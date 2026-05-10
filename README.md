@@ -1,38 +1,110 @@
-# HR Letter
+# DRAFTHR
 
-A wizard-driven, AI-assisted HR letter writing platform for the UK and US markets. Built with Vite + React + TypeScript + Tailwind v4 + shadcn/ui + Tiptap. Drafts are written by Qwen (`qwen3-max`) by default and can be swapped to Claude with one env var.
+AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, with a right-rail AI agent that proposes section-level edits and a comment thread anchored to the document text. Built on Vite + React 19 + TypeScript, AI SDK v6, and Qwen (`qwen3-max` by default).
 
-## Run
+→ **Live design system:** [`/public/design-system.html`](public/design-system.html)
+→ **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
+
+---
+
+## What it does
+
+- **Wizard → draft** — 35 letter types (14 HR-side, 21 employee-side), each with a UK and US template authored as a structured scaffold (statutory anchors, hard constraints, gold-standard examples). The model fills the scaffold using the user's wizard answers; output is HTML.
+- **Per-section editor** — every letter is broken into sections (recipient, subject, opening, body, terms, closing, signature…). Each section regenerates independently, has version history, and can be refined with a freeform instruction ("more conciliatory; cite s.95(1)(c) ERA explicitly").
+- **Three view modes** — *Edit* (section-by-section), *Split* (editor + paper preview side-by-side), *Preview* (continuous paper render with the same per-section actions on hover).
+- **Inline comments** — selection-triggered "+ Comment" both in the editor (Tiptap BubbleMenu) and the preview (floating button). Comments are anchored to the document via a custom `CommentMark` Tiptap extension; resolving/deleting strips the highlight.
+- **Right-rail AI agent** — typed AI SDK v6 tool-calling. The agent can call `regenerateSection({ section_id, instruction })`; the user reviews each call with an Apply button before it commits. Successful applies push the outcome back to the agent so it can continue reasoning.
+- **Collaborators + invites** — invite people by email + role (editor / reviewer / viewer). Local persistence today; the popover combines the form + roster + share link + a `mailto:` fallback that opens the user's mail client with a prefilled invitation. Avatar stack in the editor topbar opens the same popover.
+- **Compliance checklist** — live per-clause pattern matches against the assembled letter HTML, scored as "N / M satisfied" and broken down by severity (required missing / recommended missing / detected). Tied to the counsel-review status pill in the topbar.
+- **Letterhead + signature image uploads** — base64-stored on the profile (so every employer draft auto-picks them up), rendered in Preview, embedded in the PDF + DOCX exports.
+- **Export** — PDF (server Puppeteer with html2pdf fallback) and DOCX (html-to-docx). High-risk letter types gate behind a counsel-review attestation dialog.
+- **Cmd+K search** — indexes drafts, letter catalog, section content (with snippets), comments, and route shortcuts.
+
+## Tech
+
+| Layer | What |
+|---|---|
+| Build | Vite 6, React 19, TypeScript |
+| Styling | Tailwind v4, Radix UI Themes (`gray` / `slate`), Source Serif 4 for marquee, Geist for sans |
+| State | Zustand stores (`useDraftStore`, `useProfileStore`, `useThemeStore`) persisted to localStorage |
+| Editor | Tiptap (StarterKit + Link + Underline + Placeholder + Table + custom CommentMark) |
+| AI | AI SDK v6 (`ai@^6`, `@ai-sdk/react@^3`), `@ai-sdk/openai-compatible` against DashScope International (Qwen) |
+| Auth/DB | localStorage today. Clerk (installed) + Neon Postgres planned. |
+| Export | html2pdf.js + html-to-docx for client-side; Puppeteer route for server-side PDF |
+
+## Running locally
 
 ```bash
-# 1) Install
+# Install
 npm install
 
-# 2) Set the LLM key — copy .env.example, fill in QWEN_API_KEY
+# LLM key — copy and fill in QWEN_API_KEY
 cp .env.example .env.local
 
-# 3) Add shadcn primitives
-npx shadcn@latest add button card input label textarea select dialog separator scroll-area progress radio-group dropdown-menu tooltip switch tabs popover
-
-# 4) Dev
+# Dev server (Vite on port 5273 by default)
 npm run dev
 ```
 
 Open <http://localhost:5273>.
 
-## Architecture
-
-See [PLAN.md](PLAN.md) for the full architecture, [HR-LETTER-KNOWLEDGE-BASE.md](HR-LETTER-KNOWLEDGE-BASE.md) for the legal/content spine, and [QWEN-API-REFERENCE.md](QWEN-API-REFERENCE.md) for LLM integration details.
-
-## Switching to Claude
+### Environment
 
 ```env
-LLM_PROVIDER=claude
-ANTHROPIC_API_KEY=sk-ant-...
+# Required
+QWEN_API_KEY=...
+
+# Optional
+QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+QWEN_MODEL=qwen3-max         # or qwen-max / qwen-plus / qwen-turbo
+LLM_PROVIDER=qwen            # set to "claude" to switch
+ANTHROPIC_API_KEY=sk-ant-... # only when LLM_PROVIDER=claude
 ```
 
-Then `npm install @ai-sdk/anthropic` and the Claude provider in `server/proxy.ts` becomes live.
+A user can also pick the model at runtime via Settings → "Generation model" — that selection is sent in the request body and overrides the env default.
+
+## Project layout
+
+```
+api/                          # Vercel functions
+  draft.ts                    # /api/draft — section-streaming SSE
+  agent.ts                    # /api/agent — AI SDK UIMessage stream for the right-rail chat
+server/proxy.ts               # shared streamText handlers (dev plugin + serverless)
+dev/qwen-proxy-plugin.ts      # Vite middleware that mounts /api/* in dev
+src/
+  components/
+    ds/                       # design-system primitives (BrandMark, Avatar, PageHeader,
+                              # DataTable, StatusDot, ImageUploader)
+    editor/                   # section editor, right-rail panels (AI, Comments, Compliance),
+                              # comment popover, refine popover, edit-details sheet
+    ui/                       # shadcn primitives (kept where useful)
+  lib/
+    letters/
+      catalog/                # 35 letter-type definitions, employer + employee
+      templates/              # 70 (letterType × UK|US) gold-standard scaffolds
+      questions/              # wizard schemas
+    llm/
+      client.ts               # browser → /api/draft helper (SSE)
+      draft.ts                # generate / regenerate orchestration
+      agent.ts                # agent system prompt
+      tools.ts                # AI SDK v6 typed tools (regenerateSection)
+    prompts/                  # buildSystemPrompt / buildSectionPrompt
+    store.ts                  # drafts (Zustand persist)
+    profile.ts                # user profile (Zustand persist)
+    tiptap/comment-mark.ts    # custom Tiptap mark for inline comments
+  routes/                     # Home, BrowseLetters, Wizard, Editor, Settings, Calendar, etc.
+public/
+  design-system.html          # canonical design tokens + page templates (static)
+  regenerate-options.html     # UX proposal for refine + AI chat patterns (static)
+```
+
+## Architecture pointers
+
+- **Letter generation = template + LLM.** `buildSectionPrompt` prefers a curated template (statutory anchors, structural scaffold, MUST / MUST NOT constraints, worked example) when available, falling back to a generic instruction. The template addendum is appended to the master system prompt. This is what makes the output consistent across sessions and legally fenced.
+- **AI agent uses SDK-native tool-calling.** The right-rail agent has one tool today — `regenerateSection({ section_id, instruction })`. It's *human-in-the-loop*: no server-side `execute`, so the model's call streams to the client as a `tool-regenerateSection` part. The user reviews and clicks Apply; the client runs the regeneration and calls `addToolResult` so the model sees the outcome and can continue.
+- **Persistence is local.** Drafts, comments, collaborators, AI chat history all live in `localStorage` via Zustand `persist`. Multi-device / shared collaboration is the next big rock.
 
 ## Disclaimer
 
-This tool drafts HR letters using a template-assisted approach. Generated content is not legal advice and should be reviewed by qualified HR or employment-law counsel before issuance — especially for high-risk letters (termination, redundancy, settlement, immigration).
+This tool drafts HR correspondence with an LLM. The generated content is not legal advice and should be reviewed by qualified HR or employment-law counsel before issuance — especially for high-risk letters (termination, redundancy, settlement, immigration). Tribunal-bound letters carry the additional risk that anything in the draft may later be disclosed in proceedings.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for the release history.
