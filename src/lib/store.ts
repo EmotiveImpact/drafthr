@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  AIAction,
+  AIChatMessage,
   Collaborator,
   CollaboratorRole,
   Comment,
@@ -34,6 +36,16 @@ type Store = {
   addComment: (id: string, comment: Omit<Comment, "id" | "createdAt">) => string;
   deleteComment: (id: string, commentId: string) => void;
   resolveComment: (id: string, commentId: string, resolved: boolean) => void;
+  /** Append an AI chat message and return its id. */
+  appendAIMessage: (id: string, message: Omit<AIChatMessage, "id" | "createdAt">) => string;
+  /** Stream tokens into an existing assistant message (live updates). */
+  appendAIMessageBody: (id: string, messageId: string, delta: string) => void;
+  /** Mark an assistant message as no longer streaming + attach extracted actions. */
+  finalizeAIMessage: (id: string, messageId: string, actions?: AIAction[]) => void;
+  /** Update a single action's status (proposed -> applied / failed). */
+  updateAIAction: (id: string, messageId: string, actionId: string, patch: Partial<AIAction>) => void;
+  /** Wipe the AI chat thread for a draft. */
+  clearAIChat: (id: string) => void;
   deleteDraft: (id: string) => void;
 };
 
@@ -377,6 +389,89 @@ export const useDraftStore = create<Store>()(
               },
             },
           };
+        }),
+
+      appendAIMessage: (id, m) => {
+        const newId = uid("ai");
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const message: AIChatMessage = { ...m, id: newId, createdAt: Date.now() };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: { ...d, aiChat: [...(d.aiChat ?? []), message], updatedAt: Date.now() },
+            },
+          };
+        });
+        return newId;
+      },
+
+      appendAIMessageBody: (id, messageId, delta) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                aiChat: (d.aiChat ?? []).map((m) =>
+                  m.id === messageId ? { ...m, body: m.body + delta } : m
+                ),
+              },
+            },
+          };
+        }),
+
+      finalizeAIMessage: (id, messageId, actions) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                aiChat: (d.aiChat ?? []).map((m) =>
+                  m.id === messageId ? { ...m, streaming: false, actions: actions ?? m.actions } : m
+                ),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      updateAIAction: (id, messageId, actionId, patch) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                aiChat: (d.aiChat ?? []).map((m) =>
+                  m.id === messageId
+                    ? {
+                        ...m,
+                        actions: m.actions?.map((a) =>
+                          a.id === actionId ? { ...a, ...patch } : a
+                        ),
+                      }
+                    : m
+                ),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      clearAIChat: (id) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return { drafts: { ...s.drafts, [id]: { ...d, aiChat: [], updatedAt: Date.now() } } };
         }),
 
       deleteDraft: (id) =>

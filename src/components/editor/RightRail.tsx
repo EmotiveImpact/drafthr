@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { ShieldCheck, Users, Scale, MessageSquare } from "lucide-react";
+import { ShieldCheck, Users, Scale, MessageSquare, Wand2 } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { CompliancePanel } from "./CompliancePanel";
 import { EmployeeRail } from "./EmployeeRail";
 import { CollaboratorsPanel } from "./CollaboratorsPanel";
 import { CommentsPanel } from "./CommentsPanel";
+import { AIPanel } from "./AIPanel";
 
-export type RightRailTab = "compliance" | "comments" | "collaborators";
+export type RightRailTab = "compliance" | "ai" | "comments" | "collaborators";
 
 type Tab = RightRailTab;
 
@@ -28,12 +29,14 @@ export function RightRail({
   onTabChange,
   pendingComment,
   onPendingCommentConsumed,
+  activeSectionId,
 }: {
   draft: Draft;
   tab?: Tab;
   onTabChange?: (t: Tab) => void;
   pendingComment?: PendingComment | null;
   onPendingCommentConsumed?: () => void;
+  activeSectionId?: string | null;
 }) {
   const [internalTab, setInternalTab] = useState<Tab>("compliance");
   const tab = controlledTab ?? internalTab;
@@ -43,6 +46,7 @@ export function RightRail({
   };
   const collaboratorsCount = draft.collaborators?.length ?? 0;
   const unresolvedCommentsCount = (draft.comments ?? []).filter((c) => !c.resolved).length;
+  const aiMessageCount = (draft.aiChat ?? []).length;
   const isEmployee = draft.mode === "employee";
   const ComplianceIcon = isEmployee ? Scale : ShieldCheck;
   const complianceLabel = isEmployee ? "Rights" : "Compliance";
@@ -61,6 +65,13 @@ export function RightRail({
           label={complianceLabel}
         />
         <RailTab
+          active={tab === "ai"}
+          onClick={() => setTab("ai")}
+          icon={<Wand2 className="size-3.5" />}
+          label="AI"
+          badge={aiMessageCount > 0 ? aiMessageCount : undefined}
+        />
+        <RailTab
           active={tab === "comments"}
           onClick={() => setTab("comments")}
           icon={<MessageSquare className="size-3.5" />}
@@ -77,6 +88,7 @@ export function RightRail({
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
         {tab === "compliance" && (isEmployee ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />)}
+        {tab === "ai" && <AIPanel draft={draft} activeSectionId={activeSectionId ?? null} />}
         {tab === "comments" && (
           <CommentsPanel
             draft={draft}

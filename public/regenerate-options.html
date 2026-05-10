@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRAFTHR — Regenerate UX options</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+  <style>
+    /* Reuse the same tokens as design-system.html */
+    :root {
+      --gray-1: #ffffff;
+      --gray-2: #fafafa;
+      --gray-3: #f3f4f5;
+      --gray-4: #e9eaec;
+      --gray-5: #dcdee1;
+      --gray-7: #9ca0a8;
+      --gray-8: #6b6f78;
+      --gray-9: #4a4e57;
+      --gray-10: #2f3239;
+      --gray-12: #0a0b0d;
+
+      --canvas: var(--gray-2);
+      --surface: var(--gray-1);
+      --line: var(--gray-4);
+      --line-2: var(--gray-3);
+      --ink: var(--gray-12);
+      --body: var(--gray-10);
+      --muted: var(--gray-8);
+      --subtle: var(--gray-7);
+
+      --comment-hi: #fef3c7;
+      --comment-hi-2: #fde68a;
+
+      --r-sm: 4px; --r-md: 6px; --r-lg: 8px;
+      --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:20px; --s-6:24px; --s-8:32px; --s-12:48px;
+
+      --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-serif: "Source Serif 4", "Source Serif Pro", Charter, Georgia, serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; padding: 0; font-family: var(--font-sans); font-size: 14px; color: var(--body); background: var(--canvas); -webkit-font-smoothing: antialiased; line-height: 1.55; }
+
+    .doc { max-width: 1280px; margin: 0 auto; padding: var(--s-12) var(--s-8); }
+    .doc h1 { font-family: var(--font-serif); font-size: 36px; font-weight: 600; letter-spacing: -0.012em; margin: 0 0 var(--s-3) 0; color: var(--ink); }
+    .doc .lede { font-size: 15px; color: var(--body); max-width: 64ch; margin: 0 0 var(--s-8) 0; }
+    .doc h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; color: var(--muted); margin: var(--s-12) 0 var(--s-4) 0; padding-top: var(--s-6); border-top: 1px solid var(--line-2); }
+
+    .opt {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--s-8);
+      align-items: start;
+      margin-bottom: var(--s-12);
+    }
+    .opt .desc h3 { font-family: var(--font-serif); font-size: 24px; font-weight: 600; color: var(--ink); margin: 0 0 var(--s-2) 0; letter-spacing: -0.01em; }
+    .opt .desc p { font-size: 14px; line-height: 1.6; margin: 0 0 var(--s-3) 0; }
+    .opt .desc ul { font-size: 14px; line-height: 1.7; padding-left: 18px; margin: 0 0 var(--s-3) 0; }
+    .opt .desc .pros, .opt .desc .cons { padding: var(--s-2) var(--s-3); border-radius: var(--r-md); border: 1px solid var(--line); margin-top: var(--s-2); }
+    .opt .desc .pros { background: #f0fdf4; border-color: #bbf7d0; }
+    .opt .desc .cons { background: #fffbeb; border-color: #fde68a; }
+    .opt .desc strong { color: var(--ink); }
+
+    /* Mini editor mock */
+    .mock {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+    .mock .header {
+      height: 40px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      padding: 0 var(--s-4);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .mock .header .brand-mark {
+      width: 24px; height: 24px;
+      background: var(--ink);
+      color: white;
+      font-family: var(--font-serif);
+      font-weight: 600;
+      font-size: 14px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--r-sm);
+      letter-spacing: -0.04em;
+    }
+    .mock .header .crumb {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .mock .header .seg {
+      margin-left: auto;
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .mock .header .seg button { border: 0; background: transparent; padding: 0 10px; height: 24px; font-size: 11px; cursor: pointer; }
+    .mock .header .seg button.active { background: var(--gray-3); color: var(--ink); font-weight: 500; }
+
+    .canvas {
+      background: var(--gray-2);
+      padding: var(--s-6);
+      min-height: 360px;
+    }
+
+    /* A section block — used in both options */
+    .section-block {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      margin-bottom: var(--s-3);
+      overflow: visible;
+    }
+    .section-block .sec-header {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      padding: 6px var(--s-3);
+      border-bottom: 1px solid var(--line-2);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .section-block .sec-header .actions {
+      margin-left: auto;
+      display: flex;
+      gap: 2px;
+    }
+    .section-block .sec-header .actions button {
+      width: 24px;
+      height: 24px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      border-radius: var(--r-sm);
+      position: relative;
+    }
+    .section-block .sec-header .actions button:hover { background: var(--line-2); color: var(--ink); }
+    .section-block .sec-header .actions button.regen-active {
+      background: var(--ink);
+      color: white;
+    }
+    .section-block .body {
+      padding: var(--s-4) var(--s-5);
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--ink);
+    }
+    .section-block .body p { margin: 0 0 var(--s-3) 0; }
+    .section-block .body p:last-child { margin: 0; }
+
+    /* Refine popover (option A) */
+    .refine {
+      position: absolute;
+      top: 26px;
+      right: 0;
+      width: 320px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      box-shadow: 0 10px 24px rgba(15,17,21,0.10), 0 1px 3px rgba(15,17,21,0.04);
+      padding: var(--s-3);
+      z-index: 10;
+      text-align: left;
+      text-transform: none;
+      letter-spacing: normal;
+      color: var(--body);
+    }
+    .refine h4 {
+      margin: 0 0 6px 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .refine .hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin: 0 0 var(--s-2) 0;
+      line-height: 1.5;
+    }
+    .refine textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      resize: vertical;
+      min-height: 64px;
+      color: var(--ink);
+      background: var(--surface);
+      outline: none;
+    }
+    .refine textarea:focus { border-color: var(--ink); }
+    .refine .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: var(--s-2) 0; }
+    .refine .chips button {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--body);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .refine .chips button:hover { background: var(--line-2); color: var(--ink); }
+    .refine .row { display: flex; gap: var(--s-2); justify-content: flex-end; margin-top: var(--s-2); }
+    .refine .row button { font-size: 12px; padding: 6px 10px; border-radius: var(--r-md); border: 0; cursor: pointer; }
+    .refine .row .cancel { background: transparent; color: var(--muted); }
+    .refine .row .submit { background: var(--ink); color: white; font-weight: 500; }
+    .refine .row .submit:hover { background: var(--gray-10); }
+
+    /* Right-rail (option B) */
+    .with-rail {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 0;
+    }
+    .with-rail .canvas { border-right: 1px solid var(--line); }
+    .rail {
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+    }
+    .rail-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--line);
+    }
+    .rail-tabs button {
+      flex: 1;
+      height: 40px;
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .rail-tabs button.active { color: var(--ink); border-bottom-color: var(--ink); }
+    .rail-body { padding: var(--s-4); flex: 1; display: flex; flex-direction: column; gap: var(--s-3); overflow: auto; }
+
+    .ai-msg { display: flex; gap: var(--s-2); align-items: flex-start; font-size: 13px; line-height: 1.55; }
+    .ai-msg .av { width: 24px; height: 24px; border-radius: 999px; background: var(--ink); color: white; font-weight: 700; font-size: 10px; display: grid; place-items: center; flex-shrink: 0; }
+    .ai-msg .body { background: var(--gray-2); border-radius: var(--r-md); padding: 8px 10px; }
+    .ai-msg.user .av { background: #c5d8ee; color: var(--ink); }
+    .ai-msg.user .body { background: var(--ink); color: white; }
+    .ai-msg .body p { margin: 0 0 6px 0; }
+    .ai-msg .body p:last-child { margin: 0; }
+    .ai-msg .body .scope-pill {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .ai-msg .body .applied {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #15803d;
+      margin-top: 6px;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      padding: var(--s-3) var(--s-3);
+      background: var(--surface);
+    }
+    .composer .scope-bar { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
+    .composer .scope-chip {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .composer .scope-chip.active { background: var(--ink); color: white; border-color: var(--ink); }
+    .composer .input-row {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+    }
+    .composer textarea {
+      flex: 1;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 13px;
+      resize: none;
+      min-height: 36px;
+      max-height: 120px;
+      outline: none;
+      background: var(--surface);
+    }
+    .composer textarea:focus { border-color: var(--ink); }
+    .composer .send {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--r-md);
+      background: var(--ink);
+      color: white;
+      border: 0;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .composer .send:hover { background: var(--gray-10); }
+    .composer .quick {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .composer .quick button {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--line);
+      background: var(--gray-2);
+      color: var(--body);
+      cursor: pointer;
+    }
+    .composer .quick button:hover { background: var(--line-2); color: var(--ink); }
+
+    .verdict {
+      background: var(--ink);
+      color: var(--gray-1);
+      padding: var(--s-6) var(--s-8);
+      border-radius: var(--r-lg);
+      margin: var(--s-12) 0 0 0;
+    }
+    .verdict h2 {
+      color: rgba(255,255,255,0.65);
+      border-top: none;
+      padding-top: 0;
+      margin-top: 0;
+    }
+    .verdict h3 {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      color: white;
+      font-weight: 600;
+      margin: 0 0 var(--s-3) 0;
+      letter-spacing: -0.01em;
+    }
+    .verdict p {
+      color: rgba(255,255,255,0.85);
+      font-size: 15px;
+      line-height: 1.6;
+      max-width: 64ch;
+      margin: 0 0 var(--s-3) 0;
+    }
+    .verdict ul {
+      color: rgba(255,255,255,0.85);
+      font-size: 14px;
+      line-height: 1.7;
+      padding-left: 18px;
+      margin: 0;
+    }
+    .verdict strong { color: white; }
+  </style>
+</head>
+<body>
+<div class="doc">
+
+  <h1>How should regenerate work?</h1>
+  <p class="lede">
+    Today the Regenerate button re-runs the same prompt with the same wizard answers, so output looks the same.
+    Two ways to fix it. Below is what each looks like in the editor, then a recommendation at the bottom.
+  </p>
+
+  <!-- ============================================================ -->
+  <!-- OPTION A — Per-section refine -->
+  <!-- ============================================================ -->
+  <h2>Option A · Per-section refine instructions</h2>
+  <div class="opt">
+    <div class="desc">
+      <h3>Refine this section.</h3>
+      <p>
+        The existing Regenerate button on every section header opens a tight popover
+        with a single textarea: <em>"Optional instructions for this regeneration…"</em>.
+        Submit → only that section regenerates, with the user's instruction
+        appended to the existing section prompt as <code>USER REFINEMENT:</code>.
+      </p>
+      <p>
+        Quick chips below the textarea preset common asks: <em>more formal</em>,
+        <em>shorter</em>, <em>add specific clause</em>, <em>cite ACAS</em>, etc.
+      </p>
+      <div class="pros">
+        <strong>Strengths:</strong> in-place, fast (one popover), ties refinement to a specific section,
+        immediately useful, no new mental model.
+      </div>
+      <div class="cons">
+        <strong>Limits:</strong> can't say "rewrite the entire letter in tribunal-ready tone",
+        only operates on one section at a time, no history of past refinements.
+      </div>
+    </div>
+
+    <div class="mock">
+      <div class="header">
+        <div class="brand-mark">D</div>
+        <span class="crumb">Constructive resignation — Acme Inc.</span>
+        <div class="seg">
+          <button>Edit</button>
+          <button class="active">Split</button>
+          <button>Preview</button>
+        </div>
+      </div>
+      <div class="canvas">
+        <div class="section-block">
+          <div class="sec-header">
+            <span>Opening</span>
+            <span style="font-size:10px;color:#15803d;">ready</span>
+            <div class="actions">
+              <button title="Comment">💬</button>
+              <button title="History">↻</button>
+              <button class="regen-active" title="Refine & regenerate">✨</button>
+              <div class="refine">
+                <h4>Refine this section</h4>
+                <p class="hint">Tell the model what to change. The current section text + your wizard answers are still in scope.</p>
+                <textarea placeholder="e.g. tighten the second paragraph, drop the regret line, cite s.95(1)(c) ERA explicitly">make this more conciliatory, but keep the s.95(1)(c) reference</textarea>
+                <div class="chips">
+                  <button>+ more formal</button>
+                  <button>+ shorter</button>
+                  <button>+ cite statute</button>
+                  <button>+ add IP clause</button>
+                </div>
+                <div class="row">
+                  <button class="cancel">Cancel</button>
+                  <button class="submit">Regenerate</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="body">
+            <p>I am writing to confirm my resignation from my role as Senior Engineer with Acme Inc., to take effect from <strong>28 June 2026</strong>. My continuous service began on 14 March 2022.</p>
+            <p>I wish to make clear that I treat the conduct described below as a fundamental breach of my employment contract and consider that I have been forced to resign in response.</p>
+          </div>
+        </div>
+        <div class="section-block">
+          <div class="sec-header">
+            <span>Body — chronology of breach</span>
+            <span style="font-size:10px;color:#15803d;">ready</span>
+            <div class="actions">
+              <button title="Comment">💬</button>
+              <button title="History">↻</button>
+              <button title="Refine & regenerate">✨</button>
+            </div>
+          </div>
+          <div class="body">
+            <p>The conduct I rely on is set out below in chronological order…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- OPTION B — Right-rail AI chat -->
+  <!-- ============================================================ -->
+  <h2>Option B · Right-rail AI chat (Contracts-style)</h2>
+  <div class="opt">
+    <div class="desc">
+      <h3>An AI agent for the whole letter.</h3>
+      <p>
+        A fourth right-rail tab — <strong>AI</strong> — joining Compliance / Comments / People.
+        A chat thread scoped to the current draft. The agent has read access to every section
+        and the wizard answers, and write access via tools (regenerate section, edit section,
+        add clause, change tone).
+      </p>
+      <p>
+        The user types freeform: <em>"rewrite section 2 to be tribunal-ready"</em>,
+        <em>"make the offer warmer"</em>, <em>"add an IP-assignment clause to body"</em>,
+        <em>"summarise this letter for my lawyer"</em>. The agent replies, applies the
+        change, and the section visibly updates.
+      </p>
+      <p>
+        Scope chips above the input: <em>whole letter / section / selection</em>.
+        Common asks pre-filled as quick buttons: <em>+ make formal</em>, <em>+ tribunal-ready</em>,
+        <em>+ add clause</em>.
+      </p>
+      <div class="pros">
+        <strong>Strengths:</strong> handles multi-section commands, freeform asks, history of
+        instructions per draft. Becomes the front door to every AI capability — not just
+        regeneration but also "draft a counter-offer", "summarise for counsel", etc.
+      </div>
+      <div class="cons">
+        <strong>Limits:</strong> bigger build (chat state, scoping, tool plumbing). Discoverability:
+        not every user thinks to chat; many will keep clicking Regenerate. New mental model.
+      </div>
+    </div>
+
+    <div class="mock">
+      <div class="header">
+        <div class="brand-mark">D</div>
+        <span class="crumb">Master Services Agreement — Acme Motors</span>
+        <div class="seg">
+          <button class="active">Edit</button>
+          <button>Split</button>
+          <button>Preview</button>
+        </div>
+      </div>
+      <div class="with-rail">
+        <div class="canvas">
+          <div class="section-block">
+            <div class="sec-header">
+              <span>Confidentiality Obligations</span>
+              <span style="font-size:10px;color:#15803d;">ready</span>
+              <div class="actions">
+                <button title="Comment">💬</button>
+                <button title="History">↻</button>
+                <button title="Regenerate">✨</button>
+              </div>
+            </div>
+            <div class="body">
+              <p>The Receiving Party agrees to maintain in strict confidence all proprietary or confidential information disclosed under this Agreement, and shall not disclose such information to any third party without prior written consent of the Disclosing Party.</p>
+              <p>Such obligation of confidentiality shall remain in effect for a period of <strong>three (3) years</strong> following the disclosure thereof.</p>
+            </div>
+          </div>
+        </div>
+        <div class="rail">
+          <div class="rail-tabs">
+            <button>Compliance</button>
+            <button>Comments</button>
+            <button class="active">AI</button>
+            <button>People</button>
+          </div>
+          <div class="rail-body">
+            <div class="ai-msg user">
+              <div class="av">YOU</div>
+              <div class="body">
+                <span class="scope-pill">whole letter</span>
+                <p style="margin-top:4px;">Rewrite this in a more conciliatory tone — but keep the statutory citations.</p>
+              </div>
+            </div>
+            <div class="ai-msg">
+              <div class="av">D</div>
+              <div class="body">
+                <p>Done. I rewrote three sections and kept the statutory references intact:</p>
+                <ul style="margin:0; padding-left: 16px; font-size: 12px;">
+                  <li>Opening — softened the breach language while keeping s.95(1)(c) ERA</li>
+                  <li>Body — added a "while I appreciate" preface to two paragraphs</li>
+                  <li>Outcome — reframed asks as proposals, removed the deadline ultimatum</li>
+                </ul>
+                <span class="applied">✓ Applied to 3 sections · undo</span>
+              </div>
+            </div>
+            <div class="ai-msg user">
+              <div class="av">YOU</div>
+              <div class="body">
+                <span class="scope-pill">Confidentiality</span>
+                <p style="margin-top:4px;">Reduce the confidentiality period from 5 years to 3 years</p>
+              </div>
+            </div>
+            <div class="ai-msg">
+              <div class="av">D</div>
+              <div class="body">
+                <p>Updated. Industry-standard for this contract type. Want me to add a carve-out for trade secrets, which courts often hold beyond a fixed period?</p>
+                <span class="applied">✓ Applied to Confidentiality Obligations · undo</span>
+              </div>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="scope-bar">
+              <span class="scope-chip active">whole letter</span>
+              <span class="scope-chip">section</span>
+              <span class="scope-chip">selection</span>
+            </div>
+            <div class="input-row">
+              <textarea placeholder="Ask the AI agent..."></textarea>
+              <button class="send">↑</button>
+            </div>
+            <div class="quick">
+              <button>+ make formal</button>
+              <button>+ tribunal-ready</button>
+              <button>+ add IP clause</button>
+              <button>+ shorter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- VERDICT -->
+  <!-- ============================================================ -->
+  <div class="verdict">
+    <h2>Recommendation</h2>
+    <h3>Build both. They serve different intents.</h3>
+    <p>
+      Option A is the right answer for <strong>"this paragraph isn't quite right"</strong> —
+      80% of regeneration intents. Inline. Fast. Two clicks. Discoverable because it lives on
+      the existing Regenerate button.
+    </p>
+    <p>
+      Option B is the right answer for <strong>"rewrite the whole letter in a different tone"</strong>,
+      <strong>"add a clause about IP across the relevant sections"</strong>, or
+      <strong>"summarise this for my counsel"</strong> — multi-section, freeform, conversational.
+      It also becomes the surface for future AI capabilities (draft from clause library,
+      compliance audit, counter-offer generator) without us having to design a new affordance each time.
+    </p>
+    <p>
+      Build A first (it's a half-day). Use it as the immediate fix for your "regenerate gives me
+      similar output" frustration. Build B alongside or right after — it doesn't conflict with A.
+      If we built B alone we'd lose the in-place affordance and force users into a chat for every
+      tweak; if we built A alone we'd cap users at single-section refinements forever.
+    </p>
+    <ul>
+      <li><strong>Order:</strong> A first (immediate value), B second (the big upgrade).</li>
+      <li><strong>Scope of A:</strong> textarea + 4 chip presets + applies to one section.</li>
+      <li><strong>Scope of B:</strong> chat thread, scope chip (whole / section / selection), tool-use to apply changes, undo per turn.</li>
+      <li><strong>Future-proofing:</strong> B becomes the home for "Edit details" (re-open the wizard fields without leaving the editor) too.</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

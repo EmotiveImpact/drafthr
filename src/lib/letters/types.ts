@@ -239,6 +239,52 @@ export type Collaborator = {
 };
 
 /**
+ * Chat scope — what the AI agent should treat as the target of an
+ * instruction. "letter" applies across all sections, "section" is the
+ * caller's chosen section, "selection" is a quoted text range.
+ */
+export type AIChatScope = "letter" | "section" | "selection";
+
+/**
+ * A single AI-action proposal extracted from the agent's reply. The user
+ * confirms each via an "Apply" button under the AI message; on apply, the
+ * editor regenerates the named section with the given refinement.
+ */
+export type AIAction = {
+  id: string;
+  kind: "regenerate";
+  sectionId: string;
+  /** Human-readable section title at the time of capture (for display). */
+  sectionTitle: string;
+  /** Instruction passed through buildSectionPrompt as USER REFINEMENT. */
+  instruction: string;
+  /** Outcome state — set after the user clicks Apply. */
+  status: "proposed" | "applied" | "failed";
+  appliedAt?: number;
+};
+
+/**
+ * A single message in the AI chat thread. Persisted per draft so the
+ * agent has memory across sessions.
+ */
+export type AIChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  body: string;
+  createdAt: number;
+  /** Scope the user picked when sending. Carried for the agent's context. */
+  scope?: AIChatScope;
+  /** When scope === "section", which section. */
+  sectionId?: string;
+  /** When scope === "selection", the quoted text. */
+  quote?: string;
+  /** Assistant messages may carry one or more proposed actions. */
+  actions?: AIAction[];
+  /** Streaming flag — the message is still being received. */
+  streaming?: boolean;
+};
+
+/**
  * A comment on a draft. Threaded via parentId — top-level comments are
  * anchored to a section; replies are nested under another comment.
  */
@@ -279,6 +325,8 @@ export type Draft = {
   collaborators?: Collaborator[];
   /** Threaded comments on this draft. */
   comments?: Comment[];
+  /** Persisted AI chat thread for this draft. */
+  aiChat?: AIChatMessage[];
   createdAt: number;
   updatedAt: number;
 };

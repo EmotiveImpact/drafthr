@@ -11,14 +11,15 @@ import { useEffect, useRef } from "react";
 import type { Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Loader2, RotateCcw, History, Trash2, MessageSquarePlus } from "lucide-react";
+import { Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
+import { RefinePopover } from "./RefinePopover";
 
 type Props = {
   section: Section;
   onChange: (html: string) => void;
-  onRegenerate: () => void;
+  onRegenerate: (refineInstruction?: string) => void;
   onClear: () => void;
   onShowHistory: () => void;
   /**
@@ -186,16 +187,23 @@ export function SectionEditor({
           >
             <Trash2 className="size-3.5" />
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={(e) => { e.stopPropagation(); onRegenerate(); }}
+          <RefinePopover
             disabled={isStreaming}
-            className="h-7 px-2 text-xs"
-          >
-            <RotateCcw className="size-3 mr-1" />
-            Regenerate
-          </Button>
+            onRefineRegenerate={(instruction) => onRegenerate(instruction)}
+            onPlainRegenerate={() => onRegenerate()}
+            trigger={
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={isStreaming}
+                className="h-7 px-2 text-xs"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Sparkles className="size-3 mr-1" />
+                Regenerate
+              </Button>
+            }
+          />
         </div>
       </header>
       {active && <EditorToolbar editor={editor} />}

@@ -85,7 +85,13 @@ export async function regenerateSection(
   section: Section,
   store: StoreActions,
   signal: AbortSignal,
-  callbacks: GenerateCallbacks = {}
+  callbacks: GenerateCallbacks = {},
+  /**
+   * Optional freeform instruction to bias this single regeneration. Plumbed
+   * into the section user prompt as USER REFINEMENT — overrides defaults
+   * but the section's structural constraints still apply.
+   */
+  refineInstruction?: string
 ): Promise<void> {
   const system = buildSystemPrompt(draft);
   const priorTitles = draft.sections
@@ -95,7 +101,7 @@ export async function regenerateSection(
   store.updateSection(draft.id, section.id, "");
   store.setSectionStatus(draft.id, section.id, "streaming");
 
-  const userPrompt = buildSectionPrompt(draft, section, priorTitles);
+  const userPrompt = buildSectionPrompt(draft, section, priorTitles, refineInstruction);
   let acc = "";
 
   await streamDraft({

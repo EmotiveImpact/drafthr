@@ -33,6 +33,7 @@ import {
   Eye,
   Columns2,
   MoreHorizontal,
+  UserPlus,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -158,7 +159,7 @@ export function Editor() {
     }
   };
 
-  const onRegenerateSection = async (section: Section) => {
+  const onRegenerateSection = async (section: Section, refineInstruction?: string) => {
     if (globallyStreaming) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -169,7 +170,8 @@ export function Editor() {
         section,
         { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
         abortRef.current.signal,
-        { onRetry }
+        { onRetry },
+        refineInstruction
       );
     } catch (err) {
       console.error(err);
@@ -275,10 +277,19 @@ export function Editor() {
             <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
           </div>
 
-          {/* Right: avatars + actions */}
+          {/* Right: avatars + Invite + actions */}
           <div className="flex items-center gap-2 justify-end min-w-0">
             {identities.length > 0 && (
-              <div className="hidden sm:block">
+              <button
+                type="button"
+                onClick={() => {
+                  setRightTab("collaborators");
+                  setShowRail(true);
+                }}
+                className="hidden sm:block rounded-full hover:opacity-90 transition"
+                aria-label="Manage people"
+                title="Manage people"
+              >
                 <AvatarStack
                   size="md"
                   people={identities.map((i) => ({
@@ -289,8 +300,20 @@ export function Editor() {
                     title: i.name + (i.email ? ` <${i.email}>` : ""),
                   }))}
                 />
-              </div>
+              </button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="hidden sm:inline-flex"
+              onClick={() => {
+                setRightTab("collaborators");
+                setShowRail(true);
+              }}
+            >
+              <UserPlus className="size-3.5" />
+              <span className="hidden md:inline">Invite</span>
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">
@@ -333,20 +356,6 @@ export function Editor() {
         </div>
       </header>
 
-      {/* Secondary toolbar — tone + without-prejudice. Lives only when active section needs them. */}
-      <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
-        <ToneOverride draft={draft} />
-        <WithoutPrejudiceToggle
-          draft={draft}
-          onChange={(v) => setWithoutPrejudice(draft.id, v)}
-        />
-        {globallyStreaming && (
-          <span className="ml-auto text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
-            <Loader2 className="size-3 animate-spin" /> Drafting…
-          </span>
-        )}
-      </div>
-
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] min-h-0 relative overflow-hidden">
         <aside
@@ -369,7 +378,22 @@ export function Editor() {
           />
         </aside>
 
-        <main className="overflow-auto bg-[var(--ds-canvas)] min-w-0">
+        <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0">
+          {/* Secondary toolbar — sits ABOVE the canvas only, so the right
+           * rail tabs remain flush with the main editor topbar. */}
+          <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
+            <ToneOverride draft={draft} />
+            <WithoutPrejudiceToggle
+              draft={draft}
+              onChange={(v) => setWithoutPrejudice(draft.id, v)}
+            />
+            {globallyStreaming && (
+              <span className="ml-auto text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" /> Drafting…
+              </span>
+            )}
+          </div>
+          <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
             <div className="py-6 sm:py-8 px-3 sm:px-6">
               <LetterPreview
@@ -392,7 +416,7 @@ export function Editor() {
                     active={activeSectionId === section.id}
                     onFocus={() => setActiveSectionId(section.id)}
                     onChange={(html) => updateSection(draft.id, section.id, html)}
-                    onRegenerate={() => onRegenerateSection(section)}
+                    onRegenerate={(instr) => onRegenerateSection(section, instr)}
                     onClear={() => updateSection(draft.id, section.id, "")}
                     onShowHistory={() => setHistorySection(section)}
                     onAddComment={(opts) => onSectionAddComment(section.id, opts)}
@@ -428,7 +452,7 @@ export function Editor() {
                   active={activeSectionId === section.id}
                   onFocus={() => setActiveSectionId(section.id)}
                   onChange={(html) => updateSection(draft.id, section.id, html)}
-                  onRegenerate={() => onRegenerateSection(section)}
+                  onRegenerate={(instr) => onRegenerateSection(section, instr)}
                   onClear={() => updateSection(draft.id, section.id, "")}
                   onShowHistory={() => setHistorySection(section)}
                 />
@@ -441,6 +465,7 @@ export function Editor() {
               )}
             </div>
           )}
+          </div>
         </main>
 
         <aside
@@ -457,6 +482,7 @@ export function Editor() {
             onTabChange={setRightTab}
             pendingComment={pendingComment}
             onPendingCommentConsumed={() => setPendingComment(null)}
+            activeSectionId={activeSectionId}
           />
         </aside>
 

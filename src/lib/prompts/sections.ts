@@ -17,12 +17,26 @@ import { getSectionTemplate } from "@/lib/letters/templates";
 export function buildSectionPrompt(
   draft: Draft,
   section: Section,
-  priorSectionTitles: string[]
+  priorSectionTitles: string[],
+  /**
+   * Optional freeform user instruction biasing this single regeneration.
+   * Wrapped as USER REFINEMENT and applied AFTER the structural constraints,
+   * so the model honours the brief but can't break the section's hard rules.
+   */
+  refineInstruction?: string
 ): string {
   const meta = getLetterMeta(draft.letterType);
   const sectionFences = LEGAL_FENCES_BY_LETTER[draft.letterType]?.[draft.context.jurisdiction] ?? "";
   const lengthHint = LENGTH_HINTS_BY_SECTION[section.sectionId] ?? "Use the natural length for this section.";
   const dataDump = relevantData(draft);
+
+  const refineBlock = refineInstruction?.trim()
+    ? `\n\nUSER REFINEMENT (highest priority — apply on top of everything below; if it conflicts with HARD CONSTRAINTS, explain in [TBD] rather than break a constraint):\n${refineInstruction.trim()}\n`
+    : "";
+
+  const previousBlock = section.html?.trim()
+    ? `\n\nPREVIOUS DRAFT OF THIS SECTION (use as context for the refinement; rewrite, don't echo):\n${section.html.trim()}\n`
+    : "";
 
   const tpl = getSectionTemplate(draft.letterType, draft.context.jurisdiction, section.sectionId);
 
@@ -52,7 +66,7 @@ LEGAL FENCES (${draft.context.jurisdiction}):
 ${sectionFences}
 
 DATA TO USE:
-${dataDump}
+${dataDump}${refineBlock}${previousBlock}
 
 Write only the HTML for this section. No preamble, no commentary. Do not echo the example.`;
   }
@@ -72,7 +86,7 @@ LEGAL FENCES (${draft.context.jurisdiction}):
 ${sectionFences}
 
 DATA TO USE:
-${dataDump}
+${dataDump}${refineBlock}${previousBlock}
 
 Write only the HTML for this section. No preamble, no commentary, no headings unless the section format calls for one.`;
 }
