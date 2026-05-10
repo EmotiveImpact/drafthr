@@ -12,11 +12,58 @@ import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
 
+/**
+ * Quick-prompt chips. Each maps to one of the four typed tools so the
+ * user discovers what the agent can actually DO without having to read
+ * docs. The model decides which tool to call — these prompts are worded
+ * to make the right choice obvious.
+ *
+ * Tool mapping:
+ *   - "make formal" / "tribunal-ready"  → regenerateSection (per affected section)
+ *   - "tighten body to X words"         → tightenSection
+ *   - "add IP / confidentiality clause" → addClause
+ *   - "summarise for counsel"           → summariseForCounsel
+ */
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
-  { label: "+ make formal", prompt: "Rewrite this letter in a more formal register. Remove contractions, use full clause names, keep all statutory citations." },
-  { label: "+ tribunal-ready", prompt: "Rewrite to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit." },
-  { label: "+ shorter", prompt: "Tighten the whole letter — cut redundancy, drop adjectives, keep every fact and citation. Aim for 25% shorter." },
-  { label: "+ summarise for counsel", prompt: "Summarise this letter for an external solicitor / counsel — what it says, what it relies on, what it asks for, and the key risk points. Plain prose, no bullets unless the structure helps." },
+  // regenerateSection
+  {
+    label: "Tribunal-ready tone",
+    prompt:
+      "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.",
+  },
+  {
+    label: "Make formal",
+    prompt:
+      "Rewrite this letter in a more formal register. Remove contractions, use full clause names, keep every statutory citation intact.",
+  },
+  // tightenSection
+  {
+    label: "Tighten body to ~180 words",
+    prompt:
+      "Tighten the body section to approximately 180 words. Preserve every fact, citation, and required clause. Cut adjectives and throat-clearing.",
+  },
+  // addClause
+  {
+    label: "+ Confidentiality clause",
+    prompt:
+      "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
+  },
+  {
+    label: "+ IP-assignment clause",
+    prompt:
+      "Add an IP-assignment clause to the terms section: all work-product vests in the employer, recipient assigns and waives moral rights so far as the law permits.",
+  },
+  {
+    label: "+ Reservation of rights",
+    prompt:
+      "Add an explicit reservation-of-rights paragraph to the closing — statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
+  },
+  // summariseForCounsel
+  {
+    label: "Summarise for counsel",
+    prompt:
+      "Summarise this letter for an external employment-law adviser. Cover (1) what the letter says, (2) what it relies on, (3) what it asks for, (4) key risk points.",
+  },
 ];
 
 const SCOPE_LABEL: Record<AIChatScope, string> = {
@@ -334,12 +381,18 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
       <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
         {messages.length === 0 && (
-          <div className="text-center py-8">
-            <BrandMark size={36} className="mx-auto mb-3" />
-            <p className="text-[13px] text-[var(--ds-ink)] font-medium">Ask me anything about this draft.</p>
-            <p className="text-[12px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-xs mx-auto">
-              I can rewrite sections, add clauses, tighten prose, summarise for counsel, or just answer questions about the structure.
-            </p>
+          <div className="py-6">
+            <div className="text-center mb-5">
+              <BrandMark size={36} className="mx-auto mb-3" />
+              <p className="text-[13px] text-[var(--ds-ink)] font-medium">
+                Ask the AI to edit your letter.
+              </p>
+              <p className="text-[12px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-xs mx-auto">
+                I review your proposals before applying them. Pick a starter
+                below or type freely.
+              </p>
+            </div>
+            <ToolCapabilityList />
           </div>
         )}
         {messages.map((m) => (
@@ -817,6 +870,65 @@ function CopyButton() {
       {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
       {copied ? "Copied" : "Copy"}
     </button>
+  );
+}
+
+/**
+ * Discoverability panel in the empty state. Lists the four tools with
+ * their plain-English purpose + one example phrase the user can crib.
+ * The model picks the tool from the user's wording — this lets the
+ * user see what's actually available without reading code.
+ */
+function ToolCapabilityList() {
+  const items: { icon: React.ReactNode; title: string; desc: string; example: string }[] = [
+    {
+      icon: <Sparkles className="size-3.5 text-[var(--ds-muted)]" />,
+      title: "Rewrite a section",
+      desc: "Refine one or more sections with a freeform instruction.",
+      example: "Rewrite the opening to be more conciliatory; keep s.95(1)(c) ERA.",
+    },
+    {
+      icon: <Plus className="size-3.5 text-[var(--ds-muted)]" />,
+      title: "Add a named clause",
+      desc:
+        "Drop a confidentiality / non-compete / IP / indemnification / right-of-appeal / reservation-of-rights / garden-leave / data-protection clause into a section.",
+      example: "Add an IP-assignment clause to the terms section.",
+    },
+    {
+      icon: <Minus className="size-3.5 text-[var(--ds-muted)]" />,
+      title: "Tighten to a word count",
+      desc: "Hit a specific target length while preserving every fact + citation.",
+      example: "Tighten the body to 200 words.",
+    },
+    {
+      icon: <FileText className="size-3.5 text-[var(--ds-muted)]" />,
+      title: "Summarise for counsel",
+      desc:
+        "Brief an external lawyer: what it says, what it relies on, what it asks for, key risks.",
+      example: "Summarise this for my external solicitor.",
+    },
+  ];
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-[var(--ds-muted)] px-1">
+        What I can do
+      </p>
+      {items.map((it) => (
+        <div
+          key={it.title}
+          className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-3"
+        >
+          <div className="flex items-center gap-2 mb-1">
+            {it.icon}
+            <span className="text-[12px] font-semibold text-[var(--ds-ink)]">{it.title}</span>
+          </div>
+          <p className="text-[11px] text-[var(--ds-muted)] leading-relaxed">{it.desc}</p>
+          <p className="text-[11px] text-[var(--ds-body)] mt-1 italic">
+            <span className="opacity-50">e.g.</span> {it.example}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }
 
