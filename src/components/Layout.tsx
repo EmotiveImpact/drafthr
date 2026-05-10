@@ -18,7 +18,11 @@ export function Layout({ children }: { children: ReactNode }) {
     return (
       <TooltipProvider delayDuration={150}>
         <SearchPaletteContext.Provider value={{ open, setOpen }}>
-          <div className="min-h-screen flex flex-col">
+          {/* The editor is locked to viewport height. h-dvh handles mobile
+           * URL-bar resize correctly; h-screen as fallback. Inner flex/grid
+           * children scroll independently so the chat composer + sections
+           * list stay sticky on screen at any letter length. */}
+          <div className="h-screen h-dvh flex flex-col overflow-hidden">
             <main className="flex-1 flex flex-col min-h-0">{children}</main>
           </div>
           <SearchPalette open={open} onOpenChange={setOpen} />

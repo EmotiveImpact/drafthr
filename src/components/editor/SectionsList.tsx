@@ -10,7 +10,7 @@ type Props = {
 
 export function SectionsList({ draft, activeSectionId, onSelect }: Props) {
   return (
-    <ScrollArea className="h-full">
+    <ScrollArea className="flex-1 min-h-0">
       <div className="p-3 space-y-0.5">
         <div className="px-2 py-1.5 text-[11px] font-semibold text-[var(--ds-muted)]">
           Sections
