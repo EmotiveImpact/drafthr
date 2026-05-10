@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { useDraftStore } from "@/lib/store";
-import { MessageSquarePlus } from "lucide-react";
+import { MessageSquarePlus, Sparkles, History } from "lucide-react";
 
 type AddCommentOpts = {
   quote?: string;
@@ -11,6 +11,14 @@ type AddCommentOpts = {
 
 export type LetterPreviewProps = {
   draft: Draft;
+  /** Currently focused section id (so we can highlight its hover overlay). */
+  activeSectionId?: string | null;
+  /** Click anywhere inside a section pings the parent so it can update activeSectionId. */
+  onFocusSection?: (sectionId: string) => void;
+  /** Trigger Refine for a specific section (Preview's Refine entry point). */
+  onRefineSection?: (sectionId: string) => void;
+  /** Open version history for a specific section. */
+  onShowSectionHistory?: (sectionId: string) => void;
   /** Called when the user picks a text range and clicks "+ Comment". */
   onAddComment?: (sectionId: string, opts?: AddCommentOpts) => void;
   /** Called when the user clicks an existing inline-anchored comment highlight. */
@@ -24,7 +32,15 @@ export type LetterPreviewProps = {
  * lifts the comment id up to the right rail; selecting plain text reveals
  * a floating "+ Comment" button that opens the composer with the quote.
  */
-export function LetterPreview({ draft, onAddComment, onFocusComment }: LetterPreviewProps) {
+export function LetterPreview({
+  draft,
+  activeSectionId,
+  onFocusSection,
+  onRefineSection,
+  onShowSectionHistory,
+  onAddComment,
+  onFocusComment,
+}: LetterPreviewProps) {
   const updateSection = useDraftStore((s) => s.updateSection);
   const articleRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<{
@@ -142,14 +158,68 @@ export function LetterPreview({ draft, onAddComment, onFocusComment }: LetterPre
     >
       {draft.sections
         .filter((s) => s.html && s.html.trim())
-        .map((s) => (
-          <section
-            key={s.id}
-            data-section-id={s.id}
-            className="prose prose-sm max-w-none [&_p]:my-3 [&_p]:leading-relaxed [&_strong]:font-semibold [&_table]:my-4 [&_table_td]:px-3 [&_table_td]:py-1 [&_table_th]:px-3 [&_table_th]:py-1"
-            dangerouslySetInnerHTML={{ __html: sanitizeLetterHtml(s.html) }}
-          />
-        ))}
+        .map((s) => {
+          const isActive = activeSectionId === s.id;
+          return (
+            <div
+              key={s.id}
+              className="relative group/sec"
+              onClick={() => onFocusSection?.(s.id)}
+            >
+              <section
+                data-section-id={s.id}
+                className="prose prose-sm max-w-none [&_p]:my-3 [&_p]:leading-relaxed [&_strong]:font-semibold [&_table]:my-4 [&_table_td]:px-3 [&_table_td]:py-1 [&_table_th]:px-3 [&_table_th]:py-1"
+                dangerouslySetInnerHTML={{ __html: sanitizeLetterHtml(s.html) }}
+              />
+              {/* Per-section hover toolbar — Refine / History / Comment.
+                  Only renders if at least one handler is provided. */}
+              {(onRefineSection || onShowSectionHistory || onAddComment) && (
+                <div
+                  className={
+                    "absolute -top-3 right-0 transition-opacity z-20 flex items-center gap-0.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-sm px-1 py-0.5 " +
+                    (isActive
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/sec:opacity-100 focus-within:opacity-100")
+                  }
+                  // Don't trigger the section-focus handler when clicking
+                  // toolbar buttons.
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onRefineSection && (
+                    <button
+                      type="button"
+                      title="Refine this section with AI"
+                      onClick={() => onRefineSection(s.id)}
+                      className="size-6 grid place-items-center rounded-sm text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                    >
+                      <Sparkles className="size-3.5" />
+                    </button>
+                  )}
+                  {onShowSectionHistory && (
+                    <button
+                      type="button"
+                      title="Version history"
+                      onClick={() => onShowSectionHistory(s.id)}
+                      className="size-6 grid place-items-center rounded-sm text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                    >
+                      <History className="size-3.5" />
+                    </button>
+                  )}
+                  {onAddComment && (
+                    <button
+                      type="button"
+                      title="Comment on this section"
+                      onClick={() => onAddComment(s.id)}
+                      className="size-6 grid place-items-center rounded-sm text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                    >
+                      <MessageSquarePlus className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
       {selection && onAddComment && (
         <button

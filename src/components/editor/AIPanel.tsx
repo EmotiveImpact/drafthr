@@ -145,12 +145,56 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   const lastSubmittedScope = useRef<AIChatScope>(scope);
 
+  /**
+   * Capture the user's current text selection from anywhere in the editor
+   * canvas (section editor or preview). Returns the trimmed quoted text and
+   * the section id that contains it, if we can resolve it.
+   */
+  const captureSelection = (): { quote: string; sectionId?: string } | null => {
+    if (typeof window === "undefined") return null;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+    const quote = sel.toString().trim();
+    if (!quote) return null;
+    const range = sel.getRangeAt(0);
+    const startEl: Element | null =
+      range.startContainer instanceof Element
+        ? range.startContainer
+        : range.startContainer.parentElement;
+    const sectionEl = startEl?.closest?.("[data-section-id]") as HTMLElement | null;
+    return { quote, sectionId: sectionEl?.getAttribute("data-section-id") ?? undefined };
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-    // Append the scope label to the message content so the agent knows what
-    // to target. Cheap, model-agnostic, no protocol additions needed.
-    const scoped = `${input.trim()}\n[scope: ${scopeLabel}]`;
+
+    // Resolve the actual scope payload at submit time:
+    //  - selection: grab live window selection + the containing section id
+    //  - section:   use the active section (Editor or Preview-clicked)
+    //  - letter:    no-op
+    let resolvedLabel = scopeLabel;
+    let scopePayload = "";
+    if (scope === "selection") {
+      const captured = captureSelection();
+      if (captured) {
+        const sec = captured.sectionId
+          ? draft.sections.find((s) => s.id === captured.sectionId)
+          : undefined;
+        resolvedLabel = sec
+          ? `selection in section "${sec.title}" (id=${sec.id})`
+          : "selection";
+        scopePayload = `\n[selection: "${captured.quote}"${
+          captured.sectionId ? ` from section_id=${captured.sectionId}` : ""
+        }]`;
+      } else {
+        // Fall back to whole letter — no selection = no-op selection scope.
+        resolvedLabel = "whole letter (no active selection)";
+      }
+    }
+
+    // Append scope info to the message so the agent has the literal target.
+    const scoped = `${input.trim()}\n[scope: ${resolvedLabel}]${scopePayload}`;
     lastSubmittedScope.current = scope;
     handleSubmit(e, {
       body: {
@@ -158,11 +202,11 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         model: profile.defaults.qwenModel,
       },
       data: undefined,
-      // Override the input content for this turn only.
       allowEmptySubmit: false,
     });
-    // Re-write the just-pushed user message body to include scope (useChat
-    // sent the raw input; we want the scoped version persisted/displayed).
+    // Replace the just-pushed user message body so it carries the resolved
+    // scope label + (for selection) the live quote — for both display and
+    // /api/agent's payload.
     requestAnimationFrame(() => {
       setMessages((all) => {
         const last = all[all.length - 1];

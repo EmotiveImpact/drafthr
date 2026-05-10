@@ -44,6 +44,7 @@ import { BrandMark, AvatarStack } from "@/components/ds";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
+import { RefineDialog } from "@/components/editor/RefineDialog";
 
 type ExportFormat = "pdf" | "docx";
 
@@ -71,6 +72,7 @@ export function Editor() {
     quote?: string;
     applyMark?: (commentId: string) => void;
   } | null>(null);
+  const [refineSectionId, setRefineSectionId] = useState<string | null>(null);
 
   const openComments = (sectionId: string) => {
     setRightTab("comments");
@@ -401,6 +403,13 @@ export function Editor() {
             <div className="py-6 sm:py-8 px-3 sm:px-6">
               <LetterPreview
                 draft={draft}
+                activeSectionId={activeSectionId}
+                onFocusSection={(sectionId) => setActiveSectionId(sectionId)}
+                onRefineSection={(sectionId) => setRefineSectionId(sectionId)}
+                onShowSectionHistory={(sectionId) => {
+                  const sec = draft.sections.find((s) => s.id === sectionId);
+                  if (sec) setHistorySection(sec);
+                }}
                 onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
                 onFocusComment={onFocusComment}
               />
@@ -437,6 +446,13 @@ export function Editor() {
               <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6">
                 <LetterPreview
                 draft={draft}
+                activeSectionId={activeSectionId}
+                onFocusSection={(sectionId) => setActiveSectionId(sectionId)}
+                onRefineSection={(sectionId) => setRefineSectionId(sectionId)}
+                onShowSectionHistory={(sectionId) => {
+                  const sec = draft.sections.find((s) => s.id === sectionId);
+                  if (sec) setHistorySection(sec);
+                }}
                 onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
                 onFocusComment={onFocusComment}
               />
@@ -512,6 +528,28 @@ export function Editor() {
             updateSection(draft.id, historySection.id, html);
             setHistorySection(null);
           }
+        }}
+      />
+
+      {/* Refine dialog — Preview's entry point into the per-section refine
+       * flow. Edit/Split surfaces use the inline RefinePopover. */}
+      <RefineDialog
+        open={Boolean(refineSectionId)}
+        onOpenChange={(next) => !next && setRefineSectionId(null)}
+        sectionTitle={
+          refineSectionId
+            ? draft.sections.find((s) => s.id === refineSectionId)?.title
+            : undefined
+        }
+        onRefineRegenerate={(instruction) => {
+          const sec = draft.sections.find((s) => s.id === refineSectionId);
+          if (sec) void onRegenerateSection(sec, instruction);
+          setRefineSectionId(null);
+        }}
+        onPlainRegenerate={() => {
+          const sec = draft.sections.find((s) => s.id === refineSectionId);
+          if (sec) void onRegenerateSection(sec);
+          setRefineSectionId(null);
         }}
       />
 
