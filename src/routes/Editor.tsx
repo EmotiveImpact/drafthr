@@ -496,6 +496,7 @@ export function Editor() {
                 {draft.sections.map((section) => (
                   <SectionEditor
                     key={section.id}
+                    draft={draft}
                     section={section}
                     isStreaming={section.status === "streaming"}
                     active={activeSectionId === section.id}
@@ -504,7 +505,7 @@ export function Editor() {
                     onRegenerate={(instr) => onRegenerateSection(section, instr)}
                     onClear={() => updateSection(draft.id, section.id, "")}
                     onShowHistory={() => setHistorySection(section)}
-                    onAddComment={(opts) => onSectionAddComment(section.id, opts)}
+                    onOpenCommentsThread={() => openComments(section.id)}
                     onFocusComment={onFocusComment}
                     commentCount={commentCount(section.id)}
                   />
@@ -539,6 +540,7 @@ export function Editor() {
               {draft.sections.map((section) => (
                 <SectionEditor
                   key={section.id}
+                  draft={draft}
                   section={section}
                   isStreaming={section.status === "streaming"}
                   active={activeSectionId === section.id}
@@ -547,6 +549,9 @@ export function Editor() {
                   onRegenerate={(instr) => onRegenerateSection(section, instr)}
                   onClear={() => updateSection(draft.id, section.id, "")}
                   onShowHistory={() => setHistorySection(section)}
+                  onOpenCommentsThread={() => openComments(section.id)}
+                  onFocusComment={onFocusComment}
+                  commentCount={commentCount(section.id)}
                 />
               ))}
               {globallyStreaming && (

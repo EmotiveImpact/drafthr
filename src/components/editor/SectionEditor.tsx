@@ -7,27 +7,30 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
-import { useEffect, useRef } from "react";
-import type { Section } from "@/lib/letters/types";
+import { useEffect, useRef, useState } from "react";
+import type { Draft, Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { RefinePopover } from "./RefinePopover";
+import { CommentPopover } from "./CommentPopover";
 
 type Props = {
+  /** Parent draft — needed for the inline CommentPopover. */
+  draft: Draft;
   section: Section;
   onChange: (html: string) => void;
   onRegenerate: (refineInstruction?: string) => void;
   onClear: () => void;
   onShowHistory: () => void;
   /**
-   * Open the comment composer for this section.
-   * If `quote` is given the composer prefills with the quoted text and
-   * applies a CommentMark to the selection on post.
+   * Open the right-rail Comments tab focused on this section. Used for the
+   * "Open thread" link inside the inline CommentPopover. (The inline
+   * popover handles the actual comment post itself.)
    */
-  onAddComment?: (opts?: { quote?: string; applyMark?: (commentId: string) => void }) => void;
+  onOpenCommentsThread?: () => void;
   /** Bring an existing inline-anchored comment into focus in the right rail. */
   onFocusComment?: (commentId: string) => void;
   /** Number of unresolved comments on this section (badge count). */
@@ -38,12 +41,13 @@ type Props = {
 };
 
 export function SectionEditor({
+  draft,
   section,
   onChange,
   onRegenerate,
   onClear,
   onShowHistory,
-  onAddComment,
+  onOpenCommentsThread,
   onFocusComment,
   commentCount = 0,
   isStreaming,
@@ -90,20 +94,44 @@ export function SectionEditor({
     },
   });
 
-  const onAddCommentForSelection = () => {
-    if (!editor || !onAddComment) return;
-    const { from, to, empty } = editor.state.selection;
-    if (empty) {
-      onAddComment();
+  // Captured at the moment the comment popover opens — the editor's
+  // selection range, the quoted text, and the mark-applier. Cleared when
+  // the popover closes.
+  const [commentOpen, setCommentOpen] = useState(false);
+  const [commentTarget, setCommentTarget] = useState<{
+    quote?: string;
+    applyMark?: (commentId: string) => void;
+  }>({});
+
+  /**
+   * Open the inline CommentPopover. If text is selected we anchor the
+   * future comment to it (quote + mark); otherwise it becomes a
+   * section-level comment.
+   */
+  const openCommentPopover = () => {
+    if (!editor) {
+      setCommentTarget({});
+      setCommentOpen(true);
       return;
     }
-    const quote = editor.state.doc.textBetween(from, to, " ").trim();
-    onAddComment({
-      quote: quote || undefined,
-      applyMark: (commentId: string) => {
-        editor.chain().focus().setTextSelection({ from, to }).setCommentMark(commentId).run();
-      },
-    });
+    const { from, to, empty } = editor.state.selection;
+    if (empty) {
+      setCommentTarget({});
+    } else {
+      const quote = editor.state.doc.textBetween(from, to, " ").trim();
+      setCommentTarget({
+        quote: quote || undefined,
+        applyMark: (commentId: string) => {
+          editor
+            .chain()
+            .focus()
+            .setTextSelection({ from, to })
+            .setCommentMark(commentId)
+            .run();
+        },
+      });
+    }
+    setCommentOpen(true);
   };
 
   // Re-sync when the section html changes externally (streaming or regen).
@@ -151,22 +179,34 @@ export function SectionEditor({
           )}
         </div>
         <div className="flex items-center gap-0.5">
-          {onAddComment && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-7 relative"
-              onClick={(e) => { e.stopPropagation(); onAddCommentForSelection(); }}
-              aria-label={commentCount > 0 ? `${commentCount} comments` : "Add comment"}
-            >
-              <MessageSquarePlus className="size-3.5" />
-              {commentCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
-                  {commentCount}
-                </span>
-              )}
-            </Button>
-          )}
+          <CommentPopover
+            draft={draft}
+            sectionId={section.id}
+            quote={commentTarget.quote}
+            applyMark={commentTarget.applyMark}
+            onOpenThread={() => onOpenCommentsThread?.()}
+            open={commentOpen}
+            onOpenChange={(next) => {
+              setCommentOpen(next);
+              if (!next) setCommentTarget({});
+            }}
+            trigger={
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 relative"
+                onClick={(e) => { e.stopPropagation(); openCommentPopover(); }}
+                aria-label={commentCount > 0 ? `${commentCount} comments` : "Add comment"}
+              >
+                <MessageSquarePlus className="size-3.5" />
+                {commentCount > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                    {commentCount}
+                  </span>
+                )}
+              </Button>
+            }
+          />
           <Button
             size="icon"
             variant="ghost"
@@ -208,7 +248,7 @@ export function SectionEditor({
       </header>
       {active && <EditorToolbar editor={editor} />}
       <div className="px-7 py-5">
-        {editor && onAddComment && (
+        {editor && (
           <BubbleMenu
             editor={editor}
             tippyOptions={{ duration: 80, placement: "top" }}
@@ -219,8 +259,11 @@ export function SectionEditor({
           >
             <button
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); onAddCommentForSelection(); }}
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md shadow-sm bg-[var(--gray-12)] text-[var(--gray-1)] hover:bg-[var(--gray-11)]"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                openCommentPopover();
+              }}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md shadow-sm bg-[var(--ds-ink)] text-white hover:opacity-90"
             >
               <MessageSquarePlus className="size-3" />
               Comment
