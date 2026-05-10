@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu, ScrollText } from "lucide-react";
+import { Menu } from "lucide-react";
+import { BrandMark } from "@/components/ds";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { EditorTopbar } from "@/components/EditorTopbar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext } from "@/components/SearchPaletteContext";
@@ -19,7 +19,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <TooltipProvider delayDuration={150}>
         <SearchPaletteContext.Provider value={{ open, setOpen }}>
           <div className="min-h-screen flex flex-col">
-            <EditorTopbar />
             <main className="flex-1 flex flex-col min-h-0">{children}</main>
           </div>
           <SearchPalette open={open} onOpenChange={setOpen} />
@@ -67,10 +66,8 @@ function MobileTopbar() {
         aria-label="DRAFTHR home"
         className="flex items-center gap-2 min-w-0"
       >
-        <span className="bg-primary text-primary-foreground grid place-items-center size-7 rounded-md shrink-0">
-          <ScrollText className="size-4" />
-        </span>
-        <span className="text-sm font-semibold tracking-tight truncate">
+        <BrandMark size={28} />
+        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] truncate">
           DRAFTHR
         </span>
       </Link>

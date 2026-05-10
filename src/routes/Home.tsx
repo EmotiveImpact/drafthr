@@ -9,9 +9,7 @@ import {
   Grid,
   Heading,
   IconButton,
-  Inset,
   Separator,
-  Table,
   Text,
 } from "@radix-ui/themes";
 import {
@@ -37,6 +35,7 @@ import type { LetterTypeId, Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
+import { PageHeader, DataTable, StatusDot, type StatusTone } from "@/components/ds";
 
 const RISK_BADGE: Record<string, "green" | "amber" | "red"> = {
   low: "green",
@@ -44,11 +43,17 @@ const RISK_BADGE: Record<string, "green" | "amber" | "red"> = {
   high: "red",
 };
 
-const STATUS_BADGE: Record<string, "amber" | "green" | "gray"> = {
+const RISK_TONE: Record<string, StatusTone> = {
+  low: "green",
+  medium: "amber",
+  high: "red",
+};
+
+const STATUS_TONE: Record<string, StatusTone> = {
   drafting: "amber",
   ready: "green",
-  exported: "gray",
-  empty: "gray",
+  exported: "neutral",
+  empty: "neutral",
 };
 
 export function Home({ mode }: { mode: Mode }) {
@@ -77,31 +82,28 @@ export function Home({ mode }: { mode: Mode }) {
 
   return (
     <Box className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      {/* Hero */}
-      <Flex justify="between" align={{ initial: "stretch", sm: "end" }} direction={{ initial: "column", sm: "row" }} gap="3" mb="6">
-        <Box>
-          <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]">
-            {mode === "employer" ? "HR / Management · Home" : "Employee · Home"}
-          </Text>
-          <Heading size="6" mt="1">{greeting}</Heading>
-          <Text size="2" color="gray">
-            {myDrafts.length === 0
-              ? "Pick a letter type below to get started."
-              : `${myDrafts.length} draft${myDrafts.length === 1 ? "" : "s"} · last updated ${timeAgo(myDrafts[0].updatedAt)}`}
-          </Text>
-        </Box>
-        <Flex gap="2">
-          <Button variant="outline" color="gray" disabled>
-            <Search className="size-3.5" />
-            Search
-            <Text size="1" color="gray" ml="1">soon</Text>
-          </Button>
-          <Button onClick={() => nav(`${prefix}/new`)}>
-            <PlusCircle className="size-3.5" />
-            New letter
-          </Button>
-        </Flex>
-      </Flex>
+      <PageHeader
+        crumbs={[{ label: mode === "employer" ? "HR / Management" : "Employee" }]}
+        title={greeting}
+        lede={
+          myDrafts.length === 0
+            ? "Pick a letter type below to get started."
+            : `${myDrafts.length} draft${myDrafts.length === 1 ? "" : "s"} · last updated ${timeAgo(myDrafts[0].updatedAt)}`
+        }
+        actions={
+          <>
+            <Button variant="outline" color="gray" disabled>
+              <Search className="size-3.5" />
+              Search
+              <Text size="1" color="gray" ml="1">soon</Text>
+            </Button>
+            <Button onClick={() => nav(`${prefix}/new`)}>
+              <PlusCircle className="size-3.5" />
+              New letter
+            </Button>
+          </>
+        }
+      />
 
       {/* Stats row */}
       <Grid columns={{ initial: "2", lg: "4" }} gap="3" mb="5">
@@ -153,69 +155,82 @@ export function Home({ mode }: { mode: Mode }) {
                 </Flex>
               </Box>
             ) : (
-              <Inset side="x" mt="3">
-                <Table.Root variant="ghost">
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.ColumnHeaderCell>Letter</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell className="hidden sm:table-cell">
-                        {mode === "employer" ? "Recipient" : "To"}
-                      </Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell className="hidden md:table-cell">Risk</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell justify="end">Updated</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell />
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {myDrafts.slice(0, 8).map((d) => {
-                      const meta = safeMeta(d.letterType);
-                      const status = draftStatus(d);
-                      return (
-                        <Table.Row
-                          key={d.id}
-                          className="hover:bg-[var(--gray-2)] cursor-pointer"
-                          onClick={() => nav(`/editor/${d.id}`)}
+              <Box mt="3">
+                <DataTable
+                  rows={myDrafts.slice(0, 8)}
+                  rowKey={(d) => d.id}
+                  onRowClick={(d) => nav(`/editor/${d.id}`)}
+                  columns={[
+                    {
+                      key: "letter",
+                      header: "Letter",
+                      cell: (d) => {
+                        const meta = safeMeta(d.letterType);
+                        return (
+                          <span className="font-medium text-[var(--ds-ink)]">
+                            {meta?.shortTitle ?? d.letterType}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      key: "to",
+                      header: mode === "employer" ? "Recipient" : "To",
+                      hideOn: "sm",
+                      cell: (d) => (
+                        <span className="text-[var(--ds-muted)]">
+                          {mode === "employer"
+                            ? d.employee.legalName || "(no recipient)"
+                            : d.employer.legalName || "(no employer)"}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: "status",
+                      header: "Status",
+                      cell: (d) => <StatusDot tone={STATUS_TONE[draftStatus(d)]}>{draftStatus(d)}</StatusDot>,
+                    },
+                    {
+                      key: "risk",
+                      header: "Risk",
+                      hideOn: "md",
+                      cell: (d) => {
+                        const meta = safeMeta(d.letterType);
+                        return meta ? (
+                          <StatusDot tone={RISK_TONE[meta.riskClass]} size="sm">{meta.riskClass}</StatusDot>
+                        ) : null;
+                      },
+                    },
+                    {
+                      key: "updated",
+                      header: "Updated",
+                      num: true,
+                      cell: (d) => (
+                        <span className="text-[var(--ds-muted)] text-[12px]">{timeAgo(d.updatedAt)}</span>
+                      ),
+                    },
+                    {
+                      key: "actions",
+                      header: "",
+                      isActions: true,
+                      cell: (d) => (
+                        <IconButton
+                          size="1"
+                          variant="ghost"
+                          color="gray"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Delete this draft?")) deleteDraft(d.id);
+                          }}
+                          aria-label="Delete draft"
                         >
-                          <Table.Cell>
-                            <Text weight="medium" size="2">{meta?.shortTitle ?? d.letterType}</Text>
-                          </Table.Cell>
-                          <Table.Cell className="hidden sm:table-cell">
-                            <Text size="1" color="gray">
-                              {mode === "employer"
-                                ? d.employee.legalName || "(no recipient)"
-                                : d.employer.legalName || "(no employer)"}
-                            </Text>
-                          </Table.Cell>
-                          <Table.Cell>
-                            <Badge color={STATUS_BADGE[status]} variant="soft">{status}</Badge>
-                          </Table.Cell>
-                          <Table.Cell className="hidden md:table-cell">
-                            {meta && <Badge color={RISK_BADGE[meta.riskClass]} variant="soft">{meta.riskClass}</Badge>}
-                          </Table.Cell>
-                          <Table.Cell justify="end">
-                            <Text size="1" color="gray" className="tabular-nums">{timeAgo(d.updatedAt)}</Text>
-                          </Table.Cell>
-                          <Table.Cell>
-                            <IconButton
-                              size="1"
-                              variant="ghost"
-                              color="gray"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm("Delete this draft?")) deleteDraft(d.id);
-                              }}
-                              aria-label="Delete draft"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </IconButton>
-                          </Table.Cell>
-                        </Table.Row>
-                      );
-                    })}
-                  </Table.Body>
-                </Table.Root>
-              </Inset>
+                          <Trash2 className="size-3.5" />
+                        </IconButton>
+                      ),
+                    },
+                  ]}
+                />
+              </Box>
             )}
           </Card>
         </Box>

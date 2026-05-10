@@ -18,7 +18,6 @@ import {
 import {
   AlertTriangle,
   Briefcase,
-  ChevronLeft,
   Download,
   Save,
   Trash2,
@@ -26,6 +25,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useProfileStore, QWEN_MODEL_OPTIONS, type QwenModelId } from "@/lib/profile";
+import { PageHeader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 
 export function Settings() {
@@ -104,17 +104,11 @@ export function Settings() {
 
   return (
     <Box className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-      <Box mb="6">
-        <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
-          <ChevronLeft className="size-3.5" /> Back
-        </Button>
-        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Settings</Text>
-        <Heading size="6" mt="1" mb="1">Your profile</Heading>
-        <Text size="2" color="gray" className="max-w-2xl">
-          Your role and saved details. Used to auto-fill new letters so you don't re-type the
-          same fields every time.
-        </Text>
-      </Box>
+      <PageHeader
+        crumbs={[{ label: "Settings" }]}
+        title="Your profile"
+        lede="Your role and saved details. Used to auto-fill new letters so you don't re-type the same fields every time."
+      />
 
       <Flex direction="column" gap="4">
         {/* Role */}

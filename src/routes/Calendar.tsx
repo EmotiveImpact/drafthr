@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
-import { CalendarClock, Download, ArrowUpRight, ChevronLeft } from "lucide-react";
+import { CalendarClock, Download, ArrowUpRight } from "lucide-react";
+import { PageHeader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft } from "@/lib/letters/types";
@@ -56,22 +57,16 @@ export function Calendar() {
 
   return (
     <Box className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <Flex direction={{ initial: "column", sm: "row" }} justify="between" align={{ initial: "start", sm: "end" }} gap="3" mb="6">
-        <Box>
-          <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
-            <ChevronLeft className="size-3.5" /> Back
+      <PageHeader
+        crumbs={[{ label: "Calendar" }]}
+        title="Deadlines"
+        lede="Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off deadlines, and any remedy / acceptance dates from your drafts."
+        actions={
+          <Button onClick={onExportIcs} disabled={events.length === 0}>
+            <Download className="size-3.5" /> Export to .ics
           </Button>
-          <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Calendar</Text>
-          <Heading size="6" mt="1" mb="1">Deadlines</Heading>
-          <Text size="2" color="gray" className="max-w-2xl">
-            Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off
-            deadlines, and any remedy / acceptance dates from your drafts.
-          </Text>
-        </Box>
-        <Button onClick={onExportIcs} disabled={events.length === 0}>
-          <Download className="size-3.5" /> Export to .ics
-        </Button>
-      </Flex>
+        }
+      />
 
       {events.length === 0 && (
         <Card size="3">

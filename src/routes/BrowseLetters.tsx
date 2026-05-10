@@ -11,7 +11,8 @@ import {
   Text,
   TextField,
 } from "@radix-ui/themes";
-import { Search, ChevronLeft, ArrowUpRight, Zap } from "lucide-react";
+import { Search, ArrowUpRight, Zap } from "lucide-react";
+import { PageHeader } from "@/components/ds";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
 import { hasTemplate } from "@/lib/letters/templates";
 import type { LetterTypeId, Mode } from "@/lib/letters/types";
@@ -54,33 +55,32 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
 
   return (
     <Box className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      <Flex direction={{ initial: "column", sm: "row" }} justify="between" align={{ initial: "start", sm: "end" }} gap="3" mb="6">
-        <Box>
-          <Button variant="ghost" size="1" color="gray" onClick={() => nav(prefix)} className="!-ml-2 !mb-1">
-            <ChevronLeft className="size-3.5" /> Home
-          </Button>
-          <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">
-            New letter · {mode === "employer" ? "HR / Management" : "Employee"}
-          </Text>
-          <Heading size="6" mt="1" mb="1">Browse letter types</Heading>
-          <Text size="2" color="gray" className="max-w-2xl">
-            {mode === "employer"
-              ? "14 letter types covering hiring, performance, separation, and immigration. UK + US legal language baked in."
-              : "21 letter types covering grievances, resignation, accommodation, whistleblowing, and tribunal-bound cover. UK + US rights-preservation language baked in."}
-          </Text>
-        </Box>
-        <TextField.Root
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search letters…"
-          size="2"
-          className="w-full sm:w-64"
-        >
-          <TextField.Slot>
-            <Search className="size-3.5" />
-          </TextField.Slot>
-        </TextField.Root>
-      </Flex>
+      <PageHeader
+        crumbs={[
+          { label: mode === "employer" ? "HR / Management" : "Employee", href: prefix },
+          { label: "New letter" },
+        ]}
+        title="Browse letter types"
+        lede={
+          mode === "employer"
+            ? "14 letter types covering hiring, performance, separation, and immigration. UK + US legal language baked in."
+            : "21 letter types covering grievances, resignation, accommodation, whistleblowing, and tribunal-bound cover. UK + US rights-preservation language baked in."
+        }
+        closeTo={prefix}
+        actions={
+          <TextField.Root
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search letters…"
+            size="2"
+            className="w-full sm:w-64"
+          >
+            <TextField.Slot>
+              <Search className="size-3.5" />
+            </TextField.Slot>
+          </TextField.Root>
+        }
+      />
 
       {flagship.length > 0 && (
         <Box mb="6">

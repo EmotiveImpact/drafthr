@@ -25,18 +25,23 @@ import {
   Sparkles,
   Download,
   ChevronLeft,
+  ChevronRight,
   StopCircle,
   PanelLeft,
   PanelRight,
   FileEdit,
   Eye,
   Columns2,
+  MoreHorizontal,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
 import { exportLetterToPdf } from "@/lib/export/pdf";
 import { exportLetterToDocx } from "@/lib/export/docx";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { BrandMark, AvatarStack } from "@/components/ds";
+import { useProfileStore } from "@/lib/profile";
+import { listIdentities } from "@/lib/comments/identity";
 
 type ExportFormat = "pdf" | "docx";
 
@@ -44,6 +49,7 @@ export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const profile = useProfileStore((s) => s.profile);
   const updateSection = useDraftStore((s) => s.updateSection);
   const appendToSection = useDraftStore((s) => s.appendToSection);
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
@@ -212,13 +218,22 @@ export function Editor() {
     if (fmt) await doExport(fmt, attestation);
   };
 
+  const backTo = draft.mode === "employer" ? "/hr" : draft.mode === "employee" ? "/me" : "/";
+  const identities = listIdentities(draft, profile);
+  const recipientLabel =
+    draft.mode === "employer"
+      ? draft.employee.legalName || "(no recipient)"
+      : `to ${draft.employer.legalName || "(employer)"}`;
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Editor actions row — sits below the EditorTopbar provided by Layout */}
-      <div className="border-b border-letter-rule bg-muted/20">
-        <div className="px-3 sm:px-6 h-11 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-          {/* Left zone */}
-          <div className="flex items-center gap-1 min-w-0">
+      {/* Single canonical header — replaces the old EditorTopbar + action row.
+       * Layout: [brand · breadcrumb · meta] [centred view-mode] [avatars · actions]
+       */}
+      <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
+        <div className="h-full px-3 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+          {/* Left: brand + breadcrumb + sections-toggle + meta */}
+          <div className="flex items-center gap-2 min-w-0">
             <Button
               variant="ghost"
               size="icon"
@@ -228,15 +243,30 @@ export function Editor() {
             >
               <PanelLeft className="size-4" />
             </Button>
-            <ToneOverride draft={draft} />
-            <WithoutPrejudiceToggle
-              draft={draft}
-              onChange={(v) => setWithoutPrejudice(draft.id, v)}
-            />
+            <button
+              type="button"
+              onClick={() => nav(backTo)}
+              aria-label="Back to letters"
+              className="flex items-center gap-2 min-w-0 group rounded-md hover:bg-[var(--ds-line-2)] px-1 py-0.5 transition"
+            >
+              <BrandMark size={26} />
+              <span className="hidden md:flex items-center gap-2 text-[12px] text-[var(--ds-muted)]">
+                <ChevronLeft className="size-3 group-hover:-translate-x-0.5 transition" />
+                Letters
+              </span>
+            </button>
+            <ChevronRight className="size-3 text-[var(--ds-subtle)] hidden sm:inline" />
+            <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate">
+              {meta.title}
+            </span>
+            <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] truncate">
+              · {recipientLabel} · {draft.context.jurisdiction}
+            </span>
           </div>
-          {/* Center: view-mode toggle */}
+
+          {/* Centre: view-mode toggle */}
           <div
-            className="inline-flex items-center rounded-md border border-letter-rule bg-background overflow-hidden justify-self-center"
+            className="inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden"
             role="tablist"
             aria-label="View mode"
           >
@@ -244,19 +274,40 @@ export function Editor() {
             <ViewModeButton mode="split" current={viewMode} setMode={setViewMode} icon={<Columns2 className="size-3.5" />} label="Split" hideLabelOn="md" />
             <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
           </div>
-          {/* Right zone */}
-          <div className="flex items-center gap-1 justify-self-end">
-            {globallyStreaming ? (
-              <Button variant="ghost" size="sm" onClick={stopStreaming}>
-                <StopCircle className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">Stop</span>
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" onClick={runGenerateAll}>
-                <Sparkles className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">Regenerate all</span>
-              </Button>
+
+          {/* Right: avatars + actions */}
+          <div className="flex items-center gap-2 justify-end min-w-0">
+            {identities.length > 0 && (
+              <div className="hidden sm:block">
+                <AvatarStack
+                  size="md"
+                  people={identities.map((i) => ({
+                    seed: i.email ?? i.id,
+                    email: i.email,
+                    name: i.name,
+                    initials: i.initials,
+                    title: i.name + (i.email ? ` <${i.email}>` : ""),
+                  }))}
+                />
+              </div>
             )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[220px]">
+                <DropdownMenuItem onClick={runGenerateAll} disabled={globallyStreaming}>
+                  <Sparkles className="size-4 mr-2" /> Regenerate all
+                </DropdownMenuItem>
+                {globallyStreaming && (
+                  <DropdownMenuItem onClick={stopStreaming}>
+                    <StopCircle className="size-4 mr-2" /> Stop
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" disabled={globallyStreaming}>
@@ -274,19 +325,33 @@ export function Editor() {
               size="icon"
               className="lg:hidden size-8"
               onClick={() => setShowRail((s) => !s)}
-              aria-label="Toggle compliance rail"
+              aria-label="Toggle right rail"
             >
               <PanelRight className="size-4" />
             </Button>
           </div>
         </div>
+      </header>
+
+      {/* Secondary toolbar — tone + without-prejudice. Lives only when active section needs them. */}
+      <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
+        <ToneOverride draft={draft} />
+        <WithoutPrejudiceToggle
+          draft={draft}
+          onChange={(v) => setWithoutPrejudice(draft.id, v)}
+        />
+        {globallyStreaming && (
+          <span className="ml-auto text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
+            <Loader2 className="size-3 animate-spin" /> Drafting…
+          </span>
+        )}
       </div>
 
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] min-h-0 relative overflow-hidden">
         <aside
           className={
-            "border-r border-letter-rule bg-background min-h-0 " +
+            "border-r border-[var(--ds-line)] bg-[var(--ds-surface-2)] min-h-0 " +
             (showSidebar
               ? "absolute inset-y-0 left-0 z-40 w-[260px] shadow-xl lg:static lg:shadow-none lg:w-auto"
               : "hidden lg:block")
@@ -304,14 +369,14 @@ export function Editor() {
           />
         </aside>
 
-        <main className="overflow-auto bg-muted/30 min-w-0">
+        <main className="overflow-auto bg-[var(--ds-canvas)] min-w-0">
           {viewMode === "preview" ? (
             <div className="py-6 sm:py-8 px-3 sm:px-6">
               <LetterPreview draft={draft} />
             </div>
           ) : viewMode === "split" ? (
             <div className="grid grid-cols-1 xl:grid-cols-2 min-h-0">
-              <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6 space-y-3 border-b xl:border-b-0 xl:border-r border-letter-rule">
+              <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6 space-y-3 border-b xl:border-b-0 xl:border-r border-[var(--ds-line)]">
                 <InlineDisclaimer draft={draft} />
                 <DeadlineBanner draft={draft} />
                 <RetryBanner event={retryEvent} />
@@ -372,7 +437,7 @@ export function Editor() {
 
         <aside
           className={
-            "border-l border-letter-rule bg-background min-h-0 " +
+            "border-l border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 " +
             (showRail
               ? "absolute inset-y-0 right-0 z-40 w-[300px] shadow-xl lg:static lg:shadow-none lg:w-auto"
               : "hidden lg:block")

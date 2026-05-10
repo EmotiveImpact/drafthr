@@ -25,8 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { BrandMark } from "@/components/ds";
 import {
-  ScrollText,
   PanelLeftOpen,
   PanelLeftClose,
   PlusCircle,
@@ -168,20 +168,26 @@ function BrandHeader() {
         title={isCollapsed ? "Expand sidebar (⌘B)" : "DRAFTHR"}
         className="group/brand flex items-center gap-2 min-w-0 cursor-pointer"
       >
-        <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md shadow-xs shrink-0 relative">
-          <ScrollText
+        <div className="relative shrink-0">
+          <BrandMark
+            size={32}
             className={cn(
-              "size-5 transition-opacity duration-150",
+              "transition-opacity duration-150",
               isCollapsed && "group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
             )}
           />
           {isCollapsed && (
-            <PanelLeftOpen className="size-5 absolute opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100" />
+            <span className="absolute inset-0 grid place-items-center rounded-md bg-[var(--ds-ink)] text-white opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100">
+              <PanelLeftOpen className="size-4" />
+            </span>
           )}
         </div>
         {!isCollapsed && (
-          <span className="text-base font-semibold tracking-tight truncate">
-            DRAFTHR
+          <span className="flex flex-col leading-tight min-w-0">
+            <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] truncate">
+              DRAFTHR
+            </span>
+            <span className="text-[11px] text-[var(--ds-muted)]">Personal workspace</span>
           </span>
         )}
       </Link>
@@ -452,7 +458,7 @@ function NavUser({ mode }: { mode: Mode | null }) {
           <ArrowUpRight className="ml-auto size-3.5 text-muted-foreground" />
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => nav("/pick-role")} className="gap-2">
-          <ScrollText className="size-4" />
+          <UserRound className="size-4" />
           Role picker
         </DropdownMenuItem>
 

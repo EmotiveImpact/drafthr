@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
+import { Badge, Box, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import {
-  ChevronLeft,
   FilePlus2,
   FileEdit,
   RotateCw,
@@ -10,6 +9,7 @@ import {
   FileDown,
   Activity as ActivityIcon,
 } from "lucide-react";
+import { PageHeader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
@@ -116,17 +116,11 @@ export function Activity() {
 
   return (
     <Box className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <Box mb="6">
-        <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
-          <ChevronLeft className="size-3.5" /> Back
-        </Button>
-        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Activity</Text>
-        <Heading size="6" mt="1" mb="1">Audit trail</Heading>
-        <Text size="2" color="gray" className="max-w-2xl">
-          Every draft you've created, regenerated, exported, and attested. Useful for a paper trail
-          when sharing context with a lawyer or HR partner.
-        </Text>
-      </Box>
+      <PageHeader
+        crumbs={[{ label: "Activity" }]}
+        title="Audit trail"
+        lede="Every draft you've created, regenerated, exported, and attested. Useful for a paper trail when sharing context with a lawyer or HR partner."
+      />
 
       {events.length === 0 ? (
         <Card size="3">

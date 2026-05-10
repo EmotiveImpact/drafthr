@@ -3,6 +3,7 @@ import { Badge, Box, Button, Flex, IconButton, Select, Text, TextField } from "@
 import { Copy, Mail, UserPlus, X, Check } from "lucide-react";
 import type { Collaborator, CollaboratorRole, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { Avatar } from "@/components/ds";
 
 const ROLE_LABEL: Record<CollaboratorRole, string> = {
   owner: "Owner",
@@ -134,12 +135,7 @@ export function CollaboratorsPanel({ draft }: { draft: Draft }) {
         }}
       >
         <Flex align="center" gap="2">
-          <Box
-            className="size-7 rounded-full grid place-items-center shrink-0"
-            style={{ background: "var(--accent-9)", color: "var(--accent-contrast)" }}
-          >
-            <Text size="1" weight="bold">YOU</Text>
-          </Box>
+          <Avatar seed="me" initials="YOU" size="lg" />
           <Box className="flex-1 min-w-0">
             <Text size="1" weight="medium" as="div">You</Text>
             <Text size="1" color="gray" as="div">Created this draft</Text>
@@ -178,14 +174,6 @@ function CollaboratorRow({
   onRemove: () => void;
   onRoleChange: (role: CollaboratorRole) => void;
 }) {
-  const initials =
-    collaborator.name
-      ?.split(/\s+/)
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase() ?? collaborator.email.slice(0, 2).toUpperCase();
-
   return (
     <Box
       p="2"
@@ -195,12 +183,12 @@ function CollaboratorRow({
       }}
     >
       <Flex align="center" gap="2" mb="1">
-        <Box
-          className="size-7 rounded-full grid place-items-center shrink-0"
-          style={{ background: "var(--gray-4)", color: "var(--gray-12)" }}
-        >
-          <Text size="1" weight="bold">{initials}</Text>
-        </Box>
+        <Avatar
+          seed={collaborator.email}
+          name={collaborator.name}
+          email={collaborator.email}
+          size="lg"
+        />
         <Box className="flex-1 min-w-0">
           <Text size="1" weight="medium" as="div" className="truncate">
             {collaborator.name ?? collaborator.email}

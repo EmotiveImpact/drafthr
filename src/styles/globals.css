@@ -117,9 +117,41 @@
   --shadow-lg: 0 12px 32px -12px rgba(15, 23, 42, 0.16);
   --shadow-xl: 0 24px 48px -16px rgba(15, 23, 42, 0.20);
 
-  --font-serif: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Times New Roman", serif;
+  --font-serif: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
   --font-sans: 'Geist Variable', sans-serif;
   --font-heading: var(--font-sans);
+
+  /* DRAFTHR design system tokens. Canonical names mirrored from
+   * /public/design-system.html so React components consume the same vars. */
+  --ds-canvas: oklch(0.987 0.003 250);
+  --ds-surface: #ffffff;
+  --ds-surface-2: oklch(0.98 0.003 250);
+  --ds-line: oklch(0.93 0.005 250);
+  --ds-line-2: oklch(0.96 0.004 250);
+  --ds-ink: oklch(0.10 0.008 250);
+  --ds-body: oklch(0.30 0.011 250);
+  --ds-muted: oklch(0.50 0.013 250);
+  --ds-subtle: oklch(0.65 0.013 250);
+
+  /* Status — only used on dots, badges, inline status cells */
+  --ds-red-bg: #fef2f2;
+  --ds-red-fg: #b91c1c;
+  --ds-amber-bg: #fffbeb;
+  --ds-amber-fg: #b45309;
+  --ds-green-bg: #f0fdf4;
+  --ds-green-fg: #15803d;
+  --ds-blue-bg: #eff6ff;
+  --ds-blue-fg: #1d4ed8;
+
+  /* Avatar palette — deterministic, hash-indexed across the app */
+  --ds-av-1: #c8a45c;
+  --ds-av-2: #4f7cac;
+  --ds-av-3: #5b8a6f;
+  --ds-av-4: #8b6db4;
+  --ds-av-5: #c75c5c;
+  --ds-av-6: #2c8aa3;
+  --ds-av-7: #b88742;
+  --ds-av-8: #b35e8c;
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

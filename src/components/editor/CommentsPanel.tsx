@@ -6,10 +6,10 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import {
   type CommentIdentity,
-  colorFor,
   listIdentities,
   meIdentity,
 } from "@/lib/comments/identity";
+import { Avatar } from "@/components/ds";
 
 type PendingComment = {
   sectionId: string;
@@ -314,16 +314,15 @@ function CommentRow({
   onResolve?: () => void;
 }) {
   const ident = identities.find((i) => i.id === comment.authorId);
-  const initials = ident?.initials ?? comment.authorName.slice(0, 2).toUpperCase();
-  const hue = ident?.hue ?? 0;
   return (
     <Flex gap="2" align="start">
-      <Box
-        className="size-7 rounded-full grid place-items-center shrink-0"
-        style={{ background: colorFor(hue), color: "white" }}
-      >
-        <Text size="1" weight="bold">{initials}</Text>
-      </Box>
+      <Avatar
+        seed={ident?.email ?? ident?.id ?? comment.authorEmail ?? comment.authorName}
+        name={ident?.name ?? comment.authorName}
+        email={ident?.email ?? comment.authorEmail}
+        initials={ident?.initials}
+        size="lg"
+      />
       <Box className="flex-1 min-w-0">
         <Flex align="center" gap="2" justify="between">
           <Box className="min-w-0">
@@ -397,12 +396,13 @@ function Composer({
         </Box>
       )}
       <Flex gap="2" align="start">
-        <Box
-          className="size-6 rounded-full grid place-items-center shrink-0"
-          style={{ background: identity ? colorFor(identity.hue) : "var(--gray-7)", color: "white" }}
-        >
-          <Text size="1" weight="bold">{identity?.initials ?? "?"}</Text>
-        </Box>
+        <Avatar
+          seed={identity?.email ?? identity?.id ?? "?"}
+          name={identity?.name}
+          email={identity?.email}
+          initials={identity?.initials}
+          size="md"
+        />
         <Box className="flex-1">
           <TextArea
             placeholder="Add a comment…"

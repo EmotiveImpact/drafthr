@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
+import { Badge, Box, Card, Flex, Heading, Text } from "@radix-ui/themes";
+import { PageHeader } from "@/components/ds";
 import {
-  ChevronLeft,
   Bell,
   ArrowUpRight,
   AlertTriangle,
@@ -37,7 +37,6 @@ const SEVERITY_BG: Record<NotificationSeverity, string | undefined> = {
 };
 
 export function Notifications() {
-  const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
 
@@ -52,17 +51,11 @@ export function Notifications() {
 
   return (
     <Box className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
-      <Box mb="6">
-        <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
-          <ChevronLeft className="size-3.5" /> Back
-        </Button>
-        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Notifications</Text>
-        <Heading size="6" mt="1" mb="1">What needs your attention</Heading>
-        <Text size="2" color="gray" className="max-w-2xl">
-          Derived from your drafts and profile — tribunal deadlines, ACAS Early Conciliation
-          windows, missing required clauses, counsel-review-pending exports, and stale drafts.
-        </Text>
-      </Box>
+      <PageHeader
+        crumbs={[{ label: "Notifications" }]}
+        title="What needs your attention"
+        lede="Derived from your drafts and profile — tribunal deadlines, ACAS Early Conciliation windows, missing required clauses, counsel-review-pending exports, and stale drafts."
+      />
 
       {list.length === 0 && (
         <Card size="3">
