@@ -43,6 +43,7 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import { BrandMark, AvatarStack } from "@/components/ds";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities } from "@/lib/comments/identity";
+import { InvitePopover } from "@/components/editor/InvitePopover";
 
 type ExportFormat = "pdf" | "docx";
 
@@ -64,7 +65,7 @@ export function Editor() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "split" | "preview">("edit");
-  const [rightTab, setRightTab] = useState<RightRailTab>("compliance");
+  const [rightTab, setRightTab] = useState<RightRailTab>("ai");
   const [pendingComment, setPendingComment] = useState<{
     sectionId: string;
     quote?: string;
@@ -280,40 +281,42 @@ export function Editor() {
           {/* Right: avatars + Invite + actions */}
           <div className="flex items-center gap-2 justify-end min-w-0">
             {identities.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRightTab("collaborators");
-                  setShowRail(true);
-                }}
-                className="hidden sm:block rounded-full hover:opacity-90 transition"
-                aria-label="Manage people"
-                title="Manage people"
-              >
-                <AvatarStack
-                  size="md"
-                  people={identities.map((i) => ({
-                    seed: i.email ?? i.id,
-                    email: i.email,
-                    name: i.name,
-                    initials: i.initials,
-                    title: i.name + (i.email ? ` <${i.email}>` : ""),
-                  }))}
-                />
-              </button>
+              <InvitePopover
+                draft={draft}
+                trigger={
+                  <button
+                    type="button"
+                    className="hidden sm:block rounded-full hover:opacity-90 transition"
+                    aria-label="Manage people"
+                    title="Manage people"
+                  >
+                    <AvatarStack
+                      size="md"
+                      people={identities.map((i) => ({
+                        seed: i.email ?? i.id,
+                        email: i.email,
+                        name: i.name,
+                        initials: i.initials,
+                        title: i.name + (i.email ? ` <${i.email}>` : ""),
+                      }))}
+                    />
+                  </button>
+                }
+              />
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className="hidden sm:inline-flex"
-              onClick={() => {
-                setRightTab("collaborators");
-                setShowRail(true);
-              }}
-            >
-              <UserPlus className="size-3.5" />
-              <span className="hidden md:inline">Invite</span>
-            </Button>
+            <InvitePopover
+              draft={draft}
+              trigger={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:inline-flex"
+                >
+                  <UserPlus className="size-3.5" />
+                  <span className="hidden md:inline">Invite</span>
+                </Button>
+              }
+            />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">

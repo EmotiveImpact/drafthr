@@ -1,13 +1,12 @@
 import { useState } from "react";
-import { ShieldCheck, Users, Scale, MessageSquare, Wand2 } from "lucide-react";
+import { ShieldCheck, Scale, MessageSquare, Wand2 } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { CompliancePanel } from "./CompliancePanel";
 import { EmployeeRail } from "./EmployeeRail";
-import { CollaboratorsPanel } from "./CollaboratorsPanel";
 import { CommentsPanel } from "./CommentsPanel";
 import { AIPanel } from "./AIPanel";
 
-export type RightRailTab = "compliance" | "ai" | "comments" | "collaborators";
+export type RightRailTab = "compliance" | "ai" | "comments";
 
 type Tab = RightRailTab;
 
@@ -38,13 +37,12 @@ export function RightRail({
   onPendingCommentConsumed?: () => void;
   activeSectionId?: string | null;
 }) {
-  const [internalTab, setInternalTab] = useState<Tab>("compliance");
+  const [internalTab, setInternalTab] = useState<Tab>("ai");
   const tab = controlledTab ?? internalTab;
   const setTab = (t: Tab) => {
     if (onTabChange) onTabChange(t);
     else setInternalTab(t);
   };
-  const collaboratorsCount = draft.collaborators?.length ?? 0;
   const unresolvedCommentsCount = (draft.comments ?? []).filter((c) => !c.resolved).length;
   const aiMessageCount = (draft.aiChat ?? []).length;
   const isEmployee = draft.mode === "employee";
@@ -54,16 +52,10 @@ export function RightRail({
   return (
     <div className="flex flex-col h-full min-h-0">
       <div
-        className="flex items-stretch border-b border-letter-rule shrink-0"
+        className="flex items-stretch border-b border-[var(--ds-line)] shrink-0"
         role="tablist"
         aria-label="Right rail"
       >
-        <RailTab
-          active={tab === "compliance"}
-          onClick={() => setTab("compliance")}
-          icon={<ComplianceIcon className="size-3.5" />}
-          label={complianceLabel}
-        />
         <RailTab
           active={tab === "ai"}
           onClick={() => setTab("ai")}
@@ -79,15 +71,13 @@ export function RightRail({
           badge={unresolvedCommentsCount > 0 ? unresolvedCommentsCount : undefined}
         />
         <RailTab
-          active={tab === "collaborators"}
-          onClick={() => setTab("collaborators")}
-          icon={<Users className="size-3.5" />}
-          label="People"
-          badge={collaboratorsCount > 0 ? collaboratorsCount : undefined}
+          active={tab === "compliance"}
+          onClick={() => setTab("compliance")}
+          icon={<ComplianceIcon className="size-3.5" />}
+          label={complianceLabel}
         />
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
-        {tab === "compliance" && (isEmployee ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />)}
         {tab === "ai" && <AIPanel draft={draft} activeSectionId={activeSectionId ?? null} />}
         {tab === "comments" && (
           <CommentsPanel
@@ -96,7 +86,7 @@ export function RightRail({
             onPendingCommentConsumed={onPendingCommentConsumed}
           />
         )}
-        {tab === "collaborators" && <CollaboratorsPanel draft={draft} />}
+        {tab === "compliance" && (isEmployee ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />)}
       </div>
     </div>
   );

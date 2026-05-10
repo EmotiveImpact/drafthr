@@ -6,11 +6,28 @@ export type DraftRequest = {
   messages: CoreMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** Optional client-supplied model override (allow-listed below). */
+  model?: string;
+};
+
+/**
+ * Request shape used by the AI agent (right-rail chat). Mirrors useChat()
+ * from ai/react: messages are user/assistant turns; the system prompt is
+ * sent separately so the client can rebuild it on every turn from the
+ * live draft state.
+ */
+export type AgentRequest = {
+  messages: CoreMessage[];
+  /** System prompt — built client-side from the live draft. */
+  system?: string;
+  /** Optional client-supplied model override. */
+  model?: string;
 };
 
 const provider = (process.env.LLM_PROVIDER ?? "qwen").toLowerCase();
+const ALLOWED_MODELS = new Set(["qwen3-max", "qwen-max", "qwen-plus", "qwen-turbo"]);
 
-function buildModel() {
+function buildModel(requested?: string) {
   if (provider === "claude") {
     throw new Error(
       "Claude provider not configured. Install @ai-sdk/anthropic and set ANTHROPIC_API_KEY."
@@ -21,7 +38,8 @@ function buildModel() {
   const baseURL =
     process.env.QWEN_BASE_URL ??
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  const modelName = process.env.QWEN_MODEL ?? "qwen3-max";
+  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
+  const modelName = fromRequest ?? process.env.QWEN_MODEL ?? "qwen3-max";
   const qwen = createOpenAICompatible({
     name: "qwen",
     apiKey,
@@ -81,4 +99,35 @@ export async function handleDraftRequest(
 
   writeRaw("[DONE]");
   res.end();
+}
+
+/**
+ * Handle a useChat() POST. Reads `messages` + optional `system` + optional
+ * `model` from the request body, prepends the system message if provided,
+ * runs streamText, and pipes the AI SDK data-stream protocol back to the
+ * Node response so `useChat` on the client receives proper deltas + tool
+ * call events.
+ */
+export async function handleAgentRequest(
+  body: AgentRequest,
+  res: ServerResponse
+): Promise<void> {
+  const messages: CoreMessage[] = body.system
+    ? [{ role: "system", content: body.system }, ...body.messages]
+    : body.messages;
+
+  const result = streamText({
+    model: buildModel(body.model),
+    messages,
+    temperature: 0.4,
+    maxTokens: 1100,
+    onError: (err) => {
+      // eslint-disable-next-line no-console
+      console.error("[agent-proxy] streamText onError:", err);
+    },
+  });
+
+  // Pipe directly to the Node response in the AI SDK data-stream format.
+  // useChat() on the client decodes this natively.
+  result.pipeDataStreamToResponse(res);
 }
