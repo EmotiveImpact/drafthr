@@ -334,12 +334,19 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
+          const target = (d.comments ?? []).find((c) => c.id === commentId);
+          // Strip <mark data-comment-id={commentId}> from the section HTML so
+          // the inline highlight disappears alongside the thread.
+          const nextSections = stripMark(d.sections, target?.sectionId, commentId);
           // Remove the comment AND any replies under it.
           const next = (d.comments ?? []).filter(
             (c) => c.id !== commentId && c.parentId !== commentId
           );
           return {
-            drafts: { ...s.drafts, [id]: { ...d, comments: next, updatedAt: Date.now() } },
+            drafts: {
+              ...s.drafts,
+              [id]: { ...d, comments: next, sections: nextSections, updatedAt: Date.now() },
+            },
           };
         }),
 
@@ -347,6 +354,16 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
+          const target = (d.comments ?? []).find((c) => c.id === commentId);
+          // Resolved comments lose their inline highlight (clean reading view).
+          // The user can toggle "Show resolved" in the rail to see them again.
+          // Unresolving doesn't restore the highlight automatically — by then
+          // the section HTML may have been edited; safer to leave the quote
+          // visible only in the panel.
+          const nextSections =
+            resolved && target?.sectionId
+              ? stripMark(d.sections, target.sectionId, commentId)
+              : d.sections;
           return {
             drafts: {
               ...s.drafts,
@@ -355,6 +372,7 @@ export const useDraftStore = create<Store>()(
                 comments: (d.comments ?? []).map((c) =>
                   c.id === commentId ? { ...c, resolved } : c
                 ),
+                sections: nextSections,
                 updatedAt: Date.now(),
               },
             },
@@ -413,4 +431,34 @@ function computeProtectedDeadline(
     };
   }
   return undefined;
+}
+
+/**
+ * Strip the `<mark data-comment-id={commentId}>` wrapper from a single
+ * section's HTML, preserving the inner text. Used when a comment is
+ * deleted or resolved — the inline highlight should disappear alongside.
+ *
+ * Tolerates extra attributes inside the <mark> tag and arbitrary nested
+ * inline content. Returns the original sections array if no change.
+ */
+function stripMark(
+  sections: Section[],
+  sectionId: string | undefined,
+  commentId: string
+): Section[] {
+  if (!sectionId) return sections;
+  const idx = sections.findIndex((s) => s.id === sectionId);
+  if (idx < 0) return sections;
+  const target = sections[idx];
+  if (!target.html) return sections;
+  const escaped = commentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(
+    `<mark[^>]*data-comment-id="${escaped}"[^>]*>([\\s\\S]*?)</mark>`,
+    "g"
+  );
+  const next = target.html.replace(re, "$1");
+  if (next === target.html) return sections;
+  const updated = [...sections];
+  updated[idx] = { ...target, html: next };
+  return updated;
 }

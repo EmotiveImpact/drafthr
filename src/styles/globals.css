@@ -143,15 +143,17 @@
   --ds-blue-bg: #eff6ff;
   --ds-blue-fg: #1d4ed8;
 
-  /* Avatar palette — deterministic, hash-indexed across the app */
-  --ds-av-1: #c8a45c;
-  --ds-av-2: #4f7cac;
-  --ds-av-3: #5b8a6f;
-  --ds-av-4: #8b6db4;
-  --ds-av-5: #c75c5c;
-  --ds-av-6: #2c8aa3;
-  --ds-av-7: #b88742;
-  --ds-av-8: #b35e8c;
+  /* Avatar palette — pastel, deterministic, hash-indexed. Ink text on light
+   * backgrounds for readability; matches the soft annotation palette. */
+  --ds-av-1: #f3dca5;  /* warm sand     */
+  --ds-av-2: #c5d8ee;  /* soft blue     */
+  --ds-av-3: #c9e0d1;  /* sage          */
+  --ds-av-4: #ddc9ee;  /* lavender      */
+  --ds-av-5: #f3c9c9;  /* rose          */
+  --ds-av-6: #c2dfe6;  /* mist          */
+  --ds-av-7: #f0d4ad;  /* peach         */
+  --ds-av-8: #ebc6dd;  /* blush         */
+  --ds-av-fg: #3a3a44; /* near-black ink for legibility on pastel chips */
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);

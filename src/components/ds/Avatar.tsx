@@ -69,7 +69,7 @@ export function Avatar({
     <span
       title={title}
       className={cn(
-        "inline-grid place-items-center rounded-full text-white font-semibold leading-none shrink-0",
+        "inline-grid place-items-center rounded-full font-semibold leading-none shrink-0",
         className
       )}
       style={{
@@ -77,6 +77,7 @@ export function Avatar({
         height: dims.px,
         fontSize: dims.font,
         background: avatarColor(computedSeed),
+        color: "var(--ds-av-fg)",
       }}
     >
       {computedInitials}
