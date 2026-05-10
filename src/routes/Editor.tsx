@@ -372,7 +372,11 @@ export function Editor() {
         <main className="overflow-auto bg-[var(--ds-canvas)] min-w-0">
           {viewMode === "preview" ? (
             <div className="py-6 sm:py-8 px-3 sm:px-6">
-              <LetterPreview draft={draft} />
+              <LetterPreview
+                draft={draft}
+                onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
+                onFocusComment={onFocusComment}
+              />
             </div>
           ) : viewMode === "split" ? (
             <div className="grid grid-cols-1 xl:grid-cols-2 min-h-0">
@@ -404,7 +408,11 @@ export function Editor() {
                 )}
               </div>
               <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6">
-                <LetterPreview draft={draft} />
+                <LetterPreview
+                draft={draft}
+                onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
+                onFocusComment={onFocusComment}
+              />
               </div>
             </div>
           ) : (
