@@ -31,7 +31,6 @@ import {
   PanelRight,
   FileEdit,
   Eye,
-  Columns2,
   MoreHorizontal,
   UserPlus,
   Settings2,
@@ -68,7 +67,7 @@ export function Editor() {
   const [pendingExport, setPendingExport] = useState<ExportFormat | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
-  const [viewMode, setViewMode] = useState<"edit" | "split" | "preview">("edit");
+  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   const [rightTab, setRightTab] = useState<RightRailTab>("ai");
   const [pendingComment, setPendingComment] = useState<{
     sectionId: string;
@@ -320,7 +319,6 @@ export function Editor() {
             aria-label="View mode"
           >
             <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-            <ViewModeButton mode="split" current={viewMode} setMode={setViewMode} icon={<Columns2 className="size-3.5" />} label="Split" hideLabelOn="md" />
             <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
           </div>
 
@@ -487,51 +485,6 @@ export function Editor() {
                 onFocusComment={onFocusComment}
               />
             </div>
-          ) : viewMode === "split" ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 min-h-0">
-              <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6 space-y-3 border-b xl:border-b-0 xl:border-r border-[var(--ds-line)]">
-                <InlineDisclaimer draft={draft} />
-                <DeadlineBanner draft={draft} />
-                <RetryBanner event={retryEvent} />
-                {draft.sections.map((section) => (
-                  <SectionEditor
-                    key={section.id}
-                    draft={draft}
-                    section={section}
-                    isStreaming={section.status === "streaming"}
-                    active={activeSectionId === section.id}
-                    onFocus={() => setActiveSectionId(section.id)}
-                    onChange={(html) => updateSection(draft.id, section.id, html)}
-                    onRegenerate={(instr) => onRegenerateSection(section, instr)}
-                    onClear={() => updateSection(draft.id, section.id, "")}
-                    onShowHistory={() => setHistorySection(section)}
-                    onOpenCommentsThread={() => openComments(section.id)}
-                    onFocusComment={onFocusComment}
-                    commentCount={commentCount(section.id)}
-                  />
-                ))}
-                {globallyStreaming && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
-                    <Loader2 className="size-3 animate-spin" />
-                    Streaming sections from the model…
-                  </p>
-                )}
-              </div>
-              <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6">
-                <LetterPreview
-                draft={draft}
-                activeSectionId={activeSectionId}
-                onFocusSection={(sectionId) => setActiveSectionId(sectionId)}
-                onRefineSection={(sectionId) => setRefineSectionId(sectionId)}
-                onShowSectionHistory={(sectionId) => {
-                  const sec = draft.sections.find((s) => s.id === sectionId);
-                  if (sec) setHistorySection(sec);
-                }}
-                onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
-                onFocusComment={onFocusComment}
-              />
-              </div>
-            </div>
           ) : (
             <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
               <InlineDisclaimer draft={draft} />
@@ -664,17 +617,14 @@ function ViewModeButton({
   setMode,
   icon,
   label,
-  hideLabelOn,
 }: {
-  mode: "edit" | "split" | "preview";
-  current: "edit" | "split" | "preview";
-  setMode: (m: "edit" | "split" | "preview") => void;
+  mode: "edit" | "preview";
+  current: "edit" | "preview";
+  setMode: (m: "edit" | "preview") => void;
   icon: React.ReactNode;
   label: string;
-  hideLabelOn?: "md";
 }) {
   const active = current === mode;
-  const hideLabelClass = hideLabelOn === "md" ? "hidden xl:inline" : "hidden sm:inline";
   return (
     <button
       type="button"
@@ -682,14 +632,14 @@ function ViewModeButton({
       aria-selected={active}
       onClick={() => setMode(mode)}
       className={
-        "inline-flex items-center gap-1 px-2 h-7 text-xs font-medium transition-colors " +
+        "inline-flex items-center gap-1.5 px-3 h-7 text-xs font-medium transition-colors " +
         (active
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
       }
     >
       {icon}
-      <span className={hideLabelClass}>{label}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
