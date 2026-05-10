@@ -289,8 +289,10 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         )}
       </div>
 
-      <form onSubmit={submit} className="shrink-0 border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)]">
-        <div className="flex flex-wrap gap-1 px-3 pt-2">
+      <form onSubmit={submit} className="shrink-0 border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-3 py-3 space-y-2">
+        {/* Scope chips — small, above the composer (necessary context, not a control). */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[10px] text-[var(--ds-muted)] mr-1">Scope:</span>
           {(["letter", "section", "selection"] as AIChatScope[]).map((s) => (
             <button
               key={s}
@@ -308,13 +310,20 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             </button>
           ))}
         </div>
-        <div className="flex items-end gap-2 px-3 py-2">
+
+        {/* Composer — one rounded box with textarea + bottom toolbar + send button INSIDE. */}
+        <div
+          className={
+            "rounded-lg border bg-[var(--ds-surface)] transition focus-within:ring-2 focus-within:ring-[var(--ds-ink)]/10 " +
+            "focus-within:border-[var(--ds-ink)] border-[var(--ds-line)]"
+          }
+        >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask the AI agent..."
             rows={3}
-            className="flex-1 min-h-[72px] max-h-[200px] resize-y px-3 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[14px] leading-relaxed text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+            className="block w-full min-h-[64px] max-h-[240px] resize-none px-3 pt-3 pb-1 rounded-lg bg-transparent text-[14px] leading-relaxed text-[var(--ds-ink)] focus:outline-none placeholder:text-[var(--ds-subtle)]"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -322,40 +331,48 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
               }
             }}
           />
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={() => stop()}
-              className="size-10 shrink-0 rounded-md bg-[var(--ds-line)] text-[var(--ds-ink)] grid place-items-center"
-              aria-label="Stop"
-            >
-              <Loader2 className="size-4 animate-spin" />
-            </button>
-          ) : (
-            <button
-              type="submit"
-              disabled={!input.trim()}
-              className="size-10 shrink-0 rounded-md bg-[var(--ds-ink)] text-white grid place-items-center disabled:opacity-30"
-              aria-label="Send"
-              title="Send (⌘ + Enter)"
-            >
-              <ArrowUp className="size-4" />
-            </button>
-          )}
+          <div className="flex items-center gap-1 px-2 pb-2 pt-1">
+            {/* Quick-prompt chips on the left (horizontal scroll if many) */}
+            <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -my-1 py-1">
+              {QUICK_PROMPTS.map((q) => (
+                <button
+                  key={q.label}
+                  type="button"
+                  onClick={() => setInput(q.prompt)}
+                  disabled={isStreaming}
+                  className="shrink-0 text-[11px] px-2 py-1 rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition disabled:opacity-50"
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+            {/* Send button — bottom-right inside the composer */}
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={() => stop()}
+                className="size-7 shrink-0 rounded-md bg-[var(--ds-line-2)] text-[var(--ds-ink)] grid place-items-center hover:bg-[var(--ds-line)]"
+                aria-label="Stop"
+                title="Stop"
+              >
+                <Loader2 className="size-3.5 animate-spin" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={!input.trim()}
+                className="size-7 shrink-0 rounded-md bg-[var(--ds-ink)] text-white grid place-items-center disabled:opacity-25 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] transition"
+                aria-label="Send"
+                title="Send (⌘ + Enter)"
+              >
+                <ArrowUp className="size-3.5" />
+              </button>
+            )}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1 px-3 pb-3">
-          {QUICK_PROMPTS.map((q) => (
-            <button
-              key={q.label}
-              type="button"
-              onClick={() => setInput(q.prompt)}
-              disabled={isStreaming}
-              className="text-[11px] px-2 py-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition disabled:opacity-50"
-            >
-              {q.label}
-            </button>
-          ))}
-        </div>
+        <p className="text-[10px] text-[var(--ds-subtle)] text-center">
+          ⌘ + Enter to send · The AI may propose section changes — review with Apply before they go live.
+        </p>
       </form>
     </div>
   );

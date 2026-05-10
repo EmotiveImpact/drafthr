@@ -435,7 +435,7 @@ export function Editor() {
       </header>
 
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_420px] min-h-0 relative overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_380px] min-h-0 relative overflow-hidden">
         <aside
           className={
             "border-r border-[var(--ds-line)] bg-[var(--ds-surface-2)] min-h-0 flex flex-col overflow-hidden " +
