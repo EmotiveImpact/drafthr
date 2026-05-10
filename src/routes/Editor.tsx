@@ -34,6 +34,8 @@ import {
   Columns2,
   MoreHorizontal,
   UserPlus,
+  Settings2,
+  ShieldCheck,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -45,6 +47,7 @@ import { useProfileStore } from "@/lib/profile";
 import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
+import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 
 type ExportFormat = "pdf" | "docx";
 
@@ -73,6 +76,7 @@ export function Editor() {
     applyMark?: (commentId: string) => void;
   } | null>(null);
   const [refineSectionId, setRefineSectionId] = useState<string | null>(null);
+  const [editDetailsOpen, setEditDetailsOpen] = useState(false);
 
   const openComments = (sectionId: string) => {
     setRightTab("comments");
@@ -230,13 +234,33 @@ export function Editor() {
       ? draft.employee.legalName || "(no recipient)"
       : `to ${draft.employer.legalName || "(employer)"}`;
 
+  // Counsel-review status — derived from the most recent export attestation
+  // OR from a manual attestation in answers._counselReview. High-risk
+  // letters that haven't been reviewed show an amber "needs review" pill.
+  const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
+    const lastExport = (draft.exports ?? [])
+      .slice()
+      .sort((a, b) => b.exportedAt - a.exportedAt)
+      .find((e) => e.reviewedBy);
+    if (lastExport?.reviewedBy && lastExport.reviewedOn) {
+      return { reviewedBy: lastExport.reviewedBy, reviewedOn: lastExport.reviewedOn };
+    }
+    const manual = (draft.answers as Record<string, unknown>)._counselReview as
+      | { reviewedBy?: string; reviewedOn?: string }
+      | undefined;
+    if (manual?.reviewedBy && manual.reviewedOn) {
+      return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
+    }
+    return null;
+  })();
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Single canonical header — replaces the old EditorTopbar + action row.
        * Layout: [brand · breadcrumb · meta] [centred view-mode] [avatars · actions]
        */}
       <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
-        <div className="h-full px-3 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="h-full px-2 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
           {/* Left: brand + breadcrumb + sections-toggle + meta */}
           <div className="flex items-center gap-2 min-w-0">
             <Button
@@ -267,6 +291,26 @@ export function Editor() {
             <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] truncate">
               · {recipientLabel} · {draft.context.jurisdiction}
             </span>
+            {/* Counsel-review pill — only on high-risk letters or where the
+             * letter type's metadata flags counsel review as required. */}
+            {(meta.legalReviewRequired || meta.riskClass === "high") && (
+              <span
+                className={
+                  "inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 " +
+                  (counselReview
+                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] border-[var(--ds-green-bg)]"
+                    : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-bg)]")
+                }
+                title={
+                  counselReview
+                    ? `Counsel-reviewed by ${counselReview.reviewedBy} on ${counselReview.reviewedOn}`
+                    : "Counsel review required before export"
+                }
+              >
+                <ShieldCheck className="size-3" />
+                <span className="hidden md:inline">{counselReview ? "Reviewed" : "Needs review"}</span>
+              </span>
+            )}
           </div>
 
           {/* Centre: view-mode toggle */}
@@ -288,12 +332,13 @@ export function Editor() {
                 trigger={
                   <button
                     type="button"
-                    className="hidden sm:block rounded-full hover:opacity-90 transition"
+                    className="rounded-full hover:opacity-90 transition"
                     aria-label="Manage people"
                     title="Manage people"
                   >
                     <AvatarStack
                       size="md"
+                      max={2}
                       people={identities.map((i) => ({
                         seed: i.email ?? i.id,
                         email: i.email,
@@ -312,7 +357,8 @@ export function Editor() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="hidden sm:inline-flex"
+                  className="px-2 sm:px-3"
+                  aria-label="Invite"
                 >
                   <UserPlus className="size-3.5" />
                   <span className="hidden md:inline">Invite</span>
@@ -326,6 +372,9 @@ export function Editor() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[220px]">
+                <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
+                  <Settings2 className="size-4 mr-2" /> Edit details
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={runGenerateAll} disabled={globallyStreaming}>
                   <Sparkles className="size-4 mr-2" /> Regenerate all
                 </DropdownMenuItem>
@@ -529,6 +578,12 @@ export function Editor() {
             setHistorySection(null);
           }
         }}
+      />
+
+      <EditDetailsSheet
+        open={editDetailsOpen}
+        onOpenChange={setEditDetailsOpen}
+        draft={draft}
       />
 
       {/* Refine dialog — Preview's entry point into the per-section refine

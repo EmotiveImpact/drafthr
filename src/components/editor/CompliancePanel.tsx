@@ -1,21 +1,44 @@
 import type { Draft } from "@/lib/letters/types";
 import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
-import { CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, AlertCircle, ShieldCheck } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo } from "react";
 
-const SEVERITY_ICON = {
-  required: AlertCircle,
-  recommended: AlertTriangle,
-  warn: AlertTriangle,
+const SEVERITY_LABEL = {
+  required: "Required",
+  recommended: "Recommended",
+  warn: "Watch out",
+} as const;
+
+const SEVERITY_TONE = {
+  required: {
+    bg: "var(--ds-red-bg)",
+    fg: "var(--ds-red-fg)",
+    Icon: AlertCircle,
+  },
+  recommended: {
+    bg: "var(--ds-amber-bg)",
+    fg: "var(--ds-amber-fg)",
+    Icon: AlertTriangle,
+  },
+  warn: {
+    bg: "var(--ds-amber-bg)",
+    fg: "var(--ds-amber-fg)",
+    Icon: AlertTriangle,
+  },
 };
 
-const SEVERITY_COLOR = {
-  required: "text-rose-700 bg-rose-50 border-rose-200",
-  recommended: "text-amber-800 bg-amber-50 border-amber-200",
-  warn: "text-orange-800 bg-orange-50 border-orange-200",
-};
-
+/**
+ * Per-clause compliance checklist for the active draft. Computes against
+ * the assembled letter HTML using `rulesFor()` + `ruleMatches()`.
+ *
+ * Layout:
+ *  - Header: jurisdiction + N/M satisfied summary score
+ *  - Missing required (red)
+ *  - Missing recommended (amber)
+ *  - Detected (subtle list, ticked off)
+ *  - Footer: counsel-review reminder if applicable
+ */
 export function CompliancePanel({ draft }: { draft: Draft }) {
   const fullText = useMemo(
     () => draft.sections.map((s) => s.html).join("\n"),
@@ -38,65 +61,77 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
   }));
 
   const missing = evaluations.filter((e) => !e.present);
+  const missingRequired = missing.filter((e) => e.rule.severity === "required");
+  const missingRecommended = missing.filter((e) => e.rule.severity !== "required");
   const present = evaluations.filter((e) => e.present);
+
+  const score = evaluations.length > 0 ? Math.round((present.length / evaluations.length) * 100) : null;
+  const scoreTone =
+    score === null
+      ? "neutral"
+      : score >= 90
+      ? "green"
+      : score >= 60
+      ? "amber"
+      : "red";
 
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-5">
         <header>
-          <h3 className="text-sm font-semibold tracking-tight">Compliance checklist</h3>
-          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-[var(--ds-muted)]" />
+              <h3 className="text-[13px] font-semibold text-[var(--ds-ink)] m-0">Compliance</h3>
+            </div>
+            {score !== null && (
+              <span
+                className={
+                  "text-[11px] font-medium px-2 py-0.5 rounded-full " +
+                  (scoreTone === "green"
+                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
+                    : scoreTone === "amber"
+                    ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
+                    : "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]")
+                }
+              >
+                {present.length}/{evaluations.length} satisfied
+              </span>
+            )}
+          </div>
+          <p className="text-[12px] text-[var(--ds-muted)] leading-relaxed">
             Live checks against {draft.context.jurisdiction}
             {draft.context.usState ? ` (${draft.context.usState})` : ""} legal patterns. Not a substitute for counsel.
           </p>
         </header>
 
-        {missing.length > 0 && (
-          <section>
-            <h4 className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
-              Missing or recommended ({missing.length})
-            </h4>
-            <ul className="space-y-2">
-              {missing.map(({ rule }) => {
-                const Icon = SEVERITY_ICON[rule.severity];
-                return (
-                  <li
-                    key={rule.id}
-                    className={
-                      "rounded-md border p-3 text-xs leading-relaxed " +
-                      SEVERITY_COLOR[rule.severity]
-                    }
-                  >
-                    <div className="flex items-start gap-2">
-                      <Icon className="size-3.5 mt-0.5 shrink-0" />
-                      <div className="space-y-1">
-                        <div className="font-medium">{rule.label}</div>
-                        <div className="opacity-80">{rule.description}</div>
-                        <div className="text-[11px] opacity-90 italic">
-                          Suggestion: {rule.recommendation}
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+        {missingRequired.length > 0 && (
+          <RuleSection
+            heading={`Required missing · ${missingRequired.length}`}
+            items={missingRequired.map((e) => e.rule)}
+          />
+        )}
+
+        {missingRecommended.length > 0 && (
+          <RuleSection
+            heading={`Recommended missing · ${missingRecommended.length}`}
+            items={missingRecommended.map((e) => e.rule)}
+          />
         )}
 
         {present.length > 0 && (
           <section>
-            <h4 className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
-              Detected ({present.length})
+            <h4 className="text-[11px] font-semibold text-[var(--ds-muted)] mb-2">
+              Detected · {present.length}
             </h4>
-            <ul className="space-y-1.5">
+            <ul className="space-y-1">
               {present.map(({ rule }) => (
                 <li
                   key={rule.id}
-                  className="flex items-start gap-2 text-xs text-foreground"
+                  className="flex items-start gap-2 text-[12px] text-[var(--ds-body)] py-1"
                 >
-                  <CheckCircle2 className="size-3.5 mt-0.5 text-green-700 shrink-0" />
-                  <span>{rule.label}</span>
+                  <CheckCircle2 className="size-3.5 mt-0.5 text-[var(--ds-green-fg)] shrink-0" />
+                  <span className="flex-1">{rule.label}</span>
                 </li>
               ))}
             </ul>
@@ -104,28 +139,80 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
         )}
 
         {evaluations.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            No specific compliance rules configured for this letter/jurisdiction
+          <p className="text-[12px] text-[var(--ds-muted)] leading-relaxed">
+            No specific compliance rules configured for this letter / jurisdiction
             yet — Tier 1 disclaimer still applies.
           </p>
         )}
 
-        <section className="rounded-md border border-letter-rule bg-muted/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
+        <section
+          className="rounded-md border p-3 text-[11px] leading-relaxed"
+          style={{
+            background: draft.context.counselReviewRequired ? "var(--ds-amber-bg)" : "var(--ds-line-2)",
+            borderColor: draft.context.counselReviewRequired ? "var(--ds-amber-bg)" : "var(--ds-line)",
+            color: draft.context.counselReviewRequired ? "var(--ds-amber-fg)" : "var(--ds-muted)",
+          }}
+        >
           {draft.context.counselReviewRequired ? (
             <>
               <strong>Counsel review required.</strong> This letter type carries
               elevated legal risk. The export will include a Tier 3 disclaimer
-              and we recommend qualified employment-law review before
-              issuance.
+              and we recommend qualified employment-law review before issuance.
             </>
           ) : (
             <>
-              The export will include a Tier 1 (universal) and, where
-              applicable, Tier 2 (jurisdiction) disclaimer.
+              The export will include a Tier 1 (universal) and, where applicable,
+              Tier 2 (jurisdiction) disclaimer.
             </>
           )}
         </section>
       </div>
     </ScrollArea>
+  );
+}
+
+function RuleSection({
+  heading,
+  items,
+}: {
+  heading: string;
+  items: { id: string; label: string; description: string; recommendation: string; severity: "required" | "recommended" | "warn" }[];
+}) {
+  return (
+    <section>
+      <h4 className="text-[11px] font-semibold text-[var(--ds-muted)] mb-2">{heading}</h4>
+      <ul className="space-y-2">
+        {items.map((rule) => {
+          const tone = SEVERITY_TONE[rule.severity];
+          const Icon = tone.Icon;
+          return (
+            <li
+              key={rule.id}
+              className="rounded-md border p-3 text-[12px] leading-relaxed"
+              style={{ background: tone.bg, borderColor: tone.bg, color: tone.fg }}
+            >
+              <div className="flex items-start gap-2">
+                <Icon className="size-3.5 mt-0.5 shrink-0" />
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="font-medium flex items-center gap-2">
+                    {rule.label}
+                    <span
+                      className="ml-auto text-[10px] uppercase tracking-wider opacity-80 shrink-0"
+                      style={{ letterSpacing: "0.08em" }}
+                    >
+                      {SEVERITY_LABEL[rule.severity]}
+                    </span>
+                  </div>
+                  <div className="opacity-80">{rule.description}</div>
+                  <div className="text-[11px] italic opacity-90">
+                    Suggestion: {rule.recommendation}
+                  </div>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

@@ -41,10 +41,27 @@ export function InvitePopover({
   const collaborators = draft.collaborators ?? [];
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-  const onInvite = (e: React.FormEvent) => {
+  const onInvite = (e: React.FormEvent, sendMail = false) => {
     e.preventDefault();
     if (!valid) return;
     invite(draft.id, email, role, name || undefined);
+    if (sendMail) {
+      // Open the user's mail client with a prefilled invitation. Real
+      // transactional mail needs auth + a mail provider; this fallback
+      // works today and gets the link to the invitee.
+      const subject = encodeURIComponent("You've been invited to a DRAFTHR draft");
+      const body = encodeURIComponent(
+        `Hi${name ? " " + name : ""},
+
+I'd like you to ${role} this DRAFTHR draft with me.
+
+Open the draft here:
+${shareLink}
+
+— sent from DRAFTHR`
+      );
+      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+    }
     setEmail("");
     setName("");
   };
@@ -93,7 +110,7 @@ export function InvitePopover({
           </div>
 
           {/* Invite form */}
-          <form onSubmit={onInvite} className="space-y-2">
+          <form onSubmit={(e) => onInvite(e, false)} className="space-y-2">
             <div className="relative">
               <Mail className="size-3.5 text-[var(--ds-muted)] absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
@@ -122,7 +139,20 @@ export function InvitePopover({
                 <option value="viewer">Viewer</option>
               </select>
               <Button type="submit" size="sm" disabled={!valid} className="h-8">
-                <UserPlus className="size-3.5" /> Invite
+                <UserPlus className="size-3.5" /> Add
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!valid}
+                className="h-8"
+                onClick={(e) =>
+                  onInvite(e as unknown as React.FormEvent, true)
+                }
+                title="Add and open your mail client with a prefilled invitation"
+              >
+                <Mail className="size-3.5" /> Email
               </Button>
             </div>
             <p className="text-[11px] text-[var(--ds-muted)] leading-relaxed">{ROLE_HINT[role]}</p>

@@ -30,6 +30,20 @@ type Store = {
   setWithoutPrejudice: (id: string, value: boolean) => void;
   setEvidence: (id: string, items: EvidenceItem[]) => void;
   recordExport: (id: string, event: Omit<ExportEvent, "id" | "exportedAt"> & { exportedAt?: number }) => void;
+  /**
+   * Patch context / employer / employee on a draft. Used by the
+   * Edit-details slide-over to update fields the wizard captured at
+   * draft creation. Recomputes serviceMonths if startDate changes.
+   */
+  patchDraft: (
+    id: string,
+    patch: {
+      context?: Partial<Draft["context"]>;
+      employer?: Partial<Draft["employer"]>;
+      employee?: Partial<Draft["employee"]>;
+      answers?: Partial<Draft["answers"]>;
+    }
+  ) => void;
   inviteCollaborator: (id: string, email: string, role: CollaboratorRole, name?: string) => void;
   removeCollaborator: (id: string, collaboratorId: string) => void;
   updateCollaboratorRole: (id: string, collaboratorId: string, role: CollaboratorRole) => void;
@@ -262,6 +276,33 @@ export const useDraftStore = create<Store>()(
               [id]: {
                 ...d,
                 exports: [...(d.exports ?? []), e],
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      patchDraft: (id, patch) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const employee = patch.employee ? { ...d.employee, ...patch.employee } : d.employee;
+          const startDate = patch.employee?.startDate ?? d.employee.startDate;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                context: patch.context ? { ...d.context, ...patch.context } : d.context,
+                employer: patch.employer ? { ...d.employer, ...patch.employer } : d.employer,
+                employee: {
+                  ...employee,
+                  serviceMonths:
+                    patch.employee?.startDate !== undefined
+                      ? monthsBetween(startDate)
+                      : employee.serviceMonths,
+                },
+                answers: patch.answers ? { ...d.answers, ...patch.answers } : d.answers,
                 updatedAt: Date.now(),
               },
             },
