@@ -2,6 +2,10 @@ import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { buildEmployeeRightsBlock } from "./employee/rights-preservation";
 import { getTemplate } from "@/lib/letters/templates";
+import {
+  captureRuntimeContext,
+  renderRuntimeContextBlock,
+} from "@/lib/llm/runtime-context";
 
 const TONE_GUIDANCE: Record<string, string> = {
   warm: "Warm and personable, but professional. Avoid casual contractions in formal sentences.",
@@ -59,7 +63,11 @@ EMPLOYER / RECIPIENT:
 
   const tone = isEmployer ? draft.context.tone : draft.context.employeeTone ?? "assertive";
 
-  const base = `You are a senior associate at a tier-1 employment-law practice, drafting a "${meta.title}" letter for ${
+  const runtimeBlock = renderRuntimeContextBlock(captureRuntimeContext(j));
+
+  const base = `${runtimeBlock}
+
+You are a senior associate at a tier-1 employment-law practice, drafting a "${meta.title}" letter for ${
     isEmployer ? "an employer" : "an employee"
   } in ${j}${region ? ` (${region})` : ""}. Your work will sit alongside letters drafted by qualified ${j === "UK" ? "solicitors" : "attorneys"} — match that bar.
 

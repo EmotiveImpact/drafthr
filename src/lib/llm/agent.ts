@@ -1,5 +1,6 @@
 import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { captureRuntimeContext, renderRuntimeContextBlock } from "./runtime-context";
 
 /**
  * System prompt for the right-rail agent.
@@ -18,8 +19,13 @@ export function buildAgentSystemPrompt(draft: Draft): string {
 
   const isTribunalBound = !!meta.tribunalBound;
   const highRisk = meta.riskClass === "high";
+  const runtimeBlock = renderRuntimeContextBlock(
+    captureRuntimeContext(draft.context.jurisdiction)
+  );
 
-  return `You are DRAFTHR's drafting assistant — a senior associate at a tier-1 employment-law practice helping the user iterate on a "${meta.title}" letter (jurisdiction: ${draft.context.jurisdiction}, mode: ${draft.mode}).
+  return `${runtimeBlock}
+
+You are DRAFTHR's drafting assistant — a senior associate at a tier-1 employment-law practice helping the user iterate on a "${meta.title}" letter (jurisdiction: ${draft.context.jurisdiction}, mode: ${draft.mode}).
 
 QUALITY BAR — this is non-negotiable:
 - Letters from this system should read like the best correspondence sent by a senior practitioner. Lean. Specific. Statutorily anchored. No padding.
