@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRAFTHR — Design System v0.1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet" />
+  <style>
+    /* =========================================================================
+     * DRAFTHR design system v0.1
+     * Single source of truth for tokens + component vocabulary.
+     *
+     * Principles:
+     *   1. ONE radius scale: 4 / 6 / 8 / 12.
+     *   2. ONE card style. Cards are 1px gray-3 border, gray-1 fill, p-5, r-8.
+     *   3. ONE spacing scale: 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48 / 64.
+     *   4. Type pair: Source Serif 4 for marquee headlines (size 32+ only),
+     *      Geist for everything else. Sans never above 24px.
+     *   5. Status colour (red/amber/green) only on data dots and badges.
+     *      UI chrome is monochrome. No coloured borders on buttons.
+     *   6. Density: comfortable (15px body) on desktop, compact (14px body)
+     *      in dense lists / table rows. Never mix in the same view.
+     *   7. Avatars are a primitive. ONE size scale: 20 / 24 / 28 / 32.
+     *   8. ONE solid CTA per region. Everything else is ghost or outline.
+     * ========================================================================= */
+
+    :root {
+      /* Core monochrome scale (slate-leaning) */
+      --gray-1:  #ffffff;
+      --gray-2:  #fafafa;
+      --gray-3:  #f3f4f5;
+      --gray-4:  #e9eaec;
+      --gray-5:  #dcdee1;
+      --gray-6:  #c4c7cc;
+      --gray-7:  #9ca0a8;
+      --gray-8:  #6b6f78;
+      --gray-9:  #4a4e57;
+      --gray-10: #2f3239;
+      --gray-11: #1d1f24;
+      --gray-12: #0a0b0d;
+
+      /* Status — only used on data dots / status badges, never on chrome */
+      --red-bg:    #fef2f2;
+      --red-fg:    #b91c1c;
+      --amber-bg:  #fffbeb;
+      --amber-fg:  #b45309;
+      --green-bg:  #f0fdf4;
+      --green-fg:  #15803d;
+      --blue-bg:   #eff6ff;
+      --blue-fg:   #1d4ed8;
+
+      /* Comment highlight — universal soft yellow, theme-neutral */
+      --comment-hi:    #fef3c7;
+      --comment-hi-2:  #fde68a;
+
+      /* Surfaces */
+      --canvas:    var(--gray-2);
+      --surface:   var(--gray-1);
+      --surface-2: var(--gray-2);
+      --line:      var(--gray-4);
+      --line-2:    var(--gray-3);
+
+      /* Ink */
+      --ink:       var(--gray-12);
+      --body:      var(--gray-10);
+      --muted:     var(--gray-8);
+      --subtle:    var(--gray-7);
+
+      /* Brand: ink-on-paper. The mark is geometric, not iconographic. */
+      --brand-ink: var(--gray-12);
+      --brand-paper: var(--gray-1);
+      --brand-accent: #c8a45c;  /* used sparingly, e.g. unread dot */
+
+      /* Radii — ONE scale */
+      --r-sm: 4px;
+      --r-md: 6px;
+      --r-lg: 8px;
+      --r-xl: 12px;
+
+      /* Spacing — ONE scale */
+      --s-1: 4px;
+      --s-2: 8px;
+      --s-3: 12px;
+      --s-4: 16px;
+      --s-5: 20px;
+      --s-6: 24px;
+      --s-8: 32px;
+      --s-12: 48px;
+      --s-16: 64px;
+
+      /* Type */
+      --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-serif: "Source Serif 4", "Source Serif Pro", Charter, Georgia, serif;
+
+      --t-xs: 11px;
+      --t-sm: 12px;
+      --t-base: 14px;
+      --t-md: 15px;
+      --t-lg: 17px;
+      --t-h3: 20px;
+      --t-h2: 24px;
+      --t-h1: 32px;
+      --t-display: 48px;
+
+      /* Density */
+      --row-h: 44px;
+      --row-h-compact: 36px;
+
+      /* Shadows — used only on raised elements (popovers, dialogs). Cards never use shadow. */
+      --shadow-1: 0 1px 2px rgba(15,17,21,0.04);
+      --shadow-2: 0 4px 14px rgba(15,17,21,0.08), 0 1px 3px rgba(15,17,21,0.04);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--t-base);
+      color: var(--body);
+      background: var(--canvas);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      line-height: 1.55;
+    }
+
+    /* ========================== Layout primitives ============================ */
+
+    .ds-doc {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: var(--s-12) var(--s-8);
+    }
+    .ds-section {
+      margin-top: var(--s-12);
+      padding-top: var(--s-8);
+      border-top: 1px solid var(--line-2);
+    }
+    .ds-section:first-child { border-top: none; padding-top: 0; }
+    .ds-section h2 {
+      font-family: var(--font-sans);
+      font-size: var(--t-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin: 0 0 var(--s-4) 0;
+    }
+    .ds-section h3.label {
+      font-family: var(--font-sans);
+      font-size: var(--t-sm);
+      font-weight: 600;
+      color: var(--ink);
+      margin: var(--s-6) 0 var(--s-3) 0;
+    }
+    .ds-page-title {
+      font-family: var(--font-serif);
+      font-size: var(--t-display);
+      font-weight: 600;
+      letter-spacing: -0.012em;
+      color: var(--ink);
+      margin: 0 0 var(--s-3) 0;
+      line-height: 1.04;
+    }
+    .ds-page-lede {
+      font-size: var(--t-md);
+      color: var(--body);
+      max-width: 60ch;
+      margin: 0 0 var(--s-6) 0;
+    }
+
+    .ds-grid {
+      display: grid;
+      gap: var(--s-3);
+    }
+    .ds-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ds-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .ds-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    /* ========================== Brand mark ================================== */
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--s-3);
+    }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--r-md);
+      background: var(--brand-ink);
+      color: var(--brand-paper);
+      font-family: var(--font-serif);
+      font-weight: 600;
+      font-size: 18px;
+      letter-spacing: -0.04em;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+      min-width: 0;
+    }
+    .brand-text .name {
+      font-size: var(--t-base);
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+    .brand-text .sub {
+      font-size: var(--t-xs);
+      color: var(--muted);
+    }
+
+    /* ========================== Sidebar ===================================== */
+
+    .sb-shell {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 540px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .sb {
+      background: var(--gray-2);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+    }
+    .sb-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--s-3) var(--s-3) var(--s-3) var(--s-3);
+      border-bottom: 1px solid var(--line);
+    }
+    .sb-collapse {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--r-md);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--muted);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .sb-collapse:hover { background: var(--surface); border-color: var(--line); }
+    .sb-body { padding: var(--s-3) 0; flex: 1; overflow: auto; }
+    .sb-group { padding: var(--s-3) var(--s-3) var(--s-1) var(--s-3); }
+    .sb-group h4 {
+      margin: 0 0 var(--s-2) 0;
+      font-size: var(--t-xs);
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: capitalize;
+      letter-spacing: 0;
+    }
+    .sb-item {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      padding: 6px var(--s-3);
+      border-radius: var(--r-md);
+      color: var(--body);
+      font-size: var(--t-base);
+      cursor: pointer;
+      text-decoration: none;
+      line-height: 1.2;
+    }
+    .sb-item:hover { background: var(--surface); }
+    .sb-item.active { background: var(--surface); color: var(--ink); font-weight: 500; }
+    .sb-item .icon { width: 16px; height: 16px; color: var(--subtle); flex-shrink: 0; }
+    .sb-item.active .icon { color: var(--ink); }
+    .sb-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--s-3);
+      padding: var(--s-3);
+      border-top: 1px solid var(--line);
+    }
+    .sb-user {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      min-width: 0;
+    }
+    .sb-user .avatar { width: 28px; height: 28px; border-radius: 999px; background: var(--gray-5); flex-shrink: 0; }
+    .sb-user .text { min-width: 0; line-height: 1.15; }
+    .sb-user .name { font-size: var(--t-base); font-weight: 500; color: var(--ink); }
+    .sb-user .email { font-size: var(--t-xs); color: var(--muted); }
+
+    /* ========================== PageHeader ================================== */
+
+    .page {
+      padding: var(--s-8);
+      background: var(--surface);
+      min-height: 100%;
+    }
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: var(--s-2);
+      font-size: var(--t-sm);
+      color: var(--muted);
+      margin-bottom: var(--s-4);
+    }
+    .breadcrumb a { color: var(--muted); text-decoration: none; }
+    .breadcrumb a:hover { color: var(--ink); }
+    .breadcrumb .sep { color: var(--subtle); }
+    .breadcrumb .close {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .breadcrumb .close:hover { background: var(--gray-3); color: var(--ink); }
+
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--s-6);
+      margin-bottom: var(--s-8);
+    }
+    .page-header .title { font-family: var(--font-serif); font-size: var(--t-h1); font-weight: 600; line-height: 1.08; color: var(--ink); margin: 0; letter-spacing: -0.012em; }
+    .page-header .lede { color: var(--body); font-size: var(--t-md); margin: var(--s-2) 0 0 0; max-width: 60ch; }
+
+    /* ========================== Buttons ===================================== */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 32px;
+      padding: 0 var(--s-3);
+      border-radius: var(--r-md);
+      font-size: var(--t-sm);
+      font-weight: 500;
+      line-height: 1;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      font-family: inherit;
+    }
+    .btn-solid { background: var(--gray-12); color: var(--gray-1); }
+    .btn-solid:hover { background: var(--gray-11); }
+    .btn-outline { background: var(--surface); color: var(--ink); border-color: var(--line); }
+    .btn-outline:hover { background: var(--gray-3); border-color: var(--gray-5); }
+    .btn-ghost { background: transparent; color: var(--body); }
+    .btn-ghost:hover { background: var(--gray-3); color: var(--ink); }
+    .btn-sm { height: 26px; padding: 0 var(--s-2); font-size: var(--t-xs); }
+    .btn-lg { height: 40px; padding: 0 var(--s-4); font-size: var(--t-base); }
+
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--r-md);
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .icon-btn:hover { background: var(--gray-3); color: var(--ink); }
+
+    /* ========================== Badges / status ============================= */
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: var(--t-xs);
+      font-weight: 500;
+      line-height: 1.4;
+    }
+    .badge-neutral { background: var(--gray-3); color: var(--gray-10); }
+    .badge-red { background: var(--red-bg); color: var(--red-fg); }
+    .badge-amber { background: var(--amber-bg); color: var(--amber-fg); }
+    .badge-green { background: var(--green-bg); color: var(--green-fg); }
+    .badge-blue { background: var(--blue-bg); color: var(--blue-fg); }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--t-base);
+      color: var(--body);
+    }
+    .status .dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+    .status.red    .dot { background: var(--red-fg); }
+    .status.amber  .dot { background: var(--amber-fg); }
+    .status.green  .dot { background: var(--green-fg); }
+    .status.blue   .dot { background: var(--blue-fg); }
+
+    /* ========================== Card ======================================== */
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: var(--s-5);
+    }
+    .card.compact { padding: var(--s-3); }
+
+    /* ========================== DataTable =================================== */
+
+    .table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: var(--t-base);
+    }
+    .table th {
+      font-weight: 500;
+      color: var(--muted);
+      font-size: var(--t-sm);
+      text-align: left;
+      padding: var(--s-3) var(--s-4);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .table td {
+      padding: var(--s-3) var(--s-4);
+      border-bottom: 1px solid var(--line-2);
+      color: var(--body);
+      vertical-align: middle;
+      height: var(--row-h);
+    }
+    .table tr:last-child td { border-bottom: none; }
+    .table tr:hover td { background: var(--gray-2); }
+    .table .doc {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .table .doc .file {
+      width: 16px; height: 16px;
+      flex-shrink: 0;
+      color: var(--red-fg);
+    }
+    .table .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .table .actions { text-align: right; }
+
+    /* ========================== Avatar ====================================== */
+
+    .avatar {
+      display: inline-grid;
+      place-items: center;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      flex-shrink: 0;
+      letter-spacing: 0.01em;
+    }
+    .avatar-sm { width: 20px; height: 20px; font-size: 9px; }
+    .avatar-md { width: 24px; height: 24px; font-size: 10px; }
+    .avatar-lg { width: 28px; height: 28px; font-size: 11px; }
+    .avatar-xl { width: 32px; height: 32px; font-size: 12px; }
+    .avatar-stack {
+      display: inline-flex;
+    }
+    .avatar-stack .avatar {
+      border: 2px solid var(--surface);
+    }
+    .avatar-stack .avatar + .avatar { margin-left: -8px; }
+
+    /* Avatar palette — deterministic colour-by-hash. Same set across UI. */
+    .av-1 { background: #c8a45c; }
+    .av-2 { background: #4f7cac; }
+    .av-3 { background: #5b8a6f; }
+    .av-4 { background: #8b6db4; }
+    .av-5 { background: #c75c5c; }
+    .av-6 { background: #2c8aa3; }
+    .av-7 { background: #b88742; }
+    .av-8 { background: #b35e8c; }
+
+    /* ========================== Editor canvas mock ========================== */
+
+    .editor-shell {
+      display: grid;
+      grid-template-columns: 56px 1fr 320px;
+      min-height: 560px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .editor-rail-left {
+      background: var(--gray-2);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--s-2);
+      padding: var(--s-3) 0;
+    }
+    .editor-rail-left .icon-btn {
+      width: 32px; height: 32px;
+    }
+    .editor-rail-left .brand-mark {
+      width: 32px; height: 32px;
+      margin-bottom: var(--s-3);
+    }
+    .editor-canvas {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .editor-bar {
+      height: 48px;
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      padding: 0 var(--s-4);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .editor-bar .center { flex: 1; display: flex; justify-content: center; }
+    .editor-bar .right { display: flex; align-items: center; gap: var(--s-2); }
+    .seg {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .seg button {
+      border: 0;
+      background: transparent;
+      padding: 0 var(--s-3);
+      height: 28px;
+      font-size: var(--t-sm);
+      color: var(--body);
+      cursor: pointer;
+    }
+    .seg button.active { background: var(--gray-3); color: var(--ink); font-weight: 500; }
+    .seg button + button { border-left: 1px solid var(--line); }
+
+    .paper {
+      flex: 1;
+      background: var(--gray-2);
+      padding: var(--s-8) var(--s-8);
+      overflow: auto;
+    }
+    .paper-doc {
+      max-width: 760px;
+      margin: 0 auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 56px 64px;
+      font-family: var(--font-serif);
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--ink);
+    }
+    .paper-doc h1 {
+      font-family: var(--font-serif);
+      font-size: 36px;
+      font-weight: 600;
+      margin: 0 0 var(--s-6) 0;
+      line-height: 1.1;
+    }
+    .paper-doc h2 {
+      font-family: var(--font-serif);
+      font-size: 18px;
+      font-weight: 600;
+      margin: var(--s-6) 0 var(--s-3) 0;
+    }
+    .paper-doc p { margin: var(--s-3) 0; }
+    .paper-doc mark {
+      background: var(--comment-hi);
+      border-bottom: 1.5px solid var(--comment-hi-2);
+      padding: 0 1px;
+      border-radius: 2px;
+    }
+
+    .editor-rail-right {
+      border-left: 1px solid var(--line);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .rail-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--line);
+    }
+    .rail-tabs button {
+      flex: 1;
+      height: 40px;
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      font-size: var(--t-sm);
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .rail-tabs button.active { color: var(--ink); border-bottom-color: var(--ink); }
+    .rail-tabs button:hover:not(.active) { color: var(--ink); }
+
+    .rail-body { flex: 1; overflow: auto; padding: var(--s-4); }
+    .comment-thread {
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      padding: var(--s-3);
+      margin-bottom: var(--s-3);
+    }
+    .comment-quote {
+      background: var(--comment-hi);
+      border-left: 3px solid var(--comment-hi-2);
+      padding: 6px 8px;
+      border-radius: var(--r-sm);
+      font-size: var(--t-sm);
+      font-style: italic;
+      color: var(--gray-10);
+      margin-bottom: var(--s-3);
+    }
+    .comment-row { display: flex; gap: var(--s-2); align-items: flex-start; }
+    .comment-meta { display: flex; flex-direction: column; min-width: 0; }
+    .comment-meta .name { font-size: var(--t-sm); font-weight: 600; color: var(--ink); }
+    .comment-meta .when { font-size: var(--t-xs); color: var(--muted); }
+    .comment-body { font-size: var(--t-sm); color: var(--body); margin-top: 4px; line-height: 1.5; white-space: pre-wrap; }
+
+    /* ========================== Type ramp display =========================== */
+
+    .type-row {
+      display: flex;
+      align-items: baseline;
+      gap: var(--s-4);
+      padding: var(--s-3) 0;
+      border-bottom: 1px solid var(--line-2);
+    }
+    .type-row .label { width: 120px; font-size: var(--t-xs); color: var(--muted); }
+    .type-row .sample { flex: 1; }
+
+    /* ========================== Token swatches ============================== */
+
+    .swatch {
+      display: flex;
+      align-items: center;
+      gap: var(--s-3);
+      padding: var(--s-2);
+      border-radius: var(--r-sm);
+    }
+    .swatch .chip {
+      width: 36px; height: 36px;
+      border-radius: var(--r-md);
+      border: 1px solid var(--line);
+    }
+    .swatch .meta { line-height: 1.2; }
+    .swatch .meta .name { font-size: var(--t-sm); font-weight: 500; color: var(--ink); }
+    .swatch .meta .var  { font-size: var(--t-xs); color: var(--muted); font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+
+    /* ========================== Misc ======================================== */
+    .row { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+    .stack { display: flex; flex-direction: column; gap: var(--s-3); }
+  </style>
+</head>
+<body>
+
+<div class="ds-doc">
+  <header style="margin-bottom:var(--s-12);">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s-4);flex-wrap:wrap;">
+      <div class="brand">
+        <div class="brand-mark">D</div>
+        <div class="brand-text">
+          <div class="name">DRAFTHR</div>
+          <div class="sub">Design system v0.1</div>
+        </div>
+      </div>
+      <div class="row">
+        <span class="badge badge-neutral">Static reference</span>
+        <span class="badge badge-amber">Pending review</span>
+      </div>
+    </div>
+    <h1 class="ds-page-title" style="margin-top:var(--s-6);">A single visual language for DRAFTHR.</h1>
+    <p class="ds-page-lede">Tokens, components, and page templates. Iterate here. Once approved we refactor the React surfaces to match — same components, no inline styling.</p>
+  </header>
+
+  <!-- 1. Foundation: tokens -->
+  <section class="ds-section">
+    <h2>1 — Foundation</h2>
+
+    <h3 class="label">Surfaces</h3>
+    <div class="ds-grid ds-grid-4">
+      <div class="swatch"><div class="chip" style="background:var(--canvas)"></div><div class="meta"><div class="name">Canvas</div><div class="var">--canvas / gray-2</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--surface)"></div><div class="meta"><div class="name">Surface</div><div class="var">--surface / gray-1</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--surface-2)"></div><div class="meta"><div class="name">Surface 2</div><div class="var">--surface-2 / gray-2</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--gray-3)"></div><div class="meta"><div class="name">Hover</div><div class="var">gray-3</div></div></div>
+    </div>
+
+    <h3 class="label">Ink</h3>
+    <div class="ds-grid ds-grid-4">
+      <div class="swatch"><div class="chip" style="background:var(--ink)"></div><div class="meta"><div class="name">Ink</div><div class="var">gray-12</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--body)"></div><div class="meta"><div class="name">Body</div><div class="var">gray-10</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--muted)"></div><div class="meta"><div class="name">Muted</div><div class="var">gray-8</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--subtle)"></div><div class="meta"><div class="name">Subtle</div><div class="var">gray-7</div></div></div>
+    </div>
+
+    <h3 class="label">Status — only on dots, badges, and inline cells</h3>
+    <div class="ds-grid ds-grid-4">
+      <div class="swatch"><div class="chip" style="background:var(--red-fg)"></div><div class="meta"><div class="name">Red</div><div class="var">missing / overdue</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--amber-fg)"></div><div class="meta"><div class="name">Amber</div><div class="var">review needed</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--green-fg)"></div><div class="meta"><div class="name">Green</div><div class="var">compliant / ready</div></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--blue-fg)"></div><div class="meta"><div class="name">Blue</div><div class="var">informational</div></div></div>
+    </div>
+  </section>
+
+  <!-- 2. Type -->
+  <section class="ds-section">
+    <h2>2 — Type</h2>
+    <p class="ds-page-lede" style="margin-bottom:var(--s-4);">Two faces. Source Serif 4 for marquee headlines (32px+). Geist for everything else. Density rule: never mix sizes within a row.</p>
+
+    <div class="card" style="padding:var(--s-2) var(--s-5);">
+      <div class="type-row"><span class="label">Display 48</span><span class="sample" style="font-family:var(--font-serif);font-size:var(--t-display);font-weight:600;letter-spacing:-0.012em;">Master Services</span></div>
+      <div class="type-row"><span class="label">H1 32</span><span class="sample" style="font-family:var(--font-serif);font-size:var(--t-h1);font-weight:600;letter-spacing:-0.012em;">Compliance Insights</span></div>
+      <div class="type-row"><span class="label">H2 24</span><span class="sample" style="font-family:var(--font-sans);font-size:var(--t-h2);font-weight:600;color:var(--ink);">Drafts in progress</span></div>
+      <div class="type-row"><span class="label">H3 20</span><span class="sample" style="font-family:var(--font-sans);font-size:var(--t-h3);font-weight:600;color:var(--ink);">Compliance reminders</span></div>
+      <div class="type-row"><span class="label">Body 14</span><span class="sample">Drafted with an AI tool. Not legal advice. Free advice: ACAS 0300 123 1100.</span></div>
+      <div class="type-row"><span class="label">Small 12</span><span class="sample" style="font-size:var(--t-sm);color:var(--muted);">Last updated 2 days ago · v3 · GDPR</span></div>
+      <div class="type-row" style="border-bottom:none;"><span class="label">Eyebrow 11</span><span class="sample" style="font-size:var(--t-xs);text-transform:uppercase;letter-spacing:0.14em;color:var(--muted);">Contracts</span></div>
+    </div>
+  </section>
+
+  <!-- 3. Components -->
+  <section class="ds-section">
+    <h2>3 — Component vocabulary</h2>
+
+    <h3 class="label">Buttons — one solid CTA per region</h3>
+    <div class="row">
+      <button class="btn btn-solid">Run compliance check</button>
+      <button class="btn btn-outline">View report</button>
+      <button class="btn btn-ghost">Cancel</button>
+      <button class="btn btn-solid btn-sm">Insert template</button>
+      <button class="btn btn-outline btn-sm">Skip</button>
+      <button class="icon-btn" aria-label="Toggle">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+      </button>
+    </div>
+
+    <h3 class="label">Badges & status</h3>
+    <div class="row">
+      <span class="badge badge-neutral">Draft</span>
+      <span class="badge badge-amber">Review needed</span>
+      <span class="badge badge-red">Missing clause</span>
+      <span class="badge badge-green">Compliant</span>
+      <span class="badge badge-blue">In progress</span>
+      <span class="status red"><span class="dot"></span>Missing DPA clause</span>
+      <span class="status amber"><span class="dot"></span>Outdated reference</span>
+      <span class="status green"><span class="dot"></span>Fully compliant</span>
+    </div>
+
+    <h3 class="label">Avatars — single primitive, single palette</h3>
+    <div class="row">
+      <div class="avatar avatar-sm av-1">JP</div>
+      <div class="avatar avatar-md av-2">AK</div>
+      <div class="avatar avatar-lg av-3">DM</div>
+      <div class="avatar avatar-xl av-4">SO</div>
+      <div class="avatar-stack">
+        <div class="avatar avatar-lg av-1">JP</div>
+        <div class="avatar avatar-lg av-2">AK</div>
+        <div class="avatar avatar-lg av-5">M</div>
+      </div>
+    </div>
+
+    <h3 class="label">Brand mark</h3>
+    <p class="ds-page-lede" style="margin-bottom:var(--s-3);">A geometric chip, not a Lucide icon. The serif "D" gives it presence at 32px and works in monochrome.</p>
+    <div class="row">
+      <div class="brand">
+        <div class="brand-mark">D</div>
+        <div class="brand-text"><div class="name">DRAFTHR</div><div class="sub">Personal workspace</div></div>
+      </div>
+      <div class="brand-mark" title="Collapsed mark">D</div>
+      <div class="brand-mark" style="background:var(--gray-1);color:var(--gray-12);border:1px solid var(--gray-12);">D</div>
+    </div>
+  </section>
+
+  <!-- 4. Page template — Dashboard / Compliance Insights -->
+  <section class="ds-section">
+    <h2>4 — Page template · Dashboard (compliance-insights pattern)</h2>
+
+    <div class="sb-shell">
+      <!-- Sidebar -->
+      <aside class="sb">
+        <div class="sb-header">
+          <div class="brand">
+            <div class="brand-mark">D</div>
+            <div class="brand-text">
+              <div class="name">My Workspace</div>
+              <div class="sub">Personal</div>
+            </div>
+          </div>
+          <button class="sb-collapse" aria-label="Collapse">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l-6 6 6 6M21 6l-6 6 6 6"/></svg>
+          </button>
+        </div>
+        <div class="sb-body">
+          <div class="sb-group">
+            <h4>Drafts</h4>
+            <a class="sb-item active"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>All letters</a>
+            <a class="sb-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>In progress</a>
+            <a class="sb-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Compliance</a>
+            <a class="sb-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Comments</a>
+          </div>
+          <div class="sb-group">
+            <h4>Templates</h4>
+            <a class="sb-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Catalogue</a>
+            <a class="sb-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New template</a>
+          </div>
+          <div class="sb-group">
+            <h4>Account</h4>
+            <a class="sb-item"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+        </div>
+        <div class="sb-footer">
+          <div class="sb-user">
+            <div class="avatar avatar-lg av-2">JD</div>
+            <div class="text">
+              <div class="name">John Doe</div>
+              <div class="email">john@doe.com</div>
+            </div>
+          </div>
+          <button class="icon-btn" aria-label="Account">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="page">
+        <nav class="breadcrumb">
+          <span class="close" role="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
+          <span>Compliance Insights</span>
+        </nav>
+        <header class="page-header">
+          <div>
+            <h1 class="title">Compliance Insights</h1>
+            <p class="lede">Centralised compliance overview — track audit readiness, detect gaps, and stay aligned with international standards.</p>
+          </div>
+          <div class="row">
+            <button class="btn btn-solid">Run compliance check</button>
+          </div>
+        </header>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Document</th>
+              <th>Standard</th>
+              <th>Status</th>
+              <th class="num">Last check</th>
+              <th class="actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="doc"><svg class="file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Vendor NDA v3.pdf</span></td>
+              <td>GDPR</td>
+              <td><span class="status red"><span class="dot"></span>Missing DPA clause</span></td>
+              <td class="num">2 days ago</td>
+              <td class="actions"><button class="btn btn-outline btn-sm">Review</button></td>
+            </tr>
+            <tr>
+              <td><span class="doc"><svg class="file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>SaaS Agreement Q2</span></td>
+              <td>ISO 27001</td>
+              <td><span class="status green"><span class="dot"></span>Fully compliant</span></td>
+              <td class="num">5 days ago</td>
+              <td class="actions"><button class="btn btn-outline btn-sm">View report</button></td>
+            </tr>
+            <tr>
+              <td><span class="doc"><svg class="file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>DPA_Template</span></td>
+              <td>GDPR</td>
+              <td><span class="status amber"><span class="dot"></span>Outdated reference</span></td>
+              <td class="num">1 week ago</td>
+              <td class="actions"><button class="btn btn-outline btn-sm">Review</button></td>
+            </tr>
+            <tr>
+              <td><span class="doc"><svg class="file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Employee NDA</span></td>
+              <td>SOC 2</td>
+              <td><span class="status amber"><span class="dot"></span>Missing encryption clause</span></td>
+              <td class="num">3 days ago</td>
+              <td class="actions"><button class="btn btn-outline btn-sm">Review</button></td>
+            </tr>
+            <tr>
+              <td><span class="doc"><svg class="file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Partner Agreement</span></td>
+              <td>GDPR</td>
+              <td><span class="status green"><span class="dot"></span>Compliant</span></td>
+              <td class="num">1 day ago</td>
+              <td class="actions"><button class="btn btn-outline btn-sm">View report</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </main>
+    </div>
+  </section>
+
+  <!-- 5. Page template — Editor -->
+  <section class="ds-section">
+    <h2>5 — Page template · Editor (single-header, paper canvas, tabbed rail)</h2>
+    <p class="ds-page-lede">One header, not two. Brand mark + breadcrumb + identity stack + actions in one row. View-mode toggle centred. Right rail keeps the comments / compliance / people tabs but starts on a single tab title — no doubled chrome.</p>
+
+    <div class="editor-shell">
+      <!-- narrow icon rail -->
+      <aside class="editor-rail-left">
+        <div class="brand-mark" title="DRAFTHR">D</div>
+        <button class="icon-btn" aria-label="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+        <button class="icon-btn" aria-label="Sections"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+        <button class="icon-btn" aria-label="Comments"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+      </aside>
+
+      <!-- canvas -->
+      <div class="editor-canvas">
+        <header class="editor-bar">
+          <nav class="breadcrumb" style="margin-bottom:0;">
+            <a>Letters</a>
+            <span class="sep">/</span>
+            <span style="color:var(--ink);font-weight:500;">Constructive resignation — Acme Inc.</span>
+          </nav>
+          <div class="center">
+            <div class="seg">
+              <button>Edit</button>
+              <button class="active">Split</button>
+              <button>Preview</button>
+            </div>
+          </div>
+          <div class="right">
+            <div class="avatar-stack">
+              <div class="avatar avatar-md av-1">A</div>
+              <div class="avatar avatar-md av-2">V</div>
+              <div class="avatar avatar-md av-5">M</div>
+            </div>
+            <button class="btn btn-outline btn-sm">Invite</button>
+            <button class="btn btn-solid btn-sm">Export</button>
+          </div>
+        </header>
+
+        <div class="paper">
+          <article class="paper-doc">
+            <h1>Master Services</h1>
+            <h2>1. Purpose</h2>
+            <p>This Agreement is entered into between Acme Motors Inc. ("Client") and John Adams Consulting LLC ("Service Provider") for the purpose of defining the terms under which consulting and engineering services will be performed. Both parties agree to maintain the confidentiality of proprietary information <mark>and ensure mutual protection of intellectual property.</mark></p>
+            <h2>2. Confidentiality Obligations</h2>
+            <p>The Receiving Party agrees to maintain in strict confidence all proprietary or confidential information disclosed under this Agreement.</p>
+            <p>Such obligation of confidentiality shall remain in effect <mark>for a period of five (5) years</mark> following the disclosure thereof.</p>
+            <h2>3. Payment Terms</h2>
+            <p>All invoices shall be paid promptly upon completion of services. Late payments may incur interest <mark>at a rate of 2% per month.</mark></p>
+          </article>
+        </div>
+      </div>
+
+      <!-- right rail -->
+      <aside class="editor-rail-right">
+        <div class="rail-tabs">
+          <button>Compliance</button>
+          <button class="active">Comments <span class="badge badge-neutral" style="padding:0 6px;">3</span></button>
+          <button>People</button>
+        </div>
+        <div class="rail-body">
+          <div class="comment-thread">
+            <div class="comment-quote">"and ensure mutual protection of intellectual property."</div>
+            <div class="comment-row">
+              <div class="avatar avatar-md av-1">A</div>
+              <div class="comment-meta">
+                <div class="name">Arthur E.</div>
+                <div class="when">Jan 18 · 2:53 PM</div>
+                <div class="comment-body">Can we confirm whether this agreement covers consulting only, or also advisory services? "Master Services" might be too broad.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="comment-thread">
+            <div class="comment-quote">"for a period of five (5) years"</div>
+            <div class="comment-row">
+              <div class="avatar avatar-md av-2">V</div>
+              <div class="comment-meta">
+                <div class="name">Valentin F.</div>
+                <div class="when">Jan 18 · 3:12 PM</div>
+                <div class="comment-body">Five years may be excessive for this contract type. Industry baseline is 3 years — should we consider shortening the duration?</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="comment-thread">
+            <div class="comment-quote">"at a rate of 2% per month."</div>
+            <div class="comment-row">
+              <div class="avatar avatar-md av-1">A</div>
+              <div class="comment-meta">
+                <div class="name">Arthur E.</div>
+                <div class="when">Jan 18 · 3:35 PM</div>
+                <div class="comment-body">2% monthly interest is unusually high. Recommending switching to a fixed annual interest rate (e.g. 6–8%) for compliance.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 6. Rules -->
+  <section class="ds-section">
+    <h2>6 — Composition rules</h2>
+    <ol style="font-size:var(--t-base);line-height:1.7;color:var(--body);padding-left:18px;">
+      <li><strong>One solid CTA per region.</strong> "Run compliance check", "Generate contract", "Export". Never two solid buttons in the same row.</li>
+      <li><strong>Cards have one shape.</strong> 1px <code>--line</code> border, no shadow, <code>--r-lg</code> radius, <code>--s-5</code> padding.</li>
+      <li><strong>Status colour only on dots, badges, and table-cell text.</strong> No coloured borders, no coloured backgrounds on cards.</li>
+      <li><strong>Density never mixed.</strong> A view is either comfortable (44px row) or compact (36px row).</li>
+      <li><strong>One header per route.</strong> Editor included. Move overflow controls into a "More" menu before adding a second bar.</li>
+      <li><strong>Avatars come from the primitive.</strong> Same palette, same radius, same letter rules. The avatar stack is owned by one component.</li>
+      <li><strong>Marquee headlines are serif.</strong> Source Serif 4. Section headlines (≤24px) are sans. Don't mix faces in the same heading group.</li>
+      <li><strong>The brand mark is a chip, not an icon.</strong> 32×32 with a serif "D" — replaces every Lucide ScrollText.</li>
+      <li><strong>Letter paper is a card with serif body.</strong> Same paper renders in preview, split, and export.</li>
+      <li><strong>Right-rail tabs replace stacked toolbars.</strong> Don't add a second action row in any rail.</li>
+    </ol>
+  </section>
+
+</div>
+
+</body>
+</html>

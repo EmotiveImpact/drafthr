@@ -6,6 +6,8 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import { UserChip } from "@/lib/auth/UserChip";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { useProfileStore } from "@/lib/profile";
+import { listIdentities, colorFor } from "@/lib/comments/identity";
 
 /**
  * Compact topbar shown ONLY on the editor route, where the global sidebar is
@@ -16,8 +18,12 @@ export function EditorTopbar() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const profile = useProfileStore((s) => s.profile);
   const meta = draft ? getLetterMeta(draft.letterType) : null;
   const backTo = draft?.mode === "employer" ? "/hr" : draft?.mode === "employee" ? "/me" : "/";
+  const identities = draft ? listIdentities(draft, profile) : [];
+  const stack = identities.slice(0, 3);
+  const more = Math.max(0, identities.length - stack.length);
 
   return (
     <Flex
@@ -88,6 +94,39 @@ export function EditorTopbar() {
           <ShieldCheck className="size-3" />
           Counsel review recommended
         </Flex>
+        {stack.length > 0 && (
+          <Flex align="center" className="hidden sm:flex">
+            {stack.map((p, i) => (
+              <Box
+                key={p.id}
+                title={p.name + (p.email ? ` <${p.email}>` : "")}
+                className="size-7 rounded-full grid place-items-center shrink-0"
+                style={{
+                  background: colorFor(p.hue),
+                  color: "white",
+                  marginLeft: i === 0 ? 0 : -8,
+                  border: "2px solid var(--color-background)",
+                  zIndex: stack.length - i,
+                }}
+              >
+                <Text size="1" weight="bold">{p.initials}</Text>
+              </Box>
+            ))}
+            {more > 0 && (
+              <Box
+                className="size-7 rounded-full grid place-items-center shrink-0"
+                style={{
+                  background: "var(--gray-4)",
+                  color: "var(--gray-12)",
+                  marginLeft: -8,
+                  border: "2px solid var(--color-background)",
+                }}
+              >
+                <Text size="1" weight="bold">+{more}</Text>
+              </Box>
+            )}
+          </Flex>
+        )}
         <NotificationsBell />
         <Box className="hidden sm:block"><ThemeToggle /></Box>
         <UserChip />

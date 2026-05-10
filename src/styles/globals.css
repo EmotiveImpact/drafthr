@@ -2,48 +2,48 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/source-serif-4";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================================
- * Premium white theme.
- *
- * Cool-neutral ink (slate-leaning) on pure-white, with a barely-there warm
- * tinted off-white for sidebar / muted surfaces so panels read as one tier
- * down from the canvas. Borders are thin and slightly cool. Focus ring uses
- * a visible mid-grey rather than blue.
+ * DRAFTHR theme — Source-Serif headlines on pure white, monochrome ink-on-paper
+ * with status-only color (red / amber / green) on data dots. Aligned to the
+ * compliance-table and contract-generator references: minimal, mintlify-ish.
  * ==========================================================================*/
 
 :root {
   --background: oklch(1 0 0);
-  --foreground: oklch(0.155 0.005 240);
+  --foreground: oklch(0.16 0.01 250);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.155 0.005 240);
+  --card-foreground: oklch(0.16 0.01 250);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.155 0.005 240);
+  --popover-foreground: oklch(0.16 0.01 250);
 
-  --primary: oklch(0.205 0.008 240);
-  --primary-foreground: oklch(0.985 0.001 60);
+  /* Primary CTA: pure ink (near-black) on white — the "Run compliance check"
+   * and "Generate contract" buttons in the references. */
+  --primary: oklch(0.18 0.008 250);
+  --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.972 0.003 60);
-  --secondary-foreground: oklch(0.205 0.008 240);
+  --secondary: oklch(0.975 0.003 250);
+  --secondary-foreground: oklch(0.18 0.008 250);
 
-  --muted: oklch(0.972 0.003 60);
-  --muted-foreground: oklch(0.46 0.011 240);
+  --muted: oklch(0.975 0.003 250);
+  --muted-foreground: oklch(0.49 0.012 250);
 
-  --accent: oklch(0.965 0.004 60);
-  --accent-foreground: oklch(0.205 0.008 240);
+  --accent: oklch(0.97 0.004 250);
+  --accent-foreground: oklch(0.18 0.008 250);
 
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --border: oklch(0.928 0.004 240);
-  --input: oklch(0.928 0.004 240);
-  --ring: oklch(0.62 0.014 240);
+  --border: oklch(0.93 0.005 250);
+  --input: oklch(0.93 0.005 250);
+  --ring: oklch(0.6 0.012 250);
 
-  --radius: 0.55rem;
+  --radius: 0.5rem;
 
   /* DRAFTHR brand — legal-clean, ink-on-cream */
   --letter-paper: oklch(0.995 0.002 95);
@@ -52,6 +52,10 @@
   --letter-warning: oklch(0.6 0.18 30);
   --letter-ok: oklch(0.55 0.13 145);
 
+  /* Annotation highlight — soft yellow used by comment-mark text. Theme-neutral. */
+  --comment-highlight: oklch(0.94 0.13 90);
+  --comment-highlight-strong: oklch(0.86 0.16 80);
+
   /* Subtle chart palette */
   --chart-1: oklch(0.872 0.007 219.6);
   --chart-2: oklch(0.56 0.021 213.5);
@@ -59,15 +63,15 @@
   --chart-4: oklch(0.378 0.015 216);
   --chart-5: oklch(0.275 0.011 216.9);
 
-  /* Sidebar — one tier down from canvas, warm undertone */
-  --sidebar: oklch(0.985 0.003 60);
-  --sidebar-foreground: oklch(0.155 0.005 240);
-  --sidebar-primary: oklch(0.205 0.008 240);
-  --sidebar-primary-foreground: oklch(0.985 0.001 60);
-  --sidebar-accent: oklch(0.96 0.005 60);
-  --sidebar-accent-foreground: oklch(0.205 0.008 240);
-  --sidebar-border: oklch(0.928 0.004 240);
-  --sidebar-ring: oklch(0.62 0.014 240);
+  /* Sidebar — barely-there grey, one tier below canvas. Borders thin & cool. */
+  --sidebar: oklch(0.985 0.002 250);
+  --sidebar-foreground: oklch(0.32 0.012 250);
+  --sidebar-primary: oklch(0.18 0.008 250);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.965 0.004 250);
+  --sidebar-accent-foreground: oklch(0.18 0.008 250);
+  --sidebar-border: oklch(0.93 0.005 250);
+  --sidebar-ring: oklch(0.6 0.012 250);
 }
 
 @theme inline {
@@ -153,7 +157,18 @@
     @apply bg-background text-foreground;
   }
 
-  /* Refined heading typography — premium tracking */
+  /* Display typography — Source Serif 4 for the marquee headlines, geometric
+   * sans for everything else. Monochrome with very tight tracking, matching
+   * the reference (Compliance Insights / Master Services screens). */
+  .font-serif,
+  [data-radix-themes-heading][data-size="6"],
+  [data-radix-themes-heading][data-size="7"],
+  [data-radix-themes-heading][data-size="8"],
+  [data-radix-themes-heading][data-size="9"] {
+    font-family: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.012em;
+  }
   h1, h2, h3 {
     letter-spacing: -0.018em;
   }
@@ -166,6 +181,25 @@
     float: left;
     height: 0;
     pointer-events: none;
+  }
+
+  /* Inline comment annotations — soft yellow highlight on marked text. */
+  .tiptap mark[data-comment-id],
+  mark[data-comment-id] {
+    background: var(--comment-highlight);
+    border-bottom: 1.5px solid var(--comment-highlight-strong);
+    padding: 0 1px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .tiptap mark[data-comment-id]:hover,
+  mark[data-comment-id]:hover {
+    background: var(--comment-highlight-strong);
+  }
+  .tiptap mark[data-comment-id][data-comment-resolved="true"] {
+    background: transparent;
+    border-bottom: 1.5px dashed var(--comment-highlight-strong);
   }
 
   /* Cards: subtle, warm shadow rather than the default Tailwind stack */

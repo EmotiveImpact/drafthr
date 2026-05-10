@@ -1,4 +1,4 @@
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
@@ -11,8 +11,9 @@ import { useEffect, useRef } from "react";
 import type { Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Loader2, RotateCcw, History, Trash2 } from "lucide-react";
+import { Loader2, RotateCcw, History, Trash2, MessageSquarePlus } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
+import { CommentMark } from "@/lib/tiptap/comment-mark";
 
 type Props = {
   section: Section;
@@ -20,6 +21,16 @@ type Props = {
   onRegenerate: () => void;
   onClear: () => void;
   onShowHistory: () => void;
+  /**
+   * Open the comment composer for this section.
+   * If `quote` is given the composer prefills with the quoted text and
+   * applies a CommentMark to the selection on post.
+   */
+  onAddComment?: (opts?: { quote?: string; applyMark?: (commentId: string) => void }) => void;
+  /** Bring an existing inline-anchored comment into focus in the right rail. */
+  onFocusComment?: (commentId: string) => void;
+  /** Number of unresolved comments on this section (badge count). */
+  commentCount?: number;
   isStreaming: boolean;
   active: boolean;
   onFocus: () => void;
@@ -31,6 +42,9 @@ export function SectionEditor({
   onRegenerate,
   onClear,
   onShowHistory,
+  onAddComment,
+  onFocusComment,
+  commentCount = 0,
   isStreaming,
   active,
   onFocus,
@@ -47,6 +61,7 @@ export function SectionEditor({
       TableRow,
       TableHeader,
       TableCell,
+      CommentMark,
     ],
     content: section.html || "",
     editable: !isStreaming,
@@ -58,7 +73,37 @@ export function SectionEditor({
       }
     },
     onFocus,
+    editorProps: {
+      handleClickOn(_view, _pos, _node, _nodePos, event) {
+        const target = event.target as HTMLElement | null;
+        const mark = target?.closest?.("mark[data-comment-id]") as HTMLElement | null;
+        if (mark && onFocusComment) {
+          const id = mark.getAttribute("data-comment-id");
+          if (id) {
+            onFocusComment(id);
+            return true;
+          }
+        }
+        return false;
+      },
+    },
   });
+
+  const onAddCommentForSelection = () => {
+    if (!editor || !onAddComment) return;
+    const { from, to, empty } = editor.state.selection;
+    if (empty) {
+      onAddComment();
+      return;
+    }
+    const quote = editor.state.doc.textBetween(from, to, " ").trim();
+    onAddComment({
+      quote: quote || undefined,
+      applyMark: (commentId: string) => {
+        editor.chain().focus().setTextSelection({ from, to }).setCommentMark(commentId).run();
+      },
+    });
+  };
 
   // Re-sync when the section html changes externally (streaming or regen).
   useEffect(() => {
@@ -105,6 +150,22 @@ export function SectionEditor({
           )}
         </div>
         <div className="flex items-center gap-0.5">
+          {onAddComment && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7 relative"
+              onClick={(e) => { e.stopPropagation(); onAddCommentForSelection(); }}
+              aria-label={commentCount > 0 ? `${commentCount} comments` : "Add comment"}
+            >
+              <MessageSquarePlus className="size-3.5" />
+              {commentCount > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                  {commentCount}
+                </span>
+              )}
+            </Button>
+          )}
           <Button
             size="icon"
             variant="ghost"
@@ -139,6 +200,25 @@ export function SectionEditor({
       </header>
       {active && <EditorToolbar editor={editor} />}
       <div className="px-7 py-5">
+        {editor && onAddComment && (
+          <BubbleMenu
+            editor={editor}
+            tippyOptions={{ duration: 80, placement: "top" }}
+            shouldShow={({ editor: ed, from, to }) => {
+              if (ed.isActive("commentMark")) return false;
+              return from !== to;
+            }}
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); onAddCommentForSelection(); }}
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md shadow-sm bg-[var(--gray-12)] text-[var(--gray-1)] hover:bg-[var(--gray-11)]"
+            >
+              <MessageSquarePlus className="size-3" />
+              Comment
+            </button>
+          </BubbleMenu>
+        )}
         <EditorContent
           editor={editor}
           className="prose prose-sm max-w-none focus:outline-none [&_p]:my-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_a]:underline [&_table]:border [&_table]:border-letter-rule [&_th]:border [&_th]:border-letter-rule [&_td]:border [&_td]:border-letter-rule [&_th]:bg-muted/40 [&_th]:text-left [&_th]:p-2 [&_td]:p-2"

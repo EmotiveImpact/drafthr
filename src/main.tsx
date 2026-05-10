@@ -19,8 +19,8 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <AuthProvider>
         <Theme
-          accentColor="gold"
-          grayColor="sand"
+          accentColor="gray"
+          grayColor="slate"
           radius="medium"
           scaling="100%"
           appearance="inherit"

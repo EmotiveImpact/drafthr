@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
+  Collaborator,
+  CollaboratorRole,
+  Comment,
   Draft,
   EvidenceItem,
   ExportEvent,
@@ -25,6 +28,12 @@ type Store = {
   setWithoutPrejudice: (id: string, value: boolean) => void;
   setEvidence: (id: string, items: EvidenceItem[]) => void;
   recordExport: (id: string, event: Omit<ExportEvent, "id" | "exportedAt"> & { exportedAt?: number }) => void;
+  inviteCollaborator: (id: string, email: string, role: CollaboratorRole, name?: string) => void;
+  removeCollaborator: (id: string, collaboratorId: string) => void;
+  updateCollaboratorRole: (id: string, collaboratorId: string, role: CollaboratorRole) => void;
+  addComment: (id: string, comment: Omit<Comment, "id" | "createdAt">) => string;
+  deleteComment: (id: string, commentId: string) => void;
+  resolveComment: (id: string, commentId: string, resolved: boolean) => void;
   deleteDraft: (id: string) => void;
 };
 
@@ -241,6 +250,111 @@ export const useDraftStore = create<Store>()(
               [id]: {
                 ...d,
                 exports: [...(d.exports ?? []), e],
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      inviteCollaborator: (id, email, role, name) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const trimmed = email.trim().toLowerCase();
+          if (!trimmed) return s;
+          const existing = d.collaborators ?? [];
+          if (existing.some((c) => c.email === trimmed)) return s;
+          const c: Collaborator = {
+            id: uid("col"),
+            email: trimmed,
+            name: name?.trim() || undefined,
+            role,
+            status: "pending",
+            invitedAt: Date.now(),
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: { ...d, collaborators: [...existing, c], updatedAt: Date.now() },
+            },
+          };
+        }),
+
+      removeCollaborator: (id, collaboratorId) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                collaborators: (d.collaborators ?? []).filter((c) => c.id !== collaboratorId),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      updateCollaboratorRole: (id, collaboratorId, role) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                collaborators: (d.collaborators ?? []).map((c) =>
+                  c.id === collaboratorId ? { ...c, role } : c
+                ),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      addComment: (id, c) => {
+        const newId = uid("cmt");
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const comment: Comment = { ...c, id: newId, createdAt: Date.now() };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: { ...d, comments: [...(d.comments ?? []), comment], updatedAt: Date.now() },
+            },
+          };
+        });
+        return newId;
+      },
+
+      deleteComment: (id, commentId) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          // Remove the comment AND any replies under it.
+          const next = (d.comments ?? []).filter(
+            (c) => c.id !== commentId && c.parentId !== commentId
+          );
+          return {
+            drafts: { ...s.drafts, [id]: { ...d, comments: next, updatedAt: Date.now() } },
+          };
+        }),
+
+      resolveComment: (id, commentId, resolved) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                comments: (d.comments ?? []).map((c) =>
+                  c.id === commentId ? { ...c, resolved } : c
+                ),
                 updatedAt: Date.now(),
               },
             },

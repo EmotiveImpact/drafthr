@@ -226,6 +226,39 @@ export type ExportEvent = {
   reviewedOn?: string;
 };
 
+export type CollaboratorRole = "owner" | "editor" | "reviewer" | "viewer";
+
+export type Collaborator = {
+  id: string;
+  email: string;
+  name?: string;
+  role: CollaboratorRole;
+  /** Pending until the invitee opens the share link. Local-only flag for now. */
+  status: "pending" | "active";
+  invitedAt: number;
+};
+
+/**
+ * A comment on a draft. Threaded via parentId — top-level comments are
+ * anchored to a section; replies are nested under another comment.
+ */
+export type Comment = {
+  id: string;
+  /** The section this comment is anchored to. Empty string = draft-level. */
+  sectionId: string;
+  /** Top-level comment id this is a reply to, if any. */
+  parentId?: string;
+  /** Stable identity of the author. For now: collaborator id, "me", or email. */
+  authorId: string;
+  authorName: string;
+  authorEmail?: string;
+  body: string;
+  /** Plain-text quote of the spanned text when the comment is anchored to a range. */
+  quote?: string;
+  createdAt: number;
+  resolved?: boolean;
+};
+
 export type Draft = {
   id: string;
   /** Denormalised from context.mode for fast filtering. */
@@ -242,6 +275,10 @@ export type Draft = {
   outcomeSought?: string;
   /** Each export attempt is logged here for audit + the Exported / Activity views. */
   exports?: ExportEvent[];
+  /** Collaborators invited to this draft. Owner is implicit (the draft creator). */
+  collaborators?: Collaborator[];
+  /** Threaded comments on this draft. */
+  comments?: Comment[];
   createdAt: number;
   updatedAt: number;
 };

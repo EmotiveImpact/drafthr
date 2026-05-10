@@ -3,8 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { SectionsList } from "@/components/editor/SectionsList";
 import { SectionEditor } from "@/components/editor/SectionEditor";
-import { CompliancePanel } from "@/components/editor/CompliancePanel";
-import { EmployeeRail } from "@/components/editor/EmployeeRail";
+import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
 import { WithoutPrejudiceToggle } from "@/components/editor/WithoutPrejudiceToggle";
 import { ToneOverride } from "@/components/editor/ToneOverride";
@@ -58,6 +57,43 @@ export function Editor() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "split" | "preview">("edit");
+  const [rightTab, setRightTab] = useState<RightRailTab>("compliance");
+  const [pendingComment, setPendingComment] = useState<{
+    sectionId: string;
+    quote?: string;
+    applyMark?: (commentId: string) => void;
+  } | null>(null);
+
+  const openComments = (sectionId: string) => {
+    setRightTab("comments");
+    setShowRail(true);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-comments-anchor="${sectionId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const commentCount = (sectionId: string) =>
+    (draft?.comments ?? []).filter((c) => c.sectionId === sectionId && !c.resolved).length;
+
+  const onSectionAddComment = (
+    sectionId: string,
+    opts?: { quote?: string; applyMark?: (commentId: string) => void }
+  ) => {
+    setPendingComment({ sectionId, ...opts });
+    openComments(sectionId);
+  };
+
+  const onFocusComment = (commentId: string) => {
+    setRightTab("comments");
+    setShowRail(true);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-comment-id="${commentId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.classList.add("ring-2", "ring-[var(--accent-9)]");
+      setTimeout(() => el?.classList.remove("ring-2", "ring-[var(--accent-9)]"), 1600);
+    });
+  };
   const abortRef = useRef<AbortController | null>(null);
 
   const meta = useMemo(
@@ -180,8 +216,9 @@ export function Editor() {
     <div className="flex flex-col flex-1 min-h-0">
       {/* Editor actions row — sits below the EditorTopbar provided by Layout */}
       <div className="border-b border-letter-rule bg-muted/20">
-        <div className="px-3 sm:px-6 h-11 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
+        <div className="px-3 sm:px-6 h-11 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          {/* Left zone */}
+          <div className="flex items-center gap-1 min-w-0">
             <Button
               variant="ghost"
               size="icon"
@@ -197,16 +234,18 @@ export function Editor() {
               onChange={(v) => setWithoutPrejudice(draft.id, v)}
             />
           </div>
-          <div className="flex items-center gap-1">
-            <div
-              className="inline-flex items-center rounded-md border border-letter-rule bg-background overflow-hidden mr-1"
-              role="tablist"
-              aria-label="View mode"
-            >
-              <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-              <ViewModeButton mode="split" current={viewMode} setMode={setViewMode} icon={<Columns2 className="size-3.5" />} label="Split" hideLabelOn="md" />
-              <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
-            </div>
+          {/* Center: view-mode toggle */}
+          <div
+            className="inline-flex items-center rounded-md border border-letter-rule bg-background overflow-hidden justify-self-center"
+            role="tablist"
+            aria-label="View mode"
+          >
+            <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
+            <ViewModeButton mode="split" current={viewMode} setMode={setViewMode} icon={<Columns2 className="size-3.5" />} label="Split" hideLabelOn="md" />
+            <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+          </div>
+          {/* Right zone */}
+          <div className="flex items-center gap-1 justify-self-end">
             {globallyStreaming ? (
               <Button variant="ghost" size="sm" onClick={stopStreaming}>
                 <StopCircle className="size-4 sm:mr-1.5" />
@@ -287,6 +326,9 @@ export function Editor() {
                     onRegenerate={() => onRegenerateSection(section)}
                     onClear={() => updateSection(draft.id, section.id, "")}
                     onShowHistory={() => setHistorySection(section)}
+                    onAddComment={(opts) => onSectionAddComment(section.id, opts)}
+                    onFocusComment={onFocusComment}
+                    commentCount={commentCount(section.id)}
                   />
                 ))}
                 {globallyStreaming && (
@@ -336,11 +378,13 @@ export function Editor() {
               : "hidden lg:block")
           }
         >
-          {draft.mode === "employee" ? (
-            <EmployeeRail draft={draft} />
-          ) : (
-            <CompliancePanel draft={draft} />
-          )}
+          <RightRail
+            draft={draft}
+            tab={rightTab}
+            onTabChange={setRightTab}
+            pendingComment={pendingComment}
+            onPendingCommentConsumed={() => setPendingComment(null)}
+          />
         </aside>
 
         {/* Mobile scrim */}
