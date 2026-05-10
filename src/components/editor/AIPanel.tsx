@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
+import { Markdown } from "./Markdown";
 import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw } from "lucide-react";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -75,7 +76,12 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         api: "/api/agent",
         prepareSendMessagesRequest: ({ messages, body }) => ({
           body: {
-            messages,
+            // Strip any tool-call parts that don't have a result. v6's
+            // OpenAI-compatible adapter throws AI_MissingToolResultsError
+            // if it sees a tool_call without a matching tool_result; if
+            // the user ignored a proposal, the cleanest thing to do is
+            // drop it so the agent moves on.
+            messages: stripPendingToolCalls(messages),
             system: buildAgentSystemPrompt(draft),
             model: profile.defaults.qwenModel,
             ...(body ?? {}),
@@ -178,6 +184,14 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   const isStreaming = status === "streaming" || status === "submitted";
 
+  // Auto-scroll the message list to the bottom as new messages arrive.
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, status]);
+
   /**
    * Execute a proposed regenerateSection tool call. Runs the actual
    * regeneration via the existing draft pipeline, then pushes the
@@ -244,7 +258,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         )}
       </div>
 
-      <div className="flex-1 overflow-auto px-4 py-3 space-y-3">
+      <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
         {messages.length === 0 && (
           <div className="text-center py-8">
             <BrandMark size={36} className="mx-auto mb-3" />
@@ -299,10 +313,10 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask the AI agent..."
-            rows={1}
-            className="flex-1 min-h-[36px] max-h-[120px] resize-none px-2.5 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+            rows={3}
+            className="flex-1 min-h-[72px] max-h-[200px] resize-y px-3 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[14px] leading-relaxed text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 void submit();
               }
@@ -312,7 +326,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             <button
               type="button"
               onClick={() => stop()}
-              className="size-8 rounded-md bg-[var(--ds-line)] text-[var(--ds-ink)] grid place-items-center"
+              className="size-10 shrink-0 rounded-md bg-[var(--ds-line)] text-[var(--ds-ink)] grid place-items-center"
               aria-label="Stop"
             >
               <Loader2 className="size-4 animate-spin" />
@@ -321,8 +335,9 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             <button
               type="submit"
               disabled={!input.trim()}
-              className="size-8 rounded-md bg-[var(--ds-ink)] text-white grid place-items-center disabled:opacity-30"
+              className="size-10 shrink-0 rounded-md bg-[var(--ds-ink)] text-white grid place-items-center disabled:opacity-30"
               aria-label="Send"
+              title="Send (⌘ + Enter)"
             >
               <ArrowUp className="size-4" />
             </button>
@@ -352,6 +367,31 @@ function textFromParts(m: UIMessage): string {
     .filter((p) => p.type === "text")
     .map((p) => (p as { type: "text"; text: string }).text)
     .join("");
+}
+
+/**
+ * Remove tool-call parts that don't have an output yet. We need this on
+ * the way out to /api/agent because the OpenAI-compatible Qwen endpoint
+ * (via convertToModelMessages) requires every tool_call to have a
+ * matching tool_result. If the user ignored a proposal, the cleanest
+ * thing is to drop it from history — the agent then starts the next
+ * turn fresh rather than blocking on stale proposals.
+ */
+function stripPendingToolCalls(messages: UIMessage[]): UIMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    parts: m.parts.filter((p) => {
+      if (typeof p.type === "string" && p.type.startsWith("tool-")) {
+        const state = (p as { state?: string }).state;
+        // Keep only tool parts that have been resolved (output present)
+        // or denied. Drop pending proposals.
+        return state === "output-available" || state === "output-error";
+      }
+      // Drop dynamic-tool entries we don't render either.
+      if (p.type === "dynamic-tool") return false;
+      return true;
+    }),
+  }));
 }
 
 function Message({
@@ -394,13 +434,19 @@ function Message({
         {(body || (streaming && !textOnly)) && (
           <div
             className={
-              "mt-1 text-[13px] leading-relaxed whitespace-pre-wrap rounded-md px-3 py-2 " +
+              "mt-1 rounded-md px-3 py-2 " +
               (isUser
-                ? "bg-[var(--ds-ink)] text-white"
+                ? "bg-[var(--ds-ink)] text-white text-[13px] leading-relaxed whitespace-pre-wrap"
                 : "bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
             }
           >
-            {body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)}
+            {isUser ? (
+              body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)
+            ) : body ? (
+              <Markdown>{body}</Markdown>
+            ) : streaming ? (
+              <span className="text-[var(--ds-muted)] text-[13px]">…</span>
+            ) : null}
           </div>
         )}
 

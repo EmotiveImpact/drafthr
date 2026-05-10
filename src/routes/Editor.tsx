@@ -365,6 +365,30 @@ export function Editor() {
                 </Button>
               }
             />
+            {/* Surfaced primary actions — Regenerate all + Stop. Always
+             * visible at md+. On mobile they fold into the More menu. */}
+            {globallyStreaming ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={stopStreaming}
+                className="hidden md:inline-flex"
+              >
+                <StopCircle className="size-3.5" />
+                <span className="hidden lg:inline">Stop</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={runGenerateAll}
+                className="hidden md:inline-flex"
+                title="Regenerate every section (uses current wizard answers and tone)"
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden lg:inline">Regenerate all</span>
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">
@@ -411,13 +435,13 @@ export function Editor() {
       </header>
 
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_320px] min-h-0 relative overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_420px] min-h-0 relative overflow-hidden">
         <aside
           className={
-            "border-r border-[var(--ds-line)] bg-[var(--ds-surface-2)] min-h-0 " +
+            "border-r border-[var(--ds-line)] bg-[var(--ds-surface-2)] min-h-0 flex flex-col overflow-hidden " +
             (showSidebar
               ? "absolute inset-y-0 left-0 z-40 w-[260px] shadow-xl lg:static lg:shadow-none lg:w-auto"
-              : "hidden lg:block")
+              : "hidden lg:flex")
           }
         >
           <SectionsList

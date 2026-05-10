@@ -57,6 +57,7 @@
     "html-to-docx": "^1.8.0",
     "html2pdf.js": "^0.10.2",
     "lucide-react": "^0.475.0",
+    "marked": "^18.0.3",
     "postgres": "^3.4.9",
     "puppeteer-core": "^24.43.0",
     "radix-ui": "^1.4.3",
