@@ -1,0 +1,28 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+.env
+.env.local
+.env.*.local
+
+# Local backups + agent artefacts (not for shared repo)
+.backups
+.agents
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Editor / OS
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

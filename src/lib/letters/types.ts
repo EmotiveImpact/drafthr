@@ -1,0 +1,247 @@
+/* ============================================================================
+ * Mode discriminator
+ * ==========================================================================*/
+
+export type Mode = "employer" | "employee";
+
+/* ============================================================================
+ * Jurisdiction & locality (shared across modes)
+ * ==========================================================================*/
+
+export type Jurisdiction = "UK" | "US";
+
+export type UkRegion = "England & Wales" | "Scotland" | "Northern Ireland";
+
+export type UsState =
+  | "AL" | "AK" | "AZ" | "AR" | "CA" | "CO" | "CT" | "DE" | "FL" | "GA"
+  | "HI" | "ID" | "IL" | "IN" | "IA" | "KS" | "KY" | "LA" | "ME" | "MD"
+  | "MA" | "MI" | "MN" | "MS" | "MO" | "MT" | "NE" | "NV" | "NH" | "NJ"
+  | "NM" | "NY" | "NC" | "ND" | "OH" | "OK" | "OR" | "PA" | "RI" | "SC"
+  | "SD" | "TN" | "TX" | "UT" | "VT" | "VA" | "WA" | "WV" | "WI" | "WY"
+  | "DC";
+
+export type WorkerClass = "employee" | "worker" | "contractor" | "casual";
+
+export type Tone = "warm" | "neutral" | "formal" | "firm";
+export type EmployeeTone = "conciliatory" | "assertive" | "forensic" | "tribunal_ready";
+
+export type RiskClass = "low" | "medium" | "high";
+
+/* ============================================================================
+ * Letter type unions (mode-aware)
+ * ==========================================================================*/
+
+export type EmployerLetterTypeId =
+  | "offer"
+  | "contract_amendment"
+  | "promotion"
+  | "salary_increase"
+  | "probation_outcome"
+  | "warning"
+  | "termination"
+  | "redundancy"
+  | "reference"
+  | "leave_approval"
+  | "resignation_acceptance"
+  | "return_to_work"
+  | "settlement_cover"
+  | "right_to_work";
+
+export type EmployeeLetterTypeId =
+  | "grievance"
+  | "resignation_clean"
+  | "resignation_with_grievance"
+  | "resignation_constructive"
+  | "flexible_working_request"
+  | "subject_access_request"
+  | "appeal"
+  | "whistleblowing"
+  | "accommodation_request"
+  | "sickness_notification"
+  | "pay_dispute"
+  | "redundancy_consultation_response"
+  | "settlement_counter_offer"
+  | "right_to_disconnect"
+  | "holiday_request"
+  | "pip_response"
+  | "constructive_dismissal_warning"
+  | "reference_dispute"
+  | "resignation_withdrawal"
+  | "acas_ec_notification"
+  | "tribunal_cover";
+
+export type LetterTypeId = EmployerLetterTypeId | EmployeeLetterTypeId;
+
+/* ============================================================================
+ * Sections
+ * ==========================================================================*/
+
+export type SectionId =
+  | "header"
+  | "recipient_block"
+  | "subject"
+  | "salutation"
+  | "opening"
+  | "body"
+  | "terms"
+  | "compensation"
+  | "benefits"
+  | "conditions"
+  | "next_steps"
+  | "appeal_rights"
+  | "closing"
+  | "signature"
+  // employee-side additions
+  | "chronology"
+  | "witnesses"
+  | "statutory_basis"
+  | "impact"
+  | "outcome_sought"
+  | "evidence_attached"
+  | "reservation_of_rights"
+  | "deadline";
+
+export type SectionVersion = {
+  id: string;
+  createdAt: number;
+  html: string;
+  modelName?: string;
+};
+
+export type Section = {
+  id: string;
+  sectionId: SectionId;
+  title: string;
+  html: string;
+  required: boolean;
+  versions: SectionVersion[];
+  status: "empty" | "streaming" | "ready" | "edited";
+};
+
+/* ============================================================================
+ * Employer / employee party blocks
+ * ==========================================================================*/
+
+export type EmployerDetails = {
+  legalName: string;
+  address: string;
+  registrationNumber?: string;
+  hasLetterhead: boolean;
+  signatoryName: string;
+  signatoryTitle: string;
+};
+
+export type EmployeeDetails = {
+  legalName: string;
+  preferredName?: string;
+  jobTitle: string;
+  department?: string;
+  address: string;
+  email?: string;
+  startDate: string;
+  serviceMonths: number;
+};
+
+/* ============================================================================
+ * Employee-mode-only — protected deadline & evidence
+ * ==========================================================================*/
+
+export type ProtectedCharacteristic =
+  | "race"
+  | "sex"
+  | "age"
+  | "disability"
+  | "religion"
+  | "sexual_orientation"
+  | "gender_reassignment"
+  | "pregnancy_maternity"
+  | "marriage_civil_partnership"
+  // US-only adds
+  | "national_origin"
+  | "genetic_information"
+  | "veteran_status";
+
+export type EvidenceItem = {
+  id: string;
+  kind: "email" | "calendar" | "document" | "screenshot" | "note";
+  filename?: string;
+  /** Free-text content (or summary) the user supplied. Stored client-side; never sent to LLM unless includeVerbatim=true. */
+  content: string;
+  parsedSummary?: string;
+  uploadedAt: number;
+  includeVerbatim: boolean;
+};
+
+export type ProtectedDeadline = {
+  /** ISO date — the calculated tribunal/EEOC limitation deadline. */
+  iso: string;
+  /** Human-readable basis (e.g. "ERA s.111: 3 months less one day from act on 14 March 2026"). */
+  basis: string;
+};
+
+/* ============================================================================
+ * Letter context
+ * ==========================================================================*/
+
+export type LetterContext = {
+  mode: Mode;
+  jurisdiction: Jurisdiction;
+  ukRegion?: UkRegion;
+  usState?: UsState;
+  workerClass: WorkerClass;
+  letterType: LetterTypeId;
+  effectiveDate: string;
+  issueDate: string;
+  deliveryMethod: "email" | "post" | "hand-delivery" | "recorded-delivery";
+  /** Employer mode tone band. */
+  tone: Tone;
+  /** Employee mode tone band. */
+  employeeTone?: EmployeeTone;
+  confidentiality: "public" | "confidential" | "private_and_confidential";
+  /** Employee mode — toggles "Without Prejudice and Subject to Contract" header. */
+  withoutPrejudice?: boolean;
+  /** Employee mode — protected characteristics implicated. */
+  protectedCharacteristics?: ProtectedCharacteristic[];
+  /** Employee mode — calculated tribunal/EEOC limitation deadline. */
+  protectedDeadline?: ProtectedDeadline;
+  counselReviewRequired: boolean;
+  riskFlags: {
+    protectedStatus: boolean;
+    grievanceLast90Days: boolean;
+    collectiveConsultation: boolean;
+  };
+};
+
+export type LetterAnswers = Record<string, unknown>;
+
+/* ============================================================================
+ * Draft
+ * ==========================================================================*/
+
+export type ExportEvent = {
+  id: string;
+  format: "pdf" | "docx";
+  exportedAt: number;
+  reviewedBy?: string;
+  reviewedOn?: string;
+};
+
+export type Draft = {
+  id: string;
+  /** Denormalised from context.mode for fast filtering. */
+  mode: Mode;
+  letterType: LetterTypeId;
+  context: LetterContext;
+  employer: EmployerDetails;
+  employee: EmployeeDetails;
+  answers: LetterAnswers;
+  sections: Section[];
+  /** Employee-mode supporting evidence. */
+  evidence?: EvidenceItem[];
+  /** Outcome the employee wants. Surfaced explicitly in closing. */
+  outcomeSought?: string;
+  /** Each export attempt is logged here for audit + the Exported / Activity views. */
+  exports?: ExportEvent[];
+  createdAt: number;
+  updatedAt: number;
+};
