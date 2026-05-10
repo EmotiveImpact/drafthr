@@ -1,6 +1,12 @@
 import type { ServerResponse } from "node:http";
-import { streamText, type ModelMessage } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  type ModelMessage,
+  type UIMessage,
+} from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { agentTools } from "../src/lib/llm/tools";
 
 export type DraftRequest = {
   messages: ModelMessage[];
@@ -17,7 +23,8 @@ export type DraftRequest = {
  * live draft state.
  */
 export type AgentRequest = {
-  messages: ModelMessage[];
+  /** v6 UIMessages from useChat — converted to ModelMessage on the server. */
+  messages: UIMessage[];
   /** System prompt — built client-side from the live draft. */
   system?: string;
   /** Optional client-supplied model override. */
@@ -112,10 +119,15 @@ export async function handleAgentRequest(
   body: AgentRequest,
   res: ServerResponse
 ): Promise<void> {
+  // Convert v6 UIMessages from the client into ModelMessages (proper
+  // tool-call encoding) before passing to streamText.
+  const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
+
   const result = streamText({
     model: buildModel(body.model),
     system: body.system,
-    messages: body.messages,
+    messages: modelMessages,
+    tools: agentTools,
     temperature: 0.4,
     maxOutputTokens: 1100,
     onError: (err) => {

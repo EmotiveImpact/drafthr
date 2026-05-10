@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw } from "lucide-react";
-import type { AIAction, AIChatScope, Draft, Section } from "@/lib/letters/types";
+import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { buildAgentSystemPrompt, parseAgentReply } from "@/lib/llm/agent";
+import { buildAgentSystemPrompt } from "@/lib/llm/agent";
 import { regenerateSection } from "@/lib/llm/draft";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
@@ -23,15 +23,21 @@ const SCOPE_LABEL: Record<AIChatScope, string> = {
   selection: "selection",
 };
 
+type RegenerateInput = { section_id: string; instruction: string };
+
 /**
- * Right-rail AI tab using AI SDK v6 `useChat` from @ai-sdk/react.
+ * Right-rail AI tab — SDK-native v6 tool-calling.
  *
- *  - Transport: DefaultChatTransport against /api/agent, with the live
- *    system prompt rebuilt every turn from the draft state.
- *  - Messages are v6 UIMessage shape — text lives in m.parts[].text.
- *  - Submit handled manually via sendMessage({ text }); we own the input.
- *  - <<APPLY section_id>> sentinels parsed on stream finish; proposed
- *    actions render with Apply buttons that route through regenerateSection.
+ *  - Transport: DefaultChatTransport against /api/agent with a
+ *    prepareSendMessagesRequest that re-injects the live system prompt
+ *    and model on every send, and ships full UIMessages so tool-call
+ *    history rides along.
+ *  - Tools: the `regenerateSection` tool (see lib/llm/tools.ts) is
+ *    declared HUMAN-IN-THE-LOOP — no server-side execute. The model
+ *    streams a `tool-regenerateSection` part with the proposed args;
+ *    the user reviews + clicks Apply; we run regenerateSection() and
+ *    push the outcome back via addToolResult() so the agent can
+ *    continue reasoning.
  */
 export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectionId: string | null }) {
   const profile = useProfileStore((s) => s.profile);
@@ -45,8 +51,6 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   const [scope, setScope] = useState<AIChatScope>("letter");
   const [input, setInput] = useState("");
-  // Map of message-id → parsed actions (proposed/applied/failed).
-  const [actionsByMsg, setActionsByMsg] = useState<Record<string, AIAction[]>>({});
 
   const scopeSection: Section | undefined = useMemo(() => {
     if (scope !== "section") return undefined;
@@ -65,18 +69,13 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     [draft.id]
   );
 
-  // Build the transport. The body factory is called every send, so the
-  // system prompt always reflects the LIVE draft state at that moment.
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/agent",
         prepareSendMessagesRequest: ({ messages, body }) => ({
           body: {
-            messages: messages.map((m) => ({
-              role: m.role,
-              content: textFromParts(m),
-            })),
+            messages,
             system: buildAgentSystemPrompt(draft),
             model: profile.defaults.qwenModel,
             ...(body ?? {}),
@@ -94,34 +93,17 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     regenerate,
     status,
     error,
+    addToolResult,
   } = useChat({
     id: `agent-${draft.id}`,
     messages: initialMessages,
     transport,
-    onFinish: ({ message }) => {
-      // Parse <<APPLY>> sentinels from the final assistant text.
-      const raw = textFromParts(message);
-      const { body, actions } = parseAgentReply(raw, draft.sections);
-      if (actions.length > 0) {
-        setActionsByMsg((prev) => ({ ...prev, [message.id]: actions }));
-      }
-      // Replace the message body with the cleaned (sentinel-stripped) text.
-      if (body !== raw) {
-        setMessages((all) =>
-          all.map((m) =>
-            m.id === message.id ? { ...m, parts: [{ type: "text", text: body }] } : m
-          )
-        );
-      }
-      // Persistence happens via the messages-sync useMemo below.
-    },
     onError: (err) => {
       console.error("[AIPanel] useChat error:", err);
     },
   });
 
-  // Sync v6 messages back to the persisted draft on every stable update.
-  // Skip while streaming to avoid thrash; mirror once the stream is idle.
+  // Persist text content of messages to the store on each idle tick.
   useMemo(() => {
     if (status === "streaming" || status === "submitted") return;
     useDraftStore.setState((s) => {
@@ -170,7 +152,6 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     const text = input.trim();
     if (!text || status === "streaming" || status === "submitted") return;
 
-    // Resolve scope payload at submit time.
     let resolvedLabel = scopeLabel;
     let scopePayload = "";
     if (scope === "selection") {
@@ -197,6 +178,50 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   const isStreaming = status === "streaming" || status === "submitted";
 
+  /**
+   * Execute a proposed regenerateSection tool call. Runs the actual
+   * regeneration via the existing draft pipeline, then pushes the
+   * outcome back to the model via addToolResult so it can continue
+   * reasoning ("OK, I rewrote section X — want me to do Y next?").
+   */
+  const applyRegenerate = async (
+    toolCallId: string,
+    input: RegenerateInput
+  ): Promise<void> => {
+    const section = draft.sections.find((s) => s.id === input.section_id);
+    if (!section) {
+      addToolResult({
+        tool: "regenerateSection",
+        toolCallId,
+        output: { ok: false, error: `Unknown section_id: ${input.section_id}` },
+      });
+      return;
+    }
+    try {
+      const ctl = new AbortController();
+      await regenerateSection(
+        draft,
+        section,
+        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
+        ctl.signal,
+        {},
+        input.instruction
+      );
+      addToolResult({
+        tool: "regenerateSection",
+        toolCallId,
+        output: { ok: true, section_id: section.id, section_title: section.title },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      addToolResult({
+        tool: "regenerateSection",
+        toolCallId,
+        output: { ok: false, error: msg },
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
@@ -210,7 +235,6 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
               if (confirm("Clear this chat thread?")) {
                 clearAIChat(draft.id);
                 setMessages([]);
-                setActionsByMsg({});
               }
             }}
             className="ml-auto text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
@@ -233,14 +257,11 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         {messages.map((m) => (
           <Message
             key={m.id}
-            id={m.id}
-            role={m.role as "user" | "assistant"}
-            content={textFromParts(m)}
+            message={m}
             streaming={isStreaming && m === messages[messages.length - 1] && m.role === "assistant"}
             me={me}
             draft={draft}
-            actions={actionsByMsg[m.id] ?? []}
-            onApply={(action) => apply(m.id, action)}
+            onApplyRegenerate={applyRegenerate}
           />
         ))}
         {error && (
@@ -323,50 +344,9 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
       </form>
     </div>
   );
-
-  async function apply(messageId: string, action: AIAction) {
-    const section = draft.sections.find((s) => s.id === action.sectionId);
-    if (!section) {
-      setActionsByMsg((prev) => ({
-        ...prev,
-        [messageId]: (prev[messageId] ?? []).map((a) =>
-          a.id === action.id ? { ...a, status: "failed" } : a
-        ),
-      }));
-      return;
-    }
-    setActionsByMsg((prev) => ({
-      ...prev,
-      [messageId]: (prev[messageId] ?? []).map((a) =>
-        a.id === action.id ? { ...a, status: "applied", appliedAt: Date.now() } : a
-      ),
-    }));
-    try {
-      const ctl = new AbortController();
-      await regenerateSection(
-        draft,
-        section,
-        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
-        ctl.signal,
-        {},
-        action.instruction
-      );
-    } catch (err) {
-      console.error(err);
-      setActionsByMsg((prev) => ({
-        ...prev,
-        [messageId]: (prev[messageId] ?? []).map((a) =>
-          a.id === action.id ? { ...a, status: "failed" } : a
-        ),
-      }));
-    }
-  }
 }
 
-/**
- * Extract concatenated text from a v6 UIMessage. Skips non-text parts
- * (tool calls etc.) — we don't render those today.
- */
+/** Concatenate text-type parts from a v6 UIMessage. */
 function textFromParts(m: UIMessage): string {
   return m.parts
     .filter((p) => p.type === "text")
@@ -375,26 +355,21 @@ function textFromParts(m: UIMessage): string {
 }
 
 function Message({
-  role,
-  content,
+  message,
   streaming,
   me,
   draft,
-  actions,
-  onApply,
+  onApplyRegenerate,
 }: {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
+  message: UIMessage;
   streaming: boolean;
   me: { initials: string; name: string; email?: string };
   draft: Draft;
-  actions: AIAction[];
-  onApply: (action: AIAction) => void;
+  onApplyRegenerate: (toolCallId: string, input: RegenerateInput) => Promise<void>;
 }) {
-  const isUser = role === "user";
-  const { body, scopeChip } = parseScopeFromUserBody(content, isUser);
-  const displayBody = isUser ? body : stripSentinels(content);
+  const isUser = message.role === "user";
+  const textOnly = textFromParts(message);
+  const { body, scopeChip } = parseScopeFromUserBody(textOnly, isUser);
 
   return (
     <div className="flex gap-2 items-start">
@@ -414,67 +389,161 @@ function Message({
             </span>
           )}
         </div>
-        <div
-          className={
-            "mt-1 text-[13px] leading-relaxed whitespace-pre-wrap rounded-md px-3 py-2 " +
-            (isUser
-              ? "bg-[var(--ds-ink)] text-white"
-              : "bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
-          }
-        >
-          {displayBody || (streaming && <span className="text-[var(--ds-muted)]">…</span>)}
-        </div>
 
-        {actions.length > 0 && (
+        {/* Text bubble (only if there's any text content) */}
+        {(body || (streaming && !textOnly)) && (
+          <div
+            className={
+              "mt-1 text-[13px] leading-relaxed whitespace-pre-wrap rounded-md px-3 py-2 " +
+              (isUser
+                ? "bg-[var(--ds-ink)] text-white"
+                : "bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
+            }
+          >
+            {body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)}
+          </div>
+        )}
+
+        {/* Tool-call parts — render each in its own card. */}
+        {!isUser && (
           <div className="mt-2 space-y-1.5">
-            {actions.map((a) => (
-              <ActionRow key={a.id} action={a} onApply={() => onApply(a)} />
-            ))}
+            {message.parts
+              .filter((p) => isToolUIPart(p) && p.type === "tool-regenerateSection")
+              .map((p) => {
+                // Narrowed via the filter above.
+                const tp = p as unknown as ToolPart;
+                return (
+                  <ToolCallRow
+                    key={tp.toolCallId}
+                    part={tp}
+                    draft={draft}
+                    onApply={onApplyRegenerate}
+                  />
+                );
+              })}
           </div>
         )}
       </div>
     </div>
   );
-  void draft;
 }
 
-function ActionRow({ action, onApply }: { action: AIAction; onApply: () => void }) {
+/**
+ * Render a single tool-regenerateSection part across its state machine.
+ * input-streaming → "preparing" spinner
+ * input-available → resolvable, show Apply button
+ * output-available → applied (success) / failed (error)
+ */
+/**
+ * Shape of a tool-regenerateSection part across its state machine.
+ * Narrowed manually since v6's `UIMessagePart` union doesn't expose a
+ * convenient predicate for our specific tool name.
+ */
+type ToolPart = {
+  type: `tool-${string}`;
+  toolCallId: string;
+  state: "input-streaming" | "input-available" | "output-available" | "output-error";
+  input?: RegenerateInput;
+  output?: { ok?: boolean; error?: string; section_id?: string; section_title?: string };
+};
+
+function ToolCallRow({
+  part,
+  draft,
+  onApply,
+}: {
+  part: ToolPart;
+  draft: Draft;
+  onApply: (toolCallId: string, input: RegenerateInput) => Promise<void>;
+}) {
+  const input = part.input;
+  const output = part.output;
+  const sectionTitle =
+    input?.section_id
+      ? draft.sections.find((s) => s.id === input.section_id)?.title ?? input.section_id
+      : "section";
+
+  const state = part.state;
+
+  if (state === "input-streaming") {
+    return (
+      <ToolCard
+        title={sectionTitle}
+        body={input?.instruction ?? "…"}
+        status={
+          <span className="text-[11px] text-[var(--ds-muted)] inline-flex items-center gap-1">
+            <Loader2 className="size-3 animate-spin" /> Preparing
+          </span>
+        }
+      />
+    );
+  }
+
+  if (state === "input-available" && input) {
+    return (
+      <ToolCard
+        title={sectionTitle}
+        body={input.instruction}
+        status={
+          <button
+            type="button"
+            onClick={() => void onApply(part.toolCallId, input)}
+            className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+          >
+            Apply
+          </button>
+        }
+      />
+    );
+  }
+
+  if (state === "output-available") {
+    const ok = output?.ok !== false;
+    return (
+      <ToolCard
+        title={sectionTitle}
+        body={input?.instruction ?? ""}
+        status={
+          ok ? (
+            <span className="text-[11px] text-[var(--ds-green-fg)] inline-flex items-center gap-1">
+              <Check className="size-3" /> Applied
+            </span>
+          ) : (
+            <span className="text-[11px] text-[var(--ds-red-fg)] inline-flex items-center gap-1" title={output?.error}>
+              <AlertCircle className="size-3" /> Failed
+            </span>
+          )
+        }
+      />
+    );
+  }
+
+  return null;
+}
+
+function ToolCard({
+  title,
+  body,
+  status,
+}: {
+  title: string;
+  body: string;
+  status: React.ReactNode;
+}) {
   return (
     <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-2 text-[12px]">
       <div className="flex items-center gap-2">
         <Sparkles className="size-3 text-[var(--ds-muted)] shrink-0" />
-        <span className="font-medium text-[var(--ds-ink)] truncate">{action.sectionTitle}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {action.status === "proposed" && (
-            <button
-              type="button"
-              onClick={onApply}
-              className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
-            >
-              Apply
-            </button>
-          )}
-          {action.status === "applied" && (
-            <span className="text-[11px] text-[var(--ds-green-fg)] inline-flex items-center gap-1">
-              <Check className="size-3" /> Applied
-            </span>
-          )}
-          {action.status === "failed" && (
-            <span className="text-[11px] text-[var(--ds-red-fg)] inline-flex items-center gap-1">
-              <AlertCircle className="size-3" /> Failed
-            </span>
-          )}
+        <span className="font-medium text-[var(--ds-ink)] truncate">{title}</span>
+        <div className="ml-auto flex items-center gap-2 shrink-0">{status}</div>
+      </div>
+      {body && (
+        <div className="text-[11px] text-[var(--ds-muted)] leading-relaxed mt-1 italic">
+          {body}
         </div>
-      </div>
-      <div className="text-[11px] text-[var(--ds-muted)] leading-relaxed mt-1 italic">
-        {action.instruction}
-      </div>
+      )}
     </div>
   );
-}
-
-function stripSentinels(content: string): string {
-  return content.replace(/<<APPLY[\s\S]*?<<\/APPLY>>/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function parseScopeFromUserBody(content: string, isUser: boolean): { body: string; scopeChip?: string } {

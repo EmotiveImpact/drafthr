@@ -1,10 +1,19 @@
 /**
  * Production serverless function for /api/agent — the AI SDK v6 UIMessage
  * stream endpoint consumed by useChat() in the right-rail AIPanel.
+ *
+ * The client sends v6 UIMessages; we convert to ModelMessages so tool-call
+ * history rides along correctly, then streamText with our typed tools.
  */
 
-import { streamText, type ModelMessage } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  type ModelMessage,
+  type UIMessage,
+} from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { agentTools } from "../src/lib/llm/tools";
 
 export const config = {
   runtime: "nodejs",
@@ -12,7 +21,7 @@ export const config = {
 };
 
 type AgentRequest = {
-  messages: ModelMessage[];
+  messages: UIMessage[];
   system?: string;
   model?: string;
 };
@@ -60,10 +69,13 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
+  const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
+
   const result = streamText({
     model: buildModel(body.model),
     system: body.system,
-    messages: body.messages,
+    messages: modelMessages,
+    tools: agentTools,
     temperature: 0.4,
     maxOutputTokens: 1100,
     onError: (err) => {
