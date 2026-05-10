@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useChat } from "ai/react";
+import { useMemo, useState } from "react";
+import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw } from "lucide-react";
 import type { AIAction, AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -8,7 +9,6 @@ import { buildAgentSystemPrompt, parseAgentReply } from "@/lib/llm/agent";
 import { regenerateSection } from "@/lib/llm/draft";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
-import { uid } from "@/lib/utils";
 
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   { label: "+ make formal", prompt: "Rewrite this letter in a more formal register. Remove contractions, use full clause names, keep all statutory citations." },
@@ -24,21 +24,14 @@ const SCOPE_LABEL: Record<AIChatScope, string> = {
 };
 
 /**
- * Right-rail AI tab. Uses `useChat` from `ai/react` against /api/agent for
- * streaming, message state, and future tool-call plumbing.
+ * Right-rail AI tab using AI SDK v6 `useChat` from @ai-sdk/react.
  *
- * Architecture:
- *  - System prompt is rebuilt every turn from the live draft state (via the
- *    `body` prop on useChat) so the agent always has the current section
- *    index, jurisdiction, and meta.
- *  - User messages are tagged with a scope (whole / section / selection)
- *    appended to the user content so the agent knows what to target.
- *  - Assistant replies are parsed for <<APPLY>> sentinels on stream finish;
- *    extracted actions render as Apply buttons under the message.
- *  - Apply triggers regenerateSection(section, instruction) — same path as
- *    Option A's Refine popover. Section version history covers undo.
- *  - Persisted to draft.aiChat for cross-session memory; useChat manages
- *    the in-flight thread, we mirror to the store on each turn.
+ *  - Transport: DefaultChatTransport against /api/agent, with the live
+ *    system prompt rebuilt every turn from the draft state.
+ *  - Messages are v6 UIMessage shape — text lives in m.parts[].text.
+ *  - Submit handled manually via sendMessage({ text }); we own the input.
+ *  - <<APPLY section_id>> sentinels parsed on stream finish; proposed
+ *    actions render with Apply buttons that route through regenerateSection.
  */
 export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectionId: string | null }) {
   const profile = useProfileStore((s) => s.profile);
@@ -51,8 +44,8 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
   const clearAIChat = useDraftStore((s) => s.clearAIChat);
 
   const [scope, setScope] = useState<AIChatScope>("letter");
-  // Map of message-id → parsed actions (proposed/applied/failed). Kept in
-  // local state so each useChat turn surfaces its actions immediately.
+  const [input, setInput] = useState("");
+  // Map of message-id → parsed actions (proposed/applied/failed).
   const [actionsByMsg, setActionsByMsg] = useState<Record<string, AIAction[]>>({});
 
   const scopeSection: Section | undefined = useMemo(() => {
@@ -60,68 +53,77 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     return draft.sections.find((s) => s.id === activeSectionId) ?? draft.sections[0];
   }, [scope, draft.sections, activeSectionId]);
 
-  const scopeLabel: string =
-    scope === "section" && scopeSection
-      ? `section "${scopeSection.title}" (id=${scopeSection.id})`
-      : SCOPE_LABEL[scope];
-
-  // Rebuild the system prompt on every turn (the model needs the live draft).
-  const system = useMemo(() => buildAgentSystemPrompt(draft), [draft]);
-
-  // Hydrate from persisted chat on mount and when draft id changes.
-  const initialMessages = useMemo(
+  // Hydrate initial messages from persisted chat once per draft id.
+  const initialMessages = useMemo<UIMessage[]>(
     () =>
       (draft.aiChat ?? []).map((m) => ({
         id: m.id,
         role: m.role,
-        content: m.body,
+        parts: [{ type: "text", text: m.body }],
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [draft.id]
   );
 
+  // Build the transport. The body factory is called every send, so the
+  // system prompt always reflects the LIVE draft state at that moment.
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/agent",
+        prepareSendMessagesRequest: ({ messages, body }) => ({
+          body: {
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: textFromParts(m),
+            })),
+            system: buildAgentSystemPrompt(draft),
+            model: profile.defaults.qwenModel,
+            ...(body ?? {}),
+          },
+        }),
+      }),
+    [draft, profile.defaults.qwenModel]
+  );
+
   const {
     messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    setInput,
-    isLoading,
+    sendMessage,
     setMessages,
     stop,
-    reload,
+    regenerate,
+    status,
     error,
   } = useChat({
-    api: "/api/agent",
     id: `agent-${draft.id}`,
-    initialMessages,
-    body: {
-      system,
-      model: profile.defaults.qwenModel,
-    },
-    onFinish: (msg) => {
+    messages: initialMessages,
+    transport,
+    onFinish: ({ message }) => {
       // Parse <<APPLY>> sentinels from the final assistant text.
-      const { body, actions } = parseAgentReply(msg.content, draft.sections);
+      const raw = textFromParts(message);
+      const { body, actions } = parseAgentReply(raw, draft.sections);
       if (actions.length > 0) {
-        setActionsByMsg((prev) => ({ ...prev, [msg.id]: actions }));
+        setActionsByMsg((prev) => ({ ...prev, [message.id]: actions }));
       }
       // Replace the message body with the cleaned (sentinel-stripped) text.
-      if (body !== msg.content) {
+      if (body !== raw) {
         setMessages((all) =>
-          all.map((m) => (m.id === msg.id ? { ...m, content: body } : m))
+          all.map((m) =>
+            m.id === message.id ? { ...m, parts: [{ type: "text", text: body }] } : m
+          )
         );
       }
-      // Mirror to persisted chat in the store.
-      mirrorToStore();
+      // Persistence happens via the messages-sync useMemo below.
     },
     onError: (err) => {
       console.error("[AIPanel] useChat error:", err);
     },
   });
 
-  // Mirror useChat's working messages into draft.aiChat on every turn so the
-  // thread survives reloads. We only keep the canonical fields.
-  const mirrorToStore = () => {
+  // Sync v6 messages back to the persisted draft on every stable update.
+  // Skip while streaming to avoid thrash; mirror once the stream is idle.
+  useMemo(() => {
+    if (status === "streaming" || status === "submitted") return;
     useDraftStore.setState((s) => {
       const d = s.drafts[draft.id];
       if (!d) return s;
@@ -133,23 +135,21 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             aiChat: messages.map((m) => ({
               id: m.id,
               role: m.role as "user" | "assistant",
-              body: m.content,
+              body: textFromParts(m),
               createdAt: Date.now(),
             })),
-            updatedAt: Date.now(),
           },
         },
       };
     });
-  };
+  }, [messages, status, draft.id]);
 
-  const lastSubmittedScope = useRef<AIChatScope>(scope);
+  const scopeLabel =
+    scope === "section" && scopeSection
+      ? `section "${scopeSection.title}" (id=${scopeSection.id})`
+      : SCOPE_LABEL[scope];
 
-  /**
-   * Capture the user's current text selection from anywhere in the editor
-   * canvas (section editor or preview). Returns the trimmed quoted text and
-   * the section id that contains it, if we can resolve it.
-   */
+  /** Capture window selection so AI scope=selection has the live quote. */
   const captureSelection = (): { quote: string; sectionId?: string } | null => {
     if (typeof window === "undefined") return null;
     const sel = window.getSelection();
@@ -165,14 +165,12 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     return { quote, sectionId: sectionEl?.getAttribute("data-section-id") ?? undefined };
   };
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const submit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const text = input.trim();
+    if (!text || status === "streaming" || status === "submitted") return;
 
-    // Resolve the actual scope payload at submit time:
-    //  - selection: grab live window selection + the containing section id
-    //  - section:   use the active section (Editor or Preview-clicked)
-    //  - letter:    no-op
+    // Resolve scope payload at submit time.
     let resolvedLabel = scopeLabel;
     let scopePayload = "";
     if (scope === "selection") {
@@ -188,37 +186,16 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
           captured.sectionId ? ` from section_id=${captured.sectionId}` : ""
         }]`;
       } else {
-        // Fall back to whole letter — no selection = no-op selection scope.
         resolvedLabel = "whole letter (no active selection)";
       }
     }
 
-    // Append scope info to the message so the agent has the literal target.
-    const scoped = `${input.trim()}\n[scope: ${resolvedLabel}]${scopePayload}`;
-    lastSubmittedScope.current = scope;
-    handleSubmit(e, {
-      body: {
-        system,
-        model: profile.defaults.qwenModel,
-      },
-      data: undefined,
-      allowEmptySubmit: false,
-    });
-    // Replace the just-pushed user message body so it carries the resolved
-    // scope label + (for selection) the live quote — for both display and
-    // /api/agent's payload.
-    requestAnimationFrame(() => {
-      setMessages((all) => {
-        const last = all[all.length - 1];
-        if (!last || last.role !== "user") return all;
-        return all.map((m, i) => (i === all.length - 1 ? { ...m, content: scoped } : m));
-      });
-    });
+    const scoped = `${text}\n[scope: ${resolvedLabel}]${scopePayload}`;
+    setInput("");
+    await sendMessage({ text: scoped });
   };
 
-  useEffect(() => {
-    // On scope change, do nothing — we re-tag messages on submit.
-  }, [scope]);
+  const isStreaming = status === "streaming" || status === "submitted";
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -258,8 +235,8 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             key={m.id}
             id={m.id}
             role={m.role as "user" | "assistant"}
-            content={m.content}
-            streaming={isLoading && m === messages[messages.length - 1] && m.role === "assistant"}
+            content={textFromParts(m)}
+            streaming={isStreaming && m === messages[messages.length - 1] && m.role === "assistant"}
             me={me}
             draft={draft}
             actions={actionsByMsg[m.id] ?? []}
@@ -270,7 +247,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
           <div className="rounded-md border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] text-[12px] px-3 py-2 flex items-center gap-2">
             <AlertCircle className="size-3.5" />
             <span className="flex-1">Couldn't reach the model.</span>
-            <button onClick={() => reload()} className="inline-flex items-center gap-1 hover:underline">
+            <button onClick={() => regenerate()} className="inline-flex items-center gap-1 hover:underline">
               <RotateCw className="size-3" /> Retry
             </button>
           </div>
@@ -299,18 +276,18 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         <div className="flex items-end gap-2 px-3 py-2">
           <textarea
             value={input}
-            onChange={handleInputChange}
+            onChange={(e) => setInput(e.target.value)}
             placeholder="Ask the AI agent..."
             rows={1}
             className="flex-1 min-h-[36px] max-h-[120px] resize-none px-2.5 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                submit(e as unknown as React.FormEvent);
+                void submit();
               }
             }}
           />
-          {isLoading ? (
+          {isStreaming ? (
             <button
               type="button"
               onClick={() => stop()}
@@ -336,7 +313,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
               key={q.label}
               type="button"
               onClick={() => setInput(q.prompt)}
-              disabled={isLoading}
+              disabled={isStreaming}
               className="text-[11px] px-2 py-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition disabled:opacity-50"
             >
               {q.label}
@@ -386,6 +363,17 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
   }
 }
 
+/**
+ * Extract concatenated text from a v6 UIMessage. Skips non-text parts
+ * (tool calls etc.) — we don't render those today.
+ */
+function textFromParts(m: UIMessage): string {
+  return m.parts
+    .filter((p) => p.type === "text")
+    .map((p) => (p as { type: "text"; text: string }).text)
+    .join("");
+}
+
 function Message({
   role,
   content,
@@ -405,12 +393,7 @@ function Message({
   onApply: (action: AIAction) => void;
 }) {
   const isUser = role === "user";
-  // For user messages we appended the scope as the last bracketed line —
-  // strip it for display, render it as a chip.
   const { body, scopeChip } = parseScopeFromUserBody(content, isUser);
-
-  // Strip <<APPLY>> sentinels from streaming display so the user doesn't
-  // see them mid-flight.
   const displayBody = isUser ? body : stripSentinels(content);
 
   return (
@@ -453,7 +436,6 @@ function Message({
     </div>
   );
   void draft;
-  void uid;
 }
 
 function ActionRow({ action, onApply }: { action: AIAction; onApply: () => void }) {
@@ -491,15 +473,10 @@ function ActionRow({ action, onApply }: { action: AIAction; onApply: () => void 
   );
 }
 
-/** Strip <<APPLY>> sentinels for display while assistant text is streaming. */
 function stripSentinels(content: string): string {
   return content.replace(/<<APPLY[\s\S]*?<<\/APPLY>>/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/**
- * For a user message authored as `<text>\n[scope: ...]`, split out the scope
- * label so we can render it as a chip and not duplicate it in the bubble.
- */
 function parseScopeFromUserBody(content: string, isUser: boolean): { body: string; scopeChip?: string } {
   if (!isUser) return { body: content };
   const m = content.match(/^([\s\S]*?)\n\[scope:\s*([^\]]+)\]\s*$/);

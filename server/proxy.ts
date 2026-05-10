@@ -1,9 +1,9 @@
 import type { ServerResponse } from "node:http";
-import { streamText, type CoreMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 export type DraftRequest = {
-  messages: CoreMessage[];
+  messages: ModelMessage[];
   temperature?: number;
   maxTokens?: number;
   /** Optional client-supplied model override (allow-listed below). */
@@ -12,12 +12,12 @@ export type DraftRequest = {
 
 /**
  * Request shape used by the AI agent (right-rail chat). Mirrors useChat()
- * from ai/react: messages are user/assistant turns; the system prompt is
- * sent separately so the client can rebuild it on every turn from the
+ * from @ai-sdk/react: messages are user/assistant turns; the system prompt
+ * is sent separately so the client can rebuild it on every turn from the
  * live draft state.
  */
 export type AgentRequest = {
-  messages: CoreMessage[];
+  messages: ModelMessage[];
   /** System prompt — built client-side from the live draft. */
   system?: string;
   /** Optional client-supplied model override. */
@@ -68,10 +68,10 @@ export async function handleDraftRequest(
   let totalTokens = 0;
   try {
     const result = streamText({
-      model: buildModel(),
+      model: buildModel(body.model),
       messages: body.messages,
       temperature: body.temperature ?? 0.4,
-      maxTokens: body.maxTokens ?? 1200,
+      maxOutputTokens: body.maxTokens ?? 1200,
       onError: (err) => {
         // eslint-disable-next-line no-console
         console.error("[qwen-proxy] streamText onError:", err);
@@ -103,31 +103,26 @@ export async function handleDraftRequest(
 
 /**
  * Handle a useChat() POST. Reads `messages` + optional `system` + optional
- * `model` from the request body, prepends the system message if provided,
- * runs streamText, and pipes the AI SDK data-stream protocol back to the
- * Node response so `useChat` on the client receives proper deltas + tool
+ * `model` from the request body, hands them to streamText, and pipes the
+ * AI SDK v6 UIMessage stream protocol back to the Node response so the
+ * @ai-sdk/react useChat hook on the client receives proper deltas + tool
  * call events.
  */
 export async function handleAgentRequest(
   body: AgentRequest,
   res: ServerResponse
 ): Promise<void> {
-  const messages: CoreMessage[] = body.system
-    ? [{ role: "system", content: body.system }, ...body.messages]
-    : body.messages;
-
   const result = streamText({
     model: buildModel(body.model),
-    messages,
+    system: body.system,
+    messages: body.messages,
     temperature: 0.4,
-    maxTokens: 1100,
+    maxOutputTokens: 1100,
     onError: (err) => {
       // eslint-disable-next-line no-console
       console.error("[agent-proxy] streamText onError:", err);
     },
   });
 
-  // Pipe directly to the Node response in the AI SDK data-stream format.
-  // useChat() on the client decodes this natively.
-  result.pipeDataStreamToResponse(res);
+  result.pipeUIMessageStreamToResponse(res);
 }

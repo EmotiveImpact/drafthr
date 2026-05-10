@@ -131,6 +131,8 @@ export const useDraftStore = create<Store>()(
             address: (a.employerAddress as string) ?? "",
             registrationNumber: a.employerRegNumber as string | undefined,
             hasLetterhead: Boolean(a.hasLetterhead),
+            letterheadDataUrl: a.letterheadDataUrl as string | undefined,
+            signatureDataUrl: a.signatureDataUrl as string | undefined,
             signatoryName:
               (a.signatoryName as string) ??
               (a.recipientName as string) ??

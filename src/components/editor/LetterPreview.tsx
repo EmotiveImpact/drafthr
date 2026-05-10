@@ -156,6 +156,16 @@ export function LetterPreview({
         lineHeight: 1.7,
       }}
     >
+      {draft.employer.letterheadDataUrl && (
+        <div className="text-center mb-6">
+          {/* eslint-disable-next-line jsx-a11y/alt-text */}
+          <img
+            src={draft.employer.letterheadDataUrl}
+            className="inline-block max-w-full"
+            style={{ maxHeight: 120 }}
+          />
+        </div>
+      )}
       {draft.sections
         .filter((s) => s.html && s.html.trim())
         .map((s) => {

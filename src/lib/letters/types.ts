@@ -127,6 +127,17 @@ export type EmployerDetails = {
   address: string;
   registrationNumber?: string;
   hasLetterhead: boolean;
+  /**
+   * Optional letterhead image as a data URL (base64). Rendered at the top
+   * of exported letters. Stored on the profile so it applies to every
+   * draft created in employer mode; can be overridden per draft.
+   */
+  letterheadDataUrl?: string;
+  /**
+   * Optional signature image as a data URL — sits above the typed
+   * signatory name in exports. Same persistence model as letterhead.
+   */
+  signatureDataUrl?: string;
   signatoryName: string;
   signatoryTitle: string;
 };

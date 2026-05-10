@@ -25,7 +25,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useProfileStore, QWEN_MODEL_OPTIONS, type QwenModelId } from "@/lib/profile";
-import { PageHeader } from "@/components/ds";
+import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 
 export function Settings() {
@@ -251,6 +251,26 @@ export function Settings() {
                   <TextField.Root
                     value={profile.employer.recipientTitle ?? ""}
                     onChange={(e) => patchEmployer({ recipientTitle: e.target.value })}
+                  />
+                </Field>
+              </>
+            )}
+            {profile.role === "employer" && (
+              <>
+                <Field label="Letterhead image (optional)" full>
+                  <ImageUploader
+                    value={profile.employer.letterheadDataUrl}
+                    onChange={(dataUrl) => patchEmployer({ letterheadDataUrl: dataUrl })}
+                    aspect="banner"
+                    helpText="Renders at the top of every exported letter. PNG / JPG / SVG, max 1 MB."
+                  />
+                </Field>
+                <Field label="Signature image (optional)" full>
+                  <ImageUploader
+                    value={profile.employer.signatureDataUrl}
+                    onChange={(dataUrl) => patchEmployer({ signatureDataUrl: dataUrl })}
+                    aspect="signature"
+                    helpText="Sits above the typed signatory name. Transparent PNG works best."
                   />
                 </Field>
               </>

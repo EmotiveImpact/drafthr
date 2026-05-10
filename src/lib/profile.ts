@@ -50,6 +50,10 @@ export type Profile = {
     /** Employee-mode: who at HR the user typically writes to. */
     recipientName?: string;
     recipientTitle?: string;
+    /** Letterhead image (base64 data URL) — defaulted into every employer-mode draft. */
+    letterheadDataUrl?: string;
+    /** Signature image (base64 data URL) — defaulted into every employer-mode draft. */
+    signatureDataUrl?: string;
   };
   /** Defaults pre-filled into every wizard. */
   defaults: {
@@ -152,6 +156,14 @@ export function prefillsFromProfile(
     else if (profile.personal.legalName) out.signatoryName = profile.personal.legalName;
     if (profile.employer.signatoryTitle) out.signatoryTitle = profile.employer.signatoryTitle;
     else if (profile.personal.jobTitle) out.signatoryTitle = profile.personal.jobTitle;
+    // Letterhead + signature default to the employer profile.
+    if (profile.employer.letterheadDataUrl) {
+      out.letterheadDataUrl = profile.employer.letterheadDataUrl;
+      out.hasLetterhead = true;
+    }
+    if (profile.employer.signatureDataUrl) {
+      out.signatureDataUrl = profile.employer.signatureDataUrl;
+    }
   } else {
     // Employee mode — the user IS the employee.
     if (profile.personal.legalName) out.employeeLegalName = profile.personal.legalName;

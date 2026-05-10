@@ -22,7 +22,8 @@ export async function exportLetterToDocx(draft: Draft): Promise<void> {
   hr { border: none; border-top: 1px solid #cbd5e1; margin: 12pt 0; }
   em { color: #475569; font-style: italic; }
 </style></head><body>
-${draft.sections.map((s) => sanitizeLetterHtml(s.html)).join("\n")}
+${letterheadHtml(draft)}
+${draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signatureHtml(draft))).join("\n")}
 <hr />
 ${sanitizeLetterHtml(disclaimerHtmlFor(draft))}
 </body></html>`;
@@ -40,4 +41,26 @@ ${sanitizeLetterHtml(disclaimerHtmlFor(draft))}
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function letterheadHtml(draft: Draft): string {
+  const url = draft.employer.letterheadDataUrl;
+  if (!url) return "";
+  return `<div style="text-align:center;margin-bottom:18pt;"><img src="${url}" style="max-width:100%;max-height:120px;" /></div>`;
+}
+
+function signatureHtml(draft: Draft): string {
+  const url = draft.employer.signatureDataUrl;
+  if (!url) return "";
+  return `<div style="margin:6pt 0;"><img src="${url}" style="max-height:54px;" /></div>`;
+}
+
+function injectSignatureIntoSignatureSection(
+  section: { sectionId?: string; html: string },
+  signature: string
+): string {
+  const html = sanitizeLetterHtml(section.html);
+  if (!signature) return html;
+  if (section.sectionId === "signature") return signature + html;
+  return html;
 }

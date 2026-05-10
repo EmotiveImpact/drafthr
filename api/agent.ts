@@ -1,13 +1,9 @@
 /**
- * Production serverless function for /api/agent — the AI SDK data-stream
- * endpoint consumed by useChat() in the right-rail AIPanel.
- *
- * Web-Response variant of server/proxy.ts:handleAgentRequest. We use the
- * Web Request/Response API directly here because Vercel Functions accept
- * either; the dev plugin uses the Node ServerResponse variant.
+ * Production serverless function for /api/agent — the AI SDK v6 UIMessage
+ * stream endpoint consumed by useChat() in the right-rail AIPanel.
  */
 
-import { streamText, type CoreMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 export const config = {
@@ -16,7 +12,7 @@ export const config = {
 };
 
 type AgentRequest = {
-  messages: CoreMessage[];
+  messages: ModelMessage[];
   system?: string;
   model?: string;
 };
@@ -64,20 +60,17 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
-  const messages: CoreMessage[] = body.system
-    ? [{ role: "system", content: body.system }, ...body.messages]
-    : body.messages;
-
   const result = streamText({
     model: buildModel(body.model),
-    messages,
+    system: body.system,
+    messages: body.messages,
     temperature: 0.4,
-    maxTokens: 1100,
+    maxOutputTokens: 1100,
     onError: (err) => {
       // eslint-disable-next-line no-console
       console.error("[api/agent] streamText error:", err);
     },
   });
 
-  return result.toDataStreamResponse();
+  return result.toUIMessageStreamResponse();
 }

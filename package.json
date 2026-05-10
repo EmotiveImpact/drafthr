@@ -11,7 +11,8 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^0.2.16",
+    "@ai-sdk/openai-compatible": "^2.0.47",
+    "@ai-sdk/react": "^3.0.179",
     "@clerk/clerk-react": "^5.61.6",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/source-serif-4": "^5.2.9",
@@ -45,7 +46,7 @@
     "@tiptap/react": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
     "@types/dompurify": "^3.0.5",
-    "ai": "^4.1.46",
+    "ai": "^6.0.177",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

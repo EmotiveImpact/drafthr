@@ -24,8 +24,11 @@ type Html2PdfChain = {
  */
 export async function exportLetterToPdf(draft: Draft): Promise<void> {
   const filename = filenameFor(draft);
+  const letterhead = letterheadHtml(draft);
+  const signature = signatureHtml(draft);
   const body =
-    draft.sections.map((s) => sanitizeLetterHtml(s.html)).join("\n") +
+    letterhead +
+    draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signature)).join("\n") +
     "<hr />" +
     sanitizeLetterHtml(disclaimerHtmlFor(draft));
 
@@ -100,4 +103,37 @@ function triggerDownload(blob: Blob, filename: string) {
 export function filenameFor(draft: Draft): string {
   const safe = (draft.employee.legalName || "letter").replace(/[^a-z0-9]+/gi, "-");
   return `${draft.letterType}-${safe}-${draft.context.issueDate}.pdf`;
+}
+
+/** Render the letterhead image (if any) as the first block of the export. */
+function letterheadHtml(draft: Draft): string {
+  const url = draft.employer.letterheadDataUrl;
+  if (!url) return "";
+  return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${url}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
+}
+
+/** Render the signature image (if any) inline. */
+function signatureHtml(draft: Draft): string {
+  const url = draft.employer.signatureDataUrl;
+  if (!url) return "";
+  return `<div style="margin:8px 0 4px 0;"><img src="${url}" style="max-height:60px;display:inline-block;" alt="" /></div>`;
+}
+
+/**
+ * Insert the signature image directly above the typed signatory name in
+ * the signature section. We look for a "signature" sectionId; if absent
+ * (employee letters often have none), inject before the closing tag of
+ * the closing/signature paragraph.
+ */
+function injectSignatureIntoSignatureSection(
+  section: { sectionId?: string; html: string },
+  signature: string
+): string {
+  const html = sanitizeLetterHtml(section.html);
+  if (!signature) return html;
+  if (section.sectionId === "signature") {
+    // Prepend the signature image at the top of the signature block.
+    return signature + html;
+  }
+  return html;
 }

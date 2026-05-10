@@ -3,3 +3,4 @@ export { Avatar, AvatarStack, avatarColor, avatarInitials, type AvatarSize } fro
 export { PageHeader, type Crumb } from "./PageHeader";
 export { StatusDot, type StatusTone } from "./StatusDot";
 export { DataTable, type Column } from "./DataTable";
+export { ImageUploader } from "./ImageUploader";

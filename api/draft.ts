@@ -10,7 +10,7 @@
  * with the OpenAI-compatible providers per the meridian playbook).
  */
 
-import { streamText, type CoreMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 export const config = {
@@ -21,7 +21,7 @@ export const config = {
 };
 
 type DraftRequest = {
-  messages: CoreMessage[];
+  messages: ModelMessage[];
   temperature?: number;
   maxTokens?: number;
   /** Optional model override from the client (e.g. "qwen3-max"). Allow-listed below. */
@@ -89,10 +89,10 @@ export default async function handler(req: Request): Promise<Response> {
       let totalTokens = 0;
       try {
         const result = streamText({
-          model: buildModel(),
+          model: buildModel(body.model),
           messages: body.messages,
           temperature: body.temperature ?? 0.4,
-          maxTokens: body.maxTokens ?? 1200,
+          maxOutputTokens: body.maxTokens ?? 1200,
           onError: (err) => {
             // eslint-disable-next-line no-console
             console.error("[api/draft] streamText error:", err);
