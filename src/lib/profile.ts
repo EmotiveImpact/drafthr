@@ -3,20 +3,52 @@ import { persist } from "zustand/middleware";
 import type { Mode, Tone, EmployeeTone, UkRegion, UsState, WorkerClass } from "./letters/types";
 
 /**
- * DashScope International model identifiers.
- * - qwen3-max: flagship (best reasoning, longest context). Paid plan.
- * - qwen-max: legacy flagship.
- * - qwen-plus: balanced, free-tier capable.
- * - qwen-turbo: fastest / cheapest, used for short generations.
+ * Generation model identifiers. We support two providers — Anthropic and
+ * DashScope International (Qwen). The provider is inferred from the model
+ * name prefix in buildModel() on the server.
+ *
+ * Anthropic Claude:
+ * - claude-opus-4-7:   highest-quality legal writing, slowest, most expensive
+ * - claude-sonnet-4-6: tier-leading register/structure, balanced cost
+ * - claude-haiku-4-5:  fast + cheap, weakest for long-form legal prose
+ *
+ * Qwen (DashScope):
+ * - qwen3-max:  flagship, multilingual, longest context, paid plan
+ * - qwen-max:   previous flagship
+ * - qwen-plus:  balanced, free-tier capable
+ * - qwen-turbo: fastest / cheapest
  */
-export type QwenModelId = "qwen3-max" | "qwen-max" | "qwen-plus" | "qwen-turbo";
+export type ModelId =
+  | "claude-opus-4-7"
+  | "claude-sonnet-4-6"
+  | "claude-haiku-4-5"
+  | "qwen3-max"
+  | "qwen-max"
+  | "qwen-plus"
+  | "qwen-turbo";
 
-export const QWEN_MODEL_OPTIONS: { id: QwenModelId; label: string; hint: string }[] = [
-  { id: "qwen3-max", label: "Qwen3 Max", hint: "Flagship — best output quality, paid plan" },
-  { id: "qwen-max", label: "Qwen Max", hint: "Previous flagship" },
-  { id: "qwen-plus", label: "Qwen Plus", hint: "Balanced — works on the free tier" },
-  { id: "qwen-turbo", label: "Qwen Turbo", hint: "Fastest — short or simple letters" },
+/** Legacy alias kept so existing Settings imports still compile. */
+export type QwenModelId = ModelId;
+
+export const MODEL_OPTIONS: {
+  id: ModelId;
+  label: string;
+  hint: string;
+  provider: "anthropic" | "qwen";
+}[] = [
+  // Anthropic first — tier-leading legal writing register.
+  { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters. Slowest, most expensive.", provider: "anthropic" },
+  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Recommended default. Tier-leading register, balanced cost.", provider: "anthropic" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", hint: "Fast + cheap. Use for low-risk drafts.", provider: "anthropic" },
+  // Qwen fallback / alternative — multilingual.
+  { id: "qwen3-max", label: "Qwen3 Max", hint: "Alibaba flagship. Strong multilingual support, paid plan.", provider: "qwen" },
+  { id: "qwen-max", label: "Qwen Max", hint: "Previous Qwen flagship.", provider: "qwen" },
+  { id: "qwen-plus", label: "Qwen Plus", hint: "Free-tier capable.", provider: "qwen" },
+  { id: "qwen-turbo", label: "Qwen Turbo", hint: "Fastest, cheapest Qwen model.", provider: "qwen" },
 ];
+
+/** @deprecated Use MODEL_OPTIONS. Kept for callers that haven't migrated. */
+export const QWEN_MODEL_OPTIONS = MODEL_OPTIONS;
 
 /**
  * Single source of truth for "who the user is". Persisted to localStorage now;

@@ -59,11 +59,17 @@ EMPLOYER / RECIPIENT:
 
   const tone = isEmployer ? draft.context.tone : draft.context.employeeTone ?? "assertive";
 
-  const base = `You are an expert ${
-    isEmployer ? "HR letter author drafting a" : "employment letter author helping an employee draft a"
-  } "${meta.title}" letter for ${
-    isEmployer ? "an employer" : "use against / with"
-  } ${j}${region ? ` (${region})` : ""}.
+  const base = `You are a senior associate at a tier-1 employment-law practice, drafting a "${meta.title}" letter for ${
+    isEmployer ? "an employer" : "an employee"
+  } in ${j}${region ? ` (${region})` : ""}. Your work will sit alongside letters drafted by qualified ${j === "UK" ? "solicitors" : "attorneys"} — match that bar.
+
+QUALITY BAR — non-negotiable:
+- Lean prose. No throat-clearing ("I am writing to..."). Get to the point in the first sentence.
+- Statutorily anchored. Where a section, regulation, or case applies, cite it by name and section number.
+- No intensifiers ("very serious", "extremely concerning"). Facts carry weight.
+- No expressions of regret unless tactically warranted AND they don't undermine the legal position.
+- Specific over abstract. "By 28 June 2026" beats "in due course". "Section 86 ERA 1996" beats "the relevant notice provisions".
+- Every sentence carries weight. If a sentence isn't load-bearing, cut it.
 
 LETTER TYPE: ${meta.title} (${meta.id})
 DESCRIPTION: ${meta.description}

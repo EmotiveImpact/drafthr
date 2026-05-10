@@ -6,6 +6,7 @@ import {
   type UIMessage,
 } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { agentTools } from "../src/lib/llm/tools";
 
 export type DraftRequest = {
@@ -31,27 +32,51 @@ export type AgentRequest = {
   model?: string;
 };
 
-const provider = (process.env.LLM_PROVIDER ?? "qwen").toLowerCase();
-const ALLOWED_MODELS = new Set(["qwen3-max", "qwen-max", "qwen-plus", "qwen-turbo"]);
+const ALLOWED_MODELS = new Set([
+  // Anthropic
+  "claude-opus-4-7",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+  // Qwen
+  "qwen3-max",
+  "qwen-max",
+  "qwen-plus",
+  "qwen-turbo",
+]);
 
+/**
+ * Build a streamText-compatible model from the user's requested id.
+ *
+ * Provider is inferred from the model name prefix:
+ *   - "claude-*"  → Anthropic via @ai-sdk/anthropic (requires ANTHROPIC_API_KEY)
+ *   - "qwen-*"    → DashScope International OpenAI-compatible (requires QWEN_API_KEY)
+ *
+ * `LLM_PROVIDER` env can force a default provider; otherwise the
+ * resolution is: client-supplied id (allow-listed) > env model > flagship.
+ * Flagship default is `claude-sonnet-4-6` because it's the strongest
+ * legal-writing model that's still cost-reasonable.
+ */
 function buildModel(requested?: string) {
-  if (provider === "claude") {
-    throw new Error(
-      "Claude provider not configured. Install @ai-sdk/anthropic and set ANTHROPIC_API_KEY."
-    );
+  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
+  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
+  const envModel = process.env.QWEN_MODEL ?? process.env.LLM_MODEL;
+  // Resolution: explicit request -> env -> flagship default
+  const modelName = fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : "claude-sonnet-4-6");
+
+  if (modelName.startsWith("claude-")) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
+    const anthropic = createAnthropic({ apiKey });
+    return anthropic(modelName);
   }
+
+  // Default to the Qwen path.
   const apiKey = process.env.QWEN_API_KEY;
   if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
   const baseURL =
     process.env.QWEN_BASE_URL ??
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
-  const modelName = fromRequest ?? process.env.QWEN_MODEL ?? "qwen3-max";
-  const qwen = createOpenAICompatible({
-    name: "qwen",
-    apiKey,
-    baseURL,
-  });
+  const qwen = createOpenAICompatible({ name: "qwen", apiKey, baseURL });
   return qwen(modelName);
 }
 

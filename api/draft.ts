@@ -12,6 +12,7 @@
 
 import { streamText, type ModelMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createAnthropic } from "@ai-sdk/anthropic";
 
 export const config = {
   runtime: "nodejs",
@@ -29,30 +30,40 @@ type DraftRequest = {
 };
 
 const ALLOWED_MODELS = new Set([
+  "claude-opus-4-7",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
   "qwen3-max",
   "qwen-max",
   "qwen-plus",
   "qwen-turbo",
 ]);
 
+/**
+ * Resolve a streamText-compatible model. Provider is inferred from the
+ * model name prefix — Claude for "claude-*", Qwen for "qwen-*". Default
+ * is claude-sonnet-4-6 (best for legal writing per cost).
+ */
 function buildModel(requestedModel?: string) {
-  const provider = (process.env.LLM_PROVIDER ?? "qwen").toLowerCase();
-  if (provider === "claude") {
-    throw new Error(
-      "Claude provider not configured. Install @ai-sdk/anthropic and set ANTHROPIC_API_KEY."
-    );
+  const fromRequest =
+    requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
+  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
+  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
+  const modelName =
+    fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : "claude-sonnet-4-6");
+
+  if (modelName.startsWith("claude-")) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
+    const anthropic = createAnthropic({ apiKey });
+    return anthropic(modelName);
   }
+
   const apiKey = process.env.QWEN_API_KEY;
   if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
   const baseURL =
     process.env.QWEN_BASE_URL ??
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  // Resolution order: client-supplied (allow-listed) > env override > flagship default.
-  // qwen3-max is the DashScope flagship as of 2026 (paid plan); qwen-plus is the
-  // free-tier-capable fallback.
-  const fromRequest =
-    requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
-  const modelName = fromRequest ?? process.env.QWEN_MODEL ?? "qwen3-max";
   const qwen = createOpenAICompatible({ name: "qwen", apiKey, baseURL });
   return qwen(modelName);
 }

@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy } from "lucide-react";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { buildAgentSystemPrompt } from "@/lib/llm/agent";
 import { regenerateSection } from "@/lib/llm/draft";
+import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
 
@@ -25,6 +26,14 @@ const SCOPE_LABEL: Record<AIChatScope, string> = {
 };
 
 type RegenerateInput = { section_id: string; instruction: string };
+type AddClauseInput = {
+  section_id: string;
+  clause_type: ClauseType;
+  position?: "append" | "prepend" | "replace_paragraph";
+  note?: string;
+};
+type TightenInput = { section_id: string; target_words: number };
+type SummariseInput = { audience?: "counsel" | "hr_partner" | "self"; note?: string };
 
 /**
  * Right-rail AI tab — SDK-native v6 tool-calling.
@@ -198,29 +207,28 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
    * outcome back to the model via addToolResult so it can continue
    * reasoning ("OK, I rewrote section X — want me to do Y next?").
    */
+  /** Shared helper — find a section by id and regen with an instruction. */
+  const runSectionRegen = async (sectionId: string, instruction: string): Promise<Section> => {
+    const section = draft.sections.find((s) => s.id === sectionId);
+    if (!section) throw new Error(`Unknown section_id: ${sectionId}`);
+    const ctl = new AbortController();
+    await regenerateSection(
+      draft,
+      section,
+      { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
+      ctl.signal,
+      {},
+      instruction
+    );
+    return section;
+  };
+
   const applyRegenerate = async (
     toolCallId: string,
     input: RegenerateInput
   ): Promise<void> => {
-    const section = draft.sections.find((s) => s.id === input.section_id);
-    if (!section) {
-      addToolResult({
-        tool: "regenerateSection",
-        toolCallId,
-        output: { ok: false, error: `Unknown section_id: ${input.section_id}` },
-      });
-      return;
-    }
     try {
-      const ctl = new AbortController();
-      await regenerateSection(
-        draft,
-        section,
-        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
-        ctl.signal,
-        {},
-        input.instruction
-      );
+      const section = await runSectionRegen(input.section_id, input.instruction);
       addToolResult({
         tool: "regenerateSection",
         toolCallId,
@@ -234,6 +242,72 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         output: { ok: false, error: msg },
       });
     }
+  };
+
+  /**
+   * addClause — resolve clause_type to a concrete instruction via
+   * CLAUSE_TEMPLATES, then delegate to runSectionRegen. position +
+   * optional note are folded into the instruction text.
+   */
+  const applyAddClause = async (toolCallId: string, input: AddClauseInput): Promise<void> => {
+    const template = CLAUSE_TEMPLATES[input.clause_type];
+    const positionDirective =
+      input.position === "prepend"
+        ? "Insert the new clause at the START of this section, before any existing content."
+        : input.position === "replace_paragraph"
+        ? "Replace the existing paragraph that covers this topic. If no such paragraph exists, append."
+        : "Append the new clause at the END of this section, after existing content.";
+    const noteBit = input.note ? `\nUser note: ${input.note}` : "";
+    const instruction = `${template}\n\n${positionDirective}${noteBit}`;
+
+    try {
+      const section = await runSectionRegen(input.section_id, instruction);
+      addToolResult({
+        tool: "addClause",
+        toolCallId,
+        output: { ok: true, section_id: section.id, section_title: section.title, clause_type: input.clause_type },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      addToolResult({ tool: "addClause", toolCallId, output: { ok: false, error: msg } });
+    }
+  };
+
+  /**
+   * tightenSection — pass target_words as part of the instruction so the
+   * section prompt picks it up via USER REFINEMENT.
+   */
+  const applyTighten = async (toolCallId: string, input: TightenInput): Promise<void> => {
+    const instruction = `Rewrite this section to approximately ${input.target_words} words. Preserve every fact, citation, and structural requirement (statutory anchors, required clauses, headings). Cut redundancy, adjectives, throat-clearing, and any non-load-bearing sentence. Do NOT drop required content.`;
+    try {
+      const section = await runSectionRegen(input.section_id, instruction);
+      addToolResult({
+        tool: "tightenSection",
+        toolCallId,
+        output: {
+          ok: true,
+          section_id: section.id,
+          section_title: section.title,
+          target_words: input.target_words,
+        },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown error";
+      addToolResult({ tool: "tightenSection", toolCallId, output: { ok: false, error: msg } });
+    }
+  };
+
+  /**
+   * summariseForCounsel — non-mutating. We just acknowledge the call
+   * back to the model so it knows the marker landed. The actual
+   * summary is in the model's text reply.
+   */
+  const applySummarise = (toolCallId: string, input: SummariseInput): void => {
+    addToolResult({
+      tool: "summariseForCounsel",
+      toolCallId,
+      output: { ok: true, audience: input.audience ?? "counsel" },
+    });
   };
 
   return (
@@ -276,6 +350,9 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
             me={me}
             draft={draft}
             onApplyRegenerate={applyRegenerate}
+            onApplyAddClause={applyAddClause}
+            onApplyTighten={applyTighten}
+            onApplySummarise={applySummarise}
           />
         ))}
         {error && (
@@ -417,12 +494,18 @@ function Message({
   me,
   draft,
   onApplyRegenerate,
+  onApplyAddClause,
+  onApplyTighten,
+  onApplySummarise,
 }: {
   message: UIMessage;
   streaming: boolean;
   me: { initials: string; name: string; email?: string };
   draft: Draft;
   onApplyRegenerate: (toolCallId: string, input: RegenerateInput) => Promise<void>;
+  onApplyAddClause: (toolCallId: string, input: AddClauseInput) => Promise<void>;
+  onApplyTighten: (toolCallId: string, input: TightenInput) => Promise<void>;
+  onApplySummarise: (toolCallId: string, input: SummariseInput) => void;
 }) {
   const isUser = message.role === "user";
   const textOnly = textFromParts(message);
@@ -454,7 +537,7 @@ function Message({
               "mt-1 rounded-md px-3 py-2 " +
               (isUser
                 ? "bg-[var(--ds-ink)] text-white text-[13px] leading-relaxed whitespace-pre-wrap"
-                : "bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
+                : "ai-msg-body bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
             }
           >
             {isUser ? (
@@ -467,23 +550,24 @@ function Message({
           </div>
         )}
 
-        {/* Tool-call parts — render each in its own card. */}
+        {/* Tool-call parts — render the right card per tool. */}
         {!isUser && (
           <div className="mt-2 space-y-1.5">
-            {message.parts
-              .filter((p) => isToolUIPart(p) && p.type === "tool-regenerateSection")
-              .map((p) => {
-                // Narrowed via the filter above.
-                const tp = p as unknown as ToolPart;
-                return (
-                  <ToolCallRow
-                    key={tp.toolCallId}
-                    part={tp}
-                    draft={draft}
-                    onApply={onApplyRegenerate}
-                  />
-                );
-              })}
+            {message.parts.filter(isToolUIPart).map((p) => {
+              const tp = p as unknown as ToolPart;
+              switch (tp.type) {
+                case "tool-regenerateSection":
+                  return <RegenerateCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyRegenerate} />;
+                case "tool-addClause":
+                  return <AddClauseCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyAddClause} />;
+                case "tool-tightenSection":
+                  return <TightenCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyTighten} />;
+                case "tool-summariseForCounsel":
+                  return <SummariseMarker key={tp.toolCallId} part={tp} onAck={onApplySummarise} />;
+                default:
+                  return null;
+              }
+            })}
           </div>
         )}
       </div>
@@ -492,25 +576,62 @@ function Message({
 }
 
 /**
- * Render a single tool-regenerateSection part across its state machine.
- * input-streaming → "preparing" spinner
- * input-available → resolvable, show Apply button
- * output-available → applied (success) / failed (error)
- */
-/**
- * Shape of a tool-regenerateSection part across its state machine.
- * Narrowed manually since v6's `UIMessagePart` union doesn't expose a
- * convenient predicate for our specific tool name.
+ * Generic shape used for every tool part. v6's UIMessagePart union
+ * doesn't expose a per-tool predicate, so we widen to a permissive
+ * shape and narrow `input` per card.
  */
 type ToolPart = {
   type: `tool-${string}`;
   toolCallId: string;
   state: "input-streaming" | "input-available" | "output-available" | "output-error";
-  input?: RegenerateInput;
-  output?: { ok?: boolean; error?: string; section_id?: string; section_title?: string };
+  input?: unknown;
+  output?: { ok?: boolean; error?: string } & Record<string, unknown>;
 };
 
-function ToolCallRow({
+function sectionTitleFor(draft: Draft, sectionId?: string): string {
+  if (!sectionId) return "section";
+  return draft.sections.find((s) => s.id === sectionId)?.title ?? sectionId;
+}
+
+function StateStatus({
+  state,
+  output,
+  applyButton,
+}: {
+  state: ToolPart["state"];
+  output?: ToolPart["output"];
+  applyButton?: React.ReactNode;
+}) {
+  if (state === "input-streaming") {
+    return (
+      <span className="text-[11px] text-[var(--ds-muted)] inline-flex items-center gap-1">
+        <Loader2 className="size-3 animate-spin" /> Preparing
+      </span>
+    );
+  }
+  if (state === "input-available") return <>{applyButton}</>;
+  if (state === "output-available") {
+    const ok = output?.ok !== false;
+    return ok ? (
+      <span className="text-[11px] text-[var(--ds-green-fg)] inline-flex items-center gap-1">
+        <Check className="size-3" /> Applied
+      </span>
+    ) : (
+      <span
+        className="text-[11px] text-[var(--ds-red-fg)] inline-flex items-center gap-1"
+        title={typeof output?.error === "string" ? output.error : undefined}
+      >
+        <AlertCircle className="size-3" /> Failed
+      </span>
+    );
+  }
+  return null;
+}
+
+/* ============================================================
+ * regenerateSection — rewrite a named section with a freeform instruction.
+ * ========================================================== */
+function RegenerateCard({
   part,
   draft,
   onApply,
@@ -519,86 +640,212 @@ function ToolCallRow({
   draft: Draft;
   onApply: (toolCallId: string, input: RegenerateInput) => Promise<void>;
 }) {
-  const input = part.input;
-  const output = part.output;
-  const sectionTitle =
-    input?.section_id
-      ? draft.sections.find((s) => s.id === input.section_id)?.title ?? input.section_id
-      : "section";
+  const input = part.input as RegenerateInput | undefined;
+  return (
+    <ToolCard
+      icon={<Sparkles className="size-3 text-[var(--ds-muted)]" />}
+      title={sectionTitleFor(draft, input?.section_id)}
+      eyebrow="Rewrite"
+      body={input?.instruction}
+      status={
+        <StateStatus
+          state={part.state}
+          output={part.output}
+          applyButton={
+            input && (
+              <button
+                type="button"
+                onClick={() => void onApply(part.toolCallId, input)}
+                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+              >
+                Apply
+              </button>
+            )
+          }
+        />
+      }
+    />
+  );
+}
 
-  const state = part.state;
+/* ============================================================
+ * addClause — insert a named clause type into a section.
+ * ========================================================== */
+function AddClauseCard({
+  part,
+  draft,
+  onApply,
+}: {
+  part: ToolPart;
+  draft: Draft;
+  onApply: (toolCallId: string, input: AddClauseInput) => Promise<void>;
+}) {
+  const input = part.input as AddClauseInput | undefined;
+  const clause = input?.clause_type
+    ? input.clause_type.replace(/_/g, " ")
+    : "clause";
+  const pos = input?.position ?? "append";
+  return (
+    <ToolCard
+      icon={<Plus className="size-3 text-[var(--ds-muted)]" />}
+      title={sectionTitleFor(draft, input?.section_id)}
+      eyebrow={`Add clause · ${clause}${pos !== "append" ? ` · ${pos.replace("_", " ")}` : ""}`}
+      body={input?.note}
+      status={
+        <StateStatus
+          state={part.state}
+          output={part.output}
+          applyButton={
+            input && (
+              <button
+                type="button"
+                onClick={() => void onApply(part.toolCallId, input)}
+                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+              >
+                Apply
+              </button>
+            )
+          }
+        />
+      }
+    />
+  );
+}
 
-  if (state === "input-streaming") {
-    return (
-      <ToolCard
-        title={sectionTitle}
-        body={input?.instruction ?? "…"}
-        status={
+/* ============================================================
+ * tightenSection — rewrite to a specific word-count target.
+ * ========================================================== */
+function TightenCard({
+  part,
+  draft,
+  onApply,
+}: {
+  part: ToolPart;
+  draft: Draft;
+  onApply: (toolCallId: string, input: TightenInput) => Promise<void>;
+}) {
+  const input = part.input as TightenInput | undefined;
+  return (
+    <ToolCard
+      icon={<Minus className="size-3 text-[var(--ds-muted)]" />}
+      title={sectionTitleFor(draft, input?.section_id)}
+      eyebrow={`Tighten · target ${input?.target_words ?? "?"} words`}
+      body={undefined}
+      status={
+        <StateStatus
+          state={part.state}
+          output={part.output}
+          applyButton={
+            input && (
+              <button
+                type="button"
+                onClick={() => void onApply(part.toolCallId, input)}
+                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+              >
+                Apply
+              </button>
+            )
+          }
+        />
+      }
+    />
+  );
+}
+
+/* ============================================================
+ * summariseForCounsel — non-mutating. We auto-acknowledge so the
+ * model's stream completes; the actual summary lives in the prose
+ * reply rendered as Markdown. Card adds a Copy-summary affordance.
+ * ========================================================== */
+function SummariseMarker({
+  part,
+  onAck,
+}: {
+  part: ToolPart;
+  onAck: (toolCallId: string, input: SummariseInput) => void;
+}) {
+  const input = part.input as SummariseInput | undefined;
+  const acked = useRef(false);
+  useEffect(() => {
+    if (part.state === "input-available" && !acked.current) {
+      acked.current = true;
+      onAck(part.toolCallId, input ?? {});
+    }
+  }, [part.state, part.toolCallId, input, onAck]);
+
+  return (
+    <ToolCard
+      icon={<FileText className="size-3 text-[var(--ds-muted)]" />}
+      title="Summary for counsel"
+      eyebrow={input?.audience ? `Audience: ${input.audience.replace("_", " ")}` : "Audience: counsel"}
+      body={input?.note}
+      status={
+        part.state === "input-streaming" ? (
           <span className="text-[11px] text-[var(--ds-muted)] inline-flex items-center gap-1">
             <Loader2 className="size-3 animate-spin" /> Preparing
           </span>
-        }
-      />
-    );
-  }
+        ) : (
+          <CopyButton />
+        )
+      }
+    />
+  );
+}
 
-  if (state === "input-available" && input) {
-    return (
-      <ToolCard
-        title={sectionTitle}
-        body={input.instruction}
-        status={
-          <button
-            type="button"
-            onClick={() => void onApply(part.toolCallId, input)}
-            className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
-          >
-            Apply
-          </button>
-        }
-      />
-    );
-  }
-
-  if (state === "output-available") {
-    const ok = output?.ok !== false;
-    return (
-      <ToolCard
-        title={sectionTitle}
-        body={input?.instruction ?? ""}
-        status={
-          ok ? (
-            <span className="text-[11px] text-[var(--ds-green-fg)] inline-flex items-center gap-1">
-              <Check className="size-3" /> Applied
-            </span>
-          ) : (
-            <span className="text-[11px] text-[var(--ds-red-fg)] inline-flex items-center gap-1" title={output?.error}>
-              <AlertCircle className="size-3" /> Failed
-            </span>
-          )
-        }
-      />
-    );
-  }
-
-  return null;
+function CopyButton() {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      // Copy the most-recent assistant text — the summary lives in the
+      // message body. We grab it from the rendered DOM rather than props
+      // to avoid re-plumbing the message through every card.
+      const last = document.querySelectorAll(".ai-msg-body");
+      const target = last[last.length - 1] as HTMLElement | undefined;
+      const text = target?.innerText ?? "";
+      if (!text) return;
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* noop */ }
+  };
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      className="text-[11px] px-2 py-1 rounded-md border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)] inline-flex items-center gap-1"
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
 }
 
 function ToolCard({
   title,
   body,
   status,
+  icon,
+  eyebrow,
 }: {
   title: string;
-  body: string;
+  body?: string;
   status: React.ReactNode;
+  icon?: React.ReactNode;
+  eyebrow?: string;
 }) {
   return (
     <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-2 text-[12px]">
       <div className="flex items-center gap-2">
-        <Sparkles className="size-3 text-[var(--ds-muted)] shrink-0" />
-        <span className="font-medium text-[var(--ds-ink)] truncate">{title}</span>
-        <div className="ml-auto flex items-center gap-2 shrink-0">{status}</div>
+        <span className="shrink-0">{icon ?? <Sparkles className="size-3 text-[var(--ds-muted)]" />}</span>
+        <div className="min-w-0 flex-1">
+          {eyebrow && (
+            <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--ds-muted)] truncate">
+              {eyebrow}
+            </div>
+          )}
+          <div className="font-medium text-[var(--ds-ink)] truncate">{title}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">{status}</div>
       </div>
       {body && (
         <div className="text-[11px] text-[var(--ds-muted)] leading-relaxed mt-1 italic">
