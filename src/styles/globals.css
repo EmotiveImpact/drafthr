@@ -207,6 +207,36 @@
     letter-spacing: -0.018em;
   }
 
+  /* Tailwind v4 dropped the legacy default `cursor: pointer` on
+   * <button>. Restore it here for every interactive element so the
+   * pointing-finger appears on links, buttons, role="button" elements,
+   * native form controls, and Radix Themes / shadcn triggers.
+   *
+   * Disabled controls keep the default arrow (or the not-allowed cursor
+   * if the component sets it). */
+  button:not(:disabled),
+  a[href],
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Explicit not-allowed on disabled triggers — clearer affordance
+   * than the default arrow. */
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   /* Tiptap base */
   .tiptap { outline: none; }
   .tiptap p.is-editor-empty:first-child::before {
