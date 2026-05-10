@@ -1,8 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/Badge";
+import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import {
   ChevronLeft,
   Bell,
@@ -26,16 +24,16 @@ import {
   type NotificationSeverity,
 } from "@/lib/notifications";
 
-const SEVERITY_PILL: Record<NotificationSeverity, string> = {
-  urgent: "bg-rose-50 text-rose-900 border-rose-200",
-  warn: "bg-amber-50 text-amber-900 border-amber-200",
-  info: "bg-muted text-foreground border-letter-rule",
+const SEVERITY_COLOR: Record<NotificationSeverity, "red" | "amber" | "gray"> = {
+  urgent: "red",
+  warn: "amber",
+  info: "gray",
 };
 
-const SEVERITY_RING: Record<NotificationSeverity, string> = {
-  urgent: "border-rose-200 bg-rose-50/40",
-  warn: "border-amber-200 bg-amber-50/40",
-  info: "border-letter-rule bg-background",
+const SEVERITY_BG: Record<NotificationSeverity, string | undefined> = {
+  urgent: "var(--red-2)",
+  warn: "var(--amber-2)",
+  info: undefined,
 };
 
 export function Notifications() {
@@ -53,97 +51,81 @@ export function Notifications() {
   const info = list.filter((n) => n.severity === "info");
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8 space-y-6">
-      <div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => nav(-1)}
-          className="text-muted-foreground -ml-3 mb-2 h-7"
-        >
-          <ChevronLeft className="size-3.5 mr-1" /> Back
+    <Box className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
+      <Box mb="6">
+        <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
+          <ChevronLeft className="size-3.5" /> Back
         </Button>
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
-          Notifications
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight mb-1">
-          What needs your attention
-        </h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
+        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Notifications</Text>
+        <Heading size="6" mt="1" mb="1">What needs your attention</Heading>
+        <Text size="2" color="gray" className="max-w-2xl">
           Derived from your drafts and profile — tribunal deadlines, ACAS Early Conciliation
           windows, missing required clauses, counsel-review-pending exports, and stale drafts.
-          No emails sent yet — these are surfaced here so nothing slips.
-        </p>
-      </div>
+        </Text>
+      </Box>
 
       {list.length === 0 && (
-        <div className="rounded-md border border-dashed border-letter-rule p-10 text-center">
-          <Bell className="size-5 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm font-medium">All clear.</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            You'll see deadline reminders, compliance gaps, and counsel-review prompts here as
-            you work.
-          </p>
-        </div>
+        <Card size="3">
+          <Flex direction="column" align="center" gap="2" py="6">
+            <Bell className="size-5 text-[var(--gray-9)]" />
+            <Text size="2" weight="medium" as="p">All clear.</Text>
+            <Text size="1" color="gray" align="center" as="p">
+              You'll see deadline reminders, compliance gaps, and counsel-review prompts here.
+            </Text>
+          </Flex>
+        </Card>
       )}
 
-      {urgent.length > 0 && (
-        <Section title="Urgent" count={urgent.length} items={urgent} />
-      )}
-      {warn.length > 0 && <Section title="Action recommended" count={warn.length} items={warn} />}
-      {info.length > 0 && <Section title="Heads up" count={info.length} items={info} />}
-    </div>
+      <Flex direction="column" gap="3">
+        {urgent.length > 0 && <Section title="Urgent" count={urgent.length} items={urgent} />}
+        {warn.length > 0 && <Section title="Action recommended" count={warn.length} items={warn} />}
+        {info.length > 0 && <Section title="Heads up" count={info.length} items={info} />}
+      </Flex>
+    </Box>
   );
 }
 
-function Section({
-  title,
-  count,
-  items,
-}: {
-  title: string;
-  count: number;
-  items: Notification[];
-}) {
+function Section({ title, count, items }: { title: string; count: number; items: Notification[] }) {
   const nav = useNavigate();
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          {title}
-          <Badge className="bg-muted text-foreground border-letter-rule">{count}</Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <ul className="divide-y divide-sidebar-border">
-          {items.map((n) => (
-            <li
-              key={n.id}
-              onClick={() => n.actionHref && nav(n.actionHref)}
-              className={`px-6 py-3 cursor-pointer hover:bg-muted/30 ${SEVERITY_RING[n.severity]}`}
+    <Card size="2">
+      <Flex align="center" gap="2" mb="3">
+        <Heading size="3">{title}</Heading>
+        <Badge color="gray" variant="soft">{count}</Badge>
+      </Flex>
+      <Flex direction="column">
+        {items.map((n) => (
+          <button
+            key={n.id}
+            onClick={() => n.actionHref && nav(n.actionHref)}
+            className="text-left"
+          >
+            <Flex
+              px="4"
+              py="3"
+              gap="3"
+              align="start"
+              className="hover:bg-[var(--gray-2)] cursor-pointer border-b border-[var(--gray-5)] last:border-b-0"
+              style={{ background: SEVERITY_BG[n.severity] }}
             >
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5">{iconFor(n)}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{n.title}</span>
-                    <Badge className={SEVERITY_PILL[n.severity]}>{n.severity}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                    {n.description}
-                  </p>
-                </div>
-                {n.actionLabel && (
-                  <span className="text-xs text-muted-foreground inline-flex items-center gap-1 shrink-0">
-                    {n.actionLabel}
-                    <ArrowUpRight className="size-3" />
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </CardContent>
+              <Box mt="1">{iconFor(n)}</Box>
+              <Box className="flex-1 min-w-0">
+                <Flex align="center" gap="2" wrap="wrap">
+                  <Text size="2" weight="medium">{n.title}</Text>
+                  <Badge color={SEVERITY_COLOR[n.severity]} variant="soft">{n.severity}</Badge>
+                </Flex>
+                <Text size="1" color="gray" mt="1" as="p" className="leading-relaxed">{n.description}</Text>
+              </Box>
+              {n.actionLabel && (
+                <Flex align="center" gap="1" className="shrink-0">
+                  <Text size="1" color="gray">{n.actionLabel}</Text>
+                  <ArrowUpRight className="size-3 text-[var(--gray-9)]" />
+                </Flex>
+              )}
+            </Flex>
+          </button>
+        ))}
+      </Flex>
     </Card>
   );
 }
@@ -158,7 +140,6 @@ function iconFor(n: Notification) {
     stale_draft: Clock,
     wp_no_header: ShieldCheck,
   };
-  const Icon =
-    map[n.kind] ?? (n.severity === "urgent" ? AlertCircle : n.severity === "warn" ? AlertTriangle : Info);
-  return <Icon className="size-4 text-muted-foreground" />;
+  const Icon = map[n.kind] ?? (n.severity === "urgent" ? AlertCircle : n.severity === "warn" ? AlertTriangle : Info);
+  return <Icon className="size-4 text-[var(--gray-9)]" />;
 }

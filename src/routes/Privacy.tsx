@@ -1,29 +1,29 @@
-import { Card, CardContent } from "@/components/ui/card";
+import { Box, Card, Heading, Text } from "@radix-ui/themes";
 
 /**
- * Public privacy policy page. Required for GDPR/UK GDPR compliance.
- * The text below is a starting template — the operator must fill in the
- * data-controller details, retention specifics, and sub-processor list, and
- * have it reviewed by counsel before going live.
+ * Public privacy policy page. Required for GDPR/UK GDPR compliance. The text
+ * below is a starting template — the operator must fill in the data-controller
+ * details, retention specifics, and sub-processor list, and have it reviewed
+ * by counsel before going live.
  */
 export function Privacy() {
   return (
-    <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight mb-2">Privacy Policy</h1>
-      <p className="text-sm text-muted-foreground mb-8">
-        Effective date: <strong>{new Date().toISOString().slice(0, 10)}</strong>. This policy
-        explains how the HR Letter platform collects, processes, and stores
+    <Box className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+      <Heading size="7" mb="2">Privacy Policy</Heading>
+      <Text size="2" color="gray" mb="6" as="p">
+        Effective date: <Text weight="medium" highContrast>{new Date().toISOString().slice(0, 10)}</Text>. This policy
+        explains how the DRAFTHR platform collects, processes, and stores
         personal data in connection with drafting HR correspondence.
-      </p>
+      </Text>
 
-      <Card>
-        <CardContent className="prose prose-sm max-w-none p-6 space-y-5 [&_h2]:font-semibold [&_h2]:text-base [&_h2]:mt-6 [&_h2]:mb-2 [&_p]:leading-relaxed [&_p]:my-2">
+      <Card size="3">
+        <Box className="prose prose-sm max-w-none [&_h2]:font-semibold [&_h2]:text-base [&_h2]:mt-6 [&_h2]:mb-2 [&_p]:leading-relaxed [&_p]:my-2">
           <h2>1. Data controller</h2>
           <p>
-            <strong>[Operator legal name]</strong>, with registered office at
-            <strong> [registered address]</strong>, is the data controller in respect
-            of this platform. Contact for data protection enquiries:
-            <strong> [dpo@example.com]</strong>.
+            <strong>[Operator legal name]</strong>, with registered office at{" "}
+            <strong>[registered address]</strong>, is the data controller in respect
+            of this platform. Contact for data protection enquiries:{" "}
+            <strong>[dpo@example.com]</strong>.
           </p>
 
           <h2>2. What we collect</h2>
@@ -62,7 +62,7 @@ export function Privacy() {
           </p>
           <ul>
             <li><strong>Alibaba Cloud (DashScope International)</strong> — language model inference (Singapore region).</li>
-            <li><strong>Anthropic PBC</strong> — language model inference (planned, when enabled).</li>
+            <li><strong>Anthropic PBC</strong> — language model inference (planned).</li>
             <li><strong>Vercel Inc.</strong> — application hosting and serverless compute.</li>
             <li><strong>Neon (Databricks)</strong> — managed Postgres database.</li>
             <li><strong>Clerk Inc.</strong> — authentication and identity.</li>
@@ -74,8 +74,7 @@ export function Privacy() {
             Data may be transferred outside the United Kingdom or European
             Economic Area to the providers above. Where this occurs, we rely on
             UK Standard Contractual Clauses or the UK International Data
-            Transfer Addendum, supplemented by appropriate technical and
-            organisational measures.
+            Transfer Addendum.
           </p>
 
           <h2>6. Retention</h2>
@@ -91,10 +90,7 @@ export function Privacy() {
           <p>
             Under UK GDPR you have the right to access, rectify, erase, restrict
             processing of, and port your personal data. To exercise any of these
-            rights, contact <strong>[dpo@example.com]</strong>. Where you are an
-            employee whose data has been entered into the platform by your
-            employer, please direct subject access requests to your employer in
-            the first instance, who is the data controller for that data.
+            rights, contact <strong>[dpo@example.com]</strong>.
           </p>
           <p>
             You also have the right to lodge a complaint with the UK Information
@@ -105,8 +101,7 @@ export function Privacy() {
           <p>
             We implement appropriate technical and organisational measures
             including encryption in transit (TLS 1.2+), encryption at rest,
-            principle of least privilege, and audit logging. We sanitise editor
-            output before export and never expose API keys to the browser.
+            principle of least privilege, and audit logging.
           </p>
 
           <h2>9. Changes to this policy</h2>
@@ -114,8 +109,8 @@ export function Privacy() {
             We will post any material changes to this policy on this page and,
             where appropriate, notify users by email.
           </p>
-        </CardContent>
+        </Box>
       </Card>
-    </div>
+    </Box>
   );
 }

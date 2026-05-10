@@ -254,7 +254,7 @@ export const useDraftStore = create<Store>()(
           return { drafts: next };
         }),
     }),
-    { name: "hr-letter-store-v1" }
+    { name: "scribehr-store-v1" }
   )
 );
 

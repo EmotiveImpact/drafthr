@@ -1,8 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/Badge";
+import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import {
   ChevronLeft,
   FilePlus2,
@@ -27,17 +25,6 @@ type Event = {
   meta?: string;
 };
 
-/**
- * Activity feed — synthesised from existing draft data:
- *   - draft.createdAt              → "Created [letter]"
- *   - section.versions[]           → "Regenerated [section] (vN)"
- *   - draft.exports[]              → "Exported as PDF/DOCX"
- *   - answers._counselReview       → "Counsel review attested by X"
- *   - draft.updatedAt              → fallback "Last updated"
- *
- * No backend / no separate audit table — derived live from the store. When
- * Postgres is wired, the same shape can come from a server-side audit_log.
- */
 export function Activity() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
@@ -59,10 +46,9 @@ export function Activity() {
         meta: d.context.jurisdiction,
       });
 
-      // Regenerations: every section.versions[] beyond the first is a regen.
       for (const sec of d.sections) {
         sec.versions.forEach((v, i) => {
-          if (i === 0) return; // initial generation already implied by created
+          if (i === 0) return;
           out.push({
             ts: v.createdAt,
             draftId: d.id,
@@ -75,7 +61,6 @@ export function Activity() {
         });
       }
 
-      // Counsel review attestation
       const review = (d.answers as Record<string, unknown>)._counselReview as
         | { reviewedBy?: string; reviewedOn?: string }
         | undefined;
@@ -91,7 +76,6 @@ export function Activity() {
         });
       }
 
-      // Exports
       for (const ex of d.exports ?? []) {
         out.push({
           ts: ex.exportedAt,
@@ -104,7 +88,6 @@ export function Activity() {
         });
       }
 
-      // Last update — only if substantively newer than created.
       if (d.updatedAt - d.createdAt > 60_000 && !out.some((e) => e.draftId === d.id && e.ts === d.updatedAt)) {
         out.push({
           ts: d.updatedAt,
@@ -120,7 +103,6 @@ export function Activity() {
     return out;
   }, [drafts, role]);
 
-  // Group by day
   const groups = useMemo(() => {
     const out: { day: string; events: Event[] }[] = [];
     for (const e of events) {
@@ -133,101 +115,84 @@ export function Activity() {
   }, [events]);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-      <div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => nav(-1)}
-          className="text-muted-foreground -ml-3 mb-2 h-7"
-        >
-          <ChevronLeft className="size-3.5 mr-1" /> Back
+    <Box className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <Box mb="6">
+        <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
+          <ChevronLeft className="size-3.5" /> Back
         </Button>
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
-          Activity
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight mb-1">Audit trail</h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Every draft you've created, regenerated, exported, and attested.
-          Useful for a paper trail when sharing context with a lawyer or HR partner.
-        </p>
-      </div>
+        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Activity</Text>
+        <Heading size="6" mt="1" mb="1">Audit trail</Heading>
+        <Text size="2" color="gray" className="max-w-2xl">
+          Every draft you've created, regenerated, exported, and attested. Useful for a paper trail
+          when sharing context with a lawyer or HR partner.
+        </Text>
+      </Box>
 
       {events.length === 0 ? (
-        <div className="rounded-md border border-dashed border-letter-rule p-10 text-center">
-          <ActivityIcon className="size-5 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm font-medium">No activity yet.</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Start drafting a letter and the audit trail builds itself.
-          </p>
-        </div>
+        <Card size="3">
+          <Flex direction="column" align="center" gap="2" py="6">
+            <ActivityIcon className="size-5 text-[var(--gray-9)]" />
+            <Text size="2" weight="medium" as="p">No activity yet.</Text>
+            <Text size="1" color="gray" align="center" as="p">
+              Start drafting a letter and the audit trail builds itself.
+            </Text>
+          </Flex>
+        </Card>
       ) : (
-        <div className="space-y-5">
+        <Flex direction="column" gap="3">
           {groups.map((g) => (
-            <Card key={g.day}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">{g.day}</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <ul className="divide-y divide-sidebar-border">
-                  {g.events.map((e, i) => (
-                    <li
-                      key={i}
-                      onClick={() => nav(`/editor/${e.draftId}`)}
-                      className="px-6 py-2.5 grid grid-cols-[18px_1fr_auto] gap-3 items-start hover:bg-muted/30 cursor-pointer"
+            <Card size="2" key={g.day}>
+              <Heading size="2" mb="2">{g.day}</Heading>
+              <Flex direction="column">
+                {g.events.map((e, i) => (
+                  <button key={i} onClick={() => nav(`/editor/${e.draftId}`)} className="text-left">
+                    <Flex
+                      px="4"
+                      py="2"
+                      align="start"
+                      gap="3"
+                      className="hover:bg-[var(--gray-2)] cursor-pointer border-b border-[var(--gray-5)] last:border-b-0"
                     >
-                      <span className="mt-0.5">{iconFor(e.kind)}</span>
-                      <div className="min-w-0">
-                        <div className="text-sm">
+                      <Box mt="1">{iconFor(e.kind)}</Box>
+                      <Box className="flex-1 min-w-0">
+                        <Text size="2" as="div">
                           {e.description}{" "}
-                          <span className="text-muted-foreground">· {e.draftLabel}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
-                          <Badge className="bg-muted text-foreground border-letter-rule px-1.5 py-0 text-[9px]">
+                          <Text color="gray">· {e.draftLabel}</Text>
+                        </Text>
+                        <Flex align="center" gap="2" mt="1">
+                          <Badge color="gray" variant="soft">
                             {e.mode === "employer" ? "HR" : "employee"}
                           </Badge>
-                          {e.meta && <span>· {e.meta}</span>}
-                        </div>
-                      </div>
-                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                        {formatTime(e.ts)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
+                          {e.meta && <Text size="1" color="gray">· {e.meta}</Text>}
+                        </Flex>
+                      </Box>
+                      <Text size="1" color="gray" className="tabular-nums shrink-0">{formatTime(e.ts)}</Text>
+                    </Flex>
+                  </button>
+                ))}
+              </Flex>
             </Card>
           ))}
-        </div>
+        </Flex>
       )}
-    </div>
+    </Box>
   );
 }
 
 function iconFor(kind: Event["kind"]) {
-  const cls = "size-4 text-muted-foreground";
+  const cls = "size-4 text-[var(--gray-9)]";
   switch (kind) {
-    case "created":
-      return <FilePlus2 className={cls} />;
-    case "regenerated":
-      return <RotateCw className={cls} />;
-    case "exported":
-      return <FileDown className={cls} />;
-    case "counsel_review":
-      return <ShieldCheck className={cls + " text-green-700"} />;
-    case "updated":
-      return <FileEdit className={cls} />;
-    default:
-      return <ActivityIcon className={cls} />;
+    case "created": return <FilePlus2 className={cls} />;
+    case "regenerated": return <RotateCw className={cls} />;
+    case "exported": return <FileDown className={cls} />;
+    case "counsel_review": return <ShieldCheck className="size-4 text-[var(--green-11)]" />;
+    case "updated": return <FileEdit className={cls} />;
+    default: return <ActivityIcon className={cls} />;
   }
 }
 
 function safeMeta(id: string): { shortTitle: string } | null {
-  try {
-    return getLetterMeta(id as Parameters<typeof getLetterMeta>[0]);
-  } catch {
-    return null;
-  }
+  try { return getLetterMeta(id as Parameters<typeof getLetterMeta>[0]); } catch { return null; }
 }
 
 function formatDay(ts: number): string {
@@ -243,5 +208,5 @@ function formatDay(ts: number): string {
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
-// Avoid unused-import error for Draft type only used in the underlying store.
+
 export type { Draft as _Draft };

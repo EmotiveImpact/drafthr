@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import {
   Sidebar,
   SidebarContent,
@@ -23,20 +24,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   ScrollText,
+  PanelLeftOpen,
+  PanelLeftClose,
   PlusCircle,
   Briefcase,
   UserRound,
   History,
   ShieldCheck,
   ChevronsUpDown,
-  PanelLeftClose,
-  PanelLeftOpen,
   Settings as SettingsIcon,
   MoreHorizontal,
   Trash2,
@@ -46,29 +44,35 @@ import {
   Monitor,
   LayoutDashboard,
   Search,
-  Sparkles,
   CalendarDays,
   FileDown,
   Activity as ActivityIcon,
   Bell,
 } from "lucide-react";
-import { deriveNotifications, topSeverity } from "@/lib/notifications";
 import type { Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { useThemeStore } from "@/lib/theme";
+import { deriveNotifications, topSeverity } from "@/lib/notifications";
+import { SidebarMenuBadge } from "@/components/ui/sidebar";
+import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 
 /**
- * App sidebar — collapsible icon ↔ expanded panel.
+ * App sidebar.
  *
- * Sections:
- *   1. Header   — Role switcher (current role + dropdown to swap)
- *   2. Navigate — Home, New letter, Search, Inbox, Archive, Notifications
- *   3. Recent drafts — project-list pattern with per-row action menu
- *   4. Footer   — User card with profile / privacy / theme dropdown
+ *   Header — brand + bell + trigger.
+ *     • Brand is a plain <Link> (NOT a SidebarMenuButton) so the primitive's
+ *       size override doesn't shrink the tile when the sidebar collapses —
+ *       the 32x32 brand tile is the same size in both states.
+ *     • Bell handles all notifications (one surface, not two — there's no
+ *       separate "Notifications" nav item).
+ *     • Trigger is the explicit collapse/expand button.
+ *     • When sidebar is COLLAPSED, clicking the brand tile expands it.
+ *     • Layout flips from row → column on collapse so the three controls
+ *       stack vertically in the icon strip.
  *
- * Letter TYPES are NOT in the sidebar. They live in the dashboard's "Quick
- * start" section and on the dedicated browse page (/hr/new or /me/new).
+ *   Body  — primary nav · recent drafts · platform group.
+ *   Footer — user card with role / account / theme dropdown.
  */
 export function AppSidebar() {
   const loc = useLocation();
@@ -83,30 +87,28 @@ export function AppSidebar() {
   return (
     <SidebarShell>
       <SidebarHeader>
-        <Brand />
+        <BrandHeader />
       </SidebarHeader>
 
       <SidebarContent>
         <NavigatePrimary mode={mode} />
         <NavRecentDrafts mode={mode} />
-        <NavPlatform />
       </SidebarContent>
 
       <SidebarFooter>
         <NavUser mode={mode} />
       </SidebarFooter>
+
       <SidebarRail />
     </SidebarShell>
   );
 }
 
 /**
- * Sidebar wrapper that:
- *   1. Tags the root with `group/sb` so the brand icon can react to a
- *      sidebar-wide hover (used by collapsed Brand).
- *   2. When collapsed (desktop only), turns the whole sidebar surface into
- *      an "expand" affordance. Clicks on empty space inside the sidebar
- *      expand it; clicks on a real link/button keep their normal behaviour.
+ * Sidebar wrapper with click-anywhere-to-expand when collapsed (taken from
+ * the committed version). Clicking any empty space inside the icon-strip
+ * expands the sidebar; clicks on real interactive elements (links, buttons,
+ * dropdown items) keep their normal behaviour.
  */
 function SidebarShell({ children }: { children: React.ReactNode }) {
   const { state, toggleSidebar, isMobile } = useSidebar();
@@ -114,12 +116,12 @@ function SidebarShell({ children }: { children: React.ReactNode }) {
 
   return (
     <Sidebar
+      variant="inset"
       collapsible="icon"
-      className={collapsed ? "group/sb cursor-pointer" : "group/sb"}
+      className={collapsed ? "cursor-pointer" : undefined}
       onClick={(e) => {
         if (!collapsed) return;
         const t = e.target as HTMLElement;
-        // Don't intercept clicks on real interactive descendants.
         if (
           t.closest(
             'a, button, [role="button"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], input, textarea, select, [data-radix-popper-content-wrapper]'
@@ -136,82 +138,71 @@ function SidebarShell({ children }: { children: React.ReactNode }) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Header — role switcher                                            */
+/*  Header                                                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * Brand header.
- *
- * Expanded:
- *   - [Logo + "HR Letter"] non-interactive (just identity)
- *   - Right-side action button → collapse sidebar
- *
- * Collapsed (desktop):
- *   - Brand icon shown by default
- *   - On hover, the icon swaps to a "panel-left-open" expand glyph
- *   - Click anywhere on the icon → expand the sidebar
- */
-function Brand() {
-  const { state, toggleSidebar, isMobile } = useSidebar();
+function BrandHeader() {
+  const { state, isMobile, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed" && !isMobile;
 
-  if (isCollapsed) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            size="lg"
-            tooltip="Expand sidebar (⌘B)"
-            onClick={toggleSidebar}
-            aria-label="Expand sidebar"
-            className="group/brand cursor-pointer"
-          >
-            <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-md shadow-xs relative">
-              {/* Default: brand glyph. On hover (brand OR anywhere on the
-                  collapsed sidebar), swap to the expand glyph. */}
-              <ScrollText className="size-4 transition-opacity duration-150 group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0 group-hover/sb:opacity-0" />
-              <PanelLeftOpen className="size-4 absolute opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100 group-hover/sb:opacity-100" />
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
-
+  /*
+   * Two-button row, exactly like the committed version:
+   *   - Brand <Link>: plain anchor, NOT SidebarMenuButton — 32x32 tile stays
+   *     32x32 in both states. When collapsed, hover swaps the icon to
+   *     PanelLeftOpen and click expands. When expanded, click goes to "/".
+   *   - Collapse <button>: visible only when expanded. Sits on the right of
+   *     the brand row. Click → collapse. (When collapsed it disappears, since
+   *     the whole sidebar surface acts as the expand affordance via SidebarShell.)
+   */
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          asChild
-          size="lg"
-          className="hover:bg-transparent active:bg-transparent cursor-default"
-        >
-          <Link to="/" className="cursor-default">
-            <div className="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-md shadow-xs">
-              <ScrollText className="size-4" />
-            </div>
-            <div className="grid flex-1 text-left leading-tight min-w-0">
-              <span className="text-sm font-semibold tracking-tight truncate">HR Letter</span>
-              <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate">
-                UK & US drafting
-              </span>
-            </div>
-          </Link>
-        </SidebarMenuButton>
-        <SidebarMenuAction
+    <div className="flex w-full items-center justify-between gap-2">
+      <Link
+        to="/"
+        onClick={(e) => {
+          if (isCollapsed) {
+            e.preventDefault();
+            toggleSidebar();
+          }
+        }}
+        aria-label={isCollapsed ? "Expand sidebar" : "DRAFTHR home"}
+        title={isCollapsed ? "Expand sidebar (⌘B)" : "DRAFTHR"}
+        className="group/brand flex items-center gap-2 min-w-0 cursor-pointer"
+      >
+        <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-md shadow-xs shrink-0 relative">
+          <ScrollText
+            className={cn(
+              "size-5 transition-opacity duration-150",
+              isCollapsed && "group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
+            )}
+          />
+          {isCollapsed && (
+            <PanelLeftOpen className="size-5 absolute opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100" />
+          )}
+        </div>
+        {!isCollapsed && (
+          <span className="text-base font-semibold tracking-tight truncate">
+            DRAFTHR
+          </span>
+        )}
+      </Link>
+
+      {!isCollapsed && (
+        <button
+          type="button"
           onClick={toggleSidebar}
           aria-label="Collapse sidebar"
           title="Collapse sidebar (⌘B)"
+          className="size-7 grid place-items-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground shrink-0"
         >
-          <PanelLeftClose />
-        </SidebarMenuAction>
-      </SidebarMenuItem>
-    </SidebarMenu>
+          <PanelLeftClose className="size-4" />
+        </button>
+      )}
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Body — primary navigation                                         */
+/*  Body — primary navigation                                          */
 /* ------------------------------------------------------------------ */
 
 function NavigatePrimary({ mode }: { mode: Mode | null }) {
@@ -222,52 +213,7 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
   const actionable = notifs.filter((n) => n.severity !== "info").length;
   const top = topSeverity(notifs);
   const prefix = mode === "employer" ? "/hr" : mode === "employee" ? "/me" : null;
-
-  const items: { href: string | null; label: string; Icon: typeof LayoutDashboard; tooltip: string; disabled?: boolean }[] = [
-    {
-      href: prefix,
-      label: "Home",
-      Icon: LayoutDashboard,
-      tooltip: "Dashboard",
-    },
-    {
-      href: prefix ? `${prefix}/new` : null,
-      label: "New letter",
-      Icon: PlusCircle,
-      tooltip: "Browse letter types",
-    },
-    {
-      href: "/calendar",
-      label: "Calendar",
-      Icon: CalendarDays,
-      tooltip: "Deadlines across all your drafts",
-    },
-    {
-      href: "/exported",
-      label: "Exported",
-      Icon: FileDown,
-      tooltip: "Letters you've finalised",
-    },
-    {
-      href: "/activity",
-      label: "Activity",
-      Icon: ActivityIcon,
-      tooltip: "Audit trail of your drafts",
-    },
-    {
-      href: "/notifications",
-      label: "Notifications",
-      Icon: Bell,
-      tooltip: "Deadline reminders & compliance alerts",
-    },
-    {
-      href: null,
-      label: "Search",
-      Icon: Search,
-      tooltip: "Search drafts (coming soon)",
-      disabled: true,
-    },
-  ];
+  const search = useSearchPaletteToggle();
 
   if (!prefix) {
     return (
@@ -297,6 +243,15 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
     );
   }
 
+  const items: { href: string | null; label: string; Icon: typeof LayoutDashboard; tooltip: string; disabled?: boolean }[] = [
+    { href: prefix, label: "Home", Icon: LayoutDashboard, tooltip: "Dashboard" },
+    { href: `${prefix}/new`, label: "New letter", Icon: PlusCircle, tooltip: "Browse letter types" },
+    { href: "/calendar", label: "Calendar", Icon: CalendarDays, tooltip: "Deadlines across all your drafts" },
+    { href: "/exported", label: "Exported", Icon: FileDown, tooltip: "Letters you've finalised" },
+    { href: "/activity", label: "Activity", Icon: ActivityIcon, tooltip: "Audit trail of your drafts" },
+    { href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Deadline reminders & compliance alerts" },
+  ];
+
   return (
     <SidebarGroup>
       <SidebarGroupContent>
@@ -306,25 +261,10 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
             return (
               <SidebarMenuItem key={it.label}>
                 {it.href && !it.disabled ? (
-                  <SidebarMenuButton
-                    asChild
-                    tooltip={it.tooltip}
-                    isActive={loc.pathname === it.href}
-                  >
+                  <SidebarMenuButton asChild tooltip={it.tooltip} isActive={loc.pathname === it.href}>
                     <Link to={it.href}>
                       <it.Icon />
-                      <span className="truncate flex-1 min-w-0">{it.label}</span>
-                      {showBadge && (
-                        <span
-                          className={`ml-auto shrink-0 min-w-[18px] h-[18px] grid place-items-center rounded-full text-[10px] font-medium px-1 ${
-                            top === "urgent"
-                              ? "bg-rose-500 text-white"
-                              : "bg-amber-500 text-white"
-                          }`}
-                        >
-                          {actionable > 9 ? "9+" : actionable}
-                        </span>
-                      )}
+                      <span>{it.label}</span>
                     </Link>
                   </SidebarMenuButton>
                 ) : (
@@ -334,13 +274,36 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
                     aria-disabled
                   >
                     <it.Icon />
-                    <span className="truncate flex-1 min-w-0">{it.label}</span>
-                    <span className="ml-auto shrink-0 text-[9px] uppercase tracking-wider opacity-70">soon</span>
+                    <span>{it.label}</span>
                   </SidebarMenuButton>
+                )}
+                {showBadge && (
+                  <SidebarMenuBadge
+                    className={cn(
+                      "px-1 text-[10px] text-white",
+                      top === "urgent" ? "bg-rose-500" : "bg-amber-500"
+                    )}
+                  >
+                    {actionable > 9 ? "9+" : actionable}
+                  </SidebarMenuBadge>
                 )}
               </SidebarMenuItem>
             );
           })}
+
+          {/* Search opens the Cmd+K palette */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="Search drafts, letter types, pages (⌘K)"
+              onClick={() => search.setOpen(true)}
+            >
+              <Search />
+              <span>Search</span>
+            </SidebarMenuButton>
+            <SidebarMenuBadge className="border border-letter-rule bg-muted text-muted-foreground px-1 text-[10px]">
+              ⌘K
+            </SidebarMenuBadge>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
@@ -380,7 +343,7 @@ function NavRecentDrafts({ mode }: { mode: Mode | null }) {
                   <SidebarMenuButton asChild isActive={loc.pathname === href} tooltip={`${label} · ${sub}`}>
                     <Link to={href}>
                       <History />
-                      <span className="truncate flex-1 min-w-0">{label}</span>
+                      <span>{label}</span>
                     </Link>
                   </SidebarMenuButton>
                   <DropdownMenu>
@@ -418,47 +381,19 @@ function NavRecentDrafts({ mode }: { mode: Mode | null }) {
   );
 }
 
-function NavPlatform() {
-  const loc = useLocation();
-  return (
-    <>
-      <SidebarSeparator />
-      <SidebarGroup>
-        <SidebarGroupLabel>Platform</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton tooltip="What's new (coming soon)" className="text-muted-foreground">
-                <Sparkles />
-                <span className="truncate flex-1 min-w-0">What's new</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Privacy & data" isActive={loc.pathname === "/privacy"}>
-                <Link to="/privacy">
-                  <ShieldCheck />
-                  <span className="truncate flex-1 min-w-0">Privacy & data</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </>
-  );
-}
 
 /* ------------------------------------------------------------------ */
-/*  Footer — NavUser-style card                                       */
+/*  Footer — user card                                                 */
 /* ------------------------------------------------------------------ */
 
 function NavUser({ mode }: { mode: Mode | null }) {
-  const { isMobile } = useSidebar();
+  const { isMobile, state } = useSidebar();
   const profile = useProfileStore((s) => s.profile);
   const setRole = useProfileStore((s) => s.setRole);
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
   const nav = useNavigate();
+  const isCollapsed = state === "collapsed" && !isMobile;
 
   const display = profile.personal.preferredName ?? profile.personal.legalName ?? "Set up profile";
   const email = profile.personal.email ?? (profile.role ? "Local profile" : "");
@@ -476,80 +411,77 @@ function NavUser({ mode }: { mode: Mode | null }) {
   const SwapIcon = swapTo === "employer" ? Briefcase : UserRound;
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-              tooltip={display}
-            >
-              <Avatar className="size-8 rounded-md">
-                <AvatarFallback className="rounded-md text-xs">{initials || "??"}</AvatarFallback>
-              </Avatar>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={display}
+          title={display}
+          className="group/user flex items-center gap-2 min-w-0 w-full rounded-md p-1 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+        >
+          <Avatar className="size-8 rounded-md shrink-0">
+            <AvatarFallback className="rounded-md text-xs">{initials || "??"}</AvatarFallback>
+          </Avatar>
+          {!isCollapsed && (
+            <>
               <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
                 <span className="truncate font-medium">{display}</span>
                 <span className="truncate text-xs text-muted-foreground">{email || roleLabel}</span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-60 rounded-md"
-            side={isMobile ? "bottom" : "right"}
-            align="end"
-            sideOffset={4}
-          >
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Role · {roleLabel}
-            </DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => {
-                setRole(swapTo);
-                nav(swapTo === "employer" ? "/hr" : "/me");
-              }}
-              className="gap-2"
-            >
-              <SwapIcon className="size-4" />
-              <span>Switch to {swapLabel}</span>
-              <ArrowUpRight className="ml-auto size-3.5 text-muted-foreground" />
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => nav("/pick-role")} className="gap-2">
-              <ScrollText className="size-4" />
-              Role picker
-            </DropdownMenuItem>
+              <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
+            </>
+          )}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        className="min-w-60 rounded-md"
+        side={isMobile ? "bottom" : "right"}
+        align="end"
+        sideOffset={8}
+      >
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Role · {roleLabel}</DropdownMenuLabel>
+        <DropdownMenuItem
+          onClick={() => {
+            setRole(swapTo);
+            nav(swapTo === "employer" ? "/hr" : "/me");
+          }}
+          className="gap-2"
+        >
+          <SwapIcon className="size-4" />
+          <span>Switch to {swapLabel}</span>
+          <ArrowUpRight className="ml-auto size-3.5 text-muted-foreground" />
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => nav("/pick-role")} className="gap-2">
+          <ScrollText className="size-4" />
+          Role picker
+        </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">
-              Account
-            </DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => nav("/settings")} className="gap-2">
-              <SettingsIcon className="size-4" />
-              Profile & settings
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => nav("/privacy")} className="gap-2">
-              <ShieldCheck className="size-4" />
-              Privacy & data
-            </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Account</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => nav("/settings")} className="gap-2">
+          <SettingsIcon className="size-4" />
+          Profile & settings
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => nav("/privacy")} className="gap-2">
+          <ShieldCheck className="size-4" />
+          Privacy & data
+        </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => setThemeMode("light")} className="gap-2">
-              <Sun className="size-4" /> Light
-              {themeMode === "light" && <span className="ml-auto text-xs">·</span>}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setThemeMode("dark")} className="gap-2">
-              <Moon className="size-4" /> Dark
-              {themeMode === "dark" && <span className="ml-auto text-xs">·</span>}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setThemeMode("system")} className="gap-2">
-              <Monitor className="size-4" /> System
-              {themeMode === "system" && <span className="ml-auto text-xs">·</span>}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => setThemeMode("light")} className="gap-2">
+          <Sun className="size-4" /> Light
+          {themeMode === "light" && <span className="ml-auto text-xs">·</span>}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setThemeMode("dark")} className="gap-2">
+          <Moon className="size-4" /> Dark
+          {themeMode === "dark" && <span className="ml-auto text-xs">·</span>}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setThemeMode("system")} className="gap-2">
+          <Monitor className="size-4" /> System
+          {themeMode === "system" && <span className="ml-auto text-xs">·</span>}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

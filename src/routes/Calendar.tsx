@@ -1,8 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/Badge";
+import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { CalendarClock, Download, ArrowUpRight, ChevronLeft } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
@@ -17,141 +15,14 @@ type Event = {
   kind: "tribunal" | "acas_ec" | "advisor" | "remedy" | "appeal" | "acceptance";
 };
 
-/**
- * Calendar — chronological list of all deadlines extracted from your drafts.
- * Sources:
- *   - draft.context.protectedDeadline (computed at creation from "date of act")
- *   - answers.advisorDeadline / answers.remedyDeadline / answers.appealDeadline /
- *     answers.acceptanceDeadline (typed on case-by-case wizards)
- *   - For UK tribunal-bound letters, an ACAS Early Conciliation deadline 6 weeks
- *     before the tribunal limitation.
- *
- * Exports as `.ics` so you can drop it into your real calendar.
- */
-export function Calendar() {
-  const nav = useNavigate();
-  const drafts = useDraftStore((s) => s.drafts);
-
-  const events = useMemo(() => extractEvents(Object.values(drafts)), [drafts]);
-
-  const upcoming = events.filter((e) => e.daysAway >= 0);
-  const past = events.filter((e) => e.daysAway < 0);
-
-  const onExportIcs = () => {
-    const ics = buildIcs(events);
-    const blob = new Blob([ics], { type: "text/calendar" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `hr-letter-deadlines-${new Date().toISOString().slice(0, 10)}.ics`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => nav(-1)}
-            className="text-muted-foreground -ml-3 mb-2 h-7"
-          >
-            <ChevronLeft className="size-3.5 mr-1" /> Back
-          </Button>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
-            Calendar
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">Deadlines</h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off
-            deadlines, and any remedy / acceptance dates from your drafts. Export to your
-            calendar so nothing slips.
-          </p>
-        </div>
-        <Button onClick={onExportIcs} disabled={events.length === 0}>
-          <Download className="size-3.5 mr-1.5" />
-          Export to .ics
-        </Button>
-      </div>
-
-      {events.length === 0 && (
-        <div className="rounded-md border border-dashed border-letter-rule p-10 text-center">
-          <CalendarClock className="size-5 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm font-medium">No deadlines yet.</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Deadlines appear here when you start a tribunal-bound letter (employee mode) or
-            enter an acceptance / remedy / advisor date in any wizard.
-          </p>
-        </div>
-      )}
-
-      {upcoming.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <CalendarClock className="size-4" />
-              Upcoming ({upcoming.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-sidebar-border">
-              {upcoming.map((e, i) => (
-                <EventRow key={`u-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} />
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      {past.length > 0 && (
-        <Card className="opacity-70">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-muted-foreground">Passed ({past.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-sidebar-border">
-              {past.map((e, i) => (
-                <EventRow key={`p-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} past />
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-function EventRow({ ev, onOpen, past }: { ev: Event; onOpen: () => void; past?: boolean }) {
-  const tone =
-    past
-      ? "border-letter-rule"
-      : ev.daysAway < 14
-      ? "bg-rose-50/40"
-      : ev.daysAway < 30
-      ? "bg-amber-50/40"
-      : "";
-  return (
-    <li
-      className={`px-6 py-3 grid grid-cols-[8ch_1fr_auto] sm:grid-cols-[12ch_1fr_auto_5ch] items-center gap-3 hover:bg-muted/30 cursor-pointer ${tone}`}
-      onClick={onOpen}
-    >
-      <div className="text-xs text-muted-foreground tabular-nums">{formatDate(ev.iso)}</div>
-      <div className="min-w-0">
-        <div className="text-sm font-medium truncate">{ev.label}</div>
-        <div className="text-xs text-muted-foreground truncate">{ev.basis}</div>
-      </div>
-      <Badge className={KIND_PILL[ev.kind]}>{KIND_LABEL[ev.kind]}</Badge>
-      <span className="text-xs text-muted-foreground tabular-nums hidden sm:block text-right">
-        {ev.daysAway < 0 ? "passed" : `${ev.daysAway}d`}
-      </span>
-      <ArrowUpRight className="size-3.5 text-muted-foreground sm:hidden" />
-    </li>
-  );
-}
+const KIND_COLOR: Record<Event["kind"], "red" | "amber" | "blue" | "purple" | "green"> = {
+  tribunal: "red",
+  acas_ec: "amber",
+  advisor: "blue",
+  remedy: "amber",
+  appeal: "purple",
+  acceptance: "green",
+};
 
 const KIND_LABEL: Record<Event["kind"], string> = {
   tribunal: "tribunal",
@@ -162,28 +33,124 @@ const KIND_LABEL: Record<Event["kind"], string> = {
   acceptance: "acceptance",
 };
 
-const KIND_PILL: Record<Event["kind"], string> = {
-  tribunal: "bg-rose-50 text-rose-900 border-rose-200",
-  acas_ec: "bg-amber-50 text-amber-900 border-amber-200",
-  advisor: "bg-blue-50 text-blue-900 border-blue-200",
-  remedy: "bg-amber-50 text-amber-900 border-amber-200",
-  appeal: "bg-purple-50 text-purple-900 border-purple-200",
-  acceptance: "bg-green-50 text-green-900 border-green-200",
-};
+export function Calendar() {
+  const nav = useNavigate();
+  const drafts = useDraftStore((s) => s.drafts);
+
+  const events = useMemo(() => extractEvents(Object.values(drafts)), [drafts]);
+  const upcoming = events.filter((e) => e.daysAway >= 0);
+  const past = events.filter((e) => e.daysAway < 0);
+
+  const onExportIcs = () => {
+    const ics = buildIcs(events);
+    const blob = new Blob([ics], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `drafthr-deadlines-${new Date().toISOString().slice(0, 10)}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Box className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <Flex direction={{ initial: "column", sm: "row" }} justify="between" align={{ initial: "start", sm: "end" }} gap="3" mb="6">
+        <Box>
+          <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
+            <ChevronLeft className="size-3.5" /> Back
+          </Button>
+          <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Calendar</Text>
+          <Heading size="6" mt="1" mb="1">Deadlines</Heading>
+          <Text size="2" color="gray" className="max-w-2xl">
+            Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off
+            deadlines, and any remedy / acceptance dates from your drafts.
+          </Text>
+        </Box>
+        <Button onClick={onExportIcs} disabled={events.length === 0}>
+          <Download className="size-3.5" /> Export to .ics
+        </Button>
+      </Flex>
+
+      {events.length === 0 && (
+        <Card size="3">
+          <Flex direction="column" align="center" gap="2" py="6">
+            <CalendarClock className="size-5 text-[var(--gray-9)]" />
+            <Text size="2" weight="medium" as="p">No deadlines yet.</Text>
+            <Text size="1" color="gray" align="center" as="p" className="max-w-md">
+              Deadlines appear here when you start a tribunal-bound letter (employee mode) or
+              enter an acceptance / remedy / advisor date in any wizard.
+            </Text>
+          </Flex>
+        </Card>
+      )}
+
+      {upcoming.length > 0 && (
+        <Card size="2" mb="4">
+          <Flex align="center" gap="2" mb="3">
+            <CalendarClock className="size-4" />
+            <Heading size="3">Upcoming ({upcoming.length})</Heading>
+          </Flex>
+          <Flex direction="column">
+            {upcoming.map((e, i) => <EventRow key={`u-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} />)}
+          </Flex>
+        </Card>
+      )}
+
+      {past.length > 0 && (
+        <Card size="2" style={{ opacity: 0.7 }}>
+          <Heading size="3" color="gray" mb="3">Passed ({past.length})</Heading>
+          <Flex direction="column">
+            {past.map((e, i) => <EventRow key={`p-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} past />)}
+          </Flex>
+        </Card>
+      )}
+    </Box>
+  );
+}
+
+function EventRow({ ev, onOpen, past }: { ev: Event; onOpen: () => void; past?: boolean }) {
+  const bg = past
+    ? undefined
+    : ev.daysAway < 14
+    ? "var(--red-2)"
+    : ev.daysAway < 30
+    ? "var(--amber-2)"
+    : undefined;
+  return (
+    <button onClick={onOpen} className="text-left">
+      <Flex
+        align="center"
+        gap="3"
+        px="4"
+        py="3"
+        className="hover:bg-[var(--gray-2)] cursor-pointer border-b border-[var(--gray-5)] last:border-b-0"
+        style={{ background: bg }}
+      >
+        <Text size="1" color="gray" className="tabular-nums w-24">{formatDate(ev.iso)}</Text>
+        <Box className="flex-1 min-w-0">
+          <Text size="2" weight="medium" as="div" className="truncate">{ev.label}</Text>
+          <Text size="1" color="gray" as="div" className="truncate">{ev.basis}</Text>
+        </Box>
+        <Badge color={KIND_COLOR[ev.kind]} variant="soft">{KIND_LABEL[ev.kind]}</Badge>
+        <Text size="1" color="gray" className="tabular-nums hidden sm:inline" style={{ minWidth: 48, textAlign: "right" }}>
+          {ev.daysAway < 0 ? "passed" : `${ev.daysAway}d`}
+        </Text>
+        <ArrowUpRight className="size-3.5 text-[var(--gray-9)] sm:hidden" />
+      </Flex>
+    </button>
+  );
+}
 
 function extractEvents(drafts: Draft[]): Event[] {
   const out: Event[] = [];
   for (const d of drafts) {
     const meta = (() => {
-      try {
-        return getLetterMeta(d.letterType);
-      } catch {
-        return null;
-      }
+      try { return getLetterMeta(d.letterType); } catch { return null; }
     })();
     const label = meta?.shortTitle ?? d.letterType;
 
-    // 1) Tribunal limitation
     const dl = d.context.protectedDeadline;
     if (dl) {
       out.push({
@@ -194,8 +161,6 @@ function extractEvents(drafts: Draft[]): Event[] {
         basis: dl.basis,
         kind: "tribunal",
       });
-
-      // 2) Derived ACAS EC deadline = 6 weeks before tribunal (UK only)
       if (d.context.jurisdiction === "UK") {
         const ec = subtractDays(dl.iso, 42);
         out.push({
@@ -209,7 +174,6 @@ function extractEvents(drafts: Draft[]): Event[] {
       }
     }
 
-    // 3) Specific wizard-supplied dates
     const a = d.answers as Record<string, unknown>;
     pushIfDate(out, d.id, a.advisorDeadline, `${label} — advisor sign-off`, "Advisor certification deadline (settlement)", "advisor");
     pushIfDate(out, d.id, a.remedyDeadline, `${label} — remedy by`, "Demanded remedy deadline", "remedy");
@@ -218,19 +182,11 @@ function extractEvents(drafts: Draft[]): Event[] {
     pushIfDate(out, d.id, a.demandDeadline, `${label} — payment by`, "Pay-dispute demand deadline", "remedy");
     pushIfDate(out, d.id, a.reviewDate, `${label} — performance review`, "PIP / probation review date", "remedy");
   }
-
   out.sort((a, b) => a.iso.localeCompare(b.iso));
   return out;
 }
 
-function pushIfDate(
-  arr: Event[],
-  draftId: string,
-  v: unknown,
-  label: string,
-  basis: string,
-  kind: Event["kind"]
-) {
+function pushIfDate(arr: Event[], draftId: string, v: unknown, label: string, basis: string, kind: Event["kind"]) {
   if (typeof v !== "string" || !v) return;
   if (!/^\d{4}-\d{2}-\d{2}/.test(v)) return;
   arr.push({ draftId, iso: v, daysAway: daysBetween(v), label, basis, kind });
@@ -260,7 +216,7 @@ function buildIcs(events: Event[]): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//HR Letter//Calendar//EN",
+    "PRODID:-//DRAFTHR//Calendar//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
   ];
@@ -268,7 +224,7 @@ function buildIcs(events: Event[]): string {
     const date = stamp(e.iso);
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${e.draftId}-${e.kind}@hr-letter`,
+      `UID:${e.draftId}-${e.kind}@drafthr.app`,
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${date}`,
       `DTEND;VALUE=DATE:${date}`,

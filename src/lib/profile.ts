@@ -3,6 +3,22 @@ import { persist } from "zustand/middleware";
 import type { Mode, Tone, EmployeeTone, UkRegion, UsState, WorkerClass } from "./letters/types";
 
 /**
+ * DashScope International model identifiers.
+ * - qwen3-max: flagship (best reasoning, longest context). Paid plan.
+ * - qwen-max: legacy flagship.
+ * - qwen-plus: balanced, free-tier capable.
+ * - qwen-turbo: fastest / cheapest, used for short generations.
+ */
+export type QwenModelId = "qwen3-max" | "qwen-max" | "qwen-plus" | "qwen-turbo";
+
+export const QWEN_MODEL_OPTIONS: { id: QwenModelId; label: string; hint: string }[] = [
+  { id: "qwen3-max", label: "Qwen3 Max", hint: "Flagship — best output quality, paid plan" },
+  { id: "qwen-max", label: "Qwen Max", hint: "Previous flagship" },
+  { id: "qwen-plus", label: "Qwen Plus", hint: "Balanced — works on the free tier" },
+  { id: "qwen-turbo", label: "Qwen Turbo", hint: "Fastest — short or simple letters" },
+];
+
+/**
  * Single source of truth for "who the user is". Persisted to localStorage now;
  * moves to Postgres when Clerk auth is wired (Phase B follow-up).
  */
@@ -43,6 +59,8 @@ export type Profile = {
     workerClass: WorkerClass;
     tone?: Tone;
     employeeTone?: EmployeeTone;
+    /** DashScope model id. Defaults to qwen3-max (flagship). */
+    qwenModel?: QwenModelId;
   };
   /** Whether to auto-fill wizards from this profile. User can toggle. */
   autoFill: boolean;
@@ -92,7 +110,7 @@ export const useProfileStore = create<Store>()(
         set((s) => ({ profile: { ...s.profile, setupComplete: true } })),
       reset: () => set({ profile: EMPTY_PROFILE }),
     }),
-    { name: "hr-letter-profile-v1" }
+    { name: "scribehr-profile-v1" }
   )
 );
 

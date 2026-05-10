@@ -9,6 +9,8 @@ export type StreamOptions = {
   messages: Message[];
   temperature?: number;
   maxTokens?: number;
+  /** DashScope model id, e.g. "qwen3-max". Server falls back to env / "qwen3-max" if absent. */
+  model?: string;
   signal?: AbortSignal;
   onToken: (delta: string) => void;
   onDone?: () => void;
@@ -126,6 +128,7 @@ async function fetchOrThrow(opts: StreamOptions): Promise<Response> {
         messages: opts.messages,
         temperature: opts.temperature,
         maxTokens: opts.maxTokens,
+        model: opts.model,
       }),
       signal: opts.signal,
     });

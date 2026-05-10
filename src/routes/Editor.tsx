@@ -11,6 +11,7 @@ import { ToneOverride } from "@/components/editor/ToneOverride";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
+import { LetterPreview } from "@/components/editor/LetterPreview";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,9 @@ import {
   StopCircle,
   PanelLeft,
   PanelRight,
+  FileEdit,
+  Eye,
+  Columns2,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -53,6 +57,7 @@ export function Editor() {
   const [pendingExport, setPendingExport] = useState<ExportFormat | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
+  const [viewMode, setViewMode] = useState<"edit" | "split" | "preview">("edit");
   const abortRef = useRef<AbortController | null>(null);
 
   const meta = useMemo(
@@ -193,6 +198,15 @@ export function Editor() {
             />
           </div>
           <div className="flex items-center gap-1">
+            <div
+              className="inline-flex items-center rounded-md border border-letter-rule bg-background overflow-hidden mr-1"
+              role="tablist"
+              aria-label="View mode"
+            >
+              <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
+              <ViewModeButton mode="split" current={viewMode} setMode={setViewMode} icon={<Columns2 className="size-3.5" />} label="Split" hideLabelOn="md" />
+              <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+            </div>
             {globallyStreaming ? (
               <Button variant="ghost" size="sm" onClick={stopStreaming}>
                 <StopCircle className="size-4 sm:mr-1.5" />
@@ -251,33 +265,67 @@ export function Editor() {
           />
         </aside>
 
-        <main className="overflow-auto bg-muted/30">
-          <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
-            <InlineDisclaimer draft={draft} />
-            <DeadlineBanner draft={draft} />
-            <RetryBanner event={retryEvent} />
-
-            {draft.sections.map((section) => (
-              <SectionEditor
-                key={section.id}
-                section={section}
-                isStreaming={section.status === "streaming"}
-                active={activeSectionId === section.id}
-                onFocus={() => setActiveSectionId(section.id)}
-                onChange={(html) => updateSection(draft.id, section.id, html)}
-                onRegenerate={() => onRegenerateSection(section)}
-                onClear={() => updateSection(draft.id, section.id, "")}
-                onShowHistory={() => setHistorySection(section)}
-              />
-            ))}
-
-            {globallyStreaming && (
-              <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
-                <Loader2 className="size-3 animate-spin" />
-                Streaming sections from the model…
-              </p>
-            )}
-          </div>
+        <main className="overflow-auto bg-muted/30 min-w-0">
+          {viewMode === "preview" ? (
+            <div className="py-6 sm:py-8 px-3 sm:px-6">
+              <LetterPreview draft={draft} />
+            </div>
+          ) : viewMode === "split" ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 min-h-0">
+              <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6 space-y-3 border-b xl:border-b-0 xl:border-r border-letter-rule">
+                <InlineDisclaimer draft={draft} />
+                <DeadlineBanner draft={draft} />
+                <RetryBanner event={retryEvent} />
+                {draft.sections.map((section) => (
+                  <SectionEditor
+                    key={section.id}
+                    section={section}
+                    isStreaming={section.status === "streaming"}
+                    active={activeSectionId === section.id}
+                    onFocus={() => setActiveSectionId(section.id)}
+                    onChange={(html) => updateSection(draft.id, section.id, html)}
+                    onRegenerate={() => onRegenerateSection(section)}
+                    onClear={() => updateSection(draft.id, section.id, "")}
+                    onShowHistory={() => setHistorySection(section)}
+                  />
+                ))}
+                {globallyStreaming && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
+                    <Loader2 className="size-3 animate-spin" />
+                    Streaming sections from the model…
+                  </p>
+                )}
+              </div>
+              <div className="overflow-auto py-6 sm:py-8 px-3 sm:px-6">
+                <LetterPreview draft={draft} />
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
+              <InlineDisclaimer draft={draft} />
+              <DeadlineBanner draft={draft} />
+              <RetryBanner event={retryEvent} />
+              {draft.sections.map((section) => (
+                <SectionEditor
+                  key={section.id}
+                  section={section}
+                  isStreaming={section.status === "streaming"}
+                  active={activeSectionId === section.id}
+                  onFocus={() => setActiveSectionId(section.id)}
+                  onChange={(html) => updateSection(draft.id, section.id, html)}
+                  onRegenerate={() => onRegenerateSection(section)}
+                  onClear={() => updateSection(draft.id, section.id, "")}
+                  onShowHistory={() => setHistorySection(section)}
+                />
+              ))}
+              {globallyStreaming && (
+                <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
+                  <Loader2 className="size-3 animate-spin" />
+                  Streaming sections from the model…
+                </p>
+              )}
+            </div>
+          )}
         </main>
 
         <aside
@@ -341,3 +389,40 @@ export function Editor() {
     </div>
   );
 }
+
+function ViewModeButton({
+  mode,
+  current,
+  setMode,
+  icon,
+  label,
+  hideLabelOn,
+}: {
+  mode: "edit" | "split" | "preview";
+  current: "edit" | "split" | "preview";
+  setMode: (m: "edit" | "split" | "preview") => void;
+  icon: React.ReactNode;
+  label: string;
+  hideLabelOn?: "md";
+}) {
+  const active = current === mode;
+  const hideLabelClass = hideLabelOn === "md" ? "hidden xl:inline" : "hidden sm:inline";
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={() => setMode(mode)}
+      className={
+        "inline-flex items-center gap-1 px-2 h-7 text-xs font-medium transition-colors " +
+        (active
+          ? "bg-muted text-foreground"
+          : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
+      }
+    >
+      {icon}
+      <span className={hideLabelClass}>{label}</span>
+    </button>
+  );
+}
+

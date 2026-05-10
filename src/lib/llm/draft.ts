@@ -3,6 +3,12 @@ import { buildSystemPrompt } from "@/lib/prompts/system";
 import { buildSectionPrompt } from "@/lib/prompts/sections";
 import { streamDraft } from "./client";
 import { uid } from "@/lib/utils";
+import { useProfileStore } from "@/lib/profile";
+
+/** Resolve the user's preferred Qwen model from the persisted profile. */
+function activeModel(): string | undefined {
+  return useProfileStore.getState().profile.defaults.qwenModel;
+}
 
 type StoreActions = {
   appendToSection: (draftId: string, sectionId: string, delta: string) => void;
@@ -49,6 +55,7 @@ export async function generateAllSections(
         ],
         temperature: 0.4,
         maxTokens: 1100,
+        model: activeModel(),
         signal,
         onToken: (delta) => {
           acc += delta;
@@ -98,6 +105,7 @@ export async function regenerateSection(
     ],
     temperature: 0.5,
     maxTokens: 1100,
+    model: activeModel(),
     signal,
     onToken: (delta) => {
       acc += delta;

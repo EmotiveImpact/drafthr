@@ -1,8 +1,19 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/Badge";
-import { Button } from "@/components/ui/button";
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Flex,
+  Grid,
+  Heading,
+  IconButton,
+  Inset,
+  Separator,
+  Table,
+  Text,
+} from "@radix-ui/themes";
 import {
   PlusCircle,
   Search,
@@ -27,28 +38,19 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 
-const RISK_PILL: Record<string, string> = {
-  low: "bg-green-50 text-green-800 border-green-200",
-  medium: "bg-amber-50 text-amber-900 border-amber-200",
-  high: "bg-rose-50 text-rose-900 border-rose-200",
+const RISK_BADGE: Record<string, "green" | "amber" | "red"> = {
+  low: "green",
+  medium: "amber",
+  high: "red",
 };
 
-const STATUS_PILL: Record<string, string> = {
-  drafting: "bg-amber-50 text-amber-900 border-amber-200",
-  ready: "bg-green-50 text-green-800 border-green-200",
-  exported: "bg-muted text-foreground border-letter-rule",
-  empty: "bg-muted text-muted-foreground border-letter-rule",
+const STATUS_BADGE: Record<string, "amber" | "green" | "gray"> = {
+  drafting: "amber",
+  ready: "green",
+  exported: "gray",
+  empty: "gray",
 };
 
-/**
- * Mode-aware dashboard. Variant C from the mockups page:
- *   - Hero greeting
- *   - Stats row (4 cards)
- *   - Drafts in progress table
- *   - Upcoming deadlines panel (employee mode only — calculated from
- *     draft.context.protectedDeadline)
- *   - Quick start (4 flagship letter cards)
- */
 export function Home({ mode }: { mode: Mode }) {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
@@ -74,47 +76,37 @@ export function Home({ mode }: { mode: Mode }) {
     : "Welcome back.";
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
+    <Box className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
       {/* Hero */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
+      <Flex justify="between" align={{ initial: "stretch", sm: "end" }} direction={{ initial: "column", sm: "row" }} gap="3" mb="6">
+        <Box>
+          <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]">
             {mode === "employer" ? "HR / Management · Home" : "Employee · Home"}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight">{greeting}</h1>
-          <p className="text-sm text-muted-foreground">
+          </Text>
+          <Heading size="6" mt="1">{greeting}</Heading>
+          <Text size="2" color="gray">
             {myDrafts.length === 0
               ? "Pick a letter type below to get started."
               : `${myDrafts.length} draft${myDrafts.length === 1 ? "" : "s"} · last updated ${timeAgo(myDrafts[0].updatedAt)}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled>
-            <Search className="size-3.5 mr-1.5" />
+          </Text>
+        </Box>
+        <Flex gap="2">
+          <Button variant="outline" color="gray" disabled>
+            <Search className="size-3.5" />
             Search
-            <span className="ml-1.5 text-[10px] uppercase tracking-wider opacity-70">soon</span>
+            <Text size="1" color="gray" ml="1">soon</Text>
           </Button>
-          <Button size="sm" onClick={() => nav(`${prefix}/new`)}>
-            <PlusCircle className="size-3.5 mr-1.5" />
+          <Button onClick={() => nav(`${prefix}/new`)}>
+            <PlusCircle className="size-3.5" />
             New letter
           </Button>
-        </div>
-      </div>
+        </Flex>
+      </Flex>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          label="Total drafts"
-          value={String(stats.total)}
-          hint={stats.inProgress > 0 ? `${stats.inProgress} in progress` : "—"}
-          Icon={FileText}
-        />
-        <StatCard
-          label="Ready to export"
-          value={String(stats.ready)}
-          hint={stats.ready > 0 ? "reviewed" : "draft to ready"}
-          Icon={CircleCheckBig}
-        />
+      <Grid columns={{ initial: "2", lg: "4" }} gap="3" mb="5">
+        <StatCard label="Total drafts" value={String(stats.total)} hint={stats.inProgress > 0 ? `${stats.inProgress} in progress` : "—"} Icon={FileText} />
+        <StatCard label="Ready to export" value={String(stats.ready)} hint={stats.ready > 0 ? "reviewed" : "draft to ready"} Icon={CircleCheckBig} />
         <StatCard
           label="Urgent deadlines"
           value={String(stats.urgent)}
@@ -128,209 +120,207 @@ export function Home({ mode }: { mode: Mode }) {
           hint={stats.lastMonth > 0 ? `${signed(stats.thisMonth - stats.lastMonth)} vs last month` : "—"}
           Icon={TrendingUp}
         />
-      </div>
+      </Grid>
 
       {/* Drafts table + deadlines */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">Drafts in progress</CardTitle>
-              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => nav(`${prefix}/new`)}>
-                <PlusCircle className="size-3 mr-1" /> New
+      <Grid columns={{ initial: "1", lg: "3" }} gap="4" mb="5">
+        <Box gridColumn={{ lg: "span 2" }}>
+          <Card size="2">
+            <Flex justify="between" align="center" mb="2">
+              <Heading size="3">Drafts in progress</Heading>
+              <Button variant="ghost" size="1" onClick={() => nav(`${prefix}/new`)}>
+                <PlusCircle className="size-3" /> New
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
+            </Flex>
             {myDrafts.length === 0 ? (
-              <div className="px-6 py-10 text-center">
-                <FileText className="size-5 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm font-medium">No drafts yet.</p>
-                <p className="text-xs text-muted-foreground">
+              <Box className="py-10 text-center">
+                <FileText className="size-5 mx-auto mb-2 text-[var(--gray-9)]" />
+                <Text size="2" weight="medium" as="p">No drafts yet.</Text>
+                <Text size="1" color="gray" as="p" mt="1">
                   {profile.setupComplete
                     ? "Pick a letter from Quick start below."
                     : "Set up your profile so drafts auto-fill."}
-                </p>
-                <div className="mt-3 flex items-center justify-center gap-2">
+                </Text>
+                <Flex gap="2" justify="center" mt="3">
                   {!profile.setupComplete && (
-                    <Button size="sm" variant="outline" onClick={() => nav("/settings")}>
+                    <Button variant="outline" size="2" onClick={() => nav("/settings")}>
                       Set up profile
                     </Button>
                   )}
-                  <Button size="sm" onClick={() => nav(`${prefix}/new`)}>
+                  <Button size="2" onClick={() => nav(`${prefix}/new`)}>
                     Browse letter types
                   </Button>
-                </div>
-              </div>
+                </Flex>
+              </Box>
             ) : (
-              <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground bg-muted/30">
-                  <tr>
-                    <th className="text-left py-2 px-4 font-normal">Letter</th>
-                    <th className="text-left py-2 px-4 font-normal hidden sm:table-cell">
-                      {mode === "employer" ? "Recipient" : "To"}
-                    </th>
-                    <th className="text-left py-2 px-4 font-normal">Status</th>
-                    <th className="text-left py-2 px-4 font-normal hidden md:table-cell">Risk</th>
-                    <th className="text-right py-2 px-4 font-normal">Updated</th>
-                    <th className="w-10" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-sidebar-border">
-                  {myDrafts.slice(0, 8).map((d) => {
-                    const meta = safeMeta(d.letterType);
-                    const status = draftStatus(d);
-                    return (
-                      <tr
-                        key={d.id}
-                        className="hover:bg-muted/30 cursor-pointer"
-                        onClick={() => nav(`/editor/${d.id}`)}
-                      >
-                        <td className="py-2.5 px-4 font-medium truncate max-w-[20ch]">
-                          {meta?.shortTitle ?? d.letterType}
-                        </td>
-                        <td className="py-2.5 px-4 text-xs text-muted-foreground truncate max-w-[18ch] hidden sm:table-cell">
-                          {mode === "employer"
-                            ? d.employee.legalName || "(no recipient)"
-                            : d.employer.legalName || "(no employer)"}
-                        </td>
-                        <td className="py-2.5 px-4">
-                          <Badge className={STATUS_PILL[status]}>{status}</Badge>
-                        </td>
-                        <td className="py-2.5 px-4 hidden md:table-cell">
-                          {meta && <Badge className={RISK_PILL[meta.riskClass]}>{meta.riskClass}</Badge>}
-                        </td>
-                        <td className="py-2.5 px-4 text-right text-xs text-muted-foreground tabular-nums">
-                          {timeAgo(d.updatedAt)}
-                        </td>
-                        <td className="py-1 pr-2">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="size-7"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm("Delete this draft?")) deleteDraft(d.id);
-                            }}
-                            aria-label="Delete draft"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <Inset side="x" mt="3">
+                <Table.Root variant="ghost">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>Letter</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell className="hidden sm:table-cell">
+                        {mode === "employer" ? "Recipient" : "To"}
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell className="hidden md:table-cell">Risk</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell justify="end">Updated</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell />
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {myDrafts.slice(0, 8).map((d) => {
+                      const meta = safeMeta(d.letterType);
+                      const status = draftStatus(d);
+                      return (
+                        <Table.Row
+                          key={d.id}
+                          className="hover:bg-[var(--gray-2)] cursor-pointer"
+                          onClick={() => nav(`/editor/${d.id}`)}
+                        >
+                          <Table.Cell>
+                            <Text weight="medium" size="2">{meta?.shortTitle ?? d.letterType}</Text>
+                          </Table.Cell>
+                          <Table.Cell className="hidden sm:table-cell">
+                            <Text size="1" color="gray">
+                              {mode === "employer"
+                                ? d.employee.legalName || "(no recipient)"
+                                : d.employer.legalName || "(no employer)"}
+                            </Text>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Badge color={STATUS_BADGE[status]} variant="soft">{status}</Badge>
+                          </Table.Cell>
+                          <Table.Cell className="hidden md:table-cell">
+                            {meta && <Badge color={RISK_BADGE[meta.riskClass]} variant="soft">{meta.riskClass}</Badge>}
+                          </Table.Cell>
+                          <Table.Cell justify="end">
+                            <Text size="1" color="gray" className="tabular-nums">{timeAgo(d.updatedAt)}</Text>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <IconButton
+                              size="1"
+                              variant="ghost"
+                              color="gray"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm("Delete this draft?")) deleteDraft(d.id);
+                              }}
+                              aria-label="Delete draft"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </IconButton>
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    })}
+                  </Table.Body>
+                </Table.Root>
+              </Inset>
             )}
-          </CardContent>
-        </Card>
+          </Card>
+        </Box>
 
-        {/* Deadlines (employee only) */}
+        {/* Deadlines (employee) or compliance reminders (employer) */}
         {mode === "employee" ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CalendarClock className="size-4 text-amber-700" />
-                Upcoming deadlines
-              </CardTitle>
-              <CardDescription className="text-xs leading-relaxed">
-                Tribunal / EEOC limitation periods from your "date of act".
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
+          <Card size="2">
+            <Flex align="center" gap="2" mb="2">
+              <CalendarClock className="size-4 text-[var(--amber-11)]" />
+              <Heading size="3">Upcoming deadlines</Heading>
+            </Flex>
+            <Text size="1" color="gray" as="p" mb="3">
+              Tribunal / EEOC limitation periods from your "date of act".
+            </Text>
+            <Flex direction="column" gap="2">
               {deadlines.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
+                <Text size="1" color="gray">
                   No tribunal-bound drafts. Deadlines appear here when you start a high-risk letter.
-                </p>
+                </Text>
               ) : (
-                deadlines.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => nav(`/editor/${d.id}`)}
-                    className={`w-full text-left rounded-md border p-2 text-xs ${
-                      d.daysAway < 0
-                        ? "border-rose-300 bg-rose-50"
-                        : d.daysAway < 14
-                        ? "border-rose-200 bg-rose-50"
-                        : d.daysAway < 30
-                        ? "border-amber-200 bg-amber-50"
-                        : "border-letter-rule"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="font-medium">{d.label}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {d.daysAway < 0 ? "passed" : `${d.daysAway}d`}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Deadline {formatDate(d.iso)}
-                    </div>
-                  </button>
-                ))
+                deadlines.map((d) => {
+                  const tone =
+                    d.daysAway < 0 ? "red" : d.daysAway < 14 ? "red" : d.daysAway < 30 ? "amber" : "gray";
+                  return (
+                    <Card
+                      key={d.id}
+                      asChild
+                      size="1"
+                      style={{
+                        background: tone === "red" ? "var(--red-2)" : tone === "amber" ? "var(--amber-2)" : undefined,
+                        borderColor: tone === "red" ? "var(--red-6)" : tone === "amber" ? "var(--amber-6)" : undefined,
+                      }}
+                    >
+                      <button onClick={() => nav(`/editor/${d.id}`)} className="text-left w-full">
+                        <Flex justify="between" align="center" mb="1">
+                          <Text size="2" weight="medium">{d.label}</Text>
+                          <Text size="1" color="gray" className="tabular-nums">
+                            {d.daysAway < 0 ? "passed" : `${d.daysAway}d`}
+                          </Text>
+                        </Flex>
+                        <Text size="1" color="gray">Deadline {formatDate(d.iso)}</Text>
+                      </button>
+                    </Card>
+                  );
+                })
               )}
-            </CardContent>
+            </Flex>
           </Card>
         ) : (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ShieldCheck className="size-4" />
-                Compliance reminders
-              </CardTitle>
-              <CardDescription className="text-xs leading-relaxed">
-                High-risk letter types require counsel review before export.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-xs text-muted-foreground leading-relaxed">
-              <p>
-                <strong className="text-foreground">UK:</strong> ACAS Code — non-compliance can
-                uplift tribunal awards by up to 25% (s.207A TULRCA).
-              </p>
-              <p>
-                <strong className="text-foreground">US:</strong> WARN 60-day notice (100+
-                employers, 50+ affected); OWBPA 21 / 7 days for releases by employees 40+.
-              </p>
-            </CardContent>
+          <Card size="2">
+            <Flex align="center" gap="2" mb="2">
+              <ShieldCheck className="size-4" />
+              <Heading size="3">Compliance reminders</Heading>
+            </Flex>
+            <Text size="1" color="gray" as="p" mb="3">
+              High-risk letter types require counsel review before export.
+            </Text>
+            <Flex direction="column" gap="2">
+              <Text size="1" color="gray">
+                <Text weight="medium" color="gray" highContrast>UK:</Text> ACAS Code — non-compliance can uplift tribunal awards by up to 25% (s.207A TULRCA).
+              </Text>
+              <Text size="1" color="gray">
+                <Text weight="medium" color="gray" highContrast>US:</Text> WARN 60-day notice (100+ employers, 50+ affected); OWBPA 21 / 7 days for releases by employees 40+.
+              </Text>
+            </Flex>
           </Card>
         )}
-      </div>
+      </Grid>
+
+      <Separator size="4" my="4" />
 
       {/* Quick start */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium">Quick start</h3>
-          <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => nav(`${prefix}/new`)}>
-            Browse all
-            <ArrowUpRight className="size-3 ml-1" />
+      <Box>
+        <Flex justify="between" align="center" mb="3">
+          <Heading size="3">Quick start</Heading>
+          <Button variant="ghost" size="1" onClick={() => nav(`${prefix}/new`)}>
+            Browse all <ArrowUpRight className="size-3" />
           </Button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        </Flex>
+        <Grid columns={{ initial: "1", sm: "2", lg: "4" }} gap="3">
           {flagship.slice(0, 8).map((l) => {
             const Icon = iconForLetter(l.id);
             return (
               <Card
                 key={l.id}
-                className="cursor-pointer hover:border-foreground/30 transition-colors"
-                onClick={() => nav(`${prefix}/new/${l.id}`)}
+                asChild
+                size="2"
+                className="cursor-pointer hover:border-[var(--accent-7)] transition-colors"
               >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <Icon className="size-4 text-muted-foreground" />
-                    <Badge className={RISK_PILL[l.riskClass]}>{l.riskClass}</Badge>
-                  </div>
-                  <p className="text-sm font-medium leading-tight mb-0.5">{l.shortTitle}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                <button onClick={() => nav(`${prefix}/new/${l.id}`)} className="text-left w-full">
+                  <Flex justify="between" align="center" mb="2">
+                    <Icon className="size-4 text-[var(--gray-9)]" />
+                    <Badge color={RISK_BADGE[l.riskClass]} variant="soft">{l.riskClass}</Badge>
+                  </Flex>
+                  <Text as="p" size="2" weight="medium" className="leading-tight">{l.shortTitle}</Text>
+                  <Text as="p" size="1" color="gray" className="line-clamp-2 leading-relaxed" mt="1">
                     {l.description}
-                  </p>
-                </CardContent>
+                  </Text>
+                </button>
               </Card>
             );
           })}
-        </div>
-      </div>
-    </div>
+        </Grid>
+      </Box>
+    </Box>
   );
 }
 
@@ -350,15 +340,20 @@ function StatCard({
   tone?: "warn";
 }) {
   return (
-    <Card className={tone === "warn" ? "border-amber-200 bg-amber-50/40" : ""}>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          <Icon className="size-3.5 text-muted-foreground" />
-        </div>
-        <div className="text-2xl font-semibold tracking-tight">{value}</div>
-        <div className="text-[11px] text-muted-foreground mt-0.5">{hint}</div>
-      </CardContent>
+    <Card
+      size="2"
+      style={
+        tone === "warn"
+          ? { background: "var(--amber-2)", borderColor: "var(--amber-6)" }
+          : undefined
+      }
+    >
+      <Flex justify="between" align="center" mb="2">
+        <Text size="1" color="gray">{label}</Text>
+        <Icon className="size-3.5 text-[var(--gray-9)]" />
+      </Flex>
+      <Heading size="6" weight="medium">{value}</Heading>
+      <Text size="1" color="gray" mt="1" as="p">{hint}</Text>
     </Card>
   );
 }

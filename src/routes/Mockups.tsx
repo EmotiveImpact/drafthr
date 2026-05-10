@@ -171,7 +171,7 @@ function VariantA() {
         <div className="size-7 rounded-md bg-primary text-primary-foreground grid place-items-center">
           <ScrollText className="size-3.5" />
         </div>
-        <span className="font-semibold tracking-tight">HR Letter</span>
+        <span className="font-semibold tracking-tight">DRAFTHR</span>
         <Separator orientation="vertical" className="h-4 mx-1" />
         <span className="text-muted-foreground">Employee · Home</span>
         <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">

@@ -18,7 +18,7 @@ export const useThemeStore = create<Store>()(
       },
     }),
     {
-      name: "hr-letter-theme-v1",
+      name: "scribehr-theme-v1",
       onRehydrateStorage: () => (state) => {
         if (state) applyTheme(state.mode);
       },
@@ -41,7 +41,7 @@ export function applyTheme(mode: ThemeMode) {
 export function bootstrapTheme() {
   if (typeof document === "undefined") return;
   try {
-    const raw = localStorage.getItem("hr-letter-theme-v1");
+    const raw = localStorage.getItem("scribehr-theme-v1");
     const persisted = raw ? (JSON.parse(raw).state?.mode as ThemeMode | undefined) : undefined;
     applyTheme(persisted ?? "system");
   } catch {

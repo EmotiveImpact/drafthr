@@ -1,29 +1,40 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/Badge";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Search, ChevronLeft, ArrowUpRight } from "lucide-react";
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Flex,
+  Grid,
+  Heading,
+  Text,
+  TextField,
+} from "@radix-ui/themes";
+import { Search, ChevronLeft, ArrowUpRight, Zap } from "lucide-react";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
-import type { Mode } from "@/lib/letters/types";
+import { hasTemplate } from "@/lib/letters/templates";
+import type { LetterTypeId, Mode } from "@/lib/letters/types";
+import { useDraftStore } from "@/lib/store";
+import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
 
-const RISK_PILL: Record<string, string> = {
-  low: "bg-green-50 text-green-800 border-green-200",
-  medium: "bg-amber-50 text-amber-900 border-amber-200",
-  high: "bg-rose-50 text-rose-900 border-rose-200",
+const RISK: Record<string, "green" | "amber" | "red"> = {
+  low: "green",
+  medium: "amber",
+  high: "red",
 };
 
-/**
- * Full catalogue browse page reached from the sidebar's "New letter" entry.
- *
- * Two sections:
- *   - Flagship letters (the shortlist)
- *   - All letter types (the long list, searchable)
- */
 export function BrowseLetters({ mode }: { mode: Mode }) {
   const nav = useNavigate();
   const [q, setQ] = useState("");
+  const createDraft = useDraftStore((s) => s.createDraft);
+  const profile = useProfileStore((s) => s.profile);
+
+  const startFromTemplate = (letterType: LetterTypeId) => {
+    const answers = prefillsFromProfile(profile, mode);
+    const id = createDraft(letterType, answers, mode);
+    nav(`/editor/${id}`);
+  };
 
   const catalog = useMemo(() => letterCatalogByMode(mode), [mode]);
   const filtered = useMemo(() => {
@@ -42,100 +53,99 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
   const prefix = mode === "employer" ? "/hr" : "/me";
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => nav(prefix)}
-            className="text-muted-foreground -ml-3 mb-2 h-7"
-          >
-            <ChevronLeft className="size-3.5 mr-1" /> Home
+    <Box className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      <Flex direction={{ initial: "column", sm: "row" }} justify="between" align={{ initial: "start", sm: "end" }} gap="3" mb="6">
+        <Box>
+          <Button variant="ghost" size="1" color="gray" onClick={() => nav(prefix)} className="!-ml-2 !mb-1">
+            <ChevronLeft className="size-3.5" /> Home
           </Button>
-          <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
+          <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">
             New letter · {mode === "employer" ? "HR / Management" : "Employee"}
-          </p>
-          <h1 className="text-2xl font-semibold tracking-tight mb-1">
-            Browse letter types
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
+          </Text>
+          <Heading size="6" mt="1" mb="1">Browse letter types</Heading>
+          <Text size="2" color="gray" className="max-w-2xl">
             {mode === "employer"
               ? "14 letter types covering hiring, performance, separation, and immigration. UK + US legal language baked in."
               : "21 letter types covering grievances, resignation, accommodation, whistleblowing, and tribunal-bound cover. UK + US rights-preservation language baked in."}
-          </p>
-        </div>
-        <div className="relative">
-          <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search letters…"
-            className="pl-8 h-9 w-full sm:w-64"
-          />
-        </div>
-      </div>
+          </Text>
+        </Box>
+        <TextField.Root
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search letters…"
+          size="2"
+          className="w-full sm:w-64"
+        >
+          <TextField.Slot>
+            <Search className="size-3.5" />
+          </TextField.Slot>
+        </TextField.Root>
+      </Flex>
 
       {flagship.length > 0 && (
-        <section>
-          <h2 className="text-sm font-medium mb-3">Flagship letters</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {flagship.map((l) => (
-              <Card
-                key={l.id}
-                className="cursor-pointer group hover:border-foreground/30 transition-colors"
-                onClick={() => nav(`${prefix}/new/${l.id}`)}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between mb-1">
-                    <Badge className={RISK_PILL[l.riskClass]}>{l.riskClass} risk</Badge>
-                    <ArrowUpRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition" />
-                  </div>
-                  <CardTitle className="text-base leading-snug">{l.title}</CardTitle>
-                  <CardDescription className="leading-relaxed">{l.description}</CardDescription>
-                </CardHeader>
-                {l.badge && (
-                  <CardContent className="-mt-2 pb-5">
-                    <span className="text-xs text-rose-700 font-medium">⚠ {l.badge}</span>
-                  </CardContent>
-                )}
-              </Card>
-            ))}
-          </div>
-        </section>
+        <Box mb="6">
+          <Heading size="3" mb="3">Flagship letters</Heading>
+          <Grid columns={{ initial: "1", md: "2", lg: "3" }} gap="3">
+            {flagship.map((l) => {
+              const tplReady = hasTemplate(l.id, profile.defaults.jurisdiction);
+              return (
+                <Card key={l.id} size="2" className="group hover:border-[var(--accent-7)] transition-colors">
+                  <Flex direction="column" gap="2" className="h-full">
+                    <button onClick={() => nav(`${prefix}/new/${l.id}`)} className="text-left w-full cursor-pointer">
+                      <Flex justify="between" align="center" mb="2">
+                        <Badge color={RISK[l.riskClass]} variant="soft">{l.riskClass} risk</Badge>
+                        <ArrowUpRight className="size-4 text-[var(--gray-9)] opacity-0 group-hover:opacity-100 transition" />
+                      </Flex>
+                      <Heading size="3" weight="medium">{l.title}</Heading>
+                      <Text size="2" color="gray" className="leading-relaxed" as="p" mt="1">{l.description}</Text>
+                      {l.badge && (
+                        <Text size="1" weight="medium" color="red" mt="2" as="div">⚠ {l.badge}</Text>
+                      )}
+                    </button>
+                    <Flex gap="2" mt="auto" pt="2">
+                      <Button size="1" variant="soft" color="gray" onClick={() => nav(`${prefix}/new/${l.id}`)}>
+                        Use wizard
+                      </Button>
+                      {tplReady && (
+                        <Button size="1" onClick={() => startFromTemplate(l.id)}>
+                          <Zap className="size-3" /> Skip — use template
+                        </Button>
+                      )}
+                    </Flex>
+                  </Flex>
+                </Card>
+              );
+            })}
+          </Grid>
+        </Box>
       )}
 
       {more.length > 0 && (
-        <section>
-          <h2 className="text-sm font-medium mb-3">More letter types</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <Box>
+          <Heading size="3" mb="3">More letter types</Heading>
+          <Grid columns={{ initial: "1", md: "2", lg: "3" }} gap="3">
             {more.map((l) => (
-              <Card
-                key={l.id}
-                className="cursor-pointer hover:border-foreground/30 transition-colors"
-                onClick={() => nav(`${prefix}/new/${l.id}`)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-sm font-medium">{l.shortTitle}</span>
-                    <Badge className={RISK_PILL[l.riskClass]}>{l.riskClass}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-                    {l.description}
-                  </p>
-                </CardContent>
+              <Card key={l.id} asChild size="1" className="cursor-pointer hover:border-[var(--accent-7)] transition-colors">
+                <button onClick={() => nav(`${prefix}/new/${l.id}`)} className="text-left w-full">
+                  <Flex justify="between" align="center" mb="1">
+                    <Text size="2" weight="medium">{l.shortTitle}</Text>
+                    <Badge color={RISK[l.riskClass]} variant="soft">{l.riskClass}</Badge>
+                  </Flex>
+                  <Text size="1" color="gray" className="leading-relaxed line-clamp-3" as="p">{l.description}</Text>
+                </button>
               </Card>
             ))}
-          </div>
-        </section>
+          </Grid>
+        </Box>
       )}
 
       {filtered.length === 0 && (
-        <div className="rounded-md border border-dashed border-letter-rule p-8 text-center text-sm text-muted-foreground">
-          No letters matched <strong>"{q}"</strong>. Try a different keyword, or browse the
-          full catalogue.
-        </div>
+        <Card size="2">
+          <Text align="center" size="2" color="gray" as="p" className="py-8">
+            No letters matched <Text weight="medium" color="gray" highContrast>"{q}"</Text>. Try a different keyword.
+          </Text>
+        </Card>
       )}
-    </div>
+    </Box>
   );
 }

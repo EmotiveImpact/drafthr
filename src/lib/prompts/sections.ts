@@ -1,10 +1,18 @@
 import type { Draft, Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { getSectionTemplate } from "@/lib/letters/templates";
 
 /**
  * Build a section-specific user prompt. Pairs with the master system prompt
- * (see ./system.ts). The pair tells the LLM exactly what to write for this
- * one section, with relevant data only.
+ * (see ./system.ts).
+ *
+ * Resolution order:
+ *   1. If a template exists for (letterType, jurisdiction) and contains this
+ *      sectionId, use the template's instruction + scaffold + constraints +
+ *      example. This is the gold-standard path.
+ *   2. Otherwise fall back to the generic SECTION_INSTRUCTIONS table below.
+ *
+ * Both paths still attach LEGAL_FENCES and the wizard's answers data dump.
  */
 export function buildSectionPrompt(
   draft: Draft,
@@ -13,10 +21,44 @@ export function buildSectionPrompt(
 ): string {
   const meta = getLetterMeta(draft.letterType);
   const sectionFences = LEGAL_FENCES_BY_LETTER[draft.letterType]?.[draft.context.jurisdiction] ?? "";
-  const sectionInstr = SECTION_INSTRUCTIONS[section.sectionId] ?? "";
   const lengthHint = LENGTH_HINTS_BY_SECTION[section.sectionId] ?? "Use the natural length for this section.";
   const dataDump = relevantData(draft);
 
+  const tpl = getSectionTemplate(draft.letterType, draft.context.jurisdiction, section.sectionId);
+
+  if (tpl) {
+    const constraints = tpl.constraints.length > 0
+      ? tpl.constraints.map((c) => `- ${c}`).join("\n")
+      : "(no extra constraints)";
+    return `Write the "${section.title}" section of this ${meta.title} letter using the template below.
+
+POSITION: section comes after these prior sections (titles only, do not repeat them): ${priorSectionTitles.length > 0 ? priorSectionTitles.join(" → ") : "(this is the first section)"}.
+
+SECTION INSTRUCTION (template-authored):
+${tpl.instruction}
+
+STRUCTURAL SCAFFOLD — preserve this structure, replace {{placeholders}} with the supplied data, but rewrite phrasing in the requested tone:
+${tpl.scaffold}
+
+HARD CONSTRAINTS:
+${constraints}
+
+GOLD-STANDARD EXAMPLE (for register/length calibration only — do NOT lift verbatim):
+${tpl.example}
+
+LENGTH BUDGET: ${lengthHint}
+
+LEGAL FENCES (${draft.context.jurisdiction}):
+${sectionFences}
+
+DATA TO USE:
+${dataDump}
+
+Write only the HTML for this section. No preamble, no commentary. Do not echo the example.`;
+  }
+
+  // Fallback: pre-template generic instructions.
+  const sectionInstr = SECTION_INSTRUCTIONS[section.sectionId] ?? "";
   return `Write the "${section.title}" section of this ${meta.title} letter.
 
 POSITION: section comes after these prior sections (titles only, do not repeat them): ${priorSectionTitles.length > 0 ? priorSectionTitles.join(" → ") : "(this is the first section)"}.

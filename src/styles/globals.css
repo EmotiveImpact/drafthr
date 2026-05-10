@@ -45,7 +45,7 @@
 
   --radius: 0.55rem;
 
-  /* HR Letter brand — legal-clean, ink-on-cream */
+  /* DRAFTHR brand — legal-clean, ink-on-cream */
   --letter-paper: oklch(0.995 0.002 95);
   --letter-ink: oklch(0.18 0.01 250);
   --letter-rule: oklch(0.92 0.004 250);
@@ -185,10 +185,6 @@
     box-shadow: var(--shadow-lg) !important;
   }
 
-  /* Sidebar gets a single rule on the right rather than a heavy border */
-  [data-slot="sidebar-container"] {
-    box-shadow: 1px 0 0 0 var(--sidebar-border);
-  }
 }
 
 /* Letter "page" surface — a4-ish, cream paper, ink type */

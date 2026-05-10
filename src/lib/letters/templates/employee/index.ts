@@ -1,0 +1,172 @@
+/**
+ * Employee-mode letter templates registry.
+ *
+ * Each (letterType, jurisdiction) pair is keyed via templateKey() and
+ * resolved by the prompt builder at generation time. The map below is the
+ * single source of truth for which employee templates exist and where they
+ * live on disk.
+ */
+import type { LetterTemplate, LetterTemplateKey } from "../types";
+import { templateKey } from "../types";
+
+import { GRIEVANCE_UK, GRIEVANCE_US } from "./grievance";
+import { RESIGNATION_CLEAN_UK, RESIGNATION_CLEAN_US } from "./resignation_clean";
+import {
+  RESIGNATION_WITH_GRIEVANCE_UK,
+  RESIGNATION_WITH_GRIEVANCE_US,
+} from "./resignation_with_grievance";
+import {
+  RESIGNATION_CONSTRUCTIVE_UK,
+  RESIGNATION_CONSTRUCTIVE_US,
+} from "./resignation_constructive";
+import {
+  FLEXIBLE_WORKING_REQUEST_UK,
+  FLEXIBLE_WORKING_REQUEST_US,
+} from "./flexible_working_request";
+import {
+  SUBJECT_ACCESS_REQUEST_UK,
+  SUBJECT_ACCESS_REQUEST_US,
+} from "./subject_access_request";
+import { APPEAL_UK, APPEAL_US } from "./appeal";
+import { WHISTLEBLOWING_UK, WHISTLEBLOWING_US } from "./whistleblowing";
+import {
+  ACCOMMODATION_REQUEST_UK,
+  ACCOMMODATION_REQUEST_US,
+} from "./accommodation_request";
+import {
+  SICKNESS_NOTIFICATION_UK,
+  SICKNESS_NOTIFICATION_US,
+} from "./sickness_notification";
+import { PAY_DISPUTE_UK, PAY_DISPUTE_US } from "./pay_dispute";
+import {
+  REDUNDANCY_CONSULTATION_RESPONSE_UK,
+  REDUNDANCY_CONSULTATION_RESPONSE_US,
+} from "./redundancy_consultation_response";
+import {
+  SETTLEMENT_COUNTER_OFFER_UK,
+  SETTLEMENT_COUNTER_OFFER_US,
+} from "./settlement_counter_offer";
+import {
+  RIGHT_TO_DISCONNECT_UK,
+  RIGHT_TO_DISCONNECT_US,
+} from "./right_to_disconnect";
+import { HOLIDAY_REQUEST_UK, HOLIDAY_REQUEST_US } from "./holiday_request";
+import { PIP_RESPONSE_UK, PIP_RESPONSE_US } from "./pip_response";
+import {
+  CONSTRUCTIVE_DISMISSAL_WARNING_UK,
+  CONSTRUCTIVE_DISMISSAL_WARNING_US,
+} from "./constructive_dismissal_warning";
+import {
+  REFERENCE_DISPUTE_UK,
+  REFERENCE_DISPUTE_US,
+} from "./reference_dispute";
+import {
+  RESIGNATION_WITHDRAWAL_UK,
+  RESIGNATION_WITHDRAWAL_US,
+} from "./resignation_withdrawal";
+import {
+  ACAS_EC_NOTIFICATION_UK,
+  ACAS_EC_NOTIFICATION_US,
+} from "./acas_ec_notification";
+import { TRIBUNAL_COVER_UK, TRIBUNAL_COVER_US } from "./tribunal_cover";
+
+const ALL_TEMPLATES: LetterTemplate[] = [
+  GRIEVANCE_UK,
+  GRIEVANCE_US,
+  RESIGNATION_CLEAN_UK,
+  RESIGNATION_CLEAN_US,
+  RESIGNATION_WITH_GRIEVANCE_UK,
+  RESIGNATION_WITH_GRIEVANCE_US,
+  RESIGNATION_CONSTRUCTIVE_UK,
+  RESIGNATION_CONSTRUCTIVE_US,
+  FLEXIBLE_WORKING_REQUEST_UK,
+  FLEXIBLE_WORKING_REQUEST_US,
+  SUBJECT_ACCESS_REQUEST_UK,
+  SUBJECT_ACCESS_REQUEST_US,
+  APPEAL_UK,
+  APPEAL_US,
+  WHISTLEBLOWING_UK,
+  WHISTLEBLOWING_US,
+  ACCOMMODATION_REQUEST_UK,
+  ACCOMMODATION_REQUEST_US,
+  SICKNESS_NOTIFICATION_UK,
+  SICKNESS_NOTIFICATION_US,
+  PAY_DISPUTE_UK,
+  PAY_DISPUTE_US,
+  REDUNDANCY_CONSULTATION_RESPONSE_UK,
+  REDUNDANCY_CONSULTATION_RESPONSE_US,
+  SETTLEMENT_COUNTER_OFFER_UK,
+  SETTLEMENT_COUNTER_OFFER_US,
+  RIGHT_TO_DISCONNECT_UK,
+  RIGHT_TO_DISCONNECT_US,
+  HOLIDAY_REQUEST_UK,
+  HOLIDAY_REQUEST_US,
+  PIP_RESPONSE_UK,
+  PIP_RESPONSE_US,
+  CONSTRUCTIVE_DISMISSAL_WARNING_UK,
+  CONSTRUCTIVE_DISMISSAL_WARNING_US,
+  REFERENCE_DISPUTE_UK,
+  REFERENCE_DISPUTE_US,
+  RESIGNATION_WITHDRAWAL_UK,
+  RESIGNATION_WITHDRAWAL_US,
+  ACAS_EC_NOTIFICATION_UK,
+  ACAS_EC_NOTIFICATION_US,
+  TRIBUNAL_COVER_UK,
+  TRIBUNAL_COVER_US,
+];
+
+/**
+ * Array of [templateKey, LetterTemplate] tuples covering every employee-mode
+ * (letterType, jurisdiction) pair. Consumed by the central registry which
+ * merges this with EMPLOYER_TEMPLATES into a single Map.
+ */
+export const EMPLOYEE_TEMPLATES: ReadonlyArray<readonly [LetterTemplateKey, LetterTemplate]> =
+  ALL_TEMPLATES.map(
+    (tpl) =>
+      [templateKey(tpl.letterType, tpl.jurisdiction), tpl] as const,
+  );
+
+export {
+  GRIEVANCE_UK,
+  GRIEVANCE_US,
+  RESIGNATION_CLEAN_UK,
+  RESIGNATION_CLEAN_US,
+  RESIGNATION_WITH_GRIEVANCE_UK,
+  RESIGNATION_WITH_GRIEVANCE_US,
+  RESIGNATION_CONSTRUCTIVE_UK,
+  RESIGNATION_CONSTRUCTIVE_US,
+  FLEXIBLE_WORKING_REQUEST_UK,
+  FLEXIBLE_WORKING_REQUEST_US,
+  SUBJECT_ACCESS_REQUEST_UK,
+  SUBJECT_ACCESS_REQUEST_US,
+  APPEAL_UK,
+  APPEAL_US,
+  WHISTLEBLOWING_UK,
+  WHISTLEBLOWING_US,
+  ACCOMMODATION_REQUEST_UK,
+  ACCOMMODATION_REQUEST_US,
+  SICKNESS_NOTIFICATION_UK,
+  SICKNESS_NOTIFICATION_US,
+  PAY_DISPUTE_UK,
+  PAY_DISPUTE_US,
+  REDUNDANCY_CONSULTATION_RESPONSE_UK,
+  REDUNDANCY_CONSULTATION_RESPONSE_US,
+  SETTLEMENT_COUNTER_OFFER_UK,
+  SETTLEMENT_COUNTER_OFFER_US,
+  RIGHT_TO_DISCONNECT_UK,
+  RIGHT_TO_DISCONNECT_US,
+  HOLIDAY_REQUEST_UK,
+  HOLIDAY_REQUEST_US,
+  PIP_RESPONSE_UK,
+  PIP_RESPONSE_US,
+  CONSTRUCTIVE_DISMISSAL_WARNING_UK,
+  CONSTRUCTIVE_DISMISSAL_WARNING_US,
+  REFERENCE_DISPUTE_UK,
+  REFERENCE_DISPUTE_US,
+  RESIGNATION_WITHDRAWAL_UK,
+  RESIGNATION_WITHDRAWAL_US,
+  ACAS_EC_NOTIFICATION_UK,
+  ACAS_EC_NOTIFICATION_US,
+  TRIBUNAL_COVER_UK,
+  TRIBUNAL_COVER_US,
+};

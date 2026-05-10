@@ -1,24 +1,18 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/Badge";
-import { Button } from "@/components/ui/button";
+import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { ChevronLeft, FileDown, FileText } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { useProfileStore } from "@/lib/profile";
 import type { Draft, ExportEvent } from "@/lib/letters/types";
 
-const RISK_PILL: Record<string, string> = {
-  low: "bg-green-50 text-green-800 border-green-200",
-  medium: "bg-amber-50 text-amber-900 border-amber-200",
-  high: "bg-rose-50 text-rose-900 border-rose-200",
+const RISK: Record<string, "green" | "amber" | "red"> = {
+  low: "green",
+  medium: "amber",
+  high: "red",
 };
 
-/**
- * Exported letters — drafts that have produced at least one PDF or DOCX.
- * Filtered by the active mode in profile.
- */
 export function Exported() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
@@ -37,103 +31,85 @@ export function Exported() {
   }, [drafts, role]);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-      <div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => nav(-1)}
-          className="text-muted-foreground -ml-3 mb-2 h-7"
-        >
-          <ChevronLeft className="size-3.5 mr-1" /> Back
+    <Box className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <Box mb="6">
+        <Button variant="ghost" size="1" color="gray" onClick={() => nav(-1)} className="!-ml-2 !mb-1">
+          <ChevronLeft className="size-3.5" /> Back
         </Button>
-        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
-          Exported
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight mb-1">Sent letters</h1>
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Letters you've finalised and exported as PDF or DOCX. Re-open any draft to issue a
-          new export — each one is logged.
-        </p>
-      </div>
+        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]" as="div">Exported</Text>
+        <Heading size="6" mt="1" mb="1">Sent letters</Heading>
+        <Text size="2" color="gray" className="max-w-2xl">
+          Letters you've finalised and exported as PDF or DOCX. Re-open any draft to issue a new
+          export — each one is logged.
+        </Text>
+      </Box>
 
       {list.length === 0 ? (
-        <div className="rounded-md border border-dashed border-letter-rule p-10 text-center">
-          <FileDown className="size-5 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm font-medium">Nothing exported yet.</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            When you export a letter from the editor, it appears here with a record of the
-            format, timestamp, and any counsel-review attestation.
-          </p>
-        </div>
+        <Card size="3">
+          <Flex direction="column" align="center" gap="2" py="6">
+            <FileDown className="size-5 text-[var(--gray-9)]" />
+            <Text size="2" weight="medium" as="p">Nothing exported yet.</Text>
+            <Text size="1" color="gray" align="center" as="p" className="max-w-md">
+              When you export a letter from the editor, it appears here with a record of the
+              format, timestamp, and any counsel-review attestation.
+            </Text>
+          </Flex>
+        </Card>
       ) : (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">{list.length} exported letter{list.length === 1 ? "" : "s"}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ul className="divide-y divide-sidebar-border">
-              {list.map((item) => (
-                <li
-                  key={item.draft.id}
-                  className="px-6 py-3 hover:bg-muted/30 cursor-pointer"
-                  onClick={() => nav(`/editor/${item.draft.id}`)}
+        <Card size="2">
+          <Heading size="3" mb="3">{list.length} exported letter{list.length === 1 ? "" : "s"}</Heading>
+          <Flex direction="column">
+            {list.map((item) => (
+              <button
+                key={item.draft.id}
+                onClick={() => nav(`/editor/${item.draft.id}`)}
+                className="text-left"
+              >
+                <Flex
+                  px="4"
+                  py="3"
+                  align="center"
+                  gap="3"
+                  className="hover:bg-[var(--gray-2)] cursor-pointer border-b border-[var(--gray-5)] last:border-b-0"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="size-9 rounded-md bg-muted/40 grid place-items-center shrink-0">
-                      <FileText className="size-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">
-                          {item.meta?.shortTitle ?? item.draft.letterType}
-                        </span>
-                        {item.meta && (
-                          <Badge className={RISK_PILL[item.meta.riskClass]}>{item.meta.riskClass}</Badge>
+                  <Box
+                    className="size-9 rounded-md grid place-items-center shrink-0"
+                    style={{ background: "var(--gray-3)" }}
+                  >
+                    <FileText className="size-4 text-[var(--gray-9)]" />
+                  </Box>
+                  <Box className="flex-1 min-w-0">
+                    <Flex align="center" gap="2" wrap="wrap">
+                      <Text size="2" weight="medium">{item.meta?.shortTitle ?? item.draft.letterType}</Text>
+                      {item.meta && <Badge color={RISK[item.meta.riskClass]} variant="soft">{item.meta.riskClass}</Badge>}
+                      <Text size="1" color="gray" weight="medium" className="uppercase tracking-wider">
+                        {item.draft.mode === "employer" ? "HR" : "employee"}
+                      </Text>
+                    </Flex>
+                    <Text size="1" color="gray" className="truncate">
+                      {item.draft.mode === "employer"
+                        ? item.draft.employee.legalName || "(no recipient)"
+                        : `to ${item.draft.employer.legalName || "(employer)"}`}
+                    </Text>
+                  </Box>
+                  <Box className="text-right shrink-0">
+                    {item.latest && (
+                      <>
+                        <Text size="1" weight="medium" as="div">{item.latest.format.toUpperCase()}</Text>
+                        <Text size="1" color="gray" as="div">{formatRel(item.latest.exportedAt)}</Text>
+                        {item.latest.reviewedBy && (
+                          <Text size="1" color="green" as="div">✓ {item.latest.reviewedBy}</Text>
                         )}
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          {item.draft.mode === "employer" ? "HR" : "employee"}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {item.draft.mode === "employer"
-                          ? item.draft.employee.legalName || "(no recipient)"
-                          : `to ${item.draft.employer.legalName || "(employer)"}`}
-                      </div>
-                    </div>
-                    <div className="text-right text-xs text-muted-foreground tabular-nums shrink-0">
-                      {item.latest && (
-                        <>
-                          <div className="font-medium text-foreground">
-                            {item.latest.format.toUpperCase()}
-                          </div>
-                          <div>{formatRel(item.latest.exportedAt)}</div>
-                          {item.latest.reviewedBy && (
-                            <div className="text-[10px] mt-0.5">
-                              ✓ {item.latest.reviewedBy}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {(item.draft.exports?.length ?? 0) > 1 && (
-                    <div className="mt-2 ml-12 text-[11px] text-muted-foreground">
-                      {item.draft.exports!.length} total exports —{" "}
-                      {item.draft.exports!
-                        .slice(0, 3)
-                        .map((e) => `${e.format.toUpperCase()} ${formatRel(e.exportedAt)}`)
-                        .join(" · ")}
-                      {item.draft.exports!.length > 3 && " · …"}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
+                      </>
+                    )}
+                  </Box>
+                </Flex>
+              </button>
+            ))}
+          </Flex>
         </Card>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -143,11 +119,7 @@ function latestExport(d: Draft): ExportEvent | undefined {
 }
 
 function safeMeta(id: string) {
-  try {
-    return getLetterMeta(id as Parameters<typeof getLetterMeta>[0]);
-  } catch {
-    return null;
-  }
+  try { return getLetterMeta(id as Parameters<typeof getLetterMeta>[0]); } catch { return null; }
 }
 
 function formatRel(ts: number): string {

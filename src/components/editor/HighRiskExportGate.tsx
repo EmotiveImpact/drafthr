@@ -1,17 +1,17 @@
 import { useState } from "react";
 import {
+  Box,
+  Button,
+  Checkbox,
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+  Flex,
+  Grid,
+  Text,
+  TextField,
+} from "@radix-ui/themes";
 import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { ShieldAlert } from "lucide-react";
-import { Input } from "@/components/ui/input";
 
 type Props = {
   draft: Draft;
@@ -35,92 +35,114 @@ export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
   const canProceed = reviewedBy.trim().length >= 2 && reviewedOn && confirmed;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-rose-600" />
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Content maxWidth="540px">
+        <Dialog.Title>
+          <Flex align="center" gap="2">
+            <ShieldAlert className="size-4" style={{ color: "var(--red-11)" }} />
             Counsel review required
-          </DialogTitle>
-          <DialogDescription>
-            <strong>{meta.title}</strong> is classified as a high-risk
-            communication. Before exporting, please confirm a qualified employment-law
-            reviewer has approved the content.
-          </DialogDescription>
-        </DialogHeader>
+          </Flex>
+        </Dialog.Title>
+        <Dialog.Description size="2" color="gray" mb="4">
+          <strong>{meta.title}</strong> is classified as a high-risk
+          communication. Before exporting, please confirm a qualified employment-law
+          reviewer has approved the content.
+        </Dialog.Description>
 
-        <div className="space-y-3">
-          <div className="rounded-md border border-rose-200 bg-rose-50/60 p-3 text-xs text-rose-900 leading-relaxed">
-            {draft.context.jurisdiction === "UK" ? (
-              <>
-                The ACAS Code of Practice and Employment Rights Act 1996
-                governing this letter type carry compensation uplifts of up to
-                25% for procedural failures (s.207A TULRCA 1992). Settlement
-                agreements specifically require independent legal advice (s.203
-                ERA) to be valid.
-              </>
-            ) : (
-              <>
-                US employment law (WARN Act, OWBPA, Title VII, ADA, ADEA, plus
-                state-specific final-pay and notice rules) imposes statutory
-                penalties for non-compliant separations. CA and NY in particular
-                impose strict same-day or next-day final-pay rules.
-              </>
-            )}
-          </div>
+        <Flex direction="column" gap="3">
+          <Box
+            p="3"
+            style={{
+              background: "var(--red-2)",
+              border: "1px solid var(--red-6)",
+              borderRadius: "var(--radius-3)",
+            }}
+          >
+            <Text size="1" style={{ color: "var(--red-12)" }} className="leading-relaxed">
+              {draft.context.jurisdiction === "UK" ? (
+                <>
+                  The ACAS Code of Practice and Employment Rights Act 1996
+                  governing this letter type carry compensation uplifts of up to
+                  25% for procedural failures (s.207A TULRCA 1992). Settlement
+                  agreements specifically require independent legal advice (s.203
+                  ERA) to be valid.
+                </>
+              ) : (
+                <>
+                  US employment law (WARN Act, OWBPA, Title VII, ADA, ADEA, plus
+                  state-specific final-pay and notice rules) imposes statutory
+                  penalties for non-compliant separations. CA and NY in particular
+                  impose strict same-day or next-day final-pay rules.
+                </>
+              )}
+            </Text>
+          </Box>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="reviewedBy" className="text-xs">
+          <Grid columns="2" gap="3">
+            <Box>
+              <Text as="label" htmlFor="reviewedBy" size="1" color="gray" weight="medium" mb="1" className="block">
                 Reviewed by (name & role)
-              </Label>
-              <Input
+              </Text>
+              <TextField.Root
                 id="reviewedBy"
                 placeholder="e.g. J. Smith, Employment Counsel"
                 value={reviewedBy}
                 onChange={(e) => setReviewedBy(e.target.value)}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="reviewedOn" className="text-xs">
+            </Box>
+            <Box>
+              <Text as="label" htmlFor="reviewedOn" size="1" color="gray" weight="medium" mb="1" className="block">
                 Review date
-              </Label>
-              <Input
+              </Text>
+              <TextField.Root
                 id="reviewedOn"
                 type="date"
                 value={reviewedOn}
                 onChange={(e) => setReviewedOn(e.target.value)}
               />
-            </div>
-          </div>
+            </Box>
+          </Grid>
 
-          <label className="flex items-start gap-2 rounded-md border border-letter-rule p-3 cursor-pointer hover:bg-accent/40">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span className="text-xs leading-relaxed">
-              I confirm a qualified employment-law professional has reviewed
-              this letter and approved its content for issuance. I understand
-              this attestation will be embedded in the export metadata for audit.
-            </span>
-          </label>
-        </div>
+          <Flex
+            asChild
+            align="start"
+            gap="2"
+            p="3"
+            className="cursor-pointer hover:bg-[var(--gray-2)]"
+            style={{
+              border: "1px solid var(--gray-5)",
+              borderRadius: "var(--radius-3)",
+            }}
+          >
+            <label>
+              <Checkbox
+                checked={confirmed}
+                onCheckedChange={(c) => setConfirmed(c === true)}
+                mt="1"
+              />
+              <Text size="1" className="leading-relaxed">
+                I confirm a qualified employment-law professional has reviewed
+                this letter and approved its content for issuance. I understand
+                this attestation will be embedded in the export metadata for audit.
+              </Text>
+            </label>
+          </Flex>
+        </Flex>
 
-        <div className="flex justify-end gap-2 mt-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
+        <Flex justify="end" gap="2" mt="4">
+          <Dialog.Close>
+            <Button variant="soft" color="gray" onClick={onClose}>
+              Cancel
+            </Button>
+          </Dialog.Close>
           <Button
             disabled={!canProceed}
             onClick={() => onConfirm({ reviewedBy: reviewedBy.trim(), reviewedOn })}
           >
             Confirm and export
           </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </Flex>
+      </Dialog.Content>
+    </Dialog.Root>
   );
 }

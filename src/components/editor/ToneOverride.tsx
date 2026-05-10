@@ -1,15 +1,7 @@
 import type { Draft, EmployeeTone, Tone } from "@/lib/letters/types";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Box, Button, Flex, Popover, RadioGroup, Text } from "@radix-ui/themes";
 import { useDraftStore } from "@/lib/store";
 import { Mic2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 const EMPLOYER_TONES: { value: Tone; label: string; hint: string }[] = [
   { value: "warm", label: "Warm", hint: "Personable but professional. Use for offers, promotions." },
@@ -28,19 +20,14 @@ const EMPLOYEE_TONES: { value: EmployeeTone; label: string; hint: string }[] = [
 /**
  * Per-letter tone override. Lives in the editor action row so the user can
  * adjust tone for THIS letter without changing their profile defaults.
- *
- * Rebuilds the master system prompt on next regeneration — sections written
- * before the change keep their tone unless the user clicks "Regenerate all".
  */
 export function ToneOverride({ draft }: { draft: Draft }) {
   const updateAnswers = useDraftStore((s) => s.updateAnswers);
 
   const setTone = (next: Tone | EmployeeTone) => {
     if (draft.mode === "employer") {
-      // We piggyback on the wizard's tone field stored in answers + context.
       const updatedAnswers = { ...draft.answers, tone: next };
       updateAnswers(draft.id, updatedAnswers);
-      // Mutate context tone in-place by re-saving via the store's existing pathway.
       useDraftStore.setState((s) => {
         const d = s.drafts[draft.id];
         if (!d) return s;
@@ -83,41 +70,45 @@ export function ToneOverride({ draft }: { draft: Draft }) {
   const currentMeta = options.find((o) => o.value === current);
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 text-xs">
-          <Mic2 className="size-3.5 mr-1.5" />
-          Tone: <span className="ml-1 font-medium capitalize">{currentMeta?.label ?? current}</span>
+    <Popover.Root>
+      <Popover.Trigger>
+        <Button variant="ghost" size="1" color="gray">
+          <Mic2 className="size-3.5" />
+          Tone: <Text weight="medium" className="capitalize ml-1">{currentMeta?.label ?? current}</Text>
         </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-3">
-        <Label className="text-xs font-medium">Letter tone</Label>
-        <p className="text-[11px] text-muted-foreground mb-2 leading-relaxed">
+      </Popover.Trigger>
+      <Popover.Content align="start" width="288px">
+        <Text size="1" weight="medium" as="div">Letter tone</Text>
+        <Text size="1" color="gray" mb="2" as="p" className="leading-relaxed">
           Changes apply to the next "Regenerate all" or section regenerate.
-        </p>
-        <RadioGroup
-          value={current}
-          onValueChange={(v) => setTone(v as Tone | EmployeeTone)}
-          className="space-y-1.5"
-        >
-          {options.map((o) => (
-            <label
-              key={o.value}
-              htmlFor={`tone-${o.value}`}
-              className={cn(
-                "flex items-start gap-2 rounded-sm p-2 cursor-pointer hover:bg-accent/40",
-                current === o.value && "bg-accent/60"
-              )}
-            >
-              <RadioGroupItem id={`tone-${o.value}`} value={o.value} className="mt-0.5" />
-              <div className="space-y-0.5">
-                <div className="text-xs font-medium">{o.label}</div>
-                <div className="text-[11px] text-muted-foreground leading-relaxed">{o.hint}</div>
-              </div>
-            </label>
-          ))}
-        </RadioGroup>
-      </PopoverContent>
-    </Popover>
+        </Text>
+        <RadioGroup.Root value={current} onValueChange={(v) => setTone(v as Tone | EmployeeTone)}>
+          <Flex direction="column" gap="1">
+            {options.map((o) => (
+              <Flex
+                asChild
+                align="start"
+                gap="2"
+                p="2"
+                className="cursor-pointer hover:bg-[var(--gray-3)]"
+                style={{
+                  borderRadius: "var(--radius-2)",
+                  background: current === o.value ? "var(--accent-3)" : undefined,
+                }}
+                key={o.value}
+              >
+                <label htmlFor={`tone-${o.value}`}>
+                  <RadioGroup.Item id={`tone-${o.value}`} value={o.value} mt="1" />
+                  <Box>
+                    <Text size="1" weight="medium" as="div">{o.label}</Text>
+                    <Text size="1" color="gray" as="div" className="leading-relaxed">{o.hint}</Text>
+                  </Box>
+                </label>
+              </Flex>
+            ))}
+          </Flex>
+        </RadioGroup.Root>
+      </Popover.Content>
+    </Popover.Root>
   );
 }

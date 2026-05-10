@@ -124,7 +124,7 @@ export function Wizard({ mode }: { mode: Mode }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
@@ -203,7 +203,7 @@ export function Wizard({ mode }: { mode: Mode }) {
       )}
 
       <Card>
-        <CardContent className="p-6 space-y-6">
+        <CardContent className="p-4 sm:p-6 space-y-6">
           {visibleQuestions.map((q) => (
             <QuestionField
               key={q.id}

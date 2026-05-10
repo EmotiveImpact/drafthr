@@ -24,9 +24,18 @@ type DraftRequest = {
   messages: CoreMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** Optional model override from the client (e.g. "qwen3-max"). Allow-listed below. */
+  model?: string;
 };
 
-function buildModel() {
+const ALLOWED_MODELS = new Set([
+  "qwen3-max",
+  "qwen-max",
+  "qwen-plus",
+  "qwen-turbo",
+]);
+
+function buildModel(requestedModel?: string) {
   const provider = (process.env.LLM_PROVIDER ?? "qwen").toLowerCase();
   if (provider === "claude") {
     throw new Error(
@@ -38,7 +47,12 @@ function buildModel() {
   const baseURL =
     process.env.QWEN_BASE_URL ??
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  const modelName = process.env.QWEN_MODEL ?? "qwen-plus";
+  // Resolution order: client-supplied (allow-listed) > env override > flagship default.
+  // qwen3-max is the DashScope flagship as of 2026 (paid plan); qwen-plus is the
+  // free-tier-capable fallback.
+  const fromRequest =
+    requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
+  const modelName = fromRequest ?? process.env.QWEN_MODEL ?? "qwen3-max";
   const qwen = createOpenAICompatible({ name: "qwen", apiKey, baseURL });
   return qwen(modelName);
 }

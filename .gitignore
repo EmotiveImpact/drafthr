@@ -10,6 +10,7 @@ dist-ssr
 # Local backups + agent artefacts (not for shared repo)
 .backups
 .agents
+.claude
 
 # TypeScript build cache
 *.tsbuildinfo

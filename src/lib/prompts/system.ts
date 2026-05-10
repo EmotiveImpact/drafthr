@@ -1,6 +1,7 @@
 import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { buildEmployeeRightsBlock } from "./employee/rights-preservation";
+import { getTemplate } from "@/lib/letters/templates";
 
 const TONE_GUIDANCE: Record<string, string> = {
   warm: "Warm and personable, but professional. Avoid casual contractions in formal sentences.",
@@ -93,13 +94,19 @@ ${
     : ""
 }`;
 
+  // Append letter-wide template notes when a curated template exists.
+  const tpl = getTemplate(draft.letterType, draft.context.jurisdiction);
+  const tplAddendum = tpl?.letterSystemAddendum
+    ? `\n\n${tpl.letterSystemAddendum}`
+    : "";
+
   if (!isEmployer) {
-    return `${base}
+    return `${base}${tplAddendum}
 
 ${buildEmployeeRightsBlock(draft)}`.trim();
   }
 
-  return base.trim();
+  return `${base}${tplAddendum}`.trim();
 }
 
 export function buildConsistencyPrompt(): string {
