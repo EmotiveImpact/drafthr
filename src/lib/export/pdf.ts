@@ -1,6 +1,7 @@
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { resolveFigureRefsInHtml } from "@/lib/evidence";
 
 type Html2PdfModule = {
   default: () => Html2PdfChain;
@@ -53,12 +54,51 @@ export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
 function letterBodyHtml(draft: Draft): string {
   const letterhead = letterheadHtml(draft);
   const signature = signatureHtml(draft);
+  const evidence = draft.evidence ?? [];
+  const sectionsHtml = draft.sections
+    .map((s) => injectSignatureIntoSignatureSection(s, signature))
+    .join("\n");
+  // Re-resolve figure references to their current label (handles re-ordering).
+  const resolved = evidence.length > 0
+    ? resolveFigureRefsInHtml(sectionsHtml, evidence)
+    : sectionsHtml;
+  const attachments = buildAttachmentsListHtml(draft);
   return (
     letterhead +
-    draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signature)).join("\n") +
+    resolved +
+    attachments +
     "<hr />" +
     sanitizeLetterHtml(disclaimerHtmlFor(draft))
   );
+}
+
+/** Auto-generated "Attachments" block — only rendered when there are
+ * evidence items in displayMode=attached. Lists them numbered. */
+function buildAttachmentsListHtml(draft: Draft): string {
+  const attached = (draft.evidence ?? []).filter(
+    (e) => (e.displayMode ?? "figure") === "attached"
+  );
+  if (attached.length === 0) return "";
+  const items = attached
+    .map((e, i) => {
+      const num = `${i + 1}.`;
+      const name = e.filename || `${e.kind} item`;
+      const note = e.content ? ` — ${e.content}` : "";
+      return `<li>${num} <strong>${escapeHtml(name)}</strong>${escapeHtml(note)}</li>`;
+    })
+    .join("\n");
+  return `<div class="attachments-block">
+    <h3 style="margin-top:24px;font-size:13pt;">Attachments</h3>
+    <ol style="padding-left:1.2em;margin:6pt 0;">${items}</ol>
+  </div>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 export async function exportLetterToPdf(draft: Draft): Promise<void> {

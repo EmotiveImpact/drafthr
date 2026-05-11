@@ -1,7 +1,7 @@
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
-import { sectionLabels } from "@/lib/evidence";
+import { sectionLabels, displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { buildDraftTimeline } from "@/lib/timeline";
 import {
   buildTemplateQualityReport,
@@ -202,39 +202,100 @@ function buildReadme(
   return lines.join("\n");
 }
 
+/**
+ * Build the exhibit index HTML page that goes inside the ZIP at
+ * evidence/index.html. Groups items by display mode so the reader sees:
+ *   1. Numbered figures (the main exhibit list)
+ *   2. Attachments (referenced by name from the letter)
+ *   3. Pack-only supporting material
+ *
+ * Figures get their effective label (auto Fig N or user override) as the
+ * heading. Each item also notes which letter sections it backs up.
+ */
 function buildEvidenceIndexHtml(draft: Draft): string {
   const evidence = draft.evidence ?? [];
+  const figures = evidence.filter((e) => displayModeOf(e) === "figure");
+  const attachments = evidence.filter((e) => displayModeOf(e) === "attached");
+  const inlines = evidence.filter((e) => displayModeOf(e) === "inline");
+  const packOnly = evidence.filter((e) => displayModeOf(e) === "pack_only");
+
   return `<!doctype html>
 <html><head><meta charset="utf-8">
-<title>Evidence — ${escapeHtml(draft.letterType)}</title>
+<title>Exhibit Index — ${escapeHtml(draft.letterType)}</title>
 <style>
   body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;color:#0f172a;max-width:920px;margin:32px auto;padding:0 24px;line-height:1.55}
-  h1{font-size:22px;margin:0 0 4px 0}
+  h1{font-size:24px;margin:0 0 4px 0}
+  h2.section{font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:#64748b;margin:32px 0 12px 0;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
   .meta{color:#64748b;font-size:12px;margin-bottom:32px}
-  .item{border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px}
-  .item h2{font-size:15px;margin:0 0 6px 0;display:flex;gap:8px;align-items:center}
+  .item{border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;page-break-inside:avoid}
+  .item h3{font-size:15px;margin:0 0 6px 0;display:flex;gap:8px;align-items:center}
+  .figlabel{font-family:Georgia,'Times New Roman',serif;font-size:18px;font-weight:600;color:#0f172a;letter-spacing:0.01em}
   .kind{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;padding:2px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-weight:600}
   .caption{color:#64748b;font-size:12px;margin-bottom:8px}
   .body{font-size:13px;white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:6px}
   img{max-width:100%;height:auto;border-radius:6px;margin-top:8px}
   a{color:#0f172a}
+  .empty{color:#94a3b8;font-style:italic}
 </style></head><body>
-<h1>Evidence pack — ${escapeHtml(draft.letterType)}</h1>
-<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · Generated ${escapeHtml(new Date().toLocaleString())}</p>
-${evidence
-  .map((item, idx) => {
-    const padded = String(idx + 1).padStart(2, "0");
-    const isImage = item.mimeType?.startsWith("image/");
-    return `<div class="item">
-      <h2><span class="kind">${escapeHtml(item.kind)}</span> ${escapeHtml(item.filename || `Item ${padded}`)}</h2>
-      ${item.sectionIds?.length ? `<div class="caption">Linked to: ${escapeHtml(sectionLabels(draft, item.sectionIds))}</div>` : ""}
+<h1>Exhibit Index</h1>
+<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(draft.letterType)} · Generated ${escapeHtml(new Date().toLocaleString())}</p>
+
+${
+  figures.length > 0
+    ? `<h2 class="section">Figures (referenced from letter)</h2>
+${figures.map((item, idx) => renderExhibitItem(draft, item, idx, evidence, "figure")).join("\n")}`
+    : ""
+}
+
+${
+  attachments.length > 0
+    ? `<h2 class="section">Attachments</h2>
+${attachments.map((item, idx) => renderExhibitItem(draft, item, idx, evidence, "attached")).join("\n")}`
+    : ""
+}
+
+${
+  inlines.length > 0
+    ? `<h2 class="section">Inline (embedded in letter body)</h2>
+${inlines.map((item, idx) => renderExhibitItem(draft, item, idx, evidence, "inline")).join("\n")}`
+    : ""
+}
+
+${
+  packOnly.length > 0
+    ? `<h2 class="section">Supporting material (pack only)</h2>
+${packOnly.map((item, idx) => renderExhibitItem(draft, item, idx, evidence, "pack_only")).join("\n")}`
+    : ""
+}
+</body></html>`;
+}
+
+function renderExhibitItem(
+  draft: Draft,
+  item: EvidenceItem,
+  idx: number,
+  allEvidence: EvidenceItem[],
+  mode: "figure" | "attached" | "inline" | "pack_only"
+): string {
+  const padded = String(idx + 1).padStart(2, "0");
+  const isImage = item.mimeType?.startsWith("image/");
+  const label =
+    mode === "figure"
+      ? figureLabelFor(item, allEvidence)
+      : mode === "attached"
+      ? `Attachment ${idx + 1}`
+      : "";
+  return `<div class="item">
+      <h3>
+        ${label ? `<span class="figlabel">${escapeHtml(label)}</span>` : ""}
+        <span class="kind">${escapeHtml(item.kind)}</span>
+        ${escapeHtml(item.filename || `Item ${padded}`)}
+      </h3>
+      ${item.sectionIds?.length ? `<div class="caption">Backs up: ${escapeHtml(sectionLabels(draft, item.sectionIds))}</div>` : ""}
       ${item.content ? `<div class="body">${escapeHtml(item.content)}</div>` : ""}
       ${isImage && item.fileDataUrl ? `<img src="${item.fileDataUrl}" alt="${escapeHtml(item.filename || "")}" />` : ""}
-      ${!isImage && item.fileDataUrl ? `<p style="margin-top:8px"><a href="../evidence/${padded}-${escapeHtml(item.filename || "file")}">Open file →</a></p>` : ""}
+      ${!isImage && item.fileDataUrl ? `<p style="margin-top:8px"><a href="./${padded}-${escapeHtml(item.filename || "file")}">Open file →</a></p>` : ""}
     </div>`;
-  })
-  .join("\n")}
-</body></html>`;
 }
 
 /* ============================================================================

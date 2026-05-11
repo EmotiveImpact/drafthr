@@ -172,6 +172,20 @@ export type ProtectedCharacteristic =
   | "genetic_information"
   | "veteran_status";
 
+/**
+ * How an evidence item appears in the letter + export pack.
+ *
+ * - figure:    Numbered exhibit on a dedicated index page in the ZIP
+ *              (Fig 1, Fig 2, …). The letter body refers to it with a
+ *              "[See Fig N]" text token at a position the user picks.
+ * - inline:    Embedded directly at a user-chosen cursor position in the
+ *              letter (image, blockquote, or file link inline with prose).
+ * - attached:  Listed under an auto-generated "Attachments" section at
+ *              the end of the letter; full files in the ZIP.
+ * - pack_only: Bundled in the ZIP but never appears in the letter prose.
+ */
+export type EvidenceDisplayMode = "figure" | "inline" | "attached" | "pack_only";
+
 export type EvidenceItem = {
   id: string;
   kind: "email" | "calendar" | "document" | "screenshot" | "note";
@@ -185,6 +199,12 @@ export type EvidenceItem = {
   parsedSummary?: string;
   uploadedAt: number;
   includeVerbatim: boolean;
+  /** How this item appears in the letter + pack. Defaults to "figure" when unset. */
+  displayMode?: EvidenceDisplayMode;
+  /** Label shown on the exhibit index and in the [See …] reference text.
+   * Defaults to "Fig {N}" where N is the order among figures.
+   * User-editable so legal teams can use "Exhibit A" etc. */
+  figureLabel?: string;
 };
 
 export type ProtectedDeadline = {

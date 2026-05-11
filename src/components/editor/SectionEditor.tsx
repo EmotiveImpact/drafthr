@@ -8,6 +8,7 @@ import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import Image from "@tiptap/extension-image";
+import TextAlign from "@tiptap/extension-text-align";
 
 /**
  * Read an image file into a base64 data URL. Bounded at ~5MB raw to stop
@@ -108,6 +109,14 @@ export function SectionEditor({
           class: "section-image",
           style: "max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0;",
         },
+      }),
+      // Word-doc-style alignment (left / center / right / justify) on
+      // paragraphs + headings. Applied via a data-text-align attribute
+      // that the sanitiser already preserves on <p>/<h*>.
+      TextAlign.configure({
+        types: ["paragraph", "heading"],
+        alignments: ["left", "center", "right", "justify"],
+        defaultAlignment: "left",
       }),
     ],
     content: section.html || "",
@@ -385,7 +394,7 @@ export function SectionEditor({
           </button>
         </div>
       )}
-      {active && <EditorToolbar editor={editor} />}
+      {active && <EditorToolbar editor={editor} draft={draft} />}
       <div className="px-7 py-5">
         {editor && (
           <BubbleMenu

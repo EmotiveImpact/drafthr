@@ -1,6 +1,7 @@
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { resolveFigureRefsInHtml } from "@/lib/evidence";
 
 type HtmlToDocx = (
   html: string,
@@ -17,6 +18,20 @@ export async function renderLetterDocxBlob(draft: Draft): Promise<Blob> {
   const mod = await import("html-to-docx");
   const htmlToDocx = (mod.default ?? mod) as unknown as HtmlToDocx;
 
+  const evidence = draft.evidence ?? [];
+  const sectionsHtml = draft.sections
+    .map((s) => injectSignatureIntoSignatureSection(s, signatureHtml(draft)))
+    .join("\n");
+  const resolved = evidence.length > 0
+    ? resolveFigureRefsInHtml(sectionsHtml, evidence)
+    : sectionsHtml;
+  const attached = evidence.filter((e) => (e.displayMode ?? "figure") === "attached");
+  const attachmentsBlock = attached.length === 0
+    ? ""
+    : `<div><h3 style="margin-top:24pt;font-size:13pt;">Attachments</h3><ol style="padding-left:1.2em;margin:6pt 0;">${attached
+        .map((e, i) => `<li>${i + 1}. <strong>${escapeHtmlD(e.filename || `${e.kind} item`)}</strong>${e.content ? ` — ${escapeHtmlD(e.content)}` : ""}</li>`)
+        .join("")}</ol></div>`;
+
   const html = `
 <!doctype html>
 <html><head><meta charset="utf-8"><style>
@@ -27,9 +42,11 @@ export async function renderLetterDocxBlob(draft: Draft): Promise<Blob> {
   hr { border: none; border-top: 1px solid #cbd5e1; margin: 12pt 0; }
   em { color: #475569; font-style: italic; }
   img { max-width: 100%; height: auto; }
+  .figure-ref { font-style: italic; color: #475569; }
 </style></head><body>
 ${letterheadHtml(draft)}
-${draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signatureHtml(draft))).join("\n")}
+${resolved}
+${attachmentsBlock}
 <hr />
 ${sanitizeLetterHtml(disclaimerHtmlFor(draft))}
 </body></html>`;
@@ -54,6 +71,10 @@ export async function exportLetterToDocx(draft: Draft): Promise<void> {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function escapeHtmlD(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function letterheadHtml(draft: Draft): string {

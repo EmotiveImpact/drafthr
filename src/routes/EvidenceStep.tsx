@@ -333,6 +333,12 @@ export function EvidenceStep() {
                     onReference={() => insertReference(item)}
                     onQuote={() => insertQuote(item)}
                     onDelete={() => removeEvidence(item.id)}
+                    onUpdate={(patch) => {
+                      setEvidence(
+                        draft.id,
+                        evidence.map((e) => (e.id === item.id ? { ...e, ...patch } : e))
+                      );
+                    }}
                   />
                 ))}
               </div>
@@ -444,6 +450,7 @@ function EvidenceRow({
   onReference,
   onQuote,
   onDelete,
+  onUpdate,
 }: {
   draft: Draft;
   item: EvidenceItem;
@@ -452,6 +459,7 @@ function EvidenceRow({
   onReference: () => void;
   onQuote: () => void;
   onDelete: () => void;
+  onUpdate: (patch: Partial<EvidenceItem>) => void;
 }) {
   const Icon = iconFor(item.kind);
   const linked = sectionLabels(draft, item.sectionIds);
@@ -493,7 +501,48 @@ function EvidenceRow({
             />
           )}
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          {/* Display-mode chip strip — figure / inline / attached / pack-only. */}
+          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--ds-muted)] mr-1">
+              Show as
+            </span>
+            {(["figure", "inline", "attached", "pack_only"] as const).map((mode) => {
+              const active = (item.displayMode ?? "figure") === mode;
+              const labels: Record<typeof mode, string> = {
+                figure: "Fig (numbered)",
+                inline: "Inline at cursor",
+                attached: "Attachment",
+                pack_only: "Pack only",
+              };
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onUpdate({ displayMode: mode })}
+                  className={
+                    "text-[10.5px] px-2 py-0.5 rounded-full border transition " +
+                    (active
+                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
+                      : "bg-white text-[var(--ds-muted)] border-[var(--ds-line)] hover:border-[var(--ds-subtle)]")
+                  }
+                >
+                  {labels[mode]}
+                </button>
+              );
+            })}
+            {(item.displayMode ?? "figure") === "figure" && (
+              <input
+                type="text"
+                value={item.figureLabel ?? ""}
+                placeholder="auto: Fig N"
+                onChange={(e) => onUpdate({ figureLabel: e.target.value })}
+                title="Custom label (e.g. 'Exhibit A'). Leave blank for auto-numbered Fig N."
+                className="ml-1 text-[11px] px-2 py-0.5 rounded-md border border-[var(--ds-line)] bg-white outline-none focus:border-[var(--ds-ink)] w-[110px]"
+              />
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button size="xs" variant="outline" onClick={onReference}>
               <Link2 className="size-3" />
               Reference in section

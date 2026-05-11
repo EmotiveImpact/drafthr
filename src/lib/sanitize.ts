@@ -52,6 +52,14 @@ const ALLOWED_ATTR = [
   // <img> attributes — alt, src (allowed via data:image/* below), width,
   // height, class + inline style for max-width:100% so screenshots resize.
   "src", "alt", "title", "width", "height", "class", "style",
+  // Custom data-* attributes used by the evidence picker for figure /
+  // attachment references inside the letter body. The exporter resolves
+  // these to fully numbered exhibit labels.
+  "data-fig-id", "data-att-id",
+  // TipTap's TextAlign extension emits style="text-align: …" on <p>/<h*>.
+  // The 'style' allowance above covers that; we also explicitly permit
+  // 'data-text-align' for any future explicit-attribute uses.
+  "data-text-align",
 ];
 
 export function sanitizeLetterHtml(dirty: string): string {
