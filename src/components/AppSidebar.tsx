@@ -249,72 +249,120 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
     );
   }
 
-  const items: { href: string | null; label: string; Icon: typeof LayoutDashboard; tooltip: string; disabled?: boolean }[] = [
+  /**
+   * Three logical groups:
+   *  - PRIMARY: the actions you start every session with (Home / New letter
+   *    / Search). Search at the bottom because it's a fallback when you
+   *    can't find a thing — not the first thing you reach for.
+   *  - WATCH: things that need attention this week (Notifications, then
+   *    Calendar). Notifications first so the badge is the most prominent
+   *    thing on the rail.
+   *  - ARCHIVE: look-back surfaces (Activity, Exported).
+   *
+   * Recent drafts hangs below all three from NavRecentDrafts.
+   */
+  const primary: NavItem[] = [
     { href: prefix, label: "Home", Icon: LayoutDashboard, tooltip: "Dashboard" },
     { href: `${prefix}/new`, label: "New letter", Icon: PlusCircle, tooltip: "Browse letter types" },
-    { href: "/calendar", label: "Calendar", Icon: CalendarDays, tooltip: "Deadlines across all your drafts" },
-    { href: "/exported", label: "Exported", Icon: FileDown, tooltip: "Letters you've finalised" },
-    { href: "/activity", label: "Activity", Icon: ActivityIcon, tooltip: "Audit trail of your drafts" },
-    { href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Deadline reminders & compliance alerts" },
   ];
 
-  return (
-    <SidebarGroup>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((it) => {
-            const showBadge = it.label === "Notifications" && actionable > 0 && top;
-            return (
-              <SidebarMenuItem key={it.label}>
-                {it.href && !it.disabled ? (
-                  <SidebarMenuButton asChild tooltip={it.tooltip} isActive={loc.pathname === it.href}>
-                    <Link to={it.href}>
-                      <it.Icon />
-                      <span>{it.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                ) : (
-                  <SidebarMenuButton
-                    tooltip={it.tooltip}
-                    className="text-muted-foreground cursor-not-allowed"
-                    aria-disabled
-                  >
-                    <it.Icon />
-                    <span>{it.label}</span>
-                  </SidebarMenuButton>
-                )}
-                {showBadge && (
-                  <SidebarMenuBadge
-                    className={cn(
-                      "px-1 text-[10px] text-white",
-                      top === "urgent" ? "bg-rose-500" : "bg-amber-500"
-                    )}
-                  >
-                    {actionable > 9 ? "9+" : actionable}
-                  </SidebarMenuBadge>
-                )}
-              </SidebarMenuItem>
-            );
-          })}
+  const watch: NavItem[] = [
+    { href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Deadline reminders & compliance alerts" },
+    { href: "/calendar", label: "Calendar", Icon: CalendarDays, tooltip: "Deadlines across all your drafts" },
+  ];
 
-          {/* Search opens the Cmd+K palette */}
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              tooltip="Search drafts, letter types, pages (⌘K)"
-              onClick={() => search.setOpen(true)}
-            >
-              <Search />
-              <span>Search</span>
-            </SidebarMenuButton>
-            <SidebarMenuBadge className="border border-letter-rule bg-muted text-muted-foreground px-1 text-[10px]">
-              ⌘K
-            </SidebarMenuBadge>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+  const archive: NavItem[] = [
+    { href: "/activity", label: "Activity", Icon: ActivityIcon, tooltip: "Audit trail of your drafts" },
+    { href: "/exported", label: "Exported", Icon: FileDown, tooltip: "Letters you've finalised" },
+  ];
+
+  const renderItem = (it: NavItem) => {
+    const showBadge = it.label === "Notifications" && actionable > 0 && top;
+    return (
+      <SidebarMenuItem key={it.label}>
+        {it.href && !it.disabled ? (
+          <SidebarMenuButton asChild tooltip={it.tooltip} isActive={loc.pathname === it.href}>
+            <Link to={it.href}>
+              <it.Icon />
+              <span>{it.label}</span>
+            </Link>
+          </SidebarMenuButton>
+        ) : (
+          <SidebarMenuButton
+            tooltip={it.tooltip}
+            className="text-muted-foreground cursor-not-allowed"
+            aria-disabled
+          >
+            <it.Icon />
+            <span>{it.label}</span>
+          </SidebarMenuButton>
+        )}
+        {showBadge && (
+          <SidebarMenuBadge
+            className={cn(
+              "px-1 text-[10px] text-white",
+              top === "urgent" ? "bg-rose-500" : "bg-amber-500"
+            )}
+          >
+            {actionable > 9 ? "9+" : actionable}
+          </SidebarMenuBadge>
+        )}
+      </SidebarMenuItem>
+    );
+  };
+
+  return (
+    <>
+      {/* PRIMARY actions — Home / New letter / Search */}
+      <SidebarGroup>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {primary.map(renderItem)}
+            {/* Search opens the Cmd+K palette. Lives at the bottom of the
+             * primary group rather than its own row so power-users see
+             * it next to their main entry points. */}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Search drafts, letter types, pages (⌘K)"
+                onClick={() => search.setOpen(true)}
+              >
+                <Search />
+                <span>Search</span>
+              </SidebarMenuButton>
+              <SidebarMenuBadge className="border border-letter-rule bg-muted text-muted-foreground px-1 text-[10px]">
+                ⌘K
+              </SidebarMenuBadge>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      {/* WATCH — things that need attention this week */}
+      <SidebarGroup>
+        <SidebarGroupLabel>Watch</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>{watch.map(renderItem)}</SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      {/* ARCHIVE — look-back surfaces */}
+      <SidebarGroup>
+        <SidebarGroupLabel>Archive</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>{archive.map(renderItem)}</SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </>
   );
 }
+
+type NavItem = {
+  href: string | null;
+  label: string;
+  Icon: typeof LayoutDashboard;
+  tooltip: string;
+  disabled?: boolean;
+};
 
 function NavRecentDrafts({ mode }: { mode: Mode | null }) {
   const { isMobile } = useSidebar();
