@@ -36,11 +36,13 @@ import {
   Maximize2,
   Minimize2,
   ArrowUp,
+  ArrowRight,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
 import { exportLetterToPdf } from "@/lib/export/pdf";
 import { exportLetterToDocx } from "@/lib/export/docx";
+import { exportLetterPack } from "@/lib/export/pack";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { BrandMark, AvatarStack } from "@/components/ds";
 import { useProfileStore } from "@/lib/profile";
@@ -49,7 +51,7 @@ import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 
-type ExportFormat = "pdf" | "docx";
+type ExportFormat = "pdf" | "docx" | "pack";
 
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -246,7 +248,8 @@ export function Editor() {
   const doExport = async (format: ExportFormat, attestation?: { reviewedBy: string; reviewedOn: string }) => {
     try {
       if (format === "pdf") await exportLetterToPdf(draft);
-      else await exportLetterToDocx(draft);
+      else if (format === "docx") await exportLetterToDocx(draft);
+      else exportLetterPack(draft, attestation);
       recordExport(draft.id, { format, reviewedBy: attestation?.reviewedBy, reviewedOn: attestation?.reviewedOn });
     } catch (err) {
       alert(
@@ -448,7 +451,11 @@ export function Editor() {
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" disabled={globallyStreaming}>
+                <Button
+                  size="sm"
+                  variant={draft.mode === "employee" ? "outline" : "default"}
+                  disabled={globallyStreaming}
+                >
                   <Download className="size-4 sm:mr-1.5" />
                   <span className="hidden sm:inline">Export</span>
                 </Button>
@@ -456,8 +463,20 @@ export function Editor() {
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => requestExport("pdf")}>Export as PDF</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => requestExport("docx")}>Export as DOCX</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => requestExport("pack")}>Export pack</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            {draft.mode === "employee" && (
+              <Button
+                size="sm"
+                disabled={globallyStreaming}
+                onClick={() => nav(`/editor/${draft.id}/evidence${activeSectionId ? `?section=${activeSectionId}` : ""}`)}
+              >
+                <span className="hidden sm:inline">Next: Evidence</span>
+                <span className="sm:hidden">Evidence</span>
+                <ArrowRight className="size-4 sm:ml-1.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -664,6 +683,10 @@ export function Editor() {
                   onClear={() => updateSection(draft.id, section.id, "")}
                   onShowHistory={() => setHistorySection(section)}
                   onOpenCommentsThread={() => openComments(section.id)}
+                  onOpenEvidenceBinder={() => {
+                    setActiveSectionId(section.id);
+                    nav(`/editor/${draft.id}/evidence?section=${section.id}`);
+                  }}
                   onFocusComment={onFocusComment}
                   commentCount={commentCount(section.id)}
                 />

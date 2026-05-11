@@ -12,6 +12,7 @@ import { Calendar } from "@/routes/Calendar";
 import { Exported } from "@/routes/Exported";
 import { Activity } from "@/routes/Activity";
 import { Notifications } from "@/routes/Notifications";
+import { EvidenceStep } from "@/routes/EvidenceStep";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,6 +58,7 @@ export function App() {
             </Protected>
           }
         />
+        <Route path="/editor/:draftId/evidence" element={<Protected><EvidenceStep /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />

@@ -310,7 +310,7 @@ export const useDraftStore = create<Store>()(
               ...s.drafts,
               [id]: appendTimeline(
                 { ...d, evidence: items },
-                timelineEvent("evidence_updated", "Updated evidence binder", {
+                timelineEvent("evidence_updated", "Updated evidence and attachments", {
                   detail: `${items.length} item${items.length === 1 ? "" : "s"}`,
                 })
               ),

@@ -7,6 +7,7 @@ import {
 } from "@/lib/letters/compliance/register-safety";
 import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
 import { AlertTriangle, AlertCircle, ShieldX, CheckCircle2, ShieldCheck } from "lucide-react";
+import { TemplateQualityInspector } from "./TemplateQualityInspector";
 
 const SEVERITY_COLOR: Record<string, string> = {
   block: "text-rose-900 bg-rose-50 border-rose-300",
@@ -61,6 +62,8 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
             you write — phrasing matters.
           </p>
         </header>
+
+        <TemplateQualityInspector draft={draft} />
 
         {/* Register-safety hits */}
         {safetyHits.length > 0 && (

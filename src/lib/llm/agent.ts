@@ -1,6 +1,7 @@
 import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { captureRuntimeContext, renderRuntimeContextBlock } from "./runtime-context";
+import { evidencePromptBlock } from "@/lib/evidence";
 
 /**
  * System prompt for the right-rail agent.
@@ -78,6 +79,9 @@ DRAFT META:
   - Mode: ${draft.mode} (${draft.mode === "employer" ? "HR / sender" : "employee / sender"})
   - Recipient: ${draft.mode === "employer" ? draft.employee.legalName || "[employee]" : draft.employer.legalName || "[employer]"}
   - Risk class: ${meta.riskClass}${isTribunalBound ? " · TRIBUNAL-BOUND" : ""}${highRisk ? " · COUNSEL REVIEW REQUIRED" : ""}
+
+EVIDENCE AND ATTACHMENTS:
+${evidencePromptBlock(draft)}
 
 ${isTribunalBound ? `TRIBUNAL-BOUND DEFAULTS:
 - This letter may be disclosed in employment-tribunal or court proceedings. Anything in the draft may be used as evidence by the user OR against them.

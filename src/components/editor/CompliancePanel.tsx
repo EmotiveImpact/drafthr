@@ -3,6 +3,7 @@ import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
 import { CheckCircle2, AlertTriangle, AlertCircle, ShieldCheck } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo } from "react";
+import { TemplateQualityInspector } from "./TemplateQualityInspector";
 
 const SEVERITY_LABEL = {
   required: "Required",
@@ -104,6 +105,8 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
             {draft.context.usState ? ` (${draft.context.usState})` : ""} legal patterns. Not a substitute for counsel.
           </p>
         </header>
+
+        <TemplateQualityInspector draft={draft} />
 
         {missingRequired.length > 0 && (
           <RuleSection

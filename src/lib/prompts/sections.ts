@@ -1,6 +1,7 @@
 import type { Draft, Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { getSectionTemplate } from "@/lib/letters/templates";
+import { evidencePromptBlock } from "@/lib/evidence";
 
 /**
  * Build a section-specific user prompt. Pairs with the master system prompt
@@ -29,6 +30,7 @@ export function buildSectionPrompt(
   const sectionFences = LEGAL_FENCES_BY_LETTER[draft.letterType]?.[draft.context.jurisdiction] ?? "";
   const lengthHint = LENGTH_HINTS_BY_SECTION[section.sectionId] ?? "Use the natural length for this section.";
   const dataDump = relevantData(draft);
+  const evidenceDump = evidencePromptBlock(draft, section.id);
 
   const refineBlock = refineInstruction?.trim()
     ? `\n\nUSER REFINEMENT (highest priority — apply on top of everything below; if it conflicts with HARD CONSTRAINTS, explain in [TBD] rather than break a constraint):\n${refineInstruction.trim()}\n`
@@ -66,7 +68,10 @@ LEGAL FENCES (${draft.context.jurisdiction}):
 ${sectionFences}
 
 DATA TO USE:
-${dataDump}${refineBlock}${previousBlock}
+${dataDump}
+
+EVIDENCE TO USE:
+${evidenceDump}${refineBlock}${previousBlock}
 
 Write only the HTML for this section. No preamble, no commentary. Do not echo the example.`;
   }
@@ -86,7 +91,10 @@ LEGAL FENCES (${draft.context.jurisdiction}):
 ${sectionFences}
 
 DATA TO USE:
-${dataDump}${refineBlock}${previousBlock}
+${dataDump}
+
+EVIDENCE TO USE:
+${evidenceDump}${refineBlock}${previousBlock}
 
 Write only the HTML for this section. No preamble, no commentary, no headings unless the section format calls for one.`;
 }

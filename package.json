@@ -1,7 +1,7 @@
 {
   "name": "drafthr",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -36,6 +36,7 @@
     "@sentry/react": "^10.52.0",
     "@sparticuz/chromium-min": "^148.0.0",
     "@tabler/icons-react": "^3.44.0",
+    "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-link": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/extension-table": "^2.11.5",
@@ -57,6 +58,7 @@
     "framer-motion": "^12.38.0",
     "html-to-docx": "^1.8.0",
     "html2pdf.js": "^0.10.2",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.475.0",
     "marked": "^18.0.3",
     "postgres": "^3.4.9",

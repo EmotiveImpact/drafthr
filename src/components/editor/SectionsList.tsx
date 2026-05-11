@@ -66,7 +66,7 @@ type SidebarSection = Draft["sections"][number];
 
 const LABEL_BY_SECTION_ID: Partial<Record<SidebarSection["sectionId"], string>> = {
   header: "Header",
-  recipient_block: "Date & recipient",
+  recipient_block: "Date",
   subject: "Subject",
   salutation: "Salutation",
   opening: "Opening",
@@ -75,27 +75,27 @@ const LABEL_BY_SECTION_ID: Partial<Record<SidebarSection["sectionId"], string>> 
   compensation: "Compensation",
   benefits: "Benefits",
   conditions: "Conditions",
-  next_steps: "Next steps",
-  appeal_rights: "Appeal rights",
+  next_steps: "Next",
+  appeal_rights: "Appeal",
   closing: "Closing",
   signature: "Signature",
   chronology: "Chronology",
-  witnesses: "Evidence",
+  witnesses: "Witnesses",
   statutory_basis: "Legal basis",
   impact: "Impact",
   outcome_sought: "Outcome",
-  evidence_attached: "Evidence",
-  reservation_of_rights: "Rights reserved",
+  evidence_attached: "Attachments",
+  reservation_of_rights: "Rights",
   deadline: "Deadline",
 };
 
 const TITLE_OVERRIDES: [RegExp, string][] = [
   [/^statement that this is/i, "Statement"],
-  [/^request for hearing/i, "Hearing request"],
+  [/^request for hearing/i, "Hearing"],
   [/^request for appeal hearing/i, "Appeal hearing"],
-  [/^protected-characteristic basis/i, "Protected basis"],
+  [/^protected-characteristic basis/i, "Protected"],
   [/^without prejudice/i, "WP header"],
-  [/^reservation of/i, "Rights reserved"],
+  [/^reservation of/i, "Rights"],
   [/^notice of resignation/i, "Resignation notice"],
   [/^effective date of resignation/i, "Effective date"],
   [/^recital of breach/i, "Breach chronology"],
@@ -116,6 +116,9 @@ const TITLE_OVERRIDES: [RegExp, string][] = [
   [/^questions on selection/i, "Selection questions"],
   [/^request for selection scoring/i, "Scoring request"],
   [/^suggestions to avoid/i, "Alternatives"],
+  [/^witnesses? & documents/i, "Witnesses"],
+  [/^impact statement/i, "Impact"],
+  [/^outcome sought/i, "Outcome"],
 ];
 
 function sidebarLabelFor(section: SidebarSection): string {

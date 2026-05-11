@@ -28,4 +28,21 @@ describe("sanitizeLetterHtml", () => {
     const dangerous = sanitizeLetterHtml('<a href="javascript:alert(1)">x</a>');
     expect(dangerous).not.toContain("javascript:");
   });
+
+  it("preserves inline base64 images (pasted screenshots)", () => {
+    const tiny =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=";
+    const html = `<p>Before</p><img src="${tiny}" alt="screenshot" /><p>After</p>`;
+    const out = sanitizeLetterHtml(html);
+    expect(out).toContain("<img");
+    expect(out).toContain('src="data:image/png;base64,');
+    expect(out).toContain('alt="screenshot"');
+  });
+
+  it("strips images with non-image data: URIs", () => {
+    const evil = sanitizeLetterHtml(
+      '<img src="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==" />'
+    );
+    expect(evil).not.toContain("data:text/html");
+  });
 });

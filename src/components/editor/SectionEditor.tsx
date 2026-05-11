@@ -7,15 +7,39 @@ import Table from "@tiptap/extension-table";
 import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
+import Image from "@tiptap/extension-image";
+
+/**
+ * Read an image file into a base64 data URL. Bounded at ~5MB raw to stop
+ * users blowing the localStorage budget on a single huge screenshot. Above
+ * that, the export pack should carry the original file in /evidence/ and the
+ * letter body should reference it instead of embedding.
+ */
+const MAX_EMBED_BYTES = 5 * 1024 * 1024;
+async function readImageAsDataUrl(file: File): Promise<string | null> {
+  if (file.size > MAX_EMBED_BYTES) {
+    alert(
+      `${file.name} is larger than 5 MB. Add it as evidence via the 📎 button instead — that path stores the original file at full quality and references it from the section.`
+    );
+    return null;
+  }
+  return new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
 import { useEffect, useRef, useState } from "react";
 import type { Draft, Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
+import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
+import { linkedEvidenceForSection } from "@/lib/evidence";
 
 type Props = {
   /** Parent draft — needed for the inline CommentPopover. */
@@ -35,6 +59,8 @@ type Props = {
   onFocusComment?: (commentId: string) => void;
   /** Number of unresolved comments on this section (badge count). */
   commentCount?: number;
+  /** Open the evidence and attachments step with this section preselected. */
+  onOpenEvidenceBinder?: () => void;
   isStreaming: boolean;
   active: boolean;
   onFocus: () => void;
@@ -50,11 +76,13 @@ export function SectionEditor({
   onOpenCommentsThread,
   onFocusComment,
   commentCount = 0,
+  onOpenEvidenceBinder,
   isStreaming,
   active,
   onFocus,
 }: Props) {
   const lastWrittenContent = useRef<string>(section.html);
+  const linkedEvidence = linkedEvidenceForSection(draft, section.id);
 
   const editor = useEditor({
     extensions: [
@@ -67,6 +95,19 @@ export function SectionEditor({
       TableHeader,
       TableCell,
       CommentMark,
+      // Inline images — paste/drop a screenshot or click the toolbar 🖼 button
+      // to embed it directly into the section. Stored as base64 in the section
+      // HTML so it travels through PDF + DOCX export untouched. Best-fit for
+      // evidence sections (witnesses, evidence_attached, chronology) where you
+      // need a screenshot or page-clip inline rather than as a separate file.
+      Image.configure({
+        inline: false,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: "section-image",
+          style: "max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0;",
+        },
+      }),
     ],
     content: section.html || "",
     editable: !isStreaming,
@@ -90,6 +131,45 @@ export function SectionEditor({
           }
         }
         return false;
+      },
+      // Paste an image straight from the clipboard (cmd+V after a screenshot)
+      // or drop an image file onto the section. Both flow into the same
+      // base64-embed path that the toolbar button uses.
+      handlePaste(view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of items) {
+          if (item.kind === "file" && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (!file) continue;
+            event.preventDefault();
+            void readImageAsDataUrl(file).then((src) => {
+              if (src) view.dispatch(view.state.tr.replaceSelectionWith(
+                view.state.schema.nodes.image.create({ src, alt: file.name })
+              ));
+            });
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop(view, event) {
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        const file = files[0];
+        if (!file.type.startsWith("image/")) return false;
+        event.preventDefault();
+        const coords = { left: event.clientX, top: event.clientY };
+        const pos = view.posAtCoords(coords);
+        void readImageAsDataUrl(file).then((src) => {
+          if (!src) return;
+          const node = view.state.schema.nodes.image.create({ src, alt: file.name });
+          const tr = pos
+            ? view.state.tr.insert(pos.pos, node)
+            : view.state.tr.replaceSelectionWith(node);
+          view.dispatch(tr);
+        });
+        return true;
       },
     },
   });
@@ -179,6 +259,34 @@ export function SectionEditor({
           )}
         </div>
         <div className="flex items-center gap-0.5">
+          {draft.mode === "employee" && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7 relative"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenEvidenceBinder?.();
+              }}
+              aria-label={
+                linkedEvidence.length > 0
+                  ? `${linkedEvidence.length} linked evidence items`
+                  : "Add evidence to section"
+              }
+              title={
+                linkedEvidence.length > 0
+                  ? `${linkedEvidence.length} linked evidence item${linkedEvidence.length === 1 ? "" : "s"}`
+                  : "Add evidence to this section"
+              }
+            >
+              <FileText className="size-3.5" />
+              {linkedEvidence.length > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                  {linkedEvidence.length}
+                </span>
+              )}
+            </Button>
+          )}
           <CommentPopover
             draft={draft}
             sectionId={section.id}
@@ -246,6 +354,36 @@ export function SectionEditor({
           />
         </div>
       </header>
+      {linkedEvidence.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-letter-rule bg-[var(--ds-surface-2)] px-3 py-1.5 text-[11px] text-[var(--ds-muted)]">
+          <FileText className="size-3.5 shrink-0" />
+          <span className="shrink-0 font-medium text-[var(--ds-body)]">Evidence</span>
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+            {linkedEvidence.slice(0, 3).map((item) => (
+              <span
+                key={item.id}
+                title={item.parsedSummary || item.content || item.filename}
+                className="max-w-[160px] truncate rounded-full bg-[var(--ds-line-2)] px-2 py-0.5"
+              >
+                {item.filename || item.kind}
+              </span>
+            ))}
+            {linkedEvidence.length > 3 && (
+              <span className="shrink-0">+{linkedEvidence.length - 3}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenEvidenceBinder?.();
+            }}
+            className="shrink-0 text-[var(--ds-ink)] hover:underline"
+          >
+            Manage
+          </button>
+        </div>
+      )}
       {active && <EditorToolbar editor={editor} />}
       <div className="px-7 py-5">
         {editor && (

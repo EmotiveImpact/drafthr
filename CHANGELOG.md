@@ -14,6 +14,38 @@ Big rocks still to land — listed for reference, not yet shipped:
 
 ---
 
+## 0.3.0 — 2026-05-11
+
+Evidence and export-pack release. This adds the first real support for tribunal-style source material around a draft, with checks and exports that are useful before a letter is sent.
+
+### Evidence & Attachments
+
+- Added a dedicated post-drafting Evidence & Attachments screen for employee drafts.
+- Evidence items can be typed or uploaded, labelled as email / calendar / document / screenshot / note, and linked to one or more letter sections.
+- The editor now routes through `Next: Evidence` before review/export, keeping the right rail focused on AI, comments, checks, and timeline.
+- Evidence items can be referenced in a section, quoted into a section, or inserted as an attachment list.
+- Section headers show linked-evidence counts and a compact evidence strip, with a one-click path to the evidence step for that exact section.
+- Linked evidence now flows into section generation, whole-letter system prompts, and the right-rail AI agent prompt.
+- Evidence updates are recorded in the draft timeline for auditability.
+
+### Template Quality Inspector
+
+- Added section-by-section template requirement checks that surface hard `MUST` constraints, missing required content, manual-review items, and guardrails.
+- The inspector is visible in the compliance rail and the employee rights/register rail.
+- Compliance rules and template requirements now share one quality report that export packs can reuse.
+
+### Export Pack
+
+- Added an HTML export pack containing the final letter, evidence list, timeline, template quality report, and review checklist.
+- Export packs are logged alongside PDF and DOCX exports.
+- High-risk letters still require counsel-review attestation before any export format, including the pack.
+
+### Versioning
+
+- Bumped package version from `0.2.0` to `0.3.0`.
+
+---
+
 ## 0.2.0 — 2026-05-11
 
 Senior-dev cleanup release. No major UX redesign, but the AI/server internals are now smaller, clearer, and easier to maintain.

@@ -2,7 +2,7 @@
 
 AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, with a right-rail AI agent that proposes section-level edits and a comment thread anchored to the document text. Built on Vite + React 19 + TypeScript, AI SDK v6, and Qwen (`qwen3-max` by default).
 
-**Current version:** `0.2.0`
+**Current version:** `0.3.0`
 
 → **Live design system:** [`/public/design-system.html`](public/design-system.html)
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
@@ -16,10 +16,11 @@ AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, 
 - **Two view modes** — *Edit* (section-by-section) and *Preview* (continuous paper render with the same per-section actions on hover).
 - **Inline comments** — selection-triggered "+ Comment" both in the editor (Tiptap BubbleMenu) and the preview (floating button). Comments are anchored to the document via a custom `CommentMark` Tiptap extension; resolving/deleting strips the highlight.
 - **Right-rail AI agent** — typed AI SDK v6 tool-calling. The agent can propose section rewrites, add named clauses, tighten a section to a word-count target, or produce a counsel-grade summary. Mutating calls stay human-in-the-loop: the user reviews each proposal with an Apply button before it commits, and successful applies push the outcome back to the agent.
+- **Evidence & Attachments step** — after drafting, add typed notes or uploaded files, link each item to the letter sections it supports, then reference, quote, or list those items in the letter before review/export.
 - **Collaborators + invites** — invite people by email + role (editor / reviewer / viewer). Local persistence today; the popover combines the form + roster + share link + a `mailto:` fallback that opens the user's mail client with a prefilled invitation. Avatar stack in the editor topbar opens the same popover.
-- **Compliance checklist** — live per-clause pattern matches against the assembled letter HTML, scored as "N / M satisfied" and broken down by severity (required missing / recommended missing / detected). Tied to the counsel-review status pill in the topbar.
+- **Compliance + template quality inspector** — live per-clause pattern matches plus section-by-section template requirements, including hard "MUST" checks and guardrails. Tied to the counsel-review status pill in the topbar.
 - **Letterhead + signature image uploads** — base64-stored on the profile (so every employer draft auto-picks them up), rendered in Preview, embedded in the PDF + DOCX exports.
-- **Export** — PDF (server Puppeteer with html2pdf fallback) and DOCX (html-to-docx). High-risk letter types gate behind a counsel-review attestation dialog.
+- **Export** — PDF (server Puppeteer with html2pdf fallback), DOCX (html-to-docx), and an HTML export pack bundling the letter, evidence list, timeline, and review checklist. High-risk letter types gate behind a counsel-review attestation dialog.
 - **Cmd+K search** — indexes drafts, letter catalog, section content (with snippets), comments, and route shortcuts.
 
 ## Tech
@@ -32,7 +33,7 @@ AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, 
 | Editor | Tiptap (StarterKit + Link + Underline + Placeholder + Table + custom CommentMark) |
 | AI | AI SDK v6 (`ai@^6`, `@ai-sdk/react@^3`), DashScope International (Qwen) via `@ai-sdk/openai-compatible`, optional Claude via `@ai-sdk/anthropic` |
 | Auth/DB | localStorage today. Clerk (installed) + Neon Postgres planned. |
-| Export | html2pdf.js + html-to-docx for client-side; Puppeteer route for server-side PDF |
+| Export | html2pdf.js + html-to-docx for client-side; Puppeteer route for server-side PDF; local HTML export packs |
 
 ## Running locally
 
@@ -94,6 +95,9 @@ src/
       agent.ts                # agent system prompt
       tools.ts                # client-side clause template metadata
     prompts/                  # buildSystemPrompt / buildSectionPrompt
+    evidence.ts               # evidence filtering + prompt rendering
+    template-quality.ts       # section requirement and compliance quality report
+    timeline.ts               # derived + stored draft activity feed
     store.ts                  # drafts (Zustand persist)
     profile.ts                # user profile (Zustand persist)
     tiptap/comment-mark.ts    # custom Tiptap mark for inline comments
@@ -107,6 +111,7 @@ public/
 
 - **Letter generation = template + LLM.** `buildSectionPrompt` prefers a curated template (statutory anchors, structural scaffold, MUST / MUST NOT constraints, worked example) when available, falling back to a generic instruction. The template addendum is appended to the master system prompt. This is what makes the output consistent across sessions and legally fenced.
 - **AI agent uses SDK-native tool-calling.** Server-side tool schemas live in `server/agent-tools.ts`. The right-rail agent can propose `regenerateSection`, `addClause`, `tightenSection`, and `summariseForCounsel`. Mutating tools are *human-in-the-loop*: no server-side `execute`, so the model's call streams to the client as a `tool-*` part. The user reviews and clicks Apply; the client runs the change and calls `addToolResult` so the model sees the outcome and can continue.
+- **Evidence is scoped before prompting.** Evidence items live on the draft, can be linked to specific section ids, and are filtered into the system, section, and agent prompts so the model sees the right supporting facts without dumping unrelated attachments into every section.
 - **Model selection is centralised.** `server/llm-model.ts` owns the allow-list, env defaults, Qwen/Claude provider construction, and fallback when only one provider key is configured. Browser settings still send a preferred model, but the server validates it.
 - **Persistence is local.** Drafts, comments, collaborators, AI chat history all live in `localStorage` via Zustand `persist`. Multi-device / shared collaboration is the next big rock.
 

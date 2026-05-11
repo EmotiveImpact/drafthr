@@ -36,7 +36,7 @@ export function Exported() {
       <PageHeader
         crumbs={[{ label: "Exported" }]}
         title="Sent letters"
-        lede="Letters you've finalised and exported as PDF or DOCX. Re-open any draft to issue a new export — each one is logged."
+        lede="Letters you've finalised and exported as PDF, DOCX, or an evidence pack. Re-open any draft to issue a new export — each one is logged."
       />
 
       <DataTable

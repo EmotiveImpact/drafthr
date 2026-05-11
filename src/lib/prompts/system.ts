@@ -2,6 +2,7 @@ import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { buildEmployeeRightsBlock } from "./employee/rights-preservation";
 import { getTemplate } from "@/lib/letters/templates";
+import { evidencePromptBlock } from "@/lib/evidence";
 import {
   captureRuntimeContext,
   renderRuntimeContextBlock,
@@ -93,6 +94,9 @@ LETTER CONTEXT:
 - Issue date: ${draft.context.issueDate}
 - Confidentiality: ${draft.context.confidentiality}
 - Delivery: ${draft.context.deliveryMethod}
+
+EVIDENCE AND ATTACHMENTS:
+${evidencePromptBlock(draft)}
 
 GLOBAL OUTPUT RULES:
 - Respond in flowing paragraphs. Do NOT use bullet points, numbered lists, or section headers unless explicitly requested for that section.

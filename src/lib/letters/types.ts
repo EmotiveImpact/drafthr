@@ -176,7 +176,11 @@ export type EvidenceItem = {
   id: string;
   kind: "email" | "calendar" | "document" | "screenshot" | "note";
   filename?: string;
-  /** Free-text content (or summary) the user supplied. Stored client-side; never sent to LLM unless includeVerbatim=true. */
+  mimeType?: string;
+  fileDataUrl?: string;
+  /** Section ids this evidence supports. Empty/undefined means general draft evidence. */
+  sectionIds?: string[];
+  /** Free-text summary or key text supplied by the user. Sent to the LLM as evidence context; includeVerbatim controls exact-content labelling. */
   content: string;
   parsedSummary?: string;
   uploadedAt: number;
@@ -231,7 +235,7 @@ export type LetterAnswers = Record<string, unknown>;
 
 export type ExportEvent = {
   id: string;
-  format: "pdf" | "docx";
+  format: "pdf" | "docx" | "pack";
   exportedAt: number;
   reviewedBy?: string;
   reviewedOn?: string;
