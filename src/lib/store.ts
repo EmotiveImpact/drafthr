@@ -12,6 +12,8 @@ import type {
   ExportEvent,
   LetterAnswers,
   LetterTypeId,
+  Matter,
+  MatterColor,
   Mode,
   Section,
   SectionVersion,
@@ -27,6 +29,43 @@ import {
 
 type Store = {
   drafts: Record<string, Draft>;
+  /**
+   * Named Matters (case / project / hiring round) that bundle related
+   * drafts. See Draft.matterId for the join. Matters are global to the
+   * draft store — they're not per-draft state.
+   */
+  matters: Record<string, Matter>;
+  createMatter: (input: {
+    name: string;
+    mode: Mode;
+    color: MatterColor;
+    description?: string;
+    primaryName?: string;
+    primaryContext?: string;
+    deadlineISO?: string;
+    deadlineLabel?: string;
+    counselReviewed?: boolean;
+  }) => string;
+  updateMatter: (id: string, patch: Partial<Matter>) => void;
+  closeMatter: (id: string) => void;
+  archiveMatter: (id: string) => void;
+  deleteMatter: (id: string) => void;
+  /** Set or clear a draft's matter membership. Pass null to remove. */
+  assignDraftToMatter: (draftId: string, matterId: string | null) => void;
+  /** Promote an auto-group (set of drafts sharing a person/employer) into
+   * a named matter in one step. Creates the matter + bulk-assigns the
+   * drafts + returns the new matter id. */
+  upgradeGroupToMatter: (input: {
+    name: string;
+    mode: Mode;
+    color: MatterColor;
+    description?: string;
+    primaryName?: string;
+    primaryContext?: string;
+    deadlineISO?: string;
+    deadlineLabel?: string;
+    draftIds: string[];
+  }) => string;
   createDraft: (letterType: LetterTypeId, answers: LetterAnswers, mode?: Mode) => string;
   updateAnswers: (id: string, answers: LetterAnswers) => void;
   updateSection: (id: string, sectionId: string, html: string) => void;
@@ -94,8 +133,134 @@ const PROTECTED_DEADLINE_BASIS_US =
 
 export const useDraftStore = create<Store>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       drafts: {},
+      matters: {},
+
+      /* ----------------------------------------------------------------
+       * Matters lifecycle
+       *
+       * Pure record updates — no draft-side cascading on delete (we keep
+       * orphan drafts intact so the user can re-assign). archive vs delete:
+       *   archive() flips status to "archived" — still listed in the
+       *     index under a "Show archived" toggle, drafts retain matterId.
+       *   delete() removes the matter entirely AND clears matterId from
+       *     every draft that pointed at it.
+       * ---------------------------------------------------------------*/
+
+      createMatter: (input) => {
+        const id = uid("matter");
+        const now = Date.now();
+        const matter: Matter = {
+          id,
+          name: input.name.trim(),
+          mode: input.mode,
+          status: "active",
+          color: input.color,
+          description: input.description,
+          parties: input.primaryName
+            ? { primaryName: input.primaryName, primaryContext: input.primaryContext }
+            : undefined,
+          deadlineISO: input.deadlineISO,
+          deadlineLabel: input.deadlineLabel,
+          counselReviewed: input.counselReviewed ?? false,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ matters: { ...s.matters, [id]: matter } }));
+        return id;
+      },
+
+      updateMatter: (id, patch) =>
+        set((s) => {
+          const m = s.matters[id];
+          if (!m) return s;
+          return {
+            matters: { ...s.matters, [id]: { ...m, ...patch, updatedAt: Date.now() } },
+          };
+        }),
+
+      closeMatter: (id) =>
+        set((s) => {
+          const m = s.matters[id];
+          if (!m) return s;
+          return {
+            matters: { ...s.matters, [id]: { ...m, status: "closed", updatedAt: Date.now() } },
+          };
+        }),
+
+      archiveMatter: (id) =>
+        set((s) => {
+          const m = s.matters[id];
+          if (!m) return s;
+          return {
+            matters: {
+              ...s.matters,
+              [id]: {
+                ...m,
+                status: "archived",
+                archivedAt: Date.now(),
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      deleteMatter: (id) =>
+        set((s) => {
+          if (!s.matters[id]) return s;
+          // Pull the matter out and clear matterId from any draft pointing at it.
+          const { [id]: _removed, ...remaining } = s.matters;
+          const drafts: Record<string, Draft> = {};
+          for (const [draftId, d] of Object.entries(s.drafts)) {
+            drafts[draftId] = d.matterId === id ? { ...d, matterId: undefined } : d;
+          }
+          return { matters: remaining, drafts };
+        }),
+
+      assignDraftToMatter: (draftId, matterId) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [draftId]: { ...d, matterId: matterId ?? undefined, updatedAt: Date.now() },
+            },
+          };
+        }),
+
+      upgradeGroupToMatter: (input) => {
+        const id = uid("matter");
+        const now = Date.now();
+        const matter: Matter = {
+          id,
+          name: input.name.trim(),
+          mode: input.mode,
+          status: "active",
+          color: input.color,
+          description: input.description,
+          parties: input.primaryName
+            ? { primaryName: input.primaryName, primaryContext: input.primaryContext }
+            : undefined,
+          deadlineISO: input.deadlineISO,
+          deadlineLabel: input.deadlineLabel,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => {
+          const drafts: Record<string, Draft> = { ...s.drafts };
+          for (const did of input.draftIds) {
+            const d = drafts[did];
+            if (d) drafts[did] = { ...d, matterId: id, updatedAt: now };
+          }
+          return { matters: { ...s.matters, [id]: matter }, drafts };
+        });
+        // Suppress unused-var on get() — kept available for future enhancements
+        // (e.g. deriving deadlineISO from the most-recent draft if user omitted).
+        void get;
+        return id;
+      },
 
       createDraft: (letterType, answers, mode) => {
         const id = uid("draft");

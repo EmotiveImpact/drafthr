@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import {
   Badge,
   Box,
@@ -37,6 +37,16 @@ import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { PageHeader, DataTable, StatusDot, type StatusTone } from "@/components/ds";
+import {
+  activeMatters,
+  draftsInMatter,
+  groupDraftsForAutoMatters,
+  MATTER_COLOR_CLASSES,
+  matterInitial,
+  type AutoGroup,
+} from "@/lib/matters";
+import { UpgradeToMatterDialog } from "@/components/UpgradeToMatterDialog";
+import { ArrowRight, FolderPlus, FolderOpen } from "lucide-react";
 
 const RISK_BADGE: Record<string, "green" | "amber" | "red"> = {
   low: "green",
@@ -60,6 +70,7 @@ const STATUS_TONE: Record<string, StatusTone> = {
 export function Home({ mode }: { mode: Mode }) {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
+  const matters = useDraftStore((s) => s.matters);
   const deleteDraft = useDraftStore((s) => s.deleteDraft);
   const profile = useProfileStore((s) => s.profile);
 
@@ -70,6 +81,23 @@ export function Home({ mode }: { mode: Mode }) {
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [drafts, mode]
   );
+
+  // Top 3 active matters for this mode — shown as quick-access cards
+  // above the autoGroups / drafts table.
+  const topMatters = useMemo(
+    () => activeMatters(Object.values(matters), mode).slice(0, 3),
+    [matters, mode]
+  );
+
+  // Unaffiliated drafts grouped by employer (employee mode) or person
+  // (HR mode). Only show groups with 2+ letters — single-letter groups
+  // aren't worth the visual weight.
+  const autoGroups = useMemo(
+    () => groupDraftsForAutoMatters(myDrafts, mode).filter((g) => g.drafts.length >= 2),
+    [myDrafts, mode]
+  );
+
+  const [upgradeGroup, setUpgradeGroup] = useState<AutoGroup | null>(null);
 
   const stats = useMemo(() => deriveStats(myDrafts), [myDrafts]);
   const deadlines = useMemo(() => deriveDeadlines(myDrafts), [myDrafts]);
@@ -127,6 +155,86 @@ export function Home({ mode }: { mode: Mode }) {
 
       {/* Drafts table + deadlines */}
       <Grid columns={{ initial: "1", lg: "3" }} gap="4" mb="5">
+        {/* Matters quick-access + auto-groups — sits above the legacy
+         * drafts table. Renders nothing if there are no matters AND no
+         * auto-groups, so the home doesn't grow vertically for users
+         * with one or two drafts. */}
+        {(topMatters.length > 0 || autoGroups.length > 0) && (
+          <Box gridColumn={{ lg: "span 2" }} mb="3">
+            {topMatters.length > 0 && (
+              <Card size="2" className="mb-3">
+                <Flex justify="between" align="center" mb="2">
+                  <Heading size="3">Matters</Heading>
+                  <Link
+                    to="/matters"
+                    className="text-[12px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
+                  >
+                    See all →
+                  </Link>
+                </Flex>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                  {topMatters.map((m) => {
+                    const matterDrafts = draftsInMatter(myDrafts, m.id);
+                    const colors = MATTER_COLOR_CLASSES[m.color];
+                    return (
+                      <Link
+                        key={m.id}
+                        to={`/matters/${m.id}`}
+                        className="flex items-start gap-2 p-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:border-[var(--ds-subtle)] hover:shadow-sm transition"
+                      >
+                        <div
+                          className={`size-8 rounded-md grid place-items-center text-white font-semibold text-[13px] shrink-0 ${colors.swatch}`}
+                          style={{ fontFamily: "var(--font-serif)" }}
+                        >
+                          {matterInitial(m)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-[var(--ds-ink)] text-[13px] truncate">
+                            {m.name}
+                          </div>
+                          <div className="text-[11px] text-[var(--ds-muted)]">
+                            {matterDrafts.length} letter{matterDrafts.length === 1 ? "" : "s"}
+                            {m.deadlineISO && (() => {
+                              const days = daysUntilDateOnly(m.deadlineISO);
+                              return ` · ${days < 0 ? `+${Math.abs(days)}d past` : `${days}d to ${m.deadlineLabel ?? "deadline"}`}`;
+                            })()}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {autoGroups.length > 0 && (
+              <Card size="2">
+                <Flex justify="between" align="center" mb="2">
+                  <Box>
+                    <Heading size="3">
+                      Grouped by {mode === "employer" ? "person" : "employer"}
+                    </Heading>
+                    <Text size="1" color="gray" as="p" mt="1" className="leading-relaxed">
+                      Letters clustered automatically. Promote a group to a named Matter for deadlines + counsel-review chips.
+                    </Text>
+                  </Box>
+                </Flex>
+                <Box mt="2">
+                  {autoGroups.slice(0, 4).map((group) => (
+                    <AutoGroupRow
+                      key={group.key}
+                      group={group}
+                      mode={mode}
+                      onOpen={(draftId) => nav(`/editor/${draftId}`)}
+                      onUpgrade={() => setUpgradeGroup(group)}
+                    />
+                  ))}
+                </Box>
+              </Card>
+            )}
+          </Box>
+        )}
+
         <Box gridColumn={{ lg: "span 2" }}>
           <Card size="2">
             <Flex justify="between" align="center" mb="2">
@@ -336,6 +444,81 @@ export function Home({ mode }: { mode: Mode }) {
           })}
         </Grid>
       </Box>
+
+      {/* Upgrade-to-Matter dialog. Mounts at root so it can overlay
+       * everything. Opens when the user clicks "Make this a Matter →"
+       * on any AutoGroupRow above. */}
+      <UpgradeToMatterDialog
+        group={upgradeGroup}
+        mode={mode}
+        open={!!upgradeGroup}
+        onOpenChange={(open) => {
+          if (!open) setUpgradeGroup(null);
+        }}
+      />
+    </Box>
+  );
+}
+
+/* ============================================================================
+ * Auto-group row — one bucket of drafts that share a primary party.
+ * Click anywhere on the row → open most recent draft. Click the
+ * "Make this a Matter →" chip → upgrade dialog opens.
+ * ==========================================================================*/
+
+function AutoGroupRow({
+  group,
+  mode,
+  onOpen,
+  onUpgrade,
+}: {
+  group: AutoGroup;
+  mode: Mode;
+  onOpen: (draftId: string) => void;
+  onUpgrade: () => void;
+}) {
+  const mostRecent = group.drafts.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  return (
+    <Box className="border-t border-[var(--ds-line-2)] py-2 first:border-t-0 first:pt-0">
+      <Flex justify="between" align="center" gap="2" wrap="wrap">
+        <Box className="min-w-0">
+          <Flex align="center" gap="2">
+            <FolderOpen className="size-3.5 text-[var(--ds-muted)]" />
+            <Text size="2" weight="medium" className="text-[var(--ds-ink)]">
+              {group.primaryName}
+            </Text>
+            {group.primaryContext && (
+              <Text size="1" color="gray" className="hidden sm:inline">
+                · {group.primaryContext}
+              </Text>
+            )}
+          </Flex>
+          <Text size="1" color="gray" as="p" mt="1" className="leading-relaxed">
+            {group.drafts.length} letter{group.drafts.length === 1 ? "" : "s"} ·{" "}
+            most recent {timeAgo(mostRecent.updatedAt)}
+            {mode === "employer"
+              ? " · related to this employee"
+              : " · related to this employer"}
+          </Text>
+        </Box>
+        <Flex gap="2" align="center">
+          <button
+            type="button"
+            onClick={onUpgrade}
+            className="text-[11px] font-medium text-[var(--ds-blue-fg)] bg-[var(--ds-blue-bg)] px-2 py-1 rounded-md hover:bg-[var(--ds-blue-fg)] hover:text-white transition inline-flex items-center gap-1"
+          >
+            <FolderPlus className="size-3" />
+            Make this a Matter
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpen(mostRecent.id)}
+            className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
+          >
+            Open latest <ArrowRight className="size-3" />
+          </button>
+        </Flex>
+      </Flex>
     </Box>
   );
 }

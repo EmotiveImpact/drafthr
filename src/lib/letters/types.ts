@@ -418,6 +418,62 @@ export type Draft = {
   aiChat?: AIChatMessage[];
   /** Append-only audit trail for high-signal draft events. */
   timeline?: DraftTimelineEvent[];
+  /** Optional named Matter (case / project / hiring round) this draft belongs to.
+   * undefined = unaffiliated; appears in auto-groups on Home until promoted. */
+  matterId?: string;
   createdAt: number;
   updatedAt: number;
+};
+
+/* ============================================================================
+ * Matters — named containers for related drafts
+ *
+ * A Matter is a discrete case / workstream that bundles letters that belong
+ * together: a discrimination claim, a PIP, a hiring round, a redundancy
+ * consultation. Auto-grouping covers the simple case (single user + one
+ * employer / one employee); Matters give the explicit named-case-with-
+ * deadline structure when the workstream gets complex.
+ *
+ * Both modes use Matters. Differences:
+ *   - Employee mode: matter typically corresponds to ONE employer (the
+ *     primaryName is the employer's legal name).
+ *   - Employer mode: matter typically corresponds to ONE employee or one
+ *     hiring round (primaryName is the employee, or "Spring 2026 hires").
+ *
+ * Drafts join via Draft.matterId. A draft can be in zero or one matter.
+ * ==========================================================================*/
+
+export type MatterStatus = "active" | "closed" | "archived";
+
+/** Swatch colour key for sidebar dot + matter card hero. */
+export type MatterColor = "red" | "amber" | "blue" | "violet" | "green" | "slate";
+
+export type Matter = {
+  id: string;
+  /** Human-readable case / project name. E.g. "Acme discrimination 2026". */
+  name: string;
+  /** Mode is locked at creation — a matter belongs to either HR drafts or
+   * employee drafts but never crosses. Matches Draft.mode. */
+  mode: Mode;
+  status: MatterStatus;
+  color: MatterColor;
+  /** Optional free-text descriptor. */
+  description?: string;
+  /** Cached party context for cheap display. Source of truth is each
+   * draft's employer/employee block — this is derived. */
+  parties?: {
+    /** In HR mode: the employee. In employee mode: the employer. */
+    primaryName?: string;
+    /** Optional department / role / context. */
+    primaryContext?: string;
+  };
+  /** Optional deadline (ISO date) for the countdown chip. */
+  deadlineISO?: string;
+  /** What the deadline represents in plain English. */
+  deadlineLabel?: string;
+  /** Counsel-reviewed flag — surfaces a chip on the matter hero. */
+  counselReviewed?: boolean;
+  createdAt: number;
+  updatedAt: number;
+  archivedAt?: number;
 };

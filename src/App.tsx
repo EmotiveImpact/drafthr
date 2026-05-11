@@ -14,6 +14,8 @@ import { Activity } from "@/routes/Activity";
 import { Notifications } from "@/routes/Notifications";
 import { EvidenceStep } from "@/routes/EvidenceStep";
 import { ReviewStep } from "@/routes/ReviewStep";
+import { MattersIndex } from "@/routes/MattersIndex";
+import { MatterDetail } from "@/routes/MatterDetail";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -61,6 +63,8 @@ export function App() {
         />
         <Route path="/editor/:draftId/evidence" element={<Protected><EvidenceStep /></Protected>} />
         <Route path="/editor/:draftId/review" element={<Protected><ReviewStep /></Protected>} />
+        <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />
+        <Route path="/matters/:matterId" element={<Protected><MatterDetail /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />

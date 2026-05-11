@@ -48,7 +48,12 @@ import {
   FileDown,
   Activity as ActivityIcon,
   Bell,
+  FolderOpen,
+  ChevronDown,
+  FileText,
 } from "lucide-react";
+import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
+import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -352,9 +357,120 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
           <SidebarMenu>{archive.map(renderItem)}</SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
+
+      {/* MATTERS — named cases. Parent label is clickable → /matters
+       *   sub-items are each matter; the active matter's letters expand
+       *   inline below it. */}
+      <NavMatters mode={mode!} />
     </>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Matters group                                                      */
+/* ------------------------------------------------------------------ */
+
+function NavMatters({ mode }: { mode: Mode }) {
+  const loc = useLocation();
+  const matters = useDraftStore((s) => s.matters);
+  const drafts = useDraftStore((s) => s.drafts);
+
+  const allMatters = activeMatters(Object.values(matters), mode);
+  const allDrafts = Object.values(drafts);
+
+  const onIndexPage = loc.pathname === "/matters";
+  const activeMatterId = loc.pathname.startsWith("/matters/")
+    ? loc.pathname.slice("/matters/".length)
+    : null;
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="flex items-center gap-1">
+        <Link
+          to="/matters"
+          className={cn(
+            "flex items-center gap-1.5 px-1 py-0.5 -mx-1 rounded hover:text-sidebar-foreground transition",
+            onIndexPage && "text-sidebar-foreground font-semibold"
+          )}
+        >
+          <FolderOpen className="size-3" />
+          <span>Matters</span>
+        </Link>
+        <span className="ml-auto text-[10px] font-mono text-muted-foreground">
+          {allMatters.length}
+        </span>
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {allMatters.length === 0 ? (
+            <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
+              <div className="px-2 py-1 text-[11px] text-muted-foreground italic">
+                None yet. Promote a Home group →
+              </div>
+            </SidebarMenuItem>
+          ) : (
+            allMatters.map((m) => {
+              const matterHref = `/matters/${m.id}`;
+              const isActive = activeMatterId === m.id;
+              const matterDrafts = draftsInMatter(allDrafts, m.id);
+              return (
+                <div key={m.id}>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={m.name}
+                      isActive={isActive}
+                    >
+                      <Link to={matterHref}>
+                        <span
+                          className={cn(
+                            "size-2 rounded-full shrink-0",
+                            MATTER_COLOR_CLASSES[m.color].dot
+                          )}
+                        />
+                        <span className="truncate">{m.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {/* Inline letters for the active matter — Notion-tree pattern. */}
+                  {isActive && matterDrafts.length > 0 && (
+                    <div className="ml-3 pl-2 border-l border-sidebar-border group-data-[collapsible=icon]:hidden">
+                      {matterDrafts.map((d) => {
+                        const href = `/editor/${d.id}`;
+                        const meta = getLetterMeta(d.letterType);
+                        return (
+                          <SidebarMenuItem key={d.id}>
+                            <SidebarMenuButton
+                              asChild
+                              size="sm"
+                              isActive={loc.pathname === href}
+                              tooltip={meta.title}
+                            >
+                              <Link to={href}>
+                                <FileText className="size-3 text-muted-foreground" />
+                                <span className="truncate text-[12px]">{meta.shortTitle}</span>
+                              </Link>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+// Mark ChevronDown as used (reserved for future expand/collapse on
+// individual matter rows). The current implementation auto-expands the
+// active matter only, but the chevron will appear when we add per-row
+// expand state.
+void ChevronDown;
 
 type NavItem = {
   href: string | null;
