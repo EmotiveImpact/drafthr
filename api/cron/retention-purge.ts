@@ -16,7 +16,7 @@ import { drafts } from "../../server/db/schema";
 
 export const config = { runtime: "nodejs" };
 
-export default async function handler(req: Request): Promise<Response> {
+export async function GET(req: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const auth = req.headers.get("authorization");

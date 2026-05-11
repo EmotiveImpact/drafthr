@@ -93,11 +93,7 @@ function buildModel(requestedModel?: string) {
   return qwen(modelName);
 }
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
-  }
-
+export async function POST(req: Request): Promise<Response> {
   let body: DraftRequest;
   try {
     body = (await req.json()) as DraftRequest;

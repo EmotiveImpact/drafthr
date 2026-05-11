@@ -46,11 +46,7 @@ const A4_CSS = `
   strong { font-weight: 600; }
 `;
 
-export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
-  }
-
+export async function POST(req: Request): Promise<Response> {
   let body: ExportRequest;
   try {
     body = (await req.json()) as ExportRequest;

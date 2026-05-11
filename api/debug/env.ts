@@ -23,7 +23,7 @@ const KEYS = [
   "NODE_ENV",
 ];
 
-export default async function handler(_req: Request): Promise<Response> {
+export function GET(): Response {
   const report: Record<string, string> = {};
   for (const k of KEYS) {
     const v = process.env[k];
