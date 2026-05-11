@@ -350,9 +350,9 @@ export function Editor() {
            * canvas centre (not the viewport centre). The main topbar spans the
            * full viewport, while the secondary toolbar (where Edit/Preview
            * lives) is nested inside <main>, which is sandwiched between the
-           * 200px sections rail and the 380px right rail. To make the title
+           * 232px sections rail and the 380px right rail. To make the title
            * stack vertically with Edit/Preview we shift it by
-           * (leftRail − rightRail) / 2 = (200 − 380) / 2 = −90px on lg+.
+           * (leftRail - rightRail) / 2 = (232 - 380) / 2 = -74px on lg+.
            * Focus mode collapses both rails so the canvas fills the viewport,
            * which means the title should fall back to true centre. On smaller
            * screens the rails are drawers and canvas is full-width, so the
@@ -360,7 +360,7 @@ export function Editor() {
           <div
             className={
               "absolute -translate-x-1/2 flex items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none " +
-              (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-90px)]")
+              (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-74px)]")
             }
           >
             <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate pointer-events-auto">
@@ -472,14 +472,15 @@ export function Editor() {
       </header>
 
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers.
-       * Apple-minimal: left rail is 200px (was 240). In focus mode both rails
+       * Apple-minimal: left rail has enough room for the outline labels while
+       * keeping the writing canvas dominant. In focus mode both rails
        * collapse and the canvas takes the full width. */}
       <div
         className={
           "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
           (focusMode
             ? "lg:grid-cols-1"
-            : "lg:grid-cols-[200px_minmax(0,1fr)_380px]")
+            : "lg:grid-cols-[232px_minmax(0,1fr)_380px]")
         }
       >
         <aside
@@ -488,7 +489,7 @@ export function Editor() {
             (focusMode
               ? "hidden"
               : showSidebar
-              ? "absolute inset-y-0 left-0 z-40 w-[260px] shadow-xl lg:static lg:shadow-none lg:w-auto"
+              ? "absolute inset-y-0 left-0 z-40 w-[280px] shadow-xl lg:static lg:shadow-none lg:w-auto"
               : "hidden lg:flex")
           }
         >

@@ -295,6 +295,37 @@ export type AIChatMessage = {
   streaming?: boolean;
 };
 
+export type DraftTimelineEventKind =
+  | "created"
+  | "details_updated"
+  | "sections_updated"
+  | "section_generated"
+  | "without_prejudice_updated"
+  | "evidence_updated"
+  | "comment_added"
+  | "comment_resolved"
+  | "comment_deleted"
+  | "collaborator_invited"
+  | "collaborator_removed"
+  | "collaborator_role_updated"
+  | "ai_message"
+  | "ai_applied"
+  | "ai_cleared"
+  | "exported"
+  | "counsel_review";
+
+export type DraftTimelineEvent = {
+  id: string;
+  kind: DraftTimelineEventKind;
+  createdAt: number;
+  title: string;
+  detail?: string;
+  sectionId?: string;
+  sectionTitle?: string;
+  actorName?: string;
+  meta?: Record<string, string | number | boolean | null | undefined>;
+};
+
 /**
  * A comment on a draft. Threaded via parentId — top-level comments are
  * anchored to a section; replies are nested under another comment.
@@ -338,6 +369,8 @@ export type Draft = {
   comments?: Comment[];
   /** Persisted AI chat thread for this draft. */
   aiChat?: AIChatMessage[];
+  /** Append-only audit trail for high-signal draft events. */
+  timeline?: DraftTimelineEvent[];
   createdAt: number;
   updatedAt: number;
 };

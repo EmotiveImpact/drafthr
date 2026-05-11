@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { ShieldCheck, Scale, MessageSquare, Wand2 } from "lucide-react";
+import { Clock3, ShieldCheck, Scale, MessageSquare, Wand2 } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { CompliancePanel } from "./CompliancePanel";
 import { EmployeeRail } from "./EmployeeRail";
 import { CommentsPanel } from "./CommentsPanel";
 import { AIPanel } from "./AIPanel";
+import { TimelinePanel } from "./TimelinePanel";
+import { buildDraftTimeline } from "@/lib/timeline";
 
-export type RightRailTab = "compliance" | "ai" | "comments";
+export type RightRailTab = "compliance" | "ai" | "comments" | "timeline";
 
 type Tab = RightRailTab;
 
@@ -45,6 +47,7 @@ export function RightRail({
   };
   const unresolvedCommentsCount = (draft.comments ?? []).filter((c) => !c.resolved).length;
   const aiMessageCount = (draft.aiChat ?? []).length;
+  const timelineCount = buildDraftTimeline(draft).length;
   const isEmployee = draft.mode === "employee";
   const ComplianceIcon = isEmployee ? Scale : ShieldCheck;
   const complianceLabel = isEmployee ? "Rights" : "Compliance";
@@ -71,6 +74,13 @@ export function RightRail({
           badge={unresolvedCommentsCount > 0 ? unresolvedCommentsCount : undefined}
         />
         <RailTab
+          active={tab === "timeline"}
+          onClick={() => setTab("timeline")}
+          icon={<Clock3 className="size-3.5" />}
+          label="Timeline"
+          badge={timelineCount > 0 ? timelineCount : undefined}
+        />
+        <RailTab
           active={tab === "compliance"}
           onClick={() => setTab("compliance")}
           icon={<ComplianceIcon className="size-3.5" />}
@@ -86,6 +96,7 @@ export function RightRail({
             onPendingCommentConsumed={onPendingCommentConsumed}
           />
         )}
+        {tab === "timeline" && <TimelinePanel draft={draft} />}
         {tab === "compliance" && (isEmployee ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />)}
       </div>
     </div>

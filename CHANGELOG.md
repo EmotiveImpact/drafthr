@@ -11,7 +11,29 @@ Big rocks still to land — listed for reference, not yet shipped:
 - Real-time presence / cursors on shared drafts.
 - Onboarding walkthrough on first-run.
 - Test coverage for the new design-system primitives, AIPanel, RefinePopover, InvitePopover, EditDetailsSheet.
-- Tool-call streaming for additional tools beyond `regenerateSection` (e.g. `addClause`, `summariseForCounsel`).
+
+---
+
+## 0.2.0 — 2026-05-11
+
+Senior-dev cleanup release. No major UX redesign, but the AI/server internals are now smaller, clearer, and easier to maintain.
+
+### AI/server architecture cleanup
+
+- Centralised model allow-listing, provider fallback, and provider client construction in `server/llm-model.ts`.
+- Added resolver tests covering allow-listed requests, `LLM_PROVIDER=claude`, env fallback, and missing-provider-key fallback (`server/llm-model.test.ts`).
+- Moved server-side AI tool schemas into `server/agent-tools.ts`, shared by the Vercel `/api/agent` function and the Vite dev proxy.
+- Slimmed `api/draft.ts`, `api/agent.ts`, and `server/proxy.ts` so they focus on request parsing and streaming instead of duplicating model/tool setup.
+
+### Client bundle cleanup
+
+- Reduced `src/lib/llm/tools.ts` to client-only clause template metadata and `ClauseType` definitions.
+- Removed AI SDK server tool/schema imports from the browser path.
+- Production build output now shows a smaller `ai-sdk` chunk after the split.
+
+### Versioning
+
+- Bumped package version from `0.1.0` to `0.2.0`.
 
 ---
 

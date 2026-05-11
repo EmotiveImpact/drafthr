@@ -2,28 +2,27 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Box, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import {
+  Bot,
   FilePlus2,
   FileEdit,
   RotateCw,
   ShieldCheck,
   FileDown,
   Activity as ActivityIcon,
+  MessageSquare,
+  UserPlus,
 } from "lucide-react";
 import { PageHeader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft } from "@/lib/letters/types";
-import { parseDateOnly } from "@/lib/date-only";
+import { buildDraftTimeline, type DraftTimelineItem } from "@/lib/timeline";
 
-type Event = {
-  ts: number;
+type Event = DraftTimelineItem & {
   draftId: string;
   draftLabel: string;
   mode: "employer" | "employee";
-  kind: "created" | "regenerated" | "exported" | "counsel_review" | "updated";
-  description: string;
-  meta?: string;
 };
 
 export function Activity() {
@@ -36,78 +35,23 @@ export function Activity() {
     const list = Object.values(drafts).filter((d) => (role ? d.mode === role : true));
     for (const d of list) {
       const label = safeMeta(d.letterType)?.shortTitle ?? d.letterType.replace(/_/g, " ");
-
-      out.push({
-        ts: d.createdAt,
-        draftId: d.id,
-        draftLabel: label,
-        mode: d.mode,
-        kind: "created",
-        description: `Created ${label}`,
-        meta: d.context.jurisdiction,
-      });
-
-      for (const sec of d.sections) {
-        sec.versions.forEach((v, i) => {
-          if (i === 0) return;
-          out.push({
-            ts: v.createdAt,
-            draftId: d.id,
-            draftLabel: label,
-            mode: d.mode,
-            kind: "regenerated",
-            description: `Regenerated "${sec.title}"`,
-            meta: `v${i + 1}`,
-          });
-        });
-      }
-
-      const review = (d.answers as Record<string, unknown>)._counselReview as
-        | { reviewedBy?: string; reviewedOn?: string }
-        | undefined;
-      if (review?.reviewedBy && review.reviewedOn) {
+      for (const event of buildDraftTimeline(d)) {
         out.push({
-          ts: parseDateOnly(review.reviewedOn)?.getTime() ?? d.updatedAt,
+          ...event,
           draftId: d.id,
           draftLabel: label,
           mode: d.mode,
-          kind: "counsel_review",
-          description: `Counsel review attested by ${review.reviewedBy}`,
-          meta: review.reviewedOn,
-        });
-      }
-
-      for (const ex of d.exports ?? []) {
-        out.push({
-          ts: ex.exportedAt,
-          draftId: d.id,
-          draftLabel: label,
-          mode: d.mode,
-          kind: "exported",
-          description: `Exported as ${ex.format.toUpperCase()}`,
-          meta: ex.reviewedBy ? `attested by ${ex.reviewedBy}` : undefined,
-        });
-      }
-
-      if (d.updatedAt - d.createdAt > 60_000 && !out.some((e) => e.draftId === d.id && e.ts === d.updatedAt)) {
-        out.push({
-          ts: d.updatedAt,
-          draftId: d.id,
-          draftLabel: label,
-          mode: d.mode,
-          kind: "updated",
-          description: `Last updated ${label}`,
         });
       }
     }
-    out.sort((a, b) => b.ts - a.ts);
+    out.sort((a, b) => b.createdAt - a.createdAt);
     return out;
   }, [drafts, role]);
 
   const groups = useMemo(() => {
     const out: { day: string; events: Event[] }[] = [];
     for (const e of events) {
-      const day = formatDay(e.ts);
+      const day = formatDay(e.createdAt);
       const existing = out.find((g) => g.day === day);
       if (existing) existing.events.push(e);
       else out.push({ day, events: [e] });
@@ -151,17 +95,17 @@ export function Activity() {
                       <Box mt="1">{iconFor(e.kind)}</Box>
                       <Box className="flex-1 min-w-0">
                         <Text size="2" as="div">
-                          {e.description}{" "}
+                          {e.title}{" "}
                           <Text color="gray">· {e.draftLabel}</Text>
                         </Text>
                         <Flex align="center" gap="2" mt="1">
                           <Badge color="gray" variant="soft">
                             {e.mode === "employer" ? "HR" : "employee"}
                           </Badge>
-                          {e.meta && <Text size="1" color="gray">· {e.meta}</Text>}
+                          {e.detail && <Text size="1" color="gray">· {e.detail}</Text>}
                         </Flex>
                       </Box>
-                      <Text size="1" color="gray" className="tabular-nums shrink-0">{formatTime(e.ts)}</Text>
+                      <Text size="1" color="gray" className="tabular-nums shrink-0">{formatTime(e.createdAt)}</Text>
                     </Flex>
                   </button>
                 ))}
@@ -176,14 +120,15 @@ export function Activity() {
 
 function iconFor(kind: Event["kind"]) {
   const cls = "size-4 text-[var(--gray-9)]";
-  switch (kind) {
-    case "created": return <FilePlus2 className={cls} />;
-    case "regenerated": return <RotateCw className={cls} />;
-    case "exported": return <FileDown className={cls} />;
-    case "counsel_review": return <ShieldCheck className="size-4 text-[var(--green-11)]" />;
-    case "updated": return <FileEdit className={cls} />;
-    default: return <ActivityIcon className={cls} />;
-  }
+  if (kind === "created") return <FilePlus2 className={cls} />;
+  if (kind === "section_generated") return <RotateCw className={cls} />;
+  if (kind === "exported") return <FileDown className={cls} />;
+  if (kind === "counsel_review") return <ShieldCheck className="size-4 text-[var(--green-11)]" />;
+  if (kind.startsWith("comment_")) return <MessageSquare className={cls} />;
+  if (kind.startsWith("ai_")) return <Bot className={cls} />;
+  if (kind.startsWith("collaborator_")) return <UserPlus className={cls} />;
+  if (kind.endsWith("_updated")) return <FileEdit className={cls} />;
+  return <ActivityIcon className={cls} />;
 }
 
 function safeMeta(id: string): { shortTitle: string } | null {

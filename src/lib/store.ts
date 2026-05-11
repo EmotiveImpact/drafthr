@@ -7,6 +7,7 @@ import type {
   CollaboratorRole,
   Comment,
   Draft,
+  DraftTimelineEvent,
   EvidenceItem,
   ExportEvent,
   LetterAnswers,
@@ -66,6 +67,11 @@ type Store = {
   updateAIAction: (id: string, messageId: string, actionId: string, patch: Partial<AIAction>) => void;
   /** Wipe the AI chat thread for a draft. */
   clearAIChat: (id: string) => void;
+  /** Append a high-signal audit event to a draft timeline. */
+  recordTimelineEvent: (
+    id: string,
+    event: Omit<DraftTimelineEvent, "id" | "createdAt"> & { createdAt?: number }
+  ) => void;
   deleteDraft: (id: string) => void;
 };
 
@@ -81,6 +87,7 @@ export const useDraftStore = create<Store>()(
 
       createDraft: (letterType, answers, mode) => {
         const id = uid("draft");
+        const now = Date.now();
         const meta = getLetterMeta(letterType);
         const resolvedMode: Mode = mode ?? meta.mode;
 
@@ -162,8 +169,18 @@ export const useDraftStore = create<Store>()(
           sections,
           evidence: resolvedMode === "employee" ? [] : undefined,
           outcomeSought: a.outcomeSought as string | undefined,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+          timeline: [
+            timelineEvent("created", `Created ${meta.shortTitle}`, {
+              createdAt: now,
+              detail: `${resolvedMode === "employer" ? "HR" : "Employee"} letter · ${draftJurisdictionLabel(
+                (a.jurisdiction as "UK" | "US") ?? "UK",
+                a.ukRegion as Draft["context"]["ukRegion"],
+                a.usState as Draft["context"]["usState"]
+              )}`,
+            }),
+          ],
+          createdAt: now,
+          updatedAt: now,
         };
         set((s) => ({ drafts: { ...s.drafts, [id]: draft } }));
         return id;
@@ -220,13 +237,32 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
+          const target = d.sections.find((sec) => sec.id === sectionId);
+          const versionNumber = target ? target.versions.length + 1 : undefined;
           const sections = d.sections.map((sec) =>
             sec.id === sectionId
               ? { ...sec, versions: [...sec.versions, version] }
               : sec
           );
           return {
-            drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } },
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                { ...d, sections },
+                timelineEvent(
+                  "section_generated",
+                  `${versionNumber && versionNumber > 1 ? "Regenerated" : "Generated"} ${
+                    target?.title ?? "section"
+                  }`,
+                  {
+                    createdAt: version.createdAt,
+                    sectionId,
+                    sectionTitle: target?.title,
+                    meta: { versionId: version.id, versionNumber },
+                  }
+                )
+              ),
+            },
           };
         }),
 
@@ -235,7 +271,15 @@ export const useDraftStore = create<Store>()(
           const d = s.drafts[id];
           if (!d) return s;
           return {
-            drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } },
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                { ...d, sections },
+                timelineEvent("sections_updated", "Updated section outline", {
+                  detail: `${sections.length} sections in this draft`,
+                })
+              ),
+            },
           };
         }),
 
@@ -246,11 +290,13 @@ export const useDraftStore = create<Store>()(
           return {
             drafts: {
               ...s.drafts,
-              [id]: {
-                ...d,
-                context: { ...d.context, withoutPrejudice: value },
-                updatedAt: Date.now(),
-              },
+              [id]: appendTimeline(
+                { ...d, context: { ...d.context, withoutPrejudice: value } },
+                timelineEvent(
+                  "without_prejudice_updated",
+                  value ? "Enabled without-prejudice header" : "Disabled without-prejudice header"
+                )
+              ),
             },
           };
         }),
@@ -262,7 +308,12 @@ export const useDraftStore = create<Store>()(
           return {
             drafts: {
               ...s.drafts,
-              [id]: { ...d, evidence: items, updatedAt: Date.now() },
+              [id]: appendTimeline(
+                { ...d, evidence: items },
+                timelineEvent("evidence_updated", "Updated evidence binder", {
+                  detail: `${items.length} item${items.length === 1 ? "" : "s"}`,
+                })
+              ),
             },
           };
         }),
@@ -281,11 +332,19 @@ export const useDraftStore = create<Store>()(
           return {
             drafts: {
               ...s.drafts,
-              [id]: {
-                ...d,
-                exports: [...(d.exports ?? []), e],
-                updatedAt: Date.now(),
-              },
+              [id]: appendTimeline(
+                { ...d, exports: [...(d.exports ?? []), e] },
+                timelineEvent("exported", `Exported as ${e.format.toUpperCase()}`, {
+                  createdAt: e.exportedAt,
+                  detail: e.reviewedBy ? `Counsel review attested by ${e.reviewedBy}` : undefined,
+                  meta: {
+                    exportId: e.id,
+                    format: e.format,
+                    reviewedBy: e.reviewedBy,
+                    reviewedOn: e.reviewedOn,
+                  },
+                })
+              ),
             },
           };
         }),
@@ -299,20 +358,24 @@ export const useDraftStore = create<Store>()(
           return {
             drafts: {
               ...s.drafts,
-              [id]: {
-                ...d,
-                context: patch.context ? { ...d.context, ...patch.context } : d.context,
-                employer: patch.employer ? { ...d.employer, ...patch.employer } : d.employer,
-                employee: {
-                  ...employee,
-                  serviceMonths:
-                    patch.employee?.startDate !== undefined
-                      ? monthsBetween(startDate)
-                      : employee.serviceMonths,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  context: patch.context ? { ...d.context, ...patch.context } : d.context,
+                  employer: patch.employer ? { ...d.employer, ...patch.employer } : d.employer,
+                  employee: {
+                    ...employee,
+                    serviceMonths:
+                      patch.employee?.startDate !== undefined
+                        ? monthsBetween(startDate)
+                        : employee.serviceMonths,
+                  },
+                  answers: patch.answers ? { ...d.answers, ...patch.answers } : d.answers,
                 },
-                answers: patch.answers ? { ...d.answers, ...patch.answers } : d.answers,
-                updatedAt: Date.now(),
-              },
+                timelineEvent("details_updated", "Updated draft details", {
+                  detail: detailsPatchSummary(patch),
+                })
+              ),
             },
           };
         }),
@@ -336,7 +399,14 @@ export const useDraftStore = create<Store>()(
           return {
             drafts: {
               ...s.drafts,
-              [id]: { ...d, collaborators: [...existing, c], updatedAt: Date.now() },
+              [id]: appendTimeline(
+                { ...d, collaborators: [...existing, c] },
+                timelineEvent("collaborator_invited", `Invited ${name?.trim() || trimmed}`, {
+                  detail: `${role} access`,
+                  actorName: name?.trim() || trimmed,
+                  meta: { collaboratorId: c.id, role },
+                })
+              ),
             },
           };
         }),
@@ -345,14 +415,21 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
+          const removed = (d.collaborators ?? []).find((c) => c.id === collaboratorId);
           return {
             drafts: {
               ...s.drafts,
-              [id]: {
-                ...d,
-                collaborators: (d.collaborators ?? []).filter((c) => c.id !== collaboratorId),
-                updatedAt: Date.now(),
-              },
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  collaborators: (d.collaborators ?? []).filter((c) => c.id !== collaboratorId),
+                },
+                timelineEvent(
+                  "collaborator_removed",
+                  `Removed ${removed?.name || removed?.email || "collaborator"}`,
+                  { meta: { collaboratorId } }
+                )
+              ),
             },
           };
         }),
@@ -361,16 +438,23 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
+          const updated = (d.collaborators ?? []).find((c) => c.id === collaboratorId);
           return {
             drafts: {
               ...s.drafts,
-              [id]: {
-                ...d,
-                collaborators: (d.collaborators ?? []).map((c) =>
-                  c.id === collaboratorId ? { ...c, role } : c
-                ),
-                updatedAt: Date.now(),
-              },
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  collaborators: (d.collaborators ?? []).map((c) =>
+                    c.id === collaboratorId ? { ...c, role } : c
+                  ),
+                },
+                timelineEvent(
+                  "collaborator_role_updated",
+                  `Changed ${updated?.name || updated?.email || "collaborator"} role`,
+                  { detail: role, meta: { collaboratorId, role } }
+                )
+              ),
             },
           };
         }),
@@ -381,10 +465,21 @@ export const useDraftStore = create<Store>()(
           const d = s.drafts[id];
           if (!d) return s;
           const comment: Comment = { ...c, id: newId, createdAt: Date.now() };
+          const section = d.sections.find((sec) => sec.id === c.sectionId);
           return {
             drafts: {
               ...s.drafts,
-              [id]: { ...d, comments: [...(d.comments ?? []), comment], updatedAt: Date.now() },
+              [id]: appendTimeline(
+                { ...d, comments: [...(d.comments ?? []), comment] },
+                timelineEvent("comment_added", c.parentId ? "Replied to comment" : "Added comment", {
+                  createdAt: comment.createdAt,
+                  actorName: c.authorName,
+                  sectionId: c.sectionId,
+                  sectionTitle: section?.title,
+                  detail: truncateTimelineText(c.body),
+                  meta: { commentId: newId, parentId: c.parentId },
+                })
+              ),
             },
           };
         });
@@ -403,10 +498,20 @@ export const useDraftStore = create<Store>()(
           const next = (d.comments ?? []).filter(
             (c) => c.id !== commentId && c.parentId !== commentId
           );
+          const section = d.sections.find((sec) => sec.id === target?.sectionId);
           return {
             drafts: {
               ...s.drafts,
-              [id]: { ...d, comments: next, sections: nextSections, updatedAt: Date.now() },
+              [id]: appendTimeline(
+                { ...d, comments: next, sections: nextSections },
+                timelineEvent("comment_deleted", "Deleted comment", {
+                  actorName: target?.authorName,
+                  sectionId: target?.sectionId,
+                  sectionTitle: section?.title,
+                  detail: target ? truncateTimelineText(target.body) : undefined,
+                  meta: { commentId },
+                })
+              ),
             },
           };
         }),
@@ -425,17 +530,30 @@ export const useDraftStore = create<Store>()(
             resolved && target?.sectionId
               ? stripMark(d.sections, target.sectionId, commentId)
               : d.sections;
+          const section = d.sections.find((sec) => sec.id === target?.sectionId);
           return {
             drafts: {
               ...s.drafts,
-              [id]: {
-                ...d,
-                comments: (d.comments ?? []).map((c) =>
-                  c.id === commentId ? { ...c, resolved } : c
-                ),
-                sections: nextSections,
-                updatedAt: Date.now(),
-              },
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  comments: (d.comments ?? []).map((c) =>
+                    c.id === commentId ? { ...c, resolved } : c
+                  ),
+                  sections: nextSections,
+                },
+                timelineEvent(
+                  "comment_resolved",
+                  resolved ? "Resolved comment" : "Reopened comment",
+                  {
+                    actorName: target?.authorName,
+                    sectionId: target?.sectionId,
+                    sectionTitle: section?.title,
+                    detail: target ? truncateTimelineText(target.body) : undefined,
+                    meta: { commentId, resolved },
+                  }
+                )
+              ),
             },
           };
         }),
@@ -520,7 +638,27 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
-          return { drafts: { ...s.drafts, [id]: { ...d, aiChat: [], updatedAt: Date.now() } } };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                { ...d, aiChat: [] },
+                timelineEvent("ai_cleared", "Cleared AI chat thread")
+              ),
+            },
+          };
+        }),
+
+      recordTimelineEvent: (id, event) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(d, timelineEvent(event.kind, event.title, event)),
+            },
+          };
         }),
 
       deleteDraft: (id) =>
@@ -533,6 +671,59 @@ export const useDraftStore = create<Store>()(
     { name: "scribehr-store-v1" }
   )
 );
+
+function timelineEvent(
+  kind: DraftTimelineEvent["kind"],
+  title: string,
+  options: Partial<DraftTimelineEvent> = {}
+): DraftTimelineEvent {
+  const {
+    id: _id,
+    kind: _kind,
+    title: _title,
+    createdAt,
+    ...rest
+  } = options;
+  return {
+    id: uid("evt"),
+    kind,
+    title,
+    createdAt: createdAt ?? Date.now(),
+    ...rest,
+  };
+}
+
+function appendTimeline(draft: Draft, event: DraftTimelineEvent): Draft {
+  return {
+    ...draft,
+    timeline: [...(draft.timeline ?? []), event].slice(-500),
+    updatedAt: Date.now(),
+  };
+}
+
+function detailsPatchSummary(patch: Parameters<Store["patchDraft"]>[1]): string | undefined {
+  const parts: string[] = [];
+  if (patch.context) parts.push("letter settings");
+  if (patch.employer) parts.push("employer details");
+  if (patch.employee) parts.push("employee details");
+  if (patch.answers) parts.push("wizard answers");
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function draftJurisdictionLabel(
+  jurisdiction: Draft["context"]["jurisdiction"],
+  ukRegion?: Draft["context"]["ukRegion"],
+  usState?: Draft["context"]["usState"]
+): string {
+  if (jurisdiction === "UK") return ukRegion ? `UK · ${ukRegion}` : "UK";
+  return usState ? `US · ${usState}` : "US";
+}
+
+function truncateTimelineText(text: string, max = 120): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, max - 1).trim()}…`;
+}
 
 function monthsBetween(isoDate?: string): number {
   if (!isoDate) return 0;

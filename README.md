@@ -2,6 +2,8 @@
 
 AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, with a right-rail AI agent that proposes section-level edits and a comment thread anchored to the document text. Built on Vite + React 19 + TypeScript, AI SDK v6, and Qwen (`qwen3-max` by default).
 
+**Current version:** `0.2.0`
+
 → **Live design system:** [`/public/design-system.html`](public/design-system.html)
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
 
@@ -11,9 +13,9 @@ AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, 
 
 - **Wizard → draft** — 35 letter types (14 HR-side, 21 employee-side), each with a UK and US template authored as a structured scaffold (statutory anchors, hard constraints, gold-standard examples). The model fills the scaffold using the user's wizard answers; output is HTML.
 - **Per-section editor** — every letter is broken into sections (recipient, subject, opening, body, terms, closing, signature…). Each section regenerates independently, has version history, and can be refined with a freeform instruction ("more conciliatory; cite s.95(1)(c) ERA explicitly").
-- **Three view modes** — *Edit* (section-by-section), *Split* (editor + paper preview side-by-side), *Preview* (continuous paper render with the same per-section actions on hover).
+- **Two view modes** — *Edit* (section-by-section) and *Preview* (continuous paper render with the same per-section actions on hover).
 - **Inline comments** — selection-triggered "+ Comment" both in the editor (Tiptap BubbleMenu) and the preview (floating button). Comments are anchored to the document via a custom `CommentMark` Tiptap extension; resolving/deleting strips the highlight.
-- **Right-rail AI agent** — typed AI SDK v6 tool-calling. The agent can call `regenerateSection({ section_id, instruction })`; the user reviews each call with an Apply button before it commits. Successful applies push the outcome back to the agent so it can continue reasoning.
+- **Right-rail AI agent** — typed AI SDK v6 tool-calling. The agent can propose section rewrites, add named clauses, tighten a section to a word-count target, or produce a counsel-grade summary. Mutating calls stay human-in-the-loop: the user reviews each proposal with an Apply button before it commits, and successful applies push the outcome back to the agent.
 - **Collaborators + invites** — invite people by email + role (editor / reviewer / viewer). Local persistence today; the popover combines the form + roster + share link + a `mailto:` fallback that opens the user's mail client with a prefilled invitation. Avatar stack in the editor topbar opens the same popover.
 - **Compliance checklist** — live per-clause pattern matches against the assembled letter HTML, scored as "N / M satisfied" and broken down by severity (required missing / recommended missing / detected). Tied to the counsel-review status pill in the topbar.
 - **Letterhead + signature image uploads** — base64-stored on the profile (so every employer draft auto-picks them up), rendered in Preview, embedded in the PDF + DOCX exports.
@@ -28,7 +30,7 @@ AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, 
 | Styling | Tailwind v4, Radix UI Themes (`gray` / `slate`), Source Serif 4 for marquee, Geist for sans |
 | State | Zustand stores (`useDraftStore`, `useProfileStore`, `useThemeStore`) persisted to localStorage |
 | Editor | Tiptap (StarterKit + Link + Underline + Placeholder + Table + custom CommentMark) |
-| AI | AI SDK v6 (`ai@^6`, `@ai-sdk/react@^3`), `@ai-sdk/openai-compatible` against DashScope International (Qwen) |
+| AI | AI SDK v6 (`ai@^6`, `@ai-sdk/react@^3`), DashScope International (Qwen) via `@ai-sdk/openai-compatible`, optional Claude via `@ai-sdk/anthropic` |
 | Auth/DB | localStorage today. Clerk (installed) + Neon Postgres planned. |
 | Export | html2pdf.js + html-to-docx for client-side; Puppeteer route for server-side PDF |
 
@@ -55,12 +57,13 @@ QWEN_API_KEY=...
 
 # Optional
 QWEN_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1
-QWEN_MODEL=qwen3-max         # or qwen-max / qwen-plus / qwen-turbo
-LLM_PROVIDER=qwen            # set to "claude" to switch
-ANTHROPIC_API_KEY=sk-ant-... # only when LLM_PROVIDER=claude
+LLM_PROVIDER=qwen            # qwen | claude; used when LLM_MODEL is omitted
+LLM_MODEL=qwen3-max          # may be a Qwen or Claude model id
+QWEN_MODEL=qwen3-max         # legacy Qwen-specific fallback
+ANTHROPIC_API_KEY=sk-ant-... # required for Claude models
 ```
 
-A user can also pick the model at runtime via Settings → "Generation model" — that selection is sent in the request body and overrides the env default.
+A user can also pick the model at runtime via Settings → "Generation model". That selection is sent in the request body, validated by the server allow-list, and takes precedence over env defaults. If the chosen provider key is missing but the other provider is configured, the server falls back transparently.
 
 ## Project layout
 
@@ -68,7 +71,10 @@ A user can also pick the model at runtime via Settings → "Generation model" �
 api/                          # Vercel functions
   draft.ts                    # /api/draft — section-streaming SSE
   agent.ts                    # /api/agent — AI SDK UIMessage stream for the right-rail chat
-server/proxy.ts               # shared streamText handlers (dev plugin + serverless)
+server/
+  proxy.ts                    # Vite dev handlers for /api/draft and /api/agent
+  llm-model.ts                # shared model allow-listing + provider fallback
+  agent-tools.ts              # server-side AI SDK tool schemas
 dev/qwen-proxy-plugin.ts      # Vite middleware that mounts /api/* in dev
 src/
   components/
@@ -86,7 +92,7 @@ src/
       client.ts               # browser → /api/draft helper (SSE)
       draft.ts                # generate / regenerate orchestration
       agent.ts                # agent system prompt
-      tools.ts                # AI SDK v6 typed tools (regenerateSection)
+      tools.ts                # client-side clause template metadata
     prompts/                  # buildSystemPrompt / buildSectionPrompt
     store.ts                  # drafts (Zustand persist)
     profile.ts                # user profile (Zustand persist)
@@ -100,7 +106,8 @@ public/
 ## Architecture pointers
 
 - **Letter generation = template + LLM.** `buildSectionPrompt` prefers a curated template (statutory anchors, structural scaffold, MUST / MUST NOT constraints, worked example) when available, falling back to a generic instruction. The template addendum is appended to the master system prompt. This is what makes the output consistent across sessions and legally fenced.
-- **AI agent uses SDK-native tool-calling.** The right-rail agent has one tool today — `regenerateSection({ section_id, instruction })`. It's *human-in-the-loop*: no server-side `execute`, so the model's call streams to the client as a `tool-regenerateSection` part. The user reviews and clicks Apply; the client runs the regeneration and calls `addToolResult` so the model sees the outcome and can continue.
+- **AI agent uses SDK-native tool-calling.** Server-side tool schemas live in `server/agent-tools.ts`. The right-rail agent can propose `regenerateSection`, `addClause`, `tightenSection`, and `summariseForCounsel`. Mutating tools are *human-in-the-loop*: no server-side `execute`, so the model's call streams to the client as a `tool-*` part. The user reviews and clicks Apply; the client runs the change and calls `addToolResult` so the model sees the outcome and can continue.
+- **Model selection is centralised.** `server/llm-model.ts` owns the allow-list, env defaults, Qwen/Claude provider construction, and fallback when only one provider key is configured. Browser settings still send a preferred model, but the server validates it.
 - **Persistence is local.** Drafts, comments, collaborators, AI chat history all live in `localStorage` via Zustand `persist`. Multi-device / shared collaboration is the next big rock.
 
 ## Disclaimer

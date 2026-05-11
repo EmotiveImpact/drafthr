@@ -91,12 +91,11 @@ type SummariseInput = { audience?: "counsel" | "hr_partner" | "self"; note?: str
  *    prepareSendMessagesRequest that re-injects the live system prompt
  *    and model on every send, and ships full UIMessages so tool-call
  *    history rides along.
- *  - Tools: the `regenerateSection` tool (see lib/llm/tools.ts) is
- *    declared HUMAN-IN-THE-LOOP — no server-side execute. The model
- *    streams a `tool-regenerateSection` part with the proposed args;
- *    the user reviews + clicks Apply; we run regenerateSection() and
- *    push the outcome back via addToolResult() so the agent can
- *    continue reasoning.
+ *  - Tools: server schemas live in server/agent-tools.ts. Mutating tools are
+ *    HUMAN-IN-THE-LOOP — no server-side execute. The model streams a `tool-*`
+ *    part with proposed args; the user reviews + clicks Apply; we run the
+ *    local draft operation and push the outcome back via addToolResult() so
+ *    the agent can continue reasoning.
  */
 export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectionId: string | null }) {
   const profile = useProfileStore((s) => s.profile);
@@ -107,6 +106,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
   const clearAIChat = useDraftStore((s) => s.clearAIChat);
+  const recordTimelineEvent = useDraftStore((s) => s.recordTimelineEvent);
 
   const [scope, setScope] = useState<AIChatScope>("letter");
   const [input, setInput] = useState("");
@@ -180,6 +180,8 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     useDraftStore.setState((s) => {
       const d = s.drafts[draft.id];
       if (!d) return s;
+      const previousCreatedAt = new Map((d.aiChat ?? []).map((m) => [m.id, m.createdAt]));
+      const now = Date.now();
       return {
         drafts: {
           ...s.drafts,
@@ -189,7 +191,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
               id: m.id,
               role: m.role as "user" | "assistant",
               body: textFromParts(m),
-              createdAt: Date.now(),
+              createdAt: previousCreatedAt.get(m.id) ?? now,
             })),
           },
         },
@@ -290,6 +292,14 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         toolCallId,
         output: { ok: true, section_id: section.id, section_title: section.title },
       });
+      recordTimelineEvent(draft.id, {
+        kind: "ai_applied",
+        title: `Applied AI rewrite to ${section.title}`,
+        detail: input.instruction,
+        sectionId: section.id,
+        sectionTitle: section.title,
+        meta: { toolCallId, tool: "regenerateSection" },
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
       addToolResult({
@@ -323,6 +333,14 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         toolCallId,
         output: { ok: true, section_id: section.id, section_title: section.title, clause_type: input.clause_type },
       });
+      recordTimelineEvent(draft.id, {
+        kind: "ai_applied",
+        title: `Added ${input.clause_type.replace(/_/g, " ")} clause`,
+        detail: input.note,
+        sectionId: section.id,
+        sectionTitle: section.title,
+        meta: { toolCallId, tool: "addClause", clauseType: input.clause_type },
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
       addToolResult({ tool: "addClause", toolCallId, output: { ok: false, error: msg } });
@@ -346,6 +364,14 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
           section_title: section.title,
           target_words: input.target_words,
         },
+      });
+      recordTimelineEvent(draft.id, {
+        kind: "ai_applied",
+        title: `Tightened ${section.title}`,
+        detail: `Target ${input.target_words} words`,
+        sectionId: section.id,
+        sectionTitle: section.title,
+        meta: { toolCallId, tool: "tightenSection", targetWords: input.target_words },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";

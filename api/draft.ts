@@ -11,17 +11,7 @@
  */
 
 import { streamText, type ModelMessage } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createAnthropic } from "@ai-sdk/anthropic";
-
-// Inlined from src/lib/llm/default-model.ts because Vercel's serverless
-// bundler doesn't follow cross-tree imports out of /api/ into /src/ —
-// such imports load fine locally but module-load fails on the deployed
-// function, surfacing as FUNCTION_INVOCATION_FAILED. Keep this constant
-// in sync with src/lib/llm/default-model.ts.
-const DEFAULT_MODEL = "qwen3-max" as const;
-const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
-const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+import { buildModel } from "../server/llm-model";
 
 export const config = {
   runtime: "nodejs",
@@ -34,76 +24,9 @@ type DraftRequest = {
   messages: ModelMessage[];
   temperature?: number;
   maxTokens?: number;
-  /** Optional model override from the client (e.g. "qwen3-max"). Allow-listed below. */
+  /** Optional model override from the client. Validated by the server model resolver. */
   model?: string;
 };
-
-const ALLOWED_MODELS = new Set([
-  "claude-opus-4-7",
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5",
-  "qwen3-max",
-  "qwen-flash",
-  "qwen-max",
-  "qwen-plus",
-  "qwen-turbo",
-]);
-
-/**
- * Resolve a streamText-compatible model. Provider is inferred from the
- * model name prefix — Claude for "claude-*", Qwen for "qwen-*". Default
- * is claude-sonnet-4-6 (best for legal writing per cost).
- */
-function buildModel(requestedModel?: string) {
-  const fromRequest =
-    requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
-  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
-  let modelName =
-    fromRequest ?? envModel ?? (envProvider === "qwen" ? QWEN_FALLBACK_MODEL : DEFAULT_MODEL);
-
-  // If the requested model's provider key is missing, fall back transparently
-  // rather than failing the stream silently. Matches server/proxy.ts.
-  if (
-    modelName.startsWith("claude-") &&
-    !process.env.ANTHROPIC_API_KEY &&
-    process.env.QWEN_API_KEY
-  ) {
-    const fallback = QWEN_FALLBACK_MODEL;
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[api/draft] Requested ${modelName} but ANTHROPIC_API_KEY is missing. ` +
-        `Falling back to ${fallback}.`
-    );
-    modelName = fallback;
-  } else if (
-    !modelName.startsWith("claude-") &&
-    !process.env.QWEN_API_KEY &&
-    process.env.ANTHROPIC_API_KEY
-  ) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[api/draft] Requested ${modelName} but QWEN_API_KEY is missing. ` +
-        `Falling back to ${ANTHROPIC_FALLBACK_MODEL}.`
-    );
-    modelName = ANTHROPIC_FALLBACK_MODEL;
-  }
-
-  if (modelName.startsWith("claude-")) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
-    const anthropic = createAnthropic({ apiKey });
-    return anthropic(modelName);
-  }
-
-  const apiKey = process.env.QWEN_API_KEY;
-  if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
-  const baseURL =
-    process.env.QWEN_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  const qwen = createOpenAICompatible({ name: "qwen", apiKey, baseURL });
-  return qwen(modelName);
-}
 
 export async function POST(req: Request): Promise<Response> {
   let body: DraftRequest;
@@ -134,7 +57,7 @@ export async function POST(req: Request): Promise<Response> {
       let realError: string | null = null;
       try {
         const result = streamText({
-          model: buildModel(body.model),
+          model: buildModel(body.model, "api/draft"),
           messages: body.messages,
           temperature: body.temperature ?? 0.4,
           maxOutputTokens: body.maxTokens ?? 1200,

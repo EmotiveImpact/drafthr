@@ -5,19 +5,14 @@ import {
   type ModelMessage,
   type UIMessage,
 } from "ai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { agentTools } from "../src/lib/llm/tools";
-import { DEFAULT_MODEL } from "../src/lib/llm/default-model";
-
-const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
-const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+import { agentTools } from "./agent-tools";
+import { buildModel } from "./llm-model";
 
 export type DraftRequest = {
   messages: ModelMessage[];
   temperature?: number;
   maxTokens?: number;
-  /** Optional client-supplied model override (allow-listed below). */
+  /** Optional client-supplied model override. Validated by the server model resolver. */
   model?: string;
 };
 
@@ -35,85 +30,6 @@ export type AgentRequest = {
   /** Optional client-supplied model override. */
   model?: string;
 };
-
-const ALLOWED_MODELS = new Set([
-  // Anthropic
-  "claude-opus-4-7",
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5",
-  // Qwen
-  "qwen3-max",
-  "qwen-flash",
-  "qwen-max",
-  "qwen-plus",
-  "qwen-turbo",
-]);
-
-/**
- * Build a streamText-compatible model from the user's requested id.
- *
- * Provider is inferred from the model name prefix:
- *   - "claude-*"  → Anthropic via @ai-sdk/anthropic (requires ANTHROPIC_API_KEY)
- *   - "qwen-*"    → DashScope International OpenAI-compatible (requires QWEN_API_KEY)
- *
- * `LLM_PROVIDER` env can force a default provider; otherwise the
- * resolution is: client-supplied id (allow-listed) > env model > flagship.
- * Flagship default is `claude-sonnet-4-6` because it's the strongest
- * legal-writing model that's still cost-reasonable.
- */
-function buildModel(requested?: string) {
-  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
-  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
-  // Resolution: explicit request -> env -> flagship default
-  let modelName =
-    fromRequest ?? envModel ?? (envProvider === "qwen" ? QWEN_FALLBACK_MODEL : DEFAULT_MODEL);
-
-  // Provider availability check. If the requested model needs a provider
-  // whose API key isn't set on this server, fall back to the other provider
-  // rather than failing the request silently. This prevents the common
-  // "client default is Claude, server only has Qwen keys" misalignment.
-  if (
-    modelName.startsWith("claude-") &&
-    !process.env.ANTHROPIC_API_KEY &&
-    process.env.QWEN_API_KEY
-  ) {
-    const fallback = QWEN_FALLBACK_MODEL;
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[proxy] Requested ${modelName} but ANTHROPIC_API_KEY is missing. ` +
-        `Falling back to ${fallback}.`
-    );
-    modelName = fallback;
-  } else if (
-    !modelName.startsWith("claude-") &&
-    !process.env.QWEN_API_KEY &&
-    process.env.ANTHROPIC_API_KEY
-  ) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[proxy] Requested ${modelName} but QWEN_API_KEY is missing. ` +
-        `Falling back to ${ANTHROPIC_FALLBACK_MODEL}.`
-    );
-    modelName = ANTHROPIC_FALLBACK_MODEL;
-  }
-
-  if (modelName.startsWith("claude-")) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
-    const anthropic = createAnthropic({ apiKey });
-    return anthropic(modelName);
-  }
-
-  // Default to the Qwen path.
-  const apiKey = process.env.QWEN_API_KEY;
-  if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
-  const baseURL =
-    process.env.QWEN_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  const qwen = createOpenAICompatible({ name: "qwen", apiKey, baseURL });
-  return qwen(modelName);
-}
 
 export async function handleDraftRequest(
   body: DraftRequest,
@@ -138,7 +54,7 @@ export async function handleDraftRequest(
   let realError: string | null = null;
   try {
     const result = streamText({
-      model: buildModel(body.model),
+      model: buildModel(body.model, "qwen-proxy"),
       messages: body.messages,
       temperature: body.temperature ?? 0.4,
       maxOutputTokens: body.maxTokens ?? 1200,
@@ -199,7 +115,7 @@ export async function handleAgentRequest(
   const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
 
   const result = streamText({
-    model: buildModel(body.model),
+    model: buildModel(body.model, "agent-proxy"),
     system: body.system,
     messages: modelMessages,
     tools: agentTools,
