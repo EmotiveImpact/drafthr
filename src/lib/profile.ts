@@ -160,7 +160,17 @@ export const useProfileStore = create<Store>()(
       // header which used a different `??` string. With qwenModel now
       // populated on hydrate, every surface reads the same value.
       onRehydrateStorage: () => (state) => {
-        if (state && !state.profile.defaults.qwenModel) {
+        if (!state) return;
+        // Backfill missing model.
+        if (!state.profile.defaults.qwenModel) {
+          state.profile.defaults.qwenModel = DEFAULT_MODEL;
+          return;
+        }
+        // One-time migration off the old Claude default for environments
+        // that only have Qwen keys set. Users who explicitly picked a
+        // Claude model in Settings keep it; only the auto-applied default
+        // gets retargeted to the current DEFAULT_MODEL.
+        if (state.profile.defaults.qwenModel === "claude-sonnet-4-6") {
           state.profile.defaults.qwenModel = DEFAULT_MODEL;
         }
       },
