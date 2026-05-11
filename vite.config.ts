@@ -23,6 +23,9 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5273,
+      // Listen on all network interfaces so devices on the same Wi-Fi
+      // (e.g. iPhone/iPad for mobile testing) can reach the dev server.
+      host: true,
     },
     build: {
       // Raise the warning ceiling — our largest legitimate chunk is the

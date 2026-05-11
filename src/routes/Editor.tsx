@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { SectionsList } from "@/components/editor/SectionsList";
+import { WizardProgress } from "@/components/editor/WizardProgress";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
@@ -505,6 +506,15 @@ export function Editor() {
               : "hidden lg:flex")
           }
         >
+          {/* Wizard progress — gives users awareness of where they are in
+           * the Edit → Evidence → Review flow without moving the primary
+           * Next CTA out of the topbar. */}
+          <WizardProgress
+            draftId={draft.id}
+            mode={draft.mode}
+            current="edit"
+            disabled={globallyStreaming}
+          />
           <SectionsList
             draft={draft}
             activeSectionId={activeSectionId}

@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Editor topbar — current vs proposed</title>
+  <style>
+    :root {
+      --ds-bg: #f7f6f3;
+      --ds-surface: #ffffff;
+      --ds-ink: #18181b;
+      --ds-muted: #71717a;
+      --ds-line: #e4e4e7;
+      --ds-line-2: #f1f0ec;
+      --ds-amber-bg: #fef3c7;
+      --ds-amber-fg: #92400e;
+      --ds-green-bg: #dcfce7;
+      --ds-green-fg: #166534;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--ds-bg);
+      color: var(--ds-ink);
+      margin: 0;
+      padding: 32px 16px 80px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; }
+    p.lede { color: var(--ds-muted); margin: 0 0 24px; }
+
+    .tabs { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--ds-line); }
+    .tab {
+      background: transparent; border: 0; padding: 8px 14px; cursor: pointer;
+      color: var(--ds-muted); font-size: 13px; font-weight: 500;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .tab.active { color: var(--ds-ink); border-bottom-color: var(--ds-ink); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    section.demo {
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+    }
+    section.demo header.bar {
+      height: 48px;
+      border-bottom: 1px solid var(--ds-line);
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 12px;
+      background: var(--ds-surface);
+      position: relative;
+    }
+    /* Secondary toolbar (current only) */
+    section.demo .toolbar2 {
+      height: 48px;
+      border-bottom: 1px solid var(--ds-line);
+      display: flex; align-items: center; justify-content: center;
+      background: var(--ds-line-2);
+      position: relative;
+    }
+    section.demo .canvas {
+      height: 220px;
+      background: linear-gradient(180deg, #fff 0%, #fafaf9 100%);
+      padding: 16px 24px;
+      color: var(--ds-muted);
+      font-size: 12px;
+    }
+    .label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--ds-muted); padding: 0 4px 6px; font-weight: 600;
+    }
+
+    /* Buttons + clusters */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      height: 32px; padding: 0 10px; border-radius: 6px;
+      background: transparent; border: 1px solid transparent;
+      font-size: 13px; color: var(--ds-ink); cursor: pointer;
+    }
+    .btn:hover { background: var(--ds-line-2); }
+    .btn.ghost { color: var(--ds-muted); }
+    .btn.outline { border-color: var(--ds-line); background: white; }
+    .btn.primary { background: var(--ds-ink); color: white; }
+    .btn.primary:hover { opacity: 0.9; background: var(--ds-ink); }
+    .btn.icon { width: 32px; padding: 0; justify-content: center; }
+    .btn.sm { height: 28px; font-size: 12px; padding: 0 8px; }
+
+    .brand-d {
+      width: 26px; height: 26px; border-radius: 6px;
+      background: var(--ds-ink); color: white;
+      display: inline-grid; place-items: center;
+      font-weight: 700; font-family: "Source Serif 4", serif;
+      font-size: 14px;
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      height: 22px; padding: 0 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 500;
+    }
+    .pill.amber { background: var(--ds-amber-bg); color: var(--ds-amber-fg); }
+    .pill.green { background: var(--ds-green-bg); color: var(--ds-green-fg); }
+
+    .avatar {
+      width: 26px; height: 26px; border-radius: 999px;
+      background: #fde68a; color: #92400e;
+      display: inline-grid; place-items: center;
+      font-size: 11px; font-weight: 600;
+      border: 2px solid white;
+    }
+    .avatar.b { background: #c7d2fe; color: #3730a3; margin-left: -6px; }
+    .people-pill {
+      display: inline-flex; align-items: center;
+      padding: 2px 6px 2px 2px; border-radius: 999px;
+      background: transparent; cursor: pointer; border: 1px solid transparent;
+    }
+    .people-pill:hover { background: var(--ds-line-2); }
+    .people-pill .plus-pip {
+      display: inline-grid; place-items: center;
+      width: 18px; height: 18px; border-radius: 999px;
+      background: var(--ds-line-2); color: var(--ds-muted);
+      font-size: 12px; line-height: 1; margin-left: 4px;
+    }
+
+    /* Segmented control (Edit / Preview) */
+    .seg {
+      display: inline-flex; background: var(--ds-line-2); padding: 3px;
+      border-radius: 8px; gap: 2px;
+    }
+    .seg button {
+      border: 0; background: transparent; height: 26px; padding: 0 12px;
+      border-radius: 5px; font-size: 12px; font-weight: 500;
+      color: var(--ds-muted); cursor: pointer;
+    }
+    .seg button.on { background: white; color: var(--ds-ink); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+    /* Title block */
+    .title-centre {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px;
+      max-width: 44vw;
+    }
+    .title-centre.shifted { left: calc(50% - 74px); }
+    .title { font-size: 14px; font-weight: 500; color: var(--ds-ink); }
+    .submeta { font-size: 12px; color: var(--ds-muted); margin-left: 8px; }
+
+    /* Grid-centred variant */
+    .grid-bar {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 12px;
+    }
+    .grid-bar > .l { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .grid-bar > .c { display: flex; align-items: center; gap: 8px; justify-content: center; min-width: 0; }
+    .grid-bar > .r { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; }
+
+    .icon-sq {
+      display: inline-grid; place-items: center;
+      width: 16px; height: 16px; color: var(--ds-muted);
+    }
+    .icon-sq svg { width: 16px; height: 16px; }
+
+    .note {
+      background: var(--ds-line-2); border-left: 3px solid var(--ds-ink);
+      padding: 10px 14px; border-radius: 0 6px 6px 0;
+      font-size: 12px; color: #3f3f46; margin: 12px 0 24px;
+    }
+    .note strong { color: var(--ds-ink); }
+    .red { color: #b91c1c; }
+    .green-txt { color: #166534; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Editor topbar — current vs proposed</h1>
+    <p class="lede">Three options, same letter draft. Click a tab to swap.</p>
+
+    <div class="tabs">
+      <button class="tab active" data-target="current">A · Current (today)</button>
+      <button class="tab" data-target="quick">B · Quick fix · grid-centred</button>
+      <button class="tab" data-target="best">C · Best-in-class · one row</button>
+    </div>
+
+    <!-- A · CURRENT -->
+    <div class="panel active" data-panel="current">
+      <div class="label">Current state — what's deployed</div>
+      <section class="demo">
+        <header class="bar">
+          <span class="brand-d">D</span>
+          <button class="btn ghost sm" style="gap:4px;">
+            <span style="font-size:14px;line-height:1">‹</span> Letters
+          </button>
+          <span class="pill amber" title="Needs review">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Needs review
+          </span>
+
+          <div class="title-centre shifted">
+            <span class="title">Performance Improvement Plan</span>
+            <span class="submeta">· James O'Connor · England &amp; Wales</span>
+          </div>
+
+          <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+            <span class="people-pill">
+              <span class="avatar">Y</span>
+              <span class="plus-pip">+</span>
+            </span>
+            <button class="btn icon ghost" title="More">⋯</button>
+            <button class="btn primary sm">Evidence →</button>
+          </div>
+        </header>
+        <div class="toolbar2">
+          <div class="seg">
+            <button class="on">Edit</button>
+            <button>Preview</button>
+          </div>
+        </div>
+        <div class="canvas">Letter canvas starts here…</div>
+      </section>
+
+      <div class="note">
+        <strong>What's wrong:</strong> Two header rows (96px of chrome). Title centring uses a brittle <code>-74px</code> offset to align over the canvas. <code>D</code> + <code>← Letters</code> are redundant — both top-left, both navigation. Counsel pill sits in the nav cluster but is actually doc status.
+      </div>
+    </div>
+
+    <!-- B · QUICK FIX -->
+    <div class="panel" data-panel="quick">
+      <div class="label">Quick fix — same layout, no fragile math</div>
+      <section class="demo">
+        <header class="bar grid-bar">
+          <div class="l">
+            <span class="brand-d">D</span>
+            <button class="btn ghost sm" style="gap:4px;">
+              <span style="font-size:14px;line-height:1">‹</span> Letters
+            </button>
+            <span class="pill amber">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Needs review
+            </span>
+          </div>
+          <div class="c">
+            <span class="title">Performance Improvement Plan</span>
+            <span class="submeta">· James O'Connor · England &amp; Wales</span>
+          </div>
+          <div class="r">
+            <span class="people-pill">
+              <span class="avatar">Y</span>
+              <span class="plus-pip">+</span>
+            </span>
+            <button class="btn icon ghost" title="More">⋯</button>
+            <button class="btn primary sm">Evidence →</button>
+          </div>
+        </header>
+        <div class="toolbar2">
+          <div class="seg">
+            <button class="on">Edit</button>
+            <button>Preview</button>
+          </div>
+        </div>
+        <div class="canvas">Letter canvas starts here…</div>
+      </section>
+
+      <div class="note">
+        <strong>What changes:</strong> Visually identical to A, but the centring is now a proper <code>grid-cols-[1fr_auto_1fr]</code> — no <code>-74px</code> magic number. Resilient to any rail-width change. <span class="green-txt">~15 min of work, near-zero risk.</span>
+      </div>
+    </div>
+
+    <!-- C · BEST-IN-CLASS -->
+    <div class="panel" data-panel="best">
+      <div class="label">Best-in-class — single row, no secondary toolbar</div>
+      <section class="demo">
+        <header class="bar grid-bar">
+          <div class="l">
+            <button class="btn ghost sm" style="gap:4px;">
+              <span style="font-size:14px;line-height:1">‹</span> Letters
+            </button>
+            <span style="display:inline-flex; align-items:center; gap:8px; min-width:0;">
+              <span class="title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Performance Improvement Plan</span>
+              <span class="pill amber" style="flex-shrink:0;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Needs review
+              </span>
+            </span>
+          </div>
+          <div class="c">
+            <div class="seg">
+              <button class="on">Edit</button>
+              <button>Preview</button>
+            </div>
+          </div>
+          <div class="r">
+            <span class="people-pill">
+              <span class="avatar">Y</span>
+              <span class="plus-pip">+</span>
+            </span>
+            <button class="btn icon ghost" title="More">⋯</button>
+            <button class="btn primary sm">Evidence →</button>
+          </div>
+        </header>
+        <div class="canvas" style="height:268px;">Letter canvas starts here — 48px taller because the secondary toolbar is gone.</div>
+      </section>
+
+      <div class="note">
+        <strong>What changes:</strong>
+        <ul style="margin:6px 0 0 18px; padding:0;">
+          <li>Single 48px header — secondary toolbar dies. <span class="green-txt">+48px of writing canvas everywhere.</span></li>
+          <li>Edit/Preview toggle moves to the centre of the main bar where it belongs.</li>
+          <li>Title sits next to "← Letters" as a breadcrumb (with truncation), not floating.</li>
+          <li>Counsel pill sits next to the title — semantically correct as doc status, not nav.</li>
+          <li><code>D</code> brand mark drops — it lives in the main sidebar; the editor doesn't need a second one.</li>
+        </ul>
+        <span class="red">~30–45 min of work</span>, touches focus-mode (no rails to collapse, so focus becomes "hide right rail only") and paged.js pagination cares about chrome height.
+      </div>
+
+      <div class="label" style="margin-top: 24px;">Mobile (< md) — single row even smaller</div>
+      <section class="demo" style="max-width: 420px; margin-left:0;">
+        <header class="bar" style="display:flex; gap:6px;">
+          <button class="btn icon ghost" aria-label="Back">‹</button>
+          <span class="title" style="font-size:13px; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">PIP — James O'Connor</span>
+          <span class="pill amber" style="height:18px; padding:0 6px; font-size:10px;">!</span>
+          <button class="btn icon ghost" title="More">⋯</button>
+          <button class="btn primary sm" style="padding:0 8px;">Next</button>
+        </header>
+        <div class="canvas" style="height:140px;">Mobile writing canvas…</div>
+      </section>
+      <div class="note">
+        Mobile gets the most benefit — 96px of chrome → 48px is huge on a 700px viewport.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.querySelector(`.panel[data-panel="${t.dataset.target}"]`).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
