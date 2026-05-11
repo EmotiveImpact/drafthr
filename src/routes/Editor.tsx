@@ -38,7 +38,7 @@ import {
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { BrandMark, AvatarStack } from "@/components/ds";
+import { AvatarStack } from "@/components/ds";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
@@ -289,15 +289,18 @@ export function Editor() {
             >
               <PanelLeft className="size-4" />
             </Button>
+            {/* Back-to-letters affordance. Always visible — replaces the
+             * lonely BrandMark that previously sat here with no clear
+             * purpose at narrow widths. Shows arrow only < md, full
+             * "← Letters" label from md+. */}
             <button
               type="button"
               onClick={() => nav(backTo)}
               aria-label="Back to letters"
-              className="flex items-center gap-2 min-w-0 group rounded-md hover:bg-[var(--ds-line-2)] px-1 py-0.5 transition"
+              className="flex items-center gap-1.5 min-w-0 group rounded-md hover:bg-[var(--ds-line-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] px-2 h-8 transition"
             >
-              <BrandMark size={26} />
-              <span className="hidden md:flex items-center gap-2 text-[12px] text-[var(--ds-muted)]">
-                <ChevronLeft className="size-3 group-hover:-translate-x-0.5 transition" />
+              <ChevronLeft className="size-4 group-hover:-translate-x-0.5 transition" />
+              <span className="hidden md:inline text-[13px] font-medium">
                 Letters
               </span>
             </button>
