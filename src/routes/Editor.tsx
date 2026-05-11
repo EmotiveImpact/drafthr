@@ -353,9 +353,16 @@ export function Editor() {
            * 200px sections rail and the 380px right rail. To make the title
            * stack vertically with Edit/Preview we shift it by
            * (leftRail − rightRail) / 2 = (200 − 380) / 2 = −90px on lg+.
-           * On smaller screens the rails are drawers and canvas is full-width,
-           * so the title centres on the viewport as normal. */}
-          <div className="absolute left-1/2 lg:left-[calc(50%-90px)] -translate-x-1/2 flex items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none">
+           * Focus mode collapses both rails so the canvas fills the viewport,
+           * which means the title should fall back to true centre. On smaller
+           * screens the rails are drawers and canvas is full-width, so the
+           * title centres on the viewport as normal. */}
+          <div
+            className={
+              "absolute -translate-x-1/2 flex items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none " +
+              (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-90px)]")
+            }
+          >
             <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate pointer-events-auto">
               {meta.title}
               <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] font-normal ml-2">
