@@ -15,7 +15,7 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  *
  * Qwen (DashScope):
  * - qwen3-max:   flagship, multilingual, longest context, paid plan
- * - qwen3-flash: fastest Qwen3 tier (default for daily drafting)
+ * - qwen-flash: fastest Qwen3 tier (default for daily drafting)
  * - qwen-max:    previous flagship
  * - qwen-plus:   balanced, free-tier capable
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
@@ -25,7 +25,7 @@ export type ModelId =
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5"
   | "qwen3-max"
-  | "qwen3-flash"
+  | "qwen-flash"
   | "qwen-max"
   | "qwen-plus"
   | "qwen-turbo";
@@ -44,7 +44,7 @@ export const MODEL_OPTIONS: {
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Recommended default. Tier-leading register, balanced cost.", provider: "anthropic" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", hint: "Fast + cheap. Use for low-risk drafts.", provider: "anthropic" },
   // Qwen fallback / alternative — multilingual.
-  { id: "qwen3-flash", label: "Qwen3 Flash", hint: "Fastest Qwen3 tier — quick drafts, very low cost.", provider: "qwen" },
+  { id: "qwen-flash", label: "Qwen3 Flash", hint: "Fastest Qwen3 tier — quick drafts, very low cost.", provider: "qwen" },
   { id: "qwen3-max", label: "Qwen3 Max", hint: "Alibaba flagship. Strong multilingual support, paid plan.", provider: "qwen" },
   { id: "qwen-max", label: "Qwen Max", hint: "Previous Qwen flagship.", provider: "qwen" },
   { id: "qwen-plus", label: "Qwen Plus", hint: "Free-tier capable.", provider: "qwen" },
@@ -175,7 +175,7 @@ export const useProfileStore = create<Store>()(
         // defaults (the Claude default we shipped, then the qwen3-max
         // default we briefly shipped). Any other selection is treated as
         // user intent and left alone.
-        const stale = new Set(["claude-sonnet-4-6", "qwen3-max"]);
+        const stale = new Set(["claude-sonnet-4-6", "qwen3-max", "qwen3-flash"]);
         if (
           state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
           stale.has(state.profile.defaults.qwenModel)

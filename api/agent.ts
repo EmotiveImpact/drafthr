@@ -33,7 +33,7 @@ const ALLOWED_MODELS = new Set([
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
   "qwen3-max",
-  "qwen3-flash",
+  "qwen-flash",
   "qwen-max",
   "qwen-plus",
   "qwen-turbo",

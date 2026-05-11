@@ -14,4 +14,4 @@
  *
  * Change this string to retarget every fallback in lockstep.
  */
-export const DEFAULT_MODEL = "qwen3-flash" as const;
+export const DEFAULT_MODEL = "qwen-flash" as const;
