@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRAFTHR — Editor redesign proposal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gray-1:#fff; --gray-2:#fafafa; --gray-3:#f3f4f5; --gray-4:#e9eaec;
+      --gray-5:#dcdee1; --gray-7:#9ca0a8; --gray-8:#6b6f78; --gray-10:#2f3239;
+      --gray-12:#0a0b0d;
+      --canvas:#fafafa; --surface:#fff; --line:#e9eaec; --line-2:#f3f4f5;
+      --ink:#0a0b0d; --body:#2f3239; --muted:#6b6f78; --subtle:#9ca0a8;
+      --amber-bg:#fffbeb; --amber-fg:#b45309;
+      --green-bg:#f0fdf4; --green-fg:#15803d;
+      --red-bg:#fef2f2; --red-fg:#b91c1c;
+      --comment-hi:#fef3c7;
+      --font-sans:"Geist",-apple-system,sans-serif;
+      --font-serif:"Source Serif 4",Charter,Georgia,serif;
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{font-family:var(--font-sans);font-size:14px;color:var(--body);background:#f0f1f3;-webkit-font-smoothing:antialiased;line-height:1.55}
+    button,a,select,label{cursor:pointer}
+
+    .doc{max-width:1640px;margin:0 auto;padding:32px}
+    h1{font-family:var(--font-serif);font-size:36px;font-weight:600;letter-spacing:-0.012em;color:var(--ink);margin:0 0 8px 0;line-height:1.08}
+    .lede{font-size:15px;color:var(--body);max-width:72ch;margin:0 0 24px 0}
+    .pair{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:48px}
+    .pair > section{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+    .pair > section.before{outline:2px solid #fcd5d5;outline-offset:-2px;background:#fff7f7}
+    .pair > section.after{outline:2px solid #c6e9d5;outline-offset:-2px;background:#f6fdf9}
+    .pair h2{font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:600;color:var(--muted);margin:0 0 4px 0}
+    .pair h2 .tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:10px}
+    .pair .before h2 .tag{background:#fcd5d5;color:#7a1a1a}
+    .pair .after h2 .tag{background:#c6e9d5;color:#0e4c2c}
+    .pair h3{font-family:var(--font-serif);font-size:20px;font-weight:600;margin:0 0 12px 0;color:var(--ink)}
+
+    /* Mini editor mock */
+    .mock{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;height:560px}
+    .topbar{height:44px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 12px;font-size:12px;color:var(--muted);flex-shrink:0}
+    .secondary{height:32px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:8px;padding:0 12px;font-size:11px;color:var(--muted);flex-shrink:0;background:var(--surface)}
+    .body{flex:1;display:grid;grid-template-columns:200px 1fr 320px;min-height:0;overflow:hidden}
+    .body.collapsed{grid-template-columns:48px 1fr 320px}
+    .sections-list{background:var(--gray-2);border-right:1px solid var(--line);overflow-y:auto;padding:8px}
+    .sections-rail{background:var(--gray-2);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:6px}
+    .sec-item{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:6px;font-size:11px;color:var(--body)}
+    .sec-item:hover{background:#fff}
+    .sec-item.active{background:#fff;color:var(--ink);font-weight:500}
+    .sec-item .n{width:18px;height:18px;background:var(--gray-4);color:var(--muted);font-size:9px;font-weight:600;border-radius:4px;display:grid;place-items:center;flex-shrink:0}
+    .sec-item.active .n{background:var(--ink);color:white}
+    .sec-item .dot{width:5px;height:5px;border-radius:999px;background:var(--gray-5);margin-left:auto;flex-shrink:0}
+    .sec-item .dot.green{background:var(--green-fg)}
+    .sec-item .dot.amber{background:var(--amber-fg)}
+    .sec-item .dot.gray{background:var(--gray-5)}
+    .sec-rail-dot{width:22px;height:22px;border-radius:6px;background:var(--gray-3);color:var(--gray-7);display:grid;place-items:center;font-size:9px;font-weight:600}
+    .sec-rail-dot.active{background:var(--ink);color:#fff}
+
+    .canvas{background:var(--gray-2);padding:20px;overflow-y:auto}
+    .paper{background:#fff;border:1px solid var(--line);border-radius:8px;padding:32px 36px;font-family:var(--font-serif);font-size:11px;line-height:1.6;color:var(--ink)}
+    .paper h1{font-family:var(--font-serif);font-size:16px;margin:0 0 6px 0;font-weight:600}
+    .paper .meta{font-size:9px;color:var(--muted);margin-bottom:10px}
+    .paper p{margin:6px 0;font-size:10px;line-height:1.55}
+    .paper strong{font-weight:600}
+
+    .rail{background:var(--surface);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+    .rail-tabs{display:flex;border-bottom:1px solid var(--line);height:32px;flex-shrink:0}
+    .rail-tabs button{flex:1;background:none;border:0;font-size:11px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent}
+    .rail-tabs button.active{color:var(--ink);border-bottom-color:var(--ink)}
+    .rail-body{flex:1;overflow-y:auto;padding:12px}
+    .rail-foot{border-top:1px solid var(--line-2);padding:10px;flex-shrink:0;background:var(--surface)}
+
+    /* Topbar bits */
+    .brand-mark{width:22px;height:22px;background:var(--ink);color:#fff;font-family:var(--font-serif);font-weight:600;font-size:12px;display:grid;place-items:center;border-radius:4px;letter-spacing:-0.04em;flex-shrink:0}
+    .crumb-sep{color:var(--subtle)}
+    .pill{display:inline-flex;align-items:center;gap:3px;font-size:9px;padding:2px 6px;border-radius:999px;background:var(--amber-bg);color:var(--amber-fg);font-weight:500}
+    .pill.green{background:var(--green-bg);color:var(--green-fg)}
+    .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+    .seg button{border:0;background:transparent;padding:0 8px;height:22px;font-size:10px;color:var(--body)}
+    .seg button.active{background:var(--gray-3);color:var(--ink);font-weight:500}
+    .seg button + button{border-left:1px solid var(--line)}
+    .btn{display:inline-flex;align-items:center;gap:3px;height:22px;padding:0 8px;border-radius:5px;font-size:10px;font-weight:500;border:1px solid transparent;background:transparent;color:var(--body)}
+    .btn.outline{border-color:var(--line);background:var(--surface)}
+    .btn.outline:hover{background:var(--gray-3)}
+    .btn.solid{background:var(--ink);color:#fff}
+    .icon-btn{width:22px;height:22px;border-radius:4px;display:grid;place-items:center;color:var(--muted);background:transparent;border:0}
+    .icon-btn:hover{background:var(--gray-3);color:var(--ink)}
+    .av{width:20px;height:20px;border-radius:999px;background:#d9c8a8;color:var(--ink);font-size:9px;font-weight:600;display:grid;place-items:center}
+
+    /* AI empty state — proposed */
+    .ai-empty-tight{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 12px;text-align:center;gap:8px}
+    .ai-empty-tight .badge{padding:1px 7px;border-radius:999px;background:var(--gray-3);color:var(--muted);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em}
+    .ai-empty-tight h4{font-size:14px;font-weight:600;color:var(--ink);margin:4px 0 2px 0}
+    .ai-empty-tight p{font-size:11px;color:var(--muted);margin:0;max-width:230px;line-height:1.5}
+    .ai-empty-tall{display:flex;flex-direction:column;gap:10px;padding:8px 4px}
+    .ai-empty-tall .cap{border:1px solid var(--line);background:var(--gray-2);border-radius:6px;padding:8px;font-size:10px}
+    .ai-empty-tall .cap strong{display:block;color:var(--ink);font-size:11px;margin-bottom:2px}
+    .ai-empty-tall .cap em{color:var(--body);font-style:italic;display:block;margin-top:2px}
+
+    /* Composer */
+    .composer-box{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:6px 8px}
+    .composer-box textarea{width:100%;border:0;outline:0;resize:none;font-family:inherit;font-size:11px;line-height:1.5;color:var(--ink);min-height:40px;padding:4px 0;background:transparent}
+    .composer-bottom{display:flex;align-items:center;gap:4px;padding-top:4px}
+    .chip{font-size:9px;padding:2px 6px;border-radius:999px;background:transparent;color:var(--muted);border:0}
+    .chip:hover{background:var(--gray-3);color:var(--ink)}
+    .send{width:22px;height:22px;border-radius:5px;background:var(--ink);color:#fff;display:grid;place-items:center;margin-left:auto}
+    .scope-row{display:flex;gap:4px;margin-bottom:4px;align-items:center}
+    .scope-chip{font-size:9px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted)}
+    .scope-chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+    /* annotation balloons */
+    .balloon{position:absolute;background:#0a0b0d;color:#fff;font-size:10px;padding:4px 8px;border-radius:6px;white-space:nowrap;font-weight:500;z-index:2}
+    .balloon::after{content:"";position:absolute;width:0;height:0;border:4px solid transparent}
+    .b-down::after{border-top-color:#0a0b0d;top:100%;left:50%;margin-left:-4px}
+    .b-up::after{border-bottom-color:#0a0b0d;bottom:100%;left:50%;margin-left:-4px}
+
+    .changes{background:#fff;padding:24px;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+    .changes h2{font-size:11px;text-transform:uppercase;letter-spacing:0.14em;font-weight:600;color:var(--muted);margin:0 0 4px 0}
+    .changes h3{font-family:var(--font-serif);font-size:20px;font-weight:600;color:var(--ink);margin:0 0 20px 0}
+    .change-row{display:grid;grid-template-columns:80px 1fr 1fr;gap:24px;padding:16px 0;border-top:1px solid var(--line)}
+    .change-row:first-of-type{border-top:0}
+    .change-row .num{font-size:24px;font-family:var(--font-serif);color:var(--muted);font-weight:600}
+    .change-row h4{font-size:14px;font-weight:600;color:var(--ink);margin:0 0 6px 0}
+    .change-row p{font-size:13px;line-height:1.55;margin:0;color:var(--body)}
+    .change-row .before-text{color:var(--red-fg)}
+    .change-row .after-text{color:var(--green-fg)}
+    .change-row .label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;color:var(--muted);margin-bottom:4px}
+
+    .principles{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:32px}
+    .principle{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 2px rgba(0,0,0,0.04)}
+    .principle h3{font-family:var(--font-serif);font-size:22px;font-weight:600;margin:0 0 6px 0;color:var(--ink)}
+    .principle h3 .src{font-family:var(--font-sans);font-size:10px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-left:8px;font-weight:600;vertical-align:middle}
+    .principle ul{margin:8px 0 0 0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--body)}
+    .principle li strong{color:var(--ink)}
+  </style>
+</head>
+<body>
+<div class="doc">
+
+  <h1>Editor redesign — less chrome, same functions</h1>
+  <p class="lede">
+    Two design lenses applied to the current editor. Goal: keep every function but reduce vertical chrome,
+    sharpen visual hierarchy, and let the document and the AI panel breathe. Side-by-side mocks below, then
+    a row-by-row diff at the bottom.
+  </p>
+
+  <div class="principles">
+    <div class="principle">
+      <h3>Google <span class="src">FUNCTIONAL HIERARCHY</span></h3>
+      <ul>
+        <li><strong>Group by frequency, not category.</strong> Tone + Without-Prejudice + Regenerate-all all live in the secondary toolbar today, but the user touches Regenerate-all 10× more often than Without-Prejudice. Re-rank.</li>
+        <li><strong>Status everywhere.</strong> The section list shows numbers but not state. Add a status dot per section (ready / streaming / edited / empty) and a progress header ("8 of 13 ready").</li>
+        <li><strong>One primary CTA per region.</strong> Already true — Export is the only solid button in the topbar. Don't dilute it.</li>
+      </ul>
+    </div>
+    <div class="principle">
+      <h3>Apple <span class="src">REDUCE TO REVEAL</span></h3>
+      <ul>
+        <li><strong>Hide what's not active.</strong> The 4-card "What I can do" panel takes 40% of the right rail before the user has typed anything. Replace with one focused empty state + the input below the fold-line is the discovery.</li>
+        <li><strong>Collapse what's secondary.</strong> Without-Prejudice toggle is used once per draft. It belongs behind a Tone-style popover, not pinned to the toolbar.</li>
+        <li><strong>Quiet the chrome.</strong> Section list at 200px not 240px. Borders softened to hairlines. Tab strip in the rail loses its bottom border in favour of an underline-on-active style.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       PAIR — full editor before vs after
+       ================================================================ -->
+  <div class="pair">
+    <section class="before">
+      <h2>Before <span class="tag">current</span></h2>
+      <h3>Two toolbars, low-signal sidebar, tall AI empty state</h3>
+      <div class="mock">
+        <!-- Topbar -->
+        <div class="topbar">
+          <div class="brand-mark">D</div>
+          <span class="crumb-sep">/</span>
+          <span>Letters</span>
+          <span class="crumb-sep">/</span>
+          <span style="color:var(--ink);font-weight:500">Formal Grievance</span>
+          <span style="font-size:11px">· to employer · UK</span>
+          <span class="pill" style="margin-left:4px">⚠ Needs review</span>
+          <div class="seg" style="margin-left:auto;margin-right:auto">
+            <button>Edit</button><button class="active">Preview</button>
+          </div>
+          <div class="av">Y</div>
+          <button class="btn outline">+ Invite</button>
+          <button class="icon-btn">⋯</button>
+          <button class="btn solid">↓ Export</button>
+        </div>
+        <!-- Secondary toolbar -->
+        <div class="secondary">
+          <span>Tone: <strong style="color:var(--ink)">Assertive ▾</strong></span>
+          <span style="margin-left:8px">Without Prejudice ◯</span>
+          <button class="btn outline" style="margin-left:auto">✨ Regenerate all</button>
+        </div>
+        <div class="body">
+          <!-- Section list — numbered, no status -->
+          <div class="sections-list">
+            <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:var(--muted);padding:4px 6px;margin-bottom:4px">Sections</div>
+            <div class="sec-item"><span class="n">1</span>Date & recipient</div>
+            <div class="sec-item"><span class="n">2</span>Subject — Formal G…</div>
+            <div class="sec-item"><span class="n">3</span>Salutation</div>
+            <div class="sec-item active"><span class="n">4</span>Statement</div>
+            <div class="sec-item"><span class="n">5</span>Background & ch…</div>
+            <div class="sec-item"><span class="n">6</span>Witnesses & doc…</div>
+            <div class="sec-item"><span class="n">7</span>Protected-char…</div>
+            <div class="sec-item"><span class="n">8</span>Impact statement</div>
+            <div class="sec-item"><span class="n">9</span>Outcome sought</div>
+            <div class="sec-item"><span class="n">10</span>Request for hear…</div>
+            <div class="sec-item"><span class="n">11</span>Reservation of …</div>
+            <div class="sec-item"><span class="n">12</span>Closing</div>
+            <div class="sec-item"><span class="n">13</span>Signature</div>
+          </div>
+          <!-- Paper -->
+          <div class="canvas">
+            <div class="paper">
+              <p>10 May 2026</p>
+              <p>The HR Director<br>[employer name]<br>[employer address]</p>
+              <p><strong>Formal Grievance under the ACAS Code of Practice on Disciplinary and Grievance Procedures</strong></p>
+              <p>Dear Mr [Surname],</p>
+              <p>I am writing to raise a formal grievance under the ACAS Code of Practice on Disciplinary and Grievance Procedures…</p>
+              <p>The matters giving rise to this grievance are as follows:</p>
+              <p><strong>28 February 2026</strong> — My line manager, Claire Hammond, instructed me to rework the Q1 financial report after submission…</p>
+            </div>
+          </div>
+          <!-- Right rail -->
+          <div class="rail">
+            <div class="rail-tabs">
+              <button class="active">✨ AI</button>
+              <button>💬 Comments</button>
+              <button>⚖ Rights</button>
+            </div>
+            <div class="rail-body">
+              <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-bottom:6px">
+                <span>AI agent · qwen3-max</span>
+                <span style="margin-left:auto;background:var(--gray-3);padding:1px 6px;border-radius:999px;font-size:9px">Today · 11 May</span>
+              </div>
+              <div class="ai-empty-tall">
+                <div style="text-align:center;padding:8px 0">
+                  <div class="brand-mark" style="margin:0 auto 4px">D</div>
+                  <strong style="display:block;font-size:11px;color:var(--ink)">Ask the AI to edit your letter.</strong>
+                  <span style="font-size:10px;color:var(--muted)">I review your proposals before applying them.</span>
+                </div>
+                <div style="font-size:9px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600">What I can do</div>
+                <div class="cap"><strong>✨ Rewrite a section</strong><em>e.g. Rewrite the opening to be more conciliatory…</em></div>
+                <div class="cap"><strong>＋ Add a named clause</strong><em>e.g. Add an IP-assignment clause…</em></div>
+                <div class="cap"><strong>− Tighten to a word count</strong><em>e.g. Tighten the body to 200 words.</em></div>
+              </div>
+            </div>
+            <div class="rail-foot">
+              <div class="scope-row">
+                <span style="font-size:9px;color:var(--muted)">Scope:</span>
+                <span class="scope-chip on">whole letter</span>
+                <span class="scope-chip">section</span>
+                <span class="scope-chip">selection</span>
+              </div>
+              <div class="composer-box">
+                <textarea placeholder="Ask the AI agent..."></textarea>
+                <div class="composer-bottom">
+                  <button class="chip">Tribunal-ready</button>
+                  <button class="chip">Make formal</button>
+                  <button class="send">↑</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================= AFTER ============================ -->
+    <section class="after">
+      <h2>After <span class="tag">proposed</span></h2>
+      <h3>One toolbar, signal-rich sidebar, focused AI empty state</h3>
+      <div class="mock">
+        <!-- ONE topbar — secondary controls live in a popover trigger on the left -->
+        <div class="topbar" style="height:48px">
+          <div class="brand-mark">D</div>
+          <span class="crumb-sep">/</span>
+          <span style="color:var(--ink);font-weight:500">Formal Grievance</span>
+          <span style="font-size:11px;color:var(--muted)">UK · Assertive</span>
+          <span class="pill" title="High-risk letter — counsel review required">⚠</span>
+          <!-- Document-level controls behind ONE chip — opens a popover. -->
+          <button class="btn outline" style="font-size:10px" title="Tone, Without-Prejudice, Regenerate all">
+            ⚙ Document
+          </button>
+          <button class="btn outline" style="font-size:10px">✨ Regenerate all</button>
+          <div class="seg" style="margin-left:auto;margin-right:auto">
+            <button>Edit</button><button class="active">Preview</button>
+          </div>
+          <div class="av">Y</div>
+          <button class="btn outline">+ Invite</button>
+          <button class="icon-btn">⋯</button>
+          <button class="btn solid">↓ Export</button>
+        </div>
+
+        <!-- NO secondary toolbar — folded into the Document popover -->
+
+        <div class="body">
+          <!-- Section list — status dots + progress -->
+          <div class="sections-list" style="width:200px">
+            <div style="display:flex;align-items:center;gap:6px;padding:4px 6px;margin-bottom:6px">
+              <span style="font-size:9px;text-transform:uppercase;letter-spacing:0.14em;color:var(--muted)">Sections</span>
+              <span style="margin-left:auto;font-size:9px;color:var(--green-fg);font-weight:600">8/13</span>
+            </div>
+            <div class="sec-item"><span class="n">1</span>Date & recipient<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">2</span>Subject<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">3</span>Salutation<span class="dot green"></span></div>
+            <div class="sec-item active"><span class="n">4</span>Statement<span class="dot amber"></span></div>
+            <div class="sec-item"><span class="n">5</span>Background<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">6</span>Witnesses<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">7</span>Protected basis<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">8</span>Impact<span class="dot amber"></span></div>
+            <div class="sec-item"><span class="n">9</span>Outcome<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">10</span>Hearing request<span class="dot green"></span></div>
+            <div class="sec-item"><span class="n">11</span>Reservation<span class="dot gray"></span></div>
+            <div class="sec-item"><span class="n">12</span>Closing<span class="dot gray"></span></div>
+            <div class="sec-item"><span class="n">13</span>Signature<span class="dot gray"></span></div>
+          </div>
+
+          <!-- Paper — more breathing room (no second toolbar above) -->
+          <div class="canvas">
+            <div class="paper">
+              <p>10 May 2026</p>
+              <p>The HR Director<br>[employer name]<br>[employer address]</p>
+              <p><strong>Formal Grievance under the ACAS Code of Practice on Disciplinary and Grievance Procedures</strong></p>
+              <p>Dear Mr [Surname],</p>
+              <p>I am writing to raise a formal grievance under the ACAS Code of Practice on Disciplinary and Grievance Procedures…</p>
+              <p>The matters giving rise to this grievance are as follows:</p>
+              <p><strong>28 February 2026</strong> — My line manager, Claire Hammond, instructed me to rework the Q1 financial report after submission…</p>
+              <p><strong>15 March 2026</strong> — During a one-to-one meeting, Ms Hammond told me my recent client presentation "lacked authority"…</p>
+            </div>
+          </div>
+
+          <!-- Right rail — focused empty state -->
+          <div class="rail">
+            <div class="rail-tabs">
+              <button class="active">✨ AI</button>
+              <button>💬 Comments <span style="background:var(--ink);color:#fff;font-size:8px;padding:0 4px;border-radius:999px;margin-left:2px">3</span></button>
+              <button>⚖ Rights</button>
+            </div>
+            <div class="rail-body">
+              <!-- Tighter empty state: badge + heading + sentence. The capabilities live in the chips below the input. -->
+              <div class="ai-empty-tight">
+                <div class="brand-mark" style="width:32px;height:32px;font-size:16px">D</div>
+                <span class="badge">qwen3-max · 11 May</span>
+                <h4>Tell the AI what to change.</h4>
+                <p>Edits stage as proposals — you Apply before they touch the letter.</p>
+              </div>
+            </div>
+            <div class="rail-foot">
+              <div class="scope-row">
+                <span class="scope-chip on">whole</span>
+                <span class="scope-chip">section</span>
+                <span class="scope-chip">selection</span>
+                <span style="margin-left:auto;font-size:9px;color:var(--subtle)">⌘ + Enter</span>
+              </div>
+              <div class="composer-box">
+                <textarea placeholder="e.g. Rewrite the opening to be more conciliatory; cite s.95(1)(c) ERA"></textarea>
+                <div class="composer-bottom">
+                  <!-- Capability chips ARE the discoverability. -->
+                  <button class="chip">Tribunal-ready</button>
+                  <button class="chip">+ clause</button>
+                  <button class="chip">Tighten</button>
+                  <button class="chip">Summarise</button>
+                  <button class="send">↑</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ================================================================
+       Row-by-row diff
+       ================================================================ -->
+  <div class="changes">
+    <h2>Row-by-row diff</h2>
+    <h3>What changes, what stays.</h3>
+
+    <div class="change-row">
+      <div class="num">01</div>
+      <div>
+        <h4>Two toolbars → one</h4>
+        <p>The h-9 secondary toolbar disappears. Tone, Without-Prejudice, and Regenerate-all consolidate.</p>
+      </div>
+      <div>
+        <div class="label">How</div>
+        <p>Regenerate-all stays visible (it's used every drafting session) — moved to the topbar as a small outline button. Tone + Without-Prejudice fold behind a <strong>⚙ Document</strong> popover trigger next to it. Same total controls, one fewer horizontal strip.</p>
+      </div>
+    </div>
+
+    <div class="change-row">
+      <div class="num">02</div>
+      <div>
+        <h4>Section list gets a heartbeat</h4>
+        <p>Numbered items today say nothing about state. Now each row carries a coloured status dot.</p>
+      </div>
+      <div>
+        <div class="label">Status legend</div>
+        <p>
+          <span style="display:inline-block;width:6px;height:6px;background:var(--green-fg);border-radius:999px;margin-right:4px"></span>ready
+          <span style="display:inline-block;width:6px;height:6px;background:var(--amber-fg);border-radius:999px;margin-left:8px;margin-right:4px"></span>edited / streaming
+          <span style="display:inline-block;width:6px;height:6px;background:var(--gray-5);border-radius:999px;margin-left:8px;margin-right:4px"></span>empty. Header shows "8 of 13" so the user knows how close they are to done. Width drops 240px → 200px.
+        </p>
+      </div>
+    </div>
+
+    <div class="change-row">
+      <div class="num">03</div>
+      <div>
+        <h4>AI empty state — tight, not tall</h4>
+        <p>The "What I can do" stack of four cards is gone. It pushed the input below the fold-line.</p>
+      </div>
+      <div>
+        <div class="label">Replacement</div>
+        <p>Centred brand mark + one heading + one sentence. The four <strong>quick-prompt chips inside the composer</strong> are the capability discovery — they're labelled by what they do ("Tribunal-ready", "+ clause", "Tighten", "Summarise") so clicking one teaches you what the tool can do.</p>
+      </div>
+    </div>
+
+    <div class="change-row">
+      <div class="num">04</div>
+      <div>
+        <h4>Breadcrumb compresses</h4>
+        <p>Today: "Letters / Formal Grievance / to employer · UK · ⚠ Needs review". Five separate pieces.</p>
+      </div>
+      <div>
+        <div class="label">Now</div>
+        <p>"<strong>Formal Grievance</strong> · UK · Assertive · ⚠". The "Letters" prefix drops (the breadcrumb still navigates back via brand-mark click). Jurisdiction + tone merge into one meta line. The amber needs-review chip becomes a single icon with tooltip — colour does the work the words were doing.</p>
+      </div>
+    </div>
+
+    <div class="change-row">
+      <div class="num">05</div>
+      <div>
+        <h4>Comments tab carries a count</h4>
+        <p>Today: just "Comments". Doesn't tell you anything's there.</p>
+      </div>
+      <div>
+        <div class="label">Now</div>
+        <p>Black pill with the unresolved count next to the tab label. Same affordance Gmail / Linear / Notion use to draw the eye.</p>
+      </div>
+    </div>
+
+    <div class="change-row">
+      <div class="num">06</div>
+      <div>
+        <h4>Composer keyboard hint moves into the scope row</h4>
+        <p>"⌘ + Enter to send · The AI may propose section changes — review with Apply before they go live" was a two-line footer.</p>
+      </div>
+      <div>
+        <div class="label">Now</div>
+        <p>"⌘ + Enter" right-aligned in the scope chip row. The "Apply before they go live" bit moves into the empty state copy ("Edits stage as proposals — you Apply before they touch the letter") where the user encounters it first, then it's gone.</p>
+      </div>
+    </div>
+
+    <div class="change-row">
+      <div class="num">07</div>
+      <div>
+        <h4>"Today · 11 May" pill — out of header, into model line</h4>
+        <p>Today: separate pill in the rail body. Useful for trust but visually competing.</p>
+      </div>
+      <div>
+        <div class="label">Now</div>
+        <p>Folded into the empty-state badge: <em>"qwen3-max · 11 May"</em>. Same info, half the chrome. Once a conversation starts the badge fades behind the chat.</p>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>
