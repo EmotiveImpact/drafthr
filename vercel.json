@@ -15,15 +15,6 @@
     },
     "api/export/pdf.ts": {
       "maxDuration": 60
-    },
-    "api/me/data.ts": {
-      "maxDuration": 30
-    },
-    "api/cron/retention-purge.ts": {
-      "maxDuration": 30
     }
-  },
-  "crons": [
-    { "path": "/api/cron/retention-purge", "schedule": "0 3 * * *" }
-  ]
+  }
 }
