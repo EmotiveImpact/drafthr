@@ -42,6 +42,7 @@ import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
 import { linkedEvidenceForSection } from "@/lib/evidence";
 import { Paperclip } from "lucide-react";
+import { PendingChangeCard } from "./PendingChangeCard";
 
 type Props = {
   /** Parent draft — needed for the inline CommentPopover. */
@@ -63,6 +64,10 @@ type Props = {
   commentCount?: number;
   /** Open the evidence and attachments step with this section preselected. */
   onOpenEvidenceBinder?: () => void;
+  /** Accept the AI's pending proposal for this section. */
+  onAcceptPending?: () => void;
+  /** Reject the AI's pending proposal for this section. */
+  onRejectPending?: () => void;
   isStreaming: boolean;
   active: boolean;
   onFocus: () => void;
@@ -78,6 +83,8 @@ export function SectionEditor({
   onOpenCommentsThread,
   onFocusComment,
   commentCount = 0,
+  onAcceptPending,
+  onRejectPending,
   onOpenEvidenceBinder,
   isStreaming,
   active,
@@ -395,6 +402,19 @@ export function SectionEditor({
         </div>
       )}
       {active && <EditorToolbar editor={editor} draft={draft} />}
+
+      {/* Pending AI change for this section. Rendered above the editor
+       * so the user always sees the proposal before any further typing. */}
+      {section.pendingChange && (
+        <div className="px-7 pt-4">
+          <PendingChangeCard
+            section={section}
+            onAccept={() => onAcceptPending?.()}
+            onReject={() => onRejectPending?.()}
+          />
+        </div>
+      )}
+
       <div className="px-7 py-5">
         {editor && (
           <BubbleMenu

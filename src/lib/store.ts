@@ -33,6 +33,18 @@ type Store = {
   appendToSection: (id: string, sectionId: string, html: string) => void;
   setSectionStatus: (id: string, sectionId: string, status: Section["status"]) => void;
   pushSectionVersion: (id: string, sectionId: string, version: SectionVersion) => void;
+  /** AI proposed a change. Stores it as section.pendingChange awaiting
+   * user review. Does NOT touch section.html — the old text stays put
+   * until the user accepts. */
+  proposeSectionChange: (id: string, sectionId: string, change: import("./letters/types").PendingChange) => void;
+  /** Promote pendingChange.proposedHtml to section.html, version the old
+   * one, clear pendingChange, mark section edited. */
+  acceptSectionPending: (id: string, sectionId: string) => void;
+  /** Drop pendingChange without applying it. */
+  rejectSectionPending: (id: string, sectionId: string) => void;
+  /** Accept (or reject) every pending change in the draft. */
+  acceptAllPending: (id: string) => void;
+  rejectAllPending: (id: string) => void;
   setSections: (id: string, sections: Section[]) => void;
   setWithoutPrejudice: (id: string, value: boolean) => void;
   setEvidence: (id: string, items: EvidenceItem[]) => void;
@@ -281,6 +293,94 @@ export const useDraftStore = create<Store>()(
               ),
             },
           };
+        }),
+
+      /* ------------------------------------------------------------------
+       * Pending-change (Cursor-style diff) lifecycle.
+       * proposeSectionChange stores an AI proposal without touching the
+       * section's current html. acceptSectionPending promotes it (versions
+       * the old html into section.versions, swaps in proposedHtml, marks
+       * status "edited"). rejectSectionPending just clears the pending
+       * record. *AcceptAll / *RejectAll fan over every section.
+       * ----------------------------------------------------------------*/
+
+      proposeSectionChange: (id, sectionId, change) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const sections = d.sections.map((sec) =>
+            sec.id === sectionId ? { ...sec, pendingChange: change } : sec
+          );
+          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+        }),
+
+      acceptSectionPending: (id, sectionId) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const target = d.sections.find((sec) => sec.id === sectionId);
+          if (!target?.pendingChange) return s;
+          const oldVersion: SectionVersion = {
+            id: target.pendingChange.id + "-prev",
+            createdAt: Date.now(),
+            html: target.html,
+            modelName: target.pendingChange.modelName,
+          };
+          const sections = d.sections.map((sec) =>
+            sec.id === sectionId
+              ? {
+                  ...sec,
+                  html: sec.pendingChange!.proposedHtml,
+                  status: "edited" as Section["status"],
+                  versions: [...sec.versions, oldVersion],
+                  pendingChange: undefined,
+                }
+              : sec
+          );
+          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+        }),
+
+      rejectSectionPending: (id, sectionId) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const sections = d.sections.map((sec) =>
+            sec.id === sectionId ? { ...sec, pendingChange: undefined } : sec
+          );
+          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+        }),
+
+      acceptAllPending: (id) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const sections = d.sections.map((sec) => {
+            if (!sec.pendingChange) return sec;
+            const oldVersion: SectionVersion = {
+              id: sec.pendingChange.id + "-prev",
+              createdAt: Date.now(),
+              html: sec.html,
+              modelName: sec.pendingChange.modelName,
+            };
+            return {
+              ...sec,
+              html: sec.pendingChange.proposedHtml,
+              status: "edited" as Section["status"],
+              versions: [...sec.versions, oldVersion],
+              pendingChange: undefined,
+            };
+          });
+          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+        }),
+
+      rejectAllPending: (id) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const sections = d.sections.map((sec) =>
+            sec.pendingChange ? { ...sec, pendingChange: undefined } : sec
+          );
+          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
         }),
 
       setWithoutPrejudice: (id, value) =>

@@ -38,6 +38,25 @@ export type SectionTemplate = {
   example: string;
 };
 
+/**
+ * A single evidence requirement the template suggests. Surfaced as a
+ * checklist on the Evidence step + a warning row on the Review step.
+ * Templates that don't declare anything here just don't show the
+ * checklist — opt-in feature.
+ */
+export type ExpectedEvidence = {
+  /** Stable id — used to mark items as fulfilling this expectation. */
+  key: string;
+  /** Short label shown on the checklist (e.g. "Chronology"). */
+  label: string;
+  /** Required = blocks export until satisfied. Optional = warning only. */
+  required: boolean;
+  /** Tooltip / detail row — what kind of item satisfies this expectation. */
+  description?: string;
+  /** Which evidence kind(s) typically satisfy this (used for auto-match). */
+  expectedKinds?: Array<"email" | "calendar" | "document" | "screenshot" | "note">;
+};
+
 export type LetterTemplate = {
   letterType: LetterTypeId;
   jurisdiction: Jurisdiction;
@@ -50,6 +69,12 @@ export type LetterTemplate = {
   letterSystemAddendum: string;
   /** Sections in canonical order. Required sections must all be present. */
   sections: SectionTemplate[];
+  /**
+   * What evidence this letter type typically needs. Surfaced on the
+   * Evidence step as a "what we'd expect to see" checklist. Optional —
+   * templates without this just don't show the checklist.
+   */
+  expectedEvidence?: ExpectedEvidence[];
 };
 
 export type LetterTemplateKey = `${LetterTypeId}__${Jurisdiction}`;

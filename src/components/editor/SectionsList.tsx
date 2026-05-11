@@ -46,15 +46,24 @@ export function SectionsList({ draft, activeSectionId, onSelect }: Props) {
               {i + 1}
             </span>
             <span className="flex-1 min-w-0 truncate">{sidebarLabelFor(s)}</span>
-            <span
-              className={cn(
-                "size-1.5 rounded-full shrink-0",
-                s.status === "ready" && "bg-[var(--ds-green-fg)]",
-                s.status === "edited" && "bg-[var(--ds-amber-fg)]",
-                s.status === "streaming" && "bg-[var(--ds-ink)] animate-pulse",
-                s.status === "empty" && "bg-[var(--ds-line)]"
-              )}
-            />
+            {s.pendingChange ? (
+              <span
+                className="shrink-0 px-1 py-px text-[9px] font-bold rounded-full bg-[var(--ds-amber-fg)] text-white"
+                title="AI proposed a change — open this section to review"
+              >
+                +1
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "size-1.5 rounded-full shrink-0",
+                  s.status === "ready" && "bg-[var(--ds-green-fg)]",
+                  s.status === "edited" && "bg-[var(--ds-amber-fg)]",
+                  s.status === "streaming" && "bg-[var(--ds-ink)] animate-pulse",
+                  s.status === "empty" && "bg-[var(--ds-line)]"
+                )}
+              />
+            )}
           </button>
         ))}
       </div>

@@ -3,6 +3,7 @@ import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
+import { buildExpectedEvidenceStatus } from "@/lib/evidence";
 import {
   CheckCircle2,
   CircleAlert,
@@ -111,6 +112,29 @@ export function ReviewPanel({
           ? "No evidence attached. Tribunals weigh evidence heavily — add screenshots / emails where they support your claim."
           : `${evidence.length} item${evidence.length === 1 ? "" : "s"} (${evidenceImages} image${evidenceImages === 1 ? "" : "s"})`,
       status: evidence.length === 0 ? "warn" : "ok",
+      icon: Paperclip,
+      jumpTo: onJumpToEvidence,
+    });
+  }
+
+  // Template-declared expected evidence — only on letter types that
+  // declared expectations. Required missing → blocker. Optional missing → warn.
+  const expected = buildExpectedEvidenceStatus(draft);
+  if (expected.length > 0) {
+    const requiredMissing = expected.filter((e) => e.expectation.required && !e.ok);
+    const optionalMissing = expected.filter((e) => !e.expectation.required && !e.ok);
+    const ok = expected.filter((e) => e.ok).length;
+    rows.push({
+      id: "expected-evidence",
+      label: "Expected evidence (template)",
+      detail:
+        requiredMissing.length > 0
+          ? `Missing required: ${requiredMissing.map((e) => e.expectation.label).join(", ")}`
+          : optionalMissing.length > 0
+          ? `${ok} of ${expected.length} added · ${optionalMissing.length} optional gap${optionalMissing.length === 1 ? "" : "s"}`
+          : `All ${expected.length} expectations met`,
+      status:
+        requiredMissing.length > 0 ? "missing" : optionalMissing.length > 0 ? "warn" : "ok",
       icon: Paperclip,
       jumpTo: onJumpToEvidence,
     });

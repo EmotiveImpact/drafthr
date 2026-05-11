@@ -292,4 +292,34 @@ export const APPEAL_US: LetterTemplate = {
       example: `<p>Sarah Williams<br>Senior Marketing Manager<br>Employee ID 04231</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "outcome_letter",
+      label: "Outcome letter being appealed",
+      required: true,
+      description: "The dismissal / disciplinary / grievance outcome letter that started this appeal.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "hearing_notes",
+      label: "Original hearing notes",
+      required: false,
+      description: "Minutes, recording, or your own notes of the hearing that produced the outcome.",
+      expectedKinds: ["document", "note"],
+    },
+    {
+      key: "new_evidence",
+      label: "New evidence",
+      required: false,
+      description: "Anything not available at the original hearing that might change the outcome.",
+      expectedKinds: ["email", "document", "screenshot"],
+    },
+    {
+      key: "procedural_breaches",
+      label: "Procedural breach notes",
+      required: false,
+      description: "Where you say the original process departed from ACAS / company policy — list with dates.",
+      expectedKinds: ["note"],
+    },
+  ],
 };

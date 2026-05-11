@@ -108,6 +108,26 @@ export type SectionVersion = {
   modelName?: string;
 };
 
+/**
+ * A change the AI is proposing for a section, waiting for the user to
+ * Accept or Reject. While set, the section is in "review" mode — the
+ * old html is preserved in section.html (the truth) and the proposed
+ * html sits here. Accept promotes proposedHtml to html; Reject clears
+ * this field. This is the Cursor-IDE pattern applied to letter editing.
+ */
+export type PendingChange = {
+  id: string;
+  createdAt: number;
+  /** New HTML the AI produced. Replaces section.html on Accept. */
+  proposedHtml: string;
+  /** Human-readable description of what the AI did. */
+  instruction: string;
+  /** Where the proposal came from (for the audit trail). */
+  source: "regenerate" | "addClause" | "tighten" | "manual";
+  /** Optional model id that produced this. */
+  modelName?: string;
+};
+
 export type Section = {
   id: string;
   sectionId: SectionId;
@@ -116,6 +136,9 @@ export type Section = {
   required: boolean;
   versions: SectionVersion[];
   status: "empty" | "streaming" | "ready" | "edited";
+  /** Set when the AI has proposed a change but the user hasn't yet
+   * accepted or rejected it. UI surfaces a diff card per section. */
+  pendingChange?: PendingChange;
 };
 
 /* ============================================================================

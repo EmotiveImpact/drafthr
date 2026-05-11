@@ -80,6 +80,74 @@ export async function generateAllSections(
   }
 }
 
+/**
+ * Regenerate one section's HTML and write the result back to the draft
+ * as a Cursor-style PENDING CHANGE — section.html is NOT touched.
+ *
+ * The user reviews the diff card and Accepts or Rejects. This is the
+ * preferred path for any AI-initiated change (the cursor-diff UX).
+ *
+ * Direct overwrite (legacy regenerateSection) still exists for the
+ * "Generate all sections" flow on first open and the per-section
+ * Refine dialog button — those want immediate replacement, not review.
+ */
+export async function regenerateSectionAsPending(
+  draft: Draft,
+  section: Section,
+  store: StoreActions & {
+    proposeSectionChange: (
+      id: string,
+      sectionId: string,
+      change: import("../letters/types").PendingChange
+    ) => void;
+  },
+  signal: AbortSignal,
+  callbacks: GenerateCallbacks = {},
+  refineInstruction?: string,
+  source: "regenerate" | "addClause" | "tighten" = "regenerate"
+): Promise<void> {
+  const system = buildSystemPrompt(draft);
+  const priorTitles = draft.sections
+    .slice(0, draft.sections.findIndex((s) => s.id === section.id))
+    .map((s) => s.title);
+
+  // Don't blank section.html — keep the current content visible while
+  // the new version streams into our local buffer.
+  store.setSectionStatus(draft.id, section.id, "streaming");
+
+  const userPrompt = buildSectionPrompt(draft, section, priorTitles, refineInstruction);
+  let acc = "";
+
+  await streamDraft({
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.5,
+    maxTokens: 1100,
+    model: activeModel(),
+    signal,
+    onToken: (delta) => {
+      acc += delta;
+      // Note: NOT appending to section.html — the live text the user
+      // sees stays untouched. We accumulate locally and materialize as
+      // a pendingChange when the stream completes.
+    },
+    onRetry: callbacks.onRetry,
+  });
+
+  const html = sanitiseHtml(acc);
+  store.setSectionStatus(draft.id, section.id, section.html ? "edited" : "empty");
+  store.proposeSectionChange(draft.id, section.id, {
+    id: uid("change"),
+    createdAt: Date.now(),
+    proposedHtml: html,
+    instruction: refineInstruction ?? "AI regenerate",
+    source,
+    modelName: activeModel(),
+  });
+}
+
 export async function regenerateSection(
   draft: Draft,
   section: Section,

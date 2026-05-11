@@ -127,6 +127,36 @@ export const PIP_RESPONSE_UK: LetterTemplate = {
       example: `<p>Sarah Williams<br>Senior Marketing Manager</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "pip_document",
+      label: "The PIP document",
+      required: true,
+      description: "The performance plan you are responding to — objectives, timeline, evaluator names.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "objectives_evidence",
+      label: "Evidence of meeting / missing objectives",
+      required: false,
+      description: "Per-objective: emails, dashboards, deliverable links, peer feedback.",
+      expectedKinds: ["email", "screenshot", "document"],
+    },
+    {
+      key: "prior_1to1s",
+      label: "Prior 1:1 notes",
+      required: false,
+      description: "Your manager's prior feedback (or absence of it) on the same objectives.",
+      expectedKinds: ["note", "document"],
+    },
+    {
+      key: "context_factors",
+      label: "Context factors",
+      required: false,
+      description: "Reasonable-adjustment requests, sickness, dependency on others, workload pivots.",
+      expectedKinds: ["email", "note"],
+    },
+  ],
 };
 
 export const PIP_RESPONSE_US: LetterTemplate = {
@@ -250,6 +280,36 @@ export const PIP_RESPONSE_US: LetterTemplate = {
       scaffold: `<p>{{employeeLegalName}}<br>{{employeeJobTitle}}</p>`,
       constraints: ["MUST be name and role."],
       example: `<p>Sarah Williams<br>Senior Marketing Manager</p>`,
+    },
+  ],
+  expectedEvidence: [
+    {
+      key: "pip_document",
+      label: "The PIP document",
+      required: true,
+      description: "The performance plan you are responding to — objectives, timeline, evaluator names.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "objectives_evidence",
+      label: "Evidence of meeting / missing objectives",
+      required: false,
+      description: "Per-objective: emails, dashboards, deliverable links, peer feedback.",
+      expectedKinds: ["email", "screenshot", "document"],
+    },
+    {
+      key: "prior_1to1s",
+      label: "Prior 1:1 notes",
+      required: false,
+      description: "Your manager's prior feedback (or absence of it) on the same objectives.",
+      expectedKinds: ["note", "document"],
+    },
+    {
+      key: "context_factors",
+      label: "Context factors",
+      required: false,
+      description: "Reasonable-adjustment requests, sickness, dependency on others, workload pivots.",
+      expectedKinds: ["email", "note"],
     },
   ],
 };

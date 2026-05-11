@@ -319,4 +319,41 @@ export const TERMINATION_US: LetterTemplate = {
       example: `<p>Priya Sharma<br>Vice President, People<br>Acme Inc.</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "hearing_minutes",
+      label: "Hearing minutes",
+      required: true,
+      description: "Notes from the dismissal hearing — attendees, allegations put, responses given.",
+      expectedKinds: ["document", "note"],
+    },
+    {
+      key: "allegation_evidence",
+      label: "Allegation evidence",
+      required: true,
+      description: "What the panel relied on: emails, witness statements, expert reports, prior records.",
+      expectedKinds: ["email", "document", "screenshot"],
+    },
+    {
+      key: "prior_warnings",
+      label: "Prior warnings on file",
+      required: true,
+      description: "Any active warnings — critical for sanction proportionality and unfair-dismissal defence.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "policy_excerpts",
+      label: "Policy excerpts",
+      required: false,
+      description: "Sections of the conduct / capability policy applied to the dismissal decision.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "service_record",
+      label: "Service record",
+      required: false,
+      description: "Continuous service start, last performance review, holiday accrual snapshot for the dismissal letter.",
+      expectedKinds: ["document"],
+    },
+  ],
 };

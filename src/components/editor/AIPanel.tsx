@@ -9,7 +9,7 @@ import { useProfileStore } from "@/lib/profile";
 import { buildAgentSystemPrompt } from "@/lib/llm/agent";
 import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
-import { regenerateSection } from "@/lib/llm/draft";
+import { regenerateSectionAsPending } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
@@ -103,6 +103,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   const updateSection = useDraftStore((s) => s.updateSection);
   const appendToSection = useDraftStore((s) => s.appendToSection);
+  const proposeSectionChange = useDraftStore((s) => s.proposeSectionChange);
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
   const clearAIChat = useDraftStore((s) => s.clearAIChat);
@@ -265,18 +266,30 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
    * outcome back to the model via addToolResult so it can continue
    * reasoning ("OK, I rewrote section X — want me to do Y next?").
    */
-  /** Shared helper — find a section by id and regen with an instruction. */
-  const runSectionRegen = async (sectionId: string, instruction: string): Promise<Section> => {
+  /**
+   * Shared helper — regen a section as a PENDING CHANGE (Cursor-style
+   * review). The user reviews the diff card on the section and clicks
+   * Accept or Reject. section.html is not touched until Accept.
+   *
+   * Optional source: lets the caller (addClause / tighten / regenerate)
+   * label the change for the audit trail.
+   */
+  const runSectionRegen = async (
+    sectionId: string,
+    instruction: string,
+    source: "regenerate" | "addClause" | "tighten" = "regenerate"
+  ): Promise<Section> => {
     const section = draft.sections.find((s) => s.id === sectionId);
     if (!section) throw new Error(`Unknown section_id: ${sectionId}`);
     const ctl = new AbortController();
-    await regenerateSection(
+    await regenerateSectionAsPending(
       draft,
       section,
-      { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
+      { appendToSection, setSectionStatus, pushSectionVersion, updateSection, proposeSectionChange },
       ctl.signal,
       {},
-      instruction
+      instruction,
+      source
     );
     return section;
   };
@@ -327,7 +340,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
     const instruction = `${template}\n\n${positionDirective}${noteBit}`;
 
     try {
-      const section = await runSectionRegen(input.section_id, instruction);
+      const section = await runSectionRegen(input.section_id, instruction, "addClause");
       addToolResult({
         tool: "addClause",
         toolCallId,
@@ -354,7 +367,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
   const applyTighten = async (toolCallId: string, input: TightenInput): Promise<void> => {
     const instruction = `Rewrite this section to approximately ${input.target_words} words. Preserve every fact, citation, and structural requirement (statutory anchors, required clauses, headings). Cut redundancy, adjectives, throat-clearing, and any non-load-bearing sentence. Do NOT drop required content.`;
     try {
-      const section = await runSectionRegen(input.section_id, instruction);
+      const section = await runSectionRegen(input.section_id, instruction, "tighten");
       addToolResult({
         tool: "tightenSection",
         toolCallId,

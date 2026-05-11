@@ -527,8 +527,34 @@ export function Editor() {
                 <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
               </div>
 
-              {/* Right: streaming status + Regenerate all */}
+              {/* Right: pending-changes count, streaming status, Regenerate all */}
               <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
+                {(() => {
+                  const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
+                  if (pendingCount === 0) return null;
+                  return (
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
+                      <span>{pendingCount} pending</span>
+                      <button
+                        type="button"
+                        onClick={() => useDraftStore.getState().rejectAllPending(draft.id)}
+                        className="hover:underline"
+                        title="Reject every pending AI proposal"
+                      >
+                        Reject all
+                      </button>
+                      <span className="text-[var(--ds-amber-fg)]/50">·</span>
+                      <button
+                        type="button"
+                        onClick={() => useDraftStore.getState().acceptAllPending(draft.id)}
+                        className="hover:underline font-semibold"
+                        title="Accept every pending AI proposal"
+                      >
+                        Accept all
+                      </button>
+                    </div>
+                  );
+                })()}
                 {globallyStreaming && (
                   <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
                     <Loader2 className="size-3 animate-spin" /> Drafting…
@@ -669,6 +695,12 @@ export function Editor() {
                   }}
                   onFocusComment={onFocusComment}
                   commentCount={commentCount(section.id)}
+                  onAcceptPending={() =>
+                    useDraftStore.getState().acceptSectionPending(draft.id, section.id)
+                  }
+                  onRejectPending={() =>
+                    useDraftStore.getState().rejectSectionPending(draft.id, section.id)
+                  }
                 />
               ))}
               {globallyStreaming && (

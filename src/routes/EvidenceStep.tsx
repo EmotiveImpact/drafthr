@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { linkedEvidenceForSection, sectionLabels } from "@/lib/evidence";
+import { ExpectedEvidenceChecklist } from "@/components/editor/ExpectedEvidenceChecklist";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { cn, uid } from "@/lib/utils";
 
@@ -279,7 +280,11 @@ export function EvidenceStep() {
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-auto p-4 sm:p-6">
+        <main className="min-h-0 overflow-auto p-4 sm:p-6 space-y-4">
+          {/* Expected-evidence checklist — renders only if the template
+           * declared expectedEvidence. Soft prompt for what to gather. */}
+          <ExpectedEvidenceChecklist draft={draft} />
+
           <section className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">

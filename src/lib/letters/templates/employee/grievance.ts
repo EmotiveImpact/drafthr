@@ -447,4 +447,41 @@ export const GRIEVANCE_US: LetterTemplate = {
       example: `<p>Sarah Williams<br>Senior Marketing Manager<br>Employee ID 04231</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "chronology",
+      label: "Chronology of events",
+      required: true,
+      description: "Dated entries naming people, places, and acts. The core spine of a grievance.",
+      expectedKinds: ["note", "document"],
+    },
+    {
+      key: "policy_breach",
+      label: "Policy excerpts",
+      required: false,
+      description: "Sections of the staff handbook, equality policy, or grievance procedure the conduct breached.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "witnesses",
+      label: "Witnesses",
+      required: false,
+      description: "Names + role of colleagues who saw or heard the conduct. Statements optional.",
+      expectedKinds: ["note", "email"],
+    },
+    {
+      key: "comms",
+      label: "Communications",
+      required: false,
+      description: "Emails, Slack threads, or screenshots that demonstrate the conduct or prior raising.",
+      expectedKinds: ["email", "screenshot"],
+    },
+    {
+      key: "prior_raising",
+      label: "Prior raising (if any)",
+      required: false,
+      description: "Earlier informal raising of the same issue — letters, emails, recorded 1:1s.",
+      expectedKinds: ["email", "note"],
+    },
+  ],
 };

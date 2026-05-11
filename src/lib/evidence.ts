@@ -1,4 +1,50 @@
 import type { Draft, EvidenceDisplayMode, EvidenceItem } from "@/lib/letters/types";
+import type { ExpectedEvidence } from "@/lib/letters/templates/types";
+import { getTemplate } from "@/lib/letters/templates";
+
+/**
+ * Compute checklist status for each ExpectedEvidence row declared by the
+ * template. An expectation is "satisfied" if any evidence item's kind is in
+ * its expectedKinds set, OR if the item's content/filename matches the
+ * expectation's label loosely. Best-effort — user can manually mark items
+ * as satisfying particular expectations later if we add that UI.
+ */
+export type ExpectedEvidenceStatus = {
+  expectation: ExpectedEvidence;
+  satisfiedBy: EvidenceItem[];
+  /** True when the expectation is met — at least one matching item. */
+  ok: boolean;
+};
+
+export function buildExpectedEvidenceStatus(draft: Draft): ExpectedEvidenceStatus[] {
+  const template = getTemplate(draft.letterType, draft.context.jurisdiction);
+  const expected = template?.expectedEvidence ?? [];
+  if (expected.length === 0) return [];
+  const items = draft.evidence ?? [];
+  return expected.map((exp) => {
+    const satisfiedBy = items.filter((item) => matchesExpectation(item, exp));
+    return {
+      expectation: exp,
+      satisfiedBy,
+      ok: satisfiedBy.length > 0,
+    };
+  });
+}
+
+function matchesExpectation(item: EvidenceItem, exp: ExpectedEvidence): boolean {
+  // Kind match takes precedence — most reliable signal.
+  if (exp.expectedKinds && exp.expectedKinds.includes(item.kind)) {
+    // Loose-match by label keywords too so a "document" doesn't satisfy
+    // every document-expecting row. Keyword overlap with filename / content.
+    const haystack = `${item.filename ?? ""} ${item.content ?? ""}`.toLowerCase();
+    const keywords = exp.label.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    if (keywords.length === 0) return true; // generic label, kind is enough
+    const hits = keywords.filter((k) => haystack.includes(k)).length;
+    return hits > 0 || keywords.length <= 1;
+  }
+  return false;
+}
+
 
 /**
  * The effective display mode for an item. Falls back to "figure" — the

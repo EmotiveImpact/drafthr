@@ -295,4 +295,34 @@ export const CONSTRUCTIVE_DISMISSAL_WARNING_US: LetterTemplate = {
       example: `<p>Sarah Williams<br>Senior Marketing Manager<br>Employee ID 04231</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "breach_chronology",
+      label: "Breach chronology",
+      required: true,
+      description: "Dated entries describing the conduct that goes to the root of the contract.",
+      expectedKinds: ["note", "document"],
+    },
+    {
+      key: "prior_raising",
+      label: "Prior raising of the issue",
+      required: true,
+      description: "Earlier letters / emails where you raised these matters — establishes you didn't affirm.",
+      expectedKinds: ["email", "document"],
+    },
+    {
+      key: "contract_terms",
+      label: "Contract / handbook excerpts",
+      required: false,
+      description: "Sections of the employment contract or handbook the employer is alleged to have breached.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "impact",
+      label: "Evidence of impact",
+      required: false,
+      description: "Sickness records, medical evidence, witness statements showing the impact on you.",
+      expectedKinds: ["document", "note"],
+    },
+  ],
 };

@@ -276,4 +276,34 @@ export const WARNING_US: LetterTemplate = {
       example: `<p>Priya Sharma<br>Vice President, People<br>Acme Inc.</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "hearing_minutes",
+      label: "Hearing minutes",
+      required: true,
+      description: "Notes from the disciplinary hearing — attendees, allegations put, responses given.",
+      expectedKinds: ["document", "note"],
+    },
+    {
+      key: "allegation_evidence",
+      label: "Allegation evidence",
+      required: true,
+      description: "What the panel relied on: emails, customer complaint, CCTV note, witness statements.",
+      expectedKinds: ["email", "document", "screenshot"],
+    },
+    {
+      key: "prior_records",
+      label: "Prior disciplinary records",
+      required: false,
+      description: "Any earlier warnings on the file (still active) — affects sanction proportionality.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "policy_excerpts",
+      label: "Policy excerpts",
+      required: false,
+      description: "Sections of the conduct / capability policy applied here.",
+      expectedKinds: ["document"],
+    },
+  ],
 };
