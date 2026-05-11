@@ -78,7 +78,7 @@ export function SectionEditor({
   onOpenCommentsThread,
   onFocusComment,
   commentCount = 0,
-  onOpenEvidenceBinder,
+  onOpenEvidenceBinder: _onOpenEvidenceBinder,
   isStreaming,
   active,
   onFocus,

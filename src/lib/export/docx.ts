@@ -8,7 +8,11 @@ type HtmlToDocx = (
   options?: Record<string, unknown>
 ) => Promise<Blob>;
 
-export async function exportLetterToDocx(draft: Draft): Promise<void> {
+/**
+ * Render the letter as a DOCX Blob. Pure — does not trigger a download.
+ * Reused by both exportLetterToDocx (single-file flow) and the ZIP pack.
+ */
+export async function renderLetterDocxBlob(draft: Draft): Promise<Blob> {
   ensureHtmlToDocxBrowserGlobals();
   const mod = await import("html-to-docx");
   const htmlToDocx = (mod.default ?? mod) as unknown as HtmlToDocx;
@@ -22,6 +26,7 @@ export async function exportLetterToDocx(draft: Draft): Promise<void> {
   th, td { border: 1px solid #cbd5e1; padding: 4pt 8pt; text-align: left; }
   hr { border: none; border-top: 1px solid #cbd5e1; margin: 12pt 0; }
   em { color: #475569; font-style: italic; }
+  img { max-width: 100%; height: auto; }
 </style></head><body>
 ${letterheadHtml(draft)}
 ${draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signatureHtml(draft))).join("\n")}
@@ -29,15 +34,22 @@ ${draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signatureHtml
 ${sanitizeLetterHtml(disclaimerHtmlFor(draft))}
 </body></html>`;
 
-  const blob = await htmlToDocx(html, undefined, {
+  return await htmlToDocx(html, undefined, {
     margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
   });
+}
 
+export function docxFilenameFor(draft: Draft): string {
+  const safe = (draft.employee.legalName || "letter").replace(/[^a-z0-9]+/gi, "-");
+  return `${draft.letterType}-${safe}-${draft.context.issueDate}.docx`;
+}
+
+export async function exportLetterToDocx(draft: Draft): Promise<void> {
+  const blob = await renderLetterDocxBlob(draft);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  const safe = (draft.employee.legalName || "letter").replace(/[^a-z0-9]+/gi, "-");
-  a.download = `${draft.letterType}-${safe}-${draft.context.issueDate}.docx`;
+  a.download = docxFilenameFor(draft);
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

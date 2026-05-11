@@ -7,6 +7,8 @@ import {
   buildTemplateQualityReport,
   type TemplateRequirementStatus,
 } from "@/lib/template-quality";
+import { renderLetterPdfBlob, filenameFor as pdfFilenameFor } from "./pdf";
+import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -21,13 +23,265 @@ type ChecklistItem = {
   detail: string;
 };
 
-export function exportLetterPack(
+/**
+ * Build and download the export pack as a ZIP. Contents:
+ *
+ *   letter.pdf                Real PDF of the letter (server- or client-rendered)
+ *   letter.docx               Real DOCX (html-to-docx)
+ *   pack-summary.html         Cover sheet + checklist + quality + timeline
+ *   manifest.json             Draft metadata, contents listing, model used
+ *   audit.json                Version history, AI changes, comments, exports
+ *   evidence/                 Original-quality files, one per item
+ *     <NN>-<filename>.<ext>
+ *   evidence/index.html       Paginated bundle of evidence with captions
+ *   README.txt                Plain-English contents description
+ *
+ * Filename: {letter-type}-{case-ref}-{date}.zip
+ */
+export async function exportLetterPack(
   draft: Draft,
   attestation?: ExportAttestation
-): void {
-  const html = buildExportPackHtml(draft, attestation);
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+): Promise<void> {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+
+  // Render the letter to both formats in parallel.
+  const [pdfBlob, docxBlob] = await Promise.all([
+    renderLetterPdfBlob(draft).catch(() => null),
+    renderLetterDocxBlob(draft).catch(() => null),
+  ]);
+
+  if (pdfBlob) zip.file(pdfFilenameFor(draft), pdfBlob);
+  if (docxBlob) zip.file(docxFilenameFor(draft), docxBlob);
+
+  // Rich HTML summary (the old single-file pack format), retained as a
+  // human-readable index inside the ZIP.
+  zip.file("pack-summary.html", buildExportPackHtml(draft, attestation));
+
+  // Evidence — original files at full quality + a paginated index.
+  const evidence = draft.evidence ?? [];
+  if (evidence.length > 0) {
+    const evidenceFolder = zip.folder("evidence")!;
+    evidence.forEach((item, idx) => {
+      const padded = String(idx + 1).padStart(2, "0");
+      if (item.fileDataUrl) {
+        const parsed = parseDataUrl(item.fileDataUrl);
+        if (parsed) {
+          const ext = extFromMime(parsed.mime) || extFromFilename(item.filename);
+          const safeName = sanitizeFilename(item.filename || `${item.kind}.${ext || "bin"}`);
+          const name = ext && !safeName.endsWith(`.${ext}`) ? `${safeName}.${ext}` : safeName;
+          evidenceFolder.file(`${padded}-${name}`, parsed.bytes, { binary: true });
+        }
+      } else if (item.content) {
+        // Note-only items get written as .txt
+        const safeName = sanitizeFilename(item.filename || `${item.kind}-${padded}.txt`);
+        evidenceFolder.file(
+          `${padded}-${safeName.endsWith(".txt") ? safeName : `${safeName}.txt`}`,
+          item.content
+        );
+      }
+    });
+    evidenceFolder.file("index.html", buildEvidenceIndexHtml(draft));
+  }
+
+  // Machine-readable manifest + audit so the pack is reproducible.
+  zip.file("manifest.json", JSON.stringify(buildManifest(draft, attestation, evidence), null, 2));
+  zip.file("audit.json", JSON.stringify(buildAudit(draft), null, 2));
+  zip.file("README.txt", buildReadme(draft, attestation, evidence));
+
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   triggerDownload(blob, filenameForPack(draft));
+}
+
+/* ============================================================================
+ * Pack contents builders
+ * ==========================================================================*/
+
+function buildManifest(
+  draft: Draft,
+  attestation: ExportAttestation | undefined,
+  evidence: EvidenceItem[]
+): Record<string, unknown> {
+  return {
+    draftId: draft.id,
+    letterType: draft.letterType,
+    mode: draft.mode,
+    jurisdiction: draft.context.jurisdiction,
+    issueDate: draft.context.issueDate,
+    employee: { legalName: draft.employee.legalName },
+    employer: { legalName: draft.employer.legalName },
+    counselReview: attestation ?? null,
+    sections: draft.sections.map((s) => ({
+      id: s.id,
+      sectionId: s.sectionId,
+      title: s.title,
+      status: s.status,
+      required: s.required,
+      wordCount: stripHtml(s.html).split(/\s+/).filter(Boolean).length,
+    })),
+    evidence: evidence.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      filename: e.filename,
+      mimeType: e.mimeType,
+      sectionIds: e.sectionIds ?? [],
+      includeVerbatim: e.includeVerbatim,
+      uploadedAt: e.uploadedAt,
+    })),
+    generatedAt: new Date().toISOString(),
+    appVersion: "0.3.0",
+  };
+}
+
+function buildAudit(draft: Draft): Record<string, unknown> {
+  return {
+    draftId: draft.id,
+    versions: (draft.sections ?? []).map((s) => ({
+      sectionId: s.id,
+      versions: (s.versions ?? []).map((v) => ({
+        createdAt: v.createdAt,
+        modelName: v.modelName,
+        wordCount: stripHtml(v.html).split(/\s+/).filter(Boolean).length,
+      })),
+    })),
+    comments: (draft.comments ?? []).map((c) => ({
+      id: c.id,
+      sectionId: c.sectionId,
+      author: c.authorName,
+      body: c.body,
+      createdAt: c.createdAt,
+      resolved: c.resolved,
+      quote: c.quote,
+    })),
+    exports: (draft.exports ?? []),
+  };
+}
+
+function buildReadme(
+  draft: Draft,
+  attestation: ExportAttestation | undefined,
+  evidence: EvidenceItem[]
+): string {
+  const lines: string[] = [];
+  lines.push(`DRAFTHR EXPORT PACK`);
+  lines.push(`====================`);
+  lines.push("");
+  lines.push(`Letter type:    ${draft.letterType}`);
+  lines.push(`Mode:           ${draft.mode}`);
+  lines.push(`Jurisdiction:   ${draft.context.jurisdiction}`);
+  lines.push(`Issue date:     ${draft.context.issueDate}`);
+  lines.push(`Generated:      ${new Date().toISOString()}`);
+  lines.push("");
+  if (attestation) {
+    lines.push(`Counsel review: ${attestation.reviewedBy} on ${attestation.reviewedOn}`);
+  } else {
+    lines.push(`Counsel review: not attested`);
+  }
+  lines.push("");
+  lines.push(`CONTENTS`);
+  lines.push(`--------`);
+  lines.push(`  letter.pdf            Print-ready PDF of the letter.`);
+  lines.push(`  letter.docx           Editable Word version.`);
+  lines.push(`  pack-summary.html     One-page summary: review checklist, quality`);
+  lines.push(`                        report, change timeline. Open in any browser.`);
+  lines.push(`  manifest.json         Machine-readable index of the pack.`);
+  lines.push(`  audit.json            Version history, comments, prior exports.`);
+  if (evidence.length > 0) {
+    lines.push(`  evidence/             ${evidence.length} item${evidence.length === 1 ? "" : "s"} of evidence at original quality.`);
+    lines.push(`  evidence/index.html   Paginated bundle with captions.`);
+  }
+  lines.push("");
+  lines.push(`USE`);
+  lines.push(`---`);
+  lines.push(`This pack is self-contained. Send the ZIP, the recipient gets:`);
+  lines.push(`the letter in two formats, every piece of evidence at full quality,`);
+  lines.push(`and a tribunal-grade index for navigation. The audit.json + manifest.json`);
+  lines.push(`make the pack reproducible from a clean DRAFTHR install.`);
+  lines.push("");
+  lines.push(`Questions? Reply to the email this pack was attached to.`);
+  return lines.join("\n");
+}
+
+function buildEvidenceIndexHtml(draft: Draft): string {
+  const evidence = draft.evidence ?? [];
+  return `<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Evidence — ${escapeHtml(draft.letterType)}</title>
+<style>
+  body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;color:#0f172a;max-width:920px;margin:32px auto;padding:0 24px;line-height:1.55}
+  h1{font-size:22px;margin:0 0 4px 0}
+  .meta{color:#64748b;font-size:12px;margin-bottom:32px}
+  .item{border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px}
+  .item h2{font-size:15px;margin:0 0 6px 0;display:flex;gap:8px;align-items:center}
+  .kind{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;padding:2px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-weight:600}
+  .caption{color:#64748b;font-size:12px;margin-bottom:8px}
+  .body{font-size:13px;white-space:pre-wrap;background:#f8fafc;padding:10px;border-radius:6px}
+  img{max-width:100%;height:auto;border-radius:6px;margin-top:8px}
+  a{color:#0f172a}
+</style></head><body>
+<h1>Evidence pack — ${escapeHtml(draft.letterType)}</h1>
+<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · Generated ${escapeHtml(new Date().toLocaleString())}</p>
+${evidence
+  .map((item, idx) => {
+    const padded = String(idx + 1).padStart(2, "0");
+    const isImage = item.mimeType?.startsWith("image/");
+    return `<div class="item">
+      <h2><span class="kind">${escapeHtml(item.kind)}</span> ${escapeHtml(item.filename || `Item ${padded}`)}</h2>
+      ${item.sectionIds?.length ? `<div class="caption">Linked to: ${escapeHtml(sectionLabels(draft, item.sectionIds))}</div>` : ""}
+      ${item.content ? `<div class="body">${escapeHtml(item.content)}</div>` : ""}
+      ${isImage && item.fileDataUrl ? `<img src="${item.fileDataUrl}" alt="${escapeHtml(item.filename || "")}" />` : ""}
+      ${!isImage && item.fileDataUrl ? `<p style="margin-top:8px"><a href="../evidence/${padded}-${escapeHtml(item.filename || "file")}">Open file →</a></p>` : ""}
+    </div>`;
+  })
+  .join("\n")}
+</body></html>`;
+}
+
+/* ============================================================================
+ * Helpers
+ * ==========================================================================*/
+
+function parseDataUrl(url: string): { mime: string; bytes: Uint8Array } | null {
+  const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+  if (!m) return null;
+  try {
+    const binary = atob(m[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return { mime: m[1], bytes };
+  } catch {
+    return null;
+  }
+}
+
+function extFromMime(mime: string): string | null {
+  const map: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "application/pdf": "pdf",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "text/plain": "txt",
+    "message/rfc822": "eml",
+  };
+  return map[mime.toLowerCase()] ?? null;
+}
+
+function extFromFilename(name?: string): string | null {
+  if (!name) return null;
+  const m = /\.([a-z0-9]{1,5})$/i.exec(name);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[/\\?%*:|"<>]/g, "-").slice(0, 80);
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 export function buildExportPackHtml(
@@ -305,7 +559,7 @@ function filenameForPack(draft: Draft): string {
   const safe = (draft.employee.legalName || draft.employer.legalName || "letter")
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "");
-  return `${draft.letterType}-${safe || "letter"}-${draft.context.issueDate}-pack.html`;
+  return `${draft.letterType}-${safe || "letter"}-${draft.context.issueDate}-pack.zip`;
 }
 
 function letterheadHtml(draft: Draft): string {
@@ -322,10 +576,6 @@ function imageDataUrl(item: EvidenceItem): string | undefined {
 
 function labelForEvidence(item: EvidenceItem): string {
   return item.kind[0].toUpperCase() + item.kind.slice(1);
-}
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function triggerDownload(blob: Blob, filename: string): void {

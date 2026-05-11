@@ -10,6 +10,7 @@ type Html2PdfChain = {
   set: (opts: Record<string, unknown>) => Html2PdfChain;
   from: (el: HTMLElement) => Html2PdfChain;
   save: () => Promise<void>;
+  output: (type: "blob") => Promise<Blob>;
 };
 
 /**
@@ -22,15 +23,47 @@ type Html2PdfChain = {
  *      pack configured), fall back to the client-side html2pdf.js renderer.
  *      Lower fidelity, but works offline.
  */
-export async function exportLetterToPdf(draft: Draft): Promise<void> {
+/**
+ * Render the letter as a PDF Blob (no download). Used by the ZIP pack
+ * to bundle the PDF alongside DOCX + evidence. The auto-download flow
+ * is in exportLetterToPdf() below.
+ */
+export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
   const filename = filenameFor(draft);
+  const body = letterBodyHtml(draft);
+
+  // 1) Try server-side render
+  try {
+    const res = await fetch("/api/export/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html: body, filename }),
+    });
+    if (res.ok) {
+      return await res.blob();
+    }
+  } catch {
+    // Fall through to client-side
+  }
+
+  // 2) Client-side fallback
+  return await clientSidePdfBlob(body, filename);
+}
+
+function letterBodyHtml(draft: Draft): string {
   const letterhead = letterheadHtml(draft);
   const signature = signatureHtml(draft);
-  const body =
+  return (
     letterhead +
     draft.sections.map((s) => injectSignatureIntoSignatureSection(s, signature)).join("\n") +
     "<hr />" +
-    sanitizeLetterHtml(disclaimerHtmlFor(draft));
+    sanitizeLetterHtml(disclaimerHtmlFor(draft))
+  );
+}
+
+export async function exportLetterToPdf(draft: Draft): Promise<void> {
+  const filename = filenameFor(draft);
+  const body = letterBodyHtml(draft);
 
   // 1) Try server-side render
   try {
@@ -53,13 +86,31 @@ export async function exportLetterToPdf(draft: Draft): Promise<void> {
   await clientSidePdf(body, filename);
 }
 
-async function clientSidePdf(bodyHtml: string, filename: string) {
+async function clientSidePdfBlob(bodyHtml: string, _filename: string): Promise<Blob> {
   const mod = (await import("html2pdf.js")) as unknown as Html2PdfModule;
   const html2pdf =
     typeof mod.default === "function"
       ? (mod.default as unknown as () => Html2PdfChain)
       : (mod as unknown as () => Html2PdfChain);
 
+  const doc = buildPdfDoc(bodyHtml);
+  document.body.appendChild(doc);
+  try {
+    return await html2pdf()
+      .set({
+        margin: 0,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+      })
+      .from(doc)
+      .output("blob");
+  } finally {
+    doc.remove();
+  }
+}
+
+function buildPdfDoc(bodyHtml: string): HTMLElement {
   const doc = document.createElement("div");
   doc.className = "letter-page";
   doc.style.width = "8.27in";
@@ -71,6 +122,17 @@ async function clientSidePdf(bodyHtml: string, filename: string) {
   doc.style.fontSize = "11pt";
   doc.style.lineHeight = "1.55";
   doc.innerHTML = bodyHtml;
+  return doc;
+}
+
+async function clientSidePdf(bodyHtml: string, filename: string) {
+  const mod = (await import("html2pdf.js")) as unknown as Html2PdfModule;
+  const html2pdf =
+    typeof mod.default === "function"
+      ? (mod.default as unknown as () => Html2PdfChain)
+      : (mod as unknown as () => Html2PdfChain);
+
+  const doc = buildPdfDoc(bodyHtml);
   document.body.appendChild(doc);
 
   try {

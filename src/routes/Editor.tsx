@@ -249,7 +249,7 @@ export function Editor() {
     try {
       if (format === "pdf") await exportLetterToPdf(draft);
       else if (format === "docx") await exportLetterToDocx(draft);
-      else exportLetterPack(draft, attestation);
+      else await exportLetterPack(draft, attestation);
       recordExport(draft.id, { format, reviewedBy: attestation?.reviewedBy, reviewedOn: attestation?.reviewedOn });
     } catch (err) {
       alert(
