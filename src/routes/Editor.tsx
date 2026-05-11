@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { SectionsList } from "@/components/editor/SectionsList";
 import { SectionEditor } from "@/components/editor/SectionEditor";
@@ -39,7 +39,7 @@ import {
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { AvatarStack } from "@/components/ds";
+import { BrandMark, AvatarStack } from "@/components/ds";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
@@ -279,13 +279,21 @@ export function Editor() {
          * regardless of how heavy the left/right groups become. This is what
          * lets the title above and Edit/Preview below share a vertical axis. */}
         <div className="relative h-full px-2 sm:px-4 flex items-center gap-2 sm:gap-3">
-          {/* Left: back-to-letters + counsel pill. Rail toggles moved
-           * into the ⋯ overflow menu on the right to declutter. */}
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Back-to-letters affordance. Always visible — replaces the
-             * lonely BrandMark that previously sat here with no clear
-             * purpose at narrow widths. Shows arrow only < md, full
-             * "← Letters" label from md+. */}
+          {/* Left: brand mark + back-to-letters + counsel pill. Rail toggles
+           * moved into the ⋯ overflow menu on the right to declutter. */}
+          <div className="flex items-center gap-1 min-w-0">
+            {/* Brand mark — links to /. Compact at this size so it reads as
+             * "home" rather than a decorative logo. */}
+            <Link
+              to="/"
+              aria-label="DRAFTHR home"
+              className="shrink-0 rounded-md hover:opacity-80 transition px-1 grid place-items-center h-8"
+            >
+              <BrandMark size={26} />
+            </Link>
+            {/* Back-to-letters affordance — separate from the brand mark
+             * so each has a single clear destination (D → home, ← Letters
+             * → letters list). Shows arrow only < md, full "Letters" from md+. */}
             <button
               type="button"
               onClick={() => nav(backTo)}
