@@ -15,6 +15,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -278,17 +279,9 @@ export function Editor() {
          * regardless of how heavy the left/right groups become. This is what
          * lets the title above and Edit/Preview below share a vertical axis. */}
         <div className="relative h-full px-2 sm:px-4 flex items-center gap-2 sm:gap-3">
-          {/* Left: brand + back-to-letters + counsel pill */}
+          {/* Left: back-to-letters + counsel pill. Rail toggles moved
+           * into the ⋯ overflow menu on the right to declutter. */}
           <div className="flex items-center gap-2 min-w-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden size-8"
-              onClick={() => setShowSidebar((s) => !s)}
-              aria-label="Toggle sections"
-            >
-              <PanelLeft className="size-4" />
-            </Button>
             {/* Back-to-letters affordance. Always visible — replaces the
              * lonely BrandMark that previously sat here with no clear
              * purpose at narrow widths. Shows arrow only < md, full
@@ -426,6 +419,22 @@ export function Editor() {
                     <StopCircle className="size-4 mr-2" /> Stop
                   </DropdownMenuItem>
                 )}
+                {/* Rail toggles — only meaningful at < lg where the rails
+                 * are drawers. At lg+ both rails are persistent so these
+                 * items would be no-ops; we hide them via Tailwind. */}
+                <DropdownMenuSeparator className="lg:hidden" />
+                <DropdownMenuItem
+                  className="lg:hidden"
+                  onClick={() => setShowSidebar((s) => !s)}
+                >
+                  <PanelLeft className="size-4 mr-2" /> Toggle sections rail
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="lg:hidden"
+                  onClick={() => setShowRail((s) => !s)}
+                >
+                  <PanelRight className="size-4 mr-2" /> Toggle details rail
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             {/* Export removed from the editor topbar — the only export
@@ -457,15 +466,6 @@ export function Editor() {
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden size-8"
-              onClick={() => setShowRail((s) => !s)}
-              aria-label="Toggle right rail"
-            >
-              <PanelRight className="size-4" />
-            </Button>
           </div>
         </div>
       </header>
