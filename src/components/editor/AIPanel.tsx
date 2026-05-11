@@ -7,6 +7,7 @@ import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { buildAgentSystemPrompt } from "@/lib/llm/agent";
+import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { regenerateSection } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
@@ -115,6 +116,13 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
   }, [scope, draft.sections, activeSectionId]);
 
   // Hydrate initial messages from persisted chat once per draft id.
+  /** Today + timezone for the visible "Today · X" pill in the header.
+   * Captured once per render but cheap (just `new Date()`). */
+  const runtimeCtx = useMemo(
+    () => captureRuntimeContext(draft.context.jurisdiction),
+    [draft.context.jurisdiction]
+  );
+
   const initialMessages = useMemo<UIMessage[]>(
     () =>
       (draft.aiChat ?? []).map((m) => ({
@@ -362,7 +370,16 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
         <Wand2 className="size-4 text-[var(--ds-muted)]" />
         <span className="text-[13px] font-medium text-[var(--ds-ink)]">AI agent</span>
-        <span className="text-[11px] text-[var(--ds-subtle)]">· {profile.defaults.qwenModel ?? "qwen3-max"}</span>
+        <span className="text-[11px] text-[var(--ds-subtle)]">· {profile.defaults.qwenModel ?? "claude-sonnet-4-6"}</span>
+        {/* Visible confirmation that the agent has been given today's date.
+         * Captured once per render via useMemo; ctx is the same object the
+         * agent system prompt is built from. */}
+        <span
+          className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
+          title={`The AI has been given today's date (${runtimeCtx.timeZone}) for any "today / now / this week" reference.`}
+        >
+          Today · {runtimeCtx.localDate}
+        </span>
         {messages.length > 0 && (
           <button
             type="button"
