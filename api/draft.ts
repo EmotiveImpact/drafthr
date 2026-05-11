@@ -13,7 +13,13 @@
 import { streamText, type ModelMessage } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { DEFAULT_MODEL } from "../src/lib/llm/default-model";
+
+// Inlined from src/lib/llm/default-model.ts because Vercel's serverless
+// bundler doesn't follow cross-tree imports out of /api/ into /src/ —
+// such imports load fine locally but module-load fails on the deployed
+// function, surfacing as FUNCTION_INVOCATION_FAILED. Keep this constant
+// in sync with src/lib/llm/default-model.ts.
+const DEFAULT_MODEL = "qwen3-max" as const;
 
 export const config = {
   runtime: "nodejs",
