@@ -349,16 +349,19 @@ export function Editor() {
             </span>
           </div>
 
-          {/* Right: avatars + Invite + actions */}
+          {/* Right: people (avatars+invite as one trigger) + actions.
+           * When the draft has people, the avatar stack IS the trigger
+           * and a small UserPlus pip on the right edge signals "add more".
+           * When it has none, fall back to a single "+ Invite" button. */}
           <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
-            {identities.length > 0 && (
-              <InvitePopover
-                draft={draft}
-                trigger={
+            <InvitePopover
+              draft={draft}
+              trigger={
+                identities.length > 0 ? (
                   <button
                     type="button"
-                    className="rounded-full hover:opacity-90 transition"
-                    aria-label="Manage people"
+                    className="flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 -my-0.5 hover:bg-[var(--ds-line-2)] transition"
+                    aria-label="People on this letter — click to manage or invite"
                     title="Manage people"
                   >
                     <AvatarStack
@@ -372,22 +375,24 @@ export function Editor() {
                         title: i.name + (i.email ? ` <${i.email}>` : ""),
                       }))}
                     />
+                    <span
+                      className="grid place-items-center size-5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
+                      aria-hidden
+                    >
+                      <UserPlus className="size-3" />
+                    </span>
                   </button>
-                }
-              />
-            )}
-            <InvitePopover
-              draft={draft}
-              trigger={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="px-2 sm:px-3"
-                  aria-label="Invite"
-                >
-                  <UserPlus className="size-3.5" />
-                  <span className="hidden md:inline">Invite</span>
-                </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="px-2 sm:px-3"
+                    aria-label="Invite"
+                  >
+                    <UserPlus className="size-3.5" />
+                    <span className="hidden md:inline">Invite</span>
+                  </Button>
+                )
               }
             />
             {/* Focus toggle — temporarily disabled per user request.
