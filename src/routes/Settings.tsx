@@ -25,6 +25,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useProfileStore, QWEN_MODEL_OPTIONS, type QwenModelId } from "@/lib/profile";
+import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 
@@ -336,7 +337,7 @@ export function Settings() {
             </Field>
             <Field label="Generation model">
               <Select.Root
-                value={profile.defaults.qwenModel ?? "qwen3-max"}
+                value={profile.defaults.qwenModel ?? DEFAULT_MODEL}
                 onValueChange={(v) => patchDefaults({ qwenModel: v as QwenModelId })}
               >
                 <Select.Trigger />

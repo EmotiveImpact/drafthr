@@ -15,6 +15,7 @@ import {
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { agentTools } from "../src/lib/llm/tools";
+import { DEFAULT_MODEL } from "../src/lib/llm/default-model";
 
 export const config = {
   runtime: "nodejs",
@@ -43,7 +44,7 @@ function buildModel(requestedModel?: string) {
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
   const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
   const modelName =
-    fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : "claude-sonnet-4-6");
+    fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : DEFAULT_MODEL);
 
   if (modelName.startsWith("claude-")) {
     const apiKey = process.env.ANTHROPIC_API_KEY;

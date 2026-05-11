@@ -8,6 +8,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { buildAgentSystemPrompt } from "@/lib/llm/agent";
 import { captureRuntimeContext } from "@/lib/llm/runtime-context";
+import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { regenerateSection } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
@@ -370,7 +371,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
         <Wand2 className="size-4 text-[var(--ds-muted)]" />
         <span className="text-[13px] font-medium text-[var(--ds-ink)]">AI agent</span>
-        <span className="text-[11px] text-[var(--ds-subtle)]">· {profile.defaults.qwenModel ?? "claude-sonnet-4-6"}</span>
+        <span className="text-[11px] text-[var(--ds-subtle)]">· {profile.defaults.qwenModel ?? DEFAULT_MODEL}</span>
         {/* Visible confirmation that the agent has been given today's date.
          * Captured once per render via useMemo; ctx is the same object the
          * agent system prompt is built from. */}

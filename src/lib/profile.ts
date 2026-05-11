@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Mode, Tone, EmployeeTone, UkRegion, UsState, WorkerClass } from "./letters/types";
+import { DEFAULT_MODEL } from "./llm/default-model";
 
 /**
  * Generation model identifiers. We support two providers — Anthropic and
@@ -110,6 +111,10 @@ const EMPTY_PROFILE: Profile = {
   defaults: {
     jurisdiction: "UK",
     workerClass: "employee",
+    // Set up-front so the Settings dropdown shows a saved value (matches
+    // AIPanel header + server fallback) instead of relying on a `??`
+    // fallback that doesn't actually fire onValueChange when re-selected.
+    qwenModel: DEFAULT_MODEL,
   },
   autoFill: true,
 };
@@ -146,7 +151,20 @@ export const useProfileStore = create<Store>()(
         set((s) => ({ profile: { ...s.profile, setupComplete: true } })),
       reset: () => set({ profile: EMPTY_PROFILE }),
     }),
-    { name: "scribehr-profile-v1" }
+    {
+      name: "scribehr-profile-v1",
+      // Backfill the default model on existing localStorage profiles.
+      // Before this fix, a fresh profile had qwenModel undefined, which
+      // made Settings' dropdown display the `??` fallback but never
+      // persist the choice — leading to a mismatch with the AIPanel
+      // header which used a different `??` string. With qwenModel now
+      // populated on hydrate, every surface reads the same value.
+      onRehydrateStorage: () => (state) => {
+        if (state && !state.profile.defaults.qwenModel) {
+          state.profile.defaults.qwenModel = DEFAULT_MODEL;
+        }
+      },
+    }
   )
 );
 
