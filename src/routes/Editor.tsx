@@ -343,16 +343,16 @@ export function Editor() {
             )}
           </div>
 
-          {/* Centre: document title + meta submeta. Two-line stack centred
-           * vertically. Title is the most-glanced piece of info — putting it
-           * dead-centre makes the editor feel anchored to the letter itself. */}
-          <div className="flex flex-col items-center justify-center min-w-0 max-w-[44ch] px-2">
-            <div className="text-[14px] font-medium text-[var(--ds-ink)] truncate w-full text-center leading-tight">
+          {/* Centre: document title on a single line. Recipient + jurisdiction
+           * are appended in muted text after a separator so the header stays
+           * one line tall. Truncates with ellipsis on narrow screens. */}
+          <div className="flex items-center justify-center min-w-0 max-w-[60ch] px-2">
+            <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate">
               {meta.title}
-            </div>
-            <div className="hidden md:block text-[11px] text-[var(--ds-muted)] truncate w-full text-center leading-tight mt-0.5">
-              {recipientLabel} · {draft.context.jurisdiction}
-            </div>
+              <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] font-normal ml-2">
+                · {recipientLabel} · {draft.context.jurisdiction}
+              </span>
+            </span>
           </div>
 
           {/* Right: avatars + Invite + actions */}
@@ -493,10 +493,15 @@ export function Editor() {
            * single "Document" popover. Regenerate-all stays visible on the
            * right (most-used section action). Hidden in focus mode. */}
           {!focusMode && (
-            <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
-              {/* Edit / Preview lives here (moved off the main topbar so the
-               * document title can take centre stage). Same component, same
-               * keyboard semantics — different home. */}
+            <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] grid grid-cols-[1fr_auto_1fr] items-center px-3 sm:px-4 gap-2">
+              {/* Left: document settings */}
+              <div className="flex items-center gap-2 min-w-0">
+                <DocumentPopover draft={draft} />
+              </div>
+
+              {/* Centre: Edit / Preview — sits in the middle of the row,
+               * mirroring the visual rhythm of the main topbar where the
+               * title is now centred above it. */}
               <div
                 className="inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7"
                 role="tablist"
@@ -505,9 +510,9 @@ export function Editor() {
                 <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
                 <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
               </div>
-              <span className="h-4 w-px bg-[var(--ds-line)]" aria-hidden />
-              <DocumentPopover draft={draft} />
-              <div className="ml-auto flex items-center gap-2">
+
+              {/* Right: streaming status + Regenerate all */}
+              <div className="flex items-center gap-2 justify-end min-w-0">
                 {globallyStreaming && (
                   <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
                     <Loader2 className="size-3 animate-spin" /> Drafting…
