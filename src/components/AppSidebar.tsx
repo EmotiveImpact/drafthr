@@ -123,6 +123,10 @@ function SidebarShell({ children }: { children: React.ReactNode }) {
     <Sidebar
       variant="inset"
       collapsible="icon"
+      // Mobile: sheet slides in from the right to match the hamburger
+      // position in the mobile topbar. Desktop sidebar stays on the left
+      // where the persistent rail belongs.
+      side={isMobile ? "right" : "left"}
       className={collapsed ? "cursor-pointer" : undefined}
       onClick={(e) => {
         if (!collapsed) return;
