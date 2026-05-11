@@ -11,7 +11,72 @@
  */
 
 import { streamText, type ModelMessage } from "ai";
-import { buildModel } from "../server/llm-model";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+// MUST keep in sync with server/llm-model.ts (and api/agent.ts).
+// Why duplicated: Vercel's serverless bundler doesn't follow cross-tree
+// imports from /api/ into /server/ — module-load fails at runtime with
+// FUNCTION_INVOCATION_FAILED. The server/llm-model.ts version still
+// works for the local Vite dev proxy (server/proxy.ts).
+const DEFAULT_MODEL = "qwen3-max" as const;
+const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+
+const ALLOWED_MODELS = new Set([
+  "claude-opus-4-7",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+  "qwen3-max",
+  "qwen-flash",
+  "qwen-max",
+  "qwen-plus",
+  "qwen-turbo",
+]);
+
+function resolveModelName(requested?: string): string {
+  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
+  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
+  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
+  const providerDefault =
+    envProvider === "qwen"
+      ? QWEN_FALLBACK_MODEL
+      : envProvider === "claude" || envProvider === "anthropic"
+      ? ANTHROPIC_FALLBACK_MODEL
+      : DEFAULT_MODEL;
+  let modelName = fromRequest ?? envModel ?? providerDefault;
+
+  // Fall back to the available provider when the requested one's key is
+  // missing — but only if the alt provider IS configured (don't swap to
+  // a broken qwen if neither key is set; let the explicit error fire).
+  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY && process.env.QWEN_API_KEY) {
+    console.warn(`[api/draft] Requested ${modelName} but ANTHROPIC_API_KEY missing — using ${QWEN_FALLBACK_MODEL}.`);
+    modelName = QWEN_FALLBACK_MODEL;
+  } else if (
+    !modelName.startsWith("claude-") &&
+    !process.env.QWEN_API_KEY &&
+    process.env.ANTHROPIC_API_KEY
+  ) {
+    console.warn(`[api/draft] Requested ${modelName} but QWEN_API_KEY missing — using ${ANTHROPIC_FALLBACK_MODEL}.`);
+    modelName = ANTHROPIC_FALLBACK_MODEL;
+  }
+  return modelName;
+}
+
+function buildModel(requested?: string) {
+  const modelName = resolveModelName(requested);
+  if (modelName.startsWith("claude-")) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
+    return createAnthropic({ apiKey })(modelName);
+  }
+  const apiKey = process.env.QWEN_API_KEY;
+  if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
+  const baseURL =
+    process.env.QWEN_BASE_URL ??
+    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  return createOpenAICompatible({ name: "qwen", apiKey, baseURL })(modelName);
+}
 
 export const config = {
   runtime: "nodejs",
@@ -57,7 +122,7 @@ export async function POST(req: Request): Promise<Response> {
       let realError: string | null = null;
       try {
         const result = streamText({
-          model: buildModel(body.model, "api/draft"),
+          model: buildModel(body.model),
           messages: body.messages,
           temperature: body.temperature ?? 0.4,
           maxOutputTokens: body.maxTokens ?? 1200,
