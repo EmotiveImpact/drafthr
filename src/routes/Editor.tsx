@@ -293,11 +293,12 @@ export function Editor() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Single canonical header — replaces the old EditorTopbar + action row.
-       * Layout: [brand · breadcrumb · meta] [centred view-mode] [avatars · actions]
-       */}
+       * Layout: [brand · ← Letters · counsel pill] [TITLE centred + submeta]
+       * [avatars · actions]. Edit/Preview moved to the secondary toolbar so
+       * the title can claim centre stage. */}
       <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
         <div className="h-full px-2 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-          {/* Left: brand + breadcrumb + sections-toggle + meta */}
+          {/* Left: brand + back-to-letters + counsel pill */}
           <div className="flex items-center gap-2 min-w-0">
             <Button
               variant="ghost"
@@ -320,13 +321,6 @@ export function Editor() {
                 Letters
               </span>
             </button>
-            <ChevronRight className="size-3 text-[var(--ds-subtle)] hidden sm:inline" />
-            <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate">
-              {meta.title}
-            </span>
-            <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] truncate">
-              · {recipientLabel} · {draft.context.jurisdiction}
-            </span>
             {/* Counsel-review pill — only on high-risk letters or where the
              * letter type's metadata flags counsel review as required. */}
             {(meta.legalReviewRequired || meta.riskClass === "high") && (
@@ -349,14 +343,16 @@ export function Editor() {
             )}
           </div>
 
-          {/* Centre: view-mode toggle */}
-          <div
-            className="inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden"
-            role="tablist"
-            aria-label="View mode"
-          >
-            <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-            <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+          {/* Centre: document title + meta submeta. Two-line stack centred
+           * vertically. Title is the most-glanced piece of info — putting it
+           * dead-centre makes the editor feel anchored to the letter itself. */}
+          <div className="flex flex-col items-center justify-center min-w-0 max-w-[44ch] px-2">
+            <div className="text-[14px] font-medium text-[var(--ds-ink)] truncate w-full text-center leading-tight">
+              {meta.title}
+            </div>
+            <div className="hidden md:block text-[11px] text-[var(--ds-muted)] truncate w-full text-center leading-tight mt-0.5">
+              {recipientLabel} · {draft.context.jurisdiction}
+            </div>
           </div>
 
           {/* Right: avatars + Invite + actions */}
@@ -498,6 +494,18 @@ export function Editor() {
            * right (most-used section action). Hidden in focus mode. */}
           {!focusMode && (
             <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
+              {/* Edit / Preview lives here (moved off the main topbar so the
+               * document title can take centre stage). Same component, same
+               * keyboard semantics — different home. */}
+              <div
+                className="inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7"
+                role="tablist"
+                aria-label="View mode"
+              >
+                <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
+                <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+              </div>
+              <span className="h-4 w-px bg-[var(--ds-line)]" aria-hidden />
               <DocumentPopover draft={draft} />
               <div className="ml-auto flex items-center gap-2">
                 {globallyStreaming && (
