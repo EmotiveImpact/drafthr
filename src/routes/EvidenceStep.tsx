@@ -225,8 +225,8 @@ export function EvidenceStep() {
         <Button variant="outline" size="sm" asChild>
           <Link to={`/editor/${draft.id}`}>Back to letter</Link>
         </Button>
-        <Button size="sm" onClick={() => nav(`/editor/${draft.id}`)}>
-          Review & export <ArrowRight className="size-4" />
+        <Button size="sm" onClick={() => nav(`/editor/${draft.id}/review`)}>
+          Next: Review <ArrowRight className="size-4" />
         </Button>
       </header>
 

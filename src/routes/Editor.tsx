@@ -10,7 +10,6 @@ import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
 import { LetterPreview } from "@/components/editor/LetterPreview";
-import { ReviewPanel } from "@/components/editor/ReviewPanel";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { Button } from "@/components/ui/button";
@@ -30,7 +29,6 @@ import {
   PanelRight,
   FileEdit,
   Eye,
-  ListChecks,
   MoreHorizontal,
   UserPlus,
   Settings2,
@@ -73,7 +71,7 @@ export function Editor() {
   const [pendingExport, setPendingExport] = useState<ExportFormat | null>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
-  const [viewMode, setViewMode] = useState<"edit" | "review" | "preview">("edit");
+  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   /**
    * Focus mode — collapses both rails + the secondary toolbar so the writer
    * sees only the canvas. A floating outline pill (top-left) and a floating
@@ -546,7 +544,6 @@ export function Editor() {
                 aria-label="View mode"
               >
                 <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-                <ViewModeButton mode="review" current={viewMode} setMode={setViewMode} icon={<ListChecks className="size-3.5" />} label="Review" />
                 <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
               </div>
 
@@ -668,26 +665,6 @@ export function Editor() {
                 onFocusComment={onFocusComment}
               />
             </div>
-          ) : viewMode === "review" ? (
-            <ReviewPanel
-              draft={draft}
-              counselReviewedBy={counselReview}
-              unresolvedComments={(draft.comments ?? []).filter((c) => !c.resolved).length}
-              onJumpToSection={(sectionId) => {
-                setActiveSectionId(sectionId);
-                setViewMode("edit");
-                requestAnimationFrame(() => {
-                  const el = document.querySelector(`[data-section-id="${sectionId}"]`);
-                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                });
-              }}
-              onJumpToEvidence={() =>
-                nav(
-                  `/editor/${draft.id}/evidence${activeSectionId ? `?section=${activeSectionId}` : ""}`
-                )
-              }
-              onExport={() => requestExport("pack")}
-            />
           ) : (
             <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
               <InlineDisclaimer draft={draft} />
@@ -820,7 +797,7 @@ export function Editor() {
   );
 }
 
-type ViewMode = "edit" | "review" | "preview";
+type ViewMode = "edit" | "preview";
 
 function ViewModeButton({
   mode,
