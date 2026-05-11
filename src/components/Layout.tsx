@@ -67,25 +67,14 @@ function MobileTopbar() {
       : "/pick-role";
 
   return (
-    <header className="md:hidden relative flex h-12 shrink-0 items-center border-b border-sidebar-border bg-background/85 backdrop-blur-sm px-3 sticky top-0 z-30">
-      <button
-        type="button"
-        aria-label="Open menu"
-        onClick={() => setOpenMobile(true)}
-        className="grid place-items-center size-11 -ml-2 rounded-md hover:bg-sidebar-accent text-foreground"
-      >
-        <Menu className="size-5" />
-      </button>
-
-      {/* Logo is absolutely centred so unequal left/right icon widths
-       * (hamburger vs. plus+bell) don't push it off-axis. iOS-style. */}
+    <header className="md:hidden flex h-12 shrink-0 items-center gap-2 border-b border-sidebar-border bg-background/85 backdrop-blur-sm px-3 sticky top-0 z-30">
       <Link
         to="/"
         aria-label="DRAFTHR home"
-        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2"
+        className="flex items-center gap-2 min-w-0"
       >
         <BrandMark size={28} />
-        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">
+        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] truncate">
           DRAFTHR
         </span>
       </Link>
@@ -99,6 +88,14 @@ function MobileTopbar() {
           <Plus className="size-5" />
         </Link>
         <NotificationsBell />
+        <button
+          type="button"
+          aria-label="Open menu"
+          onClick={() => setOpenMobile(true)}
+          className="grid place-items-center size-11 -mr-2 rounded-md hover:bg-sidebar-accent text-foreground"
+        >
+          <Menu className="size-5" />
+        </button>
       </div>
     </header>
   );
