@@ -63,7 +63,21 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     throw new RetryableError("Rate limited (429)", retryAfter);
   }
   if (res.status >= 500 && res.status < 600) {
-    throw new RetryableError(`Server error (${res.status})`);
+    // Try to surface the actual server error body (function logs missing
+    // env vars, model errors, etc.) instead of a generic "Server error (500)".
+    // Body may be HTML (Vercel error page) or JSON (our error envelope).
+    const text = await res.text().catch(() => "");
+    const snippet = extractErrorSnippet(text);
+    const detail = snippet ? ` — ${snippet}` : "";
+    throw new RetryableError(`Server error (${res.status})${detail}`);
+  }
+  if (res.status === 401 || res.status === 403) {
+    // Vercel Deployment Protection or other auth gate is blocking the API.
+    // Not retryable — the user has to disable protection or sign in.
+    throw new Error(
+      `/api/draft blocked by authentication (${res.status}). ` +
+        `If you're on Vercel, check Project Settings → Deployment Protection.`
+    );
   }
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => "");
@@ -138,6 +152,31 @@ async function fetchOrThrow(opts: StreamOptions): Promise<Response> {
       err instanceof Error ? err.message : "Network error"
     );
   }
+}
+
+/**
+ * Pull a human-readable snippet from a 5xx response body. Vercel's default
+ * error pages are HTML, our SSE proxy errors are JSON-event-stream, and
+ * the function could also crash with a bare text/plain stack. Try each
+ * shape; if nothing intelligible, return empty.
+ */
+function extractErrorSnippet(text: string): string {
+  if (!text) return "";
+  // JSON envelope: {"error": "..."}
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.error === "string") return parsed.error.slice(0, 240);
+  } catch {
+    /* fall through */
+  }
+  // SSE error event: data: {"error":"..."}
+  const sseMatch = text.match(/data:\s*\{[^}]*"error"\s*:\s*"([^"]+)"/);
+  if (sseMatch) return sseMatch[1].slice(0, 240);
+  // HTML <title>: Vercel's auth wall, function crash page, etc.
+  const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+  if (titleMatch) return titleMatch[1].trim().slice(0, 240);
+  // Plain text: trim and clip
+  return text.replace(/\s+/g, " ").trim().slice(0, 240);
 }
 
 function parseRetryAfter(h: string | null): number | undefined {
