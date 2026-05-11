@@ -24,7 +24,6 @@ import {
   StopCircle,
   PanelLeft,
   PanelRight,
-  Menu,
   FileEdit,
   Eye,
   MoreHorizontal,
@@ -279,11 +278,17 @@ export function Editor() {
          * regardless of how heavy the left/right groups become. This is what
          * lets the title above and Edit/Preview below share a vertical axis. */}
         <div className="relative h-full px-2 sm:px-4 flex items-center gap-2 sm:gap-3">
-          {/* Left: brand + back-to-letters + counsel pill.
-           * Mobile hamburger moved out of here — see right-side cluster
-           * below. Keeping the brand as the first element matches the
-           * "logo always top-left" convention. */}
+          {/* Left: brand + back-to-letters + counsel pill */}
           <div className="flex items-center gap-2 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden size-8"
+              onClick={() => setShowSidebar((s) => !s)}
+              aria-label="Toggle sections"
+            >
+              <PanelLeft className="size-4" />
+            </Button>
             <button
               type="button"
               onClick={() => nav(backTo)}
@@ -452,32 +457,15 @@ export function Editor() {
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             )}
-            {/* Mobile menu — single hamburger on the right (replaces the
-             * left-side section toggle + right-rail toggle). Opens a small
-             * dropdown with both panel toggles so mobile users have a
-             * consistent affordance instead of two separate icons. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="lg:hidden size-8"
-                  aria-label="Open menu"
-                >
-                  <Menu className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setShowSidebar((s) => !s)}>
-                  <PanelLeft className="size-4 mr-2" />
-                  {showSidebar ? "Hide sections" : "Show sections"}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setShowRail((s) => !s)}>
-                  <PanelRight className="size-4 mr-2" />
-                  {showRail ? "Hide right rail" : "Show right rail"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden size-8"
+              onClick={() => setShowRail((s) => !s)}
+              aria-label="Toggle right rail"
+            >
+              <PanelRight className="size-4" />
+            </Button>
           </div>
         </div>
       </header>
