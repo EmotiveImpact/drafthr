@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRAFTHR — Projects / Matters mockups</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ds-canvas:#fafafa;
+      --ds-surface:#ffffff;
+      --ds-surface-2:#f6f7f9;
+      --ds-line:#e9eaec;
+      --ds-line-2:#f3f4f5;
+      --ds-ink:#0a0b0d;
+      --ds-body:#2f3239;
+      --ds-muted:#6b6f78;
+      --ds-subtle:#9ca0a8;
+      --ds-amber-bg:#fffbeb; --ds-amber-fg:#b45309;
+      --ds-green-bg:#f0fdf4; --ds-green-fg:#15803d;
+      --ds-blue-bg:#eff6ff; --ds-blue-fg:#1d4ed8;
+      --ds-violet-bg:#f5f3ff; --ds-violet-fg:#6d28d9;
+      --ds-red-bg:#fef2f2; --ds-red-fg:#b91c1c;
+      --font-sans:"Geist",-apple-system,sans-serif;
+      --font-serif:"Source Serif 4",Charter,Georgia,serif;
+      --font-mono:"JetBrains Mono",ui-monospace,monospace;
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{font-family:var(--font-sans);font-size:14px;color:var(--ds-body);background:#eef0f3;-webkit-font-smoothing:antialiased;line-height:1.55}
+    button,a,select,label{cursor:pointer}
+
+    .wrap{max-width:1640px;margin:0 auto;padding:24px 24px 80px}
+    h1{font-family:var(--font-serif);font-size:30px;font-weight:600;letter-spacing:-0.012em;color:var(--ds-ink);margin:0 0 6px 0;line-height:1.1}
+    .lede{font-size:14px;color:var(--ds-body);max-width:78ch;margin:0 0 16px 0}
+
+    .pitch{background:#fff;border:1px solid var(--ds-line);border-radius:10px;padding:20px 24px;margin-bottom:20px}
+    .pitch h2{font-family:var(--font-serif);font-size:20px;margin:0 0 6px;color:var(--ds-ink);font-weight:600}
+    .pitch p{margin:0 0 8px;font-size:13.5px;color:var(--ds-body)}
+    .pitch .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+    .pitch .card{border:1px solid var(--ds-line);border-radius:8px;padding:12px 14px;background:var(--ds-surface-2)}
+    .pitch .card h3{font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--ds-muted);margin:0 0 8px;font-weight:600}
+    .pitch .card ul{margin:0;padding-left:18px;font-size:12.5px;color:var(--ds-body)}
+    .pitch .card li{margin:3px 0}
+    .pitch .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:999px;background:var(--ds-blue-bg);color:var(--ds-blue-fg);margin-right:4px}
+
+    /* Tab strip */
+    .switcher{position:sticky;top:0;z-index:50;background:rgba(238,240,243,0.85);backdrop-filter:blur(12px);padding:12px 0;margin:0 -24px 20px;padding-left:24px;padding-right:24px;border-bottom:1px solid #dfe2e6}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap}
+    .tab{font-size:12px;font-weight:500;padding:6px 12px;border-radius:7px;border:1px solid var(--ds-line);background:#fff;color:var(--ds-body);transition:all 0.12s;font-family:var(--font-sans)}
+    .tab:hover{border-color:#cdd0d4;color:var(--ds-ink)}
+    .tab.active{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+    .tab .num{font-family:var(--font-mono);font-size:10px;opacity:0.55;margin-right:5px}
+
+    /* Variant */
+    .variant{display:none}
+    .variant.active{display:block}
+    .variant-head{margin-bottom:14px}
+    .variant-head h2{font-family:var(--font-serif);font-size:22px;font-weight:600;margin:0 0 4px;color:var(--ds-ink)}
+    .variant-head .meta{font-size:12.5px;color:var(--ds-muted);margin-bottom:4px}
+    .variant-head .desc{font-size:13.5px;color:var(--ds-body);max-width:80ch;margin:6px 0 0}
+
+    .pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+    @media (max-width: 1200px) { .pair { grid-template-columns: 1fr; } }
+    .pair > section{background:#fff;border-radius:12px;overflow:hidden;border:1px solid var(--ds-line);box-shadow:0 1px 2px rgba(0,0,0,0.03)}
+    .pair > section header{padding:9px 14px;border-bottom:1px solid var(--ds-line-2);font-size:11px;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;background:var(--ds-surface-2);display:flex;align-items:center;gap:6px}
+    .pair > section header .who{color:var(--ds-ink);font-weight:600;text-transform:none;letter-spacing:0;font-size:12.5px}
+
+    /* App shell mock */
+    .mock{display:grid;grid-template-columns:200px 1fr;height:540px;min-height:540px}
+    .mock-sidebar{background:var(--ds-surface-2);border-right:1px solid var(--ds-line);display:flex;flex-direction:column;min-height:0}
+    .mock-sidebar .brand{padding:10px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--ds-line-2)}
+    .mock-sidebar .brand .logo{width:24px;height:24px;background:var(--ds-ink);border-radius:5px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px;font-family:var(--font-serif)}
+    .mock-sidebar .brand .name{font-size:11px;font-weight:600;color:var(--ds-ink);letter-spacing:0.04em}
+    .mock-sidebar .brand .sub{font-size:9.5px;color:var(--ds-muted);margin-top:1px}
+    .mock-sidebar .scroll{flex:1;overflow-y:auto;padding:6px}
+    .navgroup{padding:8px 4px 4px}
+    .navgroup .label{padding:2px 8px;font-size:9.5px;font-weight:600;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.1em}
+    .navitem{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:5px;font-size:12.5px;color:var(--ds-body);width:100%;text-align:left;border:none;background:transparent}
+    .navitem:hover{background:#fff}
+    .navitem.active{background:#fff;color:var(--ds-ink);font-weight:500;box-shadow:0 0 0 1px var(--ds-line)}
+    .navitem .ic{width:14px;height:14px;display:grid;place-items:center;font-size:11px;color:var(--ds-muted);flex-shrink:0}
+    .navitem.active .ic{color:var(--ds-ink)}
+    .navitem .badge{margin-left:auto;background:var(--ds-amber-fg);color:#fff;font-size:9px;padding:0 5px;border-radius:999px;font-weight:600}
+    .nav-sub{padding-left:20px;display:flex;flex-direction:column}
+    .nav-sub .navitem{font-size:12px;padding:4px 8px;color:var(--ds-body)}
+    .nav-sub .navitem .ic{font-size:10px;width:12px;height:12px}
+
+    /* Main canvas */
+    .mock-main{background:var(--ds-canvas);display:flex;flex-direction:column;min-height:0}
+    .topbar{height:44px;border-bottom:1px solid var(--ds-line);background:#fff;display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0}
+    .topbar .crumb{font-size:12px;color:var(--ds-muted)}
+    .topbar .crumb .ttl{color:var(--ds-ink);font-weight:500}
+    .topbar .grow{flex:1}
+    .topbar .actions{display:flex;align-items:center;gap:6px}
+    .btn{font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--ds-line);background:#fff;color:var(--ds-body)}
+    .btn.solid{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+    .btn.solid:hover{background:#222}
+    .btn:hover{background:var(--ds-line-2)}
+
+    .canvas{flex:1;overflow-y:auto;padding:16px 20px}
+
+    /* Matter card */
+    .matter-card{background:#fff;border:1px solid var(--ds-line);border-radius:10px;margin-bottom:12px;overflow:hidden}
+    .matter-card .head{padding:12px 14px;border-bottom:1px solid var(--ds-line-2);display:flex;align-items:start;gap:10px}
+    .matter-card .head .title{font-family:var(--font-serif);font-size:15px;font-weight:600;color:var(--ds-ink);margin:0;line-height:1.2}
+    .matter-card .head .sub{font-size:11.5px;color:var(--ds-muted);margin-top:2px}
+    .matter-card .head .status{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;font-weight:600;padding:2px 7px;border-radius:999px}
+    .matter-card .head .status.active{background:var(--ds-green-bg);color:var(--ds-green-fg)}
+    .matter-card .head .status.closed{background:var(--ds-line-2);color:var(--ds-muted)}
+    .matter-card .head .status.urgent{background:var(--ds-red-bg);color:var(--ds-red-fg)}
+    .matter-card .body{padding:6px 0}
+    .matter-card .letter{display:flex;align-items:center;gap:10px;padding:6px 14px;border-top:1px dashed var(--ds-line-2);font-size:12.5px}
+    .matter-card .letter:first-child{border-top:none}
+    .matter-card .letter:hover{background:var(--ds-line-2)}
+    .matter-card .letter .icon{width:18px;height:18px;display:grid;place-items:center;background:var(--ds-line-2);border-radius:4px;font-size:10px;color:var(--ds-muted);flex-shrink:0}
+    .matter-card .letter .name{flex:1;min-width:0}
+    .matter-card .letter .name .ttl{color:var(--ds-ink);font-weight:500}
+    .matter-card .letter .name .meta{font-size:11px;color:var(--ds-muted);margin-top:1px}
+    .matter-card .letter .badge{font-size:10px;padding:1px 6px;border-radius:999px;font-weight:600}
+    .matter-card .letter .badge.draft{background:var(--ds-amber-bg);color:var(--ds-amber-fg)}
+    .matter-card .letter .badge.sent{background:var(--ds-green-bg);color:var(--ds-green-fg)}
+    .matter-card .letter .badge.scheduled{background:var(--ds-blue-bg);color:var(--ds-blue-fg)}
+
+    /* Group header for auto-grouped */
+    .group-head{display:flex;align-items:baseline;justify-content:space-between;padding:14px 4px 8px;border-bottom:1px solid var(--ds-line);margin-bottom:8px}
+    .group-head .title{font-family:var(--font-serif);font-size:16px;font-weight:600;color:var(--ds-ink);margin:0}
+    .group-head .meta{font-size:11px;color:var(--ds-muted)}
+
+    /* Variant C: two-pane */
+    .twopane{display:grid;grid-template-columns:260px 1fr;height:100%}
+    .twopane .left{background:#fff;border-right:1px solid var(--ds-line);overflow-y:auto;padding:6px}
+    .twopane .left .matter-row{padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:start;gap:8px}
+    .twopane .left .matter-row:hover{background:var(--ds-line-2)}
+    .twopane .left .matter-row.active{background:var(--ds-ink);color:#fff}
+    .twopane .left .matter-row.active .sub{color:rgba(255,255,255,0.7)}
+    .twopane .left .matter-row .icon{width:22px;height:22px;background:var(--ds-line-2);border-radius:6px;display:grid;place-items:center;font-size:11px;flex-shrink:0;color:var(--ds-muted)}
+    .twopane .left .matter-row.active .icon{background:rgba(255,255,255,0.15);color:#fff}
+    .twopane .left .matter-row .title{font-size:12.5px;font-weight:500;margin:0 0 2px}
+    .twopane .left .matter-row .sub{font-size:10.5px;color:var(--ds-muted);margin:0}
+    .twopane .left .grouplabel{font-size:9.5px;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.1em;font-weight:600;padding:10px 10px 4px}
+    .twopane .right{background:var(--ds-canvas);overflow-y:auto;padding:16px 20px}
+
+    /* Variant D: project picker dropdown style */
+    .proj-picker{display:inline-flex;align-items:center;gap:8px;padding:5px 10px;background:#fff;border:1px solid var(--ds-line);border-radius:7px;font-size:12.5px;color:var(--ds-ink);font-weight:500}
+    .proj-picker .swatch{width:14px;height:14px;border-radius:3px;background:var(--ds-blue-fg)}
+    .proj-picker .caret{color:var(--ds-muted);font-size:10px;margin-left:4px}
+
+    /* Filter chips */
+    .chips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+    .chip{font-size:11px;padding:4px 9px;border-radius:999px;background:#fff;border:1px solid var(--ds-line);color:var(--ds-body)}
+    .chip.active{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+
+    /* Tradeoff bar */
+    .tradeoffs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+    .tradeoffs > div{font-size:12px;padding:10px 12px;border-radius:8px;line-height:1.5}
+    .tradeoffs .pros{background:#f6fdf9;border:1px solid #c6e9d5;color:#0e4c2c}
+    .tradeoffs .cons{background:#fff7f7;border:1px solid #fcd5d5;color:#7a1a1a}
+    .tradeoffs strong{display:block;font-weight:600;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:3px}
+
+    /* Recommendation */
+    .recommendation{background:#fffbe6;border:1px solid #f5d97a;border-radius:8px;padding:14px 16px;margin-top:20px;font-size:13px;color:#7a5b00}
+    .recommendation strong{display:block;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#7a5b00;margin-bottom:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Projects (Matters) — concept + four layout variants</h1>
+    <p class="lede">After ~10 drafts a flat list breaks down. Every letter clusters around a thing — a person, a case, a hiring cycle. Below: the concept, then four UI directions for surfacing the cluster. Tab through, then pick one.</p>
+
+    <!-- Concept pitch -->
+    <div class="pitch">
+      <h2>The Matter</h2>
+      <p>A <strong>Matter</strong> is a named container for letters that belong together. Most letters won't need one. The ones that do (a discrimination claim, a PIP, a redundancy round, a hiring cycle) cluster better when they sit under a shared name.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>Employee mode</h3>
+          <p style="font-size:12px;margin-bottom:6px;"><span class="pill">Auto</span> group by <strong>Employer</strong> — every letter you ever wrote to Acme Holdings sits together.</p>
+          <p style="font-size:12px;margin-bottom:8px;"><span class="pill">Manual</span> tag a <strong>Matter</strong> — e.g. <em>"Acme discrimination claim 2026 Q1"</em> ties together your grievance, appeal, ACAS EC notice, tribunal cover.</p>
+          <ul>
+            <li><strong>Acme discrimination claim 2026</strong> — grievance · appeal · ACAS EC · tribunal cover</li>
+            <li><strong>BigCorp resignation 2025</strong> — resignation with grievance · withdrawal</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>HR / Employer mode</h3>
+          <p style="font-size:12px;margin-bottom:6px;"><span class="pill">Auto</span> group by <strong>Person</strong> — every letter about James O'Connor sits together over the years.</p>
+          <p style="font-size:12px;margin-bottom:8px;"><span class="pill">Manual</span> tag a <strong>Matter</strong> — e.g. <em>"James's PIP 2026 Q2"</em>, <em>"Engineering hiring round Spring 2026"</em>.</p>
+          <ul>
+            <li><strong>James O'Connor — PIP 2026 Q2</strong> — PIP letter · mid-point check-in · outcome</li>
+            <li><strong>Spring 2026 hires</strong> — 12 offer letters · 3 right-to-work · 2 contract amends</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="switcher">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-target="v1"><span class="num">A</span>Sidebar tree (Notion)</button>
+        <button class="tab" data-target="v2"><span class="num">B</span>Project switcher (Linear)</button>
+        <button class="tab" data-target="v3"><span class="num">C</span>Two-pane (Mail)</button>
+        <button class="tab" data-target="v4"><span class="num">D</span>Auto-grouped (no setup)</button>
+      </div>
+    </div>
+
+    <!-- VARIANT A — sidebar tree (Notion) -->
+    <section class="variant active" id="v1">
+      <div class="variant-head">
+        <h2>A · Sidebar tree (Notion-style)</h2>
+        <div class="meta">Hierarchical sidebar · matters expand inline</div>
+        <p class="desc">Matters live as expandable nodes in the existing sidebar between <strong>Watch</strong> and <strong>Recent drafts</strong>. Click a matter name → main canvas shows that matter's letters. Click a letter → opens it. Matches the navigation pattern users already know (Recent drafts uses the same convention).</p>
+      </div>
+      <div class="pair">
+        <!-- Employee variant -->
+        <section>
+          <header><span class="who">Employee mode</span> · single user defending rights</header>
+          <div class="mock">
+            <aside class="mock-sidebar">
+              <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Sarah Williams</div></div></div>
+              <div class="scroll">
+                <div class="navgroup">
+                  <button class="navitem"><span class="ic">🏠</span>Home</button>
+                  <button class="navitem"><span class="ic">＋</span>New letter</button>
+                  <button class="navitem"><span class="ic">🔍</span>Search</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Watch</div>
+                  <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">2</span></button>
+                  <button class="navitem"><span class="ic">📅</span>Calendar</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Matters · 3</div>
+                  <button class="navitem active"><span class="ic">📂</span>Acme discrimination 2026</button>
+                  <div class="nav-sub">
+                    <button class="navitem"><span class="ic">📄</span>Grievance · sent</button>
+                    <button class="navitem"><span class="ic">📄</span>Appeal · draft</button>
+                    <button class="navitem"><span class="ic">📄</span>ACAS EC</button>
+                  </div>
+                  <button class="navitem"><span class="ic">📁</span>BigCorp resignation</button>
+                  <button class="navitem"><span class="ic">📁</span>Reference dispute</button>
+                  <button class="navitem"><span class="ic" style="color:var(--ds-muted)">＋</span>New matter</button>
+                </div>
+              </div>
+            </aside>
+            <main class="mock-main">
+              <div class="topbar">
+                <span class="crumb">Matters / <span class="ttl">Acme discrimination 2026</span></span>
+                <span class="grow"></span>
+                <div class="actions">
+                  <button class="btn">⚙ Edit matter</button>
+                  <button class="btn solid">＋ Add letter</button>
+                </div>
+              </div>
+              <div class="canvas">
+                <div class="matter-card">
+                  <div class="head">
+                    <div>
+                      <h3 class="title">Acme discrimination claim — 2026 Q1</h3>
+                      <p class="sub">Acme Holdings Ltd · started 12 Feb 2026 · ACAS EC deadline in 9 days</p>
+                    </div>
+                    <span class="status urgent">Active · urgent</span>
+                  </div>
+                  <div class="body">
+                    <div class="letter"><span class="icon">G</span><div class="name"><span class="ttl">Formal grievance</span><div class="meta">Sent 18 Feb · 7 sections · 12 paragraphs</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">A</span><div class="name"><span class="ttl">Appeal letter</span><div class="meta">Drafting · last edit 2h ago</div></div><span class="badge draft">Draft</span></div>
+                    <div class="letter"><span class="icon">E</span><div class="name"><span class="ttl">ACAS EC notification</span><div class="meta">Scheduled · send by 23 May</div></div><span class="badge scheduled">Scheduled</span></div>
+                    <div class="letter"><span class="icon">T</span><div class="name"><span class="ttl">Tribunal cover (ET1)</span><div class="meta">Planned · awaits ACAS conciliation outcome</div></div><span class="badge draft">Planned</span></div>
+                  </div>
+                </div>
+                <div style="font-size:11px;color:var(--ds-muted);text-align:center;padding:20px 0">— 0 unrelated drafts —</div>
+              </div>
+            </main>
+          </div>
+        </section>
+
+        <!-- HR variant -->
+        <section>
+          <header><span class="who">HR / Employer mode</span> · HR team managing employees</header>
+          <div class="mock">
+            <aside class="mock-sidebar">
+              <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Priya M. · Acme HR</div></div></div>
+              <div class="scroll">
+                <div class="navgroup">
+                  <button class="navitem"><span class="ic">🏠</span>Home</button>
+                  <button class="navitem"><span class="ic">＋</span>New letter</button>
+                  <button class="navitem"><span class="ic">🔍</span>Search</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Watch</div>
+                  <button class="navitem"><span class="ic">🔔</span>Notifications</button>
+                  <button class="navitem"><span class="ic">📅</span>Calendar</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Matters · 5</div>
+                  <button class="navitem active"><span class="ic">📂</span>James O'Connor — PIP</button>
+                  <div class="nav-sub">
+                    <button class="navitem"><span class="ic">📄</span>PIP letter · sent</button>
+                    <button class="navitem"><span class="ic">📄</span>Mid-point check-in</button>
+                  </div>
+                  <button class="navitem"><span class="ic">📁</span>Spring 2026 hires (12)</button>
+                  <button class="navitem"><span class="ic">📁</span>Sarah K. — flexible working</button>
+                  <button class="navitem"><span class="ic">📁</span>Tom R. — disciplinary</button>
+                  <button class="navitem"><span class="ic">📁</span>Q1 redundancy round</button>
+                  <button class="navitem"><span class="ic" style="color:var(--ds-muted)">＋</span>New matter</button>
+                </div>
+              </div>
+            </aside>
+            <main class="mock-main">
+              <div class="topbar">
+                <span class="crumb">Matters / <span class="ttl">James O'Connor — PIP 2026 Q2</span></span>
+                <span class="grow"></span>
+                <div class="actions">
+                  <button class="btn">⚙ Edit matter</button>
+                  <button class="btn solid">＋ Add letter</button>
+                </div>
+              </div>
+              <div class="canvas">
+                <div class="matter-card">
+                  <div class="head">
+                    <div>
+                      <h3 class="title">James O'Connor — Performance Improvement Plan</h3>
+                      <p class="sub">Engineering · Started 14 Mar 2026 · Outcome due 14 Jun 2026 (35 days)</p>
+                    </div>
+                    <span class="status active">Active</span>
+                  </div>
+                  <div class="body">
+                    <div class="letter"><span class="icon">P</span><div class="name"><span class="ttl">PIP letter</span><div class="meta">Sent 14 Mar · 6 sections · counsel-reviewed</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">M</span><div class="name"><span class="ttl">Mid-point check-in (60 days)</span><div class="meta">Drafting · scheduled to send 14 May</div></div><span class="badge draft">Draft</span></div>
+                    <div class="letter"><span class="icon">O</span><div class="name"><span class="ttl">PIP outcome letter</span><div class="meta">Not started · drafts on 14 Jun</div></div><span class="badge scheduled">Planned</span></div>
+                  </div>
+                </div>
+                <div style="font-size:11px;color:var(--ds-muted);text-align:center;padding:20px 0">— 0 unrelated drafts —</div>
+              </div>
+            </main>
+          </div>
+        </section>
+      </div>
+      <div class="tradeoffs">
+        <div class="pros"><strong>Wins</strong>Familiar mental model — matters look like folders, letters look like files. Zero new pages; just a sidebar group. Letters are easy to find by hierarchy.</div>
+        <div class="cons"><strong>Costs</strong>Sidebar gets crowded with 5+ matters. Hard to see the matter "as a whole" — you only get its letters one at a time.</div>
+      </div>
+    </section>
+
+    <!-- VARIANT B — project switcher (Linear) -->
+    <section class="variant" id="v2">
+      <div class="variant-head">
+        <h2>B · Project switcher (Linear-style)</h2>
+        <div class="meta">Sidebar shows app-wide nav · matter picker lives in the topbar</div>
+        <p class="desc">Sidebar stays clean (no nested tree). A picker at the top of the main canvas lets you switch matter — like Linear's project picker or Notion's workspace switcher. The selected matter "owns" the rest of the page: all of Home, Calendar, Activity filter to it.</p>
+      </div>
+      <div class="pair">
+        <section>
+          <header><span class="who">Employee mode</span></header>
+          <div class="mock">
+            <aside class="mock-sidebar">
+              <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Sarah Williams</div></div></div>
+              <div class="scroll">
+                <div class="navgroup">
+                  <button class="navitem"><span class="ic">🏠</span>Home</button>
+                  <button class="navitem"><span class="ic">＋</span>New letter</button>
+                  <button class="navitem"><span class="ic">🔍</span>Search</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Watch</div>
+                  <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">2</span></button>
+                  <button class="navitem"><span class="ic">📅</span>Calendar</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Archive</div>
+                  <button class="navitem"><span class="ic">📈</span>Activity</button>
+                  <button class="navitem"><span class="ic">📤</span>Exported</button>
+                </div>
+              </div>
+            </aside>
+            <main class="mock-main">
+              <div class="topbar" style="height:54px;align-items:center;gap:14px">
+                <div class="proj-picker"><span class="swatch" style="background:var(--ds-red-fg)"></span>Acme discrimination 2026 <span class="caret">▾</span></div>
+                <span class="crumb" style="font-size:11px">3 letters · started 12 Feb · ACAS in 9 days</span>
+                <span class="grow"></span>
+                <div class="actions">
+                  <button class="btn">⚙</button>
+                  <button class="btn solid">＋ Letter</button>
+                </div>
+              </div>
+              <div class="canvas">
+                <div class="chips">
+                  <span class="chip active">All</span>
+                  <span class="chip">Draft (1)</span>
+                  <span class="chip">Sent (1)</span>
+                  <span class="chip">Scheduled (1)</span>
+                  <span class="chip">Planned (1)</span>
+                </div>
+                <div class="matter-card">
+                  <div class="head" style="background:var(--ds-canvas)">
+                    <div><h3 class="title">Letters in this matter</h3><p class="sub">4 letters · most recent edited 2h ago</p></div>
+                  </div>
+                  <div class="body">
+                    <div class="letter"><span class="icon">G</span><div class="name"><span class="ttl">Formal grievance</span><div class="meta">Sent 18 Feb</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">A</span><div class="name"><span class="ttl">Appeal letter</span><div class="meta">Last edit 2h ago</div></div><span class="badge draft">Draft</span></div>
+                    <div class="letter"><span class="icon">E</span><div class="name"><span class="ttl">ACAS EC notification</span><div class="meta">Scheduled · send by 23 May</div></div><span class="badge scheduled">Scheduled</span></div>
+                    <div class="letter"><span class="icon">T</span><div class="name"><span class="ttl">Tribunal cover (ET1)</span><div class="meta">Awaits ACAS outcome</div></div><span class="badge draft">Planned</span></div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </section>
+
+        <section>
+          <header><span class="who">HR / Employer mode</span></header>
+          <div class="mock">
+            <aside class="mock-sidebar">
+              <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Priya M. · Acme HR</div></div></div>
+              <div class="scroll">
+                <div class="navgroup">
+                  <button class="navitem"><span class="ic">🏠</span>Home</button>
+                  <button class="navitem"><span class="ic">＋</span>New letter</button>
+                  <button class="navitem"><span class="ic">🔍</span>Search</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Watch</div>
+                  <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">5</span></button>
+                  <button class="navitem"><span class="ic">📅</span>Calendar</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Archive</div>
+                  <button class="navitem"><span class="ic">📈</span>Activity</button>
+                  <button class="navitem"><span class="ic">📤</span>Exported</button>
+                </div>
+              </div>
+            </aside>
+            <main class="mock-main">
+              <div class="topbar" style="height:54px;gap:14px">
+                <div class="proj-picker"><span class="swatch" style="background:var(--ds-amber-fg)"></span>James O'Connor — PIP <span class="caret">▾</span></div>
+                <span class="crumb" style="font-size:11px">3 letters · outcome due 14 Jun</span>
+                <span class="grow"></span>
+                <div class="actions">
+                  <button class="btn">⚙</button>
+                  <button class="btn solid">＋ Letter</button>
+                </div>
+              </div>
+              <div class="canvas">
+                <div class="chips">
+                  <span class="chip active">All</span>
+                  <span class="chip">Sent (1)</span>
+                  <span class="chip">Draft (1)</span>
+                  <span class="chip">Planned (1)</span>
+                </div>
+                <div class="matter-card">
+                  <div class="head" style="background:var(--ds-canvas)">
+                    <div><h3 class="title">Letters in this matter</h3><p class="sub">3 letters · most recent edited yesterday</p></div>
+                  </div>
+                  <div class="body">
+                    <div class="letter"><span class="icon">P</span><div class="name"><span class="ttl">PIP letter</span><div class="meta">Sent 14 Mar · counsel-reviewed</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">M</span><div class="name"><span class="ttl">Mid-point check-in</span><div class="meta">Scheduled · send 14 May</div></div><span class="badge draft">Draft</span></div>
+                    <div class="letter"><span class="icon">O</span><div class="name"><span class="ttl">PIP outcome</span><div class="meta">Drafts on 14 Jun</div></div><span class="badge scheduled">Planned</span></div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </section>
+      </div>
+      <div class="tradeoffs">
+        <div class="pros"><strong>Wins</strong>Sidebar stays small. Clear "you're in matter X" focus — all the data on the page is about THIS matter. Easy to scale to 50+ matters with the dropdown picker.</div>
+        <div class="cons"><strong>Costs</strong>Switching matters is one extra click (open picker). Less discoverable than the sidebar tree — new users may miss the concept.</div>
+      </div>
+    </section>
+
+    <!-- VARIANT C — two-pane (Mail) -->
+    <section class="variant" id="v3">
+      <div class="variant-head">
+        <h2>C · Two-pane (Mail-style)</h2>
+        <div class="meta">Dedicated /matters page with master-detail layout</div>
+        <p class="desc">A standalone page at <code>/matters</code>. Left pane lists every matter (grouped by status — Active / Closed). Right pane shows the selected matter's letters + key dates + parties. The sidebar gets one extra entry ("Matters") that opens this page; the sidebar tree pattern is dropped entirely.</p>
+      </div>
+      <div class="pair">
+        <section>
+          <header><span class="who">Employee mode</span></header>
+          <div class="mock" style="grid-template-columns:0px 1fr">
+            <aside class="mock-sidebar" style="display:none"></aside>
+            <main class="mock-main">
+              <div class="topbar">
+                <span class="crumb"><span class="ttl">Matters</span></span>
+                <span class="grow"></span>
+                <div class="actions"><button class="btn solid">＋ New matter</button></div>
+              </div>
+              <div class="twopane">
+                <div class="left">
+                  <div class="grouplabel">Active · 2</div>
+                  <div class="matter-row active">
+                    <div class="icon">A</div>
+                    <div>
+                      <h4 class="title">Acme discrimination 2026</h4>
+                      <p class="sub">4 letters · ACAS in 9d</p>
+                    </div>
+                  </div>
+                  <div class="matter-row">
+                    <div class="icon">B</div>
+                    <div>
+                      <h4 class="title">BigCorp resignation</h4>
+                      <p class="sub">2 letters · last edit 3d</p>
+                    </div>
+                  </div>
+                  <div class="grouplabel">Closed · 1</div>
+                  <div class="matter-row" style="opacity:0.65">
+                    <div class="icon">R</div>
+                    <div>
+                      <h4 class="title">Reference dispute</h4>
+                      <p class="sub">Closed 14 Jan</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="right">
+                  <div style="margin-bottom:14px">
+                    <h3 style="font-family:var(--font-serif);font-size:18px;font-weight:600;margin:0;color:var(--ds-ink)">Acme discrimination claim — 2026 Q1</h3>
+                    <p style="font-size:12.5px;color:var(--ds-muted);margin:4px 0 8px">Acme Holdings Ltd · counsel: yours · started 12 Feb 2026</p>
+                    <div style="display:flex;gap:6px"><span class="status urgent" style="font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;background:var(--ds-red-bg);color:var(--ds-red-fg)">⏰ ACAS in 9 days</span><span class="status active" style="font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;background:var(--ds-green-bg);color:var(--ds-green-fg)">Active</span></div>
+                  </div>
+                  <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ds-muted);font-weight:600;margin:14px 0 8px">Letters · 4</h4>
+                  <div class="matter-card">
+                    <div class="body">
+                      <div class="letter"><span class="icon">G</span><div class="name"><span class="ttl">Formal grievance</span><div class="meta">Sent 18 Feb · 7 sections</div></div><span class="badge sent">Sent</span></div>
+                      <div class="letter"><span class="icon">A</span><div class="name"><span class="ttl">Appeal letter</span><div class="meta">Last edit 2h ago</div></div><span class="badge draft">Draft</span></div>
+                      <div class="letter"><span class="icon">E</span><div class="name"><span class="ttl">ACAS EC notification</span><div class="meta">Send by 23 May</div></div><span class="badge scheduled">Scheduled</span></div>
+                      <div class="letter"><span class="icon">T</span><div class="name"><span class="ttl">Tribunal cover (ET1)</span><div class="meta">Awaits ACAS outcome</div></div><span class="badge draft">Planned</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </section>
+
+        <section>
+          <header><span class="who">HR / Employer mode</span></header>
+          <div class="mock" style="grid-template-columns:0px 1fr">
+            <aside class="mock-sidebar" style="display:none"></aside>
+            <main class="mock-main">
+              <div class="topbar">
+                <span class="crumb"><span class="ttl">Matters</span></span>
+                <span class="grow"></span>
+                <div class="actions"><button class="btn solid">＋ New matter</button></div>
+              </div>
+              <div class="twopane">
+                <div class="left">
+                  <div class="grouplabel">Active · 4</div>
+                  <div class="matter-row active"><div class="icon">J</div><div><h4 class="title">James O'Connor — PIP</h4><p class="sub">3 letters · outcome 14 Jun</p></div></div>
+                  <div class="matter-row"><div class="icon">S</div><div><h4 class="title">Spring 2026 hires</h4><p class="sub">12 letters · 6 sent</p></div></div>
+                  <div class="matter-row"><div class="icon">S</div><div><h4 class="title">Sarah K. — flexible working</h4><p class="sub">2 letters · decision due 12 May</p></div></div>
+                  <div class="matter-row"><div class="icon">T</div><div><h4 class="title">Tom R. — disciplinary</h4><p class="sub">4 letters · hearing 18 May</p></div></div>
+                  <div class="grouplabel">Closed · 1</div>
+                  <div class="matter-row" style="opacity:0.65"><div class="icon">Q</div><div><h4 class="title">Q1 redundancy round</h4><p class="sub">Closed 31 Mar</p></div></div>
+                </div>
+                <div class="right">
+                  <div style="margin-bottom:14px">
+                    <h3 style="font-family:var(--font-serif);font-size:18px;font-weight:600;margin:0;color:var(--ds-ink)">James O'Connor — Performance Improvement Plan</h3>
+                    <p style="font-size:12.5px;color:var(--ds-muted);margin:4px 0 8px">Engineering · Started 14 Mar 2026 · Manager: Priya M.</p>
+                    <div style="display:flex;gap:6px"><span class="status active" style="font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;background:var(--ds-green-bg);color:var(--ds-green-fg)">Active</span><span class="status active" style="font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600;background:var(--ds-amber-bg);color:var(--ds-amber-fg)">⚠ Counsel-reviewed</span></div>
+                  </div>
+                  <h4 style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ds-muted);font-weight:600;margin:14px 0 8px">Letters · 3</h4>
+                  <div class="matter-card">
+                    <div class="body">
+                      <div class="letter"><span class="icon">P</span><div class="name"><span class="ttl">PIP letter</span><div class="meta">Sent 14 Mar · counsel-reviewed</div></div><span class="badge sent">Sent</span></div>
+                      <div class="letter"><span class="icon">M</span><div class="name"><span class="ttl">Mid-point check-in</span><div class="meta">Send 14 May</div></div><span class="badge draft">Draft</span></div>
+                      <div class="letter"><span class="icon">O</span><div class="name"><span class="ttl">PIP outcome</span><div class="meta">Drafts on 14 Jun</div></div><span class="badge scheduled">Planned</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </section>
+      </div>
+      <div class="tradeoffs">
+        <div class="pros"><strong>Wins</strong>Scales infinitely — works with 50 or 500 matters because of the list-detail pane. Best for HR teams managing many concurrent cases. Active vs Closed bucketing is automatic.</div>
+        <div class="cons"><strong>Costs</strong>Adds a new top-level page. Less discoverable than sidebar tree (need to know to click "Matters"). Best as a power-user view, not the default entry.</div>
+      </div>
+    </section>
+
+    <!-- VARIANT D — auto-grouped (no setup) -->
+    <section class="variant" id="v4">
+      <div class="variant-head">
+        <h2>D · Auto-grouped (no setup needed)</h2>
+        <div class="meta">Home auto-groups by Employer / Person · matters are an opt-in upgrade</div>
+        <p class="desc">No new pages, no new concept upfront. The Home page already groups recent drafts by employer (employee mode) or person (HR mode). Users with simple needs never see the word "Matter." Those who want explicit cases can <em>convert</em> a group into a Matter — gives it a name, deadline, status. Best for low-friction onboarding.</p>
+      </div>
+      <div class="pair">
+        <section>
+          <header><span class="who">Employee mode</span></header>
+          <div class="mock">
+            <aside class="mock-sidebar">
+              <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Sarah Williams</div></div></div>
+              <div class="scroll">
+                <div class="navgroup">
+                  <button class="navitem active"><span class="ic">🏠</span>Home</button>
+                  <button class="navitem"><span class="ic">＋</span>New letter</button>
+                  <button class="navitem"><span class="ic">🔍</span>Search</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Watch</div>
+                  <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">2</span></button>
+                  <button class="navitem"><span class="ic">📅</span>Calendar</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Archive</div>
+                  <button class="navitem"><span class="ic">📈</span>Activity</button>
+                  <button class="navitem"><span class="ic">📤</span>Exported</button>
+                </div>
+              </div>
+            </aside>
+            <main class="mock-main">
+              <div class="topbar">
+                <span class="crumb"><span class="ttl">Home</span> · group by:</span>
+                <div class="chips" style="margin-bottom:0">
+                  <span class="chip active">Employer</span>
+                  <span class="chip">Letter type</span>
+                  <span class="chip">Date</span>
+                </div>
+                <span class="grow"></span>
+                <button class="btn">＋ Letter</button>
+              </div>
+              <div class="canvas">
+                <div class="group-head">
+                  <h3 class="title">Acme Holdings Ltd</h3>
+                  <span class="meta">4 letters · ⏰ ACAS in 9d · <a href="#" style="color:var(--ds-blue-fg)">Make this a Matter →</a></span>
+                </div>
+                <div class="matter-card">
+                  <div class="body">
+                    <div class="letter"><span class="icon">G</span><div class="name"><span class="ttl">Formal grievance</span><div class="meta">Sent 18 Feb</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">A</span><div class="name"><span class="ttl">Appeal letter</span><div class="meta">Last edit 2h ago</div></div><span class="badge draft">Draft</span></div>
+                    <div class="letter"><span class="icon">E</span><div class="name"><span class="ttl">ACAS EC notification</span><div class="meta">Send by 23 May</div></div><span class="badge scheduled">Scheduled</span></div>
+                  </div>
+                </div>
+                <div class="group-head">
+                  <h3 class="title">BigCorp Inc.</h3>
+                  <span class="meta">2 letters · last edit 3 days ago</span>
+                </div>
+                <div class="matter-card">
+                  <div class="body">
+                    <div class="letter"><span class="icon">R</span><div class="name"><span class="ttl">Resignation with grievance</span><div class="meta">Sent 14 Jan</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">W</span><div class="name"><span class="ttl">Withdrawal of resignation</span><div class="meta">Last edit 3d ago</div></div><span class="badge draft">Draft</span></div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </section>
+
+        <section>
+          <header><span class="who">HR / Employer mode</span></header>
+          <div class="mock">
+            <aside class="mock-sidebar">
+              <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Priya M.</div></div></div>
+              <div class="scroll">
+                <div class="navgroup">
+                  <button class="navitem active"><span class="ic">🏠</span>Home</button>
+                  <button class="navitem"><span class="ic">＋</span>New letter</button>
+                  <button class="navitem"><span class="ic">🔍</span>Search</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Watch</div>
+                  <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">5</span></button>
+                  <button class="navitem"><span class="ic">📅</span>Calendar</button>
+                </div>
+                <div class="navgroup">
+                  <div class="label">Archive</div>
+                  <button class="navitem"><span class="ic">📈</span>Activity</button>
+                  <button class="navitem"><span class="ic">📤</span>Exported</button>
+                </div>
+              </div>
+            </aside>
+            <main class="mock-main">
+              <div class="topbar">
+                <span class="crumb"><span class="ttl">Home</span> · group by:</span>
+                <div class="chips" style="margin-bottom:0">
+                  <span class="chip active">Person</span>
+                  <span class="chip">Letter type</span>
+                  <span class="chip">Department</span>
+                </div>
+                <span class="grow"></span>
+                <button class="btn">＋ Letter</button>
+              </div>
+              <div class="canvas">
+                <div class="group-head">
+                  <h3 class="title">James O'Connor <span style="color:var(--ds-muted);font-size:12px;font-weight:normal">· Engineering</span></h3>
+                  <span class="meta">3 letters · PIP active · <a href="#" style="color:var(--ds-blue-fg)">Make this a Matter →</a></span>
+                </div>
+                <div class="matter-card">
+                  <div class="body">
+                    <div class="letter"><span class="icon">P</span><div class="name"><span class="ttl">PIP letter</span><div class="meta">Sent 14 Mar</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">M</span><div class="name"><span class="ttl">Mid-point check-in</span><div class="meta">Send 14 May</div></div><span class="badge draft">Draft</span></div>
+                  </div>
+                </div>
+                <div class="group-head">
+                  <h3 class="title">Sarah Kim <span style="color:var(--ds-muted);font-size:12px;font-weight:normal">· Product</span></h3>
+                  <span class="meta">2 letters · flexible working decision due 12 May</span>
+                </div>
+                <div class="matter-card">
+                  <div class="body">
+                    <div class="letter"><span class="icon">F</span><div class="name"><span class="ttl">Flexible working request response</span><div class="meta">Sent 24 Apr</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">T</span><div class="name"><span class="ttl">Trial period proposal</span><div class="meta">Drafting</div></div><span class="badge draft">Draft</span></div>
+                  </div>
+                </div>
+                <div class="group-head">
+                  <h3 class="title">Tom Riley <span style="color:var(--ds-muted);font-size:12px;font-weight:normal">· Customer Success</span></h3>
+                  <span class="meta">4 letters · hearing 18 May</span>
+                </div>
+                <div class="matter-card">
+                  <div class="body">
+                    <div class="letter"><span class="icon">N</span><div class="name"><span class="ttl">Investigation notice</span><div class="meta">Sent 6 May</div></div><span class="badge sent">Sent</span></div>
+                    <div class="letter"><span class="icon">H</span><div class="name"><span class="ttl">Hearing invitation</span><div class="meta">Sent 9 May</div></div><span class="badge sent">Sent</span></div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+        </section>
+      </div>
+      <div class="tradeoffs">
+        <div class="pros"><strong>Wins</strong>Zero setup — works on day one with no concept to learn. The grouping you'd naturally want already happens. "Make this a Matter →" upgrades a group into an explicit named matter when the user is ready.</div>
+        <div class="cons"><strong>Costs</strong>Auto-grouping by name string is fragile — typos / casing differences break clustering. Cross-employer / cross-person matters (e.g. an industry-wide matter) don't fit naturally.</div>
+      </div>
+    </section>
+
+    <div class="recommendation">
+      <strong>My recommendation</strong>
+      Ship <strong>D first</strong> (zero-setup auto-grouping) — it's the smallest change and immediately makes Home useful at 10+ drafts. Then layer <strong>A</strong> on top — the explicit Matter concept lives in the sidebar tree once the user opts in by clicking "Make this a Matter →". That gives you the cheap UX win now and the power-user feature later, with one mental model bridging them.
+      <br><br>
+      Variant <strong>C</strong> (two-pane) is best when you have 50+ matters per user — that's the "law firm scale" feature, not v1. Variant <strong>B</strong> is a strong alternative if matters feel too central to want them ambient in the sidebar.
+    </div>
+
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('#tabs .tab');
+    const variants = document.querySelectorAll('.variant');
+    function activate(id) {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.target === id));
+      variants.forEach(v => v.classList.toggle('active', v.id === id));
+      history.replaceState(null, '', '#' + id);
+    }
+    tabs.forEach(t => t.addEventListener('click', () => { activate(t.dataset.target); window.scrollTo({top:0,behavior:'smooth'}); }));
+    if (location.hash) {
+      const id = location.hash.slice(1);
+      if (document.getElementById(id)) activate(id);
+    }
+  </script>
+</body>
+</html>
