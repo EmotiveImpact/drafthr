@@ -175,7 +175,7 @@ export const useProfileStore = create<Store>()(
         // defaults (the Claude default we shipped, then the qwen3-max
         // default we briefly shipped). Any other selection is treated as
         // user intent and left alone.
-        const stale = new Set(["claude-sonnet-4-6", "qwen3-max", "qwen3-flash"]);
+        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash"]);
         if (
           state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
           stale.has(state.profile.defaults.qwenModel)
