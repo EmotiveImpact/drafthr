@@ -67,7 +67,7 @@ function MobileTopbar() {
       : "/pick-role";
 
   return (
-    <header className="md:hidden flex h-12 shrink-0 items-center gap-2 border-b border-sidebar-border bg-background/85 backdrop-blur-sm px-3 sticky top-0 z-30">
+    <header className="md:hidden relative flex h-12 shrink-0 items-center border-b border-sidebar-border bg-background/85 backdrop-blur-sm px-3 sticky top-0 z-30">
       <button
         type="button"
         aria-label="Open menu"
@@ -76,21 +76,25 @@ function MobileTopbar() {
       >
         <Menu className="size-5" />
       </button>
+
+      {/* Logo is absolutely centred so unequal left/right icon widths
+       * (hamburger vs. plus+bell) don't push it off-axis. iOS-style. */}
       <Link
         to="/"
         aria-label="DRAFTHR home"
-        className="flex items-center gap-2 min-w-0"
+        className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2"
       >
         <BrandMark size={28} />
-        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] truncate">
+        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">
           DRAFTHR
         </span>
       </Link>
+
       <div className="ml-auto flex items-center gap-1">
         <Link
           to={newLetterHref}
           aria-label="New letter"
-          className="grid place-items-center size-11 -mr-1 rounded-md hover:bg-sidebar-accent text-foreground"
+          className="grid place-items-center size-11 rounded-md hover:bg-sidebar-accent text-foreground"
         >
           <Plus className="size-5" />
         </Link>
