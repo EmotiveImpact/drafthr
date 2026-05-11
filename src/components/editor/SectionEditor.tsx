@@ -40,6 +40,8 @@ import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
 import { linkedEvidenceForSection } from "@/lib/evidence";
+import { EvidencePopover } from "./EvidencePopover";
+import { Paperclip } from "lucide-react";
 
 type Props = {
   /** Parent draft — needed for the inline CommentPopover. */
@@ -178,6 +180,7 @@ export function SectionEditor({
   // selection range, the quoted text, and the mark-applier. Cleared when
   // the popover closes.
   const [commentOpen, setCommentOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [commentTarget, setCommentTarget] = useState<{
     quote?: string;
     applyMark?: (commentId: string) => void;
@@ -260,32 +263,38 @@ export function SectionEditor({
         </div>
         <div className="flex items-center gap-0.5">
           {draft.mode === "employee" && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-7 relative"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenEvidenceBinder?.();
-              }}
-              aria-label={
-                linkedEvidence.length > 0
-                  ? `${linkedEvidence.length} linked evidence items`
-                  : "Add evidence to section"
+            <EvidencePopover
+              draft={draft}
+              section={section}
+              linkedEvidence={linkedEvidence}
+              open={evidenceOpen}
+              onOpenChange={setEvidenceOpen}
+              trigger={
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 relative"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={
+                    linkedEvidence.length > 0
+                      ? `${linkedEvidence.length} linked evidence items`
+                      : "Add evidence to section"
+                  }
+                  title={
+                    linkedEvidence.length > 0
+                      ? `${linkedEvidence.length} linked evidence item${linkedEvidence.length === 1 ? "" : "s"}`
+                      : "Add evidence to this section"
+                  }
+                >
+                  <Paperclip className="size-3.5" />
+                  {linkedEvidence.length > 0 && (
+                    <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                      {linkedEvidence.length}
+                    </span>
+                  )}
+                </Button>
               }
-              title={
-                linkedEvidence.length > 0
-                  ? `${linkedEvidence.length} linked evidence item${linkedEvidence.length === 1 ? "" : "s"}`
-                  : "Add evidence to this section"
-              }
-            >
-              <FileText className="size-3.5" />
-              {linkedEvidence.length > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
-                  {linkedEvidence.length}
-                </span>
-              )}
-            </Button>
+            />
           )}
           <CommentPopover
             draft={draft}
@@ -376,7 +385,7 @@ export function SectionEditor({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onOpenEvidenceBinder?.();
+              setEvidenceOpen(true);
             }}
             className="shrink-0 text-[var(--ds-ink)] hover:underline"
           >
