@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRAFTHR — Recommended Matters design (A + D combined)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ds-canvas:#fafafa;
+      --ds-surface:#ffffff;
+      --ds-surface-2:#f6f7f9;
+      --ds-line:#e9eaec;
+      --ds-line-2:#f3f4f5;
+      --ds-ink:#0a0b0d;
+      --ds-body:#2f3239;
+      --ds-muted:#6b6f78;
+      --ds-subtle:#9ca0a8;
+      --ds-amber-bg:#fffbeb; --ds-amber-fg:#b45309;
+      --ds-green-bg:#f0fdf4; --ds-green-fg:#15803d;
+      --ds-blue-bg:#eff6ff; --ds-blue-fg:#1d4ed8;
+      --ds-violet-bg:#f5f3ff; --ds-violet-fg:#6d28d9;
+      --ds-red-bg:#fef2f2; --ds-red-fg:#b91c1c;
+      --font-sans:"Geist",-apple-system,sans-serif;
+      --font-serif:"Source Serif 4",Charter,Georgia,serif;
+      --font-mono:"JetBrains Mono",ui-monospace,monospace;
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{font-family:var(--font-sans);font-size:14px;color:var(--ds-body);background:#eef0f3;-webkit-font-smoothing:antialiased;line-height:1.55}
+    button,a,select,label{cursor:pointer}
+
+    .wrap{max-width:1480px;margin:0 auto;padding:24px 24px 80px}
+    h1{font-family:var(--font-serif);font-size:30px;font-weight:600;letter-spacing:-0.012em;color:var(--ds-ink);margin:0 0 6px;line-height:1.1}
+    .lede{font-size:14px;color:var(--ds-body);max-width:78ch;margin:0 0 18px}
+
+    .summary{background:#fff;border:1px solid var(--ds-line);border-radius:10px;padding:18px 22px;margin-bottom:22px}
+    .summary h2{font-family:var(--font-serif);font-size:18px;margin:0 0 8px;color:var(--ds-ink);font-weight:600}
+    .summary p{margin:0 0 8px;font-size:13.5px}
+    .summary ul{font-size:13px;margin:6px 0 0;padding-left:18px}
+    .summary li{margin:3px 0}
+    .summary .pill{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px;letter-spacing:0.02em;text-transform:uppercase;margin-right:4px}
+    .summary .from-a{background:var(--ds-blue-bg);color:var(--ds-blue-fg)}
+    .summary .from-d{background:var(--ds-violet-bg);color:var(--ds-violet-fg)}
+
+    /* Tabs */
+    .switcher{position:sticky;top:0;z-index:50;background:rgba(238,240,243,0.85);backdrop-filter:blur(12px);padding:12px 0;margin:0 -24px 18px;padding-left:24px;padding-right:24px;border-bottom:1px solid #dfe2e6}
+    .tabs{display:flex;gap:6px;flex-wrap:wrap}
+    .tab{font-size:12px;font-weight:500;padding:6px 12px;border-radius:7px;border:1px solid var(--ds-line);background:#fff;color:var(--ds-body);font-family:var(--font-sans)}
+    .tab:hover{border-color:#cdd0d4;color:var(--ds-ink)}
+    .tab.active{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+    .tab .num{font-family:var(--font-mono);font-size:10px;opacity:0.55;margin-right:5px}
+
+    /* States */
+    .state{display:none}
+    .state.active{display:block}
+    .state-head{margin-bottom:12px}
+    .state-head h2{font-family:var(--font-serif);font-size:22px;font-weight:600;margin:0 0 4px;color:var(--ds-ink)}
+    .state-head .desc{font-size:13.5px;color:var(--ds-body);max-width:86ch;margin:6px 0 0}
+    .state-head .hint{font-size:12px;color:var(--ds-muted);margin-top:4px}
+
+    /* App shell */
+    .mock{background:#fff;border:1px solid var(--ds-line);border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.03);display:grid;grid-template-columns:240px 1fr;height:680px}
+    .mock-sidebar{background:var(--ds-surface-2);border-right:1px solid var(--ds-line);display:flex;flex-direction:column;min-height:0}
+    .mock-sidebar .brand{padding:10px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--ds-line-2)}
+    .mock-sidebar .brand .logo{width:24px;height:24px;background:var(--ds-ink);border-radius:5px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px;font-family:var(--font-serif)}
+    .mock-sidebar .brand .name{font-size:11px;font-weight:600;color:var(--ds-ink);letter-spacing:0.04em}
+    .mock-sidebar .brand .sub{font-size:9.5px;color:var(--ds-muted);margin-top:1px}
+    .mock-sidebar .scroll{flex:1;overflow-y:auto;padding:6px}
+    .navgroup{padding:8px 4px 4px}
+    .navgroup .label{padding:2px 8px;font-size:9.5px;font-weight:600;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.1em;display:flex;align-items:center;justify-content:space-between}
+    .navgroup .label .count{font-family:var(--font-mono);font-size:9.5px;color:var(--ds-subtle);font-weight:500}
+    .navitem{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:5px;font-size:12.5px;color:var(--ds-body);width:100%;text-align:left;border:none;background:transparent;font-family:var(--font-sans);line-height:1.3}
+    .navitem:hover{background:#fff}
+    .navitem.active{background:#fff;color:var(--ds-ink);font-weight:500;box-shadow:0 0 0 1px var(--ds-line)}
+    .navitem .ic{width:14px;height:14px;display:grid;place-items:center;font-size:11px;color:var(--ds-muted);flex-shrink:0}
+    .navitem.active .ic{color:var(--ds-ink)}
+    .navitem .badge{margin-left:auto;background:var(--ds-amber-fg);color:#fff;font-size:9px;padding:0 5px;border-radius:999px;font-weight:600}
+    .nav-sub{padding-left:18px;display:flex;flex-direction:column;border-left:1px dashed var(--ds-line);margin-left:11px}
+    .nav-sub .navitem{font-size:12px;padding:3px 8px;color:var(--ds-body)}
+    .nav-sub .navitem .ic{font-size:10px;width:12px;height:12px}
+    .nav-sub .navitem .dot{width:6px;height:6px;border-radius:999px;margin-left:auto;flex-shrink:0}
+    .nav-sub .navitem .dot.green{background:var(--ds-green-fg)}
+    .nav-sub .navitem .dot.amber{background:var(--ds-amber-fg)}
+    .nav-sub .navitem .dot.grey{background:var(--ds-line)}
+    /* Matters parent — emphasised so it reads "clickable" */
+    .matters-parent{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:5px;font-size:12.5px;color:var(--ds-ink);font-weight:600;width:100%;text-align:left;border:none;background:transparent}
+    .matters-parent:hover{background:#fff}
+    .matters-parent.active{background:#fff;box-shadow:0 0 0 1px var(--ds-line)}
+    .matters-parent .ic{width:14px;height:14px;display:grid;place-items:center;font-size:12px;color:var(--ds-ink)}
+    .matters-parent .count{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--ds-muted);font-weight:500}
+    .matters-parent .caret{font-size:10px;color:var(--ds-muted);margin-left:4px}
+
+    /* Main canvas */
+    .mock-main{background:var(--ds-canvas);display:flex;flex-direction:column;min-height:0}
+    .topbar{height:48px;border-bottom:1px solid var(--ds-line);background:#fff;display:flex;align-items:center;padding:0 18px;gap:10px;flex-shrink:0}
+    .topbar .crumb{font-size:12.5px;color:var(--ds-muted)}
+    .topbar .crumb .ttl{color:var(--ds-ink);font-weight:500}
+    .topbar .crumb .sep{color:var(--ds-subtle);margin:0 5px}
+    .topbar .grow{flex:1}
+    .topbar .actions{display:flex;align-items:center;gap:6px}
+    .btn{font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--ds-line);background:#fff;color:var(--ds-body);font-family:var(--font-sans)}
+    .btn.solid{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+    .btn.solid:hover{background:#222}
+    .btn:hover{background:var(--ds-line-2)}
+    .canvas{flex:1;overflow-y:auto;padding:18px 22px}
+
+    /* Matter index card */
+    .matter-card{background:#fff;border:1px solid var(--ds-line);border-radius:10px;margin-bottom:12px;overflow:hidden;transition:border-color 0.12s, box-shadow 0.12s}
+    .matter-card:hover{border-color:#cdd0d4;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+    .matter-card .head{padding:14px 16px;display:flex;align-items:flex-start;gap:12px;border-bottom:1px solid var(--ds-line-2);background:var(--ds-surface)}
+    .matter-card .head .swatch{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-serif);font-size:14px;flex-shrink:0}
+    .matter-card .head .swatch.red{background:#dc2626}
+    .matter-card .head .swatch.amber{background:#d97706}
+    .matter-card .head .swatch.blue{background:#2563eb}
+    .matter-card .head .swatch.violet{background:#7c3aed}
+    .matter-card .head .swatch.green{background:#16a34a}
+    .matter-card .head .swatch.slate{background:#475569}
+    .matter-card .head .meta-block{flex:1;min-width:0}
+    .matter-card .head .title{font-family:var(--font-serif);font-size:16px;font-weight:600;color:var(--ds-ink);margin:0;line-height:1.2}
+    .matter-card .head .sub{font-size:11.5px;color:var(--ds-muted);margin-top:2px}
+    .matter-card .head .pills{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+    .pill{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;border-radius:999px;font-weight:600;line-height:1}
+    .pill.urgent{background:var(--ds-red-bg);color:var(--ds-red-fg)}
+    .pill.active{background:var(--ds-green-bg);color:var(--ds-green-fg)}
+    .pill.counsel{background:var(--ds-amber-bg);color:var(--ds-amber-fg)}
+    .pill.muted{background:var(--ds-line-2);color:var(--ds-muted)}
+    .pill.draft{background:var(--ds-amber-bg);color:var(--ds-amber-fg)}
+    .pill.sent{background:var(--ds-green-bg);color:var(--ds-green-fg)}
+    .pill.scheduled{background:var(--ds-blue-bg);color:var(--ds-blue-fg)}
+
+    .matter-card .footer{padding:8px 16px;font-size:11.5px;color:var(--ds-muted);background:var(--ds-surface);display:flex;align-items:center;gap:8px}
+    .matter-card .footer .open{margin-left:auto;color:var(--ds-ink);font-weight:500}
+
+    .matter-card .letters{padding:0}
+    .matter-card .letter-row{display:flex;align-items:center;gap:10px;padding:8px 16px;border-top:1px solid var(--ds-line-2);font-size:12.5px}
+    .matter-card .letter-row:hover{background:var(--ds-line-2)}
+    .matter-card .letter-row .icon{width:20px;height:20px;display:grid;place-items:center;background:var(--ds-line-2);border-radius:5px;font-size:10px;color:var(--ds-muted);flex-shrink:0;font-weight:600}
+    .matter-card .letter-row .name{flex:1;min-width:0}
+    .matter-card .letter-row .name .ttl{color:var(--ds-ink);font-weight:500}
+    .matter-card .letter-row .name .meta{font-size:11px;color:var(--ds-muted);margin-top:1px}
+
+    /* Hero on matters index */
+    .index-hero{margin-bottom:16px}
+    .index-hero h1{font-family:var(--font-serif);font-size:24px;font-weight:600;color:var(--ds-ink);margin:0}
+    .index-hero p{font-size:13.5px;color:var(--ds-body);margin:4px 0 0}
+    .index-section{margin-bottom:18px}
+    .index-section-head{display:flex;align-items:baseline;gap:10px;padding:0 4px 8px;border-bottom:1px solid var(--ds-line);margin-bottom:10px}
+    .index-section-head h2{font-family:var(--font-serif);font-size:14px;font-weight:600;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.08em;margin:0}
+    .index-section-head .count{font-size:11px;color:var(--ds-muted);font-family:var(--font-mono)}
+
+    /* Single matter detail header */
+    .matter-detail-hero{background:#fff;border:1px solid var(--ds-line);border-radius:12px;padding:18px 20px;margin-bottom:14px;display:flex;gap:14px;align-items:flex-start}
+    .matter-detail-hero .swatch{width:48px;height:48px;border-radius:10px;display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-serif);font-size:20px;flex-shrink:0}
+    .matter-detail-hero .swatch.amber{background:#d97706}
+    .matter-detail-hero h1{font-family:var(--font-serif);font-size:22px;font-weight:600;color:var(--ds-ink);margin:0;line-height:1.15}
+    .matter-detail-hero .sub{font-size:13px;color:var(--ds-muted);margin-top:4px}
+    .matter-detail-hero .pills{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+    .matter-detail-hero .grow{flex:1}
+    .matter-detail-hero .right{text-align:right;font-size:11px;color:var(--ds-muted)}
+    .matter-detail-hero .right .big{font-family:var(--font-mono);font-size:24px;font-weight:600;color:var(--ds-red-fg);line-height:1}
+
+    /* Home auto-grouped (variant D legacy) */
+    .home-group{margin-bottom:14px}
+    .home-group .header{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 8px;border-bottom:1px solid var(--ds-line);margin-bottom:8px}
+    .home-group .header .title{font-family:var(--font-serif);font-size:15px;font-weight:600;color:var(--ds-ink);margin:0}
+    .home-group .header .title .sub{color:var(--ds-muted);font-weight:normal;font-size:12px;margin-left:4px}
+    .home-group .header .meta{font-size:11px;color:var(--ds-muted);display:flex;align-items:center;gap:8px}
+    .home-group .header .upgrade{color:var(--ds-blue-fg);font-weight:500;background:var(--ds-blue-bg);padding:2px 7px;border-radius:999px;font-size:10.5px}
+    .home-group .body{background:#fff;border:1px solid var(--ds-line);border-radius:10px;overflow:hidden}
+
+    /* Tradeoffs */
+    .closing{background:#fffbe6;border:1px solid #f5d97a;border-radius:10px;padding:16px 18px;margin-top:24px;font-size:13.5px;color:#7a5b00}
+    .closing strong{display:block;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#7a5b00;margin-bottom:6px}
+    .annot{position:absolute;background:#fff4cc;border:1px solid #f5d97a;color:#7a5b00;font-size:10.5px;font-weight:500;padding:3px 8px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,0.05);white-space:nowrap;z-index:3}
+    .annot .num{display:inline-grid;place-items:center;width:14px;height:14px;background:#fff;border-radius:999px;font-family:var(--font-mono);font-size:9px;font-weight:700;color:#7a5b00;margin-right:3px}
+    .mock-wrap{position:relative}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Recommended Matters design</h1>
+    <p class="lede"><strong>A + D combined.</strong> The sidebar tree from A (matters expand inline) plus the auto-grouping + upgrade flow from D (no setup, "Make this a Matter →" promotes a group to a named matter). Click the <strong>Matters</strong> label in the sidebar to open the matters <em>index</em> in the main canvas — all matters as cards, grouped by Active / Closed.</p>
+
+    <div class="summary">
+      <h2>How the three pieces fit</h2>
+      <p><span class="pill from-a">From A</span>The sidebar has a <strong>Matters</strong> group with each matter as a nested clickable node. Clicking a matter opens it in the main canvas.</p>
+      <p><span class="pill from-a">From A</span><span class="pill from-d">From D</span><strong>The "Matters" parent label is itself clickable.</strong> Click it → opens a <em>Matters index</em> page in the main canvas: every matter as a card, grouped by Active / Closed, with parties, deadlines, letter counts. Same pattern as clicking "Inbox" in Gmail.</p>
+      <p><span class="pill from-d">From D</span>Home stays auto-grouped by Employer (employee mode) or Person (HR mode). Each group has a "Make this a Matter →" action that promotes it: gives it a name, status, optional deadline; from then on the group lives in the sidebar tree.</p>
+      <ul>
+        <li>Users with simple needs (1–2 cases) never have to use the Matter concept — auto-groups work fine.</li>
+        <li>Users with explicit cases get the structure they need without inventing it from scratch.</li>
+        <li>Both populations live in the same app surface — the tree is just empty for the first set.</li>
+      </ul>
+    </div>
+
+    <div class="switcher">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-target="s1"><span class="num">1</span>Matters index (clicked Matters →)</button>
+        <button class="tab" data-target="s2"><span class="num">2</span>Single matter open</button>
+        <button class="tab" data-target="s3"><span class="num">3</span>Home auto-grouped (upgrade flow)</button>
+      </div>
+    </div>
+
+    <!-- STATE 1: Matters index -->
+    <section class="state active" id="s1">
+      <div class="state-head">
+        <h2>1 · Clicked "Matters" → index page in main canvas</h2>
+        <p class="desc">User clicks the <strong>Matters</strong> parent label in the sidebar (not a specific matter — the label itself). Main canvas opens to the matters <em>index</em>: every matter as a card, grouped by status, with parties, letter counts, deadlines visible at a glance. Click any card to open that matter (state 2). Cards in the canvas mirror the tree in the sidebar — they're two views of the same data.</p>
+        <p class="hint">Annotation pills point at the patterns. URL would be <code>/matters</code>.</p>
+      </div>
+      <div class="mock-wrap">
+        <div class="annot" style="top:12px;left:248px">① "Matters" label is clickable → opens this page</div>
+        <div class="annot" style="top:120px;left:248px">② Same matters appear nested as a tree below</div>
+        <div class="annot" style="top:230px;right:340px">③ Each card = same info as the sidebar row + parties + deadlines</div>
+        <div class="mock">
+          <aside class="mock-sidebar">
+            <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Priya M. · Acme HR</div></div></div>
+            <div class="scroll">
+              <div class="navgroup">
+                <button class="navitem"><span class="ic">🏠</span>Home</button>
+                <button class="navitem"><span class="ic">＋</span>New letter</button>
+                <button class="navitem"><span class="ic">🔍</span>Search</button>
+              </div>
+              <div class="navgroup">
+                <div class="label">Watch</div>
+                <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">5</span></button>
+                <button class="navitem"><span class="ic">📅</span>Calendar</button>
+              </div>
+              <div class="navgroup">
+                <div class="label">Archive</div>
+                <button class="navitem"><span class="ic">📈</span>Activity</button>
+                <button class="navitem"><span class="ic">📤</span>Exported</button>
+              </div>
+              <div class="navgroup">
+                <!-- Matters parent — active because we're on the index -->
+                <button class="matters-parent active"><span class="ic">📂</span>Matters<span class="count">5</span><span class="caret">▾</span></button>
+                <div class="nav-sub">
+                  <button class="navitem"><span class="ic">●</span>James O'Connor — PIP<span class="dot amber"></span></button>
+                  <button class="navitem"><span class="ic">●</span>Spring 2026 hires<span class="dot green"></span></button>
+                  <button class="navitem"><span class="ic">●</span>Sarah K. — flexible working<span class="dot amber"></span></button>
+                  <button class="navitem"><span class="ic">●</span>Tom R. — disciplinary<span class="dot amber"></span></button>
+                  <button class="navitem" style="opacity:0.65"><span class="ic">●</span>Q1 redundancy round<span class="dot grey"></span></button>
+                  <button class="navitem" style="color:var(--ds-muted)"><span class="ic">＋</span>New matter</button>
+                </div>
+              </div>
+              <div class="navgroup">
+                <div class="label">Recent drafts</div>
+                <button class="navitem"><span class="ic">📄</span>PIP outcome — James</button>
+                <button class="navitem"><span class="ic">📄</span>Hearing invite — Tom</button>
+              </div>
+            </div>
+          </aside>
+          <main class="mock-main">
+            <div class="topbar">
+              <span class="crumb"><span class="ttl">Matters</span></span>
+              <span class="grow"></span>
+              <div class="actions">
+                <button class="btn">Sort: Recent ▾</button>
+                <button class="btn solid">＋ New matter</button>
+              </div>
+            </div>
+            <div class="canvas">
+              <div class="index-hero">
+                <h1>Matters</h1>
+                <p>Named cases bundling related letters. 4 active · 1 closed.</p>
+              </div>
+
+              <div class="index-section">
+                <div class="index-section-head"><h2>Active</h2><span class="count">4</span></div>
+
+                <div class="matter-card">
+                  <div class="head">
+                    <div class="swatch amber">J</div>
+                    <div class="meta-block">
+                      <h3 class="title">James O'Connor — Performance Improvement Plan</h3>
+                      <p class="sub">Engineering · Started 14 Mar 2026 · Manager: Priya M.</p>
+                      <div class="pills">
+                        <span class="pill active">Active</span>
+                        <span class="pill counsel">⚠ Counsel-reviewed</span>
+                        <span class="pill muted">3 letters</span>
+                      </div>
+                    </div>
+                    <div style="text-align:right;font-size:11px;color:var(--ds-muted)">
+                      <div>Outcome due</div>
+                      <div style="font-family:var(--font-mono);font-size:13px;color:var(--ds-ink);font-weight:600;margin-top:2px">14 Jun 2026</div>
+                      <div style="font-size:10px;margin-top:1px">in 35 days</div>
+                    </div>
+                  </div>
+                  <div class="footer">
+                    <span>Last: <strong>Mid-point check-in drafted</strong> yesterday</span>
+                    <span class="open">Open →</span>
+                  </div>
+                </div>
+
+                <div class="matter-card">
+                  <div class="head">
+                    <div class="swatch green">S</div>
+                    <div class="meta-block">
+                      <h3 class="title">Spring 2026 hires</h3>
+                      <p class="sub">Engineering · 12 offers, 3 right-to-work, 2 contract amendments</p>
+                      <div class="pills">
+                        <span class="pill active">Active</span>
+                        <span class="pill muted">17 letters</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="footer">
+                    <span>Last: <strong>Offer letter — Vidya Rao</strong> 2h ago</span>
+                    <span class="open">Open →</span>
+                  </div>
+                </div>
+
+                <div class="matter-card">
+                  <div class="head">
+                    <div class="swatch blue">S</div>
+                    <div class="meta-block">
+                      <h3 class="title">Sarah Kim — flexible working request</h3>
+                      <p class="sub">Product · Started 24 Apr 2026 · Trial proposal under discussion</p>
+                      <div class="pills">
+                        <span class="pill active">Active</span>
+                        <span class="pill muted">2 letters</span>
+                      </div>
+                    </div>
+                    <div style="text-align:right;font-size:11px;color:var(--ds-muted)">
+                      <div>Decision due</div>
+                      <div style="font-family:var(--font-mono);font-size:13px;color:var(--ds-ink);font-weight:600;margin-top:2px">12 May 2026</div>
+                      <div style="font-size:10px;margin-top:1px">in 2 days</div>
+                    </div>
+                  </div>
+                  <div class="footer">
+                    <span>Last: <strong>Trial period proposal</strong> drafting</span>
+                    <span class="open">Open →</span>
+                  </div>
+                </div>
+
+                <div class="matter-card">
+                  <div class="head">
+                    <div class="swatch red">T</div>
+                    <div class="meta-block">
+                      <h3 class="title">Tom Riley — disciplinary investigation</h3>
+                      <p class="sub">Customer Success · Hearing scheduled 18 May · Allegation: customer-communications policy breach</p>
+                      <div class="pills">
+                        <span class="pill urgent">⏰ Hearing in 8 days</span>
+                        <span class="pill counsel">⚠ Counsel-reviewed</span>
+                        <span class="pill muted">4 letters</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="footer">
+                    <span>Last: <strong>Hearing invitation</strong> sent 9 May</span>
+                    <span class="open">Open →</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="index-section">
+                <div class="index-section-head"><h2>Closed</h2><span class="count">1</span></div>
+                <div class="matter-card" style="opacity:0.7">
+                  <div class="head">
+                    <div class="swatch slate">Q</div>
+                    <div class="meta-block">
+                      <h3 class="title">Q1 redundancy round</h3>
+                      <p class="sub">Closed 31 Mar 2026 · 5 letters · all sent</p>
+                      <div class="pills">
+                        <span class="pill muted">Closed</span>
+                        <span class="pill muted">5 letters</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="footer">
+                    <span>Archived 31 Mar</span>
+                    <span class="open">Open →</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATE 2: Single matter open -->
+    <section class="state" id="s2">
+      <div class="state-head">
+        <h2>2 · Clicked a specific matter → its letters open in main canvas</h2>
+        <p class="desc">User clicked <em>James O'Connor — PIP</em> in the sidebar tree (or any card on the index page from state 1). Main canvas shows the matter's hero (parties, deadlines, attestation), then its letters listed below. Same content the sidebar tree expands to inline — but with the full context that won't fit in a 240px rail.</p>
+      </div>
+      <div class="mock-wrap">
+        <div class="annot" style="top:160px;left:248px">① Matter selected in tree — sibling letters expanded</div>
+        <div class="annot" style="top:80px;right:200px">② Big hero with parties + deadline countdown</div>
+        <div class="annot" style="top:330px;right:260px">③ Letters list — click to open in editor</div>
+        <div class="mock">
+          <aside class="mock-sidebar">
+            <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Priya M. · Acme HR</div></div></div>
+            <div class="scroll">
+              <div class="navgroup">
+                <button class="navitem"><span class="ic">🏠</span>Home</button>
+                <button class="navitem"><span class="ic">＋</span>New letter</button>
+                <button class="navitem"><span class="ic">🔍</span>Search</button>
+              </div>
+              <div class="navgroup">
+                <div class="label">Watch</div>
+                <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">5</span></button>
+                <button class="navitem"><span class="ic">📅</span>Calendar</button>
+              </div>
+              <div class="navgroup">
+                <div class="label">Archive</div>
+                <button class="navitem"><span class="ic">📈</span>Activity</button>
+                <button class="navitem"><span class="ic">📤</span>Exported</button>
+              </div>
+              <div class="navgroup">
+                <button class="matters-parent"><span class="ic">📂</span>Matters<span class="count">5</span><span class="caret">▾</span></button>
+                <div class="nav-sub">
+                  <button class="navitem active"><span class="ic" style="color:var(--ds-ink)">●</span>James O'Connor — PIP<span class="dot amber"></span></button>
+                  <div class="nav-sub" style="margin-left:14px;border-left-style:solid">
+                    <button class="navitem"><span class="ic">📄</span>PIP letter <span style="font-size:10px;color:var(--ds-muted);margin-left:auto">sent</span></button>
+                    <button class="navitem"><span class="ic">📄</span>Mid-point check-in <span style="font-size:10px;color:var(--ds-amber-fg);margin-left:auto">draft</span></button>
+                    <button class="navitem"><span class="ic">📄</span>PIP outcome <span style="font-size:10px;color:var(--ds-muted);margin-left:auto">planned</span></button>
+                  </div>
+                  <button class="navitem"><span class="ic">●</span>Spring 2026 hires<span class="dot green"></span></button>
+                  <button class="navitem"><span class="ic">●</span>Sarah K. — flex working<span class="dot amber"></span></button>
+                  <button class="navitem"><span class="ic">●</span>Tom R. — disciplinary<span class="dot amber"></span></button>
+                  <button class="navitem" style="opacity:0.65"><span class="ic">●</span>Q1 redundancy round<span class="dot grey"></span></button>
+                </div>
+              </div>
+            </div>
+          </aside>
+          <main class="mock-main">
+            <div class="topbar">
+              <span class="crumb"><span style="color:var(--ds-muted)">Matters</span><span class="sep">/</span><span class="ttl">James O'Connor — PIP</span></span>
+              <span class="grow"></span>
+              <div class="actions">
+                <button class="btn">⚙ Settings</button>
+                <button class="btn solid">＋ Add letter</button>
+              </div>
+            </div>
+            <div class="canvas">
+              <div class="matter-detail-hero">
+                <div class="swatch amber">J</div>
+                <div class="meta-block" style="flex:1">
+                  <h1>James O'Connor — Performance Improvement Plan</h1>
+                  <div class="sub">Engineering · Started 14 Mar 2026 · Manager Priya M. · Counsel-reviewed by external solicitor 12 Mar</div>
+                  <div class="pills">
+                    <span class="pill active">Active</span>
+                    <span class="pill counsel">⚠ Counsel-reviewed</span>
+                    <span class="pill muted">3 letters</span>
+                    <span class="pill muted">Confidential</span>
+                  </div>
+                </div>
+                <div class="right">
+                  <div>Outcome due</div>
+                  <div class="big">35d</div>
+                  <div style="margin-top:1px">14 Jun 2026</div>
+                </div>
+              </div>
+
+              <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ds-muted);font-weight:600;margin:14px 0 8px">Letters</h3>
+
+              <div class="matter-card">
+                <div class="letters">
+                  <div class="letter-row">
+                    <span class="icon">P</span>
+                    <div class="name">
+                      <div class="ttl">PIP letter</div>
+                      <div class="meta">Sent 14 Mar · 6 sections · 712 words · counsel-reviewed</div>
+                    </div>
+                    <span class="pill sent">Sent</span>
+                  </div>
+                  <div class="letter-row">
+                    <span class="icon">M</span>
+                    <div class="name">
+                      <div class="ttl">Mid-point check-in (60 days)</div>
+                      <div class="meta">Drafting · scheduled to send 14 May (4 days) · 4 sections · 442 words</div>
+                    </div>
+                    <span class="pill draft">Draft</span>
+                  </div>
+                  <div class="letter-row" style="opacity:0.7">
+                    <span class="icon">O</span>
+                    <div class="name">
+                      <div class="ttl">PIP outcome letter</div>
+                      <div class="meta">Not started · drafts automatically on 14 Jun if no review session logged</div>
+                    </div>
+                    <span class="pill scheduled">Planned</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:18px">
+                <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--ds-muted);font-weight:600;margin:0 0 8px">Matter timeline</h3>
+                <div style="background:#fff;border:1px solid var(--ds-line);border-radius:10px;padding:12px 16px;font-size:12px;color:var(--ds-body)">
+                  <p style="margin:0 0 6px"><strong>14 Mar:</strong> PIP started · letter sent · counsel attestation logged</p>
+                  <p style="margin:0 0 6px"><strong>21 Mar:</strong> First 1:1 review logged by manager (informal)</p>
+                  <p style="margin:0 0 6px"><strong>4 May:</strong> Mid-point draft started — AI used <em>regenerateSection</em> 3x on Objectives</p>
+                  <p style="margin:0"><strong>14 Jun:</strong> Outcome letter scheduled (auto-creates if not done by then)</p>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATE 3: Home auto-grouped -->
+    <section class="state" id="s3">
+      <div class="state-head">
+        <h2>3 · Home auto-grouped (zero setup) with "Make this a Matter →" upgrade</h2>
+        <p class="desc">First-time user opens the app. No matters yet. Home auto-groups recent drafts by <strong>Person</strong> (HR mode) or <strong>Employer</strong> (employee mode). Each group has a small <em>Make this a Matter →</em> chip in the header. Clicking it opens a small "Name this matter" prompt → the group becomes a named matter, appears in the sidebar tree, and from then on the user can use the full Matter UI from states 1 and 2.</p>
+        <p class="hint">This is the D-pattern from the previous mockup — kept here because it's the on-ramp before the user has any explicit matters.</p>
+      </div>
+      <div class="mock-wrap">
+        <div class="annot" style="top:140px;right:260px">① Auto-grouped by Person — no setup needed</div>
+        <div class="annot" style="top:212px;right:260px">② Click "Make this a Matter →" to promote</div>
+        <div class="annot" style="top:144px;left:248px">③ Matters group empty (will populate on upgrade)</div>
+        <div class="mock">
+          <aside class="mock-sidebar">
+            <div class="brand"><div class="logo">D</div><div><div class="name">DRAFTHR</div><div class="sub">Priya M. · Acme HR</div></div></div>
+            <div class="scroll">
+              <div class="navgroup">
+                <button class="navitem active"><span class="ic">🏠</span>Home</button>
+                <button class="navitem"><span class="ic">＋</span>New letter</button>
+                <button class="navitem"><span class="ic">🔍</span>Search</button>
+              </div>
+              <div class="navgroup">
+                <div class="label">Watch</div>
+                <button class="navitem"><span class="ic">🔔</span>Notifications<span class="badge">2</span></button>
+                <button class="navitem"><span class="ic">📅</span>Calendar</button>
+              </div>
+              <div class="navgroup">
+                <div class="label">Archive</div>
+                <button class="navitem"><span class="ic">📈</span>Activity</button>
+                <button class="navitem"><span class="ic">📤</span>Exported</button>
+              </div>
+              <div class="navgroup">
+                <button class="matters-parent" style="color:var(--ds-muted)"><span class="ic">📂</span>Matters<span class="count">0</span><span class="caret">▾</span></button>
+                <div style="padding:4px 10px 6px;font-size:10.5px;color:var(--ds-subtle);font-style:italic">No matters yet. Upgrade a group on Home →</div>
+              </div>
+              <div class="navgroup">
+                <div class="label">Recent drafts · 12</div>
+                <button class="navitem"><span class="ic">📄</span>Mid-point check-in</button>
+                <button class="navitem"><span class="ic">📄</span>Hearing invite — Tom</button>
+                <button class="navitem"><span class="ic">📄</span>Offer — Vidya R.</button>
+              </div>
+            </div>
+          </aside>
+          <main class="mock-main">
+            <div class="topbar">
+              <span class="crumb"><span class="ttl">Home</span> · group by:</span>
+              <div style="display:inline-flex;gap:5px">
+                <span class="pill" style="background:var(--ds-ink);color:#fff;padding:3px 9px">Person</span>
+                <span class="pill" style="background:#fff;color:var(--ds-body);border:1px solid var(--ds-line);padding:3px 9px">Letter type</span>
+                <span class="pill" style="background:#fff;color:var(--ds-body);border:1px solid var(--ds-line);padding:3px 9px">Department</span>
+              </div>
+              <span class="grow"></span>
+              <button class="btn solid">＋ Letter</button>
+            </div>
+            <div class="canvas">
+              <div class="home-group">
+                <div class="header">
+                  <h3 class="title">James O'Connor <span class="sub">· Engineering</span></h3>
+                  <div class="meta">
+                    <span>3 letters · PIP active</span>
+                    <a href="#" class="upgrade">Make this a Matter →</a>
+                  </div>
+                </div>
+                <div class="body">
+                  <div class="letter-row">
+                    <span class="icon">P</span>
+                    <div class="name">
+                      <div class="ttl">PIP letter</div>
+                      <div class="meta">Sent 14 Mar · counsel-reviewed</div>
+                    </div>
+                    <span class="pill sent">Sent</span>
+                  </div>
+                  <div class="letter-row">
+                    <span class="icon">M</span>
+                    <div class="name">
+                      <div class="ttl">Mid-point check-in</div>
+                      <div class="meta">Send 14 May</div>
+                    </div>
+                    <span class="pill draft">Draft</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="home-group">
+                <div class="header">
+                  <h3 class="title">Sarah Kim <span class="sub">· Product</span></h3>
+                  <div class="meta">
+                    <span>2 letters · decision due 12 May</span>
+                    <a href="#" class="upgrade">Make this a Matter →</a>
+                  </div>
+                </div>
+                <div class="body">
+                  <div class="letter-row">
+                    <span class="icon">F</span>
+                    <div class="name">
+                      <div class="ttl">Flexible working response</div>
+                      <div class="meta">Sent 24 Apr</div>
+                    </div>
+                    <span class="pill sent">Sent</span>
+                  </div>
+                  <div class="letter-row">
+                    <span class="icon">T</span>
+                    <div class="name">
+                      <div class="ttl">Trial period proposal</div>
+                      <div class="meta">Drafting</div>
+                    </div>
+                    <span class="pill draft">Draft</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="home-group">
+                <div class="header">
+                  <h3 class="title">Tom Riley <span class="sub">· Customer Success</span></h3>
+                  <div class="meta">
+                    <span>4 letters · hearing 18 May</span>
+                    <a href="#" class="upgrade">Make this a Matter →</a>
+                  </div>
+                </div>
+                <div class="body">
+                  <div class="letter-row">
+                    <span class="icon">N</span>
+                    <div class="name">
+                      <div class="ttl">Investigation notice</div>
+                      <div class="meta">Sent 6 May</div>
+                    </div>
+                    <span class="pill sent">Sent</span>
+                  </div>
+                  <div class="letter-row">
+                    <span class="icon">H</span>
+                    <div class="name">
+                      <div class="ttl">Hearing invitation</div>
+                      <div class="meta">Sent 9 May</div>
+                    </div>
+                    <span class="pill sent">Sent</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </section>
+
+    <div class="closing">
+      <strong>What this gives you</strong>
+      A single mental model that scales from "I just started; no concept needed" (state 3) to "I run 30 concurrent cases; show me the index" (state 1). Sidebar always reflects what's in the matter set. Auto-grouping does the "obvious" thing on day one; explicit Matters give you the named-case-with-deadline structure when you need it. The transition between the two is a single chip click — no migration, no re-import, no data loss.
+      <br><br>
+      Build order: state 3 first (one day) → states 1+2 second (two days, since they share data + most of the components). Both halves run in parallel during week 2.
+    </div>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('#tabs .tab');
+    const states = document.querySelectorAll('.state');
+    function activate(id) {
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.target === id));
+      states.forEach(s => s.classList.toggle('active', s.id === id));
+      history.replaceState(null, '', '#' + id);
+    }
+    tabs.forEach(t => t.addEventListener('click', () => { activate(t.dataset.target); window.scrollTo({top:0,behavior:'smooth'}); }));
+    if (location.hash) {
+      const id = location.hash.slice(1);
+      if (document.getElementById(id)) activate(id);
+    }
+  </script>
+</body>
+</html>
