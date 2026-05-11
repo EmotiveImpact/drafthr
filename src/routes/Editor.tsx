@@ -297,7 +297,11 @@ export function Editor() {
        * [avatars · actions]. Edit/Preview moved to the secondary toolbar so
        * the title can claim centre stage. */}
       <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
-        <div className="h-full px-2 sm:px-4 grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
+        {/* Layout: relative row with left + right flex groups; the centred
+         * title is absolute-positioned so it anchors to the viewport midpoint
+         * regardless of how heavy the left/right groups become. This is what
+         * lets the title above and Edit/Preview below share a vertical axis. */}
+        <div className="relative h-full px-2 sm:px-4 flex items-center gap-2 sm:gap-3">
           {/* Left: brand + back-to-letters + counsel pill */}
           <div className="flex items-center gap-2 min-w-0">
             <Button
@@ -343,11 +347,10 @@ export function Editor() {
             )}
           </div>
 
-          {/* Centre: document title on a single line. Recipient + jurisdiction
-           * are appended in muted text after a separator so the header stays
-           * one line tall. Truncates with ellipsis on narrow screens. */}
-          <div className="flex items-center justify-center min-w-0 max-w-[60ch] px-2">
-            <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate">
+          {/* Centre: document title — absolute, anchored to viewport midpoint
+           * so it lines up vertically with Edit/Preview on the row below. */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none">
+            <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate pointer-events-auto">
               {meta.title}
               <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] font-normal ml-2">
                 · {recipientLabel} · {draft.context.jurisdiction}
@@ -356,7 +359,7 @@ export function Editor() {
           </div>
 
           {/* Right: avatars + Invite + actions */}
-          <div className="flex items-center gap-2 justify-end min-w-0">
+          <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
             {identities.length > 0 && (
               <InvitePopover
                 draft={draft}
@@ -493,17 +496,17 @@ export function Editor() {
            * single "Document" popover. Regenerate-all stays visible on the
            * right (most-used section action). Hidden in focus mode. */}
           {!focusMode && (
-            <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] grid grid-cols-[1fr_auto_1fr] items-center px-3 sm:px-4 gap-2">
+            <div className="relative h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
               {/* Left: document settings */}
               <div className="flex items-center gap-2 min-w-0">
                 <DocumentPopover draft={draft} />
               </div>
 
-              {/* Centre: Edit / Preview — sits in the middle of the row,
-               * mirroring the visual rhythm of the main topbar where the
-               * title is now centred above it. */}
+              {/* Centre: Edit / Preview — absolute-positioned so it shares the
+               * exact vertical axis as the document title in the row above,
+               * independent of left/right column content widths. */}
               <div
-                className="inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7"
+                className="absolute left-1/2 -translate-x-1/2 inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7"
                 role="tablist"
                 aria-label="View mode"
               >
@@ -512,7 +515,7 @@ export function Editor() {
               </div>
 
               {/* Right: streaming status + Regenerate all */}
-              <div className="flex items-center gap-2 justify-end min-w-0">
+              <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
                 {globallyStreaming && (
                   <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
                     <Loader2 className="size-3 animate-spin" /> Drafting…
