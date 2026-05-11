@@ -1,5 +1,5 @@
-export default function handler(): Response {
-  return new Response("hello from drafthr", {
+export function GET() {
+  return new Response("hello from drafthr (named GET)", {
     headers: { "Content-Type": "text/plain" },
   });
 }
