@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { exportLetterPack } from "@/lib/export/pack";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { WizardChrome } from "@/components/editor/WizardChrome";
 
 /**
  * Review step — the page that sits between Evidence & Attachments and
@@ -114,6 +115,15 @@ export function ReviewStep() {
           </Button>
         </div>
       </header>
+
+      <WizardChrome
+        draftId={draft.id}
+        mode={draft.mode}
+        current="review"
+        context={
+          (counselReview ? "Counsel reviewed · " : "") + "Ready to export"
+        }
+      />
 
       <ReviewPanel
         draft={draft}

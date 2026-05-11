@@ -4,16 +4,18 @@ import type { Mode } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Compact step indicator that sits at the top of the sections rail. Shows
- * the user where they are in the editor wizard without moving the primary
- * Next-step CTA out of the topbar.
+ * Shared horizontal step indicator that sits directly under the topbar
+ * on every wizard page (Editor, Evidence, Review). Single source of
+ * truth — replaces the various homegrown StepPill rows / progress
+ * indicators that used to live inside each page's chrome.
  *
- *   Edit  ─  Evidence  ─  Review     (employee mode)
- *   Edit  ─  Review                  (employer mode — skips evidence)
+ *   Edit ─ Evidence ─ Review     (employee mode)
+ *   Edit ─ Review                (employer mode — skips evidence)
  *
- * Steps are links: clicking the current step is a no-op; clicking a future
- * step navigates forward (matches the topbar CTA). The Edit step routes
- * back to /editor/:draftId without losing scroll position.
+ * Steps are links: clicking the current step is a no-op; clicking a
+ * different step navigates there. Optionally accepts a `context` string
+ * shown right-aligned ("3 of 5 sections ready", "2 of 6 items collected",
+ * "Counsel reviewed", etc) to give per-step orientation.
  */
 type Step = "edit" | "evidence" | "review";
 
@@ -21,10 +23,13 @@ type Props = {
   draftId: string;
   mode: Mode;
   current: Step;
+  /** Optional right-aligned status text, e.g. "3 of 5 ready". */
+  context?: string;
+  /** Disable navigation (e.g. while AI is streaming). */
   disabled?: boolean;
 };
 
-export function WizardProgress({ draftId, mode, current, disabled }: Props) {
+export function WizardChrome({ draftId, mode, current, context, disabled }: Props) {
   const steps: { id: Step; label: string; href: string }[] =
     mode === "employee"
       ? [
@@ -41,16 +46,16 @@ export function WizardProgress({ draftId, mode, current, disabled }: Props) {
 
   return (
     <nav
-      aria-label="Editor progress"
-      className="px-3 pt-3 pb-2 border-b border-[var(--ds-line-2)]"
+      aria-label="Wizard progress"
+      className="h-9 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface-2)] flex items-center px-3 sm:px-4 gap-2 overflow-x-auto"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1 min-w-0">
         {steps.map((step, i) => {
           const state =
             i < currentIndex ? "done" : i === currentIndex ? "current" : "upcoming";
           const isLast = i === steps.length - 1;
           return (
-            <div key={step.id} className="flex items-center flex-1 last:flex-none min-w-0">
+            <div key={step.id} className="flex items-center min-w-0">
               <Link
                 to={step.href}
                 aria-current={state === "current" ? "step" : undefined}
@@ -59,17 +64,18 @@ export function WizardProgress({ draftId, mode, current, disabled }: Props) {
                   if (disabled) e.preventDefault();
                 }}
                 className={cn(
-                  "flex items-center gap-1.5 min-w-0 group rounded-md px-1 py-1 -mx-1 transition",
-                  disabled ? "opacity-50 pointer-events-none" : "hover:bg-[var(--ds-line-2)]"
+                  "flex items-center gap-1.5 rounded-md px-1.5 py-1 transition",
+                  disabled
+                    ? "opacity-50 pointer-events-none"
+                    : "hover:bg-[var(--ds-line-2)]"
                 )}
               >
                 <span
                   className={cn(
                     "shrink-0 size-4 rounded-full grid place-items-center text-[9px] font-bold transition",
-                    state === "done" &&
-                      "bg-[var(--ds-green-fg)] text-white",
+                    state === "done" && "bg-[var(--ds-green-fg)] text-white",
                     state === "current" &&
-                      "bg-[var(--ds-ink)] text-white ring-2 ring-[var(--ds-ink)]/15",
+                      "bg-[var(--ds-ink)] text-white ring-[3px] ring-[var(--ds-ink)]/12",
                     state === "upcoming" &&
                       "bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
                   )}
@@ -78,7 +84,7 @@ export function WizardProgress({ draftId, mode, current, disabled }: Props) {
                 </span>
                 <span
                   className={cn(
-                    "text-[11px] font-medium truncate",
+                    "text-[12px] font-medium whitespace-nowrap",
                     state === "current"
                       ? "text-[var(--ds-ink)]"
                       : state === "done"
@@ -92,7 +98,7 @@ export function WizardProgress({ draftId, mode, current, disabled }: Props) {
               {!isLast && (
                 <span
                   className={cn(
-                    "h-px flex-1 mx-1.5 transition-colors",
+                    "w-6 sm:w-10 h-px shrink-0 mx-0.5 transition-colors",
                     state === "done"
                       ? "bg-[var(--ds-green-fg)]"
                       : "bg-[var(--ds-line)]"
@@ -104,6 +110,12 @@ export function WizardProgress({ draftId, mode, current, disabled }: Props) {
           );
         })}
       </div>
+
+      {context && (
+        <span className="ml-auto text-[11px] text-[var(--ds-muted)] whitespace-nowrap pl-3">
+          {context}
+        </span>
+      )}
     </nav>
   );
 }

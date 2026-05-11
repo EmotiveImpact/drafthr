@@ -21,6 +21,7 @@ import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { linkedEvidenceForSection, sectionLabels } from "@/lib/evidence";
 import { ExpectedEvidenceChecklist } from "@/components/editor/ExpectedEvidenceChecklist";
+import { WizardChrome } from "@/components/editor/WizardChrome";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { cn, uid } from "@/lib/utils";
 
@@ -202,34 +203,33 @@ export function EvidenceStep() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--ds-canvas)]">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] px-4">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] px-4">
         <Button variant="ghost" size="icon-sm" onClick={() => nav(`/editor/${draft.id}`)} aria-label="Back to letter">
           <ArrowLeft className="size-4" />
         </Button>
-        <div className="min-w-0">
-          <h1 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-            Evidence & Attachments
-          </h1>
-          <p className="m-0 truncate text-[11px] text-[var(--ds-muted)]">
-            {draft.employee.legalName || draft.employer.legalName || "Draft"} · {evidence.length} item{evidence.length === 1 ? "" : "s"}
-          </p>
-        </div>
+        <h1 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
+          Evidence & Attachments
+        </h1>
+        <span className="text-[12px] text-[var(--ds-muted)] truncate hidden md:inline">
+          · {draft.employee.legalName || draft.employer.legalName || "Draft"}
+        </span>
 
-        <div className="ml-auto hidden items-center gap-1 text-[11px] text-[var(--ds-muted)] md:flex">
-          <StepPill done label="Draft letter" />
-          <ArrowRight className="size-3" />
-          <StepPill active label="Evidence" />
-          <ArrowRight className="size-3" />
-          <StepPill label="Review/export" />
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/editor/${draft.id}`}>Back to letter</Link>
+          </Button>
+          <Button size="sm" onClick={() => nav(`/editor/${draft.id}/review`)}>
+            Next: Review <ArrowRight className="size-4" />
+          </Button>
         </div>
-
-        <Button variant="outline" size="sm" asChild>
-          <Link to={`/editor/${draft.id}`}>Back to letter</Link>
-        </Button>
-        <Button size="sm" onClick={() => nav(`/editor/${draft.id}/review`)}>
-          Next: Review <ArrowRight className="size-4" />
-        </Button>
       </header>
+
+      <WizardChrome
+        draftId={draft.id}
+        mode={draft.mode}
+        current="evidence"
+        context={`${evidence.length} item${evidence.length === 1 ? "" : "s"} collected`}
+      />
 
       {notice && (
         <button
@@ -568,20 +568,6 @@ function EvidenceRow({
   );
 }
 
-function StepPill({ label, active, done }: { label: string; active?: boolean; done?: boolean }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-1",
-        active && "bg-[var(--ds-ink)] text-white",
-        done && !active && "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-        !active && !done && "bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
-      )}
-    >
-      {label}
-    </span>
-  );
-}
 
 function targetSectionForItem(
   draft: Draft,
