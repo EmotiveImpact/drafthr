@@ -24,7 +24,6 @@ import {
   Sparkles,
   Download,
   ChevronLeft,
-  ChevronRight,
   StopCircle,
   PanelLeft,
   PanelRight,
