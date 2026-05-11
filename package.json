@@ -62,6 +62,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.475.0",
     "marked": "^18.0.3",
+    "pagedjs": "^0.4.3",
     "postgres": "^3.4.9",
     "puppeteer-core": "^24.43.0",
     "radix-ui": "^1.4.3",

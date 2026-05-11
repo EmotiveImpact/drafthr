@@ -3,6 +3,7 @@ import type { Draft, Section } from "@/lib/letters/types";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { useDraftStore } from "@/lib/store";
 import { MessageSquarePlus, Sparkles, History, Pencil, PencilOff } from "lucide-react";
+import { PaginatedLetter } from "./PaginatedLetter";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -156,27 +157,40 @@ export function LetterPreview({
     setSelection(null);
   };
 
+  // Read-only path: hand off to paged.js for real multi-page A4 rendering.
+  // Edit-on-page path: keep the inline TipTap render below (paged.js
+  // can't compose with a live editor — measurement loop fights the editor).
+  if (!editable) {
+    return (
+      <div className="letter-preview-shell">
+        <div className="flex items-center justify-end gap-2 max-w-[8.27in] mx-auto mb-3 px-1">
+          <button
+            type="button"
+            onClick={() => setEditable(true)}
+            className="inline-flex items-center gap-1.5 text-[11.5px] px-2.5 h-7 rounded-md border bg-[var(--ds-surface)] text-[var(--ds-body)] border-[var(--ds-line)] hover:bg-[var(--ds-line-2)] transition"
+            title="Edit directly on the page (rich text, paste images, insert evidence)"
+          >
+            <Pencil className="size-3.5" />
+            Edit on page
+          </button>
+        </div>
+        <PaginatedLetter draft={draft} />
+      </div>
+    );
+  }
+
   return (
     <div className="letter-preview-shell">
       {/* Toggle strip — single sticky control above the page. */}
       <div className="flex items-center justify-end gap-2 max-w-[760px] mx-auto mb-3 px-1">
         <button
           type="button"
-          onClick={() => setEditable((v) => !v)}
-          className={
-            "inline-flex items-center gap-1.5 text-[11.5px] px-2.5 h-7 rounded-md border transition " +
-            (editable
-              ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-              : "bg-[var(--ds-surface)] text-[var(--ds-body)] border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]")
-          }
-          title={
-            editable
-              ? "Done editing — switch back to read-only preview"
-              : "Edit directly on the page (rich text, paste images, insert evidence)"
-          }
+          onClick={() => setEditable(false)}
+          className="inline-flex items-center gap-1.5 text-[11.5px] px-2.5 h-7 rounded-md border bg-[var(--ds-ink)] text-white border-[var(--ds-ink)] transition"
+          title="Done editing — switch back to paginated read-only preview"
         >
-          {editable ? <PencilOff className="size-3.5" /> : <Pencil className="size-3.5" />}
-          {editable ? "Done editing" : "Edit on page"}
+          <PencilOff className="size-3.5" />
+          Done editing
         </button>
       </div>
 
