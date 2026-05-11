@@ -60,6 +60,7 @@ export function Editor() {
   const appendToSection = useDraftStore((s) => s.appendToSection);
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
+  const recordExport = useDraftStore((s) => s.recordExport);
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [globallyStreaming, setGloballyStreaming] = useState(false);
@@ -173,7 +174,6 @@ export function Editor() {
   }
 
   const isHighRisk = exportRequiresCounselGate(draft);
-  const recordExport = useDraftStore((s) => s.recordExport);
 
   const onRetry = (retryCount: number, delayMs: number, reason: string) => {
     setRetryEvent({ retryCount, delayMs, reason, startedAt: Date.now() });
@@ -805,4 +805,3 @@ function ViewModeButton({
     </button>
   );
 }
-

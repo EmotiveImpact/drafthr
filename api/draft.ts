@@ -20,6 +20,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 // function, surfacing as FUNCTION_INVOCATION_FAILED. Keep this constant
 // in sync with src/lib/llm/default-model.ts.
 const DEFAULT_MODEL = "qwen3-max" as const;
+const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 
 export const config = {
   runtime: "nodejs",
@@ -58,12 +60,16 @@ function buildModel(requestedModel?: string) {
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
   const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
   let modelName =
-    fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : DEFAULT_MODEL);
+    fromRequest ?? envModel ?? (envProvider === "qwen" ? QWEN_FALLBACK_MODEL : DEFAULT_MODEL);
 
   // If the requested model's provider key is missing, fall back transparently
   // rather than failing the stream silently. Matches server/proxy.ts.
-  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY) {
-    const fallback = envModel ?? "qwen3-max";
+  if (
+    modelName.startsWith("claude-") &&
+    !process.env.ANTHROPIC_API_KEY &&
+    process.env.QWEN_API_KEY
+  ) {
+    const fallback = QWEN_FALLBACK_MODEL;
     // eslint-disable-next-line no-console
     console.warn(
       `[api/draft] Requested ${modelName} but ANTHROPIC_API_KEY is missing. ` +
@@ -78,9 +84,9 @@ function buildModel(requestedModel?: string) {
     // eslint-disable-next-line no-console
     console.warn(
       `[api/draft] Requested ${modelName} but QWEN_API_KEY is missing. ` +
-        `Falling back to ${DEFAULT_MODEL}.`
+        `Falling back to ${ANTHROPIC_FALLBACK_MODEL}.`
     );
-    modelName = DEFAULT_MODEL;
+    modelName = ANTHROPIC_FALLBACK_MODEL;
   }
 
   if (modelName.startsWith("claude-")) {

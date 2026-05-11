@@ -35,6 +35,7 @@ import type { LetterTypeId, Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
+import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { PageHeader, DataTable, StatusDot, type StatusTone } from "@/components/ds";
 
 const RISK_BADGE: Record<string, "green" | "amber" | "red"> = {
@@ -398,7 +399,7 @@ function deriveStats(drafts: ReturnType<typeof useDraftStore.getState>["drafts"]
 
     const dl = d.context.protectedDeadline;
     if (dl) {
-      const days = Math.floor((new Date(dl.iso).getTime() - Date.now()) / 86400000);
+      const days = daysUntilDateOnly(dl.iso);
       if (days >= 0 && days < 14) urgent += 1;
     }
 
@@ -413,7 +414,7 @@ function deriveDeadlines(drafts: ReturnType<typeof useDraftStore.getState>["draf
     .filter((d) => d.context.protectedDeadline)
     .map((d) => {
       const iso = d.context.protectedDeadline!.iso;
-      const daysAway = Math.floor((new Date(iso).getTime() - Date.now()) / 86400000);
+      const daysAway = daysUntilDateOnly(iso);
       return {
         id: d.id,
         label: safeMeta(d.letterType)?.shortTitle ?? d.letterType,
@@ -446,9 +447,7 @@ function timeAgo(ts: number): string {
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function monthLabel(): string {

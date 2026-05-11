@@ -11,6 +11,7 @@ import {
 } from "@radix-ui/themes";
 import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { todayDateOnly } from "@/lib/date-only";
 import { ShieldAlert } from "lucide-react";
 
 type Props = {
@@ -28,7 +29,7 @@ type Props = {
 export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
   const meta = getLetterMeta(draft.letterType);
   const [reviewedBy, setReviewedBy] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDateOnly();
   const [reviewedOn, setReviewedOn] = useState(today);
   const [confirmed, setConfirmed] = useState(false);
 

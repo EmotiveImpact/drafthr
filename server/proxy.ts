@@ -10,6 +10,9 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { agentTools } from "../src/lib/llm/tools";
 import { DEFAULT_MODEL } from "../src/lib/llm/default-model";
 
+const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+
 export type DraftRequest = {
   messages: ModelMessage[];
   temperature?: number;
@@ -61,16 +64,21 @@ const ALLOWED_MODELS = new Set([
 function buildModel(requested?: string) {
   const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.QWEN_MODEL ?? process.env.LLM_MODEL;
+  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
   // Resolution: explicit request -> env -> flagship default
-  let modelName = fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : DEFAULT_MODEL);
+  let modelName =
+    fromRequest ?? envModel ?? (envProvider === "qwen" ? QWEN_FALLBACK_MODEL : DEFAULT_MODEL);
 
   // Provider availability check. If the requested model needs a provider
   // whose API key isn't set on this server, fall back to the other provider
   // rather than failing the request silently. This prevents the common
   // "client default is Claude, server only has Qwen keys" misalignment.
-  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY) {
-    const fallback = envModel ?? "qwen3-max";
+  if (
+    modelName.startsWith("claude-") &&
+    !process.env.ANTHROPIC_API_KEY &&
+    process.env.QWEN_API_KEY
+  ) {
+    const fallback = QWEN_FALLBACK_MODEL;
     // eslint-disable-next-line no-console
     console.warn(
       `[proxy] Requested ${modelName} but ANTHROPIC_API_KEY is missing. ` +
@@ -85,9 +93,9 @@ function buildModel(requested?: string) {
     // eslint-disable-next-line no-console
     console.warn(
       `[proxy] Requested ${modelName} but QWEN_API_KEY is missing. ` +
-        `Falling back to ${DEFAULT_MODEL}.`
+        `Falling back to ${ANTHROPIC_FALLBACK_MODEL}.`
     );
-    modelName = DEFAULT_MODEL;
+    modelName = ANTHROPIC_FALLBACK_MODEL;
   }
 
   if (modelName.startsWith("claude-")) {

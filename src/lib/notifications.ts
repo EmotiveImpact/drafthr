@@ -3,6 +3,11 @@ import { getLetterMeta } from "./letters/catalog";
 import { rulesFor, ruleMatches } from "./letters/compliance";
 import { exportRequiresCounselGate } from "./letters/disclaimers";
 import type { Profile } from "./profile";
+import {
+  addDaysToDateOnly,
+  daysUntilDateOnly,
+  formatDateOnly,
+} from "./date-only";
 
 export type NotificationSeverity = "urgent" | "warn" | "info";
 
@@ -63,7 +68,7 @@ export function deriveNotifications(
     // 1) Tribunal deadline approaching
     const dl = d.context.protectedDeadline;
     if (dl) {
-      const days = Math.floor((new Date(dl.iso).getTime() - now) / 86400000);
+      const days = daysUntilDateOnly(dl.iso, new Date(now));
       if (days >= 0 && days <= 21) {
         out.push({
           id: `tribunal-${d.id}`,
@@ -80,7 +85,7 @@ export function deriveNotifications(
       // 2) ACAS EC clock — for UK only, deadline = tribunal - 42 days
       if (d.context.jurisdiction === "UK") {
         const ecIso = subtractDays(dl.iso, 42);
-        const ecDays = Math.floor((new Date(ecIso).getTime() - now) / 86400000);
+        const ecDays = daysUntilDateOnly(ecIso, new Date(now));
         if (ecDays >= 0 && ecDays <= 14) {
           out.push({
             id: `acas-${d.id}`,
@@ -183,13 +188,9 @@ function safeMeta(id: string) {
 }
 
 function subtractDays(iso: string, days: number): string {
-  const d = new Date(iso);
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return addDaysToDateOnly(iso, -days);
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" });
 }

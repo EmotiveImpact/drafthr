@@ -1,4 +1,5 @@
 import { Box, Card, Heading, Text } from "@radix-ui/themes";
+import { todayDateOnly } from "@/lib/date-only";
 
 /**
  * Public privacy policy page. Required for GDPR/UK GDPR compliance. The text
@@ -11,7 +12,7 @@ export function Privacy() {
     <Box className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <Heading size="7" mb="2">Privacy Policy</Heading>
       <Text size="2" color="gray" mb="6" as="p">
-        Effective date: <Text weight="medium" highContrast>{new Date().toISOString().slice(0, 10)}</Text>. This policy
+        Effective date: <Text weight="medium" highContrast>{todayDateOnly()}</Text>. This policy
         explains how the DRAFTHR platform collects, processes, and stores
         personal data in connection with drafting HR correspondence.
       </Text>

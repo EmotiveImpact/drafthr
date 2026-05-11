@@ -6,6 +6,12 @@ import { PageHeader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft } from "@/lib/letters/types";
+import {
+  addDaysToDateOnly,
+  daysUntilDateOnly,
+  formatDateOnly,
+  todayDateOnly,
+} from "@/lib/date-only";
 
 type Event = {
   draftId: string;
@@ -48,7 +54,7 @@ export function Calendar() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `drafthr-deadlines-${new Date().toISOString().slice(0, 10)}.ics`;
+    a.download = `drafthr-deadlines-${todayDateOnly()}.ics`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -188,21 +194,15 @@ function pushIfDate(arr: Event[], draftId: string, v: unknown, label: string, ba
 }
 
 function daysBetween(iso: string): number {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return 9999;
-  return Math.floor((t - Date.now()) / 86400000);
+  return daysUntilDateOnly(iso);
 }
 
 function subtractDays(iso: string, days: number): string {
-  const d = new Date(iso);
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return addDaysToDateOnly(iso, -days);
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function buildIcs(events: Event[]): string {
@@ -217,12 +217,13 @@ function buildIcs(events: Event[]): string {
   ];
   for (const e of events) {
     const date = stamp(e.iso);
+    const nextDate = stamp(addDaysToDateOnly(e.iso, 1));
     lines.push(
       "BEGIN:VEVENT",
       `UID:${e.draftId}-${e.kind}@drafthr.app`,
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${date}`,
-      `DTEND;VALUE=DATE:${date}`,
+      `DTEND;VALUE=DATE:${nextDate}`,
       `SUMMARY:${escapeIcs(e.label)}`,
       `DESCRIPTION:${escapeIcs(e.basis)}`,
       "END:VEVENT"

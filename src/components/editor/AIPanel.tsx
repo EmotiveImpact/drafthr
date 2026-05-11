@@ -175,7 +175,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
   });
 
   // Persist text content of messages to the store on each idle tick.
-  useMemo(() => {
+  useEffect(() => {
     if (status === "streaming" || status === "submitted") return;
     useDraftStore.setState((s) => {
       const d = s.drafts[draft.id];

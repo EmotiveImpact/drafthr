@@ -9,6 +9,7 @@ type HtmlToDocx = (
 ) => Promise<Blob>;
 
 export async function exportLetterToDocx(draft: Draft): Promise<void> {
+  ensureHtmlToDocxBrowserGlobals();
   const mod = await import("html-to-docx");
   const htmlToDocx = (mod.default ?? mod) as unknown as HtmlToDocx;
 
@@ -63,4 +64,15 @@ function injectSignatureIntoSignatureSection(
   if (!signature) return html;
   if (section.sectionId === "signature") return signature + html;
   return html;
+}
+
+function ensureHtmlToDocxBrowserGlobals(): void {
+  if (typeof globalThis === "undefined") return;
+  const target = globalThis as typeof globalThis & { global?: typeof globalThis };
+  if (!target.global) {
+    Object.defineProperty(target, "global", {
+      value: target,
+      configurable: true,
+    });
+  }
 }

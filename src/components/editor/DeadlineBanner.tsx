@@ -1,4 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
+import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { CalendarClock } from "lucide-react";
 
 /**
@@ -44,13 +45,9 @@ export function DeadlineBanner({ draft }: { draft: Draft }) {
 }
 
 function daysUntil(iso: string): number {
-  const target = new Date(iso);
-  if (Number.isNaN(target.getTime())) return 9999;
-  return Math.floor((target.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return daysUntilDateOnly(iso);
 }
 
 function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return formatDateOnly(iso, { day: "numeric", month: "long", year: "numeric" });
 }

@@ -17,6 +17,12 @@ import type {
 } from "./letters/types";
 import { uid } from "./utils";
 import { getLetterMeta } from "./letters/catalog";
+import {
+  addDaysToDateOnly,
+  addMonthsToDateOnly,
+  parseDateOnly,
+  todayDateOnly,
+} from "./date-only";
 
 type Store = {
   drafts: Record<string, Draft>;
@@ -103,7 +109,7 @@ export const useDraftStore = create<Store>()(
             workerClass: (a.workerClass as Draft["context"]["workerClass"]) ?? "employee",
             letterType,
             effectiveDate: (a.effectiveDate as string) ?? (a.lastWorkingDay as string) ?? "",
-            issueDate: new Date().toISOString().slice(0, 10),
+            issueDate: todayDateOnly(),
             deliveryMethod:
               (a.deliveryMethod as Draft["context"]["deliveryMethod"]) ?? "email",
             tone: (a.tone as Draft["context"]["tone"]) ?? (resolvedMode === "employee" ? "formal" : "formal"),
@@ -530,9 +536,9 @@ export const useDraftStore = create<Store>()(
 
 function monthsBetween(isoDate?: string): number {
   if (!isoDate) return 0;
-  const start = new Date(isoDate);
+  const start = parseDateOnly(isoDate);
   const now = new Date();
-  if (Number.isNaN(start.getTime())) return 0;
+  if (!start) return 0;
   return Math.max(
     0,
     (now.getFullYear() - start.getFullYear()) * 12 +
@@ -545,26 +551,18 @@ function computeProtectedDeadline(
 ): Draft["context"]["protectedDeadline"] | undefined {
   const actDate = a.actDate as string | undefined;
   if (!actDate) return undefined;
-  const d = new Date(actDate);
-  if (Number.isNaN(d.getTime())) return undefined;
+  if (!parseDateOnly(actDate)) return undefined;
 
   const jurisdiction = a.jurisdiction as "UK" | "US" | undefined;
   if (jurisdiction === "UK") {
-    // 3 months less one day from act
-    const deadline = new Date(d);
-    deadline.setMonth(deadline.getMonth() + 3);
-    deadline.setDate(deadline.getDate() - 1);
     return {
-      iso: deadline.toISOString().slice(0, 10),
+      iso: addDaysToDateOnly(addMonthsToDateOnly(actDate, 3), -1),
       basis: PROTECTED_DEADLINE_BASIS_UK,
     };
   }
   if (jurisdiction === "US") {
-    // 300 days conservatively (deferral-state default)
-    const deadline = new Date(d);
-    deadline.setDate(deadline.getDate() + 300);
     return {
-      iso: deadline.toISOString().slice(0, 10),
+      iso: addDaysToDateOnly(actDate, 300),
       basis: PROTECTED_DEADLINE_BASIS_US,
     };
   }

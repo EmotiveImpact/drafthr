@@ -28,6 +28,7 @@ import { useProfileStore, QWEN_MODEL_OPTIONS, type QwenModelId } from "@/lib/pro
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
+import { todayDateOnly } from "@/lib/date-only";
 
 export function Settings() {
   const nav = useNavigate();
@@ -56,7 +57,7 @@ export function Settings() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `drafthr-profile-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `drafthr-profile-${todayDateOnly()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

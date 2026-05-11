@@ -14,6 +14,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft } from "@/lib/letters/types";
+import { parseDateOnly } from "@/lib/date-only";
 
 type Event = {
   ts: number;
@@ -66,7 +67,7 @@ export function Activity() {
         | undefined;
       if (review?.reviewedBy && review.reviewedOn) {
         out.push({
-          ts: new Date(review.reviewedOn).getTime() || d.updatedAt,
+          ts: parseDateOnly(review.reviewedOn)?.getTime() ?? d.updatedAt,
           draftId: d.id,
           draftLabel: label,
           mode: d.mode,
