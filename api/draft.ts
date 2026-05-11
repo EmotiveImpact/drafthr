@@ -50,8 +50,31 @@ function buildModel(requestedModel?: string) {
     requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
   const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
-  const modelName =
+  let modelName =
     fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : DEFAULT_MODEL);
+
+  // If the requested model's provider key is missing, fall back transparently
+  // rather than failing the stream silently. Matches server/proxy.ts.
+  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY) {
+    const fallback = envModel ?? "qwen3-max";
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[api/draft] Requested ${modelName} but ANTHROPIC_API_KEY is missing. ` +
+        `Falling back to ${fallback}.`
+    );
+    modelName = fallback;
+  } else if (
+    !modelName.startsWith("claude-") &&
+    !process.env.QWEN_API_KEY &&
+    process.env.ANTHROPIC_API_KEY
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[api/draft] Requested ${modelName} but QWEN_API_KEY is missing. ` +
+        `Falling back to ${DEFAULT_MODEL}.`
+    );
+    modelName = DEFAULT_MODEL;
+  }
 
   if (modelName.startsWith("claude-")) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -99,6 +122,7 @@ export default async function handler(req: Request): Promise<Response> {
       };
 
       let totalTokens = 0;
+      let realError: string | null = null;
       try {
         const result = streamText({
           model: buildModel(body.model),
@@ -106,6 +130,13 @@ export default async function handler(req: Request): Promise<Response> {
           temperature: body.temperature ?? 0.4,
           maxOutputTokens: body.maxTokens ?? 1200,
           onError: (err) => {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : typeof err === "object" && err && "error" in err
+                ? String((err as { error: unknown }).error)
+                : String(err);
+            realError = msg;
             // eslint-disable-next-line no-console
             console.error("[api/draft] streamText error:", err);
           },
@@ -118,16 +149,19 @@ export default async function handler(req: Request): Promise<Response> {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "unknown error";
+        realError = msg;
         // eslint-disable-next-line no-console
         console.error("[api/draft] error:", err);
         writeEvent({ error: msg });
       }
 
-      if (totalTokens === 0) {
+      if (totalTokens === 0 && !realError) {
         writeEvent({
           error:
-            "Model returned no tokens. Check the API key, model name (QWEN_MODEL), and that the prompt is valid.",
+            "Model returned no tokens. Check the API key, the model name (Settings → AI model), and that the prompt is valid.",
         });
+      } else if (totalTokens === 0 && realError) {
+        writeEvent({ error: realError });
       }
 
       controller.enqueue(enc.encode("data: [DONE]\n\n"));

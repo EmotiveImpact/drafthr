@@ -43,8 +43,31 @@ function buildModel(requestedModel?: string) {
     requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
   const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
-  const modelName =
+  let modelName =
     fromRequest ?? envModel ?? (envProvider === "qwen" ? "qwen3-max" : DEFAULT_MODEL);
+
+  // Transparent fallback when the requested provider's key isn't on this
+  // server. Matches server/proxy.ts + api/draft.ts.
+  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY) {
+    const fallback = envModel ?? "qwen3-max";
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[api/agent] Requested ${modelName} but ANTHROPIC_API_KEY is missing. ` +
+        `Falling back to ${fallback}.`
+    );
+    modelName = fallback;
+  } else if (
+    !modelName.startsWith("claude-") &&
+    !process.env.QWEN_API_KEY &&
+    process.env.ANTHROPIC_API_KEY
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[api/agent] Requested ${modelName} but QWEN_API_KEY is missing. ` +
+        `Falling back to ${DEFAULT_MODEL}.`
+    );
+    modelName = DEFAULT_MODEL;
+  }
 
   if (modelName.startsWith("claude-")) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
