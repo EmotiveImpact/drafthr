@@ -9,11 +9,25 @@ type Props = {
 };
 
 export function SectionsList({ draft, activeSectionId, onSelect }: Props) {
+  const total = draft.sections.length;
+  const ready = draft.sections.filter((s) => s.status === "ready").length;
+
   return (
     <ScrollArea className="flex-1 min-h-0">
       <div className="p-3 space-y-0.5">
-        <div className="px-2 py-1.5 text-[11px] font-semibold text-[var(--ds-muted)]">
-          Sections
+        {/* Apple-minimal: header shows progress count next to "Sections" so the
+         * user always knows how close the letter is to done without opening the
+         * preview. */}
+        <div className="px-2 py-1.5 flex items-center justify-between">
+          <span className="text-[11px] font-semibold text-[var(--ds-muted)] uppercase tracking-[0.08em]">
+            Sections
+          </span>
+          <span
+            className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums"
+            title={`${ready} of ${total} sections marked ready`}
+          >
+            {ready}/{total}
+          </span>
         </div>
         {draft.sections.map((s, i) => (
           <button

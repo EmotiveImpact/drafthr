@@ -368,18 +368,17 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   return (
     <div className="flex flex-col h-full min-h-0">
+      {/* Apple-minimal header: single row. Model name + today's date are
+       * collapsed into one badge so the rail header stays under one line.
+       * The Clear action is icon-only and lives at the far right. */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
         <Wand2 className="size-4 text-[var(--ds-muted)]" />
         <span className="text-[13px] font-medium text-[var(--ds-ink)]">AI agent</span>
-        <span className="text-[11px] text-[var(--ds-subtle)]">· {profile.defaults.qwenModel ?? DEFAULT_MODEL}</span>
-        {/* Visible confirmation that the agent has been given today's date.
-         * Captured once per render via useMemo; ctx is the same object the
-         * agent system prompt is built from. */}
         <span
-          className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
-          title={`The AI has been given today's date (${runtimeCtx.timeZone}) for any "today / now / this week" reference.`}
+          className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)] tabular-nums"
+          title={`Model: ${profile.defaults.qwenModel ?? DEFAULT_MODEL}. The agent has today's date (${runtimeCtx.localDate}, ${runtimeCtx.timeZone}) so it never invents dates.`}
         >
-          Today · {runtimeCtx.localDate}
+          {profile.defaults.qwenModel ?? DEFAULT_MODEL} · {runtimeCtx.localDate}
         </span>
         {messages.length > 0 && (
           <button
@@ -391,26 +390,27 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
               }
             }}
             className="ml-auto text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
+            aria-label="Clear chat thread"
+            title="Clear chat thread"
           >
-            <Trash2 className="size-3" /> Clear
+            <Trash2 className="size-3" />
           </button>
         )}
       </div>
 
       <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
         {messages.length === 0 && (
-          <div className="py-6">
-            <div className="text-center mb-5">
-              <BrandMark size={36} className="mx-auto mb-3" />
-              <p className="text-[13px] text-[var(--ds-ink)] font-medium">
-                Ask the AI to edit your letter.
-              </p>
-              <p className="text-[12px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-xs mx-auto">
-                I review your proposals before applying them. Pick a starter
-                below or type freely.
-              </p>
-            </div>
-            <ToolCapabilityList />
+          // Apple-minimal: drop the 4-card stack. The composer placeholder
+          // below lists the tools — the discovery surface moves down where
+          // the action actually happens. One quiet line + a brand mark.
+          <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
+            <BrandMark size={32} className="mb-3 opacity-60" />
+            <p className="text-[13px] text-[var(--ds-ink)] font-medium">
+              What change do you want?
+            </p>
+            <p className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-[28ch]">
+              Describe a change below. I'll show you the result before applying it.
+            </p>
           </div>
         )}
         {messages.map((m) => (
@@ -469,7 +469,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask the AI agent..."
+            placeholder="Rewrite a section · Add a clause · Tighten to a word target · Summarise for counsel"
             rows={3}
             className="block w-full min-h-[64px] max-h-[240px] resize-none px-3 pt-3 pb-1 rounded-lg bg-transparent text-[14px] leading-relaxed text-[var(--ds-ink)] focus:outline-none placeholder:text-[var(--ds-subtle)]"
             onKeyDown={(e) => {
@@ -888,65 +888,6 @@ function CopyButton() {
       {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
       {copied ? "Copied" : "Copy"}
     </button>
-  );
-}
-
-/**
- * Discoverability panel in the empty state. Lists the four tools with
- * their plain-English purpose + one example phrase the user can crib.
- * The model picks the tool from the user's wording — this lets the
- * user see what's actually available without reading code.
- */
-function ToolCapabilityList() {
-  const items: { icon: React.ReactNode; title: string; desc: string; example: string }[] = [
-    {
-      icon: <Sparkles className="size-3.5 text-[var(--ds-muted)]" />,
-      title: "Rewrite a section",
-      desc: "Refine one or more sections with a freeform instruction.",
-      example: "Rewrite the opening to be more conciliatory; keep s.95(1)(c) ERA.",
-    },
-    {
-      icon: <Plus className="size-3.5 text-[var(--ds-muted)]" />,
-      title: "Add a named clause",
-      desc:
-        "Drop a confidentiality / non-compete / IP / indemnification / right-of-appeal / reservation-of-rights / garden-leave / data-protection clause into a section.",
-      example: "Add an IP-assignment clause to the terms section.",
-    },
-    {
-      icon: <Minus className="size-3.5 text-[var(--ds-muted)]" />,
-      title: "Tighten to a word count",
-      desc: "Hit a specific target length while preserving every fact + citation.",
-      example: "Tighten the body to 200 words.",
-    },
-    {
-      icon: <FileText className="size-3.5 text-[var(--ds-muted)]" />,
-      title: "Summarise for counsel",
-      desc:
-        "Brief an external lawyer: what it says, what it relies on, what it asks for, key risks.",
-      example: "Summarise this for my external solicitor.",
-    },
-  ];
-  return (
-    <div className="space-y-2">
-      <p className="text-[10px] uppercase tracking-[0.12em] font-semibold text-[var(--ds-muted)] px-1">
-        What I can do
-      </p>
-      {items.map((it) => (
-        <div
-          key={it.title}
-          className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-3"
-        >
-          <div className="flex items-center gap-2 mb-1">
-            {it.icon}
-            <span className="text-[12px] font-semibold text-[var(--ds-ink)]">{it.title}</span>
-          </div>
-          <p className="text-[11px] text-[var(--ds-muted)] leading-relaxed">{it.desc}</p>
-          <p className="text-[11px] text-[var(--ds-body)] mt-1 italic">
-            <span className="opacity-50">e.g.</span> {it.example}
-          </p>
-        </div>
-      ))}
-    </div>
   );
 }
 

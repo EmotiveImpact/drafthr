@@ -5,8 +5,7 @@ import { SectionsList } from "@/components/editor/SectionsList";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
-import { WithoutPrejudiceToggle } from "@/components/editor/WithoutPrejudiceToggle";
-import { ToneOverride } from "@/components/editor/ToneOverride";
+import { DocumentPopover } from "@/components/editor/DocumentPopover";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
@@ -35,6 +34,9 @@ import {
   UserPlus,
   Settings2,
   ShieldCheck,
+  Maximize2,
+  Minimize2,
+  ArrowUp,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -68,6 +70,13 @@ export function Editor() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
+  /**
+   * Focus mode — collapses both rails + the secondary toolbar so the writer
+   * sees only the canvas. A floating outline pill (top-left) and a floating
+   * AI composer (bottom) preserve navigation and AI access. Press Esc to
+   * exit. See public/editor-designs.html#v6 for the proposal this implements.
+   */
+  const [focusMode, setFocusMode] = useState(false);
   const [rightTab, setRightTab] = useState<RightRailTab>("ai");
   const [pendingComment, setPendingComment] = useState<{
     sectionId: string;
@@ -124,6 +133,35 @@ export function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
+  // Esc exits Focus mode. Bound at the route level so it works from any
+  // child surface (canvas, floating composer, etc.). We listen on keydown
+  // capture so Radix popovers/dialogs that swallow Escape don't beat us.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Esc exits focus mode.
+      if (e.key === "Escape" && focusMode) {
+        setFocusMode(false);
+        return;
+      }
+      // ⌘L / Ctrl+L jumps to the AI agent rail (and exits focus if on).
+      // Matches the affordance shown in the focus-mode floating composer.
+      if ((e.metaKey || e.ctrlKey) && (e.key === "l" || e.key === "L")) {
+        e.preventDefault();
+        setFocusMode(false);
+        setRightTab("ai");
+        setShowRail(true);
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLTextAreaElement>(
+            'textarea[placeholder*="Rewrite a section"]'
+          );
+          el?.focus();
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusMode]);
+
   if (!draft || !draftId || !meta) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-12">
@@ -136,7 +174,6 @@ export function Editor() {
   }
 
   const isHighRisk = exportRequiresCounselGate(draft);
-  const setWithoutPrejudice = useDraftStore((s) => s.setWithoutPrejudice);
   const recordExport = useDraftStore((s) => s.recordExport);
 
   const onRetry = (retryCount: number, delayMs: number, reason: string) => {
@@ -363,6 +400,20 @@ export function Editor() {
                 </Button>
               }
             />
+            {/* Focus toggle — collapses both rails + secondary toolbar.
+             * See public/editor-designs.html#v6 for the rationale. Esc exits. */}
+            <Button
+              variant={focusMode ? "default" : "outline"}
+              size="sm"
+              className="px-2 sm:px-3"
+              onClick={() => setFocusMode((f) => !f)}
+              aria-pressed={focusMode}
+              aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+              title={focusMode ? "Exit focus mode (Esc)" : "Focus mode — hide rails"}
+            >
+              {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus"}</span>
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">
@@ -408,12 +459,23 @@ export function Editor() {
         </div>
       </header>
 
-      {/* Editor body — three columns on lg; below lg, sections + rail are drawers */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_380px] min-h-0 relative overflow-hidden">
+      {/* Editor body — three columns on lg; below lg, sections + rail are drawers.
+       * Apple-minimal: left rail is 200px (was 240). In focus mode both rails
+       * collapse and the canvas takes the full width. */}
+      <div
+        className={
+          "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
+          (focusMode
+            ? "lg:grid-cols-1"
+            : "lg:grid-cols-[200px_minmax(0,1fr)_380px]")
+        }
+      >
         <aside
           className={
             "border-r border-[var(--ds-line)] bg-[var(--ds-surface-2)] min-h-0 flex flex-col overflow-hidden " +
-            (showSidebar
+            (focusMode
+              ? "hidden"
+              : showSidebar
               ? "absolute inset-y-0 left-0 z-40 w-[260px] shadow-xl lg:static lg:shadow-none lg:w-auto"
               : "hidden lg:flex")
           }
@@ -430,48 +492,114 @@ export function Editor() {
           />
         </aside>
 
-        <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0">
-          {/* Secondary toolbar — sits ABOVE the canvas only, so the right
-           * rail tabs remain flush with the main editor topbar. */}
-          <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
-            <ToneOverride draft={draft} />
-            <WithoutPrejudiceToggle
-              draft={draft}
-              onChange={(v) => setWithoutPrejudice(draft.id, v)}
-            />
-            <div className="ml-auto flex items-center gap-2">
-              {globallyStreaming && (
-                <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
-                  <Loader2 className="size-3 animate-spin" /> Drafting…
-                </span>
-              )}
-              {/* Regenerate all / Stop — lives with Tone + WP because they're
-               * all section-generation controls. Outline button so it doesn't
-               * compete with Export in the topbar. */}
-              {globallyStreaming ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] px-2"
-                  onClick={stopStreaming}
-                >
-                  <StopCircle className="size-3.5" />
-                  <span className="hidden md:inline">Stop</span>
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] px-2"
-                  onClick={runGenerateAll}
-                  title="Regenerate every section (uses current wizard answers and tone)"
-                >
-                  <Sparkles className="size-3.5" />
-                  <span className="hidden md:inline">Regenerate all</span>
-                </Button>
-              )}
+        <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0 relative">
+          {/* Secondary toolbar — Apple-minimal: Tone + WP collapsed behind a
+           * single "Document" popover. Regenerate-all stays visible on the
+           * right (most-used section action). Hidden in focus mode. */}
+          {!focusMode && (
+            <div className="h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
+              <DocumentPopover draft={draft} />
+              <div className="ml-auto flex items-center gap-2">
+                {globallyStreaming && (
+                  <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
+                    <Loader2 className="size-3 animate-spin" /> Drafting…
+                  </span>
+                )}
+                {globallyStreaming ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] px-2"
+                    onClick={stopStreaming}
+                  >
+                    <StopCircle className="size-3.5" />
+                    <span className="hidden md:inline">Stop</span>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] px-2"
+                    onClick={runGenerateAll}
+                    title="Regenerate every section (uses current wizard answers and tone)"
+                  >
+                    <Sparkles className="size-3.5" />
+                    <span className="hidden md:inline">Regenerate all</span>
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Focus-mode overlays. Anchored to <main> (which is `relative`).
+           * Outline pill (top-left) shows progress + the active section so the
+           * writer stays oriented; click to exit. AI bar (bottom-center) is a
+           * one-click jumper back to the agent rail — full composer is in the
+           * rail, this is just the affordance. Esc also exits. */}
+          {focusMode && (
+            <>
+              <button
+                type="button"
+                onClick={() => setFocusMode(false)}
+                className="absolute top-3 left-3 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-1.5 text-[11px] text-[var(--ds-muted)] shadow-sm hover:bg-[var(--ds-line-2)] transition"
+                title="Exit focus mode (Esc)"
+                aria-label="Exit focus mode"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Minimize2 className="size-3" />
+                  <span className="tabular-nums text-[var(--ds-body)] font-medium">
+                    {(() => {
+                      const idx = activeSectionId
+                        ? draft.sections.findIndex((s) => s.id === activeSectionId)
+                        : -1;
+                      const n = idx >= 0 ? idx + 1 : 1;
+                      return `${n} / ${draft.sections.length}`;
+                    })()}
+                  </span>
+                </span>
+                <span className="truncate max-w-[180px]">
+                  {(() => {
+                    const sec = activeSectionId
+                      ? draft.sections.find((s) => s.id === activeSectionId)
+                      : draft.sections[0];
+                    return sec?.title ?? "Letter";
+                  })()}
+                </span>
+                <span className="ml-1 px-1.5 py-0.5 rounded bg-[var(--ds-line-2)] text-[10px] font-mono text-[var(--ds-muted)]">
+                  Esc
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setFocusMode(false);
+                  setRightTab("ai");
+                  setShowRail(true);
+                  requestAnimationFrame(() => {
+                    const el = document.querySelector<HTMLTextAreaElement>(
+                      'textarea[placeholder*="Rewrite a section"]'
+                    );
+                    el?.focus();
+                  });
+                }}
+                className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-2.5 text-[12px] text-[var(--ds-muted)] shadow-[0_8px_24px_rgba(0,0,0,0.08)] hover:shadow-[0_10px_28px_rgba(0,0,0,0.10)] hover:bg-[var(--ds-surface)] transition min-w-[420px] max-w-[640px]"
+                title="Open AI agent (⌘L)"
+                aria-label="Open AI agent"
+              >
+                <Sparkles className="size-3.5 text-[var(--ds-muted)]" />
+                <span className="flex-1 text-left text-[var(--ds-muted)]">
+                  Ask the AI to rewrite, tighten, or add a clause…
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-[var(--ds-line-2)] text-[10px] font-mono text-[var(--ds-muted)]">
+                  ⌘L
+                </span>
+                <span className="inline-grid place-items-center size-7 rounded-full bg-[var(--ds-ink)] text-white">
+                  <ArrowUp className="size-3.5" />
+                </span>
+              </button>
+            </>
+          )}
+
           <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
             <div className="py-6 sm:py-8 px-3 sm:px-6">
@@ -524,7 +652,9 @@ export function Editor() {
         <aside
           className={
             "border-l border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 " +
-            (showRail
+            (focusMode
+              ? "hidden"
+              : showRail
               ? "absolute inset-y-0 right-0 z-40 w-[300px] shadow-xl lg:static lg:shadow-none lg:w-auto"
               : "hidden lg:block")
           }
