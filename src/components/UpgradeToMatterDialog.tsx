@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
@@ -49,15 +49,19 @@ export function UpgradeToMatterDialog({
   const [deadlineISO, setDeadlineISO] = useState<string>("");
   const [deadlineLabel, setDeadlineLabel] = useState<string>("");
 
-  // Reset state when a new group is passed in.
-  // (Controlled by parent; we don't open ourselves.)
-  // useEffect would be cleaner but the dialog only renders when group is set.
-  if (group && name === "" && open) {
-    queueMicrotask(() => {
+  // Reset & pre-fill whenever the parent passes in a new group. Using
+  // group.key as the dependency means switching from group A to group B
+  // (with intermediate close) re-suggests fresh defaults rather than
+  // carrying stale state.
+  useEffect(() => {
+    if (group && open) {
       setName(suggestDefaultName(group));
       setColor(suggestColorForGroup(group.drafts));
-    });
-  }
+      setDeadlineISO("");
+      setDeadlineLabel("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group?.key, open]);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();

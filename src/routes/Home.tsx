@@ -90,10 +90,14 @@ export function Home({ mode }: { mode: Mode }) {
   );
 
   // Unaffiliated drafts grouped by employer (employee mode) or person
-  // (HR mode). Only show groups with 2+ letters — single-letter groups
-  // aren't worth the visual weight.
+  // (HR mode). Only show groups with 2+ letters AND a real primary name —
+  // single-letter groups aren't worth the visual weight, and "Unsorted"
+  // can't be meaningfully promoted to a named matter.
   const autoGroups = useMemo(
-    () => groupDraftsForAutoMatters(myDrafts, mode).filter((g) => g.drafts.length >= 2),
+    () =>
+      groupDraftsForAutoMatters(myDrafts, mode).filter(
+        (g) => g.drafts.length >= 2 && g.key !== "_unsorted"
+      ),
     [myDrafts, mode]
   );
 
