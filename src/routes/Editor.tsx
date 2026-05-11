@@ -347,9 +347,16 @@ export function Editor() {
             )}
           </div>
 
-          {/* Centre: document title — absolute, anchored to viewport midpoint
-           * so it lines up vertically with Edit/Preview on the row below. */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none">
+          {/* Centre: document title — absolute, but offset so it sits over the
+           * canvas centre (not the viewport centre). The main topbar spans the
+           * full viewport, while the secondary toolbar (where Edit/Preview
+           * lives) is nested inside <main>, which is sandwiched between the
+           * 200px sections rail and the 380px right rail. To make the title
+           * stack vertically with Edit/Preview we shift it by
+           * (leftRail − rightRail) / 2 = (200 − 380) / 2 = −90px on lg+.
+           * On smaller screens the rails are drawers and canvas is full-width,
+           * so the title centres on the viewport as normal. */}
+          <div className="absolute left-1/2 lg:left-[calc(50%-90px)] -translate-x-1/2 flex items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none">
             <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate pointer-events-auto">
               {meta.title}
               <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] font-normal ml-2">
