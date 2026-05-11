@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Menu } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import { BrandMark } from "@/components/ds";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
@@ -55,6 +55,17 @@ export function Layout({ children }: { children: ReactNode }) {
  */
 function MobileTopbar() {
   const { setOpenMobile } = useSidebar();
+  const loc = useLocation();
+
+  // Route the "+ New" action by which mode the user is in. We detect mode
+  // from the URL prefix so the action stays correct as the user navigates.
+  // Fallback to /pick-role if mode is ambiguous (e.g. /settings, /privacy).
+  const newLetterHref = loc.pathname.startsWith("/hr")
+    ? "/hr/new"
+    : loc.pathname.startsWith("/me")
+      ? "/me/new"
+      : "/pick-role";
+
   return (
     <header className="md:hidden flex h-12 shrink-0 items-center gap-2 border-b border-sidebar-border bg-background/85 backdrop-blur-sm px-3 sticky top-0 z-30">
       <button
@@ -75,7 +86,14 @@ function MobileTopbar() {
           DRAFTHR
         </span>
       </Link>
-      <div className="ml-auto flex items-center">
+      <div className="ml-auto flex items-center gap-1">
+        <Link
+          to={newLetterHref}
+          aria-label="New letter"
+          className="grid place-items-center size-11 -mr-1 rounded-md hover:bg-sidebar-accent text-foreground"
+        >
+          <Plus className="size-5" />
+        </Link>
         <NotificationsBell />
       </div>
     </header>
