@@ -82,7 +82,7 @@ export function Home({ mode }: { mode: Mode }) {
     : "Welcome back.";
 
   return (
-    <Box className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         crumbs={[{ label: mode === "employer" ? "HR / Management" : "Employee" }]}
         title={greeting}

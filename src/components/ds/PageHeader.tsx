@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type Crumb = {
@@ -20,7 +20,6 @@ export function PageHeader({
   title,
   lede,
   actions,
-  closeTo,
   serif = true,
   className,
 }: {
@@ -28,20 +27,15 @@ export function PageHeader({
   title: string;
   lede?: ReactNode;
   actions?: ReactNode;
-  /** Optional close-X target in the breadcrumb. Defaults to last crumb's href if absent. */
+  /** @deprecated kept for backward-compat — no longer renders an X close button. */
   closeTo?: string;
   /** Render the title in Source Serif 4 (display). Set false for compact pages. */
   serif?: boolean;
   className?: string;
 }) {
-  const nav = useNavigate();
-  const onClose = () => {
-    if (closeTo) nav(closeTo);
-    else nav(-1);
-  };
   return (
     <header className={cn("mb-8", className)}>
-      <Breadcrumbs crumbs={crumbs} onClose={onClose} />
+      <Breadcrumbs crumbs={crumbs} />
       <div className="flex items-start justify-between gap-6 mt-3 flex-wrap">
         <div className="min-w-0">
           <h1
@@ -67,24 +61,10 @@ export function PageHeader({
   );
 }
 
-function Breadcrumbs({
-  crumbs,
-  onClose,
-}: {
-  crumbs: Crumb[];
-  onClose: () => void;
-}) {
+function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
   if (crumbs.length === 0) return null;
   return (
     <nav className="flex items-center gap-2 text-[12px] text-[var(--ds-muted)]">
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="grid place-items-center size-[22px] rounded-[4px] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-      >
-        <X className="size-3.5" />
-      </button>
       {crumbs.map((c, i) => (
         <span key={i} className="flex items-center gap-2 min-w-0">
           {c.href ? (

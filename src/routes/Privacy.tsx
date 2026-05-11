@@ -9,7 +9,7 @@ import { todayDateOnly } from "@/lib/date-only";
  */
 export function Privacy() {
   return (
-    <Box className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
       <Heading size="7" mb="2">Privacy Policy</Heading>
       <Text size="2" color="gray" mb="6" as="p">
         Effective date: <Text weight="medium" highContrast>{todayDateOnly()}</Text>. This policy
