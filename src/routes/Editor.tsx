@@ -8,10 +8,8 @@ import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
 import { DocumentPopover } from "@/components/editor/DocumentPopover";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
-import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
 import { LetterPreview } from "@/components/editor/LetterPreview";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
-import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,7 +20,6 @@ import {
 import {
   Loader2,
   Sparkles,
-  Download,
   ChevronLeft,
   StopCircle,
   PanelLeft,
@@ -40,9 +37,6 @@ import {
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
-import { exportLetterToPdf } from "@/lib/export/pdf";
-import { exportLetterToDocx } from "@/lib/export/docx";
-import { exportLetterPack } from "@/lib/export/pack";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { BrandMark, AvatarStack } from "@/components/ds";
 import { useProfileStore } from "@/lib/profile";
@@ -51,7 +45,12 @@ import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 
-type ExportFormat = "pdf" | "docx" | "pack";
+/**
+ * Feature flag for the Focus-mode toggle. Disabled for now per user
+ * request; flip back to true to restore the button without touching the
+ * underlying state / Esc / floating-overlay code paths.
+ */
+const FOCUS_ENABLED = false;
 
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -62,13 +61,14 @@ export function Editor() {
   const appendToSection = useDraftStore((s) => s.appendToSection);
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
-  const recordExport = useDraftStore((s) => s.recordExport);
 
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [globallyStreaming, setGloballyStreaming] = useState(false);
   const [historySection, setHistorySection] = useState<Section | null>(null);
   const [retryEvent, setRetryEvent] = useState<RetryEvent | null>(null);
-  const [pendingExport, setPendingExport] = useState<ExportFormat | null>(null);
+  // Export was moved to the Review step — no pending-export state lives in
+  // the editor anymore. Kept the type alias below for any future surface
+  // that needs to type a format string.
   const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
@@ -175,8 +175,6 @@ export function Editor() {
     );
   }
 
-  const isHighRisk = exportRequiresCounselGate(draft);
-
   const onRetry = (retryCount: number, delayMs: number, reason: string) => {
     setRetryEvent({ retryCount, delayMs, reason, startedAt: Date.now() });
     setTimeout(() => setRetryEvent(null), delayMs);
@@ -237,33 +235,9 @@ export function Editor() {
     });
   };
 
-  const requestExport = (format: ExportFormat) => {
-    if (isHighRisk) {
-      setPendingExport(format);
-      return;
-    }
-    void doExport(format);
-  };
-
-  const doExport = async (format: ExportFormat, attestation?: { reviewedBy: string; reviewedOn: string }) => {
-    try {
-      if (format === "pdf") await exportLetterToPdf(draft);
-      else if (format === "docx") await exportLetterToDocx(draft);
-      else await exportLetterPack(draft, attestation);
-      recordExport(draft.id, { format, reviewedBy: attestation?.reviewedBy, reviewedOn: attestation?.reviewedOn });
-    } catch (err) {
-      alert(
-        `Export (${format.toUpperCase()}) failed: ` +
-          (err instanceof Error ? err.message : "unknown error")
-      );
-    }
-  };
-
-  const onConfirmHighRiskExport = async (attestation?: { reviewedBy: string; reviewedOn: string }) => {
-    const fmt = pendingExport;
-    setPendingExport(null);
-    if (fmt) await doExport(fmt, attestation);
-  };
+  // Export logic moved to ReviewStep — that page handles format choice,
+  // counsel-review attestation, and recording the export. The editor no
+  // longer owns any export state.
 
   const backTo = draft.mode === "employer" ? "/hr" : draft.mode === "employee" ? "/me" : "/";
   const identities = listIdentities(draft, profile);
@@ -415,20 +389,25 @@ export function Editor() {
                 </Button>
               }
             />
-            {/* Focus toggle — collapses both rails + secondary toolbar.
-             * See public/editor-designs.html#v6 for the rationale. Esc exits. */}
-            <Button
-              variant={focusMode ? "default" : "outline"}
-              size="sm"
-              className="px-2 sm:px-3"
-              onClick={() => setFocusMode((f) => !f)}
-              aria-pressed={focusMode}
-              aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
-              title={focusMode ? "Exit focus mode (Esc)" : "Focus mode — hide rails"}
-            >
-              {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus"}</span>
-            </Button>
+            {/* Focus toggle — temporarily disabled per user request.
+             * Code path below (state + Esc handler + floating overlays) is
+             * kept intact so we can flip FOCUS_ENABLED back to true without
+             * a code change. See public/editor-designs.html#v6.
+             * Flag: FOCUS_ENABLED at top of file. */}
+            {FOCUS_ENABLED && (
+              <Button
+                variant={focusMode ? "default" : "outline"}
+                size="sm"
+                className="px-2 sm:px-3"
+                onClick={() => setFocusMode((f) => !f)}
+                aria-pressed={focusMode}
+                aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+                title={focusMode ? "Exit focus mode (Esc)" : "Focus mode — hide rails"}
+              >
+                {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus"}</span>
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">
@@ -449,24 +428,15 @@ export function Editor() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="sm"
-                  variant={draft.mode === "employee" ? "outline" : "default"}
-                  disabled={globallyStreaming}
-                >
-                  <Download className="size-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Export</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => requestExport("pdf")}>Export as PDF</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => requestExport("docx")}>Export as DOCX</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => requestExport("pack")}>Export pack</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {draft.mode === "employee" && (
+            {/* Export removed from the editor topbar — the only export
+             * entry is now the Review step, which is the natural place to
+             * choose format after the final checklist. Editor stays focused
+             * on writing.
+             *
+             * Employee drafts go Edit → Evidence → Review → Export.
+             * Employer drafts skip Evidence (rare to need a bundle) and
+             * go Edit → Review → Export. Both end at the same place. */}
+            {draft.mode === "employee" ? (
               <Button
                 size="sm"
                 disabled={globallyStreaming}
@@ -474,6 +444,16 @@ export function Editor() {
               >
                 <span className="hidden sm:inline">Next: Evidence</span>
                 <span className="sm:hidden">Evidence</span>
+                <ArrowRight className="size-4 sm:ml-1.5" />
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={globallyStreaming}
+                onClick={() => nav(`/editor/${draft.id}/review`)}
+              >
+                <span className="hidden sm:inline">Next: Review</span>
+                <span className="sm:hidden">Review</span>
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             )}
@@ -776,22 +756,8 @@ export function Editor() {
         }}
       />
 
-      {isHighRisk && pendingExport && (
-        <HighRiskExportGate
-          draft={draft}
-          open={true}
-          onClose={() => setPendingExport(null)}
-          onConfirm={async ({ reviewedBy, reviewedOn }) => {
-            try {
-              const updated = { ...(draft.answers as object), _counselReview: { reviewedBy, reviewedOn } };
-              useDraftStore.getState().updateAnswers(draft.id, updated);
-            } catch (e) {
-              console.warn("Could not record attestation", e);
-            }
-            void onConfirmHighRiskExport({ reviewedBy, reviewedOn });
-          }}
-        />
-      )}
+      {/* High-risk export gate moved to the Review step — it lives at the
+       * point of attestation, not in the editor. */}
 
     </div>
   );
