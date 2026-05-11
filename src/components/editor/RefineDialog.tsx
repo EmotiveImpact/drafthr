@@ -2,15 +2,7 @@ import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const PRESETS = [
-  "More formal",
-  "More conciliatory",
-  "Shorter",
-  "Cite statute explicitly",
-  "Add specific clause",
-  "Drop the regret",
-];
+import { SmartRewriteMenu } from "./SmartRewriteMenu";
 
 /**
  * Modal version of the per-section Refine popover. Used in Preview mode
@@ -43,8 +35,9 @@ export function RefineDialog({
     onOpenChange(false);
   };
 
-  const addChip = (chip: string) => {
-    setBody((b) => (b.trim() ? `${b.trim()}; ${chip.toLowerCase()}` : chip));
+  const runSmartRewrite = (instruction: string) => {
+    onRefineRegenerate(instruction);
+    onOpenChange(false);
   };
 
   return (
@@ -56,7 +49,7 @@ export function RefineDialog({
             <div className="flex items-center gap-2">
               <Sparkles className="size-4 text-[var(--ds-muted)]" />
               <Dialog.Title className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
-                Refine {sectionTitle ?? "section"}
+                Smart rewrite {sectionTitle ?? "section"}
               </Dialog.Title>
             </div>
             <Dialog.Close asChild>
@@ -69,14 +62,16 @@ export function RefineDialog({
               </button>
             </Dialog.Close>
           </div>
-          <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mb-3 leading-relaxed">
-            Tell the model what to change. Wizard answers and section constraints still apply.
+          <Dialog.Description className="sr-only">
+            Choose a rewrite action or enter a custom instruction for this section.
           </Dialog.Description>
+          <SmartRewriteMenu onRun={runSmartRewrite} />
+          <div className="my-3 h-px bg-[var(--ds-line-2)]" />
           <textarea
             autoFocus
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="e.g. tighten the second paragraph, drop the regret line, cite s.95(1)(c) ERA explicitly"
+            placeholder="Custom rewrite instruction"
             rows={4}
             className="w-full text-[13px] px-3 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)] resize-y"
             onKeyDown={(e) => {
@@ -86,18 +81,6 @@ export function RefineDialog({
               }
             }}
           />
-          <div className="flex flex-wrap gap-1 mt-2">
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => addChip(p)}
-                className="text-[11px] px-2 py-0.5 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-              >
-                + {p}
-              </button>
-            ))}
-          </div>
           <div className="flex items-center justify-between gap-2 mt-3">
             <Button
               variant="ghost"

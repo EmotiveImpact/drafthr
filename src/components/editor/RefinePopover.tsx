@@ -2,15 +2,7 @@ import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Sparkles, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const PRESETS = [
-  "More formal",
-  "More conciliatory",
-  "Shorter",
-  "Cite statute explicitly",
-  "Add specific clause",
-  "Drop the regret",
-];
+import { SmartRewriteMenu } from "./SmartRewriteMenu";
 
 /**
  * Per-section regenerate popover. Two paths from a single trigger:
@@ -43,8 +35,10 @@ export function RefinePopover({
     setBody("");
   };
 
-  const addChip = (chip: string) => {
-    setBody((b) => (b.trim() ? `${b.trim()}; ${chip.toLowerCase()}` : chip));
+  const runSmartRewrite = (instruction: string) => {
+    onRefineRegenerate(instruction);
+    setOpen(false);
+    setBody("");
   };
 
   return (
@@ -60,16 +54,15 @@ export function RefinePopover({
         >
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="size-3.5 text-[var(--ds-muted)]" />
-            <h4 className="text-[12px] font-semibold text-[var(--ds-ink)] m-0">Refine this section</h4>
+            <h4 className="text-[12px] font-semibold text-[var(--ds-ink)] m-0">Smart rewrite</h4>
           </div>
-          <p className="text-[11px] text-[var(--ds-muted)] mb-2 leading-relaxed">
-            Tell the model what to change. Wizard answers and section constraints still apply.
-          </p>
+          <SmartRewriteMenu disabled={disabled} onRun={runSmartRewrite} />
+          <div className="my-3 h-px bg-[var(--ds-line-2)]" />
           <textarea
             autoFocus
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="e.g. tighten the second paragraph, drop the regret line, cite s.95(1)(c) ERA explicitly"
+            placeholder="Custom rewrite instruction"
             rows={3}
             className="w-full text-[12px] px-2.5 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)] resize-y"
             onKeyDown={(e) => {
@@ -79,18 +72,6 @@ export function RefinePopover({
               }
             }}
           />
-          <div className="flex flex-wrap gap-1 mt-2">
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => addChip(p)}
-                className="text-[11px] px-2 py-0.5 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-              >
-                + {p}
-              </button>
-            ))}
-          </div>
           <div className="flex items-center justify-between gap-2 mt-3">
             <Button
               variant="ghost"
