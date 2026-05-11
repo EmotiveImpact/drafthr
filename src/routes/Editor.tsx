@@ -363,30 +363,6 @@ export function Editor() {
                 </Button>
               }
             />
-            {/* Surfaced primary actions — Regenerate all + Stop. Always
-             * visible at md+. On mobile they fold into the More menu. */}
-            {globallyStreaming ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={stopStreaming}
-                className="hidden md:inline-flex"
-              >
-                <StopCircle className="size-3.5" />
-                <span className="hidden lg:inline">Stop</span>
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={runGenerateAll}
-                className="hidden md:inline-flex"
-                title="Regenerate every section (uses current wizard answers and tone)"
-              >
-                <Sparkles className="size-3.5" />
-                <span className="hidden lg:inline">Regenerate all</span>
-              </Button>
-            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">
@@ -463,11 +439,38 @@ export function Editor() {
               draft={draft}
               onChange={(v) => setWithoutPrejudice(draft.id, v)}
             />
-            {globallyStreaming && (
-              <span className="ml-auto text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
-                <Loader2 className="size-3 animate-spin" /> Drafting…
-              </span>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {globallyStreaming && (
+                <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
+                  <Loader2 className="size-3 animate-spin" /> Drafting…
+                </span>
+              )}
+              {/* Regenerate all / Stop — lives with Tone + WP because they're
+               * all section-generation controls. Outline button so it doesn't
+               * compete with Export in the topbar. */}
+              {globallyStreaming ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={stopStreaming}
+                >
+                  <StopCircle className="size-3.5" />
+                  <span className="hidden md:inline">Stop</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={runGenerateAll}
+                  title="Regenerate every section (uses current wizard answers and tone)"
+                >
+                  <Sparkles className="size-3.5" />
+                  <span className="hidden md:inline">Regenerate all</span>
+                </Button>
+              )}
+            </div>
           </div>
           <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
