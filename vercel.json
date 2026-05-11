@@ -11,8 +11,7 @@
       "maxDuration": 60
     },
     "api/export/pdf.ts": {
-      "maxDuration": 60,
-      "memory": 1024
+      "maxDuration": 60
     },
     "api/me/data.ts": {
       "maxDuration": 30
