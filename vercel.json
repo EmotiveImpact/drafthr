@@ -10,6 +10,9 @@
     "api/draft.ts": {
       "maxDuration": 60
     },
+    "api/agent.ts": {
+      "maxDuration": 60
+    },
     "api/export/pdf.ts": {
       "maxDuration": 60
     },
