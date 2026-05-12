@@ -21,6 +21,10 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
  */
 export type ModelId =
+  | "gemini-2.0-flash"
+  | "gemini-2.0-flash-lite"
+  | "gemini-2.5-flash"
+  | "gemini-2.5-pro"
   | "claude-opus-4-7"
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5"
@@ -37,16 +41,20 @@ export const MODEL_OPTIONS: {
   id: ModelId;
   label: string;
   hint: string;
-  provider: "anthropic" | "qwen";
+  provider: "google" | "anthropic" | "qwen";
 }[] = [
-  // Anthropic first — tier-leading legal writing register.
-  { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters. Slowest, most expensive.", provider: "anthropic" },
-  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Recommended default. Tier-leading register, balanced cost.", provider: "anthropic" },
+  // Google Gemini — default provider, free tier available.
+  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", hint: "Default. Fast, free-tier, strong general writing.", provider: "google" },
+  { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", hint: "Lightest Gemini tier — fastest, lowest cost.", provider: "google" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Latest Flash — better reasoning, still fast.", provider: "google" },
+  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Google flagship. Best quality, slower.", provider: "google" },
+  // Anthropic — tier-leading legal writing register.
+  { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters.", provider: "anthropic" },
+  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Tier-leading register, balanced cost.", provider: "anthropic" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", hint: "Fast + cheap. Use for low-risk drafts.", provider: "anthropic" },
-  // Qwen fallback / alternative — multilingual.
-  { id: "qwen-flash", label: "Qwen3 Flash", hint: "Fastest Qwen3 tier — quick drafts, very low cost.", provider: "qwen" },
-  { id: "qwen3-max", label: "Qwen3 Max", hint: "Alibaba flagship. Strong multilingual support, paid plan.", provider: "qwen" },
-  { id: "qwen-max", label: "Qwen Max", hint: "Previous Qwen flagship.", provider: "qwen" },
+  // Qwen — multilingual fallback.
+  { id: "qwen-flash", label: "Qwen3 Flash", hint: "Fastest Qwen3 tier — quick drafts.", provider: "qwen" },
+  { id: "qwen3-max", label: "Qwen3 Max", hint: "Alibaba flagship. Strong multilingual support.", provider: "qwen" },
   { id: "qwen-plus", label: "Qwen Plus", hint: "Free-tier capable.", provider: "qwen" },
   { id: "qwen-turbo", label: "Qwen Turbo", hint: "Fastest, cheapest Qwen model.", provider: "qwen" },
 ];
@@ -175,7 +183,7 @@ export const useProfileStore = create<Store>()(
         // defaults (the Claude default we shipped, then the qwen3-max
         // default we briefly shipped). Any other selection is treated as
         // user intent and left alone.
-        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash"]);
+        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash", "qwen3-max"]);
         if (
           state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
           stale.has(state.profile.defaults.qwenModel)
