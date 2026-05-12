@@ -1,7 +1,6 @@
 import type { Draft } from "@/lib/letters/types";
 import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
 import { CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo } from "react";
 import { TemplateQualityInspector } from "./TemplateQualityInspector";
 
@@ -77,10 +76,10 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
       : "red";
 
   return (
-    <ScrollArea className="h-full min-w-0">
-      {/* Tightened padding for 260px left rail. Drop the big "Compliance"
-       * header — the tab label already says "Compliance". Keep the
-       * satisfied-score pill since it's actionable info. */}
+    // Plain overflow-y-auto (not Radix ScrollArea). See EmployeeRail
+    // for the rationale — Radix's viewport sizes to widest child and
+    // ignored our min-w-0 / break-words constraints in the 260px rail.
+    <div className="h-full overflow-y-auto overflow-x-hidden min-w-0">
       <div className="p-3 space-y-4 min-w-0">
         <div className="flex items-center justify-between gap-2 min-w-0">
           <p className="text-[11px] text-[var(--ds-muted)] leading-relaxed min-w-0 break-words">
@@ -167,7 +166,7 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
           )}
         </section>
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 

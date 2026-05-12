@@ -1,6 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
 import { useMemo } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   checkRegisterSafety,
   type RegisterSafetyHit,
@@ -52,12 +51,11 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
   const suggestHits = safetyHits.filter((h) => h.rule.severity === "suggest");
 
   return (
-    <ScrollArea className="h-full min-w-0">
-      {/* Tightened padding for the 260px left rail. The lint cards use
-       * break-words + min-w-0 so long detected-quote strings wrap
-       * cleanly inside the narrow column instead of bleeding past
-       * the rail edge. The big "Rights & register checks" header
-       * is dropped — the tab label already says "Rights". */}
+    // Plain overflow-y-auto (not Radix ScrollArea). Radix's viewport
+    // uses display:table internally and sizes to widest child, which
+    // ignored our min-w-0 and let long lint strings bleed past the
+    // 260px rail. A plain block scroller respects the parent width.
+    <div className="h-full overflow-y-auto overflow-x-hidden min-w-0">
       <div className="p-3 space-y-4 min-w-0">
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Live checks against {draft.context.jurisdiction}
@@ -178,7 +176,7 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
           )}
         </section>
       </div>
-    </ScrollArea>
+    </div>
   );
 }
 
