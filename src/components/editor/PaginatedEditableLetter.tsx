@@ -336,13 +336,13 @@ export function PaginatedEditableLetter({
           min-height: 100%;
         }
 
-        /* The ProseMirror container IS the paper. White, rounded, soft
-         * drop shadow — same shadow stops as PaginatedLetter's
-         * .pagedjs_page rule. The extension applies its own border via
-         * inline style; nuke it. */
+        /* The ProseMirror container IS the paper. White, rounded, slate-200
+         * 1px border + soft drop shadow — matches PaginatedLetter's
+         * .pagedjs_page rule exactly so Edit-on-page and Preview look
+         * identical. */
         .${styleScope} .ProseMirror {
           background: #ffffff !important;
-          border: 0 !important;
+          border: 1px solid #e2e8f0 !important;
           border-radius: 4px;
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
