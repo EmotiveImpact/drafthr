@@ -1,26 +1,17 @@
-import { useState } from "react";
-import { Clock3, MessageSquare, Wand2 } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
-import { CommentsPanel } from "./CommentsPanel";
 import { AIPanel } from "./AIPanel";
-import { TimelinePanel } from "./TimelinePanel";
-import { buildDraftTimeline } from "@/lib/timeline";
 
-// "compliance" tab removed — Rights / Compliance now lives at the
-// bottom of the LEFT rail (WizardSidebar's bottom slot) so live
-// tribunal-register checks are always visible while writing without a
-// tab switch. Right rail is now purely interactive: AI / Comments /
-// Timeline.
+// Change A: right rail is AI-only. Comments now live in a floating
+// thread panel anchored to inline highlights; Timeline lives in the
+// ⋯ overflow menu as a dialog; Compliance / Rights already lives at the
+// bottom of the LEFT rail. The right rail's job is the AI assistant,
+// full-stop. No tabs, no competing surfaces.
+//
+// Tab API kept for callers that still pass `tab` / `onTabChange` so we
+// don't ripple the change through the entire editor codebase — those
+// props are ignored under Change A.
 export type RightRailTab = "ai" | "comments" | "timeline";
 
-type Tab = RightRailTab;
-
-/**
- * Right-rail container with a tab switcher between the existing
- * compliance/rights panel and the new Collaborators panel. Mode-aware:
- * employer drafts surface CompliancePanel; employee drafts surface
- * EmployeeRail. The Collaborators tab is shared.
- */
 export type PendingComment = {
   sectionId: string;
   quote?: string;
@@ -29,106 +20,19 @@ export type PendingComment = {
 
 export function RightRail({
   draft,
-  tab: controlledTab,
-  onTabChange,
-  pendingComment,
-  onPendingCommentConsumed,
   activeSectionId,
 }: {
   draft: Draft;
-  tab?: Tab;
-  onTabChange?: (t: Tab) => void;
+  /** Legacy — accepted but ignored under Change A. */
+  tab?: RightRailTab;
+  onTabChange?: (t: RightRailTab) => void;
   pendingComment?: PendingComment | null;
   onPendingCommentConsumed?: () => void;
   activeSectionId?: string | null;
 }) {
-  const [internalTab, setInternalTab] = useState<Tab>("ai");
-  const tab = controlledTab ?? internalTab;
-  const setTab = (t: Tab) => {
-    if (onTabChange) onTabChange(t);
-    else setInternalTab(t);
-  };
-  const unresolvedCommentsCount = (draft.comments ?? []).filter((c) => !c.resolved).length;
-  const aiMessageCount = (draft.aiChat ?? []).length;
-  const timelineCount = buildDraftTimeline(draft).length;
-
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div
-        className="flex items-stretch border-b border-[var(--ds-line)] shrink-0"
-        role="tablist"
-        aria-label="Right rail"
-      >
-        <RailTab
-          active={tab === "ai"}
-          onClick={() => setTab("ai")}
-          icon={<Wand2 className="size-3.5" />}
-          label="AI"
-          badge={aiMessageCount > 0 ? aiMessageCount : undefined}
-        />
-        <RailTab
-          active={tab === "comments"}
-          onClick={() => setTab("comments")}
-          icon={<MessageSquare className="size-3.5" />}
-          label="Comments"
-          badge={unresolvedCommentsCount > 0 ? unresolvedCommentsCount : undefined}
-        />
-        <RailTab
-          active={tab === "timeline"}
-          onClick={() => setTab("timeline")}
-          icon={<Clock3 className="size-3.5" />}
-          label="Timeline"
-          badge={timelineCount > 0 ? timelineCount : undefined}
-        />
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {tab === "ai" && <AIPanel draft={draft} activeSectionId={activeSectionId ?? null} />}
-        {tab === "comments" && (
-          <CommentsPanel
-            draft={draft}
-            pendingComment={pendingComment ?? null}
-            onPendingCommentConsumed={onPendingCommentConsumed}
-          />
-        )}
-        {tab === "timeline" && <TimelinePanel draft={draft} />}
-      </div>
+      <AIPanel draft={draft} activeSectionId={activeSectionId ?? null} />
     </div>
-  );
-}
-
-function RailTab({
-  active,
-  onClick,
-  icon,
-  label,
-  badge,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  badge?: number;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={
-        "flex-1 flex items-center justify-center gap-1.5 h-9 text-xs font-medium transition-colors " +
-        (active
-          ? "bg-background text-foreground border-b-2 border-foreground -mb-[1px]"
-          : "text-muted-foreground hover:text-foreground hover:bg-muted/40")
-      }
-    >
-      {icon}
-      <span>{label}</span>
-      {typeof badge === "number" && (
-        <span className="ml-0.5 inline-flex items-center justify-center size-4 text-[10px] rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
-          {badge}
-        </span>
-      )}
-    </button>
   );
 }

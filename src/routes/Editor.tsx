@@ -39,6 +39,8 @@ import {
   ArrowUp,
   ArrowRight,
   Pencil,
+  Clock3,
+  MessageSquare,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -50,6 +52,9 @@ import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
+import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
+import { TimelinePanel } from "@/components/editor/TimelinePanel";
+import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
 
 
@@ -95,18 +100,29 @@ export function Editor() {
   // Shared open state for the InvitePopover so the mobile overflow menu
   // can open it (its trigger is hidden below md:).
   const [invitePopoverOpen, setInvitePopoverOpen] = useState(false);
+  // Change A: Timeline is no longer a right-rail tab; it's a dialog
+  // launched from the ⋯ overflow menu.
+  const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
+  // Change A: All-comments index dialog. Floating panel stays the
+  // primary read path; this is the "sweep them all" overview surface
+  // — symmetric with how Timeline now works.
+  const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   // Mobile bottom-sheet snap state. "closed" is driven by !showRail; the
   // sheet ANIMATES into "half" by default when the user opens it.
   const [sheetSnap, setSheetSnap] = useState<"half" | "full">("half");
 
-  const openComments = (sectionId: string) => {
-    setRightTab("comments");
-    setShowRail(true);
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-comments-anchor="${sectionId}"]`);
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
+  // Change A: comments no longer open the right rail. They pop up as a
+  // floating panel anchored to the inline highlight (existing thread)
+  // or the selection rect at click time (new thread).
+  const [floatingComment, setFloatingComment] = useState<
+    | {
+        anchor: FloatingAnchor;
+        mode:
+          | { kind: "new"; sectionId: string; quote?: string; applyMark?: (commentId: string) => void }
+          | { kind: "existing"; commentId: string };
+      }
+    | null
+  >(null);
 
   const commentCount = (sectionId: string) =>
     (draft?.comments ?? []).filter((c) => c.sectionId === sectionId && !c.resolved).length;
@@ -115,38 +131,36 @@ export function Editor() {
     sectionId: string,
     opts?: { quote?: string; applyMark?: (commentId: string) => void }
   ) => {
-    setPendingComment({ sectionId, ...opts });
-    openComments(sectionId);
+    // Capture the selection rect at the moment of click — it'll get cleared
+    // when focus moves, so we snapshot once and keep using it.
+    const sel = window.getSelection();
+    let rect: DOMRect | null = null;
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const r = range.getBoundingClientRect();
+      if (r.width > 0 || r.height > 0) rect = r;
+    }
+    setFloatingComment({
+      anchor: { getRect: () => rect },
+      mode: { kind: "new", sectionId, ...opts },
+    });
   };
 
   const onFocusComment = (commentId: string) => {
-    // First: scroll the highlighted text in the canvas into the top
-    // portion of the viewport SO the comment anchor stays visible
-    // ABOVE where the mobile bottom sheet will cover (sheet = 72vh
-    // from bottom, so we target the top ~25% of the canvas).
-    const anchor = document.querySelector<HTMLElement>(
+    // Find the inline mark in the canvas and open the floating thread
+    // panel anchored to it. No rail open, no scroll-jump — the user
+    // already tapped the mark so it's already in view.
+    const markEl = document.querySelector<HTMLElement>(
       `mark[data-comment-id="${commentId}"]`
     );
-    if (anchor) {
-      anchor.scrollIntoView({ behavior: "smooth", block: "start" });
-      // Briefly flash the anchor so the user catches where it lives.
-      anchor.classList.add("ring-2", "ring-[var(--accent-9)]");
-      setTimeout(
-        () => anchor.classList.remove("ring-2", "ring-[var(--accent-9)]"),
-        1600
-      );
-    }
-    // Then open the sheet on the comments tab, with a small delay so
-    // the canvas scroll has a head-start and the user perceives the
-    // context BEFORE the sheet covers the lower half.
-    setTimeout(() => {
-      setRightTab("comments");
-      setShowRail(true);
-      requestAnimationFrame(() => {
-        const threadEl = document.querySelector(`[data-comment-id="${commentId}"]:not(mark)`);
-        threadEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    }, 120);
+    if (!markEl) return;
+    setFloatingComment({
+      anchor: {
+        getRect: () => markEl.getBoundingClientRect(),
+        containerEl: markEl,
+      },
+      mode: { kind: "existing", commentId },
+    });
   };
   const abortRef = useRef<AbortController | null>(null);
 
@@ -597,6 +611,20 @@ export function Editor() {
                 <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
                   <Settings2 className="size-4 mr-2" /> Edit details
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAllCommentsOpen(true)}>
+                  <MessageSquare className="size-4 mr-2" /> Comments
+                  {(() => {
+                    const n = (draft.comments ?? []).filter((c) => !c.resolved && !c.parentId).length;
+                    return n > 0 ? (
+                      <span className="ml-auto text-[10px] font-mono text-[var(--ds-muted)]">
+                        {n}
+                      </span>
+                    ) : null;
+                  })()}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTimelineDialogOpen(true)}>
+                  <Clock3 className="size-4 mr-2" /> Timeline
+                </DropdownMenuItem>
                 {/* Mobile-only: Focus toggle. On md:+ Focus has its own
                  * topbar button so we hide this item to avoid duplication. */}
                 <DropdownMenuItem
@@ -830,7 +858,24 @@ export function Editor() {
                   onRegenerate={(instr) => onRegenerateSection(section, instr)}
                   onClear={() => updateSection(draft.id, section.id, "")}
                   onShowHistory={() => setHistorySection(section)}
-                  onOpenCommentsThread={() => openComments(section.id)}
+                  onOpenCommentsThread={() => {
+                    // Without an inline anchor, pop the floating panel
+                    // at the section header's rect — a sensible default.
+                    const sectionEl = document.querySelector<HTMLElement>(
+                      `[data-section-id="${section.id}"]`
+                    );
+                    if (!sectionEl) return;
+                    setFloatingComment({
+                      anchor: {
+                        getRect: () => sectionEl.getBoundingClientRect(),
+                        containerEl: sectionEl,
+                      },
+                      // Open as new-thread mode for this section (most
+                      // common reason to click the section's Comments
+                      // button is to start one).
+                      mode: { kind: "new", sectionId: section.id },
+                    });
+                  }}
                   onOpenEvidenceBinder={() => {
                     setActiveSectionId(section.id);
                     nav(`/editor/${draft.id}/evidence?section=${section.id}`);
@@ -954,6 +999,120 @@ export function Editor() {
         )}
       </div>
 
+      {/* Change A: floating comment panel — anchored to text marks
+       * (existing thread) or selection rects (new thread). */}
+      {floatingComment && (
+        <FloatingCommentPanel
+          draft={draft}
+          anchor={floatingComment.anchor}
+          mode={floatingComment.mode}
+          onClose={() => setFloatingComment(null)}
+        />
+      )}
+
+      {/* Change A: All-comments index dialog. Click a row to close the
+       * dialog, scroll the canvas to the highlighted text, and open
+       * the FloatingCommentPanel anchored to that mark. */}
+      <Dialog.Root open={allCommentsOpen} onOpenChange={setAllCommentsOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
+          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[calc(100vw-2rem)] max-h-[80vh] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] flex flex-col">
+            <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
+              <Dialog.Title className="m-0 text-[14px] font-semibold inline-flex items-center gap-2">
+                <MessageSquare className="size-4 text-[var(--ds-muted)]" /> Comments
+              </Dialog.Title>
+              <Dialog.Description className="sr-only">
+                Every unresolved comment thread in this draft. Click one to jump to it.
+              </Dialog.Description>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                  aria-label="Close comments"
+                >
+                  <ChevronLeft className="size-4 rotate-45" />
+                </button>
+              </Dialog.Close>
+            </header>
+            <div className="flex-1 min-h-0 overflow-auto">
+              {(() => {
+                const all = draft.comments ?? [];
+                const roots = all.filter((c) => !c.parentId);
+                const unresolved = roots.filter((c) => !c.resolved);
+                const resolved = roots.filter((c) => c.resolved);
+                if (roots.length === 0) {
+                  return (
+                    <div className="px-6 py-12 text-center text-[var(--ds-muted)] text-[13px]">
+                      No comments yet. Highlight any text in the document and click <em>+ Comment</em> to start a thread.
+                    </div>
+                  );
+                }
+                const jumpTo = (commentId: string) => {
+                  setAllCommentsOpen(false);
+                  // Wait a frame so the dialog has unmounted before we
+                  // open the floating panel — otherwise the dialog's
+                  // overlay swallows the panel's outside-click guard.
+                  requestAnimationFrame(() => onFocusComment(commentId));
+                };
+                return (
+                  <div className="py-1">
+                    {unresolved.length > 0 && (
+                      <CommentGroup
+                        label="Unresolved"
+                        comments={unresolved}
+                        draft={draft}
+                        replyCounts={all}
+                        onJump={jumpTo}
+                      />
+                    )}
+                    {resolved.length > 0 && (
+                      <CommentGroup
+                        label="Resolved"
+                        comments={resolved}
+                        draft={draft}
+                        replyCounts={all}
+                        onJump={jumpTo}
+                        muted
+                      />
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Change A: Timeline dialog — moved out of the right rail into
+       * an overflow-menu launched modal. */}
+      <Dialog.Root open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
+          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[calc(100vw-2rem)] max-h-[80vh] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] flex flex-col">
+            <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
+              <Dialog.Title className="m-0 text-[14px] font-semibold inline-flex items-center gap-2">
+                <Clock3 className="size-4 text-[var(--ds-muted)]" /> Timeline
+              </Dialog.Title>
+              <Dialog.Description className="sr-only">
+                Audit timeline of regenerations, exports, comments, and attestations on this draft.
+              </Dialog.Description>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                  aria-label="Close timeline"
+                >
+                  <ChevronLeft className="size-4 rotate-45" />
+                </button>
+              </Dialog.Close>
+            </header>
+            <div className="flex-1 min-h-0 overflow-auto">
+              <TimelinePanel draft={draft} />
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
       <VersionHistoryDialog
         open={Boolean(historySection)}
         onClose={() => setHistorySection(null)}
@@ -1038,4 +1197,88 @@ function ViewModeButton({
       <span className="sr-only">{label}</span>
     </button>
   );
+}
+
+/**
+ * Index row for the All Comments dialog. Shows: section title (subtle),
+ * the quoted span (italic, truncated), author + relative time, body
+ * preview. Clicking the row dismisses the dialog and re-opens the
+ * floating panel anchored to the thread's mark.
+ */
+function CommentGroup({
+  label,
+  comments,
+  draft,
+  replyCounts,
+  onJump,
+  muted,
+}: {
+  label: string;
+  comments: Array<{
+    id: string;
+    sectionId: string;
+    authorName: string;
+    body: string;
+    quote?: string;
+    createdAt: number;
+    resolved?: boolean;
+  }>;
+  draft: { sections: { id: string; title: string }[]; comments?: { parentId?: string }[] };
+  replyCounts: Array<{ id: string; parentId?: string }>;
+  onJump: (commentId: string) => void;
+  muted?: boolean;
+}) {
+  return (
+    <div className={muted ? "opacity-60" : undefined}>
+      <div className="px-4 pt-3 pb-1 text-[10px] uppercase tracking-wide text-[var(--ds-muted)]">
+        {label} · {comments.length}
+      </div>
+      {comments.map((c) => {
+        const section = draft.sections.find((s) => s.id === c.sectionId);
+        const replyN = replyCounts.filter((r) => r.parentId === c.id).length;
+        return (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onJump(c.id)}
+            className="w-full text-left px-4 py-3 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-line-2)] transition group"
+          >
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-[11px] text-[var(--ds-muted)] truncate">
+                {section?.title ?? "Section"}
+              </span>
+              <span className="text-[10px] text-[var(--ds-subtle)] tabular-nums shrink-0">
+                {commentRelTime(c.createdAt)}
+              </span>
+            </div>
+            {c.quote && (
+              <p className="text-[11.5px] italic text-[var(--ds-muted)] m-0 mb-1 truncate">
+                "{c.quote}"
+              </p>
+            )}
+            <p className="text-[12.5px] text-[var(--ds-ink)] m-0 line-clamp-2">
+              <span className="font-medium">{c.authorName}:</span> {c.body}
+            </p>
+            {replyN > 0 && (
+              <p className="text-[10.5px] text-[var(--ds-muted)] mt-1 m-0">
+                {replyN} {replyN === 1 ? "reply" : "replies"}
+              </p>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function commentRelTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60_000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}d`;
+  return new Date(ts).toLocaleDateString();
 }
