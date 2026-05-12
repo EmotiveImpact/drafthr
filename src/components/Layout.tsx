@@ -12,7 +12,14 @@ import { SearchPaletteContext } from "@/components/SearchPaletteContext";
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const isEditor = loc.pathname.startsWith("/editor/");
+  const isLanding = loc.pathname === "/landing";
   const { open, setOpen } = useSearchPalette();
+
+  // Landing page is full-bleed, no sidebar, no chrome — it's a marketing
+  // surface, not an app surface.
+  if (isLanding) {
+    return <>{children}</>;
+  }
 
   if (isEditor) {
     return (
