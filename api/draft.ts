@@ -12,60 +12,33 @@
 
 import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 // MUST keep in sync with server/llm-model.ts (and api/agent.ts).
-const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
-const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite" as const;
-const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
-const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+const DEFAULT_MODEL = "z-ai/glm4.7" as const;
 const NVIDIA_FALLBACK_MODEL = "z-ai/glm4.7" as const;
+const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([
-  "claude-opus-4-7",
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5",
-  "gemini-3.1-flash-lite",
-  "gemini-3.1-pro-preview",
-  "gemini-3-flash-preview",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-pro",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  // NVIDIA NIM models
   "z-ai/glm4.7",
   "meta/llama-3.3-70b-instruct",
   "meta/llama-3.1-405b-instruct",
   "mistralai/mistral-large-2-instruct",
   "nvidia/llama-3.1-nemotron-70b-instruct",
-  "qwen3-max",
-  "qwen-flash",
-  "qwen-max",
-  "qwen-plus",
-  "qwen-turbo",
+  "claude-opus-4-7",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
 ]);
 
 function resolveModelName(requested?: string): string {
   const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.GEMINI_MODEL ?? process.env.NVIDIA_MODEL ?? process.env.QWEN_MODEL;
+  const envModel = process.env.LLM_MODEL ?? process.env.NVIDIA_MODEL;
   const providerDefault =
-    envProvider === "gemini" || envProvider === "google"
-      ? GEMINI_FALLBACK_MODEL
-      : envProvider === "claude" || envProvider === "anthropic"
+    envProvider === "claude" || envProvider === "anthropic"
       ? ANTHROPIC_FALLBACK_MODEL
-      : envProvider === "nvidia" || envProvider === "nim"
-      ? NVIDIA_FALLBACK_MODEL
-      : envProvider === "qwen"
-      ? QWEN_FALLBACK_MODEL
-      : DEFAULT_MODEL;
-  return fromRequest ?? envModel ?? providerDefault;
-}
-
-function isNvidiaModel(name: string): boolean {
-  return ["meta/", "mistralai/", "nvidia/", "microsoft/", "z-ai/"].some((p) => name.startsWith(p));
+      : NVIDIA_FALLBACK_MODEL;
+  return fromRequest ?? envModel ?? providerDefault ?? DEFAULT_MODEL;
 }
 
 function buildModel(requested?: string) {
@@ -77,27 +50,14 @@ function buildModel(requested?: string) {
     return createAnthropic({ apiKey })(modelName);
   }
 
-  if (modelName.startsWith("gemini-")) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY missing in environment.");
-    return createGoogleGenerativeAI({ apiKey })(modelName);
-  }
-
-  if (isNvidiaModel(modelName)) {
-    const apiKey = process.env.NVIDIA_API_KEY;
-    if (!apiKey) throw new Error("NVIDIA_API_KEY missing in environment.");
-    return createOpenAICompatible({
-      name: "nvidia-nim",
-      apiKey,
-      baseURL: "https://integrate.api.nvidia.com/v1",
-    })(modelName);
-  }
-
-  // Qwen / OpenAI-compatible fallback
-  const apiKey = process.env.QWEN_API_KEY;
-  if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
-  const baseURL = process.env.QWEN_BASE_URL ?? "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  return createOpenAICompatible({ name: "qwen", apiKey, baseURL })(modelName);
+  // NVIDIA NIM (default)
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error("NVIDIA_API_KEY missing in environment.");
+  return createOpenAICompatible({
+    name: "nvidia-nim",
+    apiKey,
+    baseURL: "https://integrate.api.nvidia.com/v1",
+  })(modelName);
 }
 
 export const config = {

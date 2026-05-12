@@ -21,27 +21,14 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
  */
 export type ModelId =
-  | "gemini-3.1-flash-lite"
-  | "gemini-3.1-pro-preview"
-  | "gemini-3-flash-preview"
-  | "gemini-2.5-flash"
-  | "gemini-2.5-flash-lite"
-  | "gemini-2.5-pro"
-  | "gemini-2.0-flash"
-  | "gemini-2.0-flash-lite"
-  | "claude-opus-4-7"
-  | "claude-sonnet-4-6"
-  | "claude-haiku-4-5"
   | "z-ai/glm4.7"
   | "meta/llama-3.3-70b-instruct"
   | "meta/llama-3.1-405b-instruct"
   | "mistralai/mistral-large-2-instruct"
   | "nvidia/llama-3.1-nemotron-70b-instruct"
-  | "qwen3-max"
-  | "qwen-flash"
-  | "qwen-max"
-  | "qwen-plus"
-  | "qwen-turbo";
+  | "claude-opus-4-7"
+  | "claude-sonnet-4-6"
+  | "claude-haiku-4-5";
 
 /** Legacy alias kept so existing Settings imports still compile. */
 export type QwenModelId = ModelId;
@@ -50,32 +37,18 @@ export const MODEL_OPTIONS: {
   id: ModelId;
   label: string;
   hint: string;
-  provider: "google" | "anthropic" | "nvidia" | "qwen";
+  provider: "nvidia" | "anthropic";
 }[] = [
-  // Google Gemini — default provider, free tier available.
-  { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", hint: "Latest stable Flash. Fast, free-tier.", provider: "google" },
-  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview", hint: "Cutting-edge Google model, preview tier.", provider: "google" },
-  { id: "gemini-3-flash-preview", label: "Gemini 3 Flash Preview", hint: "Gemini 3 Flash, preview tier.", provider: "google" },
-  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Strong reasoning, fast. Recommended default.", provider: "google" },
-  { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", hint: "Lightest 2.5 tier — ultra-fast, low cost.", provider: "google" },
-  { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Google flagship. Best quality, slower.", provider: "google" },
-  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", hint: "Solid, free-tier, widely available.", provider: "google" },
-  { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", hint: "Fastest, cheapest Gemini 2.0 tier.", provider: "google" },
-  // NVIDIA NIM — open models via NVIDIA's hosted inference.
-  { id: "z-ai/glm4.7", label: "GLM 4.7 (ZhipuAI)", hint: "Z.AI GLM 4.7 with reasoning via NVIDIA NIM.", provider: "nvidia" as const },
-  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B", hint: "Meta's latest open model via NVIDIA NIM. Fast, free tier.", provider: "nvidia" as const },
-  { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B", hint: "Meta's largest open model. Best open-source quality.", provider: "nvidia" as const },
-  { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" as const },
-  { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B", hint: "NVIDIA fine-tuned Llama. Strong instruction following.", provider: "nvidia" as const },
-  // Anthropic — tier-leading legal writing register.
+  // NVIDIA NIM — default provider.
+  { id: "z-ai/glm4.7", label: "GLM 4.7", hint: "Z.AI GLM 4.7 with reasoning. Default.", provider: "nvidia" },
+  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B", hint: "Meta's latest open model via NVIDIA NIM.", provider: "nvidia" },
+  { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B", hint: "Meta's largest open model. Best open-source quality.", provider: "nvidia" },
+  { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" },
+  { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B", hint: "NVIDIA fine-tuned Llama. Strong instruction following.", provider: "nvidia" },
+  // Anthropic — premium option for high-risk letters.
   { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters.", provider: "anthropic" },
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Tier-leading register, balanced cost.", provider: "anthropic" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", hint: "Fast + cheap. Use for low-risk drafts.", provider: "anthropic" },
-  // Qwen — multilingual fallback.
-  { id: "qwen-flash", label: "Qwen3 Flash", hint: "Fastest Qwen3 tier — quick drafts.", provider: "qwen" },
-  { id: "qwen3-max", label: "Qwen3 Max", hint: "Alibaba flagship. Strong multilingual support.", provider: "qwen" },
-  { id: "qwen-plus", label: "Qwen Plus", hint: "Free-tier capable.", provider: "qwen" },
-  { id: "qwen-turbo", label: "Qwen Turbo", hint: "Fastest, cheapest Qwen model.", provider: "qwen" },
 ];
 
 /** @deprecated Use MODEL_OPTIONS. Kept for callers that haven't migrated. */
@@ -202,7 +175,7 @@ export const useProfileStore = create<Store>()(
         // defaults (the Claude default we shipped, then the qwen3-max
         // default we briefly shipped). Any other selection is treated as
         // user intent and left alone.
-        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash", "qwen3-max"]);
+        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash", "qwen3-max", "gemini-2.0-flash", "gemini-3.1-flash-lite"]);
         if (
           state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
           stale.has(state.profile.defaults.qwenModel)

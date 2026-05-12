@@ -14,4 +14,4 @@
  *
  * Change this string to retarget every fallback in lockstep.
  */
-export const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
+export const DEFAULT_MODEL = "z-ai/glm4.7" as const;
