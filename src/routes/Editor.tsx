@@ -59,6 +59,7 @@ import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
+import { useIsLargeViewport } from "@/lib/use-large-viewport";
 
 
 export function Editor() {
@@ -117,6 +118,12 @@ export function Editor() {
   // "Ask AI" label so AI stays in peripheral vision even when collapsed.
   // lg:+ only; mobile uses showRail + bottom sheet.
   const [railCollapsed, setRailCollapsed] = useState(false);
+  // Gate which AI surface mounts — exactly one at a time. Crossing
+  // the breakpoint unmounts the previous surface (its useChat persists
+  // to draft.aiChat on idle ticks) and mounts the new one (its useChat
+  // hydrates from draft.aiChat via initialMessages). Conversation
+  // survives the viewport change.
+  const isLargeViewport = useIsLargeViewport();
 
   // Change A: comments no longer open the right rail. They pop up as a
   // floating panel anchored to the inline highlight (existing thread)
@@ -1048,60 +1055,68 @@ export function Editor() {
          * is true the rail is removed from the grid entirely (canvas takes
          * full width) and a floating "Ask AI" pill in the bottom-right
          * brings it back — mobile-mirror pattern. */}
-        {/* Always mounted at lg:+ so the grid's third track has stable
-         * content while it animates from 360px to 0px. overflow-hidden
-         * clips during the slide; opacity fades the content in lock-
-         * step so the rail doesn't look squished at midpoint. */}
-        <aside
-          aria-hidden={railCollapsed || undefined}
-          className={
-            "hidden lg:flex flex-col min-h-0 overflow-hidden lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
-            "lg:transition-opacity lg:duration-200 lg:ease-out motion-reduce:lg:transition-none " +
-            (focusMode ? "lg:hidden" : "") +
-            (railCollapsed ? " opacity-0 pointer-events-none" : " opacity-100")
-          }
-        >
-          <RightRail
-            draft={draft}
-            tab={rightTab}
-            onTabChange={setRightTab}
-            pendingComment={pendingComment}
-            onPendingCommentConsumed={() => setPendingComment(null)}
-            activeSectionId={activeSectionId}
-            onCollapse={() => setRailCollapsed(true)}
-          />
-        </aside>
-
-        {/* Mobile bottom sheet — Framer Motion with drag-to-dismiss,
-         * snap points (half / full), and momentum-aware release. Tap-scrim
-         * also dismisses (handled by the scrim element below). */}
-        <MobileBottomSheet
-          open={showRail && !focusMode}
-          snap={sheetSnap}
-          onSnapChange={(next) => {
-            if (next === "closed") {
-              setShowRail(false);
-              setSheetSnap("half");
-            } else {
-              setSheetSnap(next);
+        {/* Desktop AI rail — rendered ONLY at lg:+. The mobile bottom
+         * sheet below is hidden in this branch so there's exactly one
+         * AIPanel (and one useChat instance) in the tree at any time.
+         * Resizing across the breakpoint unmounts one and mounts the
+         * other; conversation persists via draft.aiChat. */}
+        {isLargeViewport && (
+          <aside
+            aria-hidden={railCollapsed || undefined}
+            className={
+              "flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
+              "transition-opacity duration-200 ease-out motion-reduce:transition-none " +
+              (focusMode ? "hidden" : "") +
+              (railCollapsed ? " opacity-0 pointer-events-none" : " opacity-100")
             }
-          }}
-          onDismiss={() => {
-            setShowRail(false);
-            // Reset so next open starts at half, not whatever was last set.
-            setSheetSnap("half");
-          }}
-          className="lg:hidden"
-        >
-          <RightRail
-            draft={draft}
-            tab={rightTab}
-            onTabChange={setRightTab}
-            pendingComment={pendingComment}
-            onPendingCommentConsumed={() => setPendingComment(null)}
-            activeSectionId={activeSectionId}
-          />
-        </MobileBottomSheet>
+          >
+            <RightRail
+              draft={draft}
+              tab={rightTab}
+              onTabChange={setRightTab}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+              activeSectionId={activeSectionId}
+              onCollapse={() => setRailCollapsed(true)}
+            />
+          </aside>
+        )}
+
+        {/* Mobile bottom sheet — rendered ONLY below lg:. Framer Motion
+         * with drag-to-dismiss, snap points (half / full), and momentum-
+         * aware release. Tap-scrim also dismisses (handled by the scrim
+         * element below). Sibling of the desktop aside above — exactly
+         * one of these is in the tree at a time so the AIPanel/useChat
+         * lives in a single instance. */}
+        {!isLargeViewport && (
+          <MobileBottomSheet
+            open={showRail && !focusMode}
+            snap={sheetSnap}
+            onSnapChange={(next) => {
+              if (next === "closed") {
+                setShowRail(false);
+                setSheetSnap("half");
+              } else {
+                setSheetSnap(next);
+              }
+            }}
+            onDismiss={() => {
+              setShowRail(false);
+              // Reset so next open starts at half, not whatever was last set.
+              setSheetSnap("half");
+            }}
+            className=""
+          >
+            <RightRail
+              draft={draft}
+              tab={rightTab}
+              onTabChange={setRightTab}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+              activeSectionId={activeSectionId}
+            />
+          </MobileBottomSheet>
+        )}
 
         {/* Mobile scrim — always mounted, fades in/out with showSidebar
          * or showRail. pointer-events-none when invisible so taps fall
