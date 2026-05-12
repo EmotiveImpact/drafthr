@@ -41,6 +41,8 @@ import {
   Pencil,
   Clock3,
   MessageSquare,
+  Wand2,
+  FileDown,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -331,29 +333,155 @@ export function Editor() {
           {/* Column 1 — over the left rail / viewport-left on mobile.
            * Brand mark + back-to-letters + counsel pill. */}
           <div className="flex items-center gap-1 min-w-0 lg:px-4">
-            {/* Brand mark — links to /. Compact at this size so it reads as
-             * "home" rather than a decorative logo. */}
+            {/* Brand mark — single back/home affordance. Clicking the D
+             * returns to the letters list for the current mode (employer
+             * /hr or employee /me), so we don't need a separate ←
+             * Letters button next to it. */}
             <Link
-              to="/"
-              aria-label="DRAFTHR home"
+              to={backTo}
+              aria-label="Back to letters"
+              title="Back to letters"
               className="shrink-0 rounded-md hover:opacity-80 transition px-1 grid place-items-center h-8"
             >
               <BrandMark size={32} />
             </Link>
-            {/* Back-to-letters affordance — separate from the brand mark
-             * so each has a single clear destination (D → home, ← Letters
-             * → letters list). Shows arrow only < md, full "Letters" from md+. */}
-            <button
-              type="button"
-              onClick={() => nav(backTo)}
-              aria-label="Back to letters"
-              className="flex items-center gap-1.5 min-w-0 group rounded-md hover:bg-[var(--ds-line-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] px-2 h-8 transition"
-            >
-              <ChevronLeft className="size-4 group-hover:-translate-x-0.5 transition" />
-              <span className="hidden md:inline text-[13px] font-medium">
-                Letters
-              </span>
-            </button>
+
+            {/* Change C: top menubar — File / Tools / View. Conventional
+             * desktop position: far-left, right after the brand mark.
+             * Mobile keeps the existing icon toolbar + ⋯ overflow. */}
+            <div className="hidden md:flex items-center gap-0.5 ml-1">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
+                  >
+                    File
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[220px]">
+                  <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
+                    <Settings2 className="size-4 mr-2" /> Edit details
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => nav(`/editor/${draft.id}/review`)}
+                  >
+                    <FileDown className="size-4 mr-2" /> Export…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => nav("/settings")}>
+                    <Settings2 className="size-4 mr-2" /> Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => nav("/privacy")}>
+                    <ShieldCheck className="size-4 mr-2" /> Privacy &amp; data
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
+                  >
+                    Tools
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[240px]">
+                  {globallyStreaming ? (
+                    <DropdownMenuItem onClick={stopStreaming}>
+                      <StopCircle className="size-4 mr-2" /> Stop generation
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem onClick={runGenerateAll}>
+                      <Sparkles className="size-4 mr-2" /> Regenerate all sections
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    disabled={!activeSectionId}
+                    onClick={() => {
+                      if (activeSectionId) setRefineSectionId(activeSectionId);
+                    }}
+                  >
+                    <Wand2 className="size-4 mr-2" /> Refine current section…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setAllCommentsOpen(true)}>
+                    <MessageSquare className="size-4 mr-2" /> Comments
+                    {(() => {
+                      const n = (draft.comments ?? []).filter(
+                        (c) => !c.resolved && !c.parentId
+                      ).length;
+                      return n > 0 ? (
+                        <span className="ml-auto text-[10px] font-mono text-[var(--ds-muted)]">
+                          {n}
+                        </span>
+                      ) : null;
+                    })()}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTimelineDialogOpen(true)}>
+                    <Clock3 className="size-4 mr-2" /> Timeline
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
+                  >
+                    View
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[220px]">
+                  <DropdownMenuItem onClick={() => setViewMode("edit")}>
+                    <FileEdit className="size-4 mr-2" />
+                    Edit
+                    {viewMode === "edit" && (
+                      <span className="ml-auto text-[10px]">✓</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setViewMode("preview")}>
+                    <Eye className="size-4 mr-2" />
+                    Preview
+                    {viewMode === "preview" && (
+                      <span className="ml-auto text-[10px]">✓</span>
+                    )}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={viewMode !== "preview"}
+                    onClick={() => setEditOnPage((v) => !v)}
+                  >
+                    <Pencil className="size-4 mr-2" />
+                    {editOnPage ? "Stop editing on page" : "Edit on page"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setFocusMode((f) => !f)}>
+                    {focusMode ? (
+                      <Minimize2 className="size-4 mr-2" />
+                    ) : (
+                      <Maximize2 className="size-4 mr-2" />
+                    )}
+                    {focusMode ? "Exit focus mode" : "Enter focus mode"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="lg:hidden" />
+                  <DropdownMenuItem
+                    className="lg:hidden"
+                    onClick={() => setShowSidebar((s) => !s)}
+                  >
+                    <PanelLeft className="size-4 mr-2" /> Sections rail
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="lg:hidden"
+                    onClick={() => setShowRail((s) => !s)}
+                  >
+                    <PanelRight className="size-4 mr-2" /> AI rail
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             {/* Counsel-review pill — only on high-risk letters or where the
              * letter type's metadata flags counsel review as required. */}
             {(meta.legalReviewRequired || meta.riskClass === "high") && (
@@ -382,10 +510,10 @@ export function Editor() {
            * where they used to on the secondary toolbar. Below lg this
            * inline-flows after the left cluster. */}
           <div className="relative flex-1 lg:flex-none flex items-center justify-center lg:justify-start gap-2 min-w-0 lg:px-3">
-            {/* Left-of-canvas: writing controls grouped — Tone + Regenerate all.
-             * Both are "shape the AI output" affordances, so they sit
-             * together to the left of the Edit/Preview toggle. */}
-            <DocumentPopover draft={draft} />
+            {/* Mobile-only icon toolbar — Tone, Regenerate. On md:+ these
+             * actions live inside the File/Tools menubar above. */}
+            <div className="md:hidden flex items-center gap-2">
+              <DocumentPopover draft={draft} />
             {globallyStreaming ? (
               <Button
                 variant="outline"
@@ -409,6 +537,7 @@ export function Editor() {
                 <Sparkles className="size-3.5" />
               </Button>
             )}
+            </div>
 
             {/* Edit / Preview — centred over the canvas. On lg+ the
              * grid cell IS the canvas column so a plain centre works.
@@ -436,7 +565,7 @@ export function Editor() {
               <Button
                 variant={editOnPage ? "default" : "outline"}
                 size="sm"
-                className="h-7 w-7 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="md:hidden h-7 w-7 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={viewMode !== "preview"}
                 onClick={() => setEditOnPage((v) => !v)}
                 aria-pressed={editOnPage}
@@ -456,7 +585,7 @@ export function Editor() {
               <Button
                 variant={focusMode ? "default" : "outline"}
                 size="sm"
-                className="hidden md:inline-flex h-7 w-7 p-0"
+                className="hidden h-7 w-7 p-0"
                 onClick={() => setFocusMode((f) => !f)}
                 aria-pressed={focusMode}
                 aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
@@ -589,12 +718,11 @@ export function Editor() {
                 )
               }
             />
-            {/* Focus toggle moved into column 2 next to Edit/Preview —
-             * it's a view-state affordance, not a per-user action, so it
-             * belongs with the view toggle. Disabled outside Preview. */}
+            {/* Mobile-only ⋯ overflow — on md:+ all these actions live in
+             * the File/Tools/View menubar at the start of column 2. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+                <Button variant="ghost" size="icon" className="md:hidden size-8" aria-label="More">
                   <MoreHorizontal className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
