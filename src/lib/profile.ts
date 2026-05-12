@@ -32,6 +32,10 @@ export type ModelId =
   | "claude-opus-4-7"
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5"
+  | "meta/llama-3.3-70b-instruct"
+  | "meta/llama-3.1-405b-instruct"
+  | "mistralai/mistral-large-2-instruct"
+  | "nvidia/llama-3.1-nemotron-70b-instruct"
   | "qwen3-max"
   | "qwen-flash"
   | "qwen-max"
@@ -45,7 +49,7 @@ export const MODEL_OPTIONS: {
   id: ModelId;
   label: string;
   hint: string;
-  provider: "google" | "anthropic" | "qwen";
+  provider: "google" | "anthropic" | "nvidia" | "qwen";
 }[] = [
   // Google Gemini — default provider, free tier available.
   { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", hint: "Latest stable Flash. Fast, free-tier.", provider: "google" },
@@ -56,6 +60,11 @@ export const MODEL_OPTIONS: {
   { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Google flagship. Best quality, slower.", provider: "google" },
   { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", hint: "Solid, free-tier, widely available.", provider: "google" },
   { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", hint: "Fastest, cheapest Gemini 2.0 tier.", provider: "google" },
+  // NVIDIA NIM — open models via NVIDIA's hosted inference.
+  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B", hint: "Meta's latest open model via NVIDIA NIM. Fast, free tier.", provider: "nvidia" as const },
+  { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B", hint: "Meta's largest open model. Best open-source quality.", provider: "nvidia" as const },
+  { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" as const },
+  { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B", hint: "NVIDIA fine-tuned Llama. Strong instruction following.", provider: "nvidia" as const },
   // Anthropic — tier-leading legal writing register.
   { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters.", provider: "anthropic" },
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Tier-leading register, balanced cost.", provider: "anthropic" },

@@ -2,11 +2,14 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
+const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
+
 // Keep in sync with api/draft.ts. The API functions avoid importing from /src
 // because Vercel's serverless bundler has previously failed to trace that path.
 const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
 const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+const NVIDIA_FALLBACK_MODEL = "meta/llama-3.3-70b-instruct" as const;
 const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
 
 const ALLOWED_MODELS = new Set([
@@ -17,6 +20,10 @@ const ALLOWED_MODELS = new Set([
   "gemini-2.0-flash-lite",
   "gemini-2.5-flash",
   "gemini-2.5-pro",
+  "meta/llama-3.3-70b-instruct",
+  "meta/llama-3.1-405b-instruct",
+  "mistralai/mistral-large-2-instruct",
+  "nvidia/llama-3.1-nemotron-70b-instruct",
   "qwen3-max",
   "qwen-flash",
   "qwen-max",
@@ -30,6 +37,8 @@ type ModelEnv = Partial<
     | "ANTHROPIC_API_KEY"
     | "GEMINI_API_KEY"
     | "GEMINI_MODEL"
+    | "NVIDIA_API_KEY"
+    | "NVIDIA_MODEL"
     | "LLM_MODEL"
     | "LLM_PROVIDER"
     | "QWEN_API_KEY"
@@ -55,16 +64,27 @@ export function resolveModelName(
   const fromRequest =
     requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
   const envProvider = (env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = env.LLM_MODEL ?? env.GEMINI_MODEL ?? env.QWEN_MODEL;
+  const envModel = env.LLM_MODEL ?? env.GEMINI_MODEL ?? env.NVIDIA_MODEL ?? env.QWEN_MODEL;
   const providerDefault =
     envProvider === "gemini" || envProvider === "google"
       ? GEMINI_FALLBACK_MODEL
       : envProvider === "claude" || envProvider === "anthropic"
       ? ANTHROPIC_FALLBACK_MODEL
+      : envProvider === "nvidia" || envProvider === "nim"
+      ? NVIDIA_FALLBACK_MODEL
       : envProvider === "qwen"
       ? QWEN_FALLBACK_MODEL
       : DEFAULT_MODEL;
   return fromRequest ?? envModel ?? providerDefault;
+}
+
+function isNvidiaModel(name: string): boolean {
+  return (
+    name.startsWith("meta/") ||
+    name.startsWith("mistralai/") ||
+    name.startsWith("nvidia/") ||
+    name.startsWith("microsoft/")
+  );
 }
 
 export function buildModel(requestedModel?: string, logPrefix?: string) {
@@ -82,12 +102,20 @@ export function buildModel(requestedModel?: string, logPrefix?: string) {
     return createGoogleGenerativeAI({ apiKey })(modelName);
   }
 
+  if (isNvidiaModel(modelName)) {
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) throw new Error("NVIDIA_API_KEY missing in environment.");
+    return createOpenAICompatible({
+      name: "nvidia-nim",
+      apiKey,
+      baseURL: NVIDIA_BASE_URL,
+    })(modelName);
+  }
+
   // Qwen / OpenAI-compatible fallback
   const apiKey = process.env.QWEN_API_KEY;
   if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
-  const baseURL =
-    process.env.QWEN_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  const baseURL = process.env.QWEN_BASE_URL ?? "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   return createOpenAICompatible({ name: "qwen", apiKey, baseURL })(modelName);
 }
 

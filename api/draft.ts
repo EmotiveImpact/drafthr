@@ -20,6 +20,7 @@ const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
 const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+const NVIDIA_FALLBACK_MODEL = "meta/llama-3.3-70b-instruct" as const;
 
 const ALLOWED_MODELS = new Set([
   "claude-opus-4-7",
@@ -33,6 +34,11 @@ const ALLOWED_MODELS = new Set([
   "gemini-2.5-pro",
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
+  // NVIDIA NIM models
+  "meta/llama-3.3-70b-instruct",
+  "meta/llama-3.1-405b-instruct",
+  "mistralai/mistral-large-2-instruct",
+  "nvidia/llama-3.1-nemotron-70b-instruct",
   "qwen3-max",
   "qwen-flash",
   "qwen-max",
@@ -43,16 +49,22 @@ const ALLOWED_MODELS = new Set([
 function resolveModelName(requested?: string): string {
   const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.GEMINI_MODEL ?? process.env.QWEN_MODEL;
+  const envModel = process.env.LLM_MODEL ?? process.env.GEMINI_MODEL ?? process.env.NVIDIA_MODEL ?? process.env.QWEN_MODEL;
   const providerDefault =
     envProvider === "gemini" || envProvider === "google"
       ? GEMINI_FALLBACK_MODEL
       : envProvider === "claude" || envProvider === "anthropic"
       ? ANTHROPIC_FALLBACK_MODEL
+      : envProvider === "nvidia" || envProvider === "nim"
+      ? NVIDIA_FALLBACK_MODEL
       : envProvider === "qwen"
       ? QWEN_FALLBACK_MODEL
       : DEFAULT_MODEL;
   return fromRequest ?? envModel ?? providerDefault;
+}
+
+function isNvidiaModel(name: string): boolean {
+  return name.startsWith("meta/") || name.startsWith("mistralai/") || name.startsWith("nvidia/") || name.startsWith("google/") || name.startsWith("microsoft/");
 }
 
 function buildModel(requested?: string) {
@@ -70,12 +82,20 @@ function buildModel(requested?: string) {
     return createGoogleGenerativeAI({ apiKey })(modelName);
   }
 
+  if (isNvidiaModel(modelName)) {
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) throw new Error("NVIDIA_API_KEY missing in environment.");
+    return createOpenAICompatible({
+      name: "nvidia-nim",
+      apiKey,
+      baseURL: "https://integrate.api.nvidia.com/v1",
+    })(modelName);
+  }
+
   // Qwen / OpenAI-compatible fallback
   const apiKey = process.env.QWEN_API_KEY;
   if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
-  const baseURL =
-    process.env.QWEN_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+  const baseURL = process.env.QWEN_BASE_URL ?? "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   return createOpenAICompatible({ name: "qwen", apiKey, baseURL })(modelName);
 }
 
