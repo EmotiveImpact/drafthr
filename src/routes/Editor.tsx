@@ -49,6 +49,7 @@ import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
+import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
 import { toast } from "sonner";
 
 
@@ -94,6 +95,9 @@ export function Editor() {
   // Shared open state for the InvitePopover so the mobile overflow menu
   // can open it (its trigger is hidden below md:).
   const [invitePopoverOpen, setInvitePopoverOpen] = useState(false);
+  // Mobile bottom-sheet snap state. "closed" is driven by !showRail; the
+  // sheet ANIMATES into "half" by default when the user opens it.
+  const [sheetSnap, setSheetSnap] = useState<"half" | "full">("half");
 
   const openComments = (sectionId: string) => {
     setRightTab("comments");
@@ -852,55 +856,54 @@ export function Editor() {
           </div>
         </main>
 
+        {/* Desktop right rail — inline, persistent. Hidden below lg: where
+         * the bottom sheet handles things. */}
         <aside
-          aria-hidden={!showRail || undefined}
           className={
-            "min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
-            (focusMode
-              ? "hidden"
-              : // Mobile: always mounted as a fixed bottom sheet so we can
-                // animate the slide-in/out. translate-y-full when closed,
-                // translate-y-0 when open. lg:+ stays inline (no transform,
-                // no fixed positioning).
-                "fixed left-0 right-0 bottom-0 z-40 h-[72vh] bg-[var(--ds-surface)] " +
-                "rounded-t-2xl shadow-[0_-12px_32px_rgba(0,0,0,0.18)] " +
-                "flex flex-col " +
-                "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] " +
-                "motion-reduce:transition-none " +
-                (showRail
-                  ? "translate-y-0 "
-                  : "translate-y-full pointer-events-none ") +
-                "lg:static lg:translate-y-0 lg:transition-none lg:pointer-events-auto " +
-                "lg:shadow-none lg:rounded-none lg:h-auto lg:w-auto " +
-                "lg:bottom-auto lg:left-auto lg:right-auto")
+            "hidden lg:block min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
+            (focusMode ? "lg:hidden" : "")
           }
         >
-          {/* Mobile-only grab handle — single iOS-style pull bar centred
-           * at the very top of the sheet. No inline close X (clashes with
-           * the RightRail's tabs); dismiss via tap-scrim or by tapping
-           * the Ask-AI pill again. On lg:+ the rail is inline so this
-           * affordance is hidden. */}
-          {showRail && (
-            <button
-              type="button"
-              onClick={() => setShowRail(false)}
-              className="lg:hidden block w-full pt-2.5 pb-1.5 shrink-0 group"
-              aria-label="Close panel"
-            >
-              <span className="block h-1 w-10 rounded-full bg-[var(--ds-line)] mx-auto group-hover:bg-[var(--ds-muted)] transition" />
-            </button>
-          )}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <RightRail
-              draft={draft}
-              tab={rightTab}
-              onTabChange={setRightTab}
-              pendingComment={pendingComment}
-              onPendingCommentConsumed={() => setPendingComment(null)}
-              activeSectionId={activeSectionId}
-            />
-          </div>
+          <RightRail
+            draft={draft}
+            tab={rightTab}
+            onTabChange={setRightTab}
+            pendingComment={pendingComment}
+            onPendingCommentConsumed={() => setPendingComment(null)}
+            activeSectionId={activeSectionId}
+          />
         </aside>
+
+        {/* Mobile bottom sheet — Framer Motion with drag-to-dismiss,
+         * snap points (half / full), and momentum-aware release. Tap-scrim
+         * also dismisses (handled by the scrim element below). */}
+        <MobileBottomSheet
+          open={showRail && !focusMode}
+          snap={sheetSnap}
+          onSnapChange={(next) => {
+            if (next === "closed") {
+              setShowRail(false);
+              setSheetSnap("half");
+            } else {
+              setSheetSnap(next);
+            }
+          }}
+          onDismiss={() => {
+            setShowRail(false);
+            // Reset so next open starts at half, not whatever was last set.
+            setSheetSnap("half");
+          }}
+          className="lg:hidden"
+        >
+          <RightRail
+            draft={draft}
+            tab={rightTab}
+            onTabChange={setRightTab}
+            pendingComment={pendingComment}
+            onPendingCommentConsumed={() => setPendingComment(null)}
+            activeSectionId={activeSectionId}
+          />
+        </MobileBottomSheet>
 
         {/* Mobile scrim — always mounted, fades in/out with showSidebar
          * or showRail. pointer-events-none when invisible so taps fall

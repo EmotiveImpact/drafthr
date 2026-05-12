@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
 import { Wizard } from "@/routes/Wizard";
 import { RootRedirect } from "@/routes/RootRedirect";
@@ -37,10 +38,27 @@ function EditorFallback() {
 }
 
 export function App() {
+  const location = useLocation();
+  // Editor routes are exempted from the page transition. The editor has
+  // its own internal animations (rails, sheet, streaming) and a fade on
+  // top of that double-animates and looks busy.
+  const skipTransition = location.pathname.startsWith("/editor/");
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<Protected><RootRedirect /></Protected>} />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={skipTransition ? "editor" : location.pathname}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{
+            duration: 0.18,
+            ease: [0.32, 0.72, 0, 1],
+          }}
+          className="h-full flex flex-col flex-1 min-h-0"
+        >
+          <Routes location={location}>
+            <Route path="/" element={<Protected><RootRedirect /></Protected>} />
         <Route path="/pick-role" element={<Protected><ModePicker /></Protected>} />
 
         <Route path="/hr" element={<Protected><Home mode="employer" /></Protected>} />
@@ -73,8 +91,10 @@ export function App() {
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </motion.div>
+      </AnimatePresence>
     </Layout>
   );
 }
