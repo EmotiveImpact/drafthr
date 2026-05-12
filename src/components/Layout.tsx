@@ -73,7 +73,7 @@ function MobileTopbar() {
         aria-label="DRAFTHR home"
         className="flex items-center gap-2 min-w-0"
       >
-        <BrandMark size={28} />
+        <BrandMark size={34} />
         <Wordmark size={16} className="truncate" />
       </Link>
 

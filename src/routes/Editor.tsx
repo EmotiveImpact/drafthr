@@ -321,7 +321,7 @@ export function Editor() {
               aria-label="DRAFTHR home"
               className="shrink-0 rounded-md hover:opacity-80 transition px-1 grid place-items-center h-8"
             >
-              <BrandMark size={26} />
+              <BrandMark size={32} />
             </Link>
             {/* Back-to-letters affordance — separate from the brand mark
              * so each has a single clear destination (D → home, ← Letters
