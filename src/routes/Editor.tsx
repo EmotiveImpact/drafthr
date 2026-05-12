@@ -272,14 +272,17 @@ export function Editor() {
        * [avatars · actions]. Edit/Preview moved to the secondary toolbar so
        * the title can claim centre stage. */}
       <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
-        {/* Layout: relative row with left + right flex groups; the centred
-         * title is absolute-positioned so it anchors to the viewport midpoint
-         * regardless of how heavy the left/right groups become. This is what
-         * lets the title above and Edit/Preview below share a vertical axis. */}
-        <div className="relative h-full px-2 sm:px-4 flex items-center gap-2 sm:gap-3">
-          {/* Left: brand mark + back-to-letters + counsel pill. Rail toggles
-           * moved into the ⋯ overflow menu on the right to declutter. */}
-          <div className="flex items-center gap-1 min-w-0">
+        {/* Topbar grid mirrors the body grid below it on lg+:
+         *   [260px left rail]  [1fr canvas]  [360px right rail]
+         * So the migrated secondary-toolbar items (Tone, Edit/Preview,
+         * pending/drafting/regen) sit DIRECTLY ABOVE their old positions
+         * over the canvas column, not jammed into the viewport-wide
+         * left/right clusters. Below lg the rails are drawers and the
+         * grid collapses to a single flex row. */}
+        <div className="relative h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4 lg:grid lg:grid-cols-[260px_minmax(0,1fr)_360px] lg:gap-0 lg:px-0">
+          {/* Column 1 — over the left rail / viewport-left on mobile.
+           * Brand mark + back-to-letters + counsel pill. */}
+          <div className="flex items-center gap-1 min-w-0 lg:px-4">
             {/* Brand mark — links to /. Compact at this size so it reads as
              * "home" rather than a decorative logo. */}
             <Link
@@ -325,95 +328,93 @@ export function Editor() {
             )}
           </div>
 
-          {/* Document settings — Tone / register / etc. Was in the secondary
-           * toolbar; promoted to the left cluster now that the toolbar is
-           * gone. Always visible (no md gate) so the Tone button is
-           * findable on every screen size, same as it was before. */}
-          <div className="flex items-center">
+          {/* Column 2 — over the canvas. Tone (left), Edit/Preview
+           * (centred), pending/drafting/regenerate (right). On lg+ this
+           * sits directly above the canvas column so the items appear
+           * where they used to on the secondary toolbar. Below lg this
+           * inline-flows after the left cluster. */}
+          <div className="relative flex items-center gap-2 min-w-0 lg:px-3">
             <DocumentPopover draft={draft} />
+
+            {/* Edit / Preview — centred over the canvas. On lg+ the
+             * grid cell IS the canvas column so a plain centre works.
+             * Below lg, absolute-position against the topbar so it
+             * sits in the viewport centre. */}
+            <div
+              className="inline-flex lg:absolute lg:left-1/2 lg:-translate-x-1/2 items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7 mx-auto"
+              role="tablist"
+              aria-label="View mode"
+            >
+              <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
+              <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+            </div>
+
+            {/* Right-of-canvas: pending pill + Drafting indicator +
+             * Regenerate all. ml-auto pushes them to the right edge
+             * of the canvas column (just inside the right rail). */}
+            <div className="ml-auto flex items-center gap-2">
+              {(() => {
+                const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
+                if (pendingCount === 0) return null;
+                return (
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
+                    <span>{pendingCount} pending</span>
+                    <button
+                      type="button"
+                      onClick={() => useDraftStore.getState().rejectAllPending(draft.id)}
+                      className="hover:underline"
+                      title="Reject every pending AI proposal"
+                    >
+                      Reject all
+                    </button>
+                    <span className="text-[var(--ds-amber-fg)]/50">·</span>
+                    <button
+                      type="button"
+                      onClick={() => useDraftStore.getState().acceptAllPending(draft.id)}
+                      className="hover:underline font-semibold"
+                      title="Accept every pending AI proposal"
+                    >
+                      Accept all
+                    </button>
+                  </div>
+                );
+              })()}
+              {globallyStreaming && (
+                <span className="flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
+                  <Loader2 className="size-3 animate-spin" /> Drafting…
+                </span>
+              )}
+              {globallyStreaming ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={stopStreaming}
+                  title="Stop the running generation"
+                >
+                  <StopCircle className="size-3.5" />
+                  <span className="hidden md:inline">Stop</span>
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2"
+                  onClick={runGenerateAll}
+                  title="Regenerate every section (uses current wizard answers and tone)"
+                >
+                  <Sparkles className="size-3.5" />
+                  <span className="hidden md:inline">Regenerate all</span>
+                </Button>
+              )}
+            </div>
           </div>
 
-          {/* Centre: Edit / Preview toggle — was on the secondary toolbar;
-           * now lives in the main topbar where the title used to sit.
-           * Absolute-positioned with a -50px offset on lg+ to keep it
-           * visually centred over the canvas (left rail 260 − right rail
-           * 360, halved). Falls back to true viewport centre in focus
-           * mode (rails collapsed) and below md (drawer rails). */}
-          <div
-            className={
-              "inline-flex absolute -translate-x-1/2 items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7 " +
-              (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-50px)]")
-            }
-            role="tablist"
-            aria-label="View mode"
-          >
-            <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-            <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
-          </div>
-
-          {/* Right: pending pill (when AI has proposed changes) → streaming
-           * status → people → ⋯ → primary CTA. Pending pill + streaming
-           * indicator were on the secondary toolbar; they migrate here
-           * along with the toolbar's other content. Regenerate-all stays
-           * in the ⋯ menu (already there). */}
-          <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
-            {(() => {
-              const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
-              if (pendingCount === 0) return null;
-              return (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
-                  <span>{pendingCount} pending</span>
-                  <button
-                    type="button"
-                    onClick={() => useDraftStore.getState().rejectAllPending(draft.id)}
-                    className="hover:underline"
-                    title="Reject every pending AI proposal"
-                  >
-                    Reject all
-                  </button>
-                  <span className="text-[var(--ds-amber-fg)]/50">·</span>
-                  <button
-                    type="button"
-                    onClick={() => useDraftStore.getState().acceptAllPending(draft.id)}
-                    className="hover:underline font-semibold"
-                    title="Accept every pending AI proposal"
-                  >
-                    Accept all
-                  </button>
-                </div>
-              );
-            })()}
-            {globallyStreaming && (
-              <span className="flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
-                <Loader2 className="size-3 animate-spin" /> Drafting…
-              </span>
-            )}
-            {/* Regenerate all / Stop — visible button on the topbar
-             * (was on the secondary toolbar; brought up alongside the
-             * other secondary-toolbar content rather than buried in ⋯). */}
-            {globallyStreaming ? (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px] px-2"
-                onClick={stopStreaming}
-                title="Stop the running generation"
-              >
-                <StopCircle className="size-3.5" />
-                <span className="hidden md:inline">Stop</span>
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px] px-2"
-                onClick={runGenerateAll}
-                title="Regenerate every section (uses current wizard answers and tone)"
-              >
-                <Sparkles className="size-3.5" />
-                <span className="hidden md:inline">Regenerate all</span>
-              </Button>
-            )}
+          {/* Column 3 — over the right rail / viewport-right on mobile.
+           * People → ⋯ → primary CTA. (Pending/Drafting/Regenerate moved
+           * into column 2 — the canvas column — so they sit above their
+           * old secondary-toolbar positions.) */}
+          <div className="ml-auto lg:ml-0 flex items-center gap-2 justify-end min-w-0 lg:px-4">
             <InvitePopover
               draft={draft}
               trigger={
