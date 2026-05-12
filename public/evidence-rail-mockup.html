@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evidence — Required-checklist as left rail (mockup)</title>
+  <style>
+    :root {
+      --ds-bg: #f7f6f3;
+      --ds-surface: #ffffff;
+      --ds-surface-2: #fbfaf7;
+      --ds-canvas: #fafaf9;
+      --ds-ink: #18181b;
+      --ds-body: #3f3f46;
+      --ds-muted: #71717a;
+      --ds-line: #e4e4e7;
+      --ds-line-2: #f1f0ec;
+      --ds-amber-bg: #fef3c7;
+      --ds-amber-fg: #92400e;
+      --ds-green-bg: #dcfce7;
+      --ds-green-fg: #166534;
+      --ds-red-bg: #fee2e2;
+      --ds-red-fg: #991b1b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--ds-bg);
+      color: var(--ds-ink);
+      margin: 0;
+      padding: 32px 16px 80px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1280px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; }
+    p.lede { color: var(--ds-muted); margin: 0 0 24px; }
+    .tabs { display: flex; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--ds-line); }
+    .tab { background: transparent; border: 0; padding: 8px 14px; cursor: pointer; color: var(--ds-muted); font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab.active { color: var(--ds-ink); border-bottom-color: var(--ds-ink); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ds-muted); padding: 0 4px 6px; font-weight: 600; }
+
+    section.demo {
+      background: var(--ds-surface);
+      border: 1px solid var(--ds-line);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 18px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+    }
+    .topbar { height: 48px; border-bottom: 1px solid var(--ds-line); display: flex; align-items: center; gap: 8px; padding: 0 14px; background: var(--ds-surface); }
+    .body { display: grid; grid-template-columns: 260px minmax(0,1fr) 360px; min-height: 460px; }
+
+    /* Rail bits */
+    .rail { background: var(--ds-surface); border-right: 1px solid var(--ds-line); display: flex; flex-direction: column; min-width: 0; }
+    .rail.right { border-right: 0; border-left: 1px solid var(--ds-line); }
+    .wizard { padding: 12px 14px 10px; border-bottom: 1px solid var(--ds-line-2); display: flex; align-items: center; gap: 8px; }
+    .step { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ds-muted); }
+    .step .dot { width: 14px; height: 14px; border-radius: 999px; background: var(--ds-line-2); color: var(--ds-muted); display: inline-grid; place-items: center; font-size: 9px; font-weight: 700; }
+    .step.done .dot { background: var(--ds-green-fg); color: white; }
+    .step.current { color: var(--ds-ink); }
+    .step.current .dot { background: var(--ds-ink); color: white; box-shadow: 0 0 0 3px rgba(24,24,27,0.12); }
+    .conn { width: 14px; height: 1px; background: var(--ds-line); }
+    .conn.done { background: var(--ds-green-fg); }
+
+    .rail-h { padding: 12px 14px 10px; border-bottom: 1px solid var(--ds-line-2); display: flex; align-items: center; justify-content: space-between; }
+    .rail-h h2 { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ds-muted); margin: 0; }
+    .rail-h .count { font-size: 10px; color: var(--ds-muted); font-variant-numeric: tabular-nums; }
+
+    /* Section row (today's Evidence) */
+    .sec-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0 6px; border-radius: 6px; font-size: 13px; color: var(--ds-body); cursor: pointer; }
+    .sec-row:hover { background: var(--ds-line-2); }
+    .sec-row.active { background: var(--ds-line-2); color: var(--ds-ink); font-weight: 500; }
+    .sec-row .n { width: 20px; height: 20px; border-radius: 6px; background: var(--ds-line-2); color: var(--ds-muted); display: inline-grid; place-items: center; font-size: 10px; flex: 0 0 auto; }
+    .sec-row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sec-row .badge { background: var(--ds-ink); color: white; border-radius: 999px; font-size: 9px; padding: 1px 6px; font-weight: 600; }
+
+    /* Checklist row (proposed) */
+    .chk-list { padding: 6px; }
+    .chk { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer; min-width: 0; }
+    .chk:hover { background: var(--ds-line-2); }
+    .chk.active { background: var(--ds-line-2); }
+    .chk .icon { width: 16px; height: 16px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 9px; flex: 0 0 auto; margin-top: 2px; }
+    .chk .icon.done { background: var(--ds-green-bg); color: var(--ds-green-fg); }
+    .chk .icon.req { background: var(--ds-amber-bg); color: var(--ds-amber-fg); }
+    .chk .icon.opt { background: var(--ds-line-2); color: var(--ds-muted); }
+    .chk .body { min-width: 0; flex: 1; }
+    .chk .title { font-size: 12px; font-weight: 500; color: var(--ds-ink); word-break: break-word; }
+    .chk .meta { font-size: 10px; color: var(--ds-muted); margin-top: 2px; }
+    .chk .reqpill { display: inline-block; background: var(--ds-amber-fg); color: white; font-size: 9px; padding: 1px 5px; border-radius: 999px; margin-left: 4px; vertical-align: middle; }
+
+    /* Canvas */
+    .canvas { background: var(--ds-canvas); padding: 16px 24px; color: var(--ds-muted); font-size: 12px; overflow-y: auto; }
+    .canvas h3 { font-size: 13px; margin: 0 0 4px; color: var(--ds-ink); }
+    .canvas .ph { background: var(--ds-line-2); border: 1px dashed var(--ds-line); border-radius: 8px; padding: 12px 16px; font-size: 11.5px; color: var(--ds-muted); }
+    .canvas .group + .group { margin-top: 14px; }
+
+    .note { background: var(--ds-line-2); border-left: 3px solid var(--ds-ink); padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 12px; color: #3f3f46; margin: 12px 0 24px; }
+    .note strong { color: var(--ds-ink); }
+    .red { color: #b91c1c; }
+    .green-txt { color: #166534; }
+    .small { font-size: 11.5px; color: var(--ds-muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Evidence — left rail proposal</h1>
+    <p class="lede">Drop the Sections list from Evidence's left rail. The Required-evidence checklist becomes the navigator: each row is an evidence requirement, clicking jumps to that section's evidence area.</p>
+
+    <div class="tabs">
+      <button class="tab active" data-target="today">A · Today (Sections list)</button>
+      <button class="tab" data-target="proposed">B · Proposed (Required checklist as rail)</button>
+    </div>
+
+    <!-- A · TODAY -->
+    <div class="panel active" data-panel="today">
+      <div class="label">Evidence today — left rail is the Sections list, checklist sits at the top of the canvas</div>
+      <section class="demo">
+        <div class="topbar">
+          <span style="font-size:13px; color: var(--ds-muted);">‹ Letters</span>
+          <span style="font-size:13px; font-weight: 500;">Evidence & Attachments · <span style="color: var(--ds-muted); font-weight:400;">James O'Connor</span></span>
+          <div style="margin-left:auto; display:flex; gap:6px;">
+            <span style="font-size:12px; padding: 4px 10px; border:1px solid var(--ds-line); border-radius:6px;">Back to letter</span>
+            <span style="font-size:12px; padding: 4px 10px; background: var(--ds-ink); color:white; border-radius:6px;">Next: Review →</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="rail">
+            <div class="wizard">
+              <span class="step done"><span class="dot">✓</span>Edit</span>
+              <span class="conn done"></span>
+              <span class="step current"><span class="dot">2</span>Evidence</span>
+              <span class="conn"></span>
+              <span class="step"><span class="dot">3</span>Review</span>
+            </div>
+            <div class="rail-h"><h2>Sections</h2><span class="count">3/9</span></div>
+            <div style="padding: 6px 0;">
+              <div class="sec-row"><span class="n">1</span><span class="t">Opening</span><span class="badge">2</span></div>
+              <div class="sec-row active"><span class="n">2</span><span class="t">Performance concerns</span><span class="badge">3</span></div>
+              <div class="sec-row"><span class="n">3</span><span class="t">Required improvements</span></div>
+              <div class="sec-row"><span class="n">4</span><span class="t">Engagement with each objective</span></div>
+              <div class="sec-row"><span class="n">5</span><span class="t">Tools / training / OH</span></div>
+              <div class="sec-row"><span class="n">6</span><span class="t">Reservation of right to grieve</span></div>
+              <div class="sec-row"><span class="n">7</span><span class="t">Closing</span></div>
+              <div class="sec-row"><span class="n">8</span><span class="t">Signature</span></div>
+            </div>
+          </div>
+          <div class="canvas">
+            <div class="group">
+              <h3>Required evidence (from template)</h3>
+              <div class="ph">▢ Performance log (required) · ▢ Manager 1:1 notes (required) · ✓ Email — feedback Aug 14 · ▢ Calibration ratings (optional)</div>
+            </div>
+            <div class="group">
+              <h3>Performance concerns — evidence (3)</h3>
+              <div class="ph">📧 Email — Aug 14 “Concerns about Q3 delivery”<br>📅 Calendar — Aug 22 1:1<br>📄 Document — Q3 review summary</div>
+            </div>
+          </div>
+          <div class="rail right">
+            <div class="rail-h" style="border-bottom: 1px solid var(--ds-line);"><h2>Bundle preview</h2></div>
+            <div class="canvas" style="font-size: 11px;">Final pack will include: 3 attachments · 2 inline quotes · cover sheet</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- B · PROPOSED -->
+    <div class="panel" data-panel="proposed">
+      <div class="label">Evidence proposed — left rail IS the Required checklist; clicking a row jumps the canvas to that section's evidence</div>
+      <section class="demo">
+        <div class="topbar">
+          <span style="font-size:13px; color: var(--ds-muted);">‹ Letters</span>
+          <span style="font-size:13px; font-weight: 500;">Evidence & Attachments · <span style="color: var(--ds-muted); font-weight:400;">James O'Connor</span></span>
+          <div style="margin-left:auto; display:flex; gap:6px;">
+            <span style="font-size:12px; padding: 4px 10px; border:1px solid var(--ds-line); border-radius:6px;">Back to letter</span>
+            <span style="font-size:12px; padding: 4px 10px; background: var(--ds-ink); color:white; border-radius:6px;">Next: Review →</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="rail">
+            <div class="wizard">
+              <span class="step done"><span class="dot">✓</span>Edit</span>
+              <span class="conn done"></span>
+              <span class="step current"><span class="dot">2</span>Evidence</span>
+              <span class="conn"></span>
+              <span class="step"><span class="dot">3</span>Review</span>
+            </div>
+            <div class="rail-h"><h2>Required evidence</h2><span class="count">3/8</span></div>
+            <div class="chk-list">
+              <div class="chk done">
+                <span class="icon done">✓</span>
+                <div class="body">
+                  <div class="title">Email — concern raised <span class="small">· Aug 14</span></div>
+                  <div class="meta">Performance concerns</div>
+                </div>
+              </div>
+              <div class="chk active">
+                <span class="icon req">!</span>
+                <div class="body">
+                  <div class="title">Performance log<span class="reqpill">required</span></div>
+                  <div class="meta">Performance concerns · click to add</div>
+                </div>
+              </div>
+              <div class="chk">
+                <span class="icon req">!</span>
+                <div class="body">
+                  <div class="title">Manager 1:1 notes<span class="reqpill">required</span></div>
+                  <div class="meta">Required improvements</div>
+                </div>
+              </div>
+              <div class="chk done">
+                <span class="icon done">✓</span>
+                <div class="body">
+                  <div class="title">Calendar — review meeting <span class="small">· Aug 22</span></div>
+                  <div class="meta">Performance concerns</div>
+                </div>
+              </div>
+              <div class="chk">
+                <span class="icon opt">○</span>
+                <div class="body">
+                  <div class="title">Calibration ratings <span class="small">(optional)</span></div>
+                  <div class="meta">Performance concerns</div>
+                </div>
+              </div>
+              <div class="chk done">
+                <span class="icon done">✓</span>
+                <div class="body">
+                  <div class="title">Document — Q3 summary</div>
+                  <div class="meta">Performance concerns</div>
+                </div>
+              </div>
+              <div class="chk">
+                <span class="icon req">!</span>
+                <div class="body">
+                  <div class="title">Witness statement — colleague<span class="reqpill">required</span></div>
+                  <div class="meta">Tools / training / OH</div>
+                </div>
+              </div>
+              <div class="chk">
+                <span class="icon opt">○</span>
+                <div class="body">
+                  <div class="title">OH referral letter <span class="small">(optional)</span></div>
+                  <div class="meta">Tools / training / OH</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="canvas">
+            <div class="group">
+              <h3>Performance log <span class="small">(required) · Performance concerns</span></h3>
+              <div class="ph">Upload your dated entries / weekly check-ins here. Tribunals weight a contemporaneous log highly. Drop file · paste text · paste link.</div>
+            </div>
+            <div class="group">
+              <h3>Other evidence already attached for Performance concerns</h3>
+              <div class="ph">📧 Email — Aug 14 “Concerns about Q3 delivery”<br>📅 Calendar — Aug 22 1:1<br>📄 Document — Q3 review summary</div>
+            </div>
+          </div>
+          <div class="rail right">
+            <div class="rail-h" style="border-bottom: 1px solid var(--ds-line);"><h2>Bundle preview</h2></div>
+            <div class="canvas" style="font-size: 11px;">Final pack will include: 3 attachments · 2 inline quotes · cover sheet</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="note">
+        <strong>What changed:</strong>
+        <ul style="margin:6px 0 0 18px; padding:0;">
+          <li>Left rail = Required-evidence checklist (was Sections list)</li>
+          <li>Each row carries <strong>required / optional / done</strong> state, the expectation label, and which section it belongs to</li>
+          <li>Clicking a row scrolls the canvas to that requirement's upload area (and selects the relevant section behind the scenes)</li>
+          <li>"X / Y" header count = how many requirements satisfied</li>
+          <li>The previous "Required evidence" card at the top of the canvas is gone — it lived in two places before; now there's one source of truth</li>
+          <li>The canvas focuses on the active requirement + other evidence already collected for that section</li>
+        </ul>
+        <span class="green-txt">Net win:</span> the rail is action-oriented ("what do I still need?") instead of structural ("which section?"). The structural info is implied — each item knows its section.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        document.querySelector(`.panel[data-panel="${t.dataset.target}"]`).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
