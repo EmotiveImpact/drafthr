@@ -108,14 +108,19 @@ export function ReviewStep() {
         <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
           · {meta.title}
         </span>
+        {/* Right cluster — mirrors Evidence's topbar pattern:
+         *   [outline back-to-previous-step] [primary next-action] */}
         <div className="ml-auto flex items-center gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={() => nav(`/editor/${draft.id}`)}
-            className="text-[12px]"
           >
             Back to editor
+          </Button>
+          <Button size="sm" disabled={exporting} onClick={onExport}>
+            {exporting ? "Building pack…" : "Export pack"}
+            <ArrowRight className="size-4 ml-1.5" />
           </Button>
         </div>
       </header>
@@ -144,8 +149,9 @@ export function ReviewStep() {
             onExport={onExport}
           />
 
-          {/* Footer with explicit next/export buttons */}
-          <div className="mx-auto max-w-3xl px-3 sm:px-6 py-6 flex items-center gap-2 justify-between">
+          {/* Footer — just "Back to Evidence". Export pack moved to the
+           * topbar primary CTA position to match the rest of the wizard. */}
+          <div className="mx-auto max-w-3xl px-3 sm:px-6 py-6">
             <Button
               variant="ghost"
               size="sm"
@@ -153,10 +159,6 @@ export function ReviewStep() {
             >
               <ArrowLeft className="size-3.5 mr-1.5" />
               Back to Evidence
-            </Button>
-            <Button size="sm" disabled={exporting} onClick={onExport}>
-              {exporting ? "Building pack…" : "Export pack"}
-              <ArrowRight className="size-3.5 ml-1.5" />
             </Button>
           </div>
         </main>

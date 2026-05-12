@@ -492,7 +492,7 @@ export function Editor() {
           "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
           (focusMode
             ? "lg:grid-cols-1"
-            : "lg:grid-cols-[260px_minmax(0,1fr)_380px]")
+            : "lg:grid-cols-[260px_minmax(0,1fr)_360px]")
         }
       >
         <aside
