@@ -608,14 +608,19 @@ export function Editor() {
              * Employee drafts go Edit → Evidence → Review → Export.
              * Employer drafts skip Evidence (rare to need a bundle) and
              * go Edit → Review → Export. Both end at the same place. */}
+            {/* Next step button — icon-only on mobile (just arrow) so the
+             * other topbar items have room. Expands to "Next: Evidence"
+             * / "Next: Review" at sm:+. */}
             {draft.mode === "employee" ? (
               <Button
                 size="sm"
                 disabled={globallyStreaming}
                 onClick={() => nav(`/editor/${draft.id}/evidence${activeSectionId ? `?section=${activeSectionId}` : ""}`)}
+                aria-label="Next: Evidence"
+                title="Next: Evidence"
+                className="px-2 sm:px-3"
               >
                 <span className="hidden sm:inline">Next: Evidence</span>
-                <span className="sm:hidden">Evidence</span>
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             ) : (
@@ -623,9 +628,11 @@ export function Editor() {
                 size="sm"
                 disabled={globallyStreaming}
                 onClick={() => nav(`/editor/${draft.id}/review`)}
+                aria-label="Next: Review"
+                title="Next: Review"
+                className="px-2 sm:px-3"
               >
                 <span className="hidden sm:inline">Next: Review</span>
-                <span className="sm:hidden">Review</span>
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             )}
