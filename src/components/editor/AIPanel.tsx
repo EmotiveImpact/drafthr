@@ -13,6 +13,7 @@ import { regenerateSectionAsPending } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
+import { getRecentPrompts, pushRecentPrompt } from "@/lib/recent-prompts";
 
 /**
  * Quick-prompt chips. Each maps to one of the four typed tools so the
@@ -26,6 +27,47 @@ import { meIdentity } from "@/lib/comments/identity";
  *   - "add IP / confidentiality clause" → addClause
  *   - "summarise for counsel"           → summariseForCounsel
  */
+/**
+ * Starter prompts shown in the empty-state grid — one per typed tool, so
+ * a first-time user discovers what the agent can do at a glance. Pulled
+ * from QUICK_PROMPTS but with icons + a one-line hint for discoverability.
+ */
+const STARTER_PROMPTS: {
+  label: string;
+  hint: string;
+  Icon: typeof Wand2;
+  prompt: string;
+}[] = [
+  {
+    label: "Make it tribunal-ready",
+    hint: "Strict, factual, statutory anchors explicit.",
+    Icon: Sparkles,
+    prompt:
+      "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.",
+  },
+  {
+    label: "Tighten to ~180 words",
+    hint: "Cut adjectives without dropping facts or clauses.",
+    Icon: Minus,
+    prompt:
+      "Tighten the body section to approximately 180 words. Preserve every fact, citation, and required clause. Cut adjectives and throat-clearing.",
+  },
+  {
+    label: "Add a confidentiality clause",
+    hint: "Three-year survival post-termination by default.",
+    Icon: Plus,
+    prompt:
+      "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
+  },
+  {
+    label: "Summarise for counsel",
+    hint: "One-paragraph brief covering risks + remedies.",
+    Icon: FileText,
+    prompt:
+      "Summarise this letter for counsel — one paragraph covering the legal posture, key risks, remedies sought, and any open factual questions.",
+  },
+];
+
 const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   // regenerateSection
   {
@@ -111,6 +153,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
   const [scope, setScope] = useState<AIChatScope>("letter");
   const [input, setInput] = useState("");
+  const [recentPrompts, setRecentPrompts] = useState<string[]>(() => getRecentPrompts());
 
   const scopeSection: Section | undefined = useMemo(() => {
     if (scope !== "section") return undefined;
@@ -247,6 +290,7 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
     const scoped = `${text}\n[scope: ${resolvedLabel}]${scopePayload}`;
     setInput("");
+    setRecentPrompts(pushRecentPrompt(text));
     await sendMessage({ text: scoped });
   };
 
@@ -439,17 +483,60 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
 
       <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
         {messages.length === 0 && (
-          // Apple-minimal: drop the 4-card stack. The composer placeholder
-          // below lists the tools — the discovery surface moves down where
-          // the action actually happens. One quiet line + a brand mark.
-          <div className="h-full flex flex-col items-center justify-center text-center px-4 py-8">
-            <BrandMark size={32} className="mb-3 opacity-60" />
-            <p className="text-[13px] text-[var(--ds-ink)] font-medium">
-              What change do you want?
-            </p>
-            <p className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-[28ch]">
-              Describe a change below. I'll show you the result before applying it.
-            </p>
+          // Empty state — brand mark + tagline at the top, then a clickable
+          // suggestion grid (one prompt per tool, so the user discovers
+          // what the agent can do without scrolling the composer chips),
+          // then a Recent row if the user has sent prompts before.
+          <div className="px-1 py-4">
+            <div className="flex flex-col items-center text-center px-4 pb-5">
+              <BrandMark size={32} className="mb-3 opacity-60" />
+              <p className="text-[13px] text-[var(--ds-ink)] font-medium">
+                What change do you want?
+              </p>
+              <p className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-[28ch]">
+                Pick a starter below or describe your own. I'll show the result before applying it.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-1.5 px-1">
+              {STARTER_PROMPTS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => setInput(p.prompt)}
+                  className="text-left rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:bg-[var(--ds-line-2)] hover:border-[var(--ds-line)] transition px-3 py-2 group"
+                >
+                  <div className="flex items-center gap-2">
+                    <p.Icon className="size-3.5 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
+                    <span className="text-[12px] font-medium text-[var(--ds-ink)]">{p.label}</span>
+                  </div>
+                  <p className="text-[11px] text-[var(--ds-muted)] mt-0.5 ml-[22px] leading-snug">
+                    {p.hint}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {recentPrompts.length > 0 && (
+              <div className="mt-4 px-1">
+                <div className="text-[10px] uppercase tracking-wide text-[var(--ds-muted)] mb-1.5 px-1">
+                  Recent
+                </div>
+                <div className="flex flex-col gap-1">
+                  {recentPrompts.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setInput(p)}
+                      className="text-left text-[11.5px] text-[var(--ds-body)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] px-2 py-1 rounded transition truncate"
+                      title={p}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {messages.map((m) => (
