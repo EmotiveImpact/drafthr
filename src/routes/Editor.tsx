@@ -92,6 +92,9 @@ export function Editor() {
   } | null>(null);
   const [refineSectionId, setRefineSectionId] = useState<string | null>(null);
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
+  // Shared open state for the InvitePopover so the mobile overflow menu
+  // can open it (its trigger is hidden below md:).
+  const [invitePopoverOpen, setInvitePopoverOpen] = useState(false);
 
   const openComments = (sectionId: string) => {
     setRightTab("comments");
@@ -528,11 +531,13 @@ export function Editor() {
           <div className="ml-auto lg:ml-0 flex items-center gap-2 justify-end min-w-0 lg:px-4">
             <InvitePopover
               draft={draft}
+              open={invitePopoverOpen}
+              onOpenChange={setInvitePopoverOpen}
               trigger={
                 identities.length > 0 ? (
                   <button
                     type="button"
-                    className="flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 -my-0.5 hover:bg-[var(--ds-line-2)] transition"
+                    className="hidden md:flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 -my-0.5 hover:bg-[var(--ds-line-2)] transition"
                     aria-label="People on this letter — click to manage or invite"
                     title="Manage people"
                   >
@@ -558,7 +563,7 @@ export function Editor() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="px-2 sm:px-3"
+                    className="hidden md:inline-flex px-2 sm:px-3"
                     aria-label="Invite"
                   >
                     <UserPlus className="size-3.5" />
@@ -577,6 +582,15 @@ export function Editor() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[220px]">
+                {/* Mobile-only: Invite people. On md:+ the trigger lives in
+                 * the topbar so we hide this item to avoid duplication. */}
+                <DropdownMenuItem
+                  className="md:hidden"
+                  onClick={() => setInvitePopoverOpen(true)}
+                >
+                  <UserPlus className="size-4 mr-2" /> Invite people…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="md:hidden" />
                 <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
                   <Settings2 className="size-4 mr-2" /> Edit details
                 </DropdownMenuItem>

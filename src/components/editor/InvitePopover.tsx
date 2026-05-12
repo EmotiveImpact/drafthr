@@ -23,16 +23,26 @@ export function InvitePopover({
   draft,
   trigger,
   defaultOpen,
+  open: openProp,
+  onOpenChange,
 }: {
   draft: Draft;
   trigger: React.ReactNode;
   defaultOpen?: boolean;
+  /** Controlled mode — pass open + onOpenChange to drive externally. */
+  open?: boolean;
+  onOpenChange?: (next: boolean) => void;
 }) {
   const invite = useDraftStore((s) => s.inviteCollaborator);
   const remove = useDraftStore((s) => s.removeCollaborator);
   const updateRole = useDraftStore((s) => s.updateCollaboratorRole);
 
-  const [open, setOpen] = useState(!!defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(!!defaultOpen);
+  const open = openProp ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) onOpenChange(next);
+    else setInternalOpen(next);
+  };
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<CollaboratorRole>("reviewer");
