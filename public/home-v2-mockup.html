@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DraftHR — Home v2 mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --ds-canvas:#fafafa;
+      --ds-surface:#ffffff;
+      --ds-surface-2:#f6f7f9;
+      --ds-line:#e9eaec;
+      --ds-line-2:#f3f4f5;
+      --ds-ink:#0a0b0d;
+      --ds-body:#2f3239;
+      --ds-muted:#6b6f78;
+      --ds-subtle:#9ca0a8;
+      --ds-amber-bg:#fffbeb; --ds-amber-fg:#b45309;
+      --ds-green-bg:#f0fdf4; --ds-green-fg:#15803d;
+      --ds-blue-bg:#eff6ff; --ds-blue-fg:#1d4ed8;
+      --ds-violet-bg:#f5f3ff; --ds-violet-fg:#6d28d9;
+      --ds-red-bg:#fef2f2; --ds-red-fg:#b91c1c;
+      --font-sans:"Geist",-apple-system,sans-serif;
+      --font-serif:"Source Serif 4",Charter,Georgia,serif;
+      --font-display:"Playfair Display","Iowan Old Style",Georgia,serif;
+      --font-mono:"JetBrains Mono",ui-monospace,monospace;
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;padding:0}
+    body{
+      font-family:var(--font-sans);font-size:14px;color:var(--ds-body);
+      background:#eef0f3;-webkit-font-smoothing:antialiased;line-height:1.55
+    }
+    button,a{cursor:pointer;font-family:inherit}
+    a{text-decoration:none;color:inherit}
+
+    .page-frame{max-width:1320px;margin:24px auto;padding:0 24px}
+    .frame-label{font-size:11px;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.1em;font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .frame-label .badge{background:var(--ds-blue-bg);color:var(--ds-blue-fg);padding:2px 8px;border-radius:999px;font-size:10px;letter-spacing:0.04em}
+
+    .app{display:grid;grid-template-columns:248px 1fr;background:var(--ds-canvas);border:1px solid var(--ds-line);border-radius:14px;overflow:hidden;box-shadow:0 12px 40px -16px rgba(15,23,42,0.18)}
+
+    /* ───────── Sidebar (matches the real app) ───────── */
+    .sidebar{background:var(--ds-surface-2);border-right:1px solid var(--ds-line);padding:14px 12px;display:flex;flex-direction:column;gap:14px;min-height:760px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand .chip{width:40px;height:40px;border-radius:9px;background:var(--ds-ink);display:grid;place-items:center;color:#fff;font-family:var(--font-serif);font-weight:700;font-size:22px;line-height:1;letter-spacing:-0.04em;flex-shrink:0}
+    .brand .stack{display:flex;flex-direction:column;line-height:1.15}
+    .brand .word{font-family:var(--font-display);font-size:19px;font-weight:600;letter-spacing:0.01em;color:var(--ds-ink)}
+    .brand .word .hr{letter-spacing:0.03em}
+    .brand .tag{font-size:11px;color:var(--ds-muted);margin-top:2px}
+
+    .nav-group{margin-top:4px}
+    .nav-group .label{font-size:10.5px;font-weight:600;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.1em;padding:6px 8px 4px}
+    .nav-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:13px;color:var(--ds-body);font-weight:500}
+    .nav-item:hover{background:#eef0f3}
+    .nav-item.active{background:#fff;border:1px solid var(--ds-line);color:var(--ds-ink)}
+    .nav-item .dot{width:6px;height:6px;border-radius:50%;background:var(--ds-subtle)}
+    .nav-item.active .dot{background:var(--ds-ink)}
+    .nav-item .ico{font-size:14px;width:16px;text-align:center;color:var(--ds-subtle)}
+    .nav-item.active .ico{color:var(--ds-ink)}
+
+    /* ───────── Main canvas ───────── */
+    .main{padding:32px 40px 60px;min-width:0;background:var(--ds-canvas)}
+
+    /* Breadcrumb */
+    .crumbs{font-size:12px;color:var(--ds-muted);margin-bottom:14px;display:flex;align-items:center;gap:6px}
+    .crumbs .sep{opacity:0.4}
+
+    /* ───────── HERO ───────── */
+    .hero{
+      background:linear-gradient(180deg,#fff 0%,#fafbfc 100%);
+      border:1px solid var(--ds-line);
+      border-radius:14px;
+      padding:36px 40px 32px;
+      margin-bottom:28px;
+      position:relative;
+      overflow:hidden;
+    }
+    .hero::after{
+      content:"";position:absolute;right:-80px;top:-80px;width:340px;height:340px;
+      background:radial-gradient(closest-side,rgba(10,11,13,0.04),transparent 70%);
+      pointer-events:none;
+    }
+    .hero .lockup{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+    .hero .lockup .chip{width:52px;height:52px;border-radius:12px;background:var(--ds-ink);display:grid;place-items:center;color:#fff;font-family:var(--font-serif);font-weight:700;font-size:30px;line-height:1;letter-spacing:-0.04em}
+    .hero .lockup .stack{display:flex;flex-direction:column;line-height:1.1}
+    .hero .lockup .word{font-family:var(--font-display);font-size:30px;font-weight:600;letter-spacing:0.005em;color:var(--ds-ink)}
+    .hero .lockup .word .hr{letter-spacing:0.025em}
+    .hero .lockup .slogan{font-family:var(--font-display);font-size:14px;font-style:italic;color:var(--ds-muted);margin-top:4px;letter-spacing:0.01em}
+
+    .hero h1{
+      font-family:var(--font-display);
+      font-size:42px;line-height:1.08;font-weight:600;letter-spacing:-0.005em;
+      color:var(--ds-ink);margin:6px 0 10px;max-width:24ch;
+    }
+    .hero p.lede{font-size:15.5px;color:var(--ds-body);max-width:60ch;margin:0 0 22px;line-height:1.55}
+
+    .hero .cta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .btn{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:11px 18px;border-radius:9px;font-weight:600;font-size:14px;
+      border:1px solid transparent;transition:all 0.15s ease;
+      font-family:inherit;
+    }
+    .btn.primary{background:var(--ds-ink);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.1)}
+    .btn.primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px -2px rgba(0,0,0,0.18)}
+    .btn.ghost{background:transparent;color:var(--ds-ink);border-color:var(--ds-line)}
+    .btn.ghost:hover{background:#fff;border-color:var(--ds-subtle)}
+    .btn .arrow{font-weight:400;opacity:0.7}
+
+    /* Mode chips inside hero */
+    .mode-row{display:flex;align-items:center;gap:6px;margin-top:22px;font-size:12px;color:var(--ds-muted)}
+    .mode-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border:1px solid var(--ds-line);border-radius:999px;color:var(--ds-body);font-weight:500;font-size:11.5px}
+    .mode-chip.active{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+    .mode-chip .dot{width:5px;height:5px;border-radius:50%;background:var(--ds-green-fg)}
+    .mode-chip.active .dot{background:#7CFC9A}
+
+    /* ───────── Section header ───────── */
+    .section-head{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 18px}
+    .section-head h2{font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:-0.005em;color:var(--ds-ink);margin:0}
+    .section-head .meta{font-size:12.5px;color:var(--ds-muted)}
+    .section-head a.see-all{font-size:12.5px;color:var(--ds-muted);font-weight:500}
+    .section-head a.see-all:hover{color:var(--ds-ink)}
+
+    /* ───────── Letter catalog tiles ───────── */
+    .catalog{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:34px}
+    .tile{
+      background:var(--ds-surface);border:1px solid var(--ds-line);
+      border-radius:12px;padding:20px;
+      display:flex;flex-direction:column;gap:10px;
+      transition:all 0.15s ease;position:relative;
+      min-height:148px;
+    }
+    .tile:hover{border-color:var(--ds-ink);transform:translateY(-2px);box-shadow:0 8px 24px -10px rgba(0,0,0,0.12)}
+    .tile .icon-tile{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:18px}
+    .tile h3{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ds-ink);margin:0;letter-spacing:0}
+    .tile p{font-size:12.5px;color:var(--ds-muted);margin:0;line-height:1.5}
+    .tile .start{position:absolute;bottom:14px;right:18px;font-size:11.5px;font-weight:600;color:var(--ds-ink);opacity:0;transition:opacity 0.15s}
+    .tile:hover .start{opacity:1}
+    .tile .meta-tag{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--ds-muted)}
+
+    /* Icon tile colors */
+    .icon-tile.amber{background:var(--ds-amber-bg);color:var(--ds-amber-fg)}
+    .icon-tile.blue{background:var(--ds-blue-bg);color:var(--ds-blue-fg)}
+    .icon-tile.green{background:var(--ds-green-bg);color:var(--ds-green-fg)}
+    .icon-tile.violet{background:var(--ds-violet-bg);color:var(--ds-violet-fg)}
+    .icon-tile.red{background:var(--ds-red-bg);color:var(--ds-red-fg)}
+    .icon-tile.slate{background:#eef2f6;color:#475569}
+
+    .tile.more{justify-content:center;align-items:center;text-align:center;background:transparent;border-style:dashed;color:var(--ds-muted)}
+    .tile.more h3{color:var(--ds-muted);font-size:15px}
+    .tile.more:hover{color:var(--ds-ink);border-color:var(--ds-ink)}
+
+    /* ───────── Continue + deadlines row ───────── */
+    .two-col{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-bottom:34px}
+    .panel{background:var(--ds-surface);border:1px solid var(--ds-line);border-radius:12px;overflow:hidden}
+    .panel-head{padding:14px 18px;border-bottom:1px solid var(--ds-line-2);display:flex;align-items:center;justify-content:space-between}
+    .panel-head h3{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ds-ink);margin:0}
+    .panel-head .count{font-size:11px;color:var(--ds-muted);font-weight:600;letter-spacing:0.04em;background:var(--ds-surface-2);padding:2px 8px;border-radius:999px}
+
+    .draft-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--ds-line-2);transition:background 0.12s}
+    .draft-row:last-child{border-bottom:none}
+    .draft-row:hover{background:var(--ds-surface-2)}
+    .draft-row .status{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+    .status.drafting{background:var(--ds-amber-fg)}
+    .status.ready{background:var(--ds-green-fg)}
+    .status.empty{background:var(--ds-subtle)}
+    .draft-row .info{flex:1;min-width:0}
+    .draft-row .title{font-size:13px;font-weight:600;color:var(--ds-ink);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .draft-row .sub{font-size:11.5px;color:var(--ds-muted)}
+    .draft-row .time{font-size:11px;color:var(--ds-subtle);flex-shrink:0;font-variant-numeric:tabular-nums}
+
+    .deadline-row{display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid var(--ds-line-2)}
+    .deadline-row:last-child{border-bottom:none}
+    .deadline-row .day{width:36px;text-align:center;font-family:var(--font-mono);flex-shrink:0}
+    .deadline-row .day .num{font-size:18px;font-weight:600;color:var(--ds-ink);line-height:1}
+    .deadline-row .day .unit{font-size:9px;color:var(--ds-muted);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;display:block}
+    .deadline-row .body{flex:1;min-width:0}
+    .deadline-row .what{font-size:12.5px;font-weight:600;color:var(--ds-ink);margin-bottom:1px}
+    .deadline-row .when{font-size:11px;color:var(--ds-muted)}
+    .deadline-row.urgent .day .num{color:var(--ds-amber-fg)}
+
+    /* ───────── Trust footer ───────── */
+    .trust{
+      background:var(--ds-surface-2);
+      border:1px solid var(--ds-line);
+      border-radius:12px;
+      padding:20px 28px;
+      display:flex;align-items:center;justify-content:space-between;gap:24px;
+      flex-wrap:wrap;
+    }
+    .trust .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .trust .chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ds-body);font-weight:500;background:#fff;padding:5px 11px;border-radius:999px;border:1px solid var(--ds-line)}
+    .trust .chip .check{color:var(--ds-green-fg);font-weight:700}
+    .trust .legal{font-size:11.5px;color:var(--ds-muted);max-width:42ch;text-align:right}
+
+    /* ───────── Empty-state variant ───────── */
+    .empty-state{
+      background:var(--ds-surface);border:1px dashed var(--ds-line);border-radius:12px;
+      padding:36px;text-align:center;margin-bottom:34px;
+    }
+    .empty-state h3{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ds-ink);margin:0 0 6px}
+    .empty-state p{font-size:13px;color:var(--ds-muted);margin:0}
+
+    .toggle-row{display:flex;gap:8px;margin-bottom:20px}
+    .toggle{font-size:12px;padding:6px 12px;border-radius:7px;border:1px solid var(--ds-line);background:#fff;color:var(--ds-body);font-weight:500;font-family:inherit}
+    .toggle.active{background:var(--ds-ink);color:#fff;border-color:var(--ds-ink)}
+
+    .version-label{font-size:10.5px;color:var(--ds-subtle);text-transform:uppercase;letter-spacing:0.12em;font-weight:600;margin:38px 0 12px}
+
+    /* Tighter on small */
+    @media (max-width: 1100px) {
+      .catalog{grid-template-columns:repeat(2,1fr)}
+      .two-col{grid-template-columns:1fr}
+      .app{grid-template-columns:1fr}
+      .sidebar{display:none}
+    }
+  </style>
+</head>
+<body>
+
+<div class="page-frame">
+  <div class="frame-label">
+    <span>DraftHR — Home v2 mockup</span>
+    <span class="badge">Proposal · for review</span>
+  </div>
+
+  <!-- View toggle: populated vs empty -->
+  <div class="toggle-row">
+    <button class="toggle active" onclick="setView('populated', this)">Populated state</button>
+    <button class="toggle" onclick="setView('empty', this)">Empty / new user</button>
+  </div>
+
+  <div class="app">
+
+    <!-- ─────────── Sidebar (real layout, for context) ─────────── -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="chip">D</div>
+        <div class="stack">
+          <span class="word">Draft<span class="hr">HR</span></span>
+          <span class="tag">Words that carry weight.</span>
+        </div>
+      </div>
+
+      <div class="nav-group">
+        <div class="label">Workspace</div>
+        <div class="nav-item active"><span class="ico">◆</span> Home</div>
+        <div class="nav-item"><span class="ico">＋</span> New letter</div>
+        <div class="nav-item"><span class="ico">📁</span> Matters</div>
+        <div class="nav-item"><span class="ico">📄</span> All letters</div>
+        <div class="nav-item"><span class="ico">📅</span> Calendar</div>
+      </div>
+
+      <div class="nav-group">
+        <div class="label">Recent</div>
+        <div class="nav-item"><span class="dot"></span> Acme Ltd · grievance</div>
+        <div class="nav-item"><span class="dot"></span> Settlement reply</div>
+        <div class="nav-item"><span class="dot"></span> Flexible-working req.</div>
+      </div>
+    </aside>
+
+    <!-- ─────────── Main ─────────── -->
+    <main class="main">
+
+      <div class="crumbs">
+        Employee workspace <span class="sep">/</span> <strong style="color:var(--ds-ink);font-weight:500">Home</strong>
+      </div>
+
+      <!-- ===== HERO ===== -->
+      <section class="hero">
+        <div class="lockup">
+          <div class="chip">D</div>
+          <div class="stack">
+            <span class="word">Draft<span class="hr">HR</span></span>
+            <span class="slogan">Words that carry weight.</span>
+          </div>
+        </div>
+
+        <h1>Hello, Augustus.<br/>Let's draft something that holds up.</h1>
+        <p class="lede">
+          Wizard-guided HR letters with UK <em>and</em> US legal awareness — grievance,
+          resignation, settlement, flexible working, and more. Defensible by default.
+        </p>
+
+        <div class="cta-row">
+          <a class="btn primary" href="#">＋  New letter</a>
+          <a class="btn ghost" href="#">Browse all letters <span class="arrow">→</span></a>
+        </div>
+
+        <div class="mode-row">
+          <span>Writing as:</span>
+          <span class="mode-chip active"><span class="dot"></span>Employee</span>
+          <span class="mode-chip">HR / Manager</span>
+        </div>
+      </section>
+
+      <!-- ===== LETTER CATALOG ===== -->
+      <div class="section-head">
+        <h2>Start a letter</h2>
+        <a class="see-all" href="#">See all 22 letter types →</a>
+      </div>
+
+      <div class="catalog">
+        <a class="tile" href="#">
+          <div class="icon-tile amber">⚠</div>
+          <h3>Grievance</h3>
+          <p>Raise a formal complaint with the correct structure under the ACAS Code.</p>
+          <span class="start">Start →</span>
+        </a>
+        <a class="tile" href="#">
+          <div class="icon-tile blue">✉</div>
+          <h3>Resignation</h3>
+          <p>Standard or constructive — with notice-period and final-pay clauses sorted.</p>
+          <span class="start">Start →</span>
+        </a>
+        <a class="tile" href="#">
+          <div class="icon-tile green">⚖</div>
+          <h3>Settlement response</h3>
+          <p>Reply to a settlement offer with a costed counter-proposal and protected reasoning.</p>
+          <span class="start">Start →</span>
+        </a>
+        <a class="tile" href="#">
+          <div class="icon-tile violet">⏱</div>
+          <h3>Flexible working</h3>
+          <p>Statutory request with reasons, business-effect points, and review timeline.</p>
+          <span class="start">Start →</span>
+        </a>
+        <a class="tile" href="#">
+          <div class="icon-tile red">↺</div>
+          <h3>Appeal</h3>
+          <p>Appeal a disciplinary, grievance outcome, or dismissal — with grounds laid out.</p>
+          <span class="start">Start →</span>
+        </a>
+        <a class="tile more" href="#">
+          <h3>More letter types →</h3>
+        </a>
+      </div>
+
+      <!-- ===== POPULATED: continue + deadlines ===== -->
+      <div class="two-col" id="continue-row">
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Continue where you left off</h3>
+            <span class="count">3 drafts</span>
+          </div>
+          <a class="draft-row" href="#">
+            <span class="status drafting"></span>
+            <div class="info">
+              <div class="title">Acme Ltd · Formal grievance — performance review process</div>
+              <div class="sub">Drafting · 4 of 6 sections</div>
+            </div>
+            <span class="time">2h ago</span>
+          </a>
+          <a class="draft-row" href="#">
+            <span class="status ready"></span>
+            <div class="info">
+              <div class="title">Settlement counter-offer — £18,500 + reference</div>
+              <div class="sub">Ready to export · last reviewed yesterday</div>
+            </div>
+            <span class="time">1d ago</span>
+          </a>
+          <a class="draft-row" href="#">
+            <span class="status empty"></span>
+            <div class="info">
+              <div class="title">Flexible working request — compressed week</div>
+              <div class="sub">Outline · 0 of 4 sections</div>
+            </div>
+            <span class="time">5d ago</span>
+          </a>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Upcoming</h3>
+            <span class="count">2 deadlines</span>
+          </div>
+          <div class="deadline-row urgent">
+            <div class="day"><span class="num">9</span><span class="unit">days</span></div>
+            <div class="body">
+              <div class="what">Grievance hearing response due</div>
+              <div class="when">Acme Ltd · Tue 21 May</div>
+            </div>
+          </div>
+          <div class="deadline-row">
+            <div class="day"><span class="num">17</span><span class="unit">days</span></div>
+            <div class="body">
+              <div class="what">Settlement decision window closes</div>
+              <div class="when">Mon 29 May</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ===== EMPTY STATE PANEL (toggled) ===== -->
+      <div id="empty-row" style="display:none">
+        <div class="empty-state">
+          <h3>No drafts yet</h3>
+          <p>Pick a letter type above to begin. Your work auto-saves to a private workspace.</p>
+        </div>
+      </div>
+
+      <!-- ===== TRUST FOOTER ===== -->
+      <section class="trust">
+        <div class="chips">
+          <span class="chip"><span class="check">✓</span> UK Employment Rights Act 1996</span>
+          <span class="chip"><span class="check">✓</span> ACAS Code aware</span>
+          <span class="chip"><span class="check">✓</span> US FLSA & state-law variants</span>
+          <span class="chip"><span class="check">✓</span> Private — your drafts never train models</span>
+        </div>
+        <div class="legal">
+          Not legal advice. High-stakes letters should be reviewed by qualified counsel before issuance.
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <p style="font-size:11px;color:var(--ds-muted);text-align:center;margin-top:18px">
+    Mockup file: <code>public/home-v2-mockup.html</code> — open at
+    <code>http://localhost:5273/home-v2-mockup.html</code>
+  </p>
+</div>
+
+<script>
+  function setView(view, btn) {
+    document.querySelectorAll('.toggle').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const continueRow = document.getElementById('continue-row');
+    const emptyRow = document.getElementById('empty-row');
+    if (view === 'empty') {
+      continueRow.style.display = 'none';
+      emptyRow.style.display = 'block';
+    } else {
+      continueRow.style.display = 'grid';
+      emptyRow.style.display = 'none';
+    }
+  }
+</script>
+</body>
+</html>
