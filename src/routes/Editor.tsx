@@ -4,6 +4,7 @@ import { useDraftStore } from "@/lib/store";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { EmployeeRail } from "@/components/editor/EmployeeRail";
 import { CompliancePanel } from "@/components/editor/CompliancePanel";
+import { EditableTitleBar } from "@/components/editor/EditableTitleBar";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
@@ -537,6 +538,11 @@ export function Editor() {
           </div>
         </div>
       </header>
+
+      {/* Editable title bar — sits between the topbar and the body so
+       * the title has its own breathing room and is renameable in place.
+       * Hidden in focus mode (all chrome collapses). */}
+      {!focusMode && <EditableTitleBar draft={draft} />}
 
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers.
        * Apple-minimal: left rail has enough room for the outline labels while

@@ -421,6 +421,10 @@ export type Draft = {
   /** Optional named Matter (case / project / hiring round) this draft belongs to.
    * undefined = unaffiliated; appears in auto-groups on Home until promoted. */
   matterId?: string;
+  /** User-editable display title shown above the canvas on the editor.
+   * Falls back to the letter-type meta title when unset. Persists with
+   * the draft so renames survive reloads + show in sidebars / lists. */
+  title?: string;
   createdAt: number;
   updatedAt: number;
 };

@@ -68,6 +68,9 @@ type Store = {
   }) => string;
   createDraft: (letterType: LetterTypeId, answers: LetterAnswers, mode?: Mode) => string;
   updateAnswers: (id: string, answers: LetterAnswers) => void;
+  /** Rename the draft's display title. Empty string clears the override
+   * so the letter-type meta title takes over again. */
+  setDraftTitle: (id: string, title: string) => void;
   updateSection: (id: string, sectionId: string, html: string) => void;
   appendToSection: (id: string, sectionId: string, html: string) => void;
   setSectionStatus: (id: string, sectionId: string, status: Section["status"]) => void;
@@ -370,6 +373,17 @@ export const useDraftStore = create<Store>()(
           return {
             drafts: { ...s.drafts, [id]: { ...d, answers, updatedAt: Date.now() } },
           };
+        }),
+
+      setDraftTitle: (id, title) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const trimmed = title.trim();
+          // Empty string clears the override — letter-type meta title
+          // takes over again on next render.
+          const next: Draft = { ...d, title: trimmed || undefined, updatedAt: Date.now() };
+          return { drafts: { ...s.drafts, [id]: next } };
         }),
 
       updateSection: (id, sectionId, html) =>
