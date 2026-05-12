@@ -7,7 +7,6 @@ import { ModePicker } from "@/routes/ModePicker";
 import { Settings } from "@/routes/Settings";
 import { Privacy } from "@/routes/Privacy";
 import { Mockups } from "@/routes/Mockups";
-import { Landing } from "@/routes/Landing";
 import { BrowseLetters } from "@/routes/BrowseLetters";
 import { Calendar } from "@/routes/Calendar";
 import { Exported } from "@/routes/Exported";
@@ -41,8 +40,6 @@ export function App() {
   return (
     <Layout>
       <Routes>
-        {/* Public marketing landing — no <Protected>, no app chrome. */}
-        <Route path="/landing" element={<Landing />} />
         <Route path="/" element={<Protected><RootRedirect /></Protected>} />
         <Route path="/pick-role" element={<Protected><ModePicker /></Protected>} />
 
