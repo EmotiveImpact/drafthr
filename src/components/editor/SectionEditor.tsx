@@ -271,13 +271,21 @@ export function SectionEditor({
       data-section-id={section.id}
       data-streaming={isStreaming || undefined}
       className={cn(
-        "section-node rounded-md border bg-white transition-shadow",
-        active ? "border-foreground/20 shadow-sm" : "border-letter-rule",
-        isStreaming && "border-primary/40"
+        // Mobile: strip the card chrome so text gets full viewport width
+        // — section title becomes a top divider only. Card returns at md:+.
+        "section-node bg-white transition-shadow",
+        "md:rounded-md md:border",
+        active
+          ? "md:border-foreground/20 md:shadow-sm"
+          : "md:border-letter-rule",
+        isStreaming && "md:border-primary/40",
+        // On mobile, draw a subtle top divider between stacked sections
+        // (except the first — visual handled by sibling spacing).
+        "[&:not(:first-child)]:border-t [&:not(:first-child)]:border-letter-rule md:[&:not(:first-child)]:border-t-0"
       )}
       onClick={onFocus}
     >
-      <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-letter-rule">
+      <header className="flex items-center justify-between gap-2 px-3 py-2 md:border-b md:border-letter-rule">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate">
             {section.title}
@@ -435,11 +443,29 @@ export function SectionEditor({
         </div>
       )}
 
-      <div className="px-7 py-5">
+      <div className="px-3 py-3 md:px-7 md:py-5">
         {editor && (
           <BubbleMenu
             editor={editor}
-            tippyOptions={{ duration: 80, placement: "top" }}
+            tippyOptions={{
+              duration: 80,
+              placement: "top",
+              // Keep the bubble inside the viewport — without this it
+              // clips off the right edge on mobile when the selection
+              // is near the page-margin boundary.
+              popperOptions: {
+                modifiers: [
+                  {
+                    name: "preventOverflow",
+                    options: { boundary: "viewport", padding: 8 },
+                  },
+                  {
+                    name: "flip",
+                    options: { fallbackPlacements: ["bottom", "right", "left"] },
+                  },
+                ],
+              },
+            }}
             shouldShow={({ editor: ed, from, to }) => {
               if (ed.isActive("commentMark")) return false;
               return from !== to;

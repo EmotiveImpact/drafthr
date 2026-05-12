@@ -114,14 +114,33 @@ export function Editor() {
   };
 
   const onFocusComment = (commentId: string) => {
-    setRightTab("comments");
-    setShowRail(true);
-    requestAnimationFrame(() => {
-      const el = document.querySelector(`[data-comment-id="${commentId}"]`);
-      el?.scrollIntoView({ behavior: "smooth", block: "center" });
-      el?.classList.add("ring-2", "ring-[var(--accent-9)]");
-      setTimeout(() => el?.classList.remove("ring-2", "ring-[var(--accent-9)]"), 1600);
-    });
+    // First: scroll the highlighted text in the canvas into the top
+    // portion of the viewport SO the comment anchor stays visible
+    // ABOVE where the mobile bottom sheet will cover (sheet = 72vh
+    // from bottom, so we target the top ~25% of the canvas).
+    const anchor = document.querySelector<HTMLElement>(
+      `mark[data-comment-id="${commentId}"]`
+    );
+    if (anchor) {
+      anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Briefly flash the anchor so the user catches where it lives.
+      anchor.classList.add("ring-2", "ring-[var(--accent-9)]");
+      setTimeout(
+        () => anchor.classList.remove("ring-2", "ring-[var(--accent-9)]"),
+        1600
+      );
+    }
+    // Then open the sheet on the comments tab, with a small delay so
+    // the canvas scroll has a head-start and the user perceives the
+    // context BEFORE the sheet covers the lower half.
+    setTimeout(() => {
+      setRightTab("comments");
+      setShowRail(true);
+      requestAnimationFrame(() => {
+        const threadEl = document.querySelector(`[data-comment-id="${commentId}"]:not(mark)`);
+        threadEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }, 120);
   };
   const abortRef = useRef<AbortController | null>(null);
 
