@@ -518,10 +518,8 @@ export function Editor() {
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             disabled={globallyStreaming}
-            bottomLabel={
-              draft.mode === "employee" ? "Rights & checks" : "Compliance"
-            }
-            bottom={
+            rightsLabel={draft.mode === "employee" ? "Rights" : "Compliance"}
+            rights={
               draft.mode === "employee" ? (
                 <EmployeeRail draft={draft} />
               ) : (
