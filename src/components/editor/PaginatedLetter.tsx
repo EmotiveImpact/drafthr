@@ -230,6 +230,24 @@ function wrapInPrintHtml(bodyHtml: string): string {
     margin: 0 !important;
   }
 
+  /* MOBILE: A4 paper (8.27in / ~794px) doesn't fit in a 390px viewport.
+   * Use the CSS zoom property (not transform scale) so the parent
+   * container sees the scaled height and the canvas reflows naturally —
+   * no negative-margin compensation needed. Supported in Chrome, Safari,
+   * Edge, and Firefox 126+. Native pinch-zoom still works on iOS after
+   * this fit-to-width.
+   *
+   * 0.48 is calibrated so A4 (794px) -> ~381px which fits inside the
+   * canvas with the 12px gutter on a 390px viewport. */
+  @media (max-width: 640px) {
+    .pagedjs_pages {
+      zoom: 0.48;
+    }
+    .pagedjs_page {
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.10);
+    }
+  }
+
   /* Body typography — matches the PDF render so on-screen matches print. */
   body {
     font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;

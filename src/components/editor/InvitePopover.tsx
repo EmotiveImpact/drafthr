@@ -88,7 +88,7 @@ ${shareLink}
         <Popover.Content
           align="end"
           sideOffset={8}
-          className="z-50 w-[360px] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_10px_24px_rgba(15,17,21,0.10),0_1px_3px_rgba(15,17,21,0.04)] p-4 text-[13px]"
+          className="z-50 w-[360px] max-w-[calc(100vw-1.5rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_10px_24px_rgba(15,17,21,0.10),0_1px_3px_rgba(15,17,21,0.04)] p-4 text-[13px]"
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">

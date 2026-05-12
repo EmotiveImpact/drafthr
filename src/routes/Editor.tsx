@@ -396,7 +396,7 @@ export function Editor() {
               <Button
                 variant={editOnPage ? "default" : "outline"}
                 size="sm"
-                className="h-7 w-7 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="hidden md:inline-flex h-7 w-7 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={viewMode !== "preview"}
                 onClick={() => setEditOnPage((v) => !v)}
                 aria-pressed={editOnPage}
@@ -416,7 +416,7 @@ export function Editor() {
               <Button
                 variant={focusMode ? "default" : "outline"}
                 size="sm"
-                className="h-7 w-7 p-0"
+                className="hidden md:inline-flex h-7 w-7 p-0"
                 onClick={() => setFocusMode((f) => !f)}
                 aria-pressed={focusMode}
                 aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
