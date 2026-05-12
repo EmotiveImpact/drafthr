@@ -244,10 +244,6 @@ export function Editor() {
 
   const backTo = draft.mode === "employer" ? "/hr" : draft.mode === "employee" ? "/me" : "/";
   const identities = listIdentities(draft, profile);
-  const recipientLabel =
-    draft.mode === "employer"
-      ? draft.employee.legalName || "(no recipient)"
-      : `to ${draft.employer.legalName || "(employer)"}`;
 
   // Counsel-review status — derived from the most recent export attestation
   // OR from a manual attestation in answers._counselReview. High-risk
@@ -329,33 +325,69 @@ export function Editor() {
             )}
           </div>
 
-          {/* Centre: document title — desktop only. Hidden on mobile (< md)
-           * because the cramped width caused it to crash into the left/right
-           * groups and break alignment with the Edit/Preview toggle below.
-           * Absolute-positioned so unequal left/right cluster widths don't
-           * push it off-axis; offset by (leftRail − rightRail)/2 = -74px on
-           * lg+ so it stacks vertically over the canvas centre (and thus
-           * over Edit/Preview), and falls back to true centre when focus
-           * mode collapses the rails. */}
-          <div
-            className={
-              "hidden md:flex absolute -translate-x-1/2 items-center justify-center min-w-0 max-w-[44vw] px-2 pointer-events-none " +
-              (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-74px)]")
-            }
-          >
-            <span className="text-[14px] font-medium text-[var(--ds-ink)] truncate pointer-events-auto">
-              {meta.title}
-              <span className="hidden lg:inline text-[12px] text-[var(--ds-muted)] font-normal ml-2">
-                · {recipientLabel} · {draft.context.jurisdiction}
-              </span>
-            </span>
+          {/* Document settings — Tone / register / etc. Was in the secondary
+           * toolbar; promoted to the left cluster now that the toolbar is
+           * gone. Sits after the counsel pill so the left cluster reads
+           * "where you are + doc state + doc settings". */}
+          <div className="hidden md:flex items-center">
+            <DocumentPopover draft={draft} />
           </div>
 
-          {/* Right: people (avatars+invite as one trigger) + actions.
-           * When the draft has people, the avatar stack IS the trigger
-           * and a small UserPlus pip on the right edge signals "add more".
-           * When it has none, fall back to a single "+ Invite" button. */}
+          {/* Centre: Edit / Preview toggle — was on the secondary toolbar;
+           * now lives in the main topbar where the title used to sit.
+           * Absolute-positioned with a -50px offset on lg+ to keep it
+           * visually centred over the canvas (left rail 260 − right rail
+           * 360, halved). Falls back to true viewport centre in focus
+           * mode (rails collapsed) and below md (drawer rails). */}
+          <div
+            className={
+              "hidden md:inline-flex absolute -translate-x-1/2 items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7 " +
+              (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-50px)]")
+            }
+            role="tablist"
+            aria-label="View mode"
+          >
+            <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
+            <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+          </div>
+
+          {/* Right: pending pill (when AI has proposed changes) → streaming
+           * status → people → ⋯ → primary CTA. Pending pill + streaming
+           * indicator were on the secondary toolbar; they migrate here
+           * along with the toolbar's other content. Regenerate-all stays
+           * in the ⋯ menu (already there). */}
           <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
+            {(() => {
+              const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
+              if (pendingCount === 0) return null;
+              return (
+                <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
+                  <span>{pendingCount} pending</span>
+                  <button
+                    type="button"
+                    onClick={() => useDraftStore.getState().rejectAllPending(draft.id)}
+                    className="hover:underline"
+                    title="Reject every pending AI proposal"
+                  >
+                    Reject all
+                  </button>
+                  <span className="text-[var(--ds-amber-fg)]/50">·</span>
+                  <button
+                    type="button"
+                    onClick={() => useDraftStore.getState().acceptAllPending(draft.id)}
+                    className="hover:underline font-semibold"
+                    title="Accept every pending AI proposal"
+                  >
+                    Accept all
+                  </button>
+                </div>
+              );
+            })()}
+            {globallyStreaming && (
+              <span className="hidden md:flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" /> Drafting…
+              </span>
+            )}
             <InvitePopover
               draft={draft}
               trigger={
@@ -532,86 +564,10 @@ export function Editor() {
         </aside>
 
         <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0 relative">
-          {/* Secondary toolbar — Apple-minimal: Tone + WP collapsed behind a
-           * single "Document" popover. Regenerate-all stays visible on the
-           * right (most-used section action). Hidden in focus mode. */}
-          {!focusMode && (
-            <div className="relative h-9 shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] flex items-center px-3 sm:px-4 gap-2">
-              {/* Left: document settings */}
-              <div className="flex items-center gap-2 min-w-0">
-                <DocumentPopover draft={draft} />
-              </div>
-
-              {/* Centre: Edit / Preview — absolute-positioned so it shares the
-               * exact vertical axis as the document title in the row above,
-               * independent of left/right column content widths. */}
-              <div
-                className="absolute left-1/2 -translate-x-1/2 inline-flex items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7"
-                role="tablist"
-                aria-label="View mode"
-              >
-                <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-                <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
-              </div>
-
-              {/* Right: pending-changes count, streaming status, Regenerate all */}
-              <div className="ml-auto flex items-center gap-2 justify-end min-w-0">
-                {(() => {
-                  const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
-                  if (pendingCount === 0) return null;
-                  return (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
-                      <span>{pendingCount} pending</span>
-                      <button
-                        type="button"
-                        onClick={() => useDraftStore.getState().rejectAllPending(draft.id)}
-                        className="hover:underline"
-                        title="Reject every pending AI proposal"
-                      >
-                        Reject all
-                      </button>
-                      <span className="text-[var(--ds-amber-fg)]/50">·</span>
-                      <button
-                        type="button"
-                        onClick={() => useDraftStore.getState().acceptAllPending(draft.id)}
-                        className="hover:underline font-semibold"
-                        title="Accept every pending AI proposal"
-                      >
-                        Accept all
-                      </button>
-                    </div>
-                  );
-                })()}
-                {globallyStreaming && (
-                  <span className="text-[12px] text-[var(--ds-muted)] flex items-center gap-1.5">
-                    <Loader2 className="size-3 animate-spin" /> Drafting…
-                  </span>
-                )}
-                {globallyStreaming ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2"
-                    onClick={stopStreaming}
-                  >
-                    <StopCircle className="size-3.5" />
-                    <span className="hidden md:inline">Stop</span>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2"
-                    onClick={runGenerateAll}
-                    title="Regenerate every section (uses current wizard answers and tone)"
-                  >
-                    <Sparkles className="size-3.5" />
-                    <span className="hidden md:inline">Regenerate all</span>
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Secondary toolbar removed — its contents (DocumentPopover,
+           * Edit/Preview toggle, pending pill, streaming indicator)
+           * now live in the main topbar above. Regenerate-all is in
+           * the ⋯ overflow menu. Canvas gets +36px of vertical space. */}
 
           {/* Focus-mode overlays. Anchored to <main> (which is `relative`).
            * Outline pill (top-left) shows progress + the active section so the

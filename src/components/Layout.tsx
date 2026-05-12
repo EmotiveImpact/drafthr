@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Menu, Plus } from "lucide-react";
-import { BrandMark } from "@/components/ds";
+import { BrandMark, Wordmark } from "@/components/ds";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -74,9 +74,7 @@ function MobileTopbar() {
         className="flex items-center gap-2 min-w-0"
       >
         <BrandMark size={28} />
-        <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] truncate">
-          DRAFTHR
-        </span>
+        <Wordmark size={16} className="truncate" />
       </Link>
 
       <div className="ml-auto flex items-center gap-1">

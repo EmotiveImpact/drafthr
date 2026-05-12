@@ -120,6 +120,9 @@
   --font-serif: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
   --font-sans: 'Geist Variable', sans-serif;
   --font-heading: var(--font-sans);
+  /* Display serif reserved for the brand wordmark. High-contrast transitional
+   * serif that pairs with the BrandMark glyph in the lockup. */
+  --font-display: "Playfair Display", "Iowan Old Style", "Apple Garamond", Georgia, serif;
 
   /* DRAFTHR design system tokens. Canonical names mirrored from
    * /public/design-system.html so React components consume the same vars. */

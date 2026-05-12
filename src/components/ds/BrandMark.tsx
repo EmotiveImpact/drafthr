@@ -1,13 +1,11 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The DRAFTHR brand mark — a 32×32 ink chip with a serif "D".
- * Replaces every occurrence of the lucide ScrollText icon. Has presence
- * at small sizes and reads as a real logomark.
+ * The DRAFTHR brand mark — renders /logo.png at a fixed square size.
  *
  * Use:
- *   <BrandMark />               // default 32px ink chip
- *   <BrandMark size={28} />     // smaller (sidebar header)
+ *   <BrandMark />               // default 32px
+ *   <BrandMark size={28} />     // smaller (sidebar header, message avatar)
  *   <BrandMark variant="outline" />  // ink-on-paper ring (rare)
  */
 export function BrandMark({
@@ -19,28 +17,24 @@ export function BrandMark({
   variant?: "solid" | "outline";
   className?: string;
 }) {
-  const fontSize = Math.round(size * 0.56);
   return (
     <span
       className={cn(
-        "inline-grid place-items-center shrink-0 select-none rounded-md",
-        variant === "solid"
-          ? "bg-[var(--ds-ink)] text-white"
-          : "bg-white text-[var(--ds-ink)] ring-1 ring-[var(--ds-ink)]",
+        "inline-grid place-items-center shrink-0 select-none rounded-md overflow-hidden",
+        variant === "outline" && "bg-white ring-1 ring-[var(--ds-ink)]",
         className
       )}
-      style={{
-        width: size,
-        height: size,
-        fontFamily: "var(--font-serif)",
-        fontWeight: 600,
-        fontSize,
-        letterSpacing: "-0.04em",
-        lineHeight: 1,
-      }}
+      style={{ width: size, height: size }}
       aria-label="DRAFTHR"
     >
-      D
+      <img
+        src="/logo.png"
+        alt="DRAFTHR"
+        width={size}
+        height={size}
+        draggable={false}
+        className="w-full h-full object-contain"
+      />
     </span>
   );
 }

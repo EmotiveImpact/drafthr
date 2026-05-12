@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { BrandMark } from "@/components/ds";
+import { BrandMark, Wordmark } from "@/components/ds";
 import {
   PanelLeftOpen,
   PanelLeftClose,
@@ -179,7 +179,7 @@ function BrandHeader() {
       >
         <div className="relative shrink-0">
           <BrandMark
-            size={32}
+            size={40}
             className={cn(
               "transition-opacity duration-150",
               isCollapsed && "group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
@@ -192,11 +192,11 @@ function BrandHeader() {
           )}
         </div>
         {!isCollapsed && (
-          <span className="flex flex-col leading-tight min-w-0">
-            <span className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] truncate">
-              DRAFTHR
+          <span className="flex flex-col leading-tight min-w-0 -mt-1">
+            <Wordmark size={19} className="truncate" />
+            <span className="text-[11px] text-[var(--ds-muted)] mt-0.5 truncate">
+              Words that carry weight.
             </span>
-            <span className="text-[11px] text-[var(--ds-muted)]">Personal workspace</span>
           </span>
         )}
       </Link>
