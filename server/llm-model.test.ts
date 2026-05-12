@@ -4,18 +4,18 @@ import { resolveModelName } from "./llm-model";
 describe("resolveModelName", () => {
   it("uses an allow-listed requested model before env defaults", () => {
     expect(
-      resolveModelName("meta/llama-3.3-70b-instruct", {
-        env: { LLM_MODEL: "claude-sonnet-4-6", NVIDIA_API_KEY: "nv-key" },
+      resolveModelName("qwen/qwen3-next-80b-a3b-instruct:free", {
+        env: { LLM_MODEL: "claude-sonnet-4-6", OPENROUTER_API_KEY: "or-key" },
       })
-    ).toBe("meta/llama-3.3-70b-instruct");
+    ).toBe("qwen/qwen3-next-80b-a3b-instruct:free");
   });
 
   it("ignores unrecognised requested models", () => {
     expect(
       resolveModelName("made-up-model", {
-        env: { LLM_MODEL: "moonshotai/kimi-k2.6", NVIDIA_API_KEY: "nv-key" },
+        env: { LLM_MODEL: "openai/gpt-oss-20b:free", OPENROUTER_API_KEY: "or-key" },
       })
-    ).toBe("moonshotai/kimi-k2.6");
+    ).toBe("openai/gpt-oss-20b:free");
   });
 
   it("honours LLM_PROVIDER=claude when no model is specified", () => {
@@ -26,7 +26,7 @@ describe("resolveModelName", () => {
     ).toBe("claude-sonnet-4-6");
   });
 
-  it("defaults to Kimi K2.6 when no provider or model is specified", () => {
-    expect(resolveModelName(undefined, { env: {} })).toBe("moonshotai/kimi-k2.6");
+  it("defaults to GPT-OSS 120B when no provider or model is specified", () => {
+    expect(resolveModelName(undefined, { env: {} })).toBe("openai/gpt-oss-120b:free");
   });
 });

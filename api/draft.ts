@@ -1,31 +1,34 @@
 /**
  * Production serverless function for /api/draft.
  *
- * On Vercel: this file is auto-detected and deployed as a Node.js Function.
- * In Vite dev: the same logic is mounted by `dev/qwen-proxy-plugin.ts` so the
- * URL path stays identical between dev and prod.
+ * On Vercel: auto-detected and deployed as a Node.js Function.
+ * In Vite dev: mounted by `dev/qwen-proxy-plugin.ts` at the same URL path.
  *
- * Vercel runtime configuration: Node.js. We need streaming SSE so we use the
- * raw Response API (not edge — Edge Functions have intermittent compat issues
- * with the OpenAI-compatible providers per the meridian playbook).
+ * Provider: OpenRouter (https://openrouter.ai). Free-tier models cover the
+ * default path; Anthropic models route directly through Anthropic when
+ * selected. Streaming SSE via the raw Response API.
  */
 
 import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-// MUST keep in sync with server/llm-model.ts (and api/agent.ts).
-const DEFAULT_MODEL = "moonshotai/kimi-k2.6" as const;
-const NVIDIA_FALLBACK_MODEL = "moonshotai/kimi-k2.6" as const;
+// MUST keep in sync with server/llm-model.ts.
+const DEFAULT_MODEL = "openai/gpt-oss-120b:free" as const;
+const OPENROUTER_FALLBACK_MODEL = "openai/gpt-oss-120b:free" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([
-  "moonshotai/kimi-k2.6",
-  "z-ai/glm4.7",
-  "meta/llama-3.3-70b-instruct",
-  "meta/llama-3.1-405b-instruct",
-  "mistralai/mistral-large-2-instruct",
-  "nvidia/llama-3.1-nemotron-70b-instruct",
+  // OpenRouter free tier
+  "openai/gpt-oss-120b:free",
+  "openai/gpt-oss-20b:free",
+  "qwen/qwen3-next-80b-a3b-instruct:free",
+  "qwen/qwen3-coder:free",
+  "z-ai/glm-4.5-air:free",
+  "minimax/minimax-m2.5:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "google/gemma-4-31b-it:free",
+  // Anthropic (paid)
   "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
@@ -34,11 +37,11 @@ const ALLOWED_MODELS = new Set([
 function resolveModelName(requested?: string): string {
   const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.NVIDIA_MODEL;
+  const envModel = process.env.LLM_MODEL ?? process.env.OPENROUTER_MODEL;
   const providerDefault =
     envProvider === "claude" || envProvider === "anthropic"
       ? ANTHROPIC_FALLBACK_MODEL
-      : NVIDIA_FALLBACK_MODEL;
+      : OPENROUTER_FALLBACK_MODEL;
   return fromRequest ?? envModel ?? providerDefault ?? DEFAULT_MODEL;
 }
 
@@ -51,22 +54,24 @@ function buildModel(requested?: string) {
     return createAnthropic({ apiKey })(modelName);
   }
 
-  // NVIDIA NIM (default). Hardcoded fallback so the production deploy works
-  // even when env vars aren't set on Vercel. Env var still wins if present.
+  // OpenRouter (default). Hardcoded fallback so production works even when env
+  // vars aren't set on Vercel. Env var still wins if present.
   const apiKey =
-    process.env.NVIDIA_API_KEY ??
-    "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";
+    process.env.OPENROUTER_API_KEY ??
+    "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";
   return createOpenAICompatible({
-    name: "nvidia-nim",
+    name: "openrouter",
     apiKey,
-    baseURL: "https://integrate.api.nvidia.com/v1",
+    baseURL: "https://openrouter.ai/api/v1",
+    headers: {
+      "HTTP-Referer": "https://drafthr.vercel.app",
+      "X-Title": "DraftHR",
+    },
   })(modelName);
 }
 
 export const config = {
   runtime: "nodejs",
-  // Letters can be long — give the function up to 60s to finish streaming.
-  // Vercel raised the default to 300s but keeping this conservative.
   maxDuration: 60,
 };
 
@@ -74,7 +79,6 @@ type DraftRequest = {
   messages: ModelMessage[];
   temperature?: number;
   maxTokens?: number;
-  /** Optional model override from the client. Validated by the server model resolver. */
   model?: string;
 };
 

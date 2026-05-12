@@ -21,12 +21,14 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
  */
 export type ModelId =
-  | "moonshotai/kimi-k2.6"
-  | "z-ai/glm4.7"
-  | "meta/llama-3.3-70b-instruct"
-  | "meta/llama-3.1-405b-instruct"
-  | "mistralai/mistral-large-2-instruct"
-  | "nvidia/llama-3.1-nemotron-70b-instruct"
+  | "openai/gpt-oss-120b:free"
+  | "openai/gpt-oss-20b:free"
+  | "qwen/qwen3-next-80b-a3b-instruct:free"
+  | "qwen/qwen3-coder:free"
+  | "z-ai/glm-4.5-air:free"
+  | "minimax/minimax-m2.5:free"
+  | "nvidia/nemotron-3-super-120b-a12b:free"
+  | "google/gemma-4-31b-it:free"
   | "claude-opus-4-7"
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5";
@@ -38,15 +40,17 @@ export const MODEL_OPTIONS: {
   id: ModelId;
   label: string;
   hint: string;
-  provider: "nvidia" | "anthropic";
+  provider: "openrouter" | "anthropic";
 }[] = [
-  // NVIDIA NIM — free tier (1,000 requests/month).
-  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6 · Free", hint: "Default. Moonshot AI flagship — best free quality.", provider: "nvidia" },
-  { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B · Free", hint: "Meta's largest open model. Best free option for tribunal letters.", provider: "nvidia" },
-  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B · Free", hint: "Meta's latest. Fast, reliable, free.", provider: "nvidia" },
-  { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2 · Free", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" },
-  { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B · Free", hint: "NVIDIA fine-tuned Llama. Strong instruction following.", provider: "nvidia" },
-  { id: "z-ai/glm4.7", label: "GLM 4.7 · Free (reasoning)", hint: "Reasoning model — slow, may exhaust tokens on thinking. Not recommended.", provider: "nvidia" },
+  // OpenRouter free tier — verified responsive (~7s for short prompts).
+  { id: "openai/gpt-oss-120b:free", label: "GPT-OSS 120B · Free", hint: "Default. OpenAI's open-weight 120B — fast, strong professional writing.", provider: "openrouter" },
+  { id: "openai/gpt-oss-20b:free", label: "GPT-OSS 20B · Free", hint: "Smaller, faster GPT-OSS. Use for quick drafts.", provider: "openrouter" },
+  { id: "qwen/qwen3-next-80b-a3b-instruct:free", label: "Qwen 3 Next 80B · Free", hint: "Latest Qwen — strong multilingual.", provider: "openrouter" },
+  { id: "qwen/qwen3-coder:free", label: "Qwen 3 Coder · Free", hint: "Code-focused Qwen variant.", provider: "openrouter" },
+  { id: "z-ai/glm-4.5-air:free", label: "GLM 4.5 Air · Free", hint: "Z.AI's lighter GLM. Faster than reasoning variants.", provider: "openrouter" },
+  { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B · Free", hint: "NVIDIA's flagship Nemotron.", provider: "openrouter" },
+  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B · Free", hint: "Google's latest open Gemma.", provider: "openrouter" },
+  { id: "minimax/minimax-m2.5:free", label: "MiniMax M2.5 · Free (slow)", hint: "Capable but slow — only pick if quality matters more than speed.", provider: "openrouter" },
   // Anthropic — paid (best quality, charged per request).
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 · Paid", hint: "~$0.18/letter. Best value Claude — tier-leading legal register.", provider: "anthropic" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 · Paid", hint: "~$0.02/letter. Fast, cheap Claude. Good for low-risk drafts.", provider: "anthropic" },
@@ -177,7 +181,14 @@ export const useProfileStore = create<Store>()(
         // defaults (the Claude default we shipped, then the qwen3-max
         // default we briefly shipped). Any other selection is treated as
         // user intent and left alone.
-        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash", "qwen3-max", "gemini-2.0-flash", "gemini-3.1-flash-lite", "z-ai/glm4.7", "meta/llama-3.3-70b-instruct"]);
+        const stale = new Set([
+          "claude-sonnet-4-6",
+          "qwen-flash", "qwen3-flash", "qwen3-max",
+          "gemini-2.0-flash", "gemini-3.1-flash-lite",
+          "z-ai/glm4.7", "moonshotai/kimi-k2.6",
+          "meta/llama-3.3-70b-instruct", "meta/llama-3.1-405b-instruct",
+          "mistralai/mistral-large-2-instruct", "nvidia/llama-3.1-nemotron-70b-instruct",
+        ]);
         if (
           state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
           stale.has(state.profile.defaults.qwenModel)

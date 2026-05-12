@@ -14,4 +14,4 @@
  *
  * Change this string to retarget every fallback in lockstep.
  */
-export const DEFAULT_MODEL = "moonshotai/kimi-k2.6" as const;
+export const DEFAULT_MODEL = "openai/gpt-oss-120b:free" as const;
