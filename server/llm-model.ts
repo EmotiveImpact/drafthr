@@ -71,9 +71,3 @@ export function buildModel(requestedModel?: string, logPrefix?: string) {
   })(modelName);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function warn(logPrefix: string | undefined, message: string): void {
-  if (!logPrefix) return;
-  // eslint-disable-next-line no-console
-  console.warn(`[${logPrefix}] ${message}`);
-}

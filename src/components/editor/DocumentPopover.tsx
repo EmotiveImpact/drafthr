@@ -1,7 +1,7 @@
 import type { Draft, EmployeeTone, Tone } from "@/lib/letters/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDraftStore } from "@/lib/store";
-import { Mic2, ChevronDown, Check } from "lucide-react";
+import { Mic2, Check } from "lucide-react";
 
 const EMPLOYER_TONES: { value: Tone; label: string; hint: string }[] = [
   { value: "warm", label: "Warm", hint: "Personable but professional. Offers, promotions." },
