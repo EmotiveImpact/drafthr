@@ -840,7 +840,7 @@ export function Editor() {
           (focusMode
             ? "lg:grid-cols-1"
             : railCollapsed
-            ? "lg:grid-cols-[260px_minmax(0,1fr)_28px]"
+            ? "lg:grid-cols-[260px_minmax(0,1fr)]"
             : "lg:grid-cols-[260px_minmax(0,1fr)_360px]")
         }
       >
@@ -1036,59 +1036,28 @@ export function Editor() {
         </main>
 
         {/* Desktop right rail — inline, persistent. Hidden below lg: where
-         * the bottom sheet handles things. Collapsible to a 36px vertical
-         * strip when railCollapsed is true so the canvas can reclaim the
-         * 360px without engaging full Focus mode. */}
-        <aside
-          className={
-            "hidden lg:flex flex-col min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
-            (focusMode ? "lg:hidden" : "")
-          }
-        >
-          {railCollapsed ? (
-            // Collapsed strip — tighter, black, icon-only. Sparkles top,
-            // chevron-left bottom. Click anywhere on the strip to re-
-            // expand. Deliberate ink fill so it reads as the AI anchor,
-            // not chrome.
-            <button
-              type="button"
-              onClick={() => setRailCollapsed(false)}
-              className="flex flex-col items-center justify-between h-full w-full py-3 bg-[var(--ds-ink)] text-white hover:opacity-90 transition"
-              aria-label="Expand AI rail"
-              title="Expand AI rail"
-            >
-              <Sparkles className="size-4 opacity-90" />
-              <ChevronLeft className="size-3.5 opacity-70" />
-            </button>
-          ) : (
-            <>
-              {/* Header row with collapse chevron. Sits above the
-               * RightRail's tab strip so the AI panel doesn't have to
-               * know about collapse state. */}
-              <div className="flex items-center justify-end px-1.5 py-1.5 border-b border-[var(--ds-line-2)] shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setRailCollapsed(true)}
-                  className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-                  aria-label="Collapse AI rail"
-                  title="Collapse AI rail"
-                >
-                  <PanelRight className="size-3.5" />
-                </button>
-              </div>
-              <div className="flex-1 min-h-0">
-                <RightRail
-                  draft={draft}
-                  tab={rightTab}
-                  onTabChange={setRightTab}
-                  pendingComment={pendingComment}
-                  onPendingCommentConsumed={() => setPendingComment(null)}
-                  activeSectionId={activeSectionId}
-                />
-              </div>
-            </>
-          )}
-        </aside>
+         * the bottom sheet handles things. Collapsible: when railCollapsed
+         * is true the rail is removed from the grid entirely (canvas takes
+         * full width) and a floating "Ask AI" pill in the bottom-right
+         * brings it back — mobile-mirror pattern. */}
+        {!railCollapsed && (
+          <aside
+            className={
+              "hidden lg:flex flex-col min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
+              (focusMode ? "lg:hidden" : "")
+            }
+          >
+            <RightRail
+              draft={draft}
+              tab={rightTab}
+              onTabChange={setRightTab}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+              activeSectionId={activeSectionId}
+              onCollapse={() => setRailCollapsed(true)}
+            />
+          </aside>
+        )}
 
         {/* Mobile bottom sheet — Framer Motion with drag-to-dismiss,
          * snap points (half / full), and momentum-aware release. Tap-scrim
@@ -1141,9 +1110,10 @@ export function Editor() {
           }}
         />
 
-        {/* Floating AI button — mobile-only. Fades + scales away when the
-         * sheet opens (so it doesn't peek through under the rounded sheet
-         * corner), fades back when the sheet closes. */}
+        {/* Floating "Ask AI" pill — MOBILE.
+         * lg:hidden so it only shows below the bottom-sheet breakpoint.
+         * Visible whenever the sheet is closed; fades + scales away
+         * while it's open. */}
         {!focusMode && (
           <button
             type="button"
@@ -1161,6 +1131,31 @@ export function Editor() {
             aria-label="Open AI agent"
             aria-hidden={showRail || undefined}
             tabIndex={showRail ? -1 : undefined}
+          >
+            <span className="grid place-items-center size-7 rounded-full bg-white/15">
+              <Sparkles className="size-4" />
+            </span>
+            <span className="text-[13px] font-medium">Ask AI</span>
+          </button>
+        )}
+
+        {/* Floating "Ask AI" pill — DESKTOP.
+         * hidden lg:inline-flex so it only shows at lg:+. Visible
+         * whenever railCollapsed is true; click restores the inline rail. */}
+        {!focusMode && (
+          <button
+            type="button"
+            onClick={() => setRailCollapsed(false)}
+            className={
+              "hidden fixed bottom-5 right-5 z-30 lg:inline-flex items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 active:scale-[0.98] " +
+              "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none " +
+              (railCollapsed
+                ? "opacity-100 scale-100"
+                : "opacity-0 scale-90 pointer-events-none")
+            }
+            aria-label="Open AI agent"
+            aria-hidden={!railCollapsed || undefined}
+            tabIndex={!railCollapsed ? -1 : undefined}
           >
             <span className="grid place-items-center size-7 rounded-full bg-white/15">
               <Sparkles className="size-4" />

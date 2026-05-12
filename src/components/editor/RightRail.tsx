@@ -21,6 +21,7 @@ export type PendingComment = {
 export function RightRail({
   draft,
   activeSectionId,
+  onCollapse,
 }: {
   draft: Draft;
   /** Legacy — accepted but ignored under Change A. */
@@ -29,10 +30,17 @@ export function RightRail({
   pendingComment?: PendingComment | null;
   onPendingCommentConsumed?: () => void;
   activeSectionId?: string | null;
+  /** Desktop rail-collapse handler — forwarded into AIPanel so the
+   * chevron sits on the same row as the AI agent header. */
+  onCollapse?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full min-h-0">
-      <AIPanel draft={draft} activeSectionId={activeSectionId ?? null} />
+      <AIPanel
+        draft={draft}
+        activeSectionId={activeSectionId ?? null}
+        onCollapse={onCollapse}
+      />
     </div>
   );
 }

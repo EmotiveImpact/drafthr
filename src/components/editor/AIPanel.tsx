@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight } from "lucide-react";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -139,7 +139,18 @@ type SummariseInput = { audience?: "counsel" | "hr_partner" | "self"; note?: str
  *    local draft operation and push the outcome back via addToolResult() so
  *    the agent can continue reasoning.
  */
-export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectionId: string | null }) {
+export function AIPanel({
+  draft,
+  activeSectionId,
+  onCollapse,
+}: {
+  draft: Draft;
+  activeSectionId: string | null;
+  /** Optional desktop rail-collapse handler. When supplied, a PanelRight
+   * chevron renders at the far right of the header row. Editor passes this
+   * so the chevron lives on the same line as "AI agent · model · date". */
+  onCollapse?: () => void;
+}) {
   const profile = useProfileStore((s) => s.profile);
   const me = meIdentity(profile);
 
@@ -463,22 +474,35 @@ export function AIPanel({ draft, activeSectionId }: { draft: Draft; activeSectio
         >
           {profile.defaults.qwenModel ?? DEFAULT_MODEL} · {runtimeCtx.localDate}
         </span>
-        {messages.length > 0 && (
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm("Clear this chat thread?")) {
-                clearAIChat(draft.id);
-                setMessages([]);
-              }
-            }}
-            className="ml-auto text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
-            aria-label="Clear chat thread"
-            title="Clear chat thread"
-          >
-            <Trash2 className="size-3" />
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("Clear this chat thread?")) {
+                  clearAIChat(draft.id);
+                  setMessages([]);
+                }
+              }}
+              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+              aria-label="Clear chat thread"
+              title="Clear chat thread"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+          {onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+              aria-label="Hide AI rail"
+              title="Hide AI rail"
+            >
+              <PanelRight className="size-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
