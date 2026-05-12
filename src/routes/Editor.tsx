@@ -38,6 +38,7 @@ import {
   Minimize2,
   ArrowUp,
   ArrowRight,
+  Pencil,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -77,6 +78,10 @@ export function Editor() {
    * exit. See public/editor-designs.html#v6 for the proposal this implements.
    */
   const [focusMode, setFocusMode] = useState(false);
+  // Edit-on-page swaps the read-only preview for inline TipTap editors
+  // on each section so the user can type / format / paste right on the
+  // rendered A4 page. Only meaningful when viewMode === "preview".
+  const [editOnPage, setEditOnPage] = useState(false);
   const [rightTab, setRightTab] = useState<RightRailTab>("ai");
   const [pendingComment, setPendingComment] = useState<{
     sectionId: string;
@@ -162,6 +167,12 @@ export function Editor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [focusMode]);
 
+  // Edit-on-page is only meaningful in Preview. Leaving Preview while
+  // it's active would strand the user in an invisible state, so we
+  // auto-exit it whenever the view switches away.
+  useEffect(() => {
+    if (editOnPage && viewMode !== "preview") setEditOnPage(false);
+  }, [viewMode, editOnPage]);
 
   if (!draft || !draftId || !meta) {
     return (
@@ -371,10 +382,37 @@ export function Editor() {
               <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
             </div>
 
-            {/* Right-of-canvas: Focus toggle (only enabled in Preview) +
-             * pending pill + Drafting indicator. ml-auto pushes them to
-             * the right edge of the canvas column. */}
+            {/* Right-of-canvas: Edit-on-page + Focus + pending pill +
+             * Drafting indicator. ml-auto pushes them to the right edge
+             * of the canvas column. */}
             <div className="ml-auto flex items-center gap-2">
+              {/* Edit-on-page — swaps the rendered preview for inline
+               * TipTap section editors. Only meaningful while Preview is
+               * active; disabled (but visible) in Edit so the affordance
+               * stays discoverable. Used to live as a floating button
+               * above the page card; promoted here so it sits with the
+               * other view-state controls. */}
+              <Button
+                variant={editOnPage ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-[11px] px-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={viewMode !== "preview"}
+                onClick={() => setEditOnPage((v) => !v)}
+                aria-pressed={editOnPage}
+                title={
+                  viewMode !== "preview"
+                    ? "Switch to Preview to edit directly on the page"
+                    : editOnPage
+                      ? "Stop editing on page"
+                      : "Edit directly on the rendered page"
+                }
+              >
+                <Pencil className="size-3.5" />
+                <span className="hidden md:inline">
+                  {editOnPage ? "Done" : "Edit on page"}
+                </span>
+              </Button>
+
               {/* Focus mode — hides both rails for distraction-free
                * working. Available in both Edit and Preview. Esc exits. */}
               <Button
@@ -674,6 +712,8 @@ export function Editor() {
                 }}
                 onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
                 onFocusComment={onFocusComment}
+                editable={editOnPage}
+                onEditableDone={() => setEditOnPage(false)}
               />
             </div>
           ) : (
