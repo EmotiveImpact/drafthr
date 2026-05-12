@@ -232,13 +232,33 @@ export function SectionEditor({
   };
 
   // Re-sync when the section html changes externally (streaming or regen).
+  // While streaming, throttle setContent to ~60ms — without this, each
+  // streamed token triggers a full reparse + reflow, causing visible
+  // jitter where text appears to wrap mid-line as the doc rebuilds.
+  // 60ms is faster than the eye can perceive (~16 fps still feels smooth)
+  // but lets the browser settle between updates.
   useEffect(() => {
     if (!editor) return;
     if (section.html === editor.getHTML()) return;
     if (section.html === lastWrittenContent.current) return;
-    editor.commands.setContent(section.html || "", false);
-    lastWrittenContent.current = section.html;
-  }, [section.html, editor]);
+
+    if (!isStreaming) {
+      // Final sync (or non-streaming change) — apply immediately.
+      editor.commands.setContent(section.html || "", false);
+      lastWrittenContent.current = section.html;
+      return;
+    }
+
+    const handle = setTimeout(() => {
+      // Re-check inside the timeout — the editor may have been replaced
+      // and section.html may have changed again. Re-read the latest.
+      if (!editor || editor.isDestroyed) return;
+      if (section.html === editor.getHTML()) return;
+      editor.commands.setContent(section.html || "", false);
+      lastWrittenContent.current = section.html;
+    }, 60);
+    return () => clearTimeout(handle);
+  }, [section.html, editor, isStreaming]);
 
   // Toggle editability when streaming starts/stops.
   useEffect(() => {
