@@ -21,10 +21,14 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
  */
 export type ModelId =
+  | "gemini-3.1-flash-lite"
+  | "gemini-3.1-pro-preview"
+  | "gemini-3-flash-preview"
+  | "gemini-2.5-flash"
+  | "gemini-2.5-flash-lite"
+  | "gemini-2.5-pro"
   | "gemini-2.0-flash"
   | "gemini-2.0-flash-lite"
-  | "gemini-2.5-flash"
-  | "gemini-2.5-pro"
   | "claude-opus-4-7"
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5"
@@ -44,10 +48,14 @@ export const MODEL_OPTIONS: {
   provider: "google" | "anthropic" | "qwen";
 }[] = [
   // Google Gemini — default provider, free tier available.
-  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", hint: "Default. Fast, free-tier, strong general writing.", provider: "google" },
-  { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", hint: "Lightest Gemini tier — fastest, lowest cost.", provider: "google" },
-  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Latest Flash — better reasoning, still fast.", provider: "google" },
+  { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash Lite", hint: "Latest stable Flash. Fast, free-tier.", provider: "google" },
+  { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview", hint: "Cutting-edge Google model, preview tier.", provider: "google" },
+  { id: "gemini-3-flash-preview", label: "Gemini 3 Flash Preview", hint: "Gemini 3 Flash, preview tier.", provider: "google" },
+  { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", hint: "Strong reasoning, fast. Recommended default.", provider: "google" },
+  { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", hint: "Lightest 2.5 tier — ultra-fast, low cost.", provider: "google" },
   { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", hint: "Google flagship. Best quality, slower.", provider: "google" },
+  { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", hint: "Solid, free-tier, widely available.", provider: "google" },
+  { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", hint: "Fastest, cheapest Gemini 2.0 tier.", provider: "google" },
   // Anthropic — tier-leading legal writing register.
   { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters.", provider: "anthropic" },
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Tier-leading register, balanced cost.", provider: "anthropic" },
