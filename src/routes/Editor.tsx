@@ -840,7 +840,7 @@ export function Editor() {
           (focusMode
             ? "lg:grid-cols-1"
             : railCollapsed
-            ? "lg:grid-cols-[260px_minmax(0,1fr)_36px]"
+            ? "lg:grid-cols-[260px_minmax(0,1fr)_28px]"
             : "lg:grid-cols-[260px_minmax(0,1fr)_360px]")
         }
       >
@@ -1046,24 +1046,19 @@ export function Editor() {
           }
         >
           {railCollapsed ? (
-            // Collapsed strip — full-height button. Vertical "Ask AI"
-            // text + Sparkles icon stays in peripheral vision; click
-            // anywhere on the strip re-expands the rail.
+            // Collapsed strip — tighter, black, icon-only. Sparkles top,
+            // chevron-left bottom. Click anywhere on the strip to re-
+            // expand. Deliberate ink fill so it reads as the AI anchor,
+            // not chrome.
             <button
               type="button"
               onClick={() => setRailCollapsed(false)}
-              className="flex flex-col items-center justify-between h-full w-full py-3 group hover:bg-[var(--ds-line-2)] transition"
+              className="flex flex-col items-center justify-between h-full w-full py-3 bg-[var(--ds-ink)] text-white hover:opacity-90 transition"
               aria-label="Expand AI rail"
               title="Expand AI rail"
             >
-              <ChevronLeft className="size-4 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
-              <span
-                className="text-[11px] font-medium tracking-wide text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition"
-                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
-              >
-                Ask AI
-              </span>
-              <Sparkles className="size-4 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
+              <Sparkles className="size-4 opacity-90" />
+              <ChevronLeft className="size-3.5 opacity-70" />
             </button>
           ) : (
             <>
