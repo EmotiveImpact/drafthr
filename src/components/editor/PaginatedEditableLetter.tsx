@@ -321,18 +321,29 @@ export function PaginatedEditableLetter({
         onDone={flushAndDone}
       />
 
-      {/* Scoped CSS — only typography / colours; let PaginationPlus own
-       * its layout entirely so we don't fight its sizing math. */}
+      {/* Scoped CSS — matches PaginatedLetter (paged.js read-only output)
+       * visually. The extension produces ONE tall ProseMirror container
+       * with internal page-break strips, so we style:
+       *   - container: white paper card (radius + shadow)
+       *   - page-break strips: subtle slate cuts that read as page seams
+       *   - footer: Geist 9pt slate-400 centred
+       *   - body type: Iowan Old Style 11pt 1.55 line-height */}
       <style>{`
         .${styleScope} {
-          /* Centre the page horizontally; canvas bg shows around it. */
           display: flex;
           justify-content: center;
           padding: 20px 0 32px;
           min-height: 100%;
         }
+
+        /* The ProseMirror container IS the paper. White, rounded, soft
+         * drop shadow — same shadow stops as PaginatedLetter's
+         * .pagedjs_page rule. The extension applies its own border via
+         * inline style; nuke it. */
         .${styleScope} .ProseMirror {
-          background: #ffffff;
+          background: #ffffff !important;
+          border: 0 !important;
+          border-radius: 4px;
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
             0 6px 24px rgba(0, 0, 0, 0.06);
@@ -341,16 +352,48 @@ export function PaginatedEditableLetter({
           line-height: 1.55;
           color: #0f172a;
           outline: none;
-          /* Don't force a width — the extension sets it via its
-           * inline style based on pageWidth config. */
+          overflow: hidden;
         }
-        /* Hide the section anchor entirely — atom node with 0 height. */
+
+        /* Page-break strip — the visual seam between pages. Soft slate
+         * fill with a 1px slate-200 hairline above and below so it reads
+         * as the cut between two sheets of paper. */
+        .${styleScope} .rm-page-break {
+          background: transparent !important;
+        }
+        .${styleScope} .rm-page-break .breaker {
+          background-color: #f1f5f9 !important;
+          border-top: 1px solid #e2e8f0 !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+        }
+
+        /* Header / footer wrappers inside each page break. */
+        .${styleScope} .rm-page-header,
+        .${styleScope} .rm-page-footer {
+          background: transparent !important;
+          font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .${styleScope} .rm-page-footer-content,
+        .${styleScope} .rm-page-header-content {
+          font-size: 9pt !important;
+          color: #94a3b8 !important;
+        }
+        /* "Page n" is rendered into footerRight by config. Centre it. */
+        .${styleScope} .rm-page-footer-left { flex: 1; }
+        .${styleScope} .rm-page-footer-right {
+          flex: 1;
+          text-align: center !important;
+        }
+
+        /* Hide section anchors entirely — they're invariant atoms used
+         * only for save-time section reconstruction. */
         .${styleScope} .ProseMirror div[data-section-anchor] {
           display: none !important;
           height: 0 !important;
           margin: 0 !important;
         }
-        /* Typography matches PaginatedLetter's wrapInPrintHtml. */
+
+        /* Typography matches PaginatedLetter's wrapInPrintHtml block. */
         .${styleScope} .ProseMirror > *:first-child { margin-top: 0; }
         .${styleScope} .ProseMirror > *:last-child { margin-bottom: 0; }
         .${styleScope} .ProseMirror p { margin: 0 0 8pt 0; }
@@ -373,6 +416,11 @@ export function PaginatedEditableLetter({
           border-left: 2px solid #cbd5e1;
           color: #334155;
           font-style: italic;
+        }
+        .${styleScope} .ProseMirror hr {
+          border: 0;
+          border-top: 1px solid #cbd5e1;
+          margin: 14pt 0;
         }
         .${styleScope} .ProseMirror table {
           width: 100%;
@@ -402,19 +450,6 @@ export function PaginatedEditableLetter({
           float: left;
           height: 0;
           pointer-events: none;
-        }
-        /* Footer label — Geist 9pt slate-400 centred, matching the
-         * paged.js @bottom-center rule. */
-        .${styleScope} .rm-page-footer-content {
-          font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-          font-size: 9pt !important;
-          color: #94a3b8 !important;
-          text-align: center;
-        }
-        .${styleScope} .rm-page-footer-left { flex: 1; }
-        .${styleScope} .rm-page-footer-right {
-          flex: 1;
-          text-align: center !important;
         }
       `}</style>
 
