@@ -40,17 +40,17 @@ export const MODEL_OPTIONS: {
   hint: string;
   provider: "nvidia" | "anthropic";
 }[] = [
-  // NVIDIA NIM — default provider.
-  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6", hint: "Default. Moonshot AI's flagship — strong professional writing, free tier.", provider: "nvidia" },
-  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B", hint: "Meta's latest open model. Fast, reliable.", provider: "nvidia" },
-  { id: "z-ai/glm4.7", label: "GLM 4.7 (reasoning)", hint: "Reasoning model — slow, may exhaust tokens on thinking.", provider: "nvidia" },
-  { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B", hint: "Meta's largest open model. Best open-source quality.", provider: "nvidia" },
-  { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" },
-  { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B", hint: "NVIDIA fine-tuned Llama. Strong instruction following.", provider: "nvidia" },
-  // Anthropic — premium option for high-risk letters.
-  { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Best for tribunal-bound + high-risk letters.", provider: "anthropic" },
-  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Tier-leading register, balanced cost.", provider: "anthropic" },
-  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", hint: "Fast + cheap. Use for low-risk drafts.", provider: "anthropic" },
+  // NVIDIA NIM — free tier (1,000 requests/month).
+  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6 · Free", hint: "Default. Moonshot AI flagship — best free quality.", provider: "nvidia" },
+  { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B · Free", hint: "Meta's largest open model. Best free option for tribunal letters.", provider: "nvidia" },
+  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B · Free", hint: "Meta's latest. Fast, reliable, free.", provider: "nvidia" },
+  { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2 · Free", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" },
+  { id: "nvidia/llama-3.1-nemotron-70b-instruct", label: "Nemotron 70B · Free", hint: "NVIDIA fine-tuned Llama. Strong instruction following.", provider: "nvidia" },
+  { id: "z-ai/glm4.7", label: "GLM 4.7 · Free (reasoning)", hint: "Reasoning model — slow, may exhaust tokens on thinking. Not recommended.", provider: "nvidia" },
+  // Anthropic — paid (best quality, charged per request).
+  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 · Paid", hint: "~$0.18/letter. Best value Claude — tier-leading legal register.", provider: "anthropic" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 · Paid", hint: "~$0.02/letter. Fast, cheap Claude. Good for low-risk drafts.", provider: "anthropic" },
+  { id: "claude-opus-4-7", label: "Claude Opus 4.7 · Paid", hint: "~$0.90/letter. Reserve for tribunal-bound + high-risk letters only.", provider: "anthropic" },
 ];
 
 /** @deprecated Use MODEL_OPTIONS. Kept for callers that haven't migrated. */
