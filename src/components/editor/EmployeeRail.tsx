@@ -52,22 +52,24 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
   const suggestHits = safetyHits.filter((h) => h.rule.severity === "suggest");
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-5">
-        <header>
-          <h3 className="text-sm font-semibold tracking-tight">Rights & register checks</h3>
-          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            Live checks against {draft.context.jurisdiction}
-            {draft.context.usState ? ` (${draft.context.usState})` : ""}. Tribunal panels read what
-            you write — phrasing matters.
-          </p>
-        </header>
+    <ScrollArea className="h-full min-w-0">
+      {/* Tightened padding for the 260px left rail. The lint cards use
+       * break-words + min-w-0 so long detected-quote strings wrap
+       * cleanly inside the narrow column instead of bleeding past
+       * the rail edge. The big "Rights & register checks" header
+       * is dropped — the tab label already says "Rights". */}
+      <div className="p-3 space-y-4 min-w-0">
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          Live checks against {draft.context.jurisdiction}
+          {draft.context.usState ? ` (${draft.context.usState})` : ""}. Tribunal
+          panels read what you write — phrasing matters.
+        </p>
 
         <TemplateQualityInspector draft={draft} />
 
         {/* Register-safety hits */}
         {safetyHits.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <h4 className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
               Register-safety
               {blockHits.length > 0 && (
@@ -81,19 +83,22 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
                   <li
                     key={`${h.rule.id}-${i}`}
                     className={
-                      "rounded-md border p-3 text-xs leading-relaxed " +
+                      "rounded-md border p-2.5 text-[11.5px] leading-relaxed break-words " +
                       SEVERITY_COLOR[h.rule.severity]
                     }
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2 min-w-0">
                       <Icon className="size-3.5 mt-0.5 shrink-0" />
-                      <div className="space-y-1 min-w-0">
-                        <div className="font-medium">{h.rule.label}</div>
-                        <div className="opacity-80">{h.rule.description}</div>
-                        <div className="opacity-90">
-                          Detected: <span className="italic">"{truncate(h.match, 80)}"</span>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="font-medium break-words">{h.rule.label}</div>
+                        <div className="opacity-80 break-words">{h.rule.description}</div>
+                        <div className="opacity-90 break-words">
+                          Detected:{" "}
+                          <span className="italic break-words">
+                            "{truncate(h.match, 60)}"
+                          </span>
                         </div>
-                        <div className="text-[11px] opacity-90 italic">
+                        <div className="text-[11px] opacity-90 italic break-words">
                           Suggestion: {h.rule.recommendation}
                         </div>
                       </div>
@@ -107,22 +112,22 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
 
         {/* Rights-preservation checks */}
         {rightsMissing.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <h4 className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
-              Rights preservation — missing ({rightsMissing.length})
+              Rights — missing ({rightsMissing.length})
             </h4>
             <ul className="space-y-2">
               {rightsMissing.map(({ rule }) => (
                 <li
                   key={rule.id}
-                  className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900"
+                  className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[11.5px] leading-relaxed text-amber-900 break-words"
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
                     <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
-                    <div className="space-y-1">
-                      <div className="font-medium">{rule.label}</div>
-                      <div className="opacity-80">{rule.description}</div>
-                      <div className="text-[11px] opacity-90 italic">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="font-medium break-words">{rule.label}</div>
+                      <div className="opacity-80 break-words">{rule.description}</div>
+                      <div className="text-[11px] opacity-90 italic break-words">
                         Suggestion: {rule.recommendation}
                       </div>
                     </div>
@@ -134,15 +139,18 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
         )}
 
         {rightsPresent.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <h4 className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground mb-2">
               Detected ({rightsPresent.length})
             </h4>
             <ul className="space-y-1.5">
               {rightsPresent.map(({ rule }) => (
-                <li key={rule.id} className="flex items-start gap-2 text-xs text-foreground">
+                <li
+                  key={rule.id}
+                  className="flex items-start gap-2 text-[11.5px] text-foreground min-w-0"
+                >
                   <CheckCircle2 className="size-3.5 mt-0.5 text-green-700 shrink-0" />
-                  <span>{rule.label}</span>
+                  <span className="min-w-0 break-words">{rule.label}</span>
                 </li>
               ))}
             </ul>
@@ -150,26 +158,23 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
         )}
 
         {safetyHits.length === 0 && rightsMissing.length === 0 && (
-          <div className="rounded-md border border-letter-rule bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground flex items-start gap-2">
-            <ShieldCheck className="size-4 mt-0.5 text-green-700" />
-            <p>
+          <div className="rounded-md border border-letter-rule bg-muted/30 p-3 text-[11.5px] leading-relaxed text-muted-foreground flex items-start gap-2">
+            <ShieldCheck className="size-4 mt-0.5 text-green-700 shrink-0" />
+            <p className="break-words">
               All clear so far. Keep going — checks re-run as you edit.
             </p>
           </div>
         )}
 
         {/* Footer note */}
-        <section className="rounded-md border border-letter-rule bg-muted/30 p-3 text-[11px] leading-relaxed text-muted-foreground">
+        <section className="rounded-md border border-letter-rule bg-muted/30 p-2.5 text-[10.5px] leading-relaxed text-muted-foreground break-words">
           {draft.context.counselReviewRequired ? (
             <>
               <strong>Counsel review recommended.</strong> Consider speaking to a
-              qualified employment solicitor (UK) or attorney (US) before sending. ACAS
-              0300 123 1100 / EEOC 1-800-669-4000 are free starting points.
+              qualified solicitor (UK) or attorney (US) before sending.
             </>
           ) : (
-            <>
-              Free advice: ACAS 0300 123 1100 (UK) or EEOC 1-800-669-4000 (US).
-            </>
+            <>Free advice: ACAS 0300 123 1100 (UK) · EEOC 1-800-669-4000 (US).</>
           )}
         </section>
       </div>

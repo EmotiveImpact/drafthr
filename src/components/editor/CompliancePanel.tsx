@@ -1,6 +1,6 @@
 import type { Draft } from "@/lib/letters/types";
 import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
-import { CheckCircle2, AlertTriangle, AlertCircle, ShieldCheck } from "lucide-react";
+import { CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMemo } from "react";
 import { TemplateQualityInspector } from "./TemplateQualityInspector";
@@ -77,34 +77,31 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
       : "red";
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-5">
-        <header>
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="size-4 text-[var(--ds-muted)]" />
-              <h3 className="text-[13px] font-semibold text-[var(--ds-ink)] m-0">Compliance</h3>
-            </div>
-            {score !== null && (
-              <span
-                className={
-                  "text-[11px] font-medium px-2 py-0.5 rounded-full " +
-                  (scoreTone === "green"
-                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-                    : scoreTone === "amber"
+    <ScrollArea className="h-full min-w-0">
+      {/* Tightened padding for 260px left rail. Drop the big "Compliance"
+       * header — the tab label already says "Compliance". Keep the
+       * satisfied-score pill since it's actionable info. */}
+      <div className="p-3 space-y-4 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <p className="text-[11px] text-[var(--ds-muted)] leading-relaxed min-w-0 break-words">
+            Live checks against {draft.context.jurisdiction}
+            {draft.context.usState ? ` (${draft.context.usState})` : ""}.
+          </p>
+          {score !== null && (
+            <span
+              className={
+                "shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full " +
+                (scoreTone === "green"
+                  ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
+                  : scoreTone === "amber"
                     ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
                     : "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]")
-                }
-              >
-                {present.length}/{evaluations.length} satisfied
-              </span>
-            )}
-          </div>
-          <p className="text-[12px] text-[var(--ds-muted)] leading-relaxed">
-            Live checks against {draft.context.jurisdiction}
-            {draft.context.usState ? ` (${draft.context.usState})` : ""} legal patterns. Not a substitute for counsel.
-          </p>
-        </header>
+              }
+            >
+              {present.length}/{evaluations.length}
+            </span>
+          )}
+        </div>
 
         <TemplateQualityInspector draft={draft} />
 
@@ -123,7 +120,7 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
         )}
 
         {present.length > 0 && (
-          <section>
+          <section className="min-w-0">
             <h4 className="text-[11px] font-semibold text-[var(--ds-muted)] mb-2">
               Detected · {present.length}
             </h4>
@@ -131,10 +128,10 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
               {present.map(({ rule }) => (
                 <li
                   key={rule.id}
-                  className="flex items-start gap-2 text-[12px] text-[var(--ds-body)] py-1"
+                  className="flex items-start gap-2 text-[11.5px] text-[var(--ds-body)] py-1 min-w-0"
                 >
                   <CheckCircle2 className="size-3.5 mt-0.5 text-[var(--ds-green-fg)] shrink-0" />
-                  <span className="flex-1">{rule.label}</span>
+                  <span className="flex-1 min-w-0 break-words">{rule.label}</span>
                 </li>
               ))}
             </ul>
@@ -142,14 +139,14 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
         )}
 
         {evaluations.length === 0 && (
-          <p className="text-[12px] text-[var(--ds-muted)] leading-relaxed">
+          <p className="text-[11.5px] text-[var(--ds-muted)] leading-relaxed break-words">
             No specific compliance rules configured for this letter / jurisdiction
             yet — Tier 1 disclaimer still applies.
           </p>
         )}
 
         <section
-          className="rounded-md border p-3 text-[11px] leading-relaxed"
+          className="rounded-md border p-2.5 text-[10.5px] leading-relaxed break-words"
           style={{
             background: draft.context.counselReviewRequired ? "var(--ds-amber-bg)" : "var(--ds-line-2)",
             borderColor: draft.context.counselReviewRequired ? "var(--ds-amber-bg)" : "var(--ds-line)",
@@ -191,23 +188,25 @@ function RuleSection({
           return (
             <li
               key={rule.id}
-              className="rounded-md border p-3 text-[12px] leading-relaxed"
+              className="rounded-md border p-2.5 text-[11.5px] leading-relaxed break-words"
               style={{ background: tone.bg, borderColor: tone.bg, color: tone.fg }}
             >
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-2 min-w-0">
                 <Icon className="size-3.5 mt-0.5 shrink-0" />
                 <div className="space-y-1 min-w-0 flex-1">
-                  <div className="font-medium flex items-center gap-2">
-                    {rule.label}
+                  <div className="font-medium flex items-center gap-2 min-w-0">
+                    <span className="min-w-0 break-words flex-1">
+                      {rule.label}
+                    </span>
                     <span
-                      className="ml-auto text-[10px] uppercase tracking-wider opacity-80 shrink-0"
+                      className="text-[9px] uppercase tracking-wider opacity-80 shrink-0"
                       style={{ letterSpacing: "0.08em" }}
                     >
                       {SEVERITY_LABEL[rule.severity]}
                     </span>
                   </div>
-                  <div className="opacity-80">{rule.description}</div>
-                  <div className="text-[11px] italic opacity-90">
+                  <div className="opacity-80 break-words">{rule.description}</div>
+                  <div className="text-[11px] italic opacity-90 break-words">
                     Suggestion: {rule.recommendation}
                   </div>
                 </div>

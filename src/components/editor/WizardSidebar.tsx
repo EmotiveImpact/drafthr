@@ -164,8 +164,12 @@ export function WizardSidebar({
           </ScrollArea>
         </>
       ) : (
-        // Rights tab — full rail height, own scroll container.
-        <div className="flex-1 min-h-0 overflow-auto">{rights}</div>
+        // Rights tab — full rail height. The mounted panel
+        // (EmployeeRail / CompliancePanel) owns its own ScrollArea, so
+        // we just provide the flex slot here. Nesting overflow-auto
+        // around the inner ScrollArea caused content to "bleed" past
+        // the rail on long lint hits.
+        <div className="flex-1 min-h-0 flex flex-col">{rights}</div>
       )}
     </>
   );
