@@ -12,21 +12,23 @@
 
 import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 // MUST keep in sync with server/llm-model.ts (and api/agent.ts).
-// Why duplicated: Vercel's serverless bundler doesn't follow cross-tree
-// imports from /api/ into /server/ — module-load fails at runtime with
-// FUNCTION_INVOCATION_FAILED. The server/llm-model.ts version still
-// works for the local Vite dev proxy (server/proxy.ts).
-const DEFAULT_MODEL = "qwen3-max" as const;
-const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+const DEFAULT_MODEL = "gemini-2.0-flash" as const;
+const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
 
 const ALLOWED_MODELS = new Set([
   "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
   "qwen3-max",
   "qwen-flash",
   "qwen-max",
@@ -37,39 +39,34 @@ const ALLOWED_MODELS = new Set([
 function resolveModelName(requested?: string): string {
   const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
   const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
+  const envModel = process.env.LLM_MODEL ?? process.env.GEMINI_MODEL ?? process.env.QWEN_MODEL;
   const providerDefault =
-    envProvider === "qwen"
-      ? QWEN_FALLBACK_MODEL
+    envProvider === "gemini" || envProvider === "google"
+      ? GEMINI_FALLBACK_MODEL
       : envProvider === "claude" || envProvider === "anthropic"
       ? ANTHROPIC_FALLBACK_MODEL
+      : envProvider === "qwen"
+      ? QWEN_FALLBACK_MODEL
       : DEFAULT_MODEL;
-  let modelName = fromRequest ?? envModel ?? providerDefault;
-
-  // Fall back to the available provider when the requested one's key is
-  // missing — but only if the alt provider IS configured (don't swap to
-  // a broken qwen if neither key is set; let the explicit error fire).
-  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY && process.env.QWEN_API_KEY) {
-    console.warn(`[api/draft] Requested ${modelName} but ANTHROPIC_API_KEY missing — using ${QWEN_FALLBACK_MODEL}.`);
-    modelName = QWEN_FALLBACK_MODEL;
-  } else if (
-    !modelName.startsWith("claude-") &&
-    !process.env.QWEN_API_KEY &&
-    process.env.ANTHROPIC_API_KEY
-  ) {
-    console.warn(`[api/draft] Requested ${modelName} but QWEN_API_KEY missing — using ${ANTHROPIC_FALLBACK_MODEL}.`);
-    modelName = ANTHROPIC_FALLBACK_MODEL;
-  }
-  return modelName;
+  return fromRequest ?? envModel ?? providerDefault;
 }
 
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
+
   if (modelName.startsWith("claude-")) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
     return createAnthropic({ apiKey })(modelName);
   }
+
+  if (modelName.startsWith("gemini-")) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY missing in environment.");
+    return createGoogleGenerativeAI({ apiKey })(modelName);
+  }
+
+  // Qwen / OpenAI-compatible fallback
   const apiKey = process.env.QWEN_API_KEY;
   if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
   const baseURL =

@@ -1,17 +1,22 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-// Keep in sync with src/lib/llm/default-model.ts. The API functions avoid
-// importing from /src because Vercel's serverless bundler has previously
-// failed to trace that path in production.
-const DEFAULT_MODEL = "qwen3-max" as const;
-const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
+// Keep in sync with api/draft.ts. The API functions avoid importing from /src
+// because Vercel's serverless bundler has previously failed to trace that path.
+const DEFAULT_MODEL = "gemini-2.0-flash" as const;
+const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
 
 const ALLOWED_MODELS = new Set([
   "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-pro",
   "qwen3-max",
   "qwen-flash",
   "qwen-max",
@@ -23,6 +28,8 @@ type ModelEnv = Partial<
   Pick<
     NodeJS.ProcessEnv,
     | "ANTHROPIC_API_KEY"
+    | "GEMINI_API_KEY"
+    | "GEMINI_MODEL"
     | "LLM_MODEL"
     | "LLM_PROVIDER"
     | "QWEN_API_KEY"
@@ -48,51 +55,40 @@ export function resolveModelName(
   const fromRequest =
     requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : undefined;
   const envProvider = (env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = env.LLM_MODEL ?? env.QWEN_MODEL;
+  const envModel = env.LLM_MODEL ?? env.GEMINI_MODEL ?? env.QWEN_MODEL;
   const providerDefault =
-    envProvider === "qwen"
-      ? QWEN_FALLBACK_MODEL
+    envProvider === "gemini" || envProvider === "google"
+      ? GEMINI_FALLBACK_MODEL
       : envProvider === "claude" || envProvider === "anthropic"
       ? ANTHROPIC_FALLBACK_MODEL
+      : envProvider === "qwen"
+      ? QWEN_FALLBACK_MODEL
       : DEFAULT_MODEL;
-  let modelName = fromRequest ?? envModel ?? providerDefault;
-
-  if (isClaudeModel(modelName) && !env.ANTHROPIC_API_KEY && env.QWEN_API_KEY) {
-    warn(
-      logPrefix,
-      `Requested ${modelName} but ANTHROPIC_API_KEY is missing. Falling back to ${QWEN_FALLBACK_MODEL}.`
-    );
-    modelName = QWEN_FALLBACK_MODEL;
-  } else if (!isClaudeModel(modelName) && !env.QWEN_API_KEY && env.ANTHROPIC_API_KEY) {
-    warn(
-      logPrefix,
-      `Requested ${modelName} but QWEN_API_KEY is missing. Falling back to ${ANTHROPIC_FALLBACK_MODEL}.`
-    );
-    modelName = ANTHROPIC_FALLBACK_MODEL;
-  }
-
-  return modelName;
+  return fromRequest ?? envModel ?? providerDefault;
 }
 
 export function buildModel(requestedModel?: string, logPrefix?: string) {
   const modelName = resolveModelName(requestedModel, { logPrefix });
 
-  if (isClaudeModel(modelName)) {
+  if (modelName.startsWith("claude-")) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
     return createAnthropic({ apiKey })(modelName);
   }
 
+  if (modelName.startsWith("gemini-")) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY missing in environment.");
+    return createGoogleGenerativeAI({ apiKey })(modelName);
+  }
+
+  // Qwen / OpenAI-compatible fallback
   const apiKey = process.env.QWEN_API_KEY;
   if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
   const baseURL =
     process.env.QWEN_BASE_URL ??
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   return createOpenAICompatible({ name: "qwen", apiKey, baseURL })(modelName);
-}
-
-function isClaudeModel(modelName: string): boolean {
-  return modelName.startsWith("claude-");
 }
 
 function warn(logPrefix: string | undefined, message: string): void {
