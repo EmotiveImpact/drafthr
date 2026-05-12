@@ -21,6 +21,7 @@ import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { linkedEvidenceForSection, sectionLabels } from "@/lib/evidence";
 import { ExpectedEvidenceChecklist } from "@/components/editor/ExpectedEvidenceChecklist";
+import { WizardChrome } from "@/components/editor/WizardChrome";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { cn, uid } from "@/lib/utils";
 
@@ -235,7 +236,12 @@ export function EvidenceStep() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
-        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:block">
+        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
+          <WizardChrome
+            draftId={draft.id}
+            mode={draft.mode}
+            current="evidence"
+          />
           <div className="border-b border-[var(--ds-line-2)] px-4 py-3">
             <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
               Sections
