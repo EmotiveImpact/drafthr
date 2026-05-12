@@ -14,4 +14,4 @@
  *
  * Change this string to retarget every fallback in lockstep.
  */
-export const DEFAULT_MODEL = "z-ai/glm4.7" as const;
+export const DEFAULT_MODEL = "meta/llama-3.3-70b-instruct" as const;

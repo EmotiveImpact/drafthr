@@ -16,7 +16,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 // MUST keep in sync with server/llm-model.ts (and api/agent.ts).
 const DEFAULT_MODEL = "z-ai/glm4.7" as const;
-const NVIDIA_FALLBACK_MODEL = "z-ai/glm4.7" as const;
+const NVIDIA_FALLBACK_MODEL = "meta/llama-3.3-70b-instruct" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([

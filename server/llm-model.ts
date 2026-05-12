@@ -4,7 +4,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 
 const DEFAULT_MODEL = "z-ai/glm4.7" as const;
-const NVIDIA_FALLBACK_MODEL = "z-ai/glm4.7" as const;
+const NVIDIA_FALLBACK_MODEL = "meta/llama-3.3-70b-instruct" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([
