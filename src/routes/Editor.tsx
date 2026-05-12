@@ -57,6 +57,7 @@ import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
 import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import * as Dialog from "@radix-ui/react-dialog";
+import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 
 
@@ -1140,29 +1141,36 @@ export function Editor() {
         )}
 
         {/* Floating "Ask AI" pill — DESKTOP.
-         * hidden lg:inline-flex so it only shows at lg:+. Visible
-         * whenever railCollapsed is true; click restores the inline rail. */}
-        {!focusMode && (
-          <button
-            type="button"
-            onClick={() => setRailCollapsed(false)}
-            className={
-              "hidden fixed bottom-5 right-5 z-30 lg:inline-flex items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 active:scale-[0.98] " +
-              "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none " +
-              (railCollapsed
-                ? "opacity-100 scale-100"
-                : "opacity-0 scale-90 pointer-events-none")
-            }
-            aria-label="Open AI agent"
-            aria-hidden={!railCollapsed || undefined}
-            tabIndex={!railCollapsed ? -1 : undefined}
-          >
-            <span className="grid place-items-center size-7 rounded-full bg-white/15">
-              <Sparkles className="size-4" />
-            </span>
-            <span className="text-[13px] font-medium">Ask AI</span>
-          </button>
-        )}
+         * Framer Motion spring entry from the bottom-right corner when
+         * railCollapsed flips true; reverse on expand. AnimatePresence
+         * keeps the pill mounted for the exit transition. lg:+ only. */}
+        <AnimatePresence>
+          {!focusMode && railCollapsed && (
+            <motion.button
+              key="desktop-ask-ai"
+              type="button"
+              onClick={() => setRailCollapsed(false)}
+              initial={{ opacity: 0, y: 24, scale: 0.85 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.9 }}
+              transition={{
+                type: "spring",
+                stiffness: 380,
+                damping: 28,
+                mass: 0.7,
+              }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="hidden lg:inline-flex fixed bottom-5 right-5 z-30 items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-95"
+              aria-label="Open AI agent"
+            >
+              <span className="grid place-items-center size-7 rounded-full bg-white/15">
+                <Sparkles className="size-4" />
+              </span>
+              <span className="text-[13px] font-medium">Ask AI</span>
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Change A: floating comment panel — anchored to text marks
