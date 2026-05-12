@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Theme } from "@radix-ui/themes";
+import { Toaster } from "sonner";
 import { App } from "./App";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { initSentry } from "@/lib/observability/sentry";
@@ -26,6 +27,21 @@ createRoot(document.getElementById("root")!).render(
           appearance="inherit"
         >
           <App />
+          {/* Global toast surface — top-right, theme-aware, swipe-dismiss.
+           * Used for accept/reject pending, regen done, comment resolved,
+           * export complete, etc. Single mount keeps the stack consistent. */}
+          <Toaster
+            position="top-right"
+            theme="system"
+            richColors
+            closeButton
+            toastOptions={{
+              classNames: {
+                toast:
+                  "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] shadow-lg",
+              },
+            }}
+          />
         </Theme>
       </AuthProvider>
     </BrowserRouter>

@@ -113,24 +113,73 @@ img { max-width: 100%; display: block; }
 .hero {
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(60% 50% at 90% -10%, rgba(10,11,13,0.06), transparent 70%),
-    linear-gradient(180deg, #fff 0%, #fbfbfc 100%);
+  background: #fff;
   border-bottom: 1px solid var(--ds-line);
 }
-.hero-watermark {
-  pointer-events: none; user-select: none;
+
+/*
+ *  Crossfading slideshow. Four slides, 24-second loop:
+ *    each slide fades in over ~1s, holds for ~5s, fades out over ~1s.
+ *    Animation delays stagger them by 6s so transitions overlap cleanly.
+ *  All slides sit at z-index 0 (background layer).
+ */
+.hero-slides {
   position: absolute;
-  right: -120px; bottom: -120px;
-  width: 560px; height: 560px;
-  opacity: 0.05;
-  object-fit: contain;
+  inset: 0;
+  z-index: 0;
 }
+.hero-slide {
+  position: absolute;
+  inset: 0;
+  background-position: right center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0;
+  animation: heroFade 24s infinite ease-in-out;
+  will-change: opacity;
+}
+.hero-slide-1 { background-image: url("/hero-1.jpg"); animation-delay: 0s; }
+.hero-slide-2 { background-image: url("/hero-2.jpg"); animation-delay: 6s; }
+.hero-slide-3 { background-image: url("/hero-3.jpg"); animation-delay: 12s; }
+.hero-slide-4 { background-image: url("/hero-4.jpg"); animation-delay: 18s; }
+
+@keyframes heroFade {
+  0%, 100% { opacity: 0; }
+  4%       { opacity: 1; }
+  25%      { opacity: 1; }
+  29%      { opacity: 0; }
+}
+
+/* White-fade overlay + warm radial corner. Sits above the slideshow but
+ * below the content. Keeps the H1/lede legible against any slide. */
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(255,255,255,0.97) 0%,
+      rgba(255,255,255,0.92) 38%,
+      rgba(255,255,255,0.70) 68%,
+      rgba(255,255,255,0.50) 100%
+    ),
+    radial-gradient(60% 50% at 90% -10%, rgba(10,11,13,0.06), transparent 70%);
+}
+
 .hero-inner {
   max-width: var(--maxw);
   margin: 0 auto;
   padding: 96px 28px 120px;
-  position: relative; z-index: 1;
+  position: relative; z-index: 2;
+}
+
+/* Respect reduced-motion users: freeze on the first slide. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-slide { animation: none; }
+  .hero-slide-1 { opacity: 1; }
 }
 .eyebrow {
   display: inline-flex; align-items: center; gap: 10px;
@@ -372,14 +421,6 @@ section.value, section.how, section.letters, section.trust {
   background: var(--ds-ink);
   color: #fff;
   text-align: center;
-}
-.final-mark {
-  pointer-events: none; user-select: none;
-  position: absolute;
-  right: -160px; top: -100px;
-  width: 540px; height: 540px;
-  opacity: 0.08;
-  filter: invert(1);
 }
 .final-cta-inner {
   max-width: var(--maxw-narrow);

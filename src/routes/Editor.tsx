@@ -49,6 +49,7 @@ import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
+import { toast } from "sonner";
 
 
 export function Editor() {
@@ -430,12 +431,51 @@ export function Editor() {
               {(() => {
                 const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
                 if (pendingCount === 0) return null;
+
+                const onRejectAll = () => {
+                  const snap = draft.sections
+                    .filter((s) => s.pendingChange)
+                    .map((s) => ({ sectionId: s.id, pending: s.pendingChange! }));
+                  useDraftStore.getState().rejectAllPending(draft.id);
+                  toast(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} rejected`, {
+                    action: {
+                      label: "Undo",
+                      onClick: () => {
+                        const store = useDraftStore.getState();
+                        snap.forEach(({ sectionId, pending }) =>
+                          store.proposeSectionChange(draft.id, sectionId, pending)
+                        );
+                      },
+                    },
+                  });
+                };
+
+                const onAcceptAll = () => {
+                  // Snapshot current html so undo can restore.
+                  const snap = draft.sections
+                    .filter((s) => s.pendingChange)
+                    .map((s) => ({ sectionId: s.id, html: s.html, pending: s.pendingChange! }));
+                  useDraftStore.getState().acceptAllPending(draft.id);
+                  toast.success(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} accepted`, {
+                    action: {
+                      label: "Undo",
+                      onClick: () => {
+                        const store = useDraftStore.getState();
+                        snap.forEach(({ sectionId, html, pending }) => {
+                          store.updateSection(draft.id, sectionId, html);
+                          store.proposeSectionChange(draft.id, sectionId, pending);
+                        });
+                      },
+                    },
+                  });
+                };
+
                 return (
                   <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
                     <span>{pendingCount} pending</span>
                     <button
                       type="button"
-                      onClick={() => useDraftStore.getState().rejectAllPending(draft.id)}
+                      onClick={onRejectAll}
                       className="hover:underline"
                       title="Reject every pending AI proposal"
                     >
@@ -444,7 +484,7 @@ export function Editor() {
                     <span className="text-[var(--ds-amber-fg)]/50">·</span>
                     <button
                       type="button"
-                      onClick={() => useDraftStore.getState().acceptAllPending(draft.id)}
+                      onClick={onAcceptAll}
                       className="hover:underline font-semibold"
                       title="Accept every pending AI proposal"
                     >

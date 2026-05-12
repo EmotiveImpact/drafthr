@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DraftHR — Words that carry weight.</title>
   <meta name="description" content="Wizard-guided HR letters with UK and US legal awareness. Grievance, resignation, settlement, flexible working, and more. Defensible by default." />
-  <link rel="icon" type="image/png" href="/d-mark.png" />
+  <link rel="icon" type="image/png" href="/logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -19,7 +19,7 @@
   <!-- ─────────── Nav ─────────── -->
   <header class="nav">
     <a class="brand" href="/">
-      <img src="/d-mark.png" alt="" class="brand-chip" />
+      <img src="/logo.png" alt="" class="brand-chip" />
       <span class="brand-word">Draft<span class="hr">HR</span></span>
     </a>
     <nav class="nav-links">
@@ -39,7 +39,15 @@
 
   <!-- ─────────── Hero ─────────── -->
   <section class="hero">
-    <img src="/d-mark.png" alt="" aria-hidden class="hero-watermark" />
+    <!-- Crossfading slideshow behind the hero content. CSS-only — each slide
+     * animates a 24s opacity cycle with a 6s offset, so they hand off
+     * gracefully. Order is deterministic; no JS needed. -->
+    <div class="hero-slides" aria-hidden="true">
+      <div class="hero-slide hero-slide-1"></div>
+      <div class="hero-slide hero-slide-2"></div>
+      <div class="hero-slide hero-slide-3"></div>
+      <div class="hero-slide hero-slide-4"></div>
+    </div>
     <div class="hero-inner">
       <div class="eyebrow"><span class="rule"></span>HR LETTERS · UK & US</div>
       <h1 class="hero-h1">
@@ -222,7 +230,6 @@
   <!-- ─────────── Final CTA ─────────── -->
   <section class="final-cta" id="pricing">
     <div class="final-cta-inner">
-      <img src="/d-mark.png" alt="" aria-hidden class="final-mark" />
       <h2>
         Put it in writing.<br />
         <em>Properly.</em>
@@ -249,7 +256,7 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <a class="brand" href="/">
-          <img src="/d-mark.png" alt="" class="brand-chip sm" />
+          <img src="/logo.png" alt="" class="brand-chip sm" />
           <span class="brand-word sm">Draft<span class="hr">HR</span></span>
         </a>
         <p class="footer-tag">Words that carry weight.</p>
