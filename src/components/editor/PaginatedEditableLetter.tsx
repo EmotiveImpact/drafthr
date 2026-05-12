@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -35,35 +42,46 @@ import { cn } from "@/lib/utils";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
 
 /**
- * Editable letter preview — one A4 page card styled to match the
- * read-only PaginatedLetter output (serif, 11pt, 1.1in × 1in margins,
- * paper shadow, faint page-break gridline every 11.69in).
+ * Editable letter — pixel-perfect match to the read-only PaginatedLetter
+ * visual (paged.js output), but the content is fully editable via TipTap.
  *
- * Implementation: one TipTap editor per draft.section, visually fused
- * into a single continuous card. No section dividers, no chrome
- * between sections — it reads as ONE document. Each editor saves its
- * own HTML back to the store via the existing updateSection action
- * (throttled 500ms after the last keystroke), which means rich text
- * edits round-trip reliably and survive toggling the mode.
+ * Architecture:
+ *   - ChromeStack: a column of decorative A4 page cards (white bg, slate
+ *     border, drop shadow, 24px gaps, footer with "Page n of N"). These
+ *     are *visual only* — they don't contain editable content. Their
+ *     count is computed from the editor's content height.
+ *   - ContentLayer: the actual TipTap editors, one per draft.section,
+ *     fused into a continuous flow. Positioned over the chrome stack
+ *     with margins matching paged.js's @page rule (1in top, 1.1in sides,
+ *     1.2in bottom).
  *
- * Visual fidelity rules (must mirror PaginatedLetter):
- *   - A4 page geometry: 8.27in wide, 11.69in min-height
- *   - Margins:          1in top/bottom, 1.1in left/right
- *   - Typography:       Iowan Old Style / Georgia, 11pt, 1.55 line height
- *   - Page card:        white bg, 1px slate-200 border, soft drop shadow
- *   - Page-break hint:  thin slate-200/40 horizontal line every 11.69in
- *                       of vertical content
- *   - Letterhead:       image at top if employer.letterheadDataUrl set
- *   - Signature:        image at top of the signature section
+ * Pixel-perfect details (matching PaginatedLetter):
+ *   - A4 page card: 8.27in × 11.69in, slate-200 border, 4px radius
+ *   - Drop shadow: 0 2px 8px / 0 6px 24px rgba(black, 0.04 / 0.06)
+ *   - Inter-page gap: 24px
+ *   - Margins: 1in top, 1.1in left/right, 1.2in bottom
+ *   - Page footer: "Page n of N" in Geist 9pt slate-400, centred
+ *   - Typography: Iowan Old Style / Georgia 11pt 1.55 line-height
+ *
+ * Save: each section's editor → 500ms debounced → updateSection(...).
  */
 
 const SAVE_DELAY_MS = 500;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
+// A4 dimensions matching paged.js's @page rule.
+const PAGE_W_IN = 8.27;
+const PAGE_H_IN = 11.69;
+const PAGE_GAP_PX = 24;
+// Margins in inches — must match wrapInPrintHtml @page values exactly.
+const MARGIN_TOP_IN = 1.0;
+const MARGIN_SIDE_IN = 1.1;
+const MARGIN_BOTTOM_IN = 1.2;
+// Content area per page = page height − top − bottom margins.
+const CONTENT_PER_PAGE_IN = PAGE_H_IN - MARGIN_TOP_IN - MARGIN_BOTTOM_IN; // 9.49in
+
 const EDITOR_EXTENSIONS = [
-  StarterKit.configure({
-    heading: { levels: [2, 3] },
-  }),
+  StarterKit.configure({ heading: { levels: [2, 3] } }),
   Underline,
   Link.configure({ openOnClick: false, autolink: true }),
   Placeholder.configure({
@@ -102,6 +120,38 @@ export function PaginatedEditableLetter({
   const [registeredVersion, setRegisteredVersion] = useState(0);
   const [dirtySections, setDirtySections] = useState<Set<string>>(() => new Set());
 
+  // Page count is computed from the content layer's measured height.
+  // Recomputed on every editor update via the dirty handler.
+  const contentLayerRef = useRef<HTMLDivElement>(null);
+  const [pageCount, setPageCount] = useState(1);
+
+  const recomputePageCount = useCallback(() => {
+    const layer = contentLayerRef.current;
+    if (!layer) return;
+    // Convert px → in using 96px/in (the standard CSS conversion). The
+    // editor padding equals top + bottom margins, so content height is
+    // total layer height minus those.
+    const layerPx = layer.scrollHeight;
+    const contentPx = Math.max(0, layerPx - (MARGIN_TOP_IN + MARGIN_BOTTOM_IN) * 96);
+    const contentIn = contentPx / 96;
+    const pages = Math.max(1, Math.ceil(contentIn / CONTENT_PER_PAGE_IN));
+    setPageCount((prev) => (prev === pages ? prev : pages));
+  }, []);
+
+  // Re-measure on mount and whenever any section's editor reports
+  // dirty state — covers typing, paste, image insert, etc.
+  useLayoutEffect(() => {
+    recomputePageCount();
+  }, [recomputePageCount, registeredVersion, dirtySections]);
+
+  // Also re-measure on window resize (rare, but A4 width is fixed so
+  // wrapping changes can shift the height).
+  useEffect(() => {
+    const onResize = () => recomputePageCount();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [recomputePageCount]);
+
   const activeEditor = useMemo(() => {
     if (activeSectionId) {
       const editor = editorsRef.current.get(activeSectionId);
@@ -116,14 +166,19 @@ export function PaginatedEditableLetter({
     setRegisteredVersion((v) => v + 1);
   }, []);
 
-  const handleDirtyChange = useCallback((sectionId: string, dirty: boolean) => {
-    setDirtySections((curr) => {
-      const next = new Set(curr);
-      if (dirty) next.add(sectionId);
-      else next.delete(sectionId);
-      return next;
-    });
-  }, []);
+  const handleDirtyChange = useCallback(
+    (sectionId: string, dirty: boolean) => {
+      setDirtySections((curr) => {
+        const next = new Set(curr);
+        if (dirty) next.add(sectionId);
+        else next.delete(sectionId);
+        return next;
+      });
+      // Re-measure on every keystroke so the chrome stack grows with content.
+      requestAnimationFrame(recomputePageCount);
+    },
+    [recomputePageCount],
+  );
 
   const flushAllSections = useCallback(() => {
     draft.sections.forEach((section) => {
@@ -140,10 +195,12 @@ export function PaginatedEditableLetter({
     onDone();
   }, [flushAllSections, onDone]);
 
-  // Scoped print-style CSS — gives the editor surface the same serif
-  // 11pt look, paragraph spacing, and page-break hint that the read-only
-  // PaginatedLetter uses, without touching global styles.
   const styleScope = `paginated-editable-${draft.id.slice(0, 8)}`;
+
+  // Each chrome card sits at top: (i * (pageHeight + pageGap)) from the
+  // top of the chrome layer. Using `top` rather than flex so the cards
+  // align to predictable Y offsets the content can reason about.
+  const pages = Array.from({ length: pageCount }, (_, i) => i);
 
   return (
     <div className="paginated-editable-shell">
@@ -151,40 +208,55 @@ export function PaginatedEditableLetter({
         editor={activeEditor}
         draft={draft}
         dirtyCount={dirtySections.size}
+        pageCount={pageCount}
         onDone={handleDone}
       />
 
       <style>{`
-        .${styleScope} .pe-page {
+        .${styleScope} .pe-stage {
+          position: relative;
+          width: ${PAGE_W_IN}in;
+          max-width: 100%;
+          margin: 0 auto;
+          /* Stage tall enough for every chrome card + the gaps between
+           * them. Content is positioned on top via the content layer. */
+          min-height: calc(${PAGE_H_IN}in * var(--pe-pages) + ${PAGE_GAP_PX}px * (var(--pe-pages) - 1));
+        }
+        .${styleScope} .pe-chrome-stack {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+        }
+        .${styleScope} .pe-page-card {
+          position: absolute;
+          left: 0;
+          width: 100%;
+          height: ${PAGE_H_IN}in;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 4px;
+          box-shadow:
+            0 2px 8px rgba(0, 0, 0, 0.04),
+            0 6px 24px rgba(0, 0, 0, 0.06);
+        }
+        .${styleScope} .pe-page-footer {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0.4in;
+          text-align: center;
+          font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-size: 9pt;
+          color: #94a3b8;
+          pointer-events: none;
+        }
+        .${styleScope} .pe-content {
+          position: relative;
+          padding: ${MARGIN_TOP_IN}in ${MARGIN_SIDE_IN}in ${MARGIN_BOTTOM_IN}in ${MARGIN_SIDE_IN}in;
           font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
           font-size: 11pt;
           line-height: 1.55;
           color: #0f172a;
-          background: #ffffff;
-          width: min(8.27in, 100%);
-          margin: 0 auto;
-          min-height: 11.69in;
-          border: 1px solid #e2e8f0;
-          border-radius: 4px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 6px 24px rgba(0,0,0,0.06);
-          /* Page-break hint — faint horizontal rule every 11.69in of
-           * vertical content. Same effect as paged.js's per-page gap
-           * but achieved with a repeating background. */
-          background-image: repeating-linear-gradient(
-            to bottom,
-            transparent 0,
-            transparent calc(11.69in - 1px),
-            rgba(148, 163, 184, 0.34) calc(11.69in - 1px),
-            rgba(148, 163, 184, 0.34) 11.69in
-          );
-          background-size: 100% 11.69in;
-        }
-        .${styleScope} .pe-inner {
-          padding: 1in 1.1in 1.2in 1.1in;
-        }
-        .${styleScope} .pe-section + .pe-section {
-          /* No visible divider — sections are visually fused. */
-          margin-top: 8pt;
         }
         .${styleScope} .pe-letterhead {
           text-align: center;
@@ -217,16 +289,8 @@ export function PaginatedEditableLetter({
         .${styleScope} .ProseMirror h3 { font-size: 12pt; font-weight: 600; }
         .${styleScope} .ProseMirror strong { font-weight: 600; }
         .${styleScope} .ProseMirror em { color: #475569; font-style: italic; }
-        .${styleScope} .ProseMirror ul {
-          list-style: disc;
-          padding-left: 1.5em;
-          margin: 6pt 0;
-        }
-        .${styleScope} .ProseMirror ol {
-          list-style: decimal;
-          padding-left: 1.5em;
-          margin: 6pt 0;
-        }
+        .${styleScope} .ProseMirror ul { list-style: disc; padding-left: 1.5em; margin: 6pt 0; }
+        .${styleScope} .ProseMirror ol { list-style: decimal; padding-left: 1.5em; margin: 6pt 0; }
         .${styleScope} .ProseMirror li { margin: 2pt 0; }
         .${styleScope} .ProseMirror blockquote {
           margin: 8pt 0;
@@ -267,8 +331,30 @@ export function PaginatedEditableLetter({
       `}</style>
 
       <div className={cn("pe-bg bg-slate-100 px-4 py-5 min-h-full", styleScope)}>
-        <div className="pe-page">
-          <div className="pe-inner">
+        <div
+          className="pe-stage"
+          style={{ ["--pe-pages" as string]: String(pageCount) }}
+        >
+          {/* Decorative chrome layer — N page cards stacked with 24px gaps,
+           * each with its own "Page n of N" footer. Pointer-events:none so
+           * the content layer's editor remains clickable. */}
+          <div className="pe-chrome-stack" aria-hidden>
+            {pages.map((i) => (
+              <div
+                key={i}
+                className="pe-page-card"
+                style={{ top: `calc(${i} * (${PAGE_H_IN}in + ${PAGE_GAP_PX}px))` }}
+              >
+                <div className="pe-page-footer">Page {i + 1} of {pageCount}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Content layer — the editable letter sits here, with margins
+           * matching @page so the text aligns inside the first page card.
+           * As the content grows past one page worth, the chrome layer
+           * adds another card behind it, then another, etc. */}
+          <div className="pe-content" ref={contentLayerRef}>
             {draft.employer.letterheadDataUrl ? (
               <div className="pe-letterhead">
                 <img src={draft.employer.letterheadDataUrl} alt="Letterhead" />
@@ -280,7 +366,6 @@ export function PaginatedEditableLetter({
                 key={section.id}
                 draftId={draft.id}
                 section={section}
-                isActive={section.id === activeSectionId}
                 signatureDataUrl={draft.employer.signatureDataUrl}
                 onActivate={setActiveSectionId}
                 onDirtyChange={handleDirtyChange}
@@ -301,7 +386,6 @@ export function PaginatedEditableLetter({
 type EditableSectionProps = {
   draftId: string;
   section: Section;
-  isActive: boolean;
   signatureDataUrl?: string;
   onActivate: (sectionId: string) => void;
   onDirtyChange: (sectionId: string, dirty: boolean) => void;
@@ -339,9 +423,7 @@ function EditableSection({
       extensions: EDITOR_EXTENSIONS,
       content: section.html || "",
       editorProps: {
-        attributes: {
-          class: "outline-none",
-        },
+        attributes: { class: "outline-none" },
       },
       onFocus: () => onActivate(section.id),
       onUpdate: ({ editor }) => {
@@ -363,8 +445,6 @@ function EditableSection({
     return () => onRegister(section.id, null);
   }, [editor, onRegister, section.id]);
 
-  // Sync external content changes back into the editor (only when we
-  // don't have local pending edits — otherwise the user's typing wins).
   useEffect(() => {
     if (!editor) return;
     const nextHtml = section.html || "";
@@ -378,7 +458,6 @@ function EditableSection({
     }
   }, [editor, onDirtyChange, section.html, section.id]);
 
-  // On unmount, flush any pending save so we never drop characters.
   useEffect(() => {
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current);
@@ -457,11 +536,13 @@ function PagedEditToolbar({
   draft,
   editor,
   dirtyCount,
+  pageCount,
   onDone,
 }: {
   draft: Draft;
   editor: Editor | null;
   dirtyCount: number;
+  pageCount: number;
   onDone: () => void;
 }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -472,7 +553,6 @@ function PagedEditToolbar({
     <div
       className="sticky top-0 z-30 mx-auto mb-3 flex w-[min(8.27in,100%)] items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 shadow-sm"
       onMouseDown={(e) => {
-        // Keep focus inside the active editor when clicking toolbar chrome.
         const target = e.target as HTMLElement;
         if (target.closest("button, input")) return;
         e.preventDefault();
@@ -621,8 +701,8 @@ function PagedEditToolbar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <span className="text-[10px] text-[var(--ds-muted)]" aria-live="polite">
-          {dirtyCount > 0 ? "Saving…" : "Saved"}
+        <span className="text-[10px] text-[var(--ds-muted)] tabular-nums" aria-live="polite">
+          {pageCount} {pageCount === 1 ? "page" : "pages"} · {dirtyCount > 0 ? "Saving…" : "Saved"}
         </span>
         <button
           type="button"
