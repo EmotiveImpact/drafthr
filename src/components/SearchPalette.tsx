@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/command";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
+import { letterCatalogByMode } from "@/lib/letters/catalog";
+import { briefTitleFor } from "@/lib/letters/display";
 import {
   History,
   PlusCircle,
@@ -51,10 +52,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
     return filtered
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((d) => {
-        const meta = (() => {
-          try { return getLetterMeta(d.letterType); } catch { return null; }
-        })();
-        const title = meta?.shortTitle ?? d.letterType.replace(/_/g, " ");
+        const title = briefTitleFor(d);
         const recipient =
           d.mode === "employer"
             ? d.employee.legalName || ""
@@ -85,10 +83,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
     }> = [];
     for (const d of Object.values(drafts)) {
       if (role && d.mode !== role) continue;
-      const meta = (() => {
-        try { return getLetterMeta(d.letterType); } catch { return null; }
-      })();
-      const draftTitle = meta?.shortTitle ?? d.letterType.replace(/_/g, " ");
+      const draftTitle = briefTitleFor(d);
       for (const s of d.sections) {
         if (!s.html) continue;
         const plain = htmlToPlain(s.html);
@@ -126,10 +121,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
     }> = [];
     for (const d of Object.values(drafts)) {
       if (role && d.mode !== role) continue;
-      const meta = (() => {
-        try { return getLetterMeta(d.letterType); } catch { return null; }
-      })();
-      const draftTitle = meta?.shortTitle ?? d.letterType.replace(/_/g, " ");
+      const draftTitle = briefTitleFor(d);
       for (const c of d.comments ?? []) {
         if (!c.body.toLowerCase().includes(q)) continue;
         out.push({

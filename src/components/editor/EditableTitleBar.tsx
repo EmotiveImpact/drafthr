@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle } from "@/lib/letters/display";
 
 /**
  * Editable letter title that sits at the TOP of the canvas content
@@ -20,9 +20,12 @@ import { getLetterMeta } from "@/lib/letters/catalog";
  */
 export function EditableTitleBar({ draft }: { draft: Draft }) {
   const setTitle = useDraftStore((s) => s.setDraftTitle);
-  const meta = getLetterMeta(draft.letterType);
-  const fallback = meta.title;
-  const displayTitle = draft.title?.trim() || fallback;
+  // Auto-composed default = "Letter type · Recipient name", reused
+  // verywhere via displayTitleFor() so the rename input shows the
+  // exact same string the user sees on Home / sidebar / matters.
+  const autoTitle = displayTitleFor({ ...draft, title: undefined });
+  const displayTitle = displayTitleFor(draft);
+  const isCustom = hasCustomTitle(draft);
 
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(displayTitle);
@@ -46,7 +49,10 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
 
   const commit = () => {
     const next = value.trim();
-    if (next === fallback) {
+    // If the user types exactly the auto-composed default, treat that
+    // as "no override" so the title stays auto-tracking (recipient
+    // changes will keep flowing through).
+    if (next === autoTitle || !next) {
       setTitle(draft.id, "");
     } else if (next !== (draft.title ?? "")) {
       setTitle(draft.id, next);
@@ -59,10 +65,13 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
     setEditing(false);
   };
 
-  const recipientLabel =
-    draft.mode === "employer"
-      ? draft.employee.legalName?.trim()
-      : draft.employer.legalName?.trim();
+  const recipientLabel = recipientNameFor(draft);
+  // When the user sets a custom title, show the auto-composed identity
+  // as the submeta line so they can still see "what kind of letter,
+  // for whom" at a glance even after renaming.
+  const subline = isCustom
+    ? autoTitle
+    : [recipientLabel, draft.context.jurisdiction].filter(Boolean).join(" · ");
 
   return (
     <div className="pb-1">
@@ -82,7 +91,7 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
             }
           }}
           aria-label="Letter title"
-          placeholder={fallback}
+          placeholder={autoTitle}
           className="w-full text-[28px] sm:text-[32px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] bg-transparent border-0 focus:outline-none focus:ring-0 px-0 py-1 leading-tight placeholder:text-[var(--ds-muted)]"
         />
       ) : (
@@ -90,24 +99,24 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
           type="button"
           onClick={() => setEditing(true)}
           className="w-full text-left text-[28px] sm:text-[32px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] hover:text-[var(--ds-body)] truncate transition py-1 leading-tight group"
-          title="Click to rename"
+          title={isCustom ? `Click to rename · ${letterTypeLabelFor(draft)}` : "Click to rename"}
           aria-label={`Letter title: ${displayTitle}. Click to rename.`}
         >
           <span>{displayTitle}</span>
-          {!draft.title && (
-            <span className="ml-2 align-middle text-[10px] font-normal text-[var(--ds-muted)] uppercase tracking-[0.08em] opacity-0 group-hover:opacity-100 transition">
-              auto · click to rename
-            </span>
-          )}
+          <span className="ml-2 align-middle text-[10px] font-normal text-[var(--ds-muted)] uppercase tracking-[0.08em] opacity-0 group-hover:opacity-100 transition">
+            click to rename
+          </span>
         </button>
       )}
 
-      {/* Recipient + jurisdiction submeta — sits on the second line. */}
-      {(recipientLabel || draft.context.jurisdiction) && (
+      {/* Submeta line:
+       *   - When the user has a custom title: show the auto-composed
+       *     identity so the user still sees "what kind / for whom".
+       *   - Otherwise: just the recipient + jurisdiction (the auto-title
+       *     already encodes those above). */}
+      {subline && (
         <p className="m-0 text-[12px] text-[var(--ds-muted)] truncate">
-          {recipientLabel}
-          {recipientLabel && draft.context.jurisdiction && " · "}
-          {draft.context.jurisdiction}
+          {subline}
         </p>
       )}
     </div>

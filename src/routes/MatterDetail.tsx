@@ -6,6 +6,7 @@ import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
 import { draftsInMatter, MATTER_COLOR_CLASSES, matterInitial } from "@/lib/matters";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { briefTitleFor } from "@/lib/letters/display";
 import type { Draft, LetterTypeId } from "@/lib/letters/types";
 import { PageHeader } from "@/components/ds";
 import { Button } from "@/components/ui/button";
@@ -345,7 +346,7 @@ function LetterRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-[var(--ds-ink)] text-[13px] truncate">
-            {meta.title}
+            {briefTitleFor(draft)}
           </span>
           {hasUnresolvedComments && (
             <span className="text-[10px] text-[var(--ds-amber-fg)]">
@@ -466,7 +467,7 @@ function MatterTimeline({ drafts }: { drafts: Draft[] }) {
       draftName: string;
     }> = [];
     for (const d of drafts) {
-      const draftName = getLetterMeta(d.letterType).title;
+      const draftName = briefTitleFor(d);
       for (const ev of d.timeline ?? []) {
         all.push({
           ts: ev.createdAt,

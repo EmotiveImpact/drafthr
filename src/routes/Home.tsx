@@ -35,6 +35,7 @@ import type { LetterTypeId, Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
+import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { PageHeader, DataTable, StatusDot, type StatusTone } from "@/components/ds";
 import {
@@ -277,14 +278,11 @@ export function Home({ mode }: { mode: Mode }) {
                     {
                       key: "letter",
                       header: "Letter",
-                      cell: (d) => {
-                        const meta = safeMeta(d.letterType);
-                        return (
-                          <span className="font-medium text-[var(--ds-ink)]">
-                            {meta?.shortTitle ?? d.letterType}
-                          </span>
-                        );
-                      },
+                      cell: (d) => (
+                        <span className="font-medium text-[var(--ds-ink)]">
+                          {briefTitleFor(d)}
+                        </span>
+                      ),
                     },
                     {
                       key: "to",

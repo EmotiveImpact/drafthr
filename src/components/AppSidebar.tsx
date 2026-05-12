@@ -53,7 +53,7 @@ import {
   FileText,
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
 import type { Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -441,18 +441,18 @@ function NavMatters({ mode }: { mode: Mode }) {
                     <div className="ml-3 pl-2 border-l border-sidebar-border group-data-[collapsible=icon]:hidden">
                       {matterDrafts.map((d) => {
                         const href = `/editor/${d.id}`;
-                        const meta = getLetterMeta(d.letterType);
+                        const label = briefTitleFor(d);
                         return (
                           <SidebarMenuItem key={d.id}>
                             <SidebarMenuButton
                               asChild
                               size="sm"
                               isActive={loc.pathname === href}
-                              tooltip={meta.title}
+                              tooltip={displayTitleFor(d)}
                             >
                               <Link to={href}>
                                 <FileText className="size-3 text-muted-foreground" />
-                                <span className="truncate text-[12px]">{meta.shortTitle}</span>
+                                <span className="truncate text-[12px]">{label}</span>
                               </Link>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
