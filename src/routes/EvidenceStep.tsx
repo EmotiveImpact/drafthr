@@ -21,7 +21,6 @@ import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { linkedEvidenceForSection, sectionLabels } from "@/lib/evidence";
 import { ExpectedEvidenceChecklist } from "@/components/editor/ExpectedEvidenceChecklist";
-import { WizardChrome } from "@/components/editor/WizardChrome";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { cn, uid } from "@/lib/utils";
 
@@ -223,13 +222,6 @@ export function EvidenceStep() {
           </Button>
         </div>
       </header>
-
-      <WizardChrome
-        draftId={draft.id}
-        mode={draft.mode}
-        current="evidence"
-        context={`${evidence.length} item${evidence.length === 1 ? "" : "s"} collected`}
-      />
 
       {notice && (
         <button

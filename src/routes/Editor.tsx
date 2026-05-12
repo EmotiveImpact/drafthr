@@ -484,18 +484,6 @@ export function Editor() {
         </div>
       </header>
 
-      {/* Wizard chrome — shared step indicator across Edit / Evidence /
-       * Review. Hidden in focus mode (along with all other chrome). */}
-      {!focusMode && (
-        <WizardChrome
-          draftId={draft.id}
-          mode={draft.mode}
-          current="edit"
-          context={`${draft.sections.filter((s) => s.status === "ready").length} of ${draft.sections.length} ready`}
-          disabled={globallyStreaming}
-        />
-      )}
-
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers.
        * Apple-minimal: left rail has enough room for the outline labels while
        * keeping the writing canvas dominant. In focus mode both rails
@@ -518,6 +506,12 @@ export function Editor() {
               : "hidden lg:flex")
           }
         >
+          <WizardChrome
+            draftId={draft.id}
+            mode={draft.mode}
+            current="edit"
+            disabled={globallyStreaming}
+          />
           <SectionsList
             draft={draft}
             activeSectionId={activeSectionId}
