@@ -14,4 +14,4 @@
  *
  * Change this string to retarget every fallback in lockstep.
  */
-export const DEFAULT_MODEL = "gemini-2.0-flash" as const;
+export const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;

@@ -4,8 +4,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 // Keep in sync with api/draft.ts. The API functions avoid importing from /src
 // because Vercel's serverless bundler has previously failed to trace that path.
-const DEFAULT_MODEL = "gemini-2.0-flash" as const;
-const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash" as const;
+const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
+const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
 

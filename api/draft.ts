@@ -16,8 +16,8 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 // MUST keep in sync with server/llm-model.ts (and api/agent.ts).
-const DEFAULT_MODEL = "gemini-2.0-flash" as const;
-const GEMINI_FALLBACK_MODEL = "gemini-2.0-flash" as const;
+const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
+const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
 
