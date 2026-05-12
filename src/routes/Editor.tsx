@@ -39,7 +39,6 @@ import {
   ArrowUp,
   ArrowRight,
   Pencil,
-  X,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -869,20 +868,20 @@ export function Editor() {
               : "hidden lg:block")
           }
         >
-          {/* Mobile-only grab handle + close — affordances for the bottom
-           * sheet. On lg:+ the rail is inline so we hide these. */}
+          {/* Mobile-only grab handle — single iOS-style pull bar centred
+           * at the very top of the sheet. No inline close X (clashes with
+           * the RightRail's tabs); dismiss via tap-scrim or by tapping
+           * the Ask-AI pill again. On lg:+ the rail is inline so this
+           * affordance is hidden. */}
           {showRail && (
-            <div className="lg:hidden flex items-center justify-between pt-2 pb-1 px-3 border-b border-[var(--ds-line-2)] shrink-0">
-              <span className="block h-1 w-10 rounded-full bg-[var(--ds-line)] mx-auto" />
-              <button
-                type="button"
-                onClick={() => setShowRail(false)}
-                className="absolute right-3 top-2 size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)]"
-                aria-label="Close panel"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowRail(false)}
+              className="lg:hidden block w-full pt-2.5 pb-1.5 shrink-0 group"
+              aria-label="Close panel"
+            >
+              <span className="block h-1 w-10 rounded-full bg-[var(--ds-line)] mx-auto group-hover:bg-[var(--ds-muted)] transition" />
+            </button>
           )}
           <div className="flex-1 min-h-0 overflow-hidden">
             <RightRail
