@@ -853,19 +853,26 @@ export function Editor() {
         </main>
 
         <aside
+          aria-hidden={!showRail || undefined}
           className={
             "min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
             (focusMode
               ? "hidden"
-              : showRail
-              ? // Mobile: bottom sheet (covers ~72vh, rounded top, soft shadow,
-                //   swipe handle + tap-scrim dismiss). lg:+ stays inline.
+              : // Mobile: always mounted as a fixed bottom sheet so we can
+                // animate the slide-in/out. translate-y-full when closed,
+                // translate-y-0 when open. lg:+ stays inline (no transform,
+                // no fixed positioning).
                 "fixed left-0 right-0 bottom-0 z-40 h-[72vh] bg-[var(--ds-surface)] " +
                 "rounded-t-2xl shadow-[0_-12px_32px_rgba(0,0,0,0.18)] " +
-                "lg:static lg:shadow-none lg:rounded-none lg:h-auto lg:w-auto " +
-                "lg:bottom-auto lg:left-auto lg:right-auto " +
-                "flex flex-col"
-              : "hidden lg:block")
+                "flex flex-col " +
+                "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] " +
+                "motion-reduce:transition-none " +
+                (showRail
+                  ? "translate-y-0 "
+                  : "translate-y-full pointer-events-none ") +
+                "lg:static lg:translate-y-0 lg:transition-none lg:pointer-events-auto " +
+                "lg:shadow-none lg:rounded-none lg:h-auto lg:w-auto " +
+                "lg:bottom-auto lg:left-auto lg:right-auto")
           }
         >
           {/* Mobile-only grab handle — single iOS-style pull bar centred
@@ -895,32 +902,46 @@ export function Editor() {
           </div>
         </aside>
 
-        {/* Mobile scrim — left sidebar still slides from the side; right
-         * rail is a bottom sheet now, but scrim still tap-dismisses both. */}
-        {(showSidebar || showRail) && (
-          <button
-            type="button"
-            className="lg:hidden fixed inset-0 z-30 bg-black/30"
-            aria-label="Close panel"
-            onClick={() => {
-              setShowSidebar(false);
-              setShowRail(false);
-            }}
-          />
-        )}
+        {/* Mobile scrim — always mounted, fades in/out with showSidebar
+         * or showRail. pointer-events-none when invisible so taps fall
+         * through to the canvas. */}
+        <button
+          type="button"
+          className={
+            "lg:hidden fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 motion-reduce:transition-none " +
+            (showSidebar || showRail
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none")
+          }
+          aria-label="Close panel"
+          aria-hidden={!(showSidebar || showRail) || undefined}
+          tabIndex={!(showSidebar || showRail) ? -1 : undefined}
+          onClick={() => {
+            setShowSidebar(false);
+            setShowRail(false);
+          }}
+        />
 
-        {/* Floating AI button — mobile-only, visible when the bottom sheet
-         * is closed and we're not in focus mode. Tap opens the sheet on
-         * the AI tab. Sits above the scrim z-index but below the sheet. */}
-        {!focusMode && !showRail && (
+        {/* Floating AI button — mobile-only. Fades + scales away when the
+         * sheet opens (so it doesn't peek through under the rounded sheet
+         * corner), fades back when the sheet closes. */}
+        {!focusMode && (
           <button
             type="button"
             onClick={() => {
               setRightTab("ai");
               setShowRail(true);
             }}
-            className="lg:hidden fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 active:scale-[0.98] transition"
+            className={
+              "lg:hidden fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 active:scale-[0.98] " +
+              "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none " +
+              (showRail
+                ? "opacity-0 scale-90 pointer-events-none"
+                : "opacity-100 scale-100")
+            }
             aria-label="Open AI agent"
+            aria-hidden={showRail || undefined}
+            tabIndex={showRail ? -1 : undefined}
           >
             <span className="grid place-items-center size-7 rounded-full bg-white/15">
               <Sparkles className="size-4" />
