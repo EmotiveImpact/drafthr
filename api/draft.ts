@@ -24,10 +24,11 @@ function resolveModelName(requested?: string): string {
 
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
+  // Use || (not ??) so empty-string env vars fall back to the hardcoded key.
   const apiKey =
-    process.env.ANTHROPIC_API_KEY ??
+    process.env.ANTHROPIC_API_KEY ||
     "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";
-  return createAnthropic({ apiKey })(modelName);
+  return createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(modelName);
 }
 
 export const config = {

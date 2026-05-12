@@ -27,8 +27,10 @@ export function resolveModelName(
 
 export function buildModel(requestedModel?: string) {
   const modelName = resolveModelName(requestedModel);
+  // Use || (not ??) so empty-string env vars fall back to the hardcoded
+  // key. Empty exports happen on some shells and Vercel projects.
   const apiKey =
-    process.env.ANTHROPIC_API_KEY ??
+    process.env.ANTHROPIC_API_KEY ||
     "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";
-  return createAnthropic({ apiKey })(modelName);
+  return createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(modelName);
 }
