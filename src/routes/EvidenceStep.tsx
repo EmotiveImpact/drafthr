@@ -20,8 +20,8 @@ import { Button } from "@/components/ui/button";
 import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { sectionLabels } from "@/lib/evidence";
-import { ExpectedEvidenceChecklist } from "@/components/editor/ExpectedEvidenceChecklist";
-import { WizardSidebar } from "@/components/editor/WizardSidebar";
+import { WizardChrome } from "@/components/editor/WizardChrome";
+import { EvidenceRequirementsList } from "@/components/editor/EvidenceRequirementsList";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { uid } from "@/lib/utils";
 
@@ -236,29 +236,45 @@ export function EvidenceStep() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
+        {/* Left rail: WizardChrome + Required-evidence checklist. The
+         * checklist replaces the sections list as the rail's primary
+         * navigator — it's an action list ("what do I still need to
+         * gather?"). Section context for new evidence is picked via
+         * the Selected-section dropdown in the canvas header. */}
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardSidebar
-            draft={draft}
+          <WizardChrome
+            draftId={draft.id}
+            mode={draft.mode}
             current="evidence"
-            activeSectionId={selectedSection?.id}
-            onSelectSection={(id) => selectSection(id)}
           />
+          <EvidenceRequirementsList draft={draft} />
         </aside>
 
         <main className="min-h-0 overflow-auto p-4 sm:p-6 space-y-4">
-          {/* Expected-evidence checklist — renders only if the template
-           * declared expectedEvidence. Soft prompt for what to gather. */}
-          <ExpectedEvidenceChecklist draft={draft} />
-
           <section className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-                  Selected section
-                </p>
-                <h2 className="m-0 mt-1 truncate text-[17px] font-semibold text-[var(--ds-ink)]">
-                  {selectedSection?.title ?? "No section selected"}
-                </h2>
+              <div className="min-w-0 flex-1">
+                <label
+                  htmlFor="evidence-section-picker"
+                  className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)] block"
+                >
+                  Section in focus
+                </label>
+                {/* Section picker — replaces the rail-side sections list.
+                 * Whichever section is selected is the default attachment
+                 * target for new evidence added from the right panel. */}
+                <select
+                  id="evidence-section-picker"
+                  value={selectedSection?.id ?? ""}
+                  onChange={(e) => selectSection(e.target.value)}
+                  className="mt-1 w-full max-w-md truncate rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-1.5 text-[15px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+                >
+                  {draft.sections.map((s, i) => (
+                    <option key={s.id} value={s.id}>
+                      {String(i + 1).padStart(2, "0")} · {s.title}
+                    </option>
+                  ))}
+                </select>
               </div>
               <Button variant="outline" size="sm" onClick={insertAttachmentList} disabled={evidence.length === 0}>
                 <ListPlus className="size-4" />
