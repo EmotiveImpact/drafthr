@@ -518,8 +518,10 @@ export function Editor() {
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             disabled={globallyStreaming}
-            rightsLabel={draft.mode === "employee" ? "Rights" : "Compliance"}
-            rights={
+            secondaryTabLabel={
+              draft.mode === "employee" ? "Rights" : "Compliance"
+            }
+            secondaryTab={
               draft.mode === "employee" ? (
                 <EmployeeRail draft={draft} />
               ) : (

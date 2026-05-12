@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,23 +8,24 @@ import { sidebarLabelFor } from "@/components/editor/SectionsList";
 /**
  * Shared inner contents for the left rail across all three wizard pages
  * (Edit / Evidence / Review). Renders WizardChrome at the top, then —
- * if a `rights` slot is provided — a Sections / Rights tab switcher,
- * then the active tab's content.
+ * if a `secondaryTab` slot is provided — a Sections / [Secondary] tab
+ * switcher, then the active tab's content.
  *
  * Renders flat (no <aside> wrapper) — each page mounts it inside its
  * own <aside> so per-page layout concerns (Editor's mobile drawer,
  * Evidence's hidden-below-lg, Review's desktop-only) stay local.
  *
  * Tab logic:
- *   - When `rights` is not passed (Evidence / Review): no tab bar,
- *     section list takes the full rail (current behaviour).
- *   - When `rights` IS passed (Edit): tab bar renders just below
- *     WizardChrome with two tabs. Defaults to Sections. Rights tab
- *     surfaces the EmployeeRail / CompliancePanel.
+ *   - When `secondaryTab` is not passed (Review): no tab bar, section
+ *     list takes the full rail.
+ *   - When `secondaryTab` IS passed (Edit, Evidence): tab bar renders
+ *     just below WizardChrome with Sections + the second tab. Defaults
+ *     to Sections.
  *
  * Visual rules (consistent across all three):
  *   • Surface: var(--ds-surface)
- *   • Sections header: label + X/Y ready count
+ *   • Sections header: label + X/Y ready count (or in the tab badge
+ *     when tabs are shown)
  *   • Each row: numbered chip · reduced title · status dot
  *   • Reduced labels via sidebarLabelFor — long template titles
  *     collapse to compact labels that fit the rail.
@@ -40,30 +41,21 @@ type Props = {
   /** Disable WizardChrome navigation (e.g. while AI is streaming). */
   disabled?: boolean;
   /**
-   * Optional Rights / Compliance content. When supplied, a tab bar
-   * appears below the wizard chrome with Sections / Rights tabs.
-   * Used on Edit.
+   * Optional secondary content rendered as the second tab in the left
+   * rail. When supplied, the rail shows a Sections / [Secondary] tab
+   * switcher just below the wizard chrome.
+   *
+   *   Edit:     <EmployeeRail> / <CompliancePanel>  (label "Rights" / "Compliance")
+   *   Evidence: <EvidenceRequirementsList>          (label "Required")
+   *   Review:   no secondary tab — the right rail owns the audit surface
+   *
+   * The mounted panel is expected to own its own scroll container.
    */
-  rights?: React.ReactNode;
-  /** Label for the rights tab. Defaults to "Rights". */
-  rightsLabel?: string;
-  /**
-   * Optional persistent content rendered BELOW the section list in a
-   * second always-visible pane (no tabs — the rail splits in two with
-   * each pane scrolling independently). Used on Evidence to pin the
-   * required-evidence checklist beneath the sections list. Don't pass
-   * both `rights` and `bottom` — they target different patterns.
-   */
-  bottom?: React.ReactNode;
-  /** Header label shown above the bottom pane. */
-  bottomLabel?: string;
-  /**
-   * Optional short tally shown on the right of the bottom-pane header
-   * (e.g. "5/8" for "5 of 8 required-evidence items met").
-   */
-  bottomBadge?: string;
-  /** Tooltip for the badge. */
-  bottomBadgeTitle?: string;
+  secondaryTab?: React.ReactNode;
+  /** Tab button label. */
+  secondaryTabLabel?: string;
+  /** Optional badge shown on the tab (e.g. "5/8" or "2 issues"). */
+  secondaryTabBadge?: string;
 };
 
 export function WizardSidebar({
@@ -72,20 +64,23 @@ export function WizardSidebar({
   activeSectionId,
   onSelectSection,
   disabled,
-  rights,
-  rightsLabel = "Rights",
-  bottom,
-  bottomLabel,
-  bottomBadge,
-  bottomBadgeTitle,
+  secondaryTab,
+  secondaryTabLabel = "More",
+  secondaryTabBadge,
 }: Props) {
   const total = draft.sections.length;
   const ready = draft.sections.filter((s) => s.status === "ready").length;
 
-  type Tab = "sections" | "rights";
+  type Tab = "sections" | "secondary";
   const [tab, setTab] = useState<Tab>("sections");
-  const showTabs = Boolean(rights);
+  const showTabs = Boolean(secondaryTab);
   const activeTab: Tab = showTabs ? tab : "sections";
+
+  // If the page swaps from "has secondary" to "no secondary", make sure
+  // we don't strand the user on a tab that no longer exists.
+  useEffect(() => {
+    if (!showTabs && tab !== "sections") setTab("sections");
+  }, [showTabs, tab]);
 
   return (
     <>
@@ -109,9 +104,10 @@ export function WizardSidebar({
             badge={`${ready}/${total}`}
           />
           <TabButton
-            active={activeTab === "rights"}
-            onClick={() => setTab("rights")}
-            label={rightsLabel}
+            active={activeTab === "secondary"}
+            onClick={() => setTab("secondary")}
+            label={secondaryTabLabel}
+            badge={secondaryTabBadge}
           />
         </div>
       )}
@@ -135,10 +131,7 @@ export function WizardSidebar({
             </div>
           )}
 
-          {/* When a `bottom` pane is supplied, cap the sections list at
-           * half the rail so the bottom pane is always partly visible.
-           * Each pane scrolls independently. */}
-          <ScrollArea className={bottom ? "min-h-0 basis-1/2 flex-1" : "flex-1 min-h-0"}>
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-3 space-y-0.5">
               {draft.sections.map((s, i) => {
                 const isActive = activeSectionId === s.id;
@@ -186,41 +179,12 @@ export function WizardSidebar({
               })}
             </div>
           </ScrollArea>
-
-          {/* Bottom pane — Required-evidence checklist on Evidence.
-           * Borders top so the boundary with the section list is
-           * unambiguous; own scroll context so a long checklist doesn't
-           * push the section list out of view. */}
-          {bottom && (
-            <div className="basis-1/2 flex-1 min-h-0 flex flex-col border-t border-[var(--ds-line)]">
-              {bottomLabel && (
-                <div className="border-b border-[var(--ds-line-2)] px-4 py-3 flex items-center justify-between gap-2">
-                  <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-                    {bottomLabel}
-                  </h2>
-                  {bottomBadge && (
-                    <span
-                      className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums shrink-0"
-                      title={bottomBadgeTitle}
-                    >
-                      {bottomBadge}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-                {bottom}
-              </div>
-            </div>
-          )}
         </>
       ) : (
-        // Rights tab — full rail height. The mounted panel
-        // (EmployeeRail / CompliancePanel) owns its own ScrollArea, so
-        // we just provide the flex slot here. Nesting overflow-auto
-        // around the inner ScrollArea caused content to "bleed" past
-        // the rail on long lint hits.
-        <div className="flex-1 min-h-0 flex flex-col">{rights}</div>
+        // Secondary tab — full rail height. The mounted panel
+        // (EmployeeRail / CompliancePanel / EvidenceRequirementsList)
+        // owns its own scroll container.
+        <div className="flex-1 min-h-0 flex flex-col">{secondaryTab}</div>
       )}
     </>
   );

@@ -236,36 +236,28 @@ export function EvidenceStep() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
-        {/* Left rail: Sections list (top) + Required-evidence checklist
-         * (bottom) — two-pane split, both always visible. Sections give
-         * "where am I" navigation; the checklist gives "what do I still
-         * need to gather" — different jobs, both useful, neither hidden
-         * behind a tab. */}
+        {/* Left rail: tabs — Sections | Required. Mirrors Edit's
+         * Sections | Rights pattern so the wizard rail has one
+         * mental model: "Sections" is always the first tab, the
+         * page-specific secondary tab is the second. */}
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
           <WizardSidebar
             draft={draft}
             current="evidence"
             activeSectionId={selectedSection?.id}
             onSelectSection={(id) => selectSection(id)}
-            bottomLabel="Required"
-            bottomBadge={(() => {
+            secondaryTabLabel="Required"
+            secondaryTabBadge={(() => {
               const status = buildExpectedEvidenceStatus(draft);
               if (status.length === 0) return undefined;
               const ok = status.filter((s) => s.ok).length;
               return `${ok}/${status.length}`;
             })()}
-            bottomBadgeTitle={(() => {
-              const status = buildExpectedEvidenceStatus(draft);
-              if (status.length === 0) return undefined;
-              const ok = status.filter((s) => s.ok).length;
-              const reqMissing = status.filter(
-                (s) => s.expectation.required && !s.ok
-              ).length;
-              return reqMissing > 0
-                ? `${ok} of ${status.length} added · ${reqMissing} required missing`
-                : `${ok} of ${status.length} expectations met`;
-            })()}
-            bottom={<EvidenceRequirementsList draft={draft} />}
+            secondaryTab={
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                <EvidenceRequirementsList draft={draft} />
+              </div>
+            }
           />
         </aside>
 
