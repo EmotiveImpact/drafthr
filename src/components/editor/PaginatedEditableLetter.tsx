@@ -321,18 +321,17 @@ export function PaginatedEditableLetter({
         onDone={flushAndDone}
       />
 
-      {/* Scoped CSS to override PaginationPlus defaults and match
-       * PaginatedLetter's read-only look exactly. */}
+      {/* Scoped CSS — only typography / colours; let PaginationPlus own
+       * its layout entirely so we don't fight its sizing math. */}
       <style>{`
-        .${styleScope} .pe-outer {
-          background: #f1f5f9;            /* slate-100, same as preview */
-          padding: 20px 16px 32px;
+        .${styleScope} {
+          /* Centre the page horizontally; canvas bg shows around it. */
+          display: flex;
+          justify-content: center;
+          padding: 20px 0 32px;
           min-height: 100%;
         }
         .${styleScope} .ProseMirror {
-          /* The extension applies its own border + padding via inline
-           * styles. We strip the border and force the typography here. */
-          border: 0 !important;
           background: #ffffff;
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
@@ -341,9 +340,9 @@ export function PaginatedEditableLetter({
           font-size: 11pt;
           line-height: 1.55;
           color: #0f172a;
-          margin: 0 auto;
           outline: none;
-          max-width: 100%;
+          /* Don't force a width — the extension sets it via its
+           * inline style based on pageWidth config. */
         }
         /* Hide the section anchor entirely — atom node with 0 height. */
         .${styleScope} .ProseMirror div[data-section-anchor] {
@@ -420,9 +419,7 @@ export function PaginatedEditableLetter({
       `}</style>
 
       <div className={styleScope}>
-        <div className="pe-outer">
-          <EditorContent editor={editor} />
-        </div>
+        <EditorContent editor={editor} />
       </div>
     </div>
   );
