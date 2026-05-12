@@ -42,11 +42,28 @@ type Props = {
   /**
    * Optional Rights / Compliance content. When supplied, a tab bar
    * appears below the wizard chrome with Sections / Rights tabs.
-   * On Edit only — Evidence / Review don't pass this.
+   * Used on Edit.
    */
   rights?: React.ReactNode;
   /** Label for the rights tab. Defaults to "Rights". */
   rightsLabel?: string;
+  /**
+   * Optional persistent content rendered BELOW the section list in a
+   * second always-visible pane (no tabs — the rail splits in two with
+   * each pane scrolling independently). Used on Evidence to pin the
+   * required-evidence checklist beneath the sections list. Don't pass
+   * both `rights` and `bottom` — they target different patterns.
+   */
+  bottom?: React.ReactNode;
+  /** Header label shown above the bottom pane. */
+  bottomLabel?: string;
+  /**
+   * Optional short tally shown on the right of the bottom-pane header
+   * (e.g. "5/8" for "5 of 8 required-evidence items met").
+   */
+  bottomBadge?: string;
+  /** Tooltip for the badge. */
+  bottomBadgeTitle?: string;
 };
 
 export function WizardSidebar({
@@ -57,6 +74,10 @@ export function WizardSidebar({
   disabled,
   rights,
   rightsLabel = "Rights",
+  bottom,
+  bottomLabel,
+  bottomBadge,
+  bottomBadgeTitle,
 }: Props) {
   const total = draft.sections.length;
   const ready = draft.sections.filter((s) => s.status === "ready").length;
@@ -114,7 +135,10 @@ export function WizardSidebar({
             </div>
           )}
 
-          <ScrollArea className="flex-1 min-h-0">
+          {/* When a `bottom` pane is supplied, cap the sections list at
+           * half the rail so the bottom pane is always partly visible.
+           * Each pane scrolls independently. */}
+          <ScrollArea className={bottom ? "min-h-0 basis-1/2 flex-1" : "flex-1 min-h-0"}>
             <div className="p-3 space-y-0.5">
               {draft.sections.map((s, i) => {
                 const isActive = activeSectionId === s.id;
@@ -162,6 +186,33 @@ export function WizardSidebar({
               })}
             </div>
           </ScrollArea>
+
+          {/* Bottom pane — Required-evidence checklist on Evidence.
+           * Borders top so the boundary with the section list is
+           * unambiguous; own scroll context so a long checklist doesn't
+           * push the section list out of view. */}
+          {bottom && (
+            <div className="basis-1/2 flex-1 min-h-0 flex flex-col border-t border-[var(--ds-line)]">
+              {bottomLabel && (
+                <div className="border-b border-[var(--ds-line-2)] px-4 py-3 flex items-center justify-between gap-2">
+                  <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
+                    {bottomLabel}
+                  </h2>
+                  {bottomBadge && (
+                    <span
+                      className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums shrink-0"
+                      title={bottomBadgeTitle}
+                    >
+                      {bottomBadge}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                {bottom}
+              </div>
+            </div>
+          )}
         </>
       ) : (
         // Rights tab — full rail height. The mounted panel

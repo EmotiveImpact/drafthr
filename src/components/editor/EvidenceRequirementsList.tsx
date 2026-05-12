@@ -4,61 +4,32 @@ import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * Required-evidence checklist rendered AS the Evidence step's left rail
- * (replacing the section list). Each row carries:
+ * Required-evidence checklist for the bottom pane of Evidence's left
+ * rail. Renders the inline list only — the parent rail provides the
+ * "REQUIRED EVIDENCE" header + count + scroll container.
+ *
+ * Each row carries:
  *   - State icon: done / required-missing / optional-missing
  *   - Label + optional description
  *   - "required" pill for unmet required items
- *
- * Clicking a row is a no-op for now — there's no per-requirement
- * action surface in the canvas yet (the canvas is still
- * section-oriented). Future iteration: map requirements to evidence
- * kinds so a click scopes the Add Evidence form's defaults.
- *
- * Renders flat (no <aside> / no internal scroll) — the parent rail
- * provides the surface + scroll container.
  */
 export function EvidenceRequirementsList({ draft }: { draft: Draft }) {
   const status = buildExpectedEvidenceStatus(draft);
 
   // No expectations declared by this template: show a neutral empty
-  // state so the rail isn't blank.
+  // state so the bottom pane isn't blank.
   if (status.length === 0) {
     return (
-      <div className="px-4 py-6 text-[11.5px] leading-relaxed text-[var(--ds-muted)]">
-        This letter type doesn't declare specific required-evidence
-        expectations. Add whatever the recipient should see — emails,
-        notes, screenshots, calendar invites — from the panel on the right.
+      <div className="px-4 py-3 text-[11.5px] leading-relaxed text-[var(--ds-muted)] break-words">
+        No specific evidence expectations declared for this template.
+        Add whatever the recipient should see.
       </div>
     );
   }
 
-  const ok = status.filter((s) => s.ok).length;
-  const total = status.length;
-  const requiredMissing = status.filter(
-    (s) => s.expectation.required && !s.ok
-  ).length;
-
   return (
     <>
-      <div className="border-b border-[var(--ds-line-2)] px-4 py-3 flex items-center justify-between">
-        <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-          Required evidence
-        </h2>
-        <span
-          className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums shrink-0"
-          title={
-            requiredMissing > 0
-              ? `${ok} of ${total} added · ${requiredMissing} required missing`
-              : `${ok} of ${total} expectations met`
-          }
-        >
-          {ok}/{total}
-        </span>
-      </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        <ul className="p-2 m-0 list-none space-y-0.5">
+      <ul className="p-2 m-0 list-none space-y-0.5">
           {status.map(({ expectation, ok: isOk, satisfiedBy }) => {
             const Icon = isOk
               ? CheckCircle2
@@ -112,8 +83,7 @@ export function EvidenceRequirementsList({ draft }: { draft: Draft }) {
               </li>
             );
           })}
-        </ul>
-      </div>
+      </ul>
     </>
   );
 }
