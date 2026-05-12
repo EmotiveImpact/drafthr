@@ -233,8 +233,12 @@ export function PaginatedEditableLetter({
           width: 100%;
           height: ${PAGE_H_IN}in;
           background: #ffffff;
-          border: 1px solid #e2e8f0;
           border-radius: 4px;
+          /* No border — the shadow alone defines the paper edge. The
+           * paged.js read-only render has a 1px slate-200 border but
+           * it reads as a visible rectangle around the white card,
+           * which the user finds distracting. Shadow-only is cleaner
+           * and matches the Google Docs / Notion paper aesthetic. */
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
             0 6px 24px rgba(0, 0, 0, 0.06);
