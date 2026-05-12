@@ -21,6 +21,7 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
  */
 export type ModelId =
+  | "moonshotai/kimi-k2.6"
   | "z-ai/glm4.7"
   | "meta/llama-3.3-70b-instruct"
   | "meta/llama-3.1-405b-instruct"
@@ -40,7 +41,8 @@ export const MODEL_OPTIONS: {
   provider: "nvidia" | "anthropic";
 }[] = [
   // NVIDIA NIM — default provider.
-  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B", hint: "Default. Fast, free-tier, strong writing.", provider: "nvidia" },
+  { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6", hint: "Default. Moonshot AI's flagship — strong professional writing, free tier.", provider: "nvidia" },
+  { id: "meta/llama-3.3-70b-instruct", label: "Llama 3.3 70B", hint: "Meta's latest open model. Fast, reliable.", provider: "nvidia" },
   { id: "z-ai/glm4.7", label: "GLM 4.7 (reasoning)", hint: "Reasoning model — slow, may exhaust tokens on thinking.", provider: "nvidia" },
   { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B", hint: "Meta's largest open model. Best open-source quality.", provider: "nvidia" },
   { id: "mistralai/mistral-large-2-instruct", label: "Mistral Large 2", hint: "Mistral's flagship via NVIDIA NIM.", provider: "nvidia" },
@@ -175,7 +177,7 @@ export const useProfileStore = create<Store>()(
         // defaults (the Claude default we shipped, then the qwen3-max
         // default we briefly shipped). Any other selection is treated as
         // user intent and left alone.
-        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash", "qwen3-max", "gemini-2.0-flash", "gemini-3.1-flash-lite", "z-ai/glm4.7"]);
+        const stale = new Set(["claude-sonnet-4-6", "qwen-flash", "qwen3-flash", "qwen3-max", "gemini-2.0-flash", "gemini-3.1-flash-lite", "z-ai/glm4.7", "meta/llama-3.3-70b-instruct"]);
         if (
           state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
           stale.has(state.profile.defaults.qwenModel)
