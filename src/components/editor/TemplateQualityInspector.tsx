@@ -20,17 +20,26 @@ export function TemplateQualityInspector({ draft }: { draft: Draft }) {
 
   if (!hasRequirements) return null;
 
+  const toCheck = report.summary.needsReview + report.summary.missing;
+  const total = report.summary.covered + toCheck;
+
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <ClipboardCheck className="size-4 text-[var(--ds-muted)]" />
-          <h4 className="m-0 text-[12px] font-semibold text-[var(--ds-ink)]">
+    <section className="space-y-3 min-w-0">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <ClipboardCheck className="size-3.5 text-[var(--ds-muted)] shrink-0" />
+          <h4 className="m-0 text-[12px] font-semibold text-[var(--ds-ink)] truncate">
             Template quality
           </h4>
         </div>
-        <span className="rounded-full bg-[var(--ds-line-2)] px-2 py-0.5 text-[10px] text-[var(--ds-muted)]">
-          {report.summary.covered} covered · {report.summary.needsReview + report.summary.missing} check
+        {/* Compact "X / Y" pill — full breakdown lives in the tooltip
+         * so the header stays on one line at 260px. Was "X covered · Y
+         * check" which forced the title and pill to both wrap. */}
+        <span
+          className="shrink-0 whitespace-nowrap rounded-full bg-[var(--ds-line-2)] px-2 py-0.5 text-[10px] tabular-nums text-[var(--ds-muted)]"
+          title={`${report.summary.covered} covered · ${toCheck} to check · ${total} total`}
+        >
+          {report.summary.covered}/{total}
         </span>
       </div>
 
