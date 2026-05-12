@@ -634,7 +634,7 @@ export function Editor() {
                 title="Next: Evidence"
                 className="px-2 sm:px-3"
               >
-                <span className="hidden sm:inline">Next: Evidence</span>
+                <span className="hidden sm:inline">Evidence</span>
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             ) : (
@@ -646,7 +646,7 @@ export function Editor() {
                 title="Next: Review"
                 className="px-2 sm:px-3"
               >
-                <span className="hidden sm:inline">Next: Review</span>
+                <span className="hidden sm:inline">Review</span>
                 <ArrowRight className="size-4 sm:ml-1.5" />
               </Button>
             )}
