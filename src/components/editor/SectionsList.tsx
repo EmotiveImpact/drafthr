@@ -130,7 +130,7 @@ const TITLE_OVERRIDES: [RegExp, string][] = [
   [/^outcome sought/i, "Outcome"],
 ];
 
-function sidebarLabelFor(section: SidebarSection): string {
+export function sidebarLabelFor(section: SidebarSection): string {
   const title = section.title.trim();
   for (const [pattern, label] of TITLE_OVERRIDES) {
     if (pattern.test(title)) return label;

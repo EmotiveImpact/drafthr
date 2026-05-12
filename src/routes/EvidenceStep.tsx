@@ -19,11 +19,11 @@ import {
 import { Button } from "@/components/ui/button";
 import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { linkedEvidenceForSection, sectionLabels } from "@/lib/evidence";
+import { sectionLabels } from "@/lib/evidence";
 import { ExpectedEvidenceChecklist } from "@/components/editor/ExpectedEvidenceChecklist";
-import { WizardChrome } from "@/components/editor/WizardChrome";
+import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
-import { cn, uid } from "@/lib/utils";
+import { uid } from "@/lib/utils";
 
 const KIND_OPTIONS: { value: EvidenceItem["kind"]; label: string }[] = [
   { value: "email", label: "Email" },
@@ -237,45 +237,12 @@ export function EvidenceStep() {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardChrome
-            draftId={draft.id}
-            mode={draft.mode}
+          <WizardSidebar
+            draft={draft}
             current="evidence"
+            activeSectionId={selectedSection?.id}
+            onSelectSection={(id) => selectSection(id)}
           />
-          <div className="border-b border-[var(--ds-line-2)] px-4 py-3">
-            <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-              Sections
-            </h2>
-          </div>
-          <div className="h-full min-h-0 overflow-auto p-3">
-            {draft.sections.map((section, index) => {
-              const count = linkedEvidenceForSection(draft, section.id).length;
-              const selected = selectedSection?.id === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => selectSection(section.id)}
-                  className={cn(
-                    "mb-1 flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px]",
-                    selected
-                      ? "bg-[var(--ds-line-2)] text-[var(--ds-ink)]"
-                      : "text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]"
-                  )}
-                >
-                  <span className="grid size-5 shrink-0 place-items-center rounded-md bg-[var(--ds-line-2)] text-[10px] text-[var(--ds-muted)]">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{section.title}</span>
-                  {count > 0 && (
-                    <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--accent-9)] text-[10px] font-semibold text-[var(--accent-contrast)]">
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
         </aside>
 
         <main className="min-h-0 overflow-auto p-4 sm:p-6 space-y-4">

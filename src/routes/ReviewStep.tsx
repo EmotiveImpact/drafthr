@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { exportLetterPack } from "@/lib/export/pack";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { WizardChrome } from "@/components/editor/WizardChrome";
-import { cn } from "@/lib/utils";
+import { WizardSidebar } from "@/components/editor/WizardSidebar";
 
 /**
  * Review step — the page that sits between Evidence & Attachments and
@@ -126,49 +125,11 @@ export function ReviewStep() {
          * sidebar pattern from Editor / Evidence so the three wizard pages
          * feel like one experience. */}
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardChrome
-            draftId={draft.id}
-            mode={draft.mode}
+          <WizardSidebar
+            draft={draft}
             current="review"
+            onSelectSection={(id) => nav(`/editor/${draft.id}?section=${id}`)}
           />
-          <div className="border-b border-[var(--ds-line-2)] px-4 py-3">
-            <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-              Sections
-            </h2>
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto p-3">
-            {draft.sections.map((section, index) => {
-              const sectionComments = (draft.comments ?? []).filter(
-                (c) => c.sectionId === section.id && !c.resolved
-              ).length;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() =>
-                    nav(`/editor/${draft.id}?section=${section.id}`)
-                  }
-                  className={cn(
-                    "mb-1 flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px]",
-                    "text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]"
-                  )}
-                >
-                  <span className="grid size-5 shrink-0 place-items-center rounded-md bg-[var(--ds-line-2)] text-[10px] text-[var(--ds-muted)]">
-                    {index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{section.title}</span>
-                  {sectionComments > 0 && (
-                    <span
-                      className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--ds-amber-fg)] text-[10px] font-semibold text-white"
-                      title={`${sectionComments} unresolved comment${sectionComments === 1 ? "" : "s"}`}
-                    >
-                      {sectionComments}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
         </aside>
 
         <main className="min-h-0 overflow-y-auto">

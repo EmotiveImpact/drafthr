@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
-import { SectionsList } from "@/components/editor/SectionsList";
-import { WizardChrome } from "@/components/editor/WizardChrome";
+import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
@@ -493,12 +492,12 @@ export function Editor() {
           "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
           (focusMode
             ? "lg:grid-cols-1"
-            : "lg:grid-cols-[232px_minmax(0,1fr)_380px]")
+            : "lg:grid-cols-[260px_minmax(0,1fr)_380px]")
         }
       >
         <aside
           className={
-            "border-r border-[var(--ds-line)] bg-[var(--ds-surface-2)] min-h-0 flex flex-col overflow-hidden " +
+            "border-r border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 flex flex-col overflow-hidden " +
             (focusMode
               ? "hidden"
               : showSidebar
@@ -506,21 +505,17 @@ export function Editor() {
               : "hidden lg:flex")
           }
         >
-          <WizardChrome
-            draftId={draft.id}
-            mode={draft.mode}
-            current="edit"
-            disabled={globallyStreaming}
-          />
-          <SectionsList
+          <WizardSidebar
             draft={draft}
+            current="edit"
             activeSectionId={activeSectionId}
-            onSelect={(id) => {
+            onSelectSection={(id) => {
               setActiveSectionId(id);
               setShowSidebar(false);
               const el = document.querySelector(`[data-section-id="${id}"]`);
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
+            disabled={globallyStreaming}
           />
         </aside>
 
