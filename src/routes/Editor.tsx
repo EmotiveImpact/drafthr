@@ -594,6 +594,20 @@ export function Editor() {
                 <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
                   <Settings2 className="size-4 mr-2" /> Edit details
                 </DropdownMenuItem>
+                {/* Mobile-only: Focus toggle. On md:+ the Focus button
+                 * lives in the topbar so we hide this item to avoid
+                 * duplication. */}
+                <DropdownMenuItem
+                  className="md:hidden"
+                  onClick={() => setFocusMode((f) => !f)}
+                >
+                  {focusMode ? (
+                    <Minimize2 className="size-4 mr-2" />
+                  ) : (
+                    <Maximize2 className="size-4 mr-2" />
+                  )}
+                  {focusMode ? "Exit focus mode" : "Enter focus mode"}
+                </DropdownMenuItem>
                 {/* Regenerate all / Stop moved out of this menu — they live
                  * as a visible button in the topbar right cluster now. */}
                 {/* Rail toggles — only meaningful at < lg where the rails
@@ -995,7 +1009,7 @@ function ViewModeButton({
       }
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span>{label}</span>
     </button>
   );
 }
