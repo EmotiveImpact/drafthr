@@ -162,12 +162,6 @@ export function Editor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [focusMode]);
 
-  // Focus mode is gated to Preview — if the user switches back to Edit
-  // (or any non-Preview view) while focus mode is on, drop it. Prevents
-  // stale focus state when the user clicks Edit/Preview rapidly.
-  useEffect(() => {
-    if (focusMode && viewMode !== "preview") setFocusMode(false);
-  }, [viewMode, focusMode]);
 
   if (!draft || !draftId || !meta) {
     return (
@@ -381,25 +375,19 @@ export function Editor() {
              * pending pill + Drafting indicator. ml-auto pushes them to
              * the right edge of the canvas column. */}
             <div className="ml-auto flex items-center gap-2">
-              {/* Focus mode — distraction-free reading of the rendered
-               * preview. Only enabled when Preview is the active view;
-               * in Edit mode it's a no-op (rendering nothing to read),
-               * so we disable it rather than hide it so the affordance
-               * stays discoverable. Esc / button click exits. */}
+              {/* Focus mode — hides both rails for distraction-free
+               * working. Available in both Edit and Preview. Esc exits. */}
               <Button
                 variant={focusMode ? "default" : "outline"}
                 size="sm"
-                className="h-7 text-[11px] px-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={viewMode !== "preview"}
+                className="h-7 text-[11px] px-2"
                 onClick={() => setFocusMode((f) => !f)}
                 aria-pressed={focusMode}
                 aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
                 title={
-                  viewMode !== "preview"
-                    ? "Focus mode is available in Preview"
-                    : focusMode
-                      ? "Exit focus mode (Esc)"
-                      : "Focus mode — hide rails, read the rendered letter"
+                  focusMode
+                    ? "Exit focus mode (Esc)"
+                    : "Focus mode — hide rails for distraction-free work"
                 }
               >
                 {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
