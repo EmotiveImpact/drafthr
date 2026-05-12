@@ -12,7 +12,7 @@ import {
   MessageSquare,
   UserPlus,
 } from "lucide-react";
-import { PageHeader } from "@/components/ds";
+import { PageHeader, EmptyState } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
@@ -68,15 +68,12 @@ export function Activity() {
       />
 
       {events.length === 0 ? (
-        <Card size="3">
-          <Flex direction="column" align="center" gap="2" py="6">
-            <ActivityIcon className="size-5 text-[var(--gray-9)]" />
-            <Text size="2" weight="medium" as="p">No activity yet.</Text>
-            <Text size="1" color="gray" align="center" as="p">
-              Start drafting a letter and the audit trail builds itself.
-            </Text>
-          </Flex>
-        </Card>
+        <EmptyState
+          icon={ActivityIcon}
+          title="No activity yet"
+          body="Start drafting a letter and the audit trail builds itself — every regenerate, export, and attestation is logged here."
+          primary={{ label: "Start a letter", to: "/" }}
+        />
       ) : (
         <Flex direction="column" gap="3">
           {groups.map((g) => (

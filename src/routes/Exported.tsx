@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Text } from "@radix-ui/themes";
+import { Box } from "@radix-ui/themes";
 import { FileDown, FileText } from "lucide-react";
-import { PageHeader, DataTable, StatusDot, type StatusTone } from "@/components/ds";
+import { PageHeader, DataTable, StatusDot, EmptyState, type StatusTone } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { useProfileStore } from "@/lib/profile";
@@ -44,14 +44,12 @@ export function Exported() {
         rowKey={(item) => item.draft.id}
         onRowClick={(item) => nav(`/editor/${item.draft.id}`)}
         empty={
-          <Box>
-            <FileDown className="size-5 mx-auto mb-2 text-[var(--ds-muted)]" />
-            <Text size="2" weight="medium" as="p" className="text-[var(--ds-ink)]">Nothing exported yet.</Text>
-            <Text size="1" color="gray" align="center" as="p" className="max-w-md mx-auto" mt="1">
-              When you export a letter from the editor, it appears here with a record of the
-              format, timestamp, and any counsel-review attestation.
-            </Text>
-          </Box>
+          <EmptyState
+            icon={FileDown}
+            title="Nothing exported yet"
+            body="Exported letters land here with a record of format, timestamp, and any counsel-review attestation."
+            primary={{ label: "Browse drafts", to: "/" }}
+          />
         }
         columns={[
           {

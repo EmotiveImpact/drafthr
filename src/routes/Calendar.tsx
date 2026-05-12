@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
 import { CalendarClock, Download, ArrowUpRight } from "lucide-react";
-import { PageHeader } from "@/components/ds";
+import { PageHeader, EmptyState } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft } from "@/lib/letters/types";
@@ -75,16 +75,12 @@ export function Calendar() {
       />
 
       {events.length === 0 && (
-        <Card size="3">
-          <Flex direction="column" align="center" gap="2" py="6">
-            <CalendarClock className="size-5 text-[var(--gray-9)]" />
-            <Text size="2" weight="medium" as="p">No deadlines yet.</Text>
-            <Text size="1" color="gray" align="center" as="p" className="max-w-md">
-              Deadlines appear here when you start a tribunal-bound letter (employee mode) or
-              enter an acceptance / remedy / advisor date in any wizard.
-            </Text>
-          </Flex>
-        </Card>
+        <EmptyState
+          icon={CalendarClock}
+          title="No deadlines yet"
+          body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance / remedy / advisor date in a wizard."
+          primary={{ label: "Start a letter", to: "/" }}
+        />
       )}
 
       {upcoming.length > 0 && (

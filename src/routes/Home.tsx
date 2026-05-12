@@ -21,6 +21,7 @@ import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
+import { EmptyState } from "@/components/ds";
 
 /* ============================================================================
  * Home — the landing dashboard.
@@ -292,13 +293,13 @@ function ContinueAndDeadlines({
           ) : null}
         </header>
         {drafts.length === 0 ? (
-          <div className="px-[18px] py-8 text-center">
-            <FileText className="size-5 mx-auto mb-2 text-[var(--ds-subtle)]" />
-            <p className="text-[13px] text-[var(--ds-body)] m-0 mb-1 font-medium">No drafts yet</p>
-            <p className="text-[12px] text-[var(--ds-muted)] m-0">
-              Pick a letter type above to begin.
-            </p>
-          </div>
+          <EmptyState
+            size="sm"
+            icon={FileText}
+            title="No drafts yet"
+            body="Pick a letter type from the catalogue to start your first draft. It'll appear here as soon as you generate it."
+            primary={{ label: "Browse letters", onClick: onOpenNew }}
+          />
         ) : (
           drafts.map((d) => {
             const status = draftStatus(d);
@@ -349,18 +350,13 @@ function ContinueAndDeadlines({
           )}
         </header>
         {deadlines.length === 0 ? (
-          <div className="px-[18px] py-8 text-center">
-            <CalendarClock className="size-5 mx-auto mb-2 text-[var(--ds-subtle)]" />
-            <p className="text-[12px] text-[var(--ds-muted)] m-0 leading-relaxed">
-              Deadlines appear here when you start a tribunal-bound letter.
-            </p>
-            <button
-              onClick={onOpenNew}
-              className="mt-2 text-[12px] font-medium text-[var(--ds-ink)] hover:underline"
-            >
-              Start one →
-            </button>
-          </div>
+          <EmptyState
+            size="sm"
+            icon={CalendarClock}
+            title="No deadlines yet"
+            body="Deadlines appear here when you start a tribunal-bound letter — appeals, grievances, dismissal responses."
+            primary={{ label: "Start a letter", onClick: onOpenNew }}
+          />
         ) : (
           deadlines.map((d) => {
             const urgent = d.daysAway >= 0 && d.daysAway < 14;

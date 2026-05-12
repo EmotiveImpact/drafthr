@@ -9,7 +9,7 @@ import {
   listIdentities,
   meIdentity,
 } from "@/lib/comments/identity";
-import { Avatar } from "@/components/ds";
+import { Avatar, EmptyState } from "@/components/ds";
 
 type PendingComment = {
   sectionId: string;
@@ -136,9 +136,12 @@ export function CommentsPanel({
       </Box>
 
       {totalActive === 0 && groups.every((g) => g.threads.length === 0) ? (
-        <Text size="1" color="gray" as="p" className="text-center py-6">
-          No comments yet. Add the first one to a section below.
-        </Text>
+        <EmptyState
+          size="sm"
+          icon={MessageSquare}
+          title="No comments yet"
+          body="Select text in any section and click + Comment to start a thread."
+        />
       ) : null}
 
       {groups.map((g) => (

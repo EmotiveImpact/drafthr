@@ -5,3 +5,4 @@ export { PageHeader, type Crumb } from "./PageHeader";
 export { StatusDot, type StatusTone } from "./StatusDot";
 export { DataTable, type Column } from "./DataTable";
 export { ImageUploader } from "./ImageUploader";
+export { EmptyState, type EmptyStateAction } from "./EmptyState";
