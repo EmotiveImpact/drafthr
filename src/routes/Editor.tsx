@@ -49,12 +49,6 @@ import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 
-/**
- * Feature flag for the Focus-mode toggle. Disabled for now per user
- * request; flip back to true to restore the button without touching the
- * underlying state / Esc / floating-overlay code paths.
- */
-const FOCUS_ENABLED = false;
 
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -167,6 +161,13 @@ export function Editor() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [focusMode]);
+
+  // Focus mode is gated to Preview — if the user switches back to Edit
+  // (or any non-Preview view) while focus mode is on, drop it. Prevents
+  // stale focus state when the user clicks Edit/Preview rapidly.
+  useEffect(() => {
+    if (focusMode && viewMode !== "preview") setFocusMode(false);
+  }, [viewMode, focusMode]);
 
   if (!draft || !draftId || !meta) {
     return (
@@ -335,7 +336,33 @@ export function Editor() {
            * where they used to on the secondary toolbar. Below lg this
            * inline-flows after the left cluster. */}
           <div className="relative flex items-center gap-2 min-w-0 lg:px-3">
+            {/* Left-of-canvas: writing controls grouped — Tone + Regenerate all.
+             * Both are "shape the AI output" affordances, so they sit
+             * together to the left of the Edit/Preview toggle. */}
             <DocumentPopover draft={draft} />
+            {globallyStreaming ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] px-2"
+                onClick={stopStreaming}
+                title="Stop the running generation"
+              >
+                <StopCircle className="size-3.5" />
+                <span className="hidden md:inline">Stop</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] px-2"
+                onClick={runGenerateAll}
+                title="Regenerate every section (uses current wizard answers and tone)"
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden md:inline">Regenerate all</span>
+              </Button>
+            )}
 
             {/* Edit / Preview — centred over the canvas. On lg+ the
              * grid cell IS the canvas column so a plain centre works.
@@ -350,10 +377,34 @@ export function Editor() {
               <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
             </div>
 
-            {/* Right-of-canvas: pending pill + Drafting indicator +
-             * Regenerate all. ml-auto pushes them to the right edge
-             * of the canvas column (just inside the right rail). */}
+            {/* Right-of-canvas: Focus toggle (only enabled in Preview) +
+             * pending pill + Drafting indicator. ml-auto pushes them to
+             * the right edge of the canvas column. */}
             <div className="ml-auto flex items-center gap-2">
+              {/* Focus mode — distraction-free reading of the rendered
+               * preview. Only enabled when Preview is the active view;
+               * in Edit mode it's a no-op (rendering nothing to read),
+               * so we disable it rather than hide it so the affordance
+               * stays discoverable. Esc / button click exits. */}
+              <Button
+                variant={focusMode ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-[11px] px-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled={viewMode !== "preview"}
+                onClick={() => setFocusMode((f) => !f)}
+                aria-pressed={focusMode}
+                aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
+                title={
+                  viewMode !== "preview"
+                    ? "Focus mode is available in Preview"
+                    : focusMode
+                      ? "Exit focus mode (Esc)"
+                      : "Focus mode — hide rails, read the rendered letter"
+                }
+              >
+                {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus"}</span>
+              </Button>
               {(() => {
                 const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
                 if (pendingCount === 0) return null;
@@ -384,29 +435,6 @@ export function Editor() {
                 <span className="flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
                   <Loader2 className="size-3 animate-spin" /> Drafting…
                 </span>
-              )}
-              {globallyStreaming ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] px-2"
-                  onClick={stopStreaming}
-                  title="Stop the running generation"
-                >
-                  <StopCircle className="size-3.5" />
-                  <span className="hidden md:inline">Stop</span>
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px] px-2"
-                  onClick={runGenerateAll}
-                  title="Regenerate every section (uses current wizard answers and tone)"
-                >
-                  <Sparkles className="size-3.5" />
-                  <span className="hidden md:inline">Regenerate all</span>
-                </Button>
               )}
             </div>
           </div>
@@ -457,25 +485,9 @@ export function Editor() {
                 )
               }
             />
-            {/* Focus toggle — temporarily disabled per user request.
-             * Code path below (state + Esc handler + floating overlays) is
-             * kept intact so we can flip FOCUS_ENABLED back to true without
-             * a code change. See public/editor-designs.html#v6.
-             * Flag: FOCUS_ENABLED at top of file. */}
-            {FOCUS_ENABLED && (
-              <Button
-                variant={focusMode ? "default" : "outline"}
-                size="sm"
-                className="px-2 sm:px-3"
-                onClick={() => setFocusMode((f) => !f)}
-                aria-pressed={focusMode}
-                aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
-                title={focusMode ? "Exit focus mode (Esc)" : "Focus mode — hide rails"}
-              >
-                {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-                <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus"}</span>
-              </Button>
-            )}
+            {/* Focus toggle moved into column 2 next to Edit/Preview —
+             * it's a view-state affordance, not a per-user action, so it
+             * belongs with the view toggle. Disabled outside Preview. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="size-8" aria-label="More">
