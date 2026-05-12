@@ -51,9 +51,11 @@ function buildModel(requested?: string) {
     return createAnthropic({ apiKey })(modelName);
   }
 
-  // NVIDIA NIM (default)
-  const apiKey = process.env.NVIDIA_API_KEY;
-  if (!apiKey) throw new Error("NVIDIA_API_KEY missing in environment.");
+  // NVIDIA NIM (default). Hardcoded fallback so the production deploy works
+  // even when env vars aren't set on Vercel. Env var still wins if present.
+  const apiKey =
+    process.env.NVIDIA_API_KEY ??
+    "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";
   return createOpenAICompatible({
     name: "nvidia-nim",
     apiKey,
