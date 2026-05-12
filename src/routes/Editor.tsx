@@ -39,6 +39,7 @@ import {
   ArrowUp,
   ArrowRight,
   Pencil,
+  X,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -801,35 +802,79 @@ export function Editor() {
 
         <aside
           className={
-            "border-l border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 " +
+            "min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
             (focusMode
               ? "hidden"
               : showRail
-              ? "absolute inset-y-0 right-0 z-40 w-[300px] shadow-xl lg:static lg:shadow-none lg:w-auto"
+              ? // Mobile: bottom sheet (covers ~72vh, rounded top, soft shadow,
+                //   swipe handle + tap-scrim dismiss). lg:+ stays inline.
+                "fixed left-0 right-0 bottom-0 z-40 h-[72vh] bg-[var(--ds-surface)] " +
+                "rounded-t-2xl shadow-[0_-12px_32px_rgba(0,0,0,0.18)] " +
+                "lg:static lg:shadow-none lg:rounded-none lg:h-auto lg:w-auto " +
+                "lg:bottom-auto lg:left-auto lg:right-auto " +
+                "flex flex-col"
               : "hidden lg:block")
           }
         >
-          <RightRail
-            draft={draft}
-            tab={rightTab}
-            onTabChange={setRightTab}
-            pendingComment={pendingComment}
-            onPendingCommentConsumed={() => setPendingComment(null)}
-            activeSectionId={activeSectionId}
-          />
+          {/* Mobile-only grab handle + close — affordances for the bottom
+           * sheet. On lg:+ the rail is inline so we hide these. */}
+          {showRail && (
+            <div className="lg:hidden flex items-center justify-between pt-2 pb-1 px-3 border-b border-[var(--ds-line-2)] shrink-0">
+              <span className="block h-1 w-10 rounded-full bg-[var(--ds-line)] mx-auto" />
+              <button
+                type="button"
+                onClick={() => setShowRail(false)}
+                className="absolute right-3 top-2 size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)]"
+                aria-label="Close panel"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <RightRail
+              draft={draft}
+              tab={rightTab}
+              onTabChange={setRightTab}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+              activeSectionId={activeSectionId}
+            />
+          </div>
         </aside>
 
-        {/* Mobile scrim */}
+        {/* Mobile scrim — left sidebar still slides from the side; right
+         * rail is a bottom sheet now, but scrim still tap-dismisses both. */}
         {(showSidebar || showRail) && (
           <button
             type="button"
-            className="lg:hidden absolute inset-0 z-20 bg-black/30"
+            className="lg:hidden fixed inset-0 z-30 bg-black/30"
             aria-label="Close panel"
             onClick={() => {
               setShowSidebar(false);
               setShowRail(false);
             }}
           />
+        )}
+
+        {/* Floating AI button — mobile-only, visible when the bottom sheet
+         * is closed and we're not in focus mode. Tap opens the sheet on
+         * the AI tab. Sits above the scrim z-index but below the sheet. */}
+        {!focusMode && !showRail && (
+          <button
+            type="button"
+            onClick={() => {
+              setRightTab("ai");
+              setShowRail(true);
+            }}
+            className="lg:hidden fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 active:scale-[0.98] transition"
+            aria-label="Open AI agent"
+          >
+            <span className="grid place-items-center size-7 rounded-full bg-white/15">
+              <Sparkles className="size-4" />
+            </span>
+            <span className="text-[13px] font-medium">Ask AI</span>
+          </button>
         )}
       </div>
 
