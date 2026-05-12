@@ -1,15 +1,9 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import { Node } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import Link from "@tiptap/extension-link";
+import LinkExt from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import Table from "@tiptap/extension-table";
@@ -18,6 +12,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
+import { PaginationPlus } from "tiptap-pagination-plus";
 import {
   AlignCenter,
   AlignJustify,
@@ -35,57 +30,144 @@ import {
   Underline as UnderlineIcon,
 } from "lucide-react";
 
-import type { Draft, Section } from "@/lib/letters/types";
+import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { sanitizeLetterHtml } from "@/lib/sanitize";
 
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
 
 /**
- * Editable letter — pixel-perfect match to the read-only PaginatedLetter
- * visual (paged.js output), but the content is fully editable via TipTap.
+ * Editable letter using `tiptap-pagination-plus` for real ProseMirror-level
+ * page breaks (https://github.com/RomikMakavana/tiptap-pagination-plus, MIT).
  *
  * Architecture:
- *   - ChromeStack: a column of decorative A4 page cards (white bg, slate
- *     border, drop shadow, 24px gaps, footer with "Page n of N"). These
- *     are *visual only* — they don't contain editable content. Their
- *     count is computed from the editor's content height.
- *   - ContentLayer: the actual TipTap editors, one per draft.section,
- *     fused into a continuous flow. Positioned over the chrome stack
- *     with margins matching paged.js's @page rule (1in top, 1.1in sides,
- *     1.2in bottom).
+ *   - ONE TipTap editor holds the whole letter. Sections are preserved
+ *     across the edit by inserting an invisible `sectionAnchor` Node
+ *     before each section's content. The anchors survive the
+ *     ProseMirror round-trip; on save we walk the doc, group children
+ *     by which anchor preceded them, and emit per-section updates.
+ *   - PaginationPlus paints the page chrome (white card, gap between
+ *     pages, footer with "Page n of N").
+ *   - Our scoped <style> block overrides the extension's default look
+ *     so it matches the read-only PaginatedLetter (Iowan Old Style
+ *     11pt, slate-100 page gap, no card border, drop shadow).
  *
- * Pixel-perfect details (matching PaginatedLetter):
- *   - A4 page card: 8.27in × 11.69in, slate-200 border, 4px radius
- *   - Drop shadow: 0 2px 8px / 0 6px 24px rgba(black, 0.04 / 0.06)
- *   - Inter-page gap: 24px
- *   - Margins: 1in top, 1.1in left/right, 1.2in bottom
- *   - Page footer: "Page n of N" in Geist 9pt slate-400, centred
- *   - Typography: Iowan Old Style / Georgia 11pt 1.55 line-height
- *
- * Save: each section's editor → 500ms debounced → updateSection(...).
+ * A4 geometry (matches wrapInPrintHtml @page in PaginatedLetter):
+ *   pageHeight 1122 (11.69in × 96)   pageWidth 794 (8.27in × 96)
+ *   margin top 96 (1in)              bottom 115 (1.2in)
+ *   margin sides 106 (1.1in each)
+ *   gap 24px between pages
  */
 
 const SAVE_DELAY_MS = 500;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
-// A4 dimensions matching paged.js's @page rule.
-const PAGE_W_IN = 8.27;
-const PAGE_H_IN = 11.69;
+const PAGE_HEIGHT_PX = Math.round(11.69 * 96); // 1122
+const PAGE_WIDTH_PX = Math.round(8.27 * 96);   // 794
+const MARGIN_TOP_PX = Math.round(1.0 * 96);    // 96
+const MARGIN_BOTTOM_PX = Math.round(1.2 * 96); // 115
+const MARGIN_SIDE_PX = Math.round(1.1 * 96);   // 106
 const PAGE_GAP_PX = 24;
-// Margins in inches — must match wrapInPrintHtml @page values exactly.
-const MARGIN_TOP_IN = 1.0;
-const MARGIN_SIDE_IN = 1.1;
-const MARGIN_BOTTOM_IN = 1.2;
-// Content area per page = page height − top − bottom margins.
-const CONTENT_PER_PAGE_IN = PAGE_H_IN - MARGIN_TOP_IN - MARGIN_BOTTOM_IN; // 9.49in
+
+/**
+ * Invisible block node inserted before each section's content. Carries
+ * the section id as a data attribute so we can split content back into
+ * the right sections on save. atom + display:none so it never
+ * contributes height or shows in the rendered letter.
+ */
+const SectionAnchor = Node.create({
+  name: "sectionAnchor",
+  group: "block",
+  atom: true,
+  selectable: false,
+  draggable: false,
+  addAttributes() {
+    return {
+      sectionId: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-section-id"),
+        renderHTML: (attrs: Record<string, unknown>) => ({
+          "data-section-id": attrs.sectionId,
+        }),
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "div[data-section-anchor]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "div",
+      {
+        ...HTMLAttributes,
+        "data-section-anchor": "",
+        style: "display:none;height:0;line-height:0;margin:0;padding:0;",
+      },
+    ];
+  },
+});
+
+function buildMergedHtml(draft: Draft): string {
+  return draft.sections
+    .map(
+      (s) =>
+        `<div data-section-anchor data-section-id="${s.id}"></div>` +
+        sanitizeLetterHtml(s.html || ""),
+    )
+    .join("");
+}
+
+/**
+ * Walk the editor's serialised HTML and split it into a {sectionId: html}
+ * map by accumulating siblings between each <div data-section-anchor> marker.
+ * Content before the first anchor is dropped (shouldn't happen in normal
+ * use — the editor always starts with an anchor).
+ */
+function splitHtmlBySection(fullHtml: string): Record<string, string> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<div>${fullHtml}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+  const result: Record<string, string> = {};
+  if (!root) return result;
+
+  let currentId: string | null = null;
+  let buf: string[] = [];
+
+  const flush = () => {
+    if (currentId != null) {
+      result[currentId] = buf.join("");
+    }
+    buf = [];
+  };
+
+  // 1 = ELEMENT_NODE, 3 = TEXT_NODE (using numeric constants because
+  // the TipTap `Node` import shadows the global DOM `Node` namespace).
+  for (const node of Array.from(root.childNodes)) {
+    if (
+      node.nodeType === 1 &&
+      (node as HTMLElement).getAttribute("data-section-anchor") !== null
+    ) {
+      flush();
+      currentId = (node as HTMLElement).getAttribute("data-section-id");
+      continue;
+    }
+    if (node.nodeType === 1) {
+      buf.push((node as HTMLElement).outerHTML);
+    } else if (node.nodeType === 3) {
+      buf.push(node.textContent ?? "");
+    }
+  }
+  flush();
+  return result;
+}
 
 const EDITOR_EXTENSIONS = [
   StarterKit.configure({ heading: { levels: [2, 3] } }),
   Underline,
-  Link.configure({ openOnClick: false, autolink: true }),
+  LinkExt.configure({ openOnClick: false, autolink: true }),
   Placeholder.configure({
-    placeholder: "Continue writing this section…",
+    placeholder: "Continue writing this letter…",
     showOnlyWhenEditable: true,
     showOnlyCurrent: true,
   }),
@@ -103,6 +185,30 @@ const EDITOR_EXTENSIONS = [
     alignments: ["left", "center", "right", "justify"],
     defaultAlignment: "left",
   }),
+  SectionAnchor,
+  PaginationPlus.configure({
+    pageHeight: PAGE_HEIGHT_PX,
+    pageWidth: PAGE_WIDTH_PX,
+    marginTop: MARGIN_TOP_PX,
+    marginBottom: MARGIN_BOTTOM_PX,
+    marginLeft: MARGIN_SIDE_PX,
+    marginRight: MARGIN_SIDE_PX,
+    pageGap: PAGE_GAP_PX,
+    // The extension paints the inter-page gap with this background — we
+    // want it to match the outer slate-100 background so the white pages
+    // sit cleanly with a visible break between them.
+    pageBreakBackground: "#f1f5f9",
+    pageGapBorderSize: 0,
+    pageGapBorderColor: "transparent",
+    contentMarginTop: 0,
+    contentMarginBottom: 0,
+    headerLeft: "",
+    headerRight: "",
+    footerLeft: "",
+    footerRight: "Page {page}",
+    customHeader: {},
+    customFooter: {},
+  }),
 ];
 
 export function PaginatedEditableLetter({
@@ -113,241 +219,139 @@ export function PaginatedEditableLetter({
   onDone: () => void;
 }) {
   const updateSection = useDraftStore((state) => state.updateSection);
-  const editorsRef = useRef<Map<string, Editor>>(new Map());
-  const [activeSectionId, setActiveSectionId] = useState<string | null>(
-    draft.sections[0]?.id ?? null,
+
+  const initialHtml = useMemo(() => buildMergedHtml(draft), [
+    // Only build once per Edit-on-page session — we use draft.id as the
+    // memo key so the merged content is rebuilt if the user switches drafts.
+    draft.id,
+  ]);
+
+  // Snapshot of last-saved HTML per section. Initialised once on mount
+  // from the draft's stored section HTML; updated on every successful save.
+  const savedHtmlByIdRef = useRef<Record<string, string> | null>(null);
+  if (savedHtmlByIdRef.current === null) {
+    const seed: Record<string, string> = {};
+    for (const s of draft.sections) seed[s.id] = s.html || "";
+    savedHtmlByIdRef.current = seed;
+  }
+
+  const [dirty, setDirty] = useState(false);
+  const saveTimerRef = useRef<number | null>(null);
+
+  const editor = useEditor(
+    {
+      extensions: EDITOR_EXTENSIONS,
+      content: initialHtml,
+      editorProps: {
+        attributes: { class: "outline-none" },
+      },
+      onUpdate: ({ editor }) => {
+        setDirty(true);
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = window.setTimeout(() => {
+          const fullHtml = editor.getHTML();
+          const splits = splitHtmlBySection(fullHtml);
+          const saved = savedHtmlByIdRef.current as Record<string, string>;
+          for (const section of draft.sections) {
+            const next = splits[section.id] ?? "";
+            if (next !== saved[section.id]) {
+              updateSection(draft.id, section.id, next);
+              saved[section.id] = next;
+            }
+          }
+          setDirty(false);
+          saveTimerRef.current = null;
+        }, SAVE_DELAY_MS);
+      },
+    },
+    // Re-create when the draft id changes (rare, but covers the case of
+    // switching draft while Edit-on-page is mounted).
+    [draft.id],
   );
-  const [registeredVersion, setRegisteredVersion] = useState(0);
-  const [dirtySections, setDirtySections] = useState<Set<string>>(() => new Set());
 
-  // Page count is computed from the content layer's measured height.
-  // Recomputed on every editor update via the dirty handler.
-  const contentLayerRef = useRef<HTMLDivElement>(null);
-  const [pageCount, setPageCount] = useState(1);
+  // Flush any pending save on unmount so nothing is lost.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        // Best-effort sync flush.
+        if (editor) {
+          const splits = splitHtmlBySection(editor.getHTML());
+          const saved = savedHtmlByIdRef.current as Record<string, string>;
+          for (const section of draft.sections) {
+            const next = splits[section.id] ?? "";
+            if (next !== saved[section.id]) {
+              updateSection(draft.id, section.id, next);
+            }
+          }
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
-  /**
-   * Walk every section and:
-   *   1. Reset its margin-top
-   *   2. If the section would cross a page boundary (its bottom extends
-   *      past page N's content-area bottom while its top is on page N),
-   *      add margin-top to push it down to page N+1's top margin.
-   *   3. After all spacing is applied, recompute pageCount from the new
-   *      content layer height.
-   *
-   * Pixel math (all in px, CSS uses 96 px/in):
-   *   PAGE_PX             = 11.69 * 96   = 1122   (chrome card height)
-   *   GAP_PX              = 24
-   *   TOP_MARGIN_PX       = 1.0  * 96    = 96
-   *   BOTTOM_MARGIN_PX    = 1.2  * 96    = 115
-   *   PAGE_STEP_PX        = PAGE_PX + GAP_PX  (offset between page top edges)
-   *
-   * Content layer coordinate system is shared with pe-stage (same top:0
-   * origin). Each page i's content area runs from
-   *   y_top = i * PAGE_STEP_PX + TOP_MARGIN_PX
-   *   y_bot = i * PAGE_STEP_PX + PAGE_PX - BOTTOM_MARGIN_PX
-   *
-   * Note: applying margin-top to section N changes offsetTop for every
-   * subsequent section, but offsetTop reads force a synchronous layout
-   * in modern browsers, so iterating forward stays consistent.
-   */
-  const applyPageSpacingAndCount = useCallback(() => {
-    const layer = contentLayerRef.current;
-    if (!layer) return;
-
-    const PAGE_PX = PAGE_H_IN * 96;
-    const STEP_PX = PAGE_PX + PAGE_GAP_PX;
-    const TOP_MARGIN_PX = MARGIN_TOP_IN * 96;
-    const BOTTOM_MARGIN_PX = MARGIN_BOTTOM_IN * 96;
-    const CONTENT_PER_PAGE_PX = PAGE_PX - TOP_MARGIN_PX - BOTTOM_MARGIN_PX;
-
-    const sections = Array.from(
-      layer.querySelectorAll<HTMLElement>("[data-section-id]"),
-    );
-
-    // 1) Reset all section-level margins so the measurement is clean.
-    sections.forEach((s) => {
-      s.style.marginTop = "";
-    });
-
-    // 2) Walk forward, pushing sections off page boundaries.
-    for (const section of sections) {
-      // offsetTop is relative to the offsetParent (pe-content). Reading
-      // it forces a layout flush so any prior section's margin-top
-      // change is reflected.
-      const top = section.offsetTop;
-      const height = section.offsetHeight;
-      const bottom = top + height;
-
-      // Which page does this section START on?
-      // Page i's top-content edge sits at i*STEP + TOP_MARGIN.
-      // The section is on page i if top >= i*STEP + TOP_MARGIN AND
-      // top < (i+1)*STEP + TOP_MARGIN.
-      let pageIdx = 0;
-      while (top >= (pageIdx + 1) * STEP_PX + TOP_MARGIN_PX) pageIdx++;
-
-      const pageBottom = pageIdx * STEP_PX + PAGE_PX - BOTTOM_MARGIN_PX;
-
-      // If the section ends past the page's safe-bottom AND it'd actually
-      // fit on the next page (height < one page worth of content), push
-      // it. Sections taller than a page are unavoidable and just overflow.
-      if (bottom > pageBottom && height <= CONTENT_PER_PAGE_PX) {
-        const nextPageTop = (pageIdx + 1) * STEP_PX + TOP_MARGIN_PX;
-        const pushPx = Math.max(0, nextPageTop - top);
-        if (pushPx > 0) section.style.marginTop = `${pushPx}px`;
+  const flushAndDone = useCallback(() => {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (editor) {
+      const splits = splitHtmlBySection(editor.getHTML());
+      const saved = savedHtmlByIdRef.current as Record<string, string>;
+      for (const section of draft.sections) {
+        const next = splits[section.id] ?? "";
+        if (next !== saved[section.id]) {
+          updateSection(draft.id, section.id, next);
+          saved[section.id] = next;
+        }
       }
     }
-
-    // 3) Recompute page count from the final laid-out height.
-    const layerPx = layer.scrollHeight;
-    const contentPx = Math.max(0, layerPx - (MARGIN_TOP_IN + MARGIN_BOTTOM_IN) * 96);
-    const contentIn = contentPx / 96;
-    const pages = Math.max(1, Math.ceil(contentIn / CONTENT_PER_PAGE_IN));
-    setPageCount((prev) => (prev === pages ? prev : pages));
-  }, []);
-
-  // Re-measure on mount and whenever any section's editor reports
-  // dirty state — covers typing, paste, image insert, etc.
-  useLayoutEffect(() => {
-    applyPageSpacingAndCount();
-  }, [applyPageSpacingAndCount, registeredVersion, dirtySections]);
-
-  // Also re-measure on window resize (rare, but A4 width is fixed so
-  // wrapping changes can shift the height).
-  useEffect(() => {
-    const onResize = () => applyPageSpacingAndCount();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [applyPageSpacingAndCount]);
-
-  const activeEditor = useMemo(() => {
-    if (activeSectionId) {
-      const editor = editorsRef.current.get(activeSectionId);
-      if (editor) return editor;
-    }
-    return editorsRef.current.values().next().value ?? null;
-  }, [activeSectionId, registeredVersion]);
-
-  const handleRegister = useCallback((sectionId: string, editor: Editor | null) => {
-    if (editor) editorsRef.current.set(sectionId, editor);
-    else editorsRef.current.delete(sectionId);
-    setRegisteredVersion((v) => v + 1);
-  }, []);
-
-  const handleDirtyChange = useCallback(
-    (sectionId: string, dirty: boolean) => {
-      setDirtySections((curr) => {
-        const next = new Set(curr);
-        if (dirty) next.add(sectionId);
-        else next.delete(sectionId);
-        return next;
-      });
-      // Re-measure on every keystroke so the chrome stack grows with
-      // content AND page-boundary spacers are kept in sync.
-      requestAnimationFrame(applyPageSpacingAndCount);
-    },
-    [applyPageSpacingAndCount],
-  );
-
-  const flushAllSections = useCallback(() => {
-    draft.sections.forEach((section) => {
-      const editor = editorsRef.current.get(section.id);
-      if (!editor) return;
-      const html = editor.getHTML();
-      if (html !== section.html) updateSection(draft.id, section.id, html);
-      handleDirtyChange(section.id, false);
-    });
-  }, [draft.id, draft.sections, handleDirtyChange, updateSection]);
-
-  const handleDone = useCallback(() => {
-    flushAllSections();
+    setDirty(false);
     onDone();
-  }, [flushAllSections, onDone]);
+  }, [draft.id, draft.sections, editor, onDone, updateSection]);
 
-  const styleScope = `paginated-editable-${draft.id.slice(0, 8)}`;
-
-  // Each chrome card sits at top: (i * (pageHeight + pageGap)) from the
-  // top of the chrome layer. Using `top` rather than flex so the cards
-  // align to predictable Y offsets the content can reason about.
-  const pages = Array.from({ length: pageCount }, (_, i) => i);
+  const styleScope = `pe-${draft.id.slice(0, 8)}`;
 
   return (
     <div className="paginated-editable-shell">
       <PagedEditToolbar
-        editor={activeEditor}
+        editor={editor}
         draft={draft}
-        dirtyCount={dirtySections.size}
-        pageCount={pageCount}
-        onDone={handleDone}
+        dirty={dirty}
+        onDone={flushAndDone}
       />
 
+      {/* Scoped CSS to override PaginationPlus defaults and match
+       * PaginatedLetter's read-only look exactly. */}
       <style>{`
-        .${styleScope} .pe-stage {
-          position: relative;
-          width: ${PAGE_W_IN}in;
-          max-width: 100%;
-          margin: 0 auto;
-          /* Stage tall enough for every chrome card + the gaps between
-           * them. Content is positioned on top via the content layer. */
-          min-height: calc(${PAGE_H_IN}in * var(--pe-pages) + ${PAGE_GAP_PX}px * (var(--pe-pages) - 1));
+        .${styleScope} .pe-outer {
+          background: #f1f5f9;            /* slate-100, same as preview */
+          padding: 20px 16px 32px;
+          min-height: 100%;
         }
-        .${styleScope} .pe-chrome-stack {
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-        }
-        .${styleScope} .pe-page-card {
-          position: absolute;
-          left: 0;
-          width: 100%;
-          height: ${PAGE_H_IN}in;
+        .${styleScope} .ProseMirror {
+          /* The extension applies its own border + padding via inline
+           * styles. We strip the border and force the typography here. */
+          border: 0 !important;
           background: #ffffff;
-          border-radius: 4px;
-          /* No border — the shadow alone defines the paper edge. The
-           * paged.js read-only render has a 1px slate-200 border but
-           * it reads as a visible rectangle around the white card,
-           * which the user finds distracting. Shadow-only is cleaner
-           * and matches the Google Docs / Notion paper aesthetic. */
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
             0 6px 24px rgba(0, 0, 0, 0.06);
-        }
-        .${styleScope} .pe-page-footer {
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 0.4in;
-          text-align: center;
-          font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-          font-size: 9pt;
-          color: #94a3b8;
-          pointer-events: none;
-        }
-        .${styleScope} .pe-content {
-          position: relative;
-          padding: ${MARGIN_TOP_IN}in ${MARGIN_SIDE_IN}in ${MARGIN_BOTTOM_IN}in ${MARGIN_SIDE_IN}in;
           font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
           font-size: 11pt;
           line-height: 1.55;
           color: #0f172a;
-        }
-        .${styleScope} .pe-letterhead {
-          text-align: center;
-          margin-bottom: 18pt;
-        }
-        .${styleScope} .pe-letterhead img {
-          max-height: 120px;
+          margin: 0 auto;
+          outline: none;
           max-width: 100%;
         }
-        .${styleScope} .pe-signature-image {
-          margin: 6pt 0 4pt;
+        /* Hide the section anchor entirely — atom node with 0 height. */
+        .${styleScope} .ProseMirror div[data-section-anchor] {
+          display: none !important;
+          height: 0 !important;
+          margin: 0 !important;
         }
-        .${styleScope} .pe-signature-image img {
-          max-height: 54px;
-        }
-        .${styleScope} .ProseMirror {
-          outline: none;
-          min-height: 1.5em;
-        }
+        /* Typography matches PaginatedLetter's wrapInPrintHtml. */
         .${styleScope} .ProseMirror > *:first-child { margin-top: 0; }
         .${styleScope} .ProseMirror > *:last-child { margin-bottom: 0; }
         .${styleScope} .ProseMirror p { margin: 0 0 8pt 0; }
@@ -400,151 +404,26 @@ export function PaginatedEditableLetter({
           height: 0;
           pointer-events: none;
         }
+        /* Footer label — Geist 9pt slate-400 centred, matching the
+         * paged.js @bottom-center rule. */
+        .${styleScope} .rm-page-footer-content {
+          font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+          font-size: 9pt !important;
+          color: #94a3b8 !important;
+          text-align: center;
+        }
+        .${styleScope} .rm-page-footer-left { flex: 1; }
+        .${styleScope} .rm-page-footer-right {
+          flex: 1;
+          text-align: center !important;
+        }
       `}</style>
 
-      <div className={cn("pe-bg bg-slate-100 px-4 py-5 min-h-full", styleScope)}>
-        <div
-          className="pe-stage"
-          style={{ ["--pe-pages" as string]: String(pageCount) }}
-        >
-          {/* Decorative chrome layer — N page cards stacked with 24px gaps,
-           * each with its own "Page n of N" footer. Pointer-events:none so
-           * the content layer's editor remains clickable. */}
-          <div className="pe-chrome-stack" aria-hidden>
-            {pages.map((i) => (
-              <div
-                key={i}
-                className="pe-page-card"
-                style={{ top: `calc(${i} * (${PAGE_H_IN}in + ${PAGE_GAP_PX}px))` }}
-              >
-                <div className="pe-page-footer">Page {i + 1} of {pageCount}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Content layer — the editable letter sits here, with margins
-           * matching @page so the text aligns inside the first page card.
-           * As the content grows past one page worth, the chrome layer
-           * adds another card behind it, then another, etc. */}
-          <div className="pe-content" ref={contentLayerRef}>
-            {draft.employer.letterheadDataUrl ? (
-              <div className="pe-letterhead">
-                <img src={draft.employer.letterheadDataUrl} alt="Letterhead" />
-              </div>
-            ) : null}
-
-            {draft.sections.map((section) => (
-              <EditableSection
-                key={section.id}
-                draftId={draft.id}
-                section={section}
-                signatureDataUrl={draft.employer.signatureDataUrl}
-                onActivate={setActiveSectionId}
-                onDirtyChange={handleDirtyChange}
-                onRegister={handleRegister}
-              />
-            ))}
-          </div>
+      <div className={styleScope}>
+        <div className="pe-outer">
+          <EditorContent editor={editor} />
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ============================================================================
- * Per-section TipTap editor
- * ==========================================================================*/
-
-type EditableSectionProps = {
-  draftId: string;
-  section: Section;
-  signatureDataUrl?: string;
-  onActivate: (sectionId: string) => void;
-  onDirtyChange: (sectionId: string, dirty: boolean) => void;
-  onRegister: (sectionId: string, editor: Editor | null) => void;
-};
-
-function EditableSection({
-  draftId,
-  section,
-  signatureDataUrl,
-  onActivate,
-  onDirtyChange,
-  onRegister,
-}: EditableSectionProps) {
-  const updateSection = useDraftStore((state) => state.updateSection);
-  const timerRef = useRef<number | null>(null);
-  const latestHtmlRef = useRef(section.html || "");
-  const savedHtmlRef = useRef(section.html || "");
-
-  const saveNow = useCallback(
-    (html: string) => {
-      if (html === savedHtmlRef.current) {
-        onDirtyChange(section.id, false);
-        return;
-      }
-      updateSection(draftId, section.id, html);
-      savedHtmlRef.current = html;
-      onDirtyChange(section.id, false);
-    },
-    [draftId, onDirtyChange, section.id, updateSection],
-  );
-
-  const editor = useEditor(
-    {
-      extensions: EDITOR_EXTENSIONS,
-      content: section.html || "",
-      editorProps: {
-        attributes: { class: "outline-none" },
-      },
-      onFocus: () => onActivate(section.id),
-      onUpdate: ({ editor }) => {
-        const html = editor.getHTML();
-        latestHtmlRef.current = html;
-        onDirtyChange(section.id, true);
-        if (timerRef.current) window.clearTimeout(timerRef.current);
-        timerRef.current = window.setTimeout(() => {
-          saveNow(latestHtmlRef.current);
-          timerRef.current = null;
-        }, SAVE_DELAY_MS);
-      },
-    },
-    [draftId, section.id],
-  );
-
-  useEffect(() => {
-    onRegister(section.id, editor);
-    return () => onRegister(section.id, null);
-  }, [editor, onRegister, section.id]);
-
-  useEffect(() => {
-    if (!editor) return;
-    const nextHtml = section.html || "";
-    const currentHtml = editor.getHTML();
-    const hasLocalChanges = latestHtmlRef.current !== savedHtmlRef.current;
-    if (!hasLocalChanges && nextHtml !== savedHtmlRef.current && nextHtml !== currentHtml) {
-      editor.commands.setContent(nextHtml, false);
-      latestHtmlRef.current = nextHtml;
-      savedHtmlRef.current = nextHtml;
-      onDirtyChange(section.id, false);
-    }
-  }, [editor, onDirtyChange, section.html, section.id]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-      saveNow(latestHtmlRef.current);
-    };
-  }, [saveNow]);
-
-  return (
-    <div className="pe-section" data-section-id={section.id}>
-      {section.sectionId === "signature" && signatureDataUrl ? (
-        <div className="pe-signature-image">
-          <img src={signatureDataUrl} alt="Signature" />
-        </div>
-      ) : null}
-      <EditorContent editor={editor} />
     </div>
   );
 }
@@ -607,14 +486,12 @@ function insertImage(editor: Editor | null, event: ChangeEvent<HTMLInputElement>
 function PagedEditToolbar({
   draft,
   editor,
-  dirtyCount,
-  pageCount,
+  dirty,
   onDone,
 }: {
   draft: Draft;
   editor: Editor | null;
-  dirtyCount: number;
-  pageCount: number;
+  dirty: boolean;
   onDone: () => void;
 }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -631,113 +508,50 @@ function PagedEditToolbar({
       }}
     >
       <div className="flex items-center gap-0.5">
-        <ToolbarButton
-          label="Bold"
-          active={editor?.isActive("bold")}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-        >
+        <ToolbarButton label="Bold" active={editor?.isActive("bold")} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleBold().run()}>
           <Bold className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Italic"
-          active={editor?.isActive("italic")}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-        >
+        <ToolbarButton label="Italic" active={editor?.isActive("italic")} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleItalic().run()}>
           <Italic className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Underline"
-          active={editor?.isActive("underline")}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleUnderline().run()}
-        >
+        <ToolbarButton label="Underline" active={editor?.isActive("underline")} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleUnderline().run()}>
           <UnderlineIcon className="size-3.5" />
         </ToolbarButton>
       </div>
-
       <ToolbarDivider />
-
       <div className="flex items-center gap-0.5">
-        <ToolbarButton
-          label="Heading 2"
-          active={editor?.isActive("heading", { level: 2 })}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
+        <ToolbarButton label="Heading 2" active={editor?.isActive("heading", { level: 2 })} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}>
           <Heading2 className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Heading 3"
-          active={editor?.isActive("heading", { level: 3 })}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-        >
+        <ToolbarButton label="Heading 3" active={editor?.isActive("heading", { level: 3 })} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}>
           <Heading3 className="size-3.5" />
         </ToolbarButton>
       </div>
-
       <ToolbarDivider />
-
       <div className="flex items-center gap-0.5">
-        <ToolbarButton
-          label="Bullet list"
-          active={editor?.isActive("bulletList")}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
-        >
+        <ToolbarButton label="Bullet list" active={editor?.isActive("bulletList")} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
           <List className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Numbered list"
-          active={editor?.isActive("orderedList")}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        >
+        <ToolbarButton label="Numbered list" active={editor?.isActive("orderedList")} disabled={!canEdit} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
           <ListOrdered className="size-3.5" />
         </ToolbarButton>
       </div>
-
       <ToolbarDivider />
-
       <div className="flex items-center gap-0.5">
-        <ToolbarButton
-          label="Align left"
-          active={editor?.isActive({ textAlign: "left" })}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().setTextAlign("left").run()}
-        >
+        <ToolbarButton label="Align left" active={editor?.isActive({ textAlign: "left" })} disabled={!canEdit} onClick={() => editor?.chain().focus().setTextAlign("left").run()}>
           <AlignLeft className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Align center"
-          active={editor?.isActive({ textAlign: "center" })}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().setTextAlign("center").run()}
-        >
+        <ToolbarButton label="Align center" active={editor?.isActive({ textAlign: "center" })} disabled={!canEdit} onClick={() => editor?.chain().focus().setTextAlign("center").run()}>
           <AlignCenter className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Align right"
-          active={editor?.isActive({ textAlign: "right" })}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().setTextAlign("right").run()}
-        >
+        <ToolbarButton label="Align right" active={editor?.isActive({ textAlign: "right" })} disabled={!canEdit} onClick={() => editor?.chain().focus().setTextAlign("right").run()}>
           <AlignRight className="size-3.5" />
         </ToolbarButton>
-        <ToolbarButton
-          label="Justify"
-          active={editor?.isActive({ textAlign: "justify" })}
-          disabled={!canEdit}
-          onClick={() => editor?.chain().focus().setTextAlign("justify").run()}
-        >
+        <ToolbarButton label="Justify" active={editor?.isActive({ textAlign: "justify" })} disabled={!canEdit} onClick={() => editor?.chain().focus().setTextAlign("justify").run()}>
           <AlignJustify className="size-3.5" />
         </ToolbarButton>
       </div>
-
       <ToolbarDivider />
-
       <div className="flex items-center gap-0.5">
         <input
           ref={imageInputRef}
@@ -746,11 +560,7 @@ function PagedEditToolbar({
           className="hidden"
           onChange={(e) => insertImage(editor, e)}
         />
-        <ToolbarButton
-          label="Insert image"
-          disabled={!canEdit}
-          onClick={() => imageInputRef.current?.click()}
-        >
+        <ToolbarButton label="Insert image" disabled={!canEdit} onClick={() => imageInputRef.current?.click()}>
           <ImageIcon className="size-3.5" />
         </ToolbarButton>
         {editor ? (
@@ -774,7 +584,7 @@ function PagedEditToolbar({
 
       <div className="ml-auto flex items-center gap-2">
         <span className="text-[10px] text-[var(--ds-muted)] tabular-nums" aria-live="polite">
-          {pageCount} {pageCount === 1 ? "page" : "pages"} · {dirtyCount > 0 ? "Saving…" : "Saved"}
+          {dirty ? "Saving…" : "Saved"}
         </span>
         <button
           type="button"
