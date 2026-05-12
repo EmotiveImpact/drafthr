@@ -125,12 +125,79 @@ export function PaginatedEditableLetter({
   const contentLayerRef = useRef<HTMLDivElement>(null);
   const [pageCount, setPageCount] = useState(1);
 
-  const recomputePageCount = useCallback(() => {
+  /**
+   * Walk every section and:
+   *   1. Reset its margin-top
+   *   2. If the section would cross a page boundary (its bottom extends
+   *      past page N's content-area bottom while its top is on page N),
+   *      add margin-top to push it down to page N+1's top margin.
+   *   3. After all spacing is applied, recompute pageCount from the new
+   *      content layer height.
+   *
+   * Pixel math (all in px, CSS uses 96 px/in):
+   *   PAGE_PX             = 11.69 * 96   = 1122   (chrome card height)
+   *   GAP_PX              = 24
+   *   TOP_MARGIN_PX       = 1.0  * 96    = 96
+   *   BOTTOM_MARGIN_PX    = 1.2  * 96    = 115
+   *   PAGE_STEP_PX        = PAGE_PX + GAP_PX  (offset between page top edges)
+   *
+   * Content layer coordinate system is shared with pe-stage (same top:0
+   * origin). Each page i's content area runs from
+   *   y_top = i * PAGE_STEP_PX + TOP_MARGIN_PX
+   *   y_bot = i * PAGE_STEP_PX + PAGE_PX - BOTTOM_MARGIN_PX
+   *
+   * Note: applying margin-top to section N changes offsetTop for every
+   * subsequent section, but offsetTop reads force a synchronous layout
+   * in modern browsers, so iterating forward stays consistent.
+   */
+  const applyPageSpacingAndCount = useCallback(() => {
     const layer = contentLayerRef.current;
     if (!layer) return;
-    // Convert px → in using 96px/in (the standard CSS conversion). The
-    // editor padding equals top + bottom margins, so content height is
-    // total layer height minus those.
+
+    const PAGE_PX = PAGE_H_IN * 96;
+    const STEP_PX = PAGE_PX + PAGE_GAP_PX;
+    const TOP_MARGIN_PX = MARGIN_TOP_IN * 96;
+    const BOTTOM_MARGIN_PX = MARGIN_BOTTOM_IN * 96;
+    const CONTENT_PER_PAGE_PX = PAGE_PX - TOP_MARGIN_PX - BOTTOM_MARGIN_PX;
+
+    const sections = Array.from(
+      layer.querySelectorAll<HTMLElement>("[data-section-id]"),
+    );
+
+    // 1) Reset all section-level margins so the measurement is clean.
+    sections.forEach((s) => {
+      s.style.marginTop = "";
+    });
+
+    // 2) Walk forward, pushing sections off page boundaries.
+    for (const section of sections) {
+      // offsetTop is relative to the offsetParent (pe-content). Reading
+      // it forces a layout flush so any prior section's margin-top
+      // change is reflected.
+      const top = section.offsetTop;
+      const height = section.offsetHeight;
+      const bottom = top + height;
+
+      // Which page does this section START on?
+      // Page i's top-content edge sits at i*STEP + TOP_MARGIN.
+      // The section is on page i if top >= i*STEP + TOP_MARGIN AND
+      // top < (i+1)*STEP + TOP_MARGIN.
+      let pageIdx = 0;
+      while (top >= (pageIdx + 1) * STEP_PX + TOP_MARGIN_PX) pageIdx++;
+
+      const pageBottom = pageIdx * STEP_PX + PAGE_PX - BOTTOM_MARGIN_PX;
+
+      // If the section ends past the page's safe-bottom AND it'd actually
+      // fit on the next page (height < one page worth of content), push
+      // it. Sections taller than a page are unavoidable and just overflow.
+      if (bottom > pageBottom && height <= CONTENT_PER_PAGE_PX) {
+        const nextPageTop = (pageIdx + 1) * STEP_PX + TOP_MARGIN_PX;
+        const pushPx = Math.max(0, nextPageTop - top);
+        if (pushPx > 0) section.style.marginTop = `${pushPx}px`;
+      }
+    }
+
+    // 3) Recompute page count from the final laid-out height.
     const layerPx = layer.scrollHeight;
     const contentPx = Math.max(0, layerPx - (MARGIN_TOP_IN + MARGIN_BOTTOM_IN) * 96);
     const contentIn = contentPx / 96;
@@ -141,16 +208,16 @@ export function PaginatedEditableLetter({
   // Re-measure on mount and whenever any section's editor reports
   // dirty state — covers typing, paste, image insert, etc.
   useLayoutEffect(() => {
-    recomputePageCount();
-  }, [recomputePageCount, registeredVersion, dirtySections]);
+    applyPageSpacingAndCount();
+  }, [applyPageSpacingAndCount, registeredVersion, dirtySections]);
 
   // Also re-measure on window resize (rare, but A4 width is fixed so
   // wrapping changes can shift the height).
   useEffect(() => {
-    const onResize = () => recomputePageCount();
+    const onResize = () => applyPageSpacingAndCount();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [recomputePageCount]);
+  }, [applyPageSpacingAndCount]);
 
   const activeEditor = useMemo(() => {
     if (activeSectionId) {
@@ -174,10 +241,11 @@ export function PaginatedEditableLetter({
         else next.delete(sectionId);
         return next;
       });
-      // Re-measure on every keystroke so the chrome stack grows with content.
-      requestAnimationFrame(recomputePageCount);
+      // Re-measure on every keystroke so the chrome stack grows with
+      // content AND page-boundary spacers are kept in sync.
+      requestAnimationFrame(applyPageSpacingAndCount);
     },
-    [recomputePageCount],
+    [applyPageSpacingAndCount],
   );
 
   const flushAllSections = useCallback(() => {
