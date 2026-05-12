@@ -341,7 +341,7 @@ export function Editor() {
            * mode (rails collapsed) and below md (drawer rails). */}
           <div
             className={
-              "hidden md:inline-flex absolute -translate-x-1/2 items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7 " +
+              "inline-flex absolute -translate-x-1/2 items-center rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden h-7 " +
               (focusMode ? "left-1/2" : "left-1/2 lg:left-[calc(50%-50px)]")
             }
             role="tablist"
@@ -361,7 +361,7 @@ export function Editor() {
               const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
               if (pendingCount === 0) return null;
               return (
-                <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[11px] text-[var(--ds-amber-fg)] font-medium">
                   <span>{pendingCount} pending</span>
                   <button
                     type="button"
@@ -384,7 +384,7 @@ export function Editor() {
               );
             })()}
             {globallyStreaming && (
-              <span className="hidden md:flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
+              <span className="flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
                 <Loader2 className="size-3 animate-spin" /> Drafting…
               </span>
             )}
