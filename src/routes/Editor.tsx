@@ -838,10 +838,17 @@ export function Editor() {
       <div
         className={
           "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
+          // Keep three tracks at lg:+ even when the rail is collapsed —
+          // shrink the last track to 0px instead of removing it. Browsers
+          // can interpolate grid-template-columns when track counts match,
+          // so the column smoothly animates from 360px to 0px and the
+          // canvas grows in lockstep. iOS-style easing matches the rest
+          // of the editor's motion vocabulary.
+          "lg:transition-[grid-template-columns] lg:duration-[280ms] lg:ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:lg:transition-none " +
           (focusMode
             ? "lg:grid-cols-1"
             : railCollapsed
-            ? "lg:grid-cols-[260px_minmax(0,1fr)]"
+            ? "lg:grid-cols-[260px_minmax(0,1fr)_0px]"
             : "lg:grid-cols-[260px_minmax(0,1fr)_360px]")
         }
       >
@@ -1041,24 +1048,29 @@ export function Editor() {
          * is true the rail is removed from the grid entirely (canvas takes
          * full width) and a floating "Ask AI" pill in the bottom-right
          * brings it back — mobile-mirror pattern. */}
-        {!railCollapsed && (
-          <aside
-            className={
-              "hidden lg:flex flex-col min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
-              (focusMode ? "lg:hidden" : "")
-            }
-          >
-            <RightRail
-              draft={draft}
-              tab={rightTab}
-              onTabChange={setRightTab}
-              pendingComment={pendingComment}
-              onPendingCommentConsumed={() => setPendingComment(null)}
-              activeSectionId={activeSectionId}
-              onCollapse={() => setRailCollapsed(true)}
-            />
-          </aside>
-        )}
+        {/* Always mounted at lg:+ so the grid's third track has stable
+         * content while it animates from 360px to 0px. overflow-hidden
+         * clips during the slide; opacity fades the content in lock-
+         * step so the rail doesn't look squished at midpoint. */}
+        <aside
+          aria-hidden={railCollapsed || undefined}
+          className={
+            "hidden lg:flex flex-col min-h-0 overflow-hidden lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
+            "lg:transition-opacity lg:duration-200 lg:ease-out motion-reduce:lg:transition-none " +
+            (focusMode ? "lg:hidden" : "") +
+            (railCollapsed ? " opacity-0 pointer-events-none" : " opacity-100")
+          }
+        >
+          <RightRail
+            draft={draft}
+            tab={rightTab}
+            onTabChange={setRightTab}
+            pendingComment={pendingComment}
+            onPendingCommentConsumed={() => setPendingComment(null)}
+            activeSectionId={activeSectionId}
+            onCollapse={() => setRailCollapsed(true)}
+          />
+        </aside>
 
         {/* Mobile bottom sheet — Framer Motion with drag-to-dismiss,
          * snap points (half / full), and momentum-aware release. Tap-scrim
