@@ -73,34 +73,47 @@
 
     /* ───────── HERO ───────── */
     .hero{
-      background:linear-gradient(180deg,#fff 0%,#fafbfc 100%);
+      background:
+        radial-gradient(80% 60% at 88% -10%, rgba(10,11,13,0.05), transparent 70%),
+        linear-gradient(180deg,#fff 0%,#fbfbfc 100%);
       border:1px solid var(--ds-line);
-      border-radius:14px;
-      padding:36px 40px 32px;
+      border-radius:16px;
+      padding:60px 56px 52px;
       margin-bottom:28px;
       position:relative;
       overflow:hidden;
     }
-    .hero::after{
-      content:"";position:absolute;right:-80px;top:-80px;width:340px;height:340px;
-      background:radial-gradient(closest-side,rgba(10,11,13,0.04),transparent 70%);
-      pointer-events:none;
+    /* A quiet, large decorative serif glyph in the corner — replaces the
+     * lockup we removed. Reinforces brand without literal logo repetition. */
+    .hero::before{
+      content:"D";
+      position:absolute;right:42px;top:18px;
+      font-family:var(--font-display);font-weight:600;font-size:300px;line-height:1;
+      color:rgba(10,11,13,0.035);
+      pointer-events:none;letter-spacing:-0.04em;
     }
-    .hero .lockup{display:flex;align-items:center;gap:14px;margin-bottom:18px}
-    .hero .lockup .chip{width:52px;height:52px;border-radius:12px;background:var(--ds-ink);display:grid;place-items:center;color:#fff;font-family:var(--font-serif);font-weight:700;font-size:30px;line-height:1;letter-spacing:-0.04em}
-    .hero .lockup .stack{display:flex;flex-direction:column;line-height:1.1}
-    .hero .lockup .word{font-family:var(--font-display);font-size:30px;font-weight:600;letter-spacing:0.005em;color:var(--ds-ink)}
-    .hero .lockup .word .hr{letter-spacing:0.025em}
-    .hero .lockup .slogan{font-family:var(--font-display);font-size:14px;font-style:italic;color:var(--ds-muted);margin-top:4px;letter-spacing:0.01em}
+
+    .hero .eyebrow{
+      font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.14em;
+      color:var(--ds-muted);margin-bottom:14px;display:inline-flex;align-items:center;gap:8px;
+    }
+    .hero .eyebrow::before{
+      content:"";width:18px;height:1px;background:var(--ds-subtle);display:inline-block;
+    }
 
     .hero h1{
-      font-family:var(--font-display);
-      font-size:42px;line-height:1.08;font-weight:600;letter-spacing:-0.005em;
-      color:var(--ds-ink);margin:6px 0 10px;max-width:24ch;
+      font-family:var(--font-serif);
+      font-size:52px;line-height:1.05;font-weight:600;letter-spacing:-0.012em;
+      color:var(--ds-ink);margin:0 0 6px;max-width:20ch;
     }
-    .hero p.lede{font-size:15.5px;color:var(--ds-body);max-width:60ch;margin:0 0 22px;line-height:1.55}
+    .hero h1 .accent{font-style:italic;font-weight:500;color:var(--ds-body)}
+    .hero p.lede{
+      font-size:16.5px;color:var(--ds-body);max-width:54ch;
+      margin:18px 0 28px;line-height:1.55;
+    }
+    .hero p.lede em{font-style:italic;color:var(--ds-ink);font-weight:500;font-family:var(--font-display)}
 
-    .hero .cta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .hero .cta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:relative;z-index:1}
     .btn{
       display:inline-flex;align-items:center;gap:8px;
       padding:11px 18px;border-radius:9px;font-weight:600;font-size:14px;
@@ -122,7 +135,7 @@
 
     /* ───────── Section header ───────── */
     .section-head{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 18px}
-    .section-head h2{font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:-0.005em;color:var(--ds-ink);margin:0}
+    .section-head h2{font-family:var(--font-serif);font-size:22px;font-weight:600;letter-spacing:-0.005em;color:var(--ds-ink);margin:0}
     .section-head .meta{font-size:12.5px;color:var(--ds-muted)}
     .section-head a.see-all{font-size:12.5px;color:var(--ds-muted);font-weight:500}
     .section-head a.see-all:hover{color:var(--ds-ink)}
@@ -138,7 +151,7 @@
     }
     .tile:hover{border-color:var(--ds-ink);transform:translateY(-2px);box-shadow:0 8px 24px -10px rgba(0,0,0,0.12)}
     .tile .icon-tile{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-size:18px}
-    .tile h3{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ds-ink);margin:0;letter-spacing:0}
+    .tile h3{font-family:var(--font-serif);font-size:18px;font-weight:600;color:var(--ds-ink);margin:0;letter-spacing:0}
     .tile p{font-size:12.5px;color:var(--ds-muted);margin:0;line-height:1.5}
     .tile .start{position:absolute;bottom:14px;right:18px;font-size:11.5px;font-weight:600;color:var(--ds-ink);opacity:0;transition:opacity 0.15s}
     .tile:hover .start{opacity:1}
@@ -160,7 +173,7 @@
     .two-col{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-bottom:34px}
     .panel{background:var(--ds-surface);border:1px solid var(--ds-line);border-radius:12px;overflow:hidden}
     .panel-head{padding:14px 18px;border-bottom:1px solid var(--ds-line-2);display:flex;align-items:center;justify-content:space-between}
-    .panel-head h3{font-family:var(--font-display);font-size:16px;font-weight:600;color:var(--ds-ink);margin:0}
+    .panel-head h3{font-family:var(--font-serif);font-size:16px;font-weight:600;color:var(--ds-ink);margin:0}
     .panel-head .count{font-size:11px;color:var(--ds-muted);font-weight:600;letter-spacing:0.04em;background:var(--ds-surface-2);padding:2px 8px;border-radius:999px}
 
     .draft-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--ds-line-2);transition:background 0.12s}
@@ -204,7 +217,7 @@
       background:var(--ds-surface);border:1px dashed var(--ds-line);border-radius:12px;
       padding:36px;text-align:center;margin-bottom:34px;
     }
-    .empty-state h3{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--ds-ink);margin:0 0 6px}
+    .empty-state h3{font-family:var(--font-serif);font-size:18px;font-weight:600;color:var(--ds-ink);margin:0 0 6px}
     .empty-state p{font-size:13px;color:var(--ds-muted);margin:0}
 
     .toggle-row{display:flex;gap:8px;margin-bottom:20px}
@@ -274,29 +287,21 @@
 
       <!-- ===== HERO ===== -->
       <section class="hero">
-        <div class="lockup">
-          <div class="chip">D</div>
-          <div class="stack">
-            <span class="word">Draft<span class="hr">HR</span></span>
-            <span class="slogan">Words that carry weight.</span>
-          </div>
-        </div>
+        <div class="eyebrow">Tuesday · 12 May</div>
 
-        <h1>Hello, Augustus.<br/>Let's draft something that holds up.</h1>
+        <h1>
+          Hello, Augustus.<br/>
+          <span class="accent">Let's put it in writing.</span>
+        </h1>
+
         <p class="lede">
-          Wizard-guided HR letters with UK <em>and</em> US legal awareness — grievance,
-          resignation, settlement, flexible working, and more. Defensible by default.
+          Wizard-guided HR letters with UK and US legal awareness — grievance, resignation,
+          settlement, flexible working, and more. <em>Defensible by default.</em>
         </p>
 
         <div class="cta-row">
           <a class="btn primary" href="#">＋  New letter</a>
-          <a class="btn ghost" href="#">Browse all letters <span class="arrow">→</span></a>
-        </div>
-
-        <div class="mode-row">
-          <span>Writing as:</span>
-          <span class="mode-chip active"><span class="dot"></span>Employee</span>
-          <span class="mode-chip">HR / Manager</span>
+          <a class="btn ghost" href="#">Browse all 22 letter types <span class="arrow">→</span></a>
         </div>
       </section>
 
