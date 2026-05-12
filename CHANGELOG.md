@@ -10,7 +10,89 @@ Big rocks still to land — listed for reference, not yet shipped:
 - Real transactional email for invites and comment notifications (mailto fallback shipped).
 - Real-time presence / cursors on shared drafts.
 - Onboarding walkthrough on first-run.
-- Test coverage for the new design-system primitives, AIPanel, RefinePopover, InvitePopover, EditDetailsSheet.
+- Keyboard shortcuts for the most-used menubar actions (Regenerate, Tone, Refine) to compensate for the extra tap-depth introduced in 0.4.0.
+- Test coverage for the new design-system primitives, AIPanel, RefinePopover, InvitePopover, EditDetailsSheet, FloatingCommentPanel, MobileBottomSheet.
+
+---
+
+## 0.4.0 — 2026-05-12
+
+Editor restructure release. Two architectural moves — AI takes the full right rail, a top File/Tools/View menubar replaces the desktop icon toolbar — plus a full mobile polish pass and a sweep of feedback / empty-state / animation work. Provider also rotated end-to-end and settled on Anthropic Claude.
+
+### Editor — Change A: right rail is AI-only
+
+- Right rail collapsed to `AIPanel` at full rail height. No tab strip, no Comments / Timeline / Compliance competing for space. AI is the rail.
+- New `FloatingCommentPanel` (portalled to `<body>`) anchors comment threads inline to the highlighted text mark — selection rect for new threads, `mark[data-comment-id]` for existing ones. Self-positions below the anchor, flips above when it would overflow, viewport-clamped, repositions on scroll/resize, dismisses on Esc / outside-click / X.
+- "All comments" overview — a Radix Dialog launched from the Tools menu, lists every unresolved thread (and resolved separately). Click any row to scroll the canvas + open the floating panel anchored there.
+- Timeline relocated to a Radix Dialog launched from the Tools menu.
+- Compliance / Rights stays as the bottom of the LEFT rail's secondary tab.
+
+### Editor — Change C: top File / Tools / View menubar
+
+- Three labelled DropdownMenu triggers at the top-left of the topbar, just after the D brand mark. Conventional desktop menubar position. `md:+` only — mobile keeps the existing icon toolbar + ⋯ overflow.
+- File → Edit details · Export… · Settings · Privacy & data.
+- Tools → Regenerate all (or Stop) · Refine current section · Comments (count) · Timeline.
+- View → Edit / Preview (✓) · Edit-on-page · Focus mode · (mobile-only: Sections rail · AI rail toggles).
+- Retired from the desktop topbar: Tone icon, Regenerate icon, Edit-on-page icon, Focus icon, ⋯ overflow, ← Letters button. All available via the menus.
+- D brand mark is now the single back/home anchor (links to `/hr` or `/me` based on `draft.mode`).
+- Net: roughly half as many interactive elements in the desktop topbar, organised by intent.
+
+### Mobile editor polish
+
+- A4 paper in Preview now fits a 390px viewport via `zoom: 0.48` (CSS reflows naturally; iOS pinch-zoom still works for detail reads).
+- Right rail replaced with a Framer Motion bottom sheet with three snap points (closed / half / full), drag-to-dismiss, momentum-aware release (flick-down closes, flick-up expands to full), and a tap-the-handle cycle (full → half → closed). Spring physics (stiffness 320, damping 38, mass 0.8) so the snap feels weighted.
+- Floating "Ask AI" pill in the bottom-right corner — bottom-sheet trigger that's visible whenever the sheet is closed. Fades + scales away when the sheet opens.
+- Selection bubble menu now passes `popperOptions` with `preventOverflow` boundary `'viewport'` + flip fallback placements so the "+ Comment" pill stays inside the viewport at any selection position.
+- Comment coverage loop fixed — tapping an inline comment anchor now scrolls the mark to the top of the viewport (with ring flash), then opens the panel 120ms later so the user sees both contexts.
+- SectionEditor card chrome stripped on mobile (`md:` and below) — drops the rounded border + header divider, shrinks padding from `px-7 py-5` to `px-3 py-3`. Sections separated by a single top hairline. Gains ~64px of horizontal writing surface.
+- Modal/popover viewport caps — `InvitePopover` and `RefineDialog` clamp via `max-w-[calc(100vw-1.5rem)]`.
+
+### Animations + transitions
+
+- Sheet open/close transitions to/from `translate-y` via Framer Motion with a `cubic-bezier(0.32, 0.72, 0, 1)` iOS easing.
+- Page-level cross-fade between routes — `AnimatePresence` wraps `<Routes>`, 180ms opacity + 6px Y slide on every route change. Editor routes exempted to avoid double-animation against their internal transitions.
+- Bottom-sheet scrim cross-fades to 30% black opacity in parallel with the sheet slide.
+- Floating Ask AI pill scales-down 90% + fades when the sheet opens so it doesn't peek through under the rounded sheet corner.
+
+### Toasts + feedback
+
+- New Sonner toast surface mounted once at the app root (top-right, theme-aware, richColors, swipe-dismiss + close button).
+- Accept-all / reject-all of pending AI changes now emits a toast with **Undo** — snapshots the prior state (sections' html + pendingChange) and restores it via existing store actions.
+
+### Empty-state polish
+
+- New reusable `EmptyState` component in `components/ds/` — icon in a slate-200 circular backdrop, 15px medium heading, muted body (52ch max), optional primary + secondary CTAs.
+- Swept five surfaces: Home (drafts + deadlines), Comments panel, Exported, Activity, Calendar. Each now points the user back to productive work — "Browse letters", "Start a letter", etc.
+
+### AI panel polish
+
+- Discoverable starter grid in the empty state — four cards, one per typed tool (regenerate / tighten / addClause / summariseForCounsel) with icon + bold label + one-line hint. Click hydrates the composer with the underlying prompt.
+- New `Recent` row below the starter grid showing the last 5 submitted prompts (deduped, newest first, 5-cap). Persisted to `localStorage` via the new `recent-prompts.ts` helper.
+
+### LLM provider
+
+- Provider rotated through Qwen → Gemini → NVIDIA NIM → OpenRouter and settled on **Anthropic Claude only**. Default model is `claude-sonnet-4-6`; `claude-opus-4-7` and `claude-haiku-4-5` selectable from Settings.
+- Removed dependencies: `@ai-sdk/google`, `@ai-sdk/openai-compatible`. Removed env vars: `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `NVIDIA_API_KEY`, `NVIDIA_MODEL`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`.
+- `api/draft.ts` / `api/agent.ts` / `server/llm-model.ts` simplified to a single `createAnthropic` path with explicit `baseURL: 'https://api.anthropic.com/v1'` (the v3.0.76 SDK was calling `/messages` without the `/v1/` prefix and returning 404).
+- API key fallback uses `||` not `??` so empty-string env vars (which some shells export) properly fall through to the hardcoded server-side key.
+- `MODEL_OPTIONS` reduced to three Claude tiers with cost hints. Stale localStorage selections (Qwen / Gemini / NVIDIA / OpenRouter) auto-reset to the new default on next load.
+
+### Streaming + output quality
+
+- Throttled `editor.commands.setContent` to 60ms during streaming so the section editor doesn't reparse on every token — fixes the "5 words per line jitter" effect at 50+ tokens/sec.
+- Post-stream sanitisation now strips any leftover `{{placeholder}}` tokens from the model output and replaces them with `[TBD]`. Triple defence (system-prompt rule + better model + sanitiser) against template variables leaking into the final letter.
+
+### UI polish
+
+- Wordmark letter-spacing increased from `0.01em` to `0.06em` for breathing room.
+- BrandMark sized up on every surface (editor topbar 26 → 32, mobile topbar 28 → 34, sidebar already 40).
+- Mobile sidebar sheet narrowed from `18rem` to `11.5rem`.
+- Edit/Preview pill: only the active tab shows its label; the inactive collapses to icon-only.
+- Wizard step → next-step button switched from "Next: Evidence/Review" to just "Evidence" / "Review" (the arrow already implies "next"). Icon-only on mobile.
+
+### Fixes
+
+- Vercel CI builds were failing every commit since the Home redesign — TypeScript errors in unused `ChevronDown` import, removed `QWEN_API_KEY` references in `server/llm-model.test.ts`, unused `warn` helper. All fixed; production deploy unblocked.
 
 ---
 
