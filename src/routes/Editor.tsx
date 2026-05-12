@@ -112,6 +112,10 @@ export function Editor() {
   // Mobile bottom-sheet snap state. "closed" is driven by !showRail; the
   // sheet ANIMATES into "half" by default when the user opens it.
   const [sheetSnap, setSheetSnap] = useState<"half" | "full">("half");
+  // Desktop right-rail collapse — Notion-style 36px vertical strip with
+  // "Ask AI" label so AI stays in peripheral vision even when collapsed.
+  // lg:+ only; mobile uses showRail + bottom sheet.
+  const [railCollapsed, setRailCollapsed] = useState(false);
 
   // Change A: comments no longer open the right rail. They pop up as a
   // floating panel anchored to the inline highlight (existing thread)
@@ -835,6 +839,8 @@ export function Editor() {
           "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
           (focusMode
             ? "lg:grid-cols-1"
+            : railCollapsed
+            ? "lg:grid-cols-[260px_minmax(0,1fr)_36px]"
             : "lg:grid-cols-[260px_minmax(0,1fr)_360px]")
         }
       >
@@ -1030,21 +1036,63 @@ export function Editor() {
         </main>
 
         {/* Desktop right rail — inline, persistent. Hidden below lg: where
-         * the bottom sheet handles things. */}
+         * the bottom sheet handles things. Collapsible to a 36px vertical
+         * strip when railCollapsed is true so the canvas can reclaim the
+         * 360px without engaging full Focus mode. */}
         <aside
           className={
-            "hidden lg:block min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
+            "hidden lg:flex flex-col min-h-0 lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)] " +
             (focusMode ? "lg:hidden" : "")
           }
         >
-          <RightRail
-            draft={draft}
-            tab={rightTab}
-            onTabChange={setRightTab}
-            pendingComment={pendingComment}
-            onPendingCommentConsumed={() => setPendingComment(null)}
-            activeSectionId={activeSectionId}
-          />
+          {railCollapsed ? (
+            // Collapsed strip — full-height button. Vertical "Ask AI"
+            // text + Sparkles icon stays in peripheral vision; click
+            // anywhere on the strip re-expands the rail.
+            <button
+              type="button"
+              onClick={() => setRailCollapsed(false)}
+              className="flex flex-col items-center justify-between h-full w-full py-3 group hover:bg-[var(--ds-line-2)] transition"
+              aria-label="Expand AI rail"
+              title="Expand AI rail"
+            >
+              <ChevronLeft className="size-4 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
+              <span
+                className="text-[11px] font-medium tracking-wide text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition"
+                style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+              >
+                Ask AI
+              </span>
+              <Sparkles className="size-4 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
+            </button>
+          ) : (
+            <>
+              {/* Header row with collapse chevron. Sits above the
+               * RightRail's tab strip so the AI panel doesn't have to
+               * know about collapse state. */}
+              <div className="flex items-center justify-end px-1.5 py-1.5 border-b border-[var(--ds-line-2)] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setRailCollapsed(true)}
+                  className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+                  aria-label="Collapse AI rail"
+                  title="Collapse AI rail"
+                >
+                  <PanelRight className="size-3.5" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <RightRail
+                  draft={draft}
+                  tab={rightTab}
+                  onTabChange={setRightTab}
+                  pendingComment={pendingComment}
+                  onPendingCommentConsumed={() => setPendingComment(null)}
+                  activeSectionId={activeSectionId}
+                />
+              </div>
+            </>
+          )}
         </aside>
 
         {/* Mobile bottom sheet — Framer Motion with drag-to-dismiss,
