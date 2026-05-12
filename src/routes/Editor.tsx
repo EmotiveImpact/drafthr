@@ -364,7 +364,7 @@ export function Editor() {
            * sits directly above the canvas column so the items appear
            * where they used to on the secondary toolbar. Below lg this
            * inline-flows after the left cluster. */}
-          <div className="relative flex items-center gap-2 min-w-0 lg:px-3">
+          <div className="relative flex-1 lg:flex-none flex items-center justify-center lg:justify-start gap-2 min-w-0 lg:px-3">
             {/* Left-of-canvas: writing controls grouped — Tone + Regenerate all.
              * Both are "shape the AI output" affordances, so they sit
              * together to the left of the Edit/Preview toggle. */}
