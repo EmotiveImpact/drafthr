@@ -9,7 +9,7 @@ const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1";
 const DEFAULT_MODEL = "gemini-3.1-flash-lite" as const;
 const GEMINI_FALLBACK_MODEL = "gemini-3.1-flash-lite" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
-const NVIDIA_FALLBACK_MODEL = "meta/llama-3.3-70b-instruct" as const;
+const NVIDIA_FALLBACK_MODEL = "z-ai/glm4.7" as const;
 const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
 
 const ALLOWED_MODELS = new Set([
@@ -20,6 +20,7 @@ const ALLOWED_MODELS = new Set([
   "gemini-2.0-flash-lite",
   "gemini-2.5-flash",
   "gemini-2.5-pro",
+  "z-ai/glm4.7",
   "meta/llama-3.3-70b-instruct",
   "meta/llama-3.1-405b-instruct",
   "mistralai/mistral-large-2-instruct",
@@ -79,12 +80,7 @@ export function resolveModelName(
 }
 
 function isNvidiaModel(name: string): boolean {
-  return (
-    name.startsWith("meta/") ||
-    name.startsWith("mistralai/") ||
-    name.startsWith("nvidia/") ||
-    name.startsWith("microsoft/")
-  );
+  return ["meta/", "mistralai/", "nvidia/", "microsoft/", "z-ai/"].some((p) => name.startsWith(p));
 }
 
 export function buildModel(requestedModel?: string, logPrefix?: string) {
