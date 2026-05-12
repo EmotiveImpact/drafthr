@@ -36,6 +36,16 @@ type Props = {
   onSelectSection: (sectionId: string) => void;
   /** Disable WizardChrome navigation (e.g. while AI is streaming). */
   disabled?: boolean;
+  /**
+   * Optional persistent content rendered below the section list. Used on
+   * Edit to pin the Rights / Compliance panel to the bottom of the rail
+   * so live tribunal-register checks are always visible while writing
+   * (no tab-switch needed). The bottom slot has its own border + bg so
+   * it reads as a distinct region from the section list above it.
+   */
+  bottom?: React.ReactNode;
+  /** Header label rendered above the bottom slot. */
+  bottomLabel?: string;
 };
 
 export function WizardSidebar({
@@ -44,6 +54,8 @@ export function WizardSidebar({
   activeSectionId,
   onSelectSection,
   disabled,
+  bottom,
+  bottomLabel,
 }: Props) {
   const total = draft.sections.length;
   const ready = draft.sections.filter((s) => s.status === "ready").length;
@@ -70,7 +82,11 @@ export function WizardSidebar({
         </span>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      {/* Sections list. When a bottom slot is provided we cap the
+       * sections list to half the available rail so the bottom panel
+       * is always partly visible without scrolling. Both regions scroll
+       * independently inside their own ScrollAreas. */}
+      <ScrollArea className={bottom ? "min-h-0 basis-1/2 flex-1" : "flex-1 min-h-0"}>
         <div className="p-3 space-y-0.5">
           {draft.sections.map((s, i) => {
             const isActive = activeSectionId === s.id;
@@ -120,6 +136,22 @@ export function WizardSidebar({
           })}
         </div>
       </ScrollArea>
+
+      {/* Bottom slot — Rights / Compliance panel on Edit. Borders top so
+       * the boundary with the section list is unambiguous; own ScrollArea
+       * so a long lint list doesn't push the section list out of view. */}
+      {bottom && (
+        <div className="basis-1/2 flex-1 min-h-0 flex flex-col border-t border-[var(--ds-line)]">
+          {bottomLabel && (
+            <div className="border-b border-[var(--ds-line-2)] px-4 py-3">
+              <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
+                {bottomLabel}
+              </h2>
+            </div>
+          )}
+          <div className="flex-1 min-h-0 overflow-auto">{bottom}</div>
+        </div>
+      )}
     </>
   );
 }

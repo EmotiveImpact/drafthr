@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
+import { EmployeeRail } from "@/components/editor/EmployeeRail";
+import { CompliancePanel } from "@/components/editor/CompliancePanel";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { RightRail, type RightRailTab } from "@/components/editor/RightRail";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
@@ -516,6 +518,16 @@ export function Editor() {
               el?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             disabled={globallyStreaming}
+            bottomLabel={
+              draft.mode === "employee" ? "Rights & checks" : "Compliance"
+            }
+            bottom={
+              draft.mode === "employee" ? (
+                <EmployeeRail draft={draft} />
+              ) : (
+                <CompliancePanel draft={draft} />
+              )
+            }
           />
         </aside>
 
