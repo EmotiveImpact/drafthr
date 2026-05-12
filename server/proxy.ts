@@ -54,7 +54,7 @@ export async function handleDraftRequest(
   let realError: string | null = null;
   try {
     const result = streamText({
-      model: buildModel(body.model, "qwen-proxy"),
+      model: buildModel(body.model),
       messages: body.messages,
       temperature: body.temperature ?? 0.4,
       maxOutputTokens: body.maxTokens ?? 1200,
@@ -115,7 +115,7 @@ export async function handleAgentRequest(
   const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
 
   const result = streamText({
-    model: buildModel(body.model, "agent-proxy"),
+    model: buildModel(body.model),
     system: body.system,
     messages: modelMessages,
     tools: agentTools,

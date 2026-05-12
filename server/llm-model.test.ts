@@ -2,31 +2,23 @@ import { describe, expect, it } from "vitest";
 import { resolveModelName } from "./llm-model";
 
 describe("resolveModelName", () => {
-  it("uses an allow-listed requested model before env defaults", () => {
+  it("uses an allow-listed requested model", () => {
     expect(
-      resolveModelName("qwen/qwen3-next-80b-a3b-instruct:free", {
-        env: { LLM_MODEL: "claude-sonnet-4-6", OPENROUTER_API_KEY: "or-key" },
+      resolveModelName("claude-haiku-4-5", {
+        env: { ANTHROPIC_API_KEY: "anthropic-key" },
       })
-    ).toBe("qwen/qwen3-next-80b-a3b-instruct:free");
+    ).toBe("claude-haiku-4-5");
   });
 
   it("ignores unrecognised requested models", () => {
     expect(
       resolveModelName("made-up-model", {
-        env: { LLM_MODEL: "openai/gpt-oss-20b:free", OPENROUTER_API_KEY: "or-key" },
+        env: { LLM_MODEL: "claude-opus-4-7", ANTHROPIC_API_KEY: "anthropic-key" },
       })
-    ).toBe("openai/gpt-oss-20b:free");
+    ).toBe("claude-opus-4-7");
   });
 
-  it("honours LLM_PROVIDER=claude when no model is specified", () => {
-    expect(
-      resolveModelName(undefined, {
-        env: { LLM_PROVIDER: "claude", ANTHROPIC_API_KEY: "anthropic-key" },
-      })
-    ).toBe("claude-sonnet-4-6");
-  });
-
-  it("defaults to GPT-OSS 120B when no provider or model is specified", () => {
-    expect(resolveModelName(undefined, { env: {} })).toBe("openai/gpt-oss-120b:free");
+  it("defaults to Sonnet when no model is specified", () => {
+    expect(resolveModelName(undefined, { env: {} })).toBe("claude-sonnet-4-6");
   });
 });

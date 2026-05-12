@@ -14,4 +14,4 @@
  *
  * Change this string to retarget every fallback in lockstep.
  */
-export const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free" as const;
+export const DEFAULT_MODEL = "claude-sonnet-4-6" as const;

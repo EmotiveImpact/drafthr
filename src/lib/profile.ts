@@ -21,14 +21,6 @@ import { DEFAULT_MODEL } from "./llm/default-model";
  * - qwen-turbo:  fastest / cheapest (Qwen 2.x line)
  */
 export type ModelId =
-  | "openai/gpt-oss-120b:free"
-  | "openai/gpt-oss-20b:free"
-  | "qwen/qwen3-next-80b-a3b-instruct:free"
-  | "qwen/qwen3-coder:free"
-  | "z-ai/glm-4.5-air:free"
-  | "minimax/minimax-m2.5:free"
-  | "nvidia/nemotron-3-super-120b-a12b:free"
-  | "google/gemma-4-31b-it:free"
   | "claude-opus-4-7"
   | "claude-sonnet-4-6"
   | "claude-haiku-4-5";
@@ -40,21 +32,11 @@ export const MODEL_OPTIONS: {
   id: ModelId;
   label: string;
   hint: string;
-  provider: "openrouter" | "anthropic";
+  provider: "anthropic";
 }[] = [
-  // OpenRouter free tier — verified responsive.
-  { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super · Free", hint: "Default. ~2.5s response, follows templates accurately.", provider: "openrouter" },
-  { id: "openai/gpt-oss-120b:free", label: "GPT-OSS 120B · Free", hint: "OpenAI's open 120B. Strong writing, slower start (reasoning).", provider: "openrouter" },
-  { id: "openai/gpt-oss-20b:free", label: "GPT-OSS 20B · Free", hint: "Smaller, faster GPT-OSS. Use for quick drafts.", provider: "openrouter" },
-  { id: "qwen/qwen3-next-80b-a3b-instruct:free", label: "Qwen 3 Next 80B · Free", hint: "Latest Qwen — strong multilingual.", provider: "openrouter" },
-  { id: "qwen/qwen3-coder:free", label: "Qwen 3 Coder · Free", hint: "Code-focused Qwen variant.", provider: "openrouter" },
-  { id: "z-ai/glm-4.5-air:free", label: "GLM 4.5 Air · Free", hint: "Z.AI's lighter GLM.", provider: "openrouter" },
-  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B · Free", hint: "Google's latest open Gemma.", provider: "openrouter" },
-  { id: "minimax/minimax-m2.5:free", label: "MiniMax M2.5 · Free (slow)", hint: "Capable but slow — only pick if quality matters more than speed.", provider: "openrouter" },
-  // Anthropic — paid (best quality, charged per request).
-  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 · Paid", hint: "~$0.18/letter. Best value Claude — tier-leading legal register.", provider: "anthropic" },
-  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 · Paid", hint: "~$0.02/letter. Fast, cheap Claude. Good for low-risk drafts.", provider: "anthropic" },
-  { id: "claude-opus-4-7", label: "Claude Opus 4.7 · Paid", hint: "~$0.90/letter. Reserve for tribunal-bound + high-risk letters only.", provider: "anthropic" },
+  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", hint: "Default. Tier-leading legal register, ~$0.18/letter.", provider: "anthropic" },
+  { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", hint: "Fast + cheap, ~$0.02/letter. Good for low-risk drafts.", provider: "anthropic" },
+  { id: "claude-opus-4-7", label: "Claude Opus 4.7", hint: "Highest quality, ~$0.90/letter. Tribunal-bound + high-risk only.", provider: "anthropic" },
 ];
 
 /** @deprecated Use MODEL_OPTIONS. Kept for callers that haven't migrated. */
@@ -175,24 +157,11 @@ export const useProfileStore = create<Store>()(
           state.profile.defaults.qwenModel = DEFAULT_MODEL;
           return;
         }
-        // One-time migration off prior defaults that aren't the current
-        // DEFAULT_MODEL. Users who explicitly picked something else in
-        // Settings keep their choice — we only retarget known auto-applied
-        // defaults (the Claude default we shipped, then the qwen3-max
-        // default we briefly shipped). Any other selection is treated as
-        // user intent and left alone.
-        const stale = new Set([
-          "claude-sonnet-4-6",
-          "qwen-flash", "qwen3-flash", "qwen3-max",
-          "gemini-2.0-flash", "gemini-3.1-flash-lite",
-          "z-ai/glm4.7", "moonshotai/kimi-k2.6",
-          "meta/llama-3.3-70b-instruct", "meta/llama-3.1-405b-instruct",
-          "mistralai/mistral-large-2-instruct", "nvidia/llama-3.1-nemotron-70b-instruct",
-        ]);
-        if (
-          state.profile.defaults.qwenModel !== DEFAULT_MODEL &&
-          stale.has(state.profile.defaults.qwenModel)
-        ) {
+        // Reset any saved model that's no longer in MODEL_OPTIONS. This
+        // catches every legacy provider (Qwen, Gemini, NVIDIA NIM,
+        // OpenRouter) since we collapsed to Anthropic-only.
+        const validIds = new Set(MODEL_OPTIONS.map((m) => m.id));
+        if (!validIds.has(state.profile.defaults.qwenModel)) {
           state.profile.defaults.qwenModel = DEFAULT_MODEL;
         }
       },

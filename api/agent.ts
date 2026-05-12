@@ -22,67 +22,31 @@ import {
   type UIMessage,
 } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 
 /* ============================================================================
- * Inlined from server/llm-model.ts
+ * Inlined from server/llm-model.ts — Anthropic only.
  * ==========================================================================*/
 
-const DEFAULT_MODEL = "qwen3-max" as const;
-const QWEN_FALLBACK_MODEL = "qwen3-max" as const;
-const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([
   "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
-  "qwen3-max",
-  "qwen-flash",
-  "qwen-max",
-  "qwen-plus",
-  "qwen-turbo",
 ]);
 
 function resolveModelName(requested?: string): string {
-  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
-  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.QWEN_MODEL;
-  const providerDefault =
-    envProvider === "qwen"
-      ? QWEN_FALLBACK_MODEL
-      : envProvider === "claude" || envProvider === "anthropic"
-      ? ANTHROPIC_FALLBACK_MODEL
-      : DEFAULT_MODEL;
-  let modelName = fromRequest ?? envModel ?? providerDefault;
-
-  if (modelName.startsWith("claude-") && !process.env.ANTHROPIC_API_KEY && process.env.QWEN_API_KEY) {
-    console.warn(`[api/agent] Requested ${modelName} but ANTHROPIC_API_KEY missing — using ${QWEN_FALLBACK_MODEL}.`);
-    modelName = QWEN_FALLBACK_MODEL;
-  } else if (
-    !modelName.startsWith("claude-") &&
-    !process.env.QWEN_API_KEY &&
-    process.env.ANTHROPIC_API_KEY
-  ) {
-    console.warn(`[api/agent] Requested ${modelName} but QWEN_API_KEY missing — using ${ANTHROPIC_FALLBACK_MODEL}.`);
-    modelName = ANTHROPIC_FALLBACK_MODEL;
-  }
-  return modelName;
+  if (requested && ALLOWED_MODELS.has(requested)) return requested;
+  return process.env.LLM_MODEL ?? DEFAULT_MODEL;
 }
 
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
-  if (modelName.startsWith("claude-")) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
-    return createAnthropic({ apiKey })(modelName);
-  }
-  const apiKey = process.env.QWEN_API_KEY;
-  if (!apiKey) throw new Error("QWEN_API_KEY missing in environment.");
-  const baseURL =
-    process.env.QWEN_BASE_URL ??
-    "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
-  return createOpenAICompatible({ name: "qwen", apiKey, baseURL })(modelName);
+  const apiKey =
+    process.env.ANTHROPIC_API_KEY ??
+    "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";
+  return createAnthropic({ apiKey })(modelName);
 }
 
 /* ============================================================================

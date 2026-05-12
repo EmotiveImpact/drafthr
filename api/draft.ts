@@ -1,73 +1,33 @@
 /**
  * Production serverless function for /api/draft.
  *
- * On Vercel: auto-detected and deployed as a Node.js Function.
- * In Vite dev: mounted by `dev/qwen-proxy-plugin.ts` at the same URL path.
- *
- * Provider: OpenRouter (https://openrouter.ai). Free-tier models cover the
- * default path; Anthropic models route directly through Anthropic when
- * selected. Streaming SSE via the raw Response API.
+ * Anthropic Claude only. Streaming SSE via the raw Response API.
+ * Hardcoded API key fallback so production works without env vars
+ * (private repo, server-only code — never reaches browser bundle).
  */
 
 import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-// MUST keep in sync with server/llm-model.ts.
-const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free" as const;
-const OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free" as const;
-const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
+const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([
-  // OpenRouter free tier
-  "openai/gpt-oss-120b:free",
-  "openai/gpt-oss-20b:free",
-  "qwen/qwen3-next-80b-a3b-instruct:free",
-  "qwen/qwen3-coder:free",
-  "z-ai/glm-4.5-air:free",
-  "minimax/minimax-m2.5:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "google/gemma-4-31b-it:free",
-  // Anthropic (paid)
   "claude-opus-4-7",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
 ]);
 
 function resolveModelName(requested?: string): string {
-  const fromRequest = requested && ALLOWED_MODELS.has(requested) ? requested : undefined;
-  const envProvider = (process.env.LLM_PROVIDER ?? "").toLowerCase();
-  const envModel = process.env.LLM_MODEL ?? process.env.OPENROUTER_MODEL;
-  const providerDefault =
-    envProvider === "claude" || envProvider === "anthropic"
-      ? ANTHROPIC_FALLBACK_MODEL
-      : OPENROUTER_FALLBACK_MODEL;
-  return fromRequest ?? envModel ?? providerDefault ?? DEFAULT_MODEL;
+  if (requested && ALLOWED_MODELS.has(requested)) return requested;
+  return process.env.LLM_MODEL ?? DEFAULT_MODEL;
 }
 
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
-
-  if (modelName.startsWith("claude-")) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing in environment.");
-    return createAnthropic({ apiKey })(modelName);
-  }
-
-  // OpenRouter (default). Hardcoded fallback so production works even when env
-  // vars aren't set on Vercel. Env var still wins if present.
   const apiKey =
-    process.env.OPENROUTER_API_KEY ??
-    "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";
-  return createOpenAICompatible({
-    name: "openrouter",
-    apiKey,
-    baseURL: "https://openrouter.ai/api/v1",
-    headers: {
-      "HTTP-Referer": "https://drafthr.vercel.app",
-      "X-Title": "DraftHR",
-    },
-  })(modelName);
+    process.env.ANTHROPIC_API_KEY ??
+    "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";
+  return createAnthropic({ apiKey })(modelName);
 }
 
 export const config = {
@@ -144,7 +104,7 @@ export async function POST(req: Request): Promise<Response> {
       if (totalTokens === 0 && !realError) {
         writeEvent({
           error:
-            "Model returned no tokens. Check the API key, the model name (Settings → AI model), and that the prompt is valid.",
+            "Model returned no tokens. Check the API key and that the prompt is valid.",
         });
       } else if (totalTokens === 0 && realError) {
         writeEvent({ error: realError });
