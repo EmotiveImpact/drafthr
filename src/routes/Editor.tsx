@@ -327,9 +327,9 @@ export function Editor() {
 
           {/* Document settings — Tone / register / etc. Was in the secondary
            * toolbar; promoted to the left cluster now that the toolbar is
-           * gone. Sits after the counsel pill so the left cluster reads
-           * "where you are + doc state + doc settings". */}
-          <div className="hidden md:flex items-center">
+           * gone. Always visible (no md gate) so the Tone button is
+           * findable on every screen size, same as it was before. */}
+          <div className="flex items-center">
             <DocumentPopover draft={draft} />
           </div>
 
@@ -387,6 +387,32 @@ export function Editor() {
               <span className="hidden md:flex text-[12px] text-[var(--ds-muted)] items-center gap-1.5">
                 <Loader2 className="size-3 animate-spin" /> Drafting…
               </span>
+            )}
+            {/* Regenerate all / Stop — visible button on the topbar
+             * (was on the secondary toolbar; brought up alongside the
+             * other secondary-toolbar content rather than buried in ⋯). */}
+            {globallyStreaming ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] px-2"
+                onClick={stopStreaming}
+                title="Stop the running generation"
+              >
+                <StopCircle className="size-3.5" />
+                <span className="hidden md:inline">Stop</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] px-2"
+                onClick={runGenerateAll}
+                title="Regenerate every section (uses current wizard answers and tone)"
+              >
+                <Sparkles className="size-3.5" />
+                <span className="hidden md:inline">Regenerate all</span>
+              </Button>
             )}
             <InvitePopover
               draft={draft}
@@ -458,14 +484,8 @@ export function Editor() {
                 <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
                   <Settings2 className="size-4 mr-2" /> Edit details
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={runGenerateAll} disabled={globallyStreaming}>
-                  <Sparkles className="size-4 mr-2" /> Regenerate all
-                </DropdownMenuItem>
-                {globallyStreaming && (
-                  <DropdownMenuItem onClick={stopStreaming}>
-                    <StopCircle className="size-4 mr-2" /> Stop
-                  </DropdownMenuItem>
-                )}
+                {/* Regenerate all / Stop moved out of this menu — they live
+                 * as a visible button in the topbar right cluster now. */}
                 {/* Rail toggles — only meaningful at < lg where the rails
                  * are drawers. At lg+ both rails are persistent so these
                  * items would be no-ops; we hide them via Tailwind. */}
