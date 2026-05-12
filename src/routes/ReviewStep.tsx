@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { ReviewPanel } from "@/components/editor/ReviewPanel";
+import { LetterPreview } from "@/components/editor/LetterPreview";
+import { ReviewRail } from "@/components/editor/ReviewRail";
 import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
 import { Button } from "@/components/ui/button";
 import { exportLetterPack } from "@/lib/export/pack";
@@ -11,15 +12,17 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 
 /**
- * Review step — the page that sits between Evidence & Attachments and
- * the export download. Reuses ReviewPanel for the actual checklist UI;
- * this route wraps it with the previous/next breadcrumb and the export
- * gate handling for high-risk letter types.
+ * Review step — the page between Evidence & Attachments and the export
+ * download. 3-column layout matching the rest of the wizard:
+ *
+ *   [WizardSidebar] [LetterPreview]  [ReviewRail]
+ *      sections        clean letter     verdict + checks
  *
  *   Edit → Evidence & Attachments → REVIEW → Export pack
  *
- * No view-mode tab in the editor — Review is a discrete workflow stage
- * with its own URL, not a way of looking at the letter.
+ * The letter is actually visible on Review — previously the checklist
+ * took the centre canvas and the letter was nowhere to be seen until
+ * export. ReviewRail (right) handles all the "is this ready?" signals.
  */
 export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -125,10 +128,12 @@ export function ReviewStep() {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
-        {/* Left rail: wizard chrome + per-section jump links. Mirrors the
-         * sidebar pattern from Editor / Evidence so the three wizard pages
-         * feel like one experience. */}
+      {/* 3-column layout matches Edit and Evidence:
+       *   [WizardSidebar 260px] [letter preview canvas] [ReviewRail 360px]
+       * Single visual rhythm across the whole wizard. The letter is now
+       * actually visible on Review — previously it was buried behind
+       * the checklist. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
           <WizardSidebar
             draft={draft}
@@ -137,31 +142,21 @@ export function ReviewStep() {
           />
         </aside>
 
-        <main className="min-h-0 overflow-y-auto">
-          <ReviewPanel
+        <main className="min-h-0 overflow-y-auto bg-[var(--ds-canvas)] p-4 sm:p-6">
+          <LetterPreview draft={draft} />
+        </main>
+
+        <aside className="hidden min-h-0 border-l border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
+          <ReviewRail
             draft={draft}
             counselReviewedBy={counselReview}
             unresolvedComments={unresolvedCommentCount}
-            onJumpToSection={(sectionId) => {
-              nav(`/editor/${draft.id}?section=${sectionId}`);
-            }}
+            onJumpToSection={(sectionId) =>
+              nav(`/editor/${draft.id}?section=${sectionId}`)
+            }
             onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
-            onExport={onExport}
           />
-
-          {/* Footer — just "Back to Evidence". Export pack moved to the
-           * topbar primary CTA position to match the rest of the wizard. */}
-          <div className="mx-auto max-w-3xl px-3 sm:px-6 py-6">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => nav(`/editor/${draft.id}/evidence`)}
-            >
-              <ArrowLeft className="size-3.5 mr-1.5" />
-              Back to Evidence
-            </Button>
-          </div>
-        </main>
+        </aside>
       </div>
 
       {requiresCounsel && gateOpen && (
