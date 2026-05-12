@@ -349,23 +349,23 @@ export function Editor() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-[11px] px-2"
+                className="h-7 w-7 p-0"
                 onClick={stopStreaming}
                 title="Stop the running generation"
+                aria-label="Stop generation"
               >
                 <StopCircle className="size-3.5" />
-                <span className="hidden md:inline">Stop</span>
               </Button>
             ) : (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-[11px] px-2"
+                className="h-7 w-7 p-0"
                 onClick={runGenerateAll}
-                title="Regenerate every section (uses current wizard answers and tone)"
+                title="Regenerate all sections"
+                aria-label="Regenerate all sections"
               >
                 <Sparkles className="size-3.5" />
-                <span className="hidden md:inline">Regenerate all</span>
               </Button>
             )}
 
@@ -395,7 +395,7 @@ export function Editor() {
               <Button
                 variant={editOnPage ? "default" : "outline"}
                 size="sm"
-                className="h-7 text-[11px] px-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="h-7 w-7 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={viewMode !== "preview"}
                 onClick={() => setEditOnPage((v) => !v)}
                 aria-pressed={editOnPage}
@@ -408,9 +408,6 @@ export function Editor() {
                 }
               >
                 <Pencil className="size-3.5" />
-                <span className="hidden md:inline">
-                  {editOnPage ? "Done" : "Edit on page"}
-                </span>
               </Button>
 
               {/* Focus mode — hides both rails for distraction-free
@@ -418,7 +415,7 @@ export function Editor() {
               <Button
                 variant={focusMode ? "default" : "outline"}
                 size="sm"
-                className="h-7 text-[11px] px-2"
+                className="h-7 w-7 p-0"
                 onClick={() => setFocusMode((f) => !f)}
                 aria-pressed={focusMode}
                 aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
@@ -429,7 +426,6 @@ export function Editor() {
                 }
               >
                 {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-                <span className="hidden md:inline">{focusMode ? "Exit focus" : "Focus"}</span>
               </Button>
               {(() => {
                 const pendingCount = draft.sections.filter((s) => s.pendingChange).length;

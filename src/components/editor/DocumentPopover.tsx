@@ -75,14 +75,11 @@ export function DocumentPopover({ draft }: { draft: Draft }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 h-7 px-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[11px] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-          aria-label="Tone and document options"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
+          aria-label={`Tone: ${currentMeta?.label ?? current}`}
+          title={`Tone: ${currentMeta?.label ?? current}`}
         >
           <Mic2 className="size-3.5" />
-          <span>
-            Tone: <span className="font-medium text-[var(--ds-ink)]">{currentMeta?.label ?? current}</span>
-          </span>
-          <ChevronDown className="size-3 text-[var(--ds-muted)]" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[300px] p-1">

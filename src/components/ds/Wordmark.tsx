@@ -31,7 +31,7 @@ export function Wordmark({
         fontFamily: "var(--font-display)",
         fontWeight: 600,
         fontSize: size,
-        letterSpacing: "0.01em",
+        letterSpacing: "0.06em",
         // Playfair's cap-height sits low in its em-box. Nudge up so the
         // optical center of the wordmark lines up with the BrandMark chip
         // when both are placed in a flex row with items-center.
@@ -39,7 +39,7 @@ export function Wordmark({
       }}
       aria-label="DraftHR"
     >
-      Draft<span style={{ letterSpacing: "0.03em" }}>HR</span>
+      Draft<span style={{ letterSpacing: "0.07em" }}>HR</span>
     </span>
   );
 }
