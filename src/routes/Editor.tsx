@@ -539,11 +539,6 @@ export function Editor() {
         </div>
       </header>
 
-      {/* Editable title bar — sits between the topbar and the body so
-       * the title has its own breathing room and is renameable in place.
-       * Hidden in focus mode (all chrome collapses). */}
-      {!focusMode && <EditableTitleBar draft={draft} />}
-
       {/* Editor body — three columns on lg; below lg, sections + rail are drawers.
        * Apple-minimal: left rail has enough room for the outline labels while
        * keeping the writing canvas dominant. In focus mode both rails
@@ -683,6 +678,10 @@ export function Editor() {
             </div>
           ) : (
             <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
+              {/* Editable title sits at the very top of the canvas, above
+               * the disclaimer + sections. Click to rename — Google
+               * Docs / Notion pattern. */}
+              <EditableTitleBar draft={draft} />
               <InlineDisclaimer draft={draft} />
               <DeadlineBanner draft={draft} />
               <RetryBanner event={retryEvent} />

@@ -4,9 +4,10 @@ import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 
 /**
- * Editable letter-title bar that sits between the editor topbar and the
- * 3-column body. Click the title → text input opens with the value
- * pre-selected; blur or Enter saves; Esc cancels.
+ * Editable letter title that sits at the TOP of the canvas content
+ * (above the disclaimer + sections). Renders as a large heading you
+ * click to rename — Google Docs / Notion pattern. Blur or Enter saves;
+ * Esc cancels.
  *
  * Source-of-truth precedence:
  *   draft.title (user override)  →  letter-type meta title (fallback)
@@ -14,9 +15,8 @@ import { getLetterMeta } from "@/lib/letters/catalog";
  * Clearing the input restores the meta title automatically (the store
  * persists an empty override as undefined).
  *
- * Recipient + jurisdiction display alongside the title as muted submeta
- * — same info that used to live in the now-deleted topbar title block,
- * but now on its own row where the title can breathe and be edited.
+ * Recipient + jurisdiction display below the title as muted submeta —
+ * same info that used to live in the now-deleted topbar title block.
  */
 export function EditableTitleBar({ draft }: { draft: Draft }) {
   const setTitle = useDraftStore((s) => s.setDraftTitle);
@@ -65,7 +65,7 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
       : draft.employer.legalName?.trim();
 
   return (
-    <div className="shrink-0 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-4 sm:px-6 py-2 flex items-center gap-3 min-w-0">
+    <div className="pb-1">
       {editing ? (
         <input
           ref={inputRef}
@@ -83,32 +83,32 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
           }}
           aria-label="Letter title"
           placeholder={fallback}
-          className="flex-1 min-w-0 text-[15px] font-semibold text-[var(--ds-ink)] bg-transparent border-b border-[var(--ds-ink)] focus:outline-none px-0 py-0"
+          className="w-full text-[28px] sm:text-[32px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] bg-transparent border-0 focus:outline-none focus:ring-0 px-0 py-1 leading-tight placeholder:text-[var(--ds-muted)]"
         />
       ) : (
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="flex-1 min-w-0 text-left text-[15px] font-semibold text-[var(--ds-ink)] hover:text-[var(--ds-muted)] truncate transition"
+          className="w-full text-left text-[28px] sm:text-[32px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] hover:text-[var(--ds-body)] truncate transition py-1 leading-tight group"
           title="Click to rename"
           aria-label={`Letter title: ${displayTitle}. Click to rename.`}
         >
-          {displayTitle}
+          <span>{displayTitle}</span>
           {!draft.title && (
-            <span className="ml-2 text-[10px] font-normal text-[var(--ds-muted)] uppercase tracking-[0.08em]">
-              auto
+            <span className="ml-2 align-middle text-[10px] font-normal text-[var(--ds-muted)] uppercase tracking-[0.08em] opacity-0 group-hover:opacity-100 transition">
+              auto · click to rename
             </span>
           )}
         </button>
       )}
 
-      {/* Recipient + jurisdiction submeta — only visible on md+ to keep
-       * the bar one line on mobile. */}
+      {/* Recipient + jurisdiction submeta — sits on the second line. */}
       {(recipientLabel || draft.context.jurisdiction) && (
-        <span className="hidden md:inline shrink-0 text-[12px] text-[var(--ds-muted)] truncate">
-          {recipientLabel && <>· {recipientLabel}</>}
-          {draft.context.jurisdiction && <> · {draft.context.jurisdiction}</>}
-        </span>
+        <p className="m-0 text-[12px] text-[var(--ds-muted)] truncate">
+          {recipientLabel}
+          {recipientLabel && draft.context.jurisdiction && " · "}
+          {draft.context.jurisdiction}
+        </p>
       )}
     </div>
   );
