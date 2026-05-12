@@ -198,10 +198,21 @@ export async function regenerateSection(
   });
 }
 
-/** Strip ```html fences and stray code formatting that Qwen sometimes wraps output in. */
+/**
+ * Strip ```html fences, stray code formatting, and any unresolved
+ * {{placeholder}} tokens the model failed to substitute. Replace
+ * unresolved placeholders with [TBD] so the user sees a clear gap
+ * to fill rather than the raw template variable name.
+ */
 function sanitiseHtml(s: string): string {
   let out = s.trim();
   out = out.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "");
+
+  // Replace any leftover {{placeholder}} tokens — even when the system
+  // prompt explicitly forbids them, smaller models occasionally echo
+  // them back. Surface as [TBD] so users notice and fill in manually.
+  out = out.replace(/\{\{[^{}]+\}\}/g, "[TBD]");
+
   // ensure paragraphs — if model returned plain prose without <p>, wrap
   if (!/^\s*<(p|h\d|table|div|ul|ol|blockquote)/i.test(out)) {
     out = out

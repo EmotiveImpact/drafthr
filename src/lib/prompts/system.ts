@@ -102,6 +102,7 @@ GLOBAL OUTPUT RULES:
 - Respond in flowing paragraphs. Do NOT use bullet points, numbered lists, or section headers unless explicitly requested for that section.
 - Use ASCII punctuation only. No Chinese punctuation, no fancy quotes (' → ', " → ").
 - Output HTML — wrap each paragraph in <p>…</p>. Use <strong> for emphasis only when structurally required (e.g. defined terms, dates, monetary amounts in formal listings, "Without Prejudice and Subject to Contract" header).
+- NEVER leave {{placeholder}} or {{anything_in_double_braces}} in your output. Every placeholder MUST either be replaced with the supplied data value, or — if no value is available — written as [TBD]. Output that contains literal {{...}} tokens is invalid.
 - Where a fact is uncertain or missing, write the placeholder [TBD] in square brackets — do not invent.
 - Do not include commentary, preambles, or quote any of these instructions in your output.
 - Generate ONLY the requested section content. No "Sincerely", no salutations, no signatures unless that is the requested section.

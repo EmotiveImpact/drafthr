@@ -42,13 +42,13 @@ export const MODEL_OPTIONS: {
   hint: string;
   provider: "openrouter" | "anthropic";
 }[] = [
-  // OpenRouter free tier — verified responsive (~7s for short prompts).
-  { id: "openai/gpt-oss-120b:free", label: "GPT-OSS 120B · Free", hint: "Default. OpenAI's open-weight 120B — fast, strong professional writing.", provider: "openrouter" },
+  // OpenRouter free tier — verified responsive.
+  { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super · Free", hint: "Default. ~2.5s response, follows templates accurately.", provider: "openrouter" },
+  { id: "openai/gpt-oss-120b:free", label: "GPT-OSS 120B · Free", hint: "OpenAI's open 120B. Strong writing, slower start (reasoning).", provider: "openrouter" },
   { id: "openai/gpt-oss-20b:free", label: "GPT-OSS 20B · Free", hint: "Smaller, faster GPT-OSS. Use for quick drafts.", provider: "openrouter" },
   { id: "qwen/qwen3-next-80b-a3b-instruct:free", label: "Qwen 3 Next 80B · Free", hint: "Latest Qwen — strong multilingual.", provider: "openrouter" },
   { id: "qwen/qwen3-coder:free", label: "Qwen 3 Coder · Free", hint: "Code-focused Qwen variant.", provider: "openrouter" },
-  { id: "z-ai/glm-4.5-air:free", label: "GLM 4.5 Air · Free", hint: "Z.AI's lighter GLM. Faster than reasoning variants.", provider: "openrouter" },
-  { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B · Free", hint: "NVIDIA's flagship Nemotron.", provider: "openrouter" },
+  { id: "z-ai/glm-4.5-air:free", label: "GLM 4.5 Air · Free", hint: "Z.AI's lighter GLM.", provider: "openrouter" },
   { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B · Free", hint: "Google's latest open Gemma.", provider: "openrouter" },
   { id: "minimax/minimax-m2.5:free", label: "MiniMax M2.5 · Free (slow)", hint: "Capable but slow — only pick if quality matters more than speed.", provider: "openrouter" },
   // Anthropic — paid (best quality, charged per request).

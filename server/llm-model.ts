@@ -3,8 +3,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
-const DEFAULT_MODEL = "openai/gpt-oss-120b:free" as const;
-const OPENROUTER_FALLBACK_MODEL = "openai/gpt-oss-120b:free" as const;
+const DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free" as const;
+const OPENROUTER_FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free" as const;
 const ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6" as const;
 
 const ALLOWED_MODELS = new Set([
