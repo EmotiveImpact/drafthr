@@ -439,7 +439,7 @@ export function Editor() {
               <Button
                 variant={focusMode ? "default" : "outline"}
                 size="sm"
-                className="h-7 w-7 p-0"
+                className="hidden md:inline-flex h-7 w-7 p-0"
                 onClick={() => setFocusMode((f) => !f)}
                 aria-pressed={focusMode}
                 aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
@@ -593,6 +593,19 @@ export function Editor() {
                 <DropdownMenuSeparator className="md:hidden" />
                 <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
                   <Settings2 className="size-4 mr-2" /> Edit details
+                </DropdownMenuItem>
+                {/* Mobile-only: Focus toggle. On md:+ Focus has its own
+                 * topbar button so we hide this item to avoid duplication. */}
+                <DropdownMenuItem
+                  className="md:hidden"
+                  onClick={() => setFocusMode((f) => !f)}
+                >
+                  {focusMode ? (
+                    <Minimize2 className="size-4 mr-2" />
+                  ) : (
+                    <Maximize2 className="size-4 mr-2" />
+                  )}
+                  {focusMode ? "Exit focus mode" : "Enter focus mode"}
                 </DropdownMenuItem>
                 {/* Regenerate all / Stop moved out of this menu — they live
                  * as a visible button in the topbar right cluster now. */}
