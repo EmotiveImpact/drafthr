@@ -12,7 +12,6 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
-import { PaginationPlus } from "tiptap-pagination-plus";
 import {
   AlignCenter,
   AlignJustify,
@@ -38,37 +37,31 @@ import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
 
 /**
- * Editable letter using `tiptap-pagination-plus` for real ProseMirror-level
- * page breaks (https://github.com/RomikMakavana/tiptap-pagination-plus, MIT).
+ * Editable letter — single-page contenteditable. No fake pagination, no
+ * page-break strips. Renders as ONE long A4-width card with the same
+ * typography as the export render. The Preview tab still uses paged.js
+ * for the multi-page truth; this surface is purely for editing.
  *
  * Architecture:
  *   - ONE TipTap editor holds the whole letter. Sections are preserved
- *     across the edit by inserting an invisible `sectionAnchor` Node
- *     before each section's content. The anchors survive the
- *     ProseMirror round-trip; on save we walk the doc, group children
- *     by which anchor preceded them, and emit per-section updates.
- *   - PaginationPlus paints the page chrome (white card, gap between
- *     pages, footer with "Page n of N").
- *   - Our scoped <style> block overrides the extension's default look
- *     so it matches the read-only PaginatedLetter (Iowan Old Style
- *     11pt, slate-100 page gap, no card border, drop shadow).
+ *     by inserting an invisible `sectionAnchor` node before each
+ *     section's content. The anchors survive the ProseMirror round-trip;
+ *     on save we walk the doc, group children by which anchor preceded
+ *     them, and emit per-section updates.
  *
  * A4 geometry (matches wrapInPrintHtml @page in PaginatedLetter):
- *   pageHeight 1122 (11.69in × 96)   pageWidth 794 (8.27in × 96)
- *   margin top 96 (1in)              bottom 115 (1.2in)
- *   margin sides 106 (1.1in each)
- *   gap 24px between pages
+ *   width 794 (8.27in × 96)
+ *   horizontal padding 106 (1.1in each)
+ *   vertical padding 96 / 115 (1.0in / 1.2in) — top / bottom
  */
 
 const SAVE_DELAY_MS = 500;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
-const PAGE_HEIGHT_PX = Math.round(11.69 * 96); // 1122
 const PAGE_WIDTH_PX = Math.round(8.27 * 96);   // 794
 const MARGIN_TOP_PX = Math.round(1.0 * 96);    // 96
 const MARGIN_BOTTOM_PX = Math.round(1.2 * 96); // 115
 const MARGIN_SIDE_PX = Math.round(1.1 * 96);   // 106
-const PAGE_GAP_PX = 24;
 
 /**
  * Invisible block node inserted before each section's content. Carries
@@ -186,29 +179,6 @@ const EDITOR_EXTENSIONS = [
     defaultAlignment: "left",
   }),
   SectionAnchor,
-  PaginationPlus.configure({
-    pageHeight: PAGE_HEIGHT_PX,
-    pageWidth: PAGE_WIDTH_PX,
-    marginTop: MARGIN_TOP_PX,
-    marginBottom: MARGIN_BOTTOM_PX,
-    marginLeft: MARGIN_SIDE_PX,
-    marginRight: MARGIN_SIDE_PX,
-    pageGap: PAGE_GAP_PX,
-    // The extension paints the inter-page gap with this background — we
-    // want it to match the outer slate-100 background so the white pages
-    // sit cleanly with a visible break between them.
-    pageBreakBackground: "#f1f5f9",
-    pageGapBorderSize: 0,
-    pageGapBorderColor: "transparent",
-    contentMarginTop: 0,
-    contentMarginBottom: 0,
-    headerLeft: "",
-    headerRight: "",
-    footerLeft: "",
-    footerRight: "Page {page}",
-    customHeader: {},
-    customFooter: {},
-  }),
 ];
 
 export function PaginatedEditableLetter({
@@ -321,13 +291,10 @@ export function PaginatedEditableLetter({
         onDone={flushAndDone}
       />
 
-      {/* Scoped CSS — matches PaginatedLetter (paged.js read-only output)
-       * visually. The extension produces ONE tall ProseMirror container
-       * with internal page-break strips, so we style:
-       *   - container: white paper card (radius + shadow)
-       *   - page-break strips: subtle slate cuts that read as page seams
-       *   - footer: Geist 9pt slate-400 centred
-       *   - body type: Iowan Old Style 11pt 1.55 line-height */}
+      {/* Scoped CSS — single-page contenteditable. No fake pagination,
+       * no page-break strips. One long A4-width card with the same
+       * typography as the Preview render. Vertical growth is natural —
+       * the surface extends as content is added. */}
       <style>{`
         .${styleScope} {
           display: flex;
@@ -336,13 +303,15 @@ export function PaginatedEditableLetter({
           min-height: 100%;
         }
 
-        /* The ProseMirror container IS the paper. White, rounded, slate-200
-         * 1px border + soft drop shadow — matches PaginatedLetter's
-         * .pagedjs_page rule exactly so Edit-on-page and Preview look
-         * identical. */
+        /* The ProseMirror container IS the paper. A4 width, paper-card
+         * styling, print-margin padding so the text column matches the
+         * Preview/PDF render. Height grows with content. */
         .${styleScope} .ProseMirror {
-          background: #ffffff !important;
-          border: 1px solid #e2e8f0 !important;
+          width: ${PAGE_WIDTH_PX}px;
+          max-width: 100%;
+          padding: ${MARGIN_TOP_PX}px ${MARGIN_SIDE_PX}px ${MARGIN_BOTTOM_PX}px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 4px;
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
@@ -352,37 +321,6 @@ export function PaginatedEditableLetter({
           line-height: 1.55;
           color: #0f172a;
           outline: none;
-          overflow: hidden;
-        }
-
-        /* Page-break strip — the visual seam between pages. Soft slate
-         * fill with a 1px slate-200 hairline above and below so it reads
-         * as the cut between two sheets of paper. */
-        .${styleScope} .rm-page-break {
-          background: transparent !important;
-        }
-        .${styleScope} .rm-page-break .breaker {
-          background-color: #f1f5f9 !important;
-          border-top: 1px solid #e2e8f0 !important;
-          border-bottom: 1px solid #e2e8f0 !important;
-        }
-
-        /* Header / footer wrappers inside each page break. */
-        .${styleScope} .rm-page-header,
-        .${styleScope} .rm-page-footer {
-          background: transparent !important;
-          font-family: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
-        .${styleScope} .rm-page-footer-content,
-        .${styleScope} .rm-page-header-content {
-          font-size: 9pt !important;
-          color: #94a3b8 !important;
-        }
-        /* "Page n" is rendered into footerRight by config. Centre it. */
-        .${styleScope} .rm-page-footer-left { flex: 1; }
-        .${styleScope} .rm-page-footer-right {
-          flex: 1;
-          text-align: center !important;
         }
 
         /* Hide section anchors entirely — they're invariant atoms used
