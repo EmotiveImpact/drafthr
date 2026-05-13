@@ -17,6 +17,7 @@ import {
   splitHtmlBySection,
 } from "./editorShared";
 import { usePageBreakPositions } from "./usePageBreakPositions";
+import { PageBreakOverlay } from "./PageBreakOverlay";
 
 /**
  * Edit-on-page V2 — the pixel-perfect render path gated behind
@@ -240,7 +241,23 @@ export function PaginatedEditableLetterV2({
       `}</style>
 
       <div className={styleScope}>
-        <EditorContent editor={editor} />
+        {/* Relative shell wraps the editor + overlay so the absolute
+         * page-break strips share a coordinate origin with .ProseMirror.
+         * The shell is sized to the page so the overlay's bounding box
+         * matches the visible card. */}
+        <div
+          style={{
+            position: "relative",
+            width: PAGE_WIDTH_PX,
+            maxWidth: "100%",
+          }}
+        >
+          <EditorContent editor={editor} />
+          <PageBreakOverlay
+            breakOffsets={breakOffsets}
+            pageWidthPx={PAGE_WIDTH_PX}
+          />
+        </div>
       </div>
     </div>
   );
