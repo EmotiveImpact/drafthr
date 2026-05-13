@@ -214,15 +214,24 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
       id: "outcome",
       title: "What outcome do you want?",
       description:
-        "We surface this explicitly in the closing paragraph. Be specific.",
+        "We surface these explicitly in the closing paragraph. Be specific.",
       questions: [
         {
-          id: "outcomeSought",
-          type: "textarea",
-          label: "Outcome sought",
+          id: "outcomes",
+          type: "repeater",
+          label: "Outcomes sought (numbered)",
+          help: "Each entry becomes a numbered remedy in the letter. Pair every ask with the reason it follows from the facts.",
           required: true,
-          help:
-            "Examples: acknowledgement and apology; policy change; procedural rectification (e.g. re-allocate role / new manager); financial remedy; reinstatement; reference correction; settlement and exit.",
+          repeater: {
+            itemLabel: "Outcome",
+            minItems: 1,
+            maxItems: 8,
+            defaultItems: 2,
+            fields: [
+              { id: "outcome", type: "textarea", label: "Outcome / remedy you want", required: true, placeholder: "e.g. Re-allocation under a different line manager" },
+              { id: "rationale", type: "textarea", label: "Why this remedy follows from the facts" },
+            ],
+          },
         },
       ],
     },
@@ -265,8 +274,42 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
       title: "Grievance content",
       questions: [
         { id: "grievanceSummary", type: "textarea", label: "What is the grievance? (brief, factual)", required: true },
-        { id: "factsChronology", type: "textarea", label: "Chronology", required: true },
-        { id: "outcomeSought", type: "textarea", label: "Outcome sought", required: true },
+        {
+          id: "incidents",
+          type: "repeater",
+          label: "Incidents — chronological",
+          help: "The AI weaves each incident into a tribunal-grade narrative with causation linking the facts to the resignation decision.",
+          required: true,
+          repeater: {
+            itemLabel: "Incident",
+            minItems: 1,
+            maxItems: 12,
+            defaultItems: 2,
+            fields: [
+              { id: "date", type: "date", label: "Date", required: true },
+              { id: "description", type: "textarea", label: "What happened (factual)", required: true },
+              { id: "causation", type: "textarea", label: "How this contributed to your decision to resign" },
+              { id: "individuals", type: "text", label: "Person(s) involved (full names)" },
+              { id: "witnesses", type: "text", label: "Witnesses" },
+            ],
+          },
+        },
+        {
+          id: "outcomes",
+          type: "repeater",
+          label: "Outcomes you still want from the grievance",
+          help: "Even though you are resigning, the grievance has live remedies (reference correction, policy change, financial remedy).",
+          required: true,
+          repeater: {
+            itemLabel: "Outcome",
+            minItems: 1,
+            maxItems: 6,
+            defaultItems: 1,
+            fields: [
+              { id: "outcome", type: "textarea", label: "Outcome / remedy", required: true },
+            ],
+          },
+        },
       ],
     },
   ],
