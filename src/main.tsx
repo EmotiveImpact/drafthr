@@ -7,6 +7,7 @@ import { App } from "./App";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { initSentry } from "@/lib/observability/sentry";
 import { bootstrapTheme } from "@/lib/theme";
+import { getFlag, setFlag } from "@/lib/flags";
 import "./styles/globals.css";
 // Radix Themes CSS must come AFTER ./styles/globals.css so Tailwind's preflight
 // doesn't strip Radix component backgrounds. (See RADIX-THEMES-MIGRATION.md.)
@@ -14,6 +15,12 @@ import "@radix-ui/themes/styles.css";
 
 bootstrapTheme();
 initSentry();
+
+// Dev helper — flip feature flags from devtools without a code change.
+// e.g. window.__drafthr.setFlag("pixelPerfectEdit", true)
+if (typeof window !== "undefined") {
+  (window as unknown as { __drafthr?: unknown }).__drafthr = { getFlag, setFlag };
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
