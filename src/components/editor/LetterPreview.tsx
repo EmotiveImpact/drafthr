@@ -2,7 +2,7 @@ import type { Draft } from "@/lib/letters/types";
 import { getFlag } from "@/lib/flags";
 import { PaginatedLetter } from "./PaginatedLetter";
 import { PaginatedEditableLetter } from "./PaginatedEditableLetter";
-import { PaginatedEditableLetterV2 } from "./paged-edit/PaginatedEditableLetterV2";
+import { PagedEditor } from "./paged-edit/PagedEditor";
 
 type AddCommentOpts = {
   quote?: string;
@@ -61,17 +61,13 @@ export function LetterPreview({ draft, editable = false, onEditableDone }: Lette
     );
   }
 
-  // Edit-on-page: feature flag chooses between V1 (single continuous
-  // contenteditable, ships today) and V2 (pixel-perfect paged.js break
-  // detection, dogfooding). Default is V1; flip the flag via
-  // VITE_FEATURE_PIXEL_PERFECT_EDIT or window.__drafthr.setFlag(...).
+  // Edit-on-page: the paged.js render IS the editor. Each .pagedjs_page
+  // card is a contenteditable surface — same DOM, same margins, same
+  // typography as Preview. Flip pixelPerfectEdit off to fall back to
+  // the legacy single-card editor:
+  //   window.__drafthr.setFlag("pixelPerfectEdit", false)
   if (getFlag("pixelPerfectEdit")) {
-    return (
-      <PaginatedEditableLetterV2
-        draft={draft}
-        onDone={() => onEditableDone?.()}
-      />
-    );
+    return <PagedEditor draft={draft} onDone={() => onEditableDone?.()} />;
   }
   return (
     <PaginatedEditableLetter
