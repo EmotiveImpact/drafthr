@@ -484,15 +484,15 @@ export function SectionEditor({
             </button>
           </BubbleMenu>
         )}
-        {/* Typography matches PaginatedLetter (paged.js / export render) so
-         * Edit and Preview look like the same document at the same scale —
-         * Iowan Old Style 11pt with 1.55 line-height, paragraph spacing
-         * 8pt, heading hierarchy + table chrome ported from
-         * wrapInPrintHtml. Edit-on-page mode is gone; this IS the editing
-         * surface and it should read as the letter. */}
+        {/* Edit mode uses Tailwind Typography's prose-sm — sans-serif
+         * (Geist, inherited from body), comfortable line-height, designed
+         * for writing. The serif look of the export render lives in
+         * Preview (paged.js) and Edit-on-page (single-page contenteditable
+         * — both use Iowan Old Style). Two intentional fonts: one for
+         * writing, one for proofing. */}
         <EditorContent
           editor={editor}
-          className="section-editor-letter max-w-none focus:outline-none"
+          className="prose prose-sm max-w-none focus:outline-none [&_p]:my-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_a]:underline [&_table]:border [&_table]:border-letter-rule [&_th]:border [&_th]:border-letter-rule [&_td]:border [&_td]:border-letter-rule [&_th]:bg-muted/40 [&_th]:text-left [&_th]:p-2 [&_td]:p-2"
         />
       </div>
     </section>
