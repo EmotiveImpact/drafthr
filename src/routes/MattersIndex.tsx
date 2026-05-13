@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, FolderOpen, ArrowRight, Briefcase, UserRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
@@ -366,7 +366,7 @@ function NewMatterDialog({
   const [color, setColor] = useState<MatterColor>("blue");
 
   // Reset on open so each invocation is fresh.
-  useMemo(() => {
+  useEffect(() => {
     if (open) {
       setName("");
       setPrimaryName("");

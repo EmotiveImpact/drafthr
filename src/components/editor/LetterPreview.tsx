@@ -45,6 +45,8 @@ export function LetterPreview({
   editable = false,
   onEditableDone,
   editorActionsRef,
+  onAddComment,
+  onFocusComment,
 }: LetterPreviewProps) {
   const empty = draft.sections.every((s) => !s.html?.trim());
 
@@ -57,10 +59,17 @@ export function LetterPreview({
   }
 
   // Read-only path: hand off to paged.js for real multi-page A4 rendering.
+  // Comment handlers thread through so the paged page surface can host a
+  // selection-bubble "+ Comment" affordance and route mark clicks back
+  // to the parent's floating panel.
   if (!editable) {
     return (
       <div className="letter-preview-shell">
-        <PaginatedLetter draft={draft} />
+        <PaginatedLetter
+          draft={draft}
+          onAddComment={onAddComment}
+          onFocusComment={onFocusComment}
+        />
       </div>
     );
   }
