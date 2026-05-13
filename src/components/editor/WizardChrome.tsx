@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
  *   - Steps are links; clicking the current step is a no-op, clicking
  *     a future step navigates forward (matches the topbar CTA).
  */
-type Step = "edit" | "evidence" | "review";
+type Step = "edit" | "evidence" | "review" | "finalize";
 
 type Props = {
   draftId: string;
@@ -32,16 +32,21 @@ type Props = {
 };
 
 export function WizardChrome({ draftId, mode, current, disabled }: Props) {
+  // Finalize is the new ship-gate step that replaces the inline "Export pack"
+  // button at the end of Review. It applies to both modes — every letter
+  // needs the health check + handoff regardless of who's drafting it.
   const steps: { id: Step; label: string; href: string }[] =
     mode === "employee"
       ? [
           { id: "edit", label: "Edit", href: `/editor/${draftId}` },
           { id: "evidence", label: "Evidence", href: `/editor/${draftId}/evidence` },
           { id: "review", label: "Review", href: `/editor/${draftId}/review` },
+          { id: "finalize", label: "Finalize", href: `/editor/${draftId}/finalize` },
         ]
       : [
           { id: "edit", label: "Edit", href: `/editor/${draftId}` },
           { id: "review", label: "Review", href: `/editor/${draftId}/review` },
+          { id: "finalize", label: "Finalize", href: `/editor/${draftId}/finalize` },
         ];
 
   const currentIndex = steps.findIndex((s) => s.id === current);

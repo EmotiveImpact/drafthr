@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Finalize — design exploration</title>
+<style>
+  :root {
+    --ds-ink: #0f172a;
+    --ds-muted: #64748b;
+    --ds-subtle: #94a3b8;
+    --ds-line: #e2e8f0;
+    --ds-line-2: #f1f5f9;
+    --ds-surface: #ffffff;
+    --ds-bg: #fafaf9;
+    --ds-blue-bg: #dbeafe;
+    --ds-blue-fg: #1e40af;
+    --ds-green-bg: #dcfce7;
+    --ds-green-fg: #166534;
+    --ds-amber-bg: #fef3c7;
+    --ds-amber-fg: #92400e;
+    --ds-red-bg: #fee2e2;
+    --ds-red-fg: #991b1b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--ds-bg);
+    color: var(--ds-ink);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+  button { font: inherit; cursor: pointer; }
+  .icon { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-sm { width: 12px; height: 12px; }
+  .icon-lg { width: 22px; height: 22px; }
+
+  .shell { max-width: 920px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ---------- Header ---------- */
+  .crumb {
+    font-size: 12px;
+    color: var(--ds-muted);
+    margin-bottom: 6px;
+  }
+  .crumb a { color: var(--ds-muted); text-decoration: none; }
+  .crumb a:hover { color: var(--ds-ink); }
+  h1 { font-size: 28px; letter-spacing: -0.01em; }
+  .lede {
+    margin: 6px 0 28px;
+    color: var(--ds-muted);
+    max-width: 640px;
+    font-size: 14px;
+  }
+
+  /* ---------- Section wrapper ---------- */
+  .section { margin-bottom: 24px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .section-head h2 { font-size: 15px; }
+  .section-head .step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--ds-ink);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .section-head .meta {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--ds-muted);
+  }
+
+  .card {
+    background: var(--ds-surface);
+    border: 1px solid var(--ds-line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* ---------- Health score ---------- */
+  .health-top {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+    border-bottom: 1px solid var(--ds-line-2);
+  }
+  .score-ring {
+    --pct: 82;
+    position: relative;
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: conic-gradient(var(--ds-green-fg) calc(var(--pct) * 1%), var(--ds-line-2) 0);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+  .score-ring::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    background: var(--ds-surface);
+    border-radius: 50%;
+  }
+  .score-ring span {
+    position: relative;
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .health-meta { flex: 1; min-width: 0; }
+  .health-band {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: var(--ds-green-bg);
+    color: var(--ds-green-fg);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .health-meta h3 { font-size: 16px; margin-bottom: 4px; }
+  .health-meta p { margin: 0; font-size: 13px; color: var(--ds-muted); }
+
+  .health-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .health-col { padding: 16px 20px; }
+  .health-col + .health-col { border-left: 1px solid var(--ds-line-2); }
+  .health-col h4 {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ds-muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+  .check-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+  .check-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--ds-ink);
+  }
+  .check-list .dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .check-list .dot.pass { background: var(--ds-green-bg); color: var(--ds-green-fg); }
+  .check-list .dot.fail { background: var(--ds-red-bg); color: var(--ds-red-fg); }
+  .check-list .dot.warn { background: var(--ds-amber-bg); color: var(--ds-amber-fg); }
+  .check-list .label { color: var(--ds-muted); font-size: 12px; flex: 1; }
+  .check-list .pass + .label { color: var(--ds-ink); }
+  .ai-eval p {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--ds-ink);
+    line-height: 1.55;
+  }
+  .ai-eval p strong { font-weight: 600; }
+  .ai-eval .ai-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--ds-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  /* ---------- Review picker ---------- */
+  .review-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+  }
+  .review-lane {
+    padding: 18px;
+    border-right: 1px solid var(--ds-line-2);
+    display: flex;
+    flex-direction: column;
+    min-height: 220px;
+  }
+  .review-lane:last-child { border-right: 0; }
+  .review-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--ds-line-2);
+    color: var(--ds-ink);
+    margin-bottom: 10px;
+  }
+  .review-lane h3 { font-size: 14px; margin-bottom: 4px; }
+  .review-lane .desc {
+    font-size: 12.5px;
+    color: var(--ds-muted);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .review-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: var(--ds-line-2);
+    border-radius: 6px;
+  }
+  .review-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .review-stat label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ds-muted);
+    font-weight: 600;
+  }
+  .review-stat value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ds-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .review-action {
+    margin-top: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--ds-ink);
+    color: white;
+    border: 0;
+    transition: opacity 0.15s;
+  }
+  .review-action:hover { opacity: 0.9; }
+  .review-action.secondary {
+    background: var(--ds-surface);
+    color: var(--ds-ink);
+    border: 1px solid var(--ds-line);
+  }
+  .review-action.secondary:hover { background: var(--ds-line-2); }
+
+  /* ---------- Export pack ---------- */
+  .export-list { list-style: none; padding: 0; margin: 0; }
+  .export-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--ds-line-2);
+  }
+  .export-row:last-child { border-bottom: 0; }
+  .export-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--ds-line-2);
+    color: var(--ds-ink);
+    flex-shrink: 0;
+  }
+  .export-info { flex: 1; min-width: 0; }
+  .export-info h4 { font-size: 13px; margin-bottom: 2px; }
+  .export-info p { margin: 0; font-size: 12px; color: var(--ds-muted); }
+  .export-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    color: var(--ds-ink);
+    font-size: 12px;
+    font-weight: 500;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .export-btn:hover { background: var(--ds-line-2); }
+  .export-btn.primary {
+    background: var(--ds-ink);
+    color: white;
+    border-color: var(--ds-ink);
+  }
+  .export-btn.primary:hover { opacity: 0.9; background: var(--ds-ink); }
+
+  .export-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--ds-line-2);
+    font-size: 12px;
+    color: var(--ds-muted);
+  }
+  .export-foot .all-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 6px;
+    background: var(--ds-ink);
+    color: white;
+    border: 0;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* ---------- Final action bar ---------- */
+  .action-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--ds-line);
+    margin-top: 28px;
+  }
+  .action-bar .note {
+    flex: 1;
+    font-size: 12px;
+    color: var(--ds-muted);
+  }
+  .btn-ghost {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 7px;
+    border: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    color: var(--ds-ink);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 7px;
+    background: var(--ds-ink);
+    color: white;
+    border: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  @media (max-width: 720px) {
+    .health-grid, .review-grid { grid-template-columns: 1fr; }
+    .health-col + .health-col,
+    .review-lane { border-left: 0; border-right: 0; border-top: 1px solid var(--ds-line-2); }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Header -->
+  <div class="crumb"><a href="#">Letters</a> · <a href="#">PIP response</a> · Finalize</div>
+  <h1>Finalize letter</h1>
+  <p class="lede">
+    Last gate before this letter leaves the building. Check the health score, get
+    independent eyes if it matters, and export the formats you need.
+  </p>
+
+  <!-- ============================================================
+       1. Letter Health Score
+       ============================================================ -->
+  <div class="section">
+    <div class="section-head">
+      <span class="step">1</span>
+      <h2>Letter health</h2>
+      <span class="meta">Refreshed 2 min ago · <a href="#" style="color:var(--ds-ink);text-decoration:none;border-bottom:1px solid currentColor">Re-run</a></span>
+    </div>
+
+    <div class="card">
+      <!-- Top band: score + summary -->
+      <div class="health-top">
+        <div class="score-ring"><span>82</span></div>
+        <div class="health-meta">
+          <span class="health-band">Strong</span>
+          <h3>Send-ready with minor polish suggested</h3>
+          <p>9 of 10 static checks pass. Tone is balanced and tribunal-aware. One placeholder still unresolved.</p>
+        </div>
+      </div>
+
+      <!-- Two-column detail: checks + AI eval -->
+      <div class="health-grid">
+        <div class="health-col">
+          <h4>Static checks</h4>
+          <ul class="check-list">
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>Recipient, sender, and date present</span></li>
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>All 6 required sections filled</span></li>
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>3 evidence references resolve correctly</span></li>
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>No PII red flags (NI, DOB) in body</span></li>
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>Word count within range (380 / 250–600)</span></li>
+            <li><span class="dot warn">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
+            </span><span>1 placeholder unresolved: <code style="font-size:11px;background:var(--ds-line-2);padding:1px 4px;border-radius:3px">[meeting_date]</code></span></li>
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>Signature attached</span></li>
+            <li><span class="dot pass">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </span><span>Letterhead matches profile</span></li>
+          </ul>
+        </div>
+
+        <div class="health-col">
+          <div class="ai-eval">
+            <div class="ai-tag">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
+              AI evaluation
+            </div>
+            <p><strong>Tone:</strong> Measured and procedural. Avoids defensive language while clearly stating the employee's position. Tribunal-bound register holds throughout.</p>
+            <p><strong>Risk:</strong> Low. No statements that could be construed as admission of liability. References to grievance procedure are correctly framed.</p>
+            <p><strong>Suggested polish:</strong> Section 3 (Background) leans slightly long — consider trimming the timeline summary to focus on the disputed incidents only.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       2. Independent review
+       ============================================================ -->
+  <div class="section">
+    <div class="section-head">
+      <span class="step">2</span>
+      <h2>Independent review</h2>
+      <span class="meta">Optional · recommended for high-stakes letters</span>
+    </div>
+
+    <div class="card">
+      <div class="review-grid">
+        <!-- Lane 1: AI persona -->
+        <div class="review-lane">
+          <div class="review-icon">
+            <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>
+          </div>
+          <h3>AI specialist</h3>
+          <p class="desc">Pick a perspective — Tribunal counsel, Employee advocate, or DEI lead — for an instant structured critique.</p>
+          <div class="review-stats">
+            <div class="review-stat"><label>Cost</label><value>Free</value></div>
+            <div class="review-stat"><label>Returns in</label><value>~30s</value></div>
+          </div>
+          <button class="review-action">
+            Get AI critique
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <!-- Lane 2: Your team -->
+        <div class="review-lane">
+          <div class="review-icon">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h3>Your team</h3>
+          <p class="desc">Send to a colleague you've added. They can edit, comment, or sign off. Free, async.</p>
+          <div class="review-stats">
+            <div class="review-stat"><label>Cost</label><value>Free</value></div>
+            <div class="review-stat"><label>Returns in</label><value>Async</value></div>
+          </div>
+          <button class="review-action secondary">
+            Send to teammate
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+
+        <!-- Lane 3: External consultant -->
+        <div class="review-lane">
+          <div class="review-icon">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>External consultant</h3>
+          <p class="desc">Vetted HR/employment specialist reviews and edits. Best for settlements, dismissals, tribunal-bound letters.</p>
+          <div class="review-stats">
+            <div class="review-stat"><label>From</label><value>£85</value></div>
+            <div class="review-stat"><label>SLA</label><value>24–48h</value></div>
+          </div>
+          <button class="review-action secondary">
+            Browse consultants
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       3. Export pack
+       ============================================================ -->
+  <div class="section">
+    <div class="section-head">
+      <span class="step">3</span>
+      <h2>Export</h2>
+      <span class="meta">Download what you need · all files include attestation hash</span>
+    </div>
+
+    <div class="card">
+      <ul class="export-list">
+        <li class="export-row">
+          <div class="export-icon">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="export-info">
+            <h4>PDF — print-ready</h4>
+            <p>A4 paged render with letterhead and signature. Most common format.</p>
+          </div>
+          <button class="export-btn primary">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download
+          </button>
+        </li>
+
+        <li class="export-row">
+          <div class="export-icon">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          </div>
+          <div class="export-info">
+            <h4>DOCX — editable</h4>
+            <p>Microsoft Word format. Useful if recipient needs to amend or annotate.</p>
+          </div>
+          <button class="export-btn">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download
+          </button>
+        </li>
+
+        <li class="export-row">
+          <div class="export-icon">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          </div>
+          <div class="export-info">
+            <h4>Signed PDF — attested</h4>
+            <p>PDF with cryptographic hash footer. Provides tamper-evidence for tribunal use.</p>
+          </div>
+          <button class="export-btn">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download
+          </button>
+        </li>
+
+        <li class="export-row">
+          <div class="export-icon">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </div>
+          <div class="export-info">
+            <h4>Evidence bundle — zip</h4>
+            <p>PDF + all attached evidence files + change history. One package for handover.</p>
+          </div>
+          <button class="export-btn">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download
+          </button>
+        </li>
+
+        <li class="export-row">
+          <div class="export-icon">
+            <svg class="icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </div>
+          <div class="export-info">
+            <h4>Copy as plain text</h4>
+            <p>For pasting directly into an email body. Strips formatting, keeps structure.</p>
+          </div>
+          <button class="export-btn">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </li>
+      </ul>
+
+      <div class="export-foot">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        Every download is logged in Activity with the attestation hash.
+        <button class="all-btn">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Download all (zip)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action bar -->
+  <div class="action-bar">
+    <span class="note">Marking as sent moves this letter into Archive and locks edits.</span>
+    <button class="btn-ghost">Back to editor</button>
+    <button class="btn-primary">
+      Mark as sent
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </button>
+  </div>
+
+</div>
+
+</body>
+</html>

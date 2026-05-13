@@ -15,6 +15,7 @@ import { Activity } from "@/routes/Activity";
 import { Notifications } from "@/routes/Notifications";
 import { EvidenceStep } from "@/routes/EvidenceStep";
 import { ReviewStep } from "@/routes/ReviewStep";
+import { Finalize } from "@/routes/Finalize";
 import { MattersIndex } from "@/routes/MattersIndex";
 import { MatterDetail } from "@/routes/MatterDetail";
 import { Layout } from "@/components/Layout";
@@ -81,6 +82,7 @@ export function App() {
         />
         <Route path="/editor/:draftId/evidence" element={<Protected><EvidenceStep /></Protected>} />
         <Route path="/editor/:draftId/review" element={<Protected><ReviewStep /></Protected>} />
+        <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
         <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />
         <Route path="/matters/:matterId" element={<Protected><MatterDetail /></Protected>} />
 

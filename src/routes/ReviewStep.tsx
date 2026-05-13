@@ -1,38 +1,31 @@
-import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { LetterPreview } from "@/components/editor/LetterPreview";
 import { ReviewRail } from "@/components/editor/ReviewRail";
-import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
 import { Button } from "@/components/ui/button";
-import { exportLetterPack } from "@/lib/export/pack";
-import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 
 /**
- * Review step — the page between Evidence & Attachments and the export
- * download. 3-column layout matching the rest of the wizard:
+ * Review step — the page between Evidence & Attachments and the new
+ * Finalize ship-gate. 3-column layout matching the rest of the wizard:
  *
  *   [WizardSidebar] [LetterPreview]  [ReviewRail]
  *      sections        clean letter     verdict + checks
  *
- *   Edit → Evidence & Attachments → REVIEW → Export pack
+ *   Edit → Evidence → REVIEW → Finalize (export + sign-off lives there)
  *
- * The letter is actually visible on Review — previously the checklist
- * took the centre canvas and the letter was nowhere to be seen until
- * export. ReviewRail (right) handles all the "is this ready?" signals.
+ * The letter is actually visible on Review — the right rail (ReviewRail)
+ * handles all the "is this ready?" signals before the user steps into
+ * Finalize. Export and counsel-gate logic moved to Finalize so the user
+ * gets one consolidated ship surface instead of a button-driven export
+ * scattered across pages.
  */
 export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
-  const recordExport = useDraftStore((s) => s.recordExport);
-  const updateAnswers = useDraftStore((s) => s.updateAnswers);
-
-  const [exporting, setExporting] = useState(false);
-  const [gateOpen, setGateOpen] = useState(false);
 
   if (!draft || !draftId) {
     return (
@@ -46,8 +39,10 @@ export function ReviewStep() {
   }
 
   const meta = getLetterMeta(draft.letterType);
-  const requiresCounsel = exportRequiresCounselGate(draft);
 
+  // Counsel-review status surfaced in ReviewRail. The actual export gate
+  // moved to Finalize, but the rail still wants to know whether a review
+  // has been attached so it can render the green tick.
   const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
     const last = (draft.exports ?? [])
       .slice()
@@ -64,30 +59,6 @@ export function ReviewStep() {
     }
     return null;
   })();
-
-  const runExport = async (attestation?: { reviewedBy: string; reviewedOn: string }) => {
-    setExporting(true);
-    try {
-      await exportLetterPack(draft, attestation);
-      recordExport(draft.id, {
-        format: "pack",
-        reviewedBy: attestation?.reviewedBy,
-        reviewedOn: attestation?.reviewedOn,
-      });
-    } catch (err) {
-      alert(`Export failed: ${err instanceof Error ? err.message : "unknown error"}`);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const onExport = () => {
-    if (requiresCounsel && !counselReview) {
-      setGateOpen(true);
-      return;
-    }
-    void runExport(counselReview ?? undefined);
-  };
 
   const unresolvedCommentCount = (draft.comments ?? []).filter(
     (c) => !c.resolved
@@ -121,8 +92,11 @@ export function ReviewStep() {
           >
             Back to editor
           </Button>
-          <Button size="sm" disabled={exporting} onClick={onExport}>
-            {exporting ? "Building pack…" : "Export pack"}
+          <Button
+            size="sm"
+            onClick={() => nav(`/editor/${draft.id}/finalize`)}
+          >
+            Finalize
             <ArrowRight className="size-4 ml-1.5" />
           </Button>
         </div>
@@ -159,27 +133,6 @@ export function ReviewStep() {
         </aside>
       </div>
 
-      {requiresCounsel && gateOpen && (
-        <HighRiskExportGate
-          draft={draft}
-          open={gateOpen}
-          onClose={() => setGateOpen(false)}
-          onConfirm={async ({ reviewedBy, reviewedOn }) => {
-            try {
-              const updated = {
-                ...(draft.answers as object),
-                _counselReview: { reviewedBy, reviewedOn },
-              };
-              updateAnswers(draft.id, updated);
-            } catch {
-              /* ignore */
-            }
-            setGateOpen(false);
-            await runExport({ reviewedBy, reviewedOn });
-          }}
-        />
-      )}
     </div>
   );
 }
-

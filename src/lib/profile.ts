@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Mode, Tone, EmployeeTone, UkRegion, UsState, WorkerClass } from "./letters/types";
 import { DEFAULT_MODEL } from "./llm/default-model";
+import { isSafeImageDataUrl } from "./safe-data-url";
 
 /**
  * Generation model identifiers. We support two providers — Anthropic and
@@ -92,7 +93,15 @@ export type Profile = {
   };
   /** Whether to auto-fill wizards from this profile. User can toggle. */
   autoFill: boolean;
+  /** Credits balance for AI-powered features (e.g. AI specialist review on
+   * the Finalize page). New accounts start with FREE_CREDITS_ALLOWANCE. */
+  credits: number;
 };
+
+/** Starter credits each new user gets. ~6 AI reviews at 5 credits each. */
+export const FREE_CREDITS_ALLOWANCE = 30;
+/** Cost of one AI specialist review. */
+export const AI_REVIEW_COST = 5;
 
 const EMPTY_PROFILE: Profile = {
   setupComplete: false,
@@ -108,6 +117,7 @@ const EMPTY_PROFILE: Profile = {
     qwenModel: DEFAULT_MODEL,
   },
   autoFill: true,
+  credits: FREE_CREDITS_ALLOWANCE,
 };
 
 type Store = {
@@ -119,6 +129,10 @@ type Store = {
   patchDefaults: (patch: Partial<Profile["defaults"]>) => void;
   setAutoFill: (value: boolean) => void;
   markSetupComplete: () => void;
+  /** Subtract credits (e.g. on AI review). No-op + returns false if not enough. */
+  spendCredits: (amount: number) => boolean;
+  /** Add credits (top-up flow / promo / refund). */
+  addCredits: (amount: number) => void;
   reset: () => void;
 };
 
@@ -133,13 +147,31 @@ export const useProfileStore = create<Store>()(
       patchPersonal: (patch) =>
         set((s) => ({ profile: { ...s.profile, personal: { ...s.profile.personal, ...patch } } })),
       patchEmployer: (patch) =>
-        set((s) => ({ profile: { ...s.profile, employer: { ...s.profile.employer, ...patch } } })),
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            employer: { ...s.profile.employer, ...sanitizeEmployerPatch(patch) },
+          },
+        })),
       patchDefaults: (patch) =>
         set((s) => ({ profile: { ...s.profile, defaults: { ...s.profile.defaults, ...patch } } })),
       setAutoFill: (value) =>
         set((s) => ({ profile: { ...s.profile, autoFill: value } })),
       markSetupComplete: () =>
         set((s) => ({ profile: { ...s.profile, setupComplete: true } })),
+      spendCredits: (amount) => {
+        // Read latest store snapshot to avoid stale reads across rapid clicks.
+        const current = useProfileStore.getState().profile.credits ?? 0;
+        if (current < amount) return false;
+        set((s) => ({
+          profile: { ...s.profile, credits: (s.profile.credits ?? 0) - amount },
+        }));
+        return true;
+      },
+      addCredits: (amount) =>
+        set((s) => ({
+          profile: { ...s.profile, credits: (s.profile.credits ?? 0) + amount },
+        })),
       reset: () => set({ profile: EMPTY_PROFILE }),
     }),
     {
@@ -152,6 +184,10 @@ export const useProfileStore = create<Store>()(
       // populated on hydrate, every surface reads the same value.
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+        // Backfill credits for pre-existing profiles (added 2026-05-13).
+        if (typeof state.profile.credits !== "number") {
+          state.profile.credits = FREE_CREDITS_ALLOWANCE;
+        }
         // Backfill missing model.
         if (!state.profile.defaults.qwenModel) {
           state.profile.defaults.qwenModel = DEFAULT_MODEL;
@@ -208,11 +244,11 @@ export function prefillsFromProfile(
     if (profile.employer.signatoryTitle) out.signatoryTitle = profile.employer.signatoryTitle;
     else if (profile.personal.jobTitle) out.signatoryTitle = profile.personal.jobTitle;
     // Letterhead + signature default to the employer profile.
-    if (profile.employer.letterheadDataUrl) {
+    if (isSafeImageDataUrl(profile.employer.letterheadDataUrl)) {
       out.letterheadDataUrl = profile.employer.letterheadDataUrl;
       out.hasLetterhead = true;
     }
-    if (profile.employer.signatureDataUrl) {
+    if (isSafeImageDataUrl(profile.employer.signatureDataUrl)) {
       out.signatureDataUrl = profile.employer.signatureDataUrl;
     }
   } else {
@@ -271,4 +307,20 @@ export function profileUpdatesFromAnswers(
   }
 
   return { personal, employer, defaults };
+}
+
+function sanitizeEmployerPatch(
+  patch: Partial<Profile["employer"]>
+): Partial<Profile["employer"]> {
+  return {
+    ...patch,
+    letterheadDataUrl:
+      patch.letterheadDataUrl === undefined || isSafeImageDataUrl(patch.letterheadDataUrl)
+        ? patch.letterheadDataUrl
+        : undefined,
+    signatureDataUrl:
+      patch.signatureDataUrl === undefined || isSafeImageDataUrl(patch.signatureDataUrl)
+        ? patch.signatureDataUrl
+        : undefined,
+  };
 }

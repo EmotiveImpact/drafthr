@@ -33,7 +33,7 @@ import { sidebarLabelFor } from "@/components/editor/SectionsList";
 type Props = {
   draft: Draft;
   /** Which wizard step this sidebar is rendered on. */
-  current: "edit" | "evidence" | "review";
+  current: "edit" | "evidence" | "review" | "finalize";
   /** Currently-active section in the page (highlighted). */
   activeSectionId?: string | null;
   /** Called when a section is clicked. */
