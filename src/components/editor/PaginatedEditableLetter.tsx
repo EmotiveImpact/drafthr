@@ -316,7 +316,7 @@ export function PaginatedEditableLetter({
           box-shadow:
             0 2px 8px rgba(0, 0, 0, 0.04),
             0 6px 24px rgba(0, 0, 0, 0.06);
-          font-family: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
+          font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
           font-size: 11pt;
           line-height: 1.55;
           color: #0f172a;
