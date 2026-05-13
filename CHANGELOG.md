@@ -2,6 +2,47 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.5.0 — 2026-05-13
+
+Pixel-perfect Edit-on-page. The previous V1 Edit-on-page was a single
+continuous scrolling card with no real page boundaries — clean to type
+in, but the user couldn't tell where their content would split when
+printed. V2 keeps the same continuous editor but runs paged.js's
+Chunker against a hidden off-screen render of the letter on every
+debounced keystroke (350 ms) and overlays subtle "Page N · Page N+1"
+strips at the exact y-positions where the printed letter would break.
+
+Why the off-screen approach rather than rendering paged.js inline as
+the editor: paged.js mutates its source DOM during pagination, which is
+incompatible with a live TipTap editor that owns the same DOM. Two
+trees solve the problem cleanly — TipTap is the typeable source of
+truth, the off-screen Chunker is the break detector, the strips are
+projection.
+
+- Shared `paged-edit/printCss.ts` — A4 geometry + the @page CSS string
+  + `wrapInPrintHtml()` used by both the read-only Preview and the new
+  off-screen paginator.
+- `paged-edit/offscreenPaginator.ts` — `paginate(html)` → `{pageCount,
+  breaks[]}`. Mounts a hidden `visibility:hidden` host (NOT off-screen
+  at -99999px, which confuses paged.js's column measurement and
+  produces phantom pages — verified empirically), runs `Previewer`
+  with the polisher so the embedded @page CSS is applied, scans each
+  rendered page's clones for the last `data-paged-ref` to produce the
+  page-end source ref.
+- `paged-edit/usePageBreakPositions.ts` — debounced hook that stamps
+  refs by index, calls `paginate()`, locates the live block in the
+  editor and reads `bottom - editorRoot.top` to get the strip y-offset.
+- `paged-edit/PageBreakOverlay.tsx` — slate strip + dashed borders +
+  uppercase "Page N · Page N+1" label, `pointer-events: none` so the
+  user types straight through.
+- `paged-edit/PaginatedEditableLetterV2.tsx` — same TipTap editor +
+  toolbar as V1 (factored into `editorShared.tsx`), wraps in a
+  relative shell so the overlay layers correctly.
+- `lib/flags.ts` — three-tier flag resolver (localStorage > VITE env
+  > per-flag default). `pixelPerfectEdit` defaults to on; flip back
+  with `window.__drafthr.setFlag("pixelPerfectEdit", false)` if a
+  regression surfaces.
+
 ## [Unreleased]
 
 Big rocks still to land — listed for reference, not yet shipped:

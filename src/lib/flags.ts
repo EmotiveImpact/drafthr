@@ -25,6 +25,18 @@ const STORAGE_KEY: Record<FlagKey, string> = {
   pixelPerfectEdit: "drafthr.flag.pixel-perfect-edit",
 };
 
+/**
+ * Default value for each flag when neither the localStorage override
+ * nor the env var resolves. Used as the final tier of getFlag().
+ *
+ * pixelPerfectEdit ships on. Set the localStorage key to "0" to flip
+ * back to V1 (legacy single-page editor) without a redeploy if a
+ * regression surfaces.
+ */
+const DEFAULTS: Record<FlagKey, boolean> = {
+  pixelPerfectEdit: true,
+};
+
 function parseBool(raw: string | null | undefined): boolean | null {
   if (raw == null) return null;
   const v = raw.trim().toLowerCase();
@@ -47,7 +59,7 @@ export function getFlag(key: FlagKey): boolean {
   if (ls != null) return ls;
   const env = parseBool(import.meta.env[ENV_KEY[key]] as string | undefined);
   if (env != null) return env;
-  return false;
+  return DEFAULTS[key];
 }
 
 /**
