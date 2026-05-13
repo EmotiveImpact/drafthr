@@ -35,6 +35,12 @@ import { cn } from "@/lib/utils";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
+import {
+  PAGE_WIDTH_PX,
+  MARGIN_TOP_PX,
+  MARGIN_BOTTOM_PX,
+  MARGIN_SIDE_PX,
+} from "./paged-edit/printCss";
 
 /**
  * Editable letter — single-page contenteditable. No fake pagination, no
@@ -57,11 +63,6 @@ import { EvidencePickerPopover } from "./EvidencePickerPopover";
 
 const SAVE_DELAY_MS = 500;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
-
-const PAGE_WIDTH_PX = Math.round(8.27 * 96);   // 794
-const MARGIN_TOP_PX = Math.round(1.0 * 96);    // 96
-const MARGIN_BOTTOM_PX = Math.round(1.2 * 96); // 115
-const MARGIN_SIDE_PX = Math.round(1.1 * 96);   // 106
 
 /**
  * Invisible block node inserted before each section's content. Carries
