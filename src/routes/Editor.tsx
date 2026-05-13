@@ -845,9 +845,11 @@ export function Editor() {
           // shrink the last track to 0px instead of removing it. Browsers
           // can interpolate grid-template-columns when track counts match,
           // so the column smoothly animates from 360px to 0px and the
-          // canvas grows in lockstep. iOS-style easing matches the rest
-          // of the editor's motion vocabulary.
-          "lg:transition-[grid-template-columns] lg:duration-[280ms] lg:ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:lg:transition-none " +
+          // canvas grows in lockstep. Duration calibrated to the spring's
+          // settle time (~360ms) so the canvas reflow finishes when the
+          // rail finishes sliding — no half-beat gap. ease-out matches
+          // the spring's deceleration curve.
+          "lg:transition-[grid-template-columns] lg:duration-[360ms] lg:ease-out motion-reduce:lg:transition-none " +
           (focusMode
             ? "lg:grid-cols-1"
             : railCollapsed
@@ -1062,10 +1064,14 @@ export function Editor() {
             initial={false}
             animate={{ x: railCollapsed ? "100%" : 0 }}
             transition={{
+              // Slightly heavier damping than the mobile overlay so the
+              // rail settles without a perceptible spring-back at the
+              // end of the slide. Stiffness lowered a touch to match
+              // the longer travel distance on desktop.
               type: "spring",
-              stiffness: 380,
-              damping: 38,
-              mass: 0.85,
+              stiffness: 340,
+              damping: 42,
+              mass: 0.9,
             }}
             className={
               "flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
@@ -1182,10 +1188,14 @@ export function Editor() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.9 }}
               transition={{
+                // Entry: ~80ms delay so the rail finishes leaving before
+                // the pill starts arriving (relay, not race). Exit:
+                // no delay so it gets out of the way as the rail returns.
                 type: "spring",
                 stiffness: 380,
                 damping: 28,
                 mass: 0.7,
+                delay: 0.08,
               }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
