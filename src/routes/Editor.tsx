@@ -1234,7 +1234,7 @@ export function Editor() {
               setShowRail(true);
             }}
             className={
-              "lg:hidden fixed bottom-5 right-5 z-30 inline-flex items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-90 active:scale-[0.98] " +
+              "lg:hidden fixed bottom-4 right-4 z-30 inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-90 active:scale-[0.98] " +
               "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none " +
               (showRail
                 ? "opacity-0 scale-90 pointer-events-none"
@@ -1244,10 +1244,10 @@ export function Editor() {
             aria-hidden={showRail || undefined}
             tabIndex={showRail ? -1 : undefined}
           >
-            <span className="grid place-items-center size-7 rounded-full bg-white/15">
-              <Sparkles className="size-4" />
+            <span className="grid place-items-center size-5 rounded-full bg-white/15">
+              <Sparkles className="size-3" />
             </span>
-            <span className="text-[13px] font-medium">Ask AI</span>
+            <span className="text-[12px] font-medium">Ask AI</span>
           </button>
         )}
 
@@ -1276,13 +1276,13 @@ export function Editor() {
               }}
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
-              className="hidden lg:inline-flex fixed bottom-5 right-5 z-30 items-center gap-2 h-12 pl-3 pr-4 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)] hover:opacity-95"
+              className="hidden lg:inline-flex fixed bottom-4 right-4 z-30 items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-95"
               aria-label="Open AI agent"
             >
-              <span className="grid place-items-center size-7 rounded-full bg-white/15">
-                <Sparkles className="size-4" />
+              <span className="grid place-items-center size-5 rounded-full bg-white/15">
+                <Sparkles className="size-3" />
               </span>
-              <span className="text-[13px] font-medium">Ask AI</span>
+              <span className="text-[12px] font-medium">Ask AI</span>
             </motion.button>
           )}
         </AnimatePresence>
