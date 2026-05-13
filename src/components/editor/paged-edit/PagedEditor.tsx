@@ -25,13 +25,14 @@ import {
   Link as LinkIcon,
   List,
   ListOrdered,
-  Loader2,
   Pilcrow,
   Redo2,
   Underline as UnderlineIcon,
   Undo2,
   X,
 } from "lucide-react";
+
+import { toast } from "sonner";
 
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -97,12 +98,6 @@ type ToolbarFormatState = {
   align: "left" | "center" | "right" | "justify" | "";
 };
 
-type EditStatus =
-  | { kind: "reflowing"; label: string }
-  | { kind: "saving"; label: string }
-  | { kind: "saved"; label: string }
-  | { kind: "error"; label: string };
-
 type PreviewerInstance = {
   preview: (
     content: string | HTMLElement,
@@ -156,6 +151,10 @@ export function PagedEditor({
   const undoStackRef = useRef<string[]>([]);
   const redoStackRef = useRef<string[]>([]);
   const savedSelectionRef = useRef<Range | null>(null);
+  // Tracks dirty state across renders so we can fire a "Saved" toast
+  // only on the dirty → clean transition (i.e. a flush actually
+  // completed). Without this we'd toast on the initial render too.
+  const wasDirtyRef = useRef(false);
 
   const [busy, setBusy] = useState(true);
   const [pageCount, setPageCount] = useState<number | null>(null);
@@ -742,7 +741,25 @@ export function PagedEditor({
 
   const canUndo = dirty || historyState.canUndo;
   const canRedo = !dirty && historyState.canRedo;
-  const editStatus = getEditStatus({ busy, dirty, error, pageCount });
+
+  // Toast "Saved" on the dirty → clean transition. Shares an id so
+  // back-to-back saves (fast typing → debounce → save → typing again)
+  // replace the same toast slot rather than stacking up. Initial mount
+  // doesn't toast because wasDirtyRef starts false.
+  useEffect(() => {
+    if (wasDirtyRef.current && !dirty && !error) {
+      toast.success("Saved", { id: "drafthr-paged-saved", duration: 1200 });
+    }
+    wasDirtyRef.current = dirty;
+  }, [dirty, error]);
+
+  // Pagination failure — surface as an error toast since the inline
+  // status pill is gone.
+  useEffect(() => {
+    if (error) {
+      toast.error(error, { id: "drafthr-paged-error" });
+    }
+  }, [error]);
 
   return (
     <div className="paged-edit-shell">
@@ -891,7 +908,6 @@ export function PagedEditor({
               <Redo2 className="size-3.5" />
             </NativeToolbarButton>
           </div>
-          <EditStatusPill status={editStatus} />
           <button
             type="button"
             onClick={handleDone}
@@ -994,53 +1010,6 @@ function NativeToolbarButton({
 
 function ToolbarDivider() {
   return <span aria-hidden className="mx-1 h-5 w-px bg-[var(--ds-line)]" />;
-}
-
-function getEditStatus({
-  busy,
-  dirty,
-  error,
-  pageCount,
-}: {
-  busy: boolean;
-  dirty: boolean;
-  error: string | null;
-  pageCount: number | null;
-}): EditStatus {
-  if (error) return { kind: "error", label: error };
-  if (busy) return { kind: "reflowing", label: "Reflowing pages" };
-  if (dirty) return { kind: "saving", label: "Saving changes" };
-  void pageCount;
-  return { kind: "saved", label: "Saved" };
-}
-
-function EditStatusPill({ status }: { status: EditStatus }) {
-  const tone =
-    status.kind === "error"
-      ? "border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]"
-      : status.kind === "saving"
-      ? "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
-      : status.kind === "reflowing"
-      ? "border-[var(--ds-blue-bg)] bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]"
-      : "border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-muted)]";
-
-  return (
-    <span
-      role="status"
-      aria-live="polite"
-      data-state={status.kind}
-      className={[
-        "inline-flex h-5 items-center justify-center gap-1 rounded-full border px-2",
-        "text-[10px] font-medium tabular-nums",
-        tone,
-      ].join(" ")}
-    >
-      {(status.kind === "saving" || status.kind === "reflowing") && (
-        <Loader2 className="size-2.5 animate-spin" />
-      )}
-      <span>{status.label}</span>
-    </span>
-  );
 }
 
 /* ============================================================================
