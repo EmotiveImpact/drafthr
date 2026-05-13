@@ -257,7 +257,7 @@ function wrapInPrintHtml(bodyHtml: string): string {
    * (i.e. the entire app shell) are unaffected. */
   body { margin: 0; }
   .pagedjs_page {
-    font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+    font-family: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 11pt;
     line-height: 1.55;
     color: #0f172a;
