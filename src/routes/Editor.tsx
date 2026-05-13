@@ -1039,7 +1039,10 @@ export function Editor() {
             // click stays read-only; the View menu's toggle is still
             // available for users who want to commit to one or the other.
             <div
-              className="py-6 sm:py-8 px-3 sm:px-6"
+              className={[
+                "px-3 sm:px-6",
+                editOnPage ? "pt-2 pb-6 sm:pt-3 sm:pb-8" : "py-6 sm:py-8",
+              ].join(" ")}
               onDoubleClick={() => {
                 if (!editOnPage) setEditOnPage(true);
               }}
@@ -1247,7 +1250,7 @@ export function Editor() {
             <span className="grid place-items-center size-5 rounded-full bg-white/15">
               <Sparkles className="size-3" />
             </span>
-            <span className="text-[12px] font-medium">Ask AI</span>
+            <span className="drafthr-text-shimmer text-[12px] font-medium">Ask AI</span>
           </button>
         )}
 
@@ -1282,7 +1285,7 @@ export function Editor() {
               <span className="grid place-items-center size-5 rounded-full bg-white/15">
                 <Sparkles className="size-3" />
               </span>
-              <span className="text-[12px] font-medium">Ask AI</span>
+              <span className="drafthr-text-shimmer text-[12px] font-medium">Ask AI</span>
             </motion.button>
           )}
         </AnimatePresence>

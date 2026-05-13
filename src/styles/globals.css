@@ -342,6 +342,39 @@
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+.drafthr-text-shimmer {
+  display: inline-block;
+  color: currentColor;
+  background-image: repeating-linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.58) 0%,
+    rgba(255, 255, 255, 0.58) 36%,
+    #ffffff 50%,
+    rgba(255, 255, 255, 0.58) 64%,
+    rgba(255, 255, 255, 0.58) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 200% 0;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: drafthr-text-shimmer 1.9s linear infinite;
+}
+
+@keyframes drafthr-text-shimmer {
+  to {
+    background-position: 0% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drafthr-text-shimmer {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}
+
 .dark {
   --background: oklch(0.148 0.004 228.8);
   --foreground: oklch(0.987 0.002 197.1);

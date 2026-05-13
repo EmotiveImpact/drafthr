@@ -129,6 +129,25 @@ describe("PagedEditor source reconstruction", () => {
     expect(splits["sec-b"]).toContain("Changed B");
     expect(normalized.match(/data-section-anchor/g)).toHaveLength(2);
   });
+
+  it("reconstructs section anchors from rendered block section ids", () => {
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <div class="pagedjs_page_content">
+        <div class="letter-body">
+          <p data-section-id="sec-a" data-paged-ref="0">Alpha</p>
+          <p data-section-id="sec-b" data-paged-ref="1">Beta</p>
+        </div>
+      </div>
+    `;
+
+    const html = editor.reconstructSourceHtml(container);
+    const splits = editor.splitBySection(html);
+
+    expect(splits["sec-a"]).toBe("<p>Alpha</p>");
+    expect(splits["sec-b"]).toBe("<p>Beta</p>");
+    expect(html).not.toContain("<p data-section-id");
+  });
 });
 
 describe("PagedEditor paste cleanup", () => {
@@ -254,7 +273,7 @@ describe("PagedEditor undo and redo", () => {
     const draft = makeDraft([makeSection("sec-a", "body", "<p>Original text</p>")]);
 
     render(<PagedEditorHarness draft={draft} />);
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox")).toBeInTheDocument();
 
     const body = document.querySelector<HTMLElement>(".letter-body");
     expect(body).not.toBeNull();
@@ -264,14 +283,12 @@ describe("PagedEditor undo and redo", () => {
     setCaret(paragraph!.firstChild as Text, "Original text changed".length);
 
     fireEvent.input(body!, { bubbles: true });
-    expect(screen.getByRole("status")).toHaveTextContent("Saving changes");
 
     await act(async () => {
       await sleep(650);
       await flushMicrotasks();
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent("Saved");
     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text changed");
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
 

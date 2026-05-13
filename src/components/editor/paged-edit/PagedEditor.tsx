@@ -22,7 +22,6 @@ import {
   Heading3,
   Image as ImageIcon,
   Italic,
-  Link as LinkIcon,
   List,
   ListOrdered,
   Pilcrow,
@@ -156,8 +155,8 @@ export function PagedEditor({
   // completed). Without this we'd toast on the initial render too.
   const wasDirtyRef = useRef(false);
 
-  const [busy, setBusy] = useState(true);
-  const [pageCount, setPageCount] = useState<number | null>(null);
+  const [, setBusy] = useState(true);
+  const [, setPageCount] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
@@ -443,21 +442,6 @@ export function PagedEditor({
     runNativeCommand("formatBlock", next);
   }, [formatState.block, runNativeCommand]);
 
-  const insertLink = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    rememberSelection();
-    const previous = findSelectedLinkHref(container);
-    const url = window.prompt("URL", previous ?? "https://");
-    if (url == null) return;
-    restoreRememberedSelection();
-    if (!selectionInsideLetterBody(container)) return;
-    focusSelectionLetterBody(container);
-    if (url.trim() === "") runEditorCommand("unlink");
-    else runEditorCommand("createLink", url.trim());
-    rememberSelection();
-    afterToolbarMutation();
-  }, [afterToolbarMutation, rememberSelection, restoreRememberedSelection]);
 
   const onImageChosen = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -763,7 +747,7 @@ export function PagedEditor({
 
   return (
     <div className="paged-edit-shell">
-      <div className="mx-auto mb-3 flex w-[min(8.27in,100%)] flex-wrap items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 text-[11px] shadow-sm">
+      <div className="sticky top-1 z-30 mx-auto mb-3 flex w-fit max-w-full flex-wrap items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 text-[11px] shadow-md">
         <input
           ref={imageInputRef}
           type="file"
@@ -877,9 +861,6 @@ export function PagedEditor({
         <ToolbarDivider />
 
         <div className="flex items-center gap-0.5">
-          <NativeToolbarButton label="Link" onClick={insertLink}>
-            <LinkIcon className="size-3.5" />
-          </NativeToolbarButton>
           <NativeToolbarButton
             label="Insert image"
             onClick={() => {
@@ -891,7 +872,7 @@ export function PagedEditor({
           </NativeToolbarButton>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-0.5">
             <NativeToolbarButton
               label="Undo"
@@ -1024,12 +1005,11 @@ function ToolbarDivider() {
 function buildMergedSourceHtml(draft: Draft): string {
   return draft.sections
     .map((s) => {
-      const anchor = `<div data-section-anchor data-section-id="${escAttr(s.id)}" style="display:none;height:0;line-height:0;margin:0;padding:0;"></div>`;
       const generated =
         s.sectionId === "signature"
           ? signatureImageHtml(draft, ' data-generated-letter-chrome="signature" contenteditable="false"')
           : "";
-      return anchor + generated + sanitizeLetterHtml(s.html || "");
+      return anchorHtmlFor(s.id) + generated + sanitizeLetterHtml(s.html || "");
     })
     .join("");
 }
@@ -1046,10 +1026,18 @@ function stampPagedRefs(html: string): string {
   const root = doc.body.firstElementChild as HTMLElement | null;
   if (!root) return html;
   let i = 0;
+  let currentSectionId: string | null = null;
   for (const child of Array.from(root.children)) {
-    if (child.hasAttribute("data-section-anchor")) continue;
+    if (child.hasAttribute("data-section-anchor")) {
+      currentSectionId = child.getAttribute("data-section-id");
+      // Do not give paged.js hidden section sentinels to lay out. Chrome can
+      // split the wrapper around them and emit blank/duplicated first pages.
+      child.remove();
+      continue;
+    }
     if (child.hasAttribute("data-generated-letter-chrome")) continue;
     child.setAttribute("data-paged-ref", String(i));
+    if (currentSectionId) child.setAttribute("data-section-id", currentSectionId);
     i++;
   }
   return root.innerHTML;
@@ -1272,23 +1260,31 @@ function reconstructSourceHtml(container: HTMLElement): string {
   const items: RebuildItem[] = [];
   const blockIndex = new Map<string, number>();
   const seenAnchors = new Set<string>();
+  let currentSectionId: string | null = null;
+
+  const appendSectionAnchor = (sectionId: string | null) => {
+    if (!sectionId || seenAnchors.has(sectionId)) return;
+    seenAnchors.add(sectionId);
+    items.push({
+      kind: "anchor",
+      sectionId,
+      outerHTML: anchorHtmlFor(sectionId),
+    });
+  };
 
   for (const root of roots) {
     for (const node of Array.from(root.children) as HTMLElement[]) {
       if (node.hasAttribute("data-section-anchor")) {
         const id = node.getAttribute("data-section-id") || "";
-        if (!seenAnchors.has(id)) {
-          seenAnchors.add(id);
-          items.push({
-            kind: "anchor",
-            sectionId: id,
-            outerHTML: anchorHtmlFor(id),
-          });
-        }
+        currentSectionId = id || currentSectionId;
+        appendSectionAnchor(id);
       } else if (node.hasAttribute("data-generated-letter-chrome")) {
         continue;
       } else if (node.hasAttribute("data-paged-ref")) {
         const ref = node.getAttribute("data-paged-ref")!;
+        const sectionId: string | null = node.getAttribute("data-section-id") || currentSectionId;
+        currentSectionId = sectionId;
+        appendSectionAnchor(sectionId);
         if (blockIndex.has(ref)) {
           const item = items[blockIndex.get(ref)!];
           if (item.kind === "block") item.innerParts.push(node.innerHTML);
@@ -1322,7 +1318,7 @@ function reconstructSourceHtml(container: HTMLElement): string {
 }
 
 function anchorHtmlFor(id: string): string {
-  return `<div data-section-anchor data-section-id="${escAttr(id)}" style="display:none;height:0;line-height:0;margin:0;padding:0;"></div>`;
+  return `<template data-section-anchor data-section-id="${escAttr(id)}"></template>`;
 }
 
 function findRenderedSourceRoots(container: HTMLElement): HTMLElement[] {
@@ -1356,11 +1352,21 @@ function normalizeRenderedPagedRefs(container: HTMLElement): void {
   const roots = findRenderedSourceRoots(container);
   const refMap = new Map<string, string>();
   let nextRef = 0;
+  let currentSectionId: string | null = null;
 
   for (const root of roots) {
     for (const child of Array.from(root.children) as HTMLElement[]) {
-      if (child.hasAttribute("data-section-anchor")) continue;
+      if (child.hasAttribute("data-section-anchor")) {
+        currentSectionId = child.getAttribute("data-section-id") || currentSectionId;
+        continue;
+      }
       if (child.hasAttribute("data-generated-letter-chrome")) continue;
+
+      const sectionId = child.getAttribute("data-section-id") || currentSectionId;
+      if (sectionId) {
+        child.setAttribute("data-section-id", sectionId);
+        currentSectionId = sectionId;
+      }
 
       const oldRef = child.getAttribute("data-paged-ref");
       let next = oldRef ? refMap.get(oldRef) : undefined;
@@ -1383,6 +1389,7 @@ function stripPagedArtifacts(root: HTMLElement): void {
     el.removeAttribute("data-ref");
     el.removeAttribute("data-id");
     el.removeAttribute("data-paged-ref");
+    el.removeAttribute("data-section-id");
     el.removeAttribute("data-split-from");
     el.removeAttribute("data-split-to");
     el.removeAttribute("data-previous-break-after");
@@ -2030,18 +2037,6 @@ function normalizeFormatBlock(value: string): string {
   if (normalized === "heading 3") return "h3";
   if (normalized === "normal" || normalized === "div") return "p";
   return normalized;
-}
-
-function findSelectedLinkHref(root: HTMLElement): string | undefined {
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0 || !sel.anchorNode || !root.contains(sel.anchorNode)) {
-    return undefined;
-  }
-  const anchor =
-    sel.anchorNode.nodeType === Node.TEXT_NODE
-      ? sel.anchorNode.parentElement
-      : (sel.anchorNode as HTMLElement | null);
-  return anchor?.closest<HTMLAnchorElement>("a[href]")?.href;
 }
 
 function isComposingInput(event: Event): boolean {
