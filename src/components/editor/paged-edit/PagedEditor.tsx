@@ -135,7 +135,6 @@ export function PagedEditor({
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [layoutWarning, setLayoutWarning] = useState<string | null>(null);
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
   const [formatState, setFormatState] = useState<ToolbarFormatState>({
     bold: false,
@@ -247,7 +246,6 @@ export function PagedEditor({
 
     setBusy(true);
     setError(null);
-    setLayoutWarning(null);
     try {
       const { Previewer } = await import("pagedjs");
       if (token !== flowTokenRef.current || !mountedRef.current) return;
@@ -307,8 +305,6 @@ export function PagedEditor({
         chrome.contentEditable = "false";
         chrome.setAttribute("aria-readonly", "true");
       }
-
-      setLayoutWarning(inspectRenderedLayout(container, flow.total ?? null));
 
       // Restore caret + scroll *after* contentEditable is set, otherwise
       // some browsers reject the selection on read-only nodes.
@@ -709,10 +705,6 @@ export function PagedEditor({
               </span>
             ) : error ? (
               <span className="text-[var(--ds-red-fg)]">{error}</span>
-            ) : layoutWarning ? (
-              <span className="text-[var(--ds-amber-fg)]" title={layoutWarning}>
-                {layoutWarning}
-              </span>
             ) : dirty ? (
               "Saving…"
             ) : pageCount != null ? (
@@ -1122,32 +1114,6 @@ function hasDirectSourceChildren(root: HTMLElement): boolean {
       child.hasAttribute("data-section-anchor") ||
       child.hasAttribute("data-paged-ref"),
   );
-}
-
-function inspectRenderedLayout(container: HTMLElement, pageCount: number | null): string | null {
-  const firstPageContent = container.querySelector<HTMLElement>(".pagedjs_page_content");
-  const pageContentHeight = firstPageContent?.getBoundingClientRect().height ?? 0;
-  let oversizedBlocks = 0;
-
-  if (pageContentHeight > 0) {
-    for (const root of findRenderedSourceRoots(container)) {
-      for (const child of Array.from(root.children) as HTMLElement[]) {
-        if (child.hasAttribute("data-section-anchor")) continue;
-        if (child.hasAttribute("data-generated-letter-chrome")) continue;
-        if (child.getBoundingClientRect().height > pageContentHeight - 4) {
-          oversizedBlocks += 1;
-        }
-      }
-    }
-  }
-
-  if (oversizedBlocks > 0) {
-    return `${oversizedBlocks} block${oversizedBlocks === 1 ? "" : "s"} taller than a page`;
-  }
-  if (pageCount != null && pageCount > 20) {
-    return `Large letter · ${pageCount} pages`;
-  }
-  return null;
 }
 
 function normalizeRenderedPagedRefs(container: HTMLElement): void {
