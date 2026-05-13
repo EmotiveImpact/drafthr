@@ -1482,11 +1482,7 @@ function ViewModeButton({
       }
     >
       {icon}
-      {/* Show the label only on the active tab — the inactive one
-       * collapses to icon-only so the pill stays compact, and the
-       * selected mode reads clearly. */}
-      {active && <span>{label}</span>}
-      <span className="sr-only">{label}</span>
+      <span>{label}</span>
     </button>
   );
 }
