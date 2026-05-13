@@ -21,6 +21,18 @@ import type { Draft } from "@/lib/letters/types";
 export type HealthSeverity = "pass" | "warn" | "fail";
 
 /**
+ * Where the "Fix it" button on a failing check should route the user.
+ *
+ *   editor   — open the draft editor (most issues are fixed inline there)
+ *   evidence — open the Evidence step (broken evidence references)
+ *   settings — open profile/Settings (signature, letterhead live there)
+ *
+ * The Finalize page maps this enum to a concrete URL because only the
+ * page knows the current draftId.
+ */
+export type HealthActionRoute = "editor" | "evidence" | "settings";
+
+/**
  * Each check belongs to one of three dimensions. The Finalize page rolls
  * checks up per-dimension and displays a sub-score ring alongside the
  * primary score, so the user sees not just "82" but where their weakest
@@ -44,6 +56,18 @@ export type HealthCheck = {
   severity: HealthSeverity;
   dimension: HealthDimension;
   detail?: string;
+  /** Surface text for the action button on the Fix-this-first card.
+   * Only set on checks that aren't passing. */
+  actionLabel?: string;
+  /** Where the action button should route. */
+  actionRoute?: HealthActionRoute;
+};
+
+/** A single prioritised fix surfaced on the "Fix this first" card. */
+export type Fix = {
+  check: HealthCheck;
+  /** Predicted score gain if this check flips to pass, in [0,100]. */
+  impact: number;
 };
 
 export type HealthBand = "strong" | "adequate" | "weak";
@@ -159,6 +183,8 @@ function checkSections(draft: Draft): HealthCheck {
     label: `${ready} of ${total} sections filled`,
     severity: ready === 0 ? "fail" : "warn",
     detail: `${total - ready} section${total - ready === 1 ? "" : "s"} still empty`,
+    actionLabel: "Open editor",
+    actionRoute: "editor",
   };
 }
 
@@ -186,6 +212,8 @@ function checkRecipientAndSender(draft: Draft): HealthCheck {
     label: `Missing ${missing}`,
     severity: "fail",
     detail: "Letter cannot be sent without both parties identified",
+    actionLabel: "Add details",
+    actionRoute: "settings",
   };
 }
 
@@ -211,6 +239,8 @@ function checkPlaceholders(draft: Draft): HealthCheck {
     label: `${found.size} placeholder${found.size === 1 ? "" : "s"} unresolved`,
     severity: "warn",
     detail: `Still in body: ${list}${more}`,
+    actionLabel: "Open editor",
+    actionRoute: "editor",
   };
 }
 
@@ -234,6 +264,8 @@ function checkPII(draft: Draft): HealthCheck {
     label: `${hits.length} PII pattern${hits.length === 1 ? "" : "s"} detected`,
     severity: "fail",
     detail: `Found: ${hits.join(", ")}. Consider redacting before send.`,
+    actionLabel: "Review in editor",
+    actionRoute: "editor",
   };
 }
 
@@ -258,6 +290,8 @@ function checkWordCount(draft: Draft): HealthCheck {
       words < range.min
         ? "Letter may be too short to be persuasive"
         : "Letter is long — consider trimming repetition",
+    actionLabel: words < range.min ? "Expand in editor" : "Trim in editor",
+    actionRoute: "editor",
   };
 }
 
@@ -279,6 +313,8 @@ function checkSignature(draft: Draft): HealthCheck {
     label: "No signature attached",
     severity: "warn",
     detail: "Sign in Settings to attach automatically to all letters",
+    actionLabel: "Add in Settings",
+    actionRoute: "settings",
   };
 }
 
@@ -311,6 +347,8 @@ function checkEvidenceRefs(draft: Draft): HealthCheck {
     label: `${broken.length} broken evidence reference${broken.length === 1 ? "" : "s"}`,
     severity: "fail",
     detail: `[See Fig ${broken.join(", ")}] — no matching attachment`,
+    actionLabel: "Edit evidence",
+    actionRoute: "evidence",
   };
 }
 
@@ -339,6 +377,8 @@ function checkLetterhead(draft: Draft): HealthCheck {
     label: "No company letterhead",
     severity: "warn",
     detail: "Add a letterhead in Settings for a professional finish",
+    actionLabel: "Add in Settings",
+    actionRoute: "settings",
   };
 }
 
@@ -358,6 +398,8 @@ function checkUnresolvedComments(draft: Draft): HealthCheck {
     label: `${unresolved} unresolved comment${unresolved === 1 ? "" : "s"}`,
     severity: "warn",
     detail: "Review and resolve before sending",
+    actionLabel: "Resolve in editor",
+    actionRoute: "editor",
   };
 }
 
@@ -471,6 +513,47 @@ export function computeHealthScore(checks: HealthCheck[]): HealthScore {
     oneLiner,
     dimensions,
   };
+}
+
+/**
+ * Compute the top `limit` actionable fixes for this draft, sorted by the
+ * score gain that would result from flipping each check to "pass".
+ *
+ * "Impact" is the delta on the overall (weighted) score, computed by
+ * cloning the checks list, forcing the target check to "pass", and re-
+ * scoring. That keeps the impact number honest — fixing a compliance
+ * fail moves the overall a lot (compliance is heavily weighted); a
+ * quality warn moves it less.
+ *
+ * Passing checks are excluded so the card never shows "everything is
+ * fine" rows. If a draft has fewer than `limit` issues, the function
+ * returns however many it has (often 0 — at which point the consumer
+ * should hide the card entirely).
+ */
+export function topFixes(checks: HealthCheck[], limit = 3): Fix[] {
+  const issues = checks.filter((c) => c.severity !== "pass");
+  if (issues.length === 0) return [];
+
+  const baseline = computeHealthScore(checks).score;
+
+  const ranked = issues.map<Fix>((c) => {
+    const simulated = checks.map((other) =>
+      other.id === c.id ? { ...other, severity: "pass" as const } : other,
+    );
+    const next = computeHealthScore(simulated).score;
+    const impact = Math.max(0, next - baseline);
+    return { check: c, impact };
+  });
+
+  // Sort by impact desc, then by severity (fails before warns) so that
+  // two checks with identical impact still order intuitively.
+  const sevRank: Record<HealthSeverity, number> = { fail: 0, warn: 1, pass: 2 };
+  ranked.sort((a, b) => {
+    if (b.impact !== a.impact) return b.impact - a.impact;
+    return sevRank[a.check.severity] - sevRank[b.check.severity];
+  });
+
+  return ranked.slice(0, limit);
 }
 
 function oneLinerFor(

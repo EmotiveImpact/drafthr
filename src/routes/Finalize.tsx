@@ -30,13 +30,17 @@ import { cn } from "@/lib/utils";
 import {
   runHealthChecks,
   computeHealthScore,
+  topFixes,
   DIMENSION_LABELS,
   DIMENSION_DESCRIPTIONS,
   type HealthCheck,
   type HealthDimension,
+  type DimensionScore,
+  type Fix,
 } from "@/lib/finalize/healthChecks";
 import { ScoreRing } from "@/components/finalize/ScoreRing";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
+import { FixThisFirst } from "@/components/finalize/FixThisFirst";
 
 /**
  * Finalize — the final wizard step. Replaces the old "Export pack" button
@@ -94,6 +98,7 @@ export function Finalize() {
     [draft],
   );
   const scoreData = useMemo(() => computeHealthScore(checks), [checks]);
+  const fixes = useMemo<Fix[]>(() => topFixes(checks, 3), [checks]);
 
   if (!draft || !draftId) {
     return (
@@ -201,6 +206,27 @@ export function Finalize() {
     setTimeout(() => setAiReviewState("complete"), 2500);
   };
 
+  /* ------------------- Fix-this-first action routing ----------------- */
+
+  // Map a check's actionRoute enum to the actual URL. The route enum lives
+  // in healthChecks.ts (pure logic, doesn't know the draftId) — only the
+  // page can compose the final path.
+  const resolveActionUrl = (fix: Fix): string => {
+    switch (fix.check.actionRoute) {
+      case "evidence":
+        return `/editor/${draft.id}/evidence`;
+      case "settings":
+        return "/settings";
+      case "editor":
+      default:
+        return `/editor/${draft.id}`;
+    }
+  };
+
+  const onFix = (fix: Fix) => {
+    nav(resolveActionUrl(fix));
+  };
+
   /* --------------------- Mark as sent + confetti -------------------- */
 
   const onMarkAsSent = () => {
@@ -287,7 +313,7 @@ export function Finalize() {
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-          className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden mb-8"
+          className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden"
         >
           {/* Top: hero ring + verdict + sub-scores. The three dimension
            * rings sit beside the verdict text so the hero stays the focal
@@ -315,13 +341,15 @@ export function Finalize() {
               </p>
 
               {/* Three dimension rings — staggered count-up so the eye
-               * tracks across them as they fill. */}
-              <div className="flex items-start gap-5">
+               * tracks across them as they fill. Each ring carries a
+               * one-line verdict under the label so the diagnosis is
+               * scannable at a glance ("1 blocker", "All clear", etc.). */}
+              <div className="flex items-start gap-5 flex-wrap">
                 {scoreData.dimensions.map((d, i) => (
                   <div
                     key={d.dimension}
                     title={DIMENSION_DESCRIPTIONS[d.dimension]}
-                    className="flex flex-col items-center"
+                    className="flex flex-col items-center gap-1"
                   >
                     <ScoreRing
                       score={d.score}
@@ -330,6 +358,16 @@ export function Finalize() {
                       delay={0.25 + i * 0.12}
                       label={DIMENSION_LABELS[d.dimension]}
                     />
+                    <span
+                      className={cn(
+                        "text-[10.5px] font-medium",
+                        d.band === "strong" && "text-[var(--ds-green-fg)]",
+                        d.band === "adequate" && "text-[var(--ds-amber-fg)]",
+                        d.band === "weak" && "text-[var(--ds-red-fg)]",
+                      )}
+                    >
+                      {dimensionVerdict(d)}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -350,24 +388,25 @@ export function Finalize() {
                 <Bot className="size-3" />
                 AI evaluation
               </div>
-              <div className="space-y-2.5 text-[13px] text-[var(--ds-ink)] leading-relaxed">
-                <p className="m-0">
-                  <strong className="font-semibold">Tone:</strong>{" "}
-                  Measured and procedural. Avoids defensive language while
-                  clearly stating position. Register holds throughout.
-                </p>
-                <p className="m-0">
-                  <strong className="font-semibold">Risk:</strong>{" "}
-                  Low. No statements that could be construed as admission of
-                  liability.
-                </p>
-                <p className="m-0 text-[var(--ds-muted)] italic text-[12.5px]">
-                  Full AI critique available below (Step 2 → AI specialist).
-                </p>
+              <div className="space-y-3">
+                {scoreData.dimensions.map((d) => (
+                  <AiDimensionParagraph
+                    key={d.dimension}
+                    dim={d}
+                    checks={checks}
+                  />
+                ))}
               </div>
             </div>
           </div>
         </motion.div>
+
+        {/* Actionable top-3 fixes — the bridge between the score and the
+         * editor. Hidden when the draft has zero issues so the page
+         * doesn't carry an empty card. */}
+        <FixThisFirst fixes={fixes} onAction={onFix} />
+
+        <div className="mb-8" />
 
         {/* ───────── Step 2: Independent review ───────── */}
         <SectionHeader
@@ -560,6 +599,139 @@ function SectionHeader({
           {meta}
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * One-line verdict shown under each sub-score ring. Stays terse: "1 blocker
+ * · 2 warnings", "All clear", "2 polish notes". The Finalize page lets the
+ * verdict carry the colour cue (red/amber/green) — keeps the ring label
+ * itself uncluttered.
+ */
+function dimensionVerdict(d: DimensionScore): string {
+  if (d.totalCount === 0) return "Not assessed";
+  if (d.failCount === 0 && d.warnCount === 0) return "All clear";
+  const parts: string[] = [];
+  if (d.failCount > 0) {
+    parts.push(`${d.failCount} blocker${d.failCount === 1 ? "" : "s"}`);
+  }
+  if (d.warnCount > 0) {
+    parts.push(`${d.warnCount} warning${d.warnCount === 1 ? "" : "s"}`);
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * Per-dimension AI evaluation paragraph. Replaces the previous flat
+ * two-bullet stub with a coloured pill + adaptive prose that varies by
+ * the dimension's score and the specific failing checks. The prose is
+ * deterministic today (lookup-based) and will be swapped for a real AI
+ * call when the AI specialist flow lands — same shape, real content.
+ */
+const DIM_PILL_CLASSES: Record<HealthDimension, string> = {
+  compliance: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+  quality: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
+  risk: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
+};
+
+function AiDimensionParagraph({
+  dim,
+  checks,
+}: {
+  dim: DimensionScore;
+  checks: HealthCheck[];
+}) {
+  const dimChecks = checks.filter((c) => c.dimension === dim.dimension);
+  const fails = dimChecks.filter((c) => c.severity === "fail");
+  const warns = dimChecks.filter((c) => c.severity === "warn");
+
+  let prose: React.ReactNode;
+  if (dim.dimension === "compliance") {
+    if (fails.length > 0) {
+      prose = (
+        <>
+          <strong>{fails.length} structural issue{fails.length === 1 ? "" : "s"} block send.</strong>{" "}
+          The blockers are administrative ({fails[0].label.toLowerCase()}) rather
+          than legal — clear them and compliance jumps materially. Procedural
+          framing and section structure are otherwise intact.
+        </>
+      );
+    } else if (warns.length > 0) {
+      prose = (
+        <>
+          <strong>Structurally intact.</strong> Every required section is present
+          and procedural references are correctly framed.{" "}
+          {warns.length} polish note{warns.length === 1 ? "" : "s"} remain — mostly
+          fillable in under a minute.
+        </>
+      );
+    } else {
+      prose = (
+        <>
+          <strong>Compliance is locked in.</strong> Required sections, parties,
+          and references all in place. Nothing here will block send.
+        </>
+      );
+    }
+  } else if (dim.dimension === "quality") {
+    if (fails.length + warns.length > 0) {
+      const wc = dimChecks.find((c) => c.id === "wordcount");
+      const sig = dimChecks.find((c) => c.id === "signature" && c.severity !== "pass");
+      prose = (
+        <>
+          <strong>Tone is measured and procedural.</strong> Register holds
+          throughout. The main polish opportunity is{" "}
+          {wc && wc.severity !== "pass"
+            ? "the length — consider trimming the longest section"
+            : sig
+              ? "the missing signature — usually a Settings issue, not a draft issue"
+              : "captured in the warnings on the left"}
+          .
+        </>
+      );
+    } else {
+      prose = (
+        <>
+          <strong>Tone is measured and procedural.</strong> Register, length,
+          and presentation all sit in the sweet spot for this letter type.
+          Nothing to polish.
+        </>
+      );
+    }
+  } else {
+    // risk
+    if (fails.length > 0) {
+      prose = (
+        <>
+          <strong>Risk flagged.</strong> {fails[0].label} —{" "}
+          {fails[0].detail ?? "redact before sending."}
+        </>
+      );
+    } else {
+      prose = (
+        <>
+          <strong>Low risk profile.</strong> No statements that could be
+          construed as admission of liability. Grievance procedure references
+          correctly framed. <em>Safe to send as a record.</em>
+        </>
+      );
+    }
+  }
+
+  return (
+    <div>
+      <span
+        className={cn(
+          "inline-block text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded mb-1.5",
+          DIM_PILL_CLASSES[dim.dimension],
+        )}
+      >
+        {DIMENSION_LABELS[dim.dimension]}
+      </span>
+      <p className="text-[12.5px] text-[var(--ds-body)] m-0 leading-relaxed">
+        {prose}
+      </p>
     </div>
   );
 }
