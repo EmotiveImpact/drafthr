@@ -248,13 +248,19 @@ function wrapInPrintHtml(bodyHtml: string): string {
     }
   }
 
-  /* Body typography — matches the PDF render so on-screen matches print. */
-  body {
+  /* Body typography — matches the PDF render so on-screen matches print.
+   * Scoped to .pagedjs_page rather than bare body so the font-family
+   * doesn't leak into Radix dropdown portals (which mount under
+   * document.body) and turn the rest of the UI serif while Preview is
+   * mounted. Children of .pagedjs_page (p, h2, table, etc.) inherit
+   * font/colour from this rule; descendants outside paged.js's pages
+   * (i.e. the entire app shell) are unaffected. */
+  body { margin: 0; }
+  .pagedjs_page {
     font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
     font-size: 11pt;
     line-height: 1.55;
     color: #0f172a;
-    margin: 0;
   }
   p { margin: 0 0 8pt 0; }
   h1, h2, h3 { margin: 14pt 0 6pt; line-height: 1.25; }
@@ -262,7 +268,14 @@ function wrapInPrintHtml(bodyHtml: string): string {
   h3 { font-size: 12pt; font-weight: 600; }
   strong { font-weight: 600; }
   em { color: #475569; font-style: italic; }
-  table { width: 100%; border-collapse: collapse; margin: 4pt 0; }
+  /* Lists — explicit rules so Tailwind preflight (which zeroes ul/ol
+   * styling) doesn't strip the bullets/numbers + padding. Mirrors the
+   * Edit-mode .section-editor-letter rules so both surfaces wrap
+   * identically. */
+  ul { list-style: disc; padding-left: 1.5em; margin: 6pt 0; }
+  ol { list-style: decimal; padding-left: 1.5em; margin: 6pt 0; }
+  li { margin: 2pt 0; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
   th, td { border: 1px solid #cbd5e1; padding: 4pt 8pt; text-align: left; }
   hr.letter-rule { border: none; border-top: 1px solid #cbd5e1; margin: 14pt 0; }
 
