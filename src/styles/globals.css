@@ -329,6 +329,70 @@
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* Edit-mode SectionEditor body — typography mirrors PaginatedLetter so
+ * the writing surface reads like the same document the user will print
+ * or export. Iowan Old Style 11pt, 1.55 line-height, 8pt paragraph
+ * spacing, same heading hierarchy and table/blockquote/list chrome as
+ * wrapInPrintHtml in PaginatedLetter.tsx. Scoped so it doesn't bleed
+ * into the AI panel or other surfaces that also use Tiptap. */
+.section-editor-letter .ProseMirror {
+  font-family: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  font-size: 11pt;
+  line-height: 1.55;
+  color: #0f172a;
+}
+.section-editor-letter .ProseMirror > *:first-child { margin-top: 0; }
+.section-editor-letter .ProseMirror > *:last-child { margin-bottom: 0; }
+.section-editor-letter .ProseMirror p { margin: 0 0 8pt 0; }
+.section-editor-letter .ProseMirror h1,
+.section-editor-letter .ProseMirror h2,
+.section-editor-letter .ProseMirror h3 {
+  margin: 14pt 0 6pt;
+  line-height: 1.25;
+}
+.section-editor-letter .ProseMirror h2 { font-size: 14pt; font-weight: 600; }
+.section-editor-letter .ProseMirror h3 { font-size: 12pt; font-weight: 600; }
+.section-editor-letter .ProseMirror strong { font-weight: 600; }
+.section-editor-letter .ProseMirror em { color: #475569; font-style: italic; }
+.section-editor-letter .ProseMirror ul { list-style: disc; padding-left: 1.5em; margin: 6pt 0; }
+.section-editor-letter .ProseMirror ol { list-style: decimal; padding-left: 1.5em; margin: 6pt 0; }
+.section-editor-letter .ProseMirror li { margin: 2pt 0; }
+.section-editor-letter .ProseMirror blockquote {
+  margin: 8pt 0;
+  padding-left: 1em;
+  border-left: 2px solid #cbd5e1;
+  color: #334155;
+  font-style: italic;
+}
+.section-editor-letter .ProseMirror hr {
+  border: 0;
+  border-top: 1px solid #cbd5e1;
+  margin: 14pt 0;
+}
+.section-editor-letter .ProseMirror a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.section-editor-letter .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6pt 0;
+}
+.section-editor-letter .ProseMirror th,
+.section-editor-letter .ProseMirror td {
+  border: 1px solid #cbd5e1;
+  padding: 4pt 8pt;
+  text-align: left;
+}
+.section-editor-letter .ProseMirror th { background-color: rgba(241, 245, 249, 0.6); }
+.section-editor-letter .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  margin: 6pt 0;
+  border-radius: 3px;
+}
+
 .dark {
   --background: oklch(0.148 0.004 228.8);
   --foreground: oklch(0.987 0.002 197.1);

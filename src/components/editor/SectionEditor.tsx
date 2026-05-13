@@ -484,9 +484,15 @@ export function SectionEditor({
             </button>
           </BubbleMenu>
         )}
+        {/* Typography matches PaginatedLetter (paged.js / export render) so
+         * Edit and Preview look like the same document at the same scale —
+         * Iowan Old Style 11pt with 1.55 line-height, paragraph spacing
+         * 8pt, heading hierarchy + table chrome ported from
+         * wrapInPrintHtml. Edit-on-page mode is gone; this IS the editing
+         * surface and it should read as the letter. */}
         <EditorContent
           editor={editor}
-          className="prose prose-sm max-w-none focus:outline-none [&_p]:my-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_a]:underline [&_table]:border [&_table]:border-letter-rule [&_th]:border [&_th]:border-letter-rule [&_td]:border [&_td]:border-letter-rule [&_th]:bg-muted/40 [&_th]:text-left [&_th]:p-2 [&_td]:p-2"
+          className="section-editor-letter max-w-none focus:outline-none"
         />
       </div>
     </section>
