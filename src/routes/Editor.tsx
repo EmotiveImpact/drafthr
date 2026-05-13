@@ -968,7 +968,17 @@ export function Editor() {
 
           <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
-            <div className="py-6 sm:py-8 px-3 sm:px-6">
+            // Double-click anywhere on the rendered page flips into
+            // Edit-on-page mode — spreadsheet-cell pattern. Single
+            // click stays read-only; the View menu's toggle is still
+            // available for users who want to commit to one or the other.
+            <div
+              className="py-6 sm:py-8 px-3 sm:px-6"
+              onDoubleClick={() => {
+                if (!editOnPage) setEditOnPage(true);
+              }}
+              title={editOnPage ? undefined : "Double-click to edit on page"}
+            >
               <LetterPreview
                 draft={draft}
                 activeSectionId={activeSectionId}
