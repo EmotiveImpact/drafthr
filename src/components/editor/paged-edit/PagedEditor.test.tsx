@@ -254,7 +254,7 @@ describe("PagedEditor undo and redo", () => {
     const draft = makeDraft([makeSection("sec-a", "body", "<p>Original text</p>")]);
 
     render(<PagedEditorHarness draft={draft} />);
-    expect(await screen.findByText("Saved · 1 page")).toBeInTheDocument();
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
 
     const body = document.querySelector<HTMLElement>(".letter-body");
     expect(body).not.toBeNull();
@@ -271,7 +271,7 @@ describe("PagedEditor undo and redo", () => {
       await flushMicrotasks();
     });
 
-    expect(screen.getByRole("status")).toHaveTextContent("Saved · 1 page");
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text changed");
     expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
 

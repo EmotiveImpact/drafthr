@@ -230,13 +230,14 @@ export function Editor() {
     if (editOnPage && viewMode !== "preview") setEditOnPage(false);
   }, [viewMode, editOnPage]);
 
-  // Auto-collapse the AI rail when the user enters edit-on-page so the
-  // letter card gets the full canvas width. Doesn't auto-expand on exit
-  // — if they collapsed the rail intentionally before entering Edit, we
-  // shouldn't snap it back open under them.
+  // Auto-collapse the AI rail when the user switches into Preview or
+  // enters edit-on-page — both are "look at the actual letter" modes
+  // where the AI rail just steals page width. Doesn't auto-expand on
+  // exit — if the user later wants AI back, they tap the Ask AI pill,
+  // and that intent should stick rather than fight a re-collapse.
   useEffect(() => {
-    if (editOnPage) setRailCollapsed(true);
-  }, [editOnPage]);
+    if (viewMode === "preview" || editOnPage) setRailCollapsed(true);
+  }, [viewMode, editOnPage]);
 
   // Imperative handle into the PagedEditor for the top File / Edit /
   // Tools menubar. PagedEditor populates this on mount, nulls it on

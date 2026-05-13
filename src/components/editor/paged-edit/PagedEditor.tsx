@@ -1010,12 +1010,7 @@ function getEditStatus({
   if (error) return { kind: "error", label: error };
   if (busy) return { kind: "reflowing", label: "Reflowing pages" };
   if (dirty) return { kind: "saving", label: "Saving changes" };
-  if (pageCount != null) {
-    return {
-      kind: "saved",
-      label: `Saved · ${pageCount} page${pageCount === 1 ? "" : "s"}`,
-    };
-  }
+  void pageCount;
   return { kind: "saved", label: "Saved" };
 }
 
