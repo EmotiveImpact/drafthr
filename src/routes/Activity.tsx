@@ -228,142 +228,136 @@ export function Activity() {
         />
       ) : (
         <>
-          {/* Search box */}
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)] pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search drafts, people, events…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 h-9 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] placeholder:text-[var(--ds-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)] focus:border-transparent transition"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
-                aria-label="Clear search"
-              >
-                <X className="size-4" />
-              </button>
+          {/* ── Toolbar: search + filters + day nav ── */}
+          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] mb-5">
+            {/* Row 1: Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)] pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search drafts, people, events…"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-9 h-10 rounded-t-lg bg-transparent text-[13px] placeholder:text-[var(--ds-muted)] focus:outline-none transition border-b border-[var(--ds-line)]"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+                  aria-label="Clear search"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Row 2: Filter chips + day nav */}
+            <div className="flex items-center gap-2 px-3 py-2">
+              {/* Chips */}
+              <div className="flex items-center gap-1 overflow-x-auto">
+                {CATEGORY_FILTERS.map((f) => {
+                  const active = filter === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFilter(f.id)}
+                      className={cn(
+                        "shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-medium transition",
+                        active
+                          ? "bg-[var(--ds-ink)] text-white"
+                          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]",
+                      )}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Day navigation */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  disabled={!canPrev}
+                  className="inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+                  aria-label="Previous active day"
+                >
+                  <ChevronLeft className="size-3.5" />
+                </button>
+
+                <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1.5 h-6 px-2 rounded text-[12px] font-medium tabular-nums hover:bg-[var(--ds-line-2)] transition"
+                    >
+                      <CalendarIcon className="size-3 text-[var(--ds-muted)]" />
+                      <span>{prettyDay(selectedDay)}</span>
+                      <ChevronDown className="size-3 text-[var(--ds-muted)]" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="p-0 w-auto">
+                    <MonthGrid
+                      selectedDay={selectedDay}
+                      todayIso={today}
+                      activeDays={eventsByDay}
+                      onPick={(iso) => {
+                        setSelectedDay(iso);
+                        setPickerOpen(false);
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!canNext}
+                  className="inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+                  aria-label="Next active day"
+                >
+                  <ChevronRight className="size-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Row 3: Recent days strip */}
+            {recentDays.length > 1 && (
+              <div className="flex items-center gap-1 px-3 pb-2.5 overflow-x-auto">
+                {recentDays.slice(0, 10).map((day) => {
+                  const active = day === selectedDay;
+                  const count = eventsByDay.get(day)?.length ?? 0;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setSelectedDay(day)}
+                      className={cn(
+                        "shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11px] font-medium tabular-nums transition",
+                        active
+                          ? "bg-[var(--ds-ink)] text-white"
+                          : "bg-[var(--ds-line-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
+                      )}
+                    >
+                      <span>{relDayLabel(day, today)}</span>
+                      <span className={cn("opacity-60", active && "opacity-80")}>{count}</span>
+                    </button>
+                  );
+                })}
+                <span className="ml-auto text-[11px] tabular-nums text-[var(--ds-muted)] shrink-0 pl-2">
+                  {draftGroups.length} {draftGroups.length === 1 ? "letter" : "letters"}
+                  {" · "}
+                  {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
+                </span>
+              </div>
             )}
           </div>
-
-          {/* Filter chips */}
-          <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-0.5 -mx-1 px-1">
-            {CATEGORY_FILTERS.map((f) => {
-              const active = filter === f.id;
-              return (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setFilter(f.id)}
-                  className={cn(
-                    "shrink-0 inline-flex items-center h-7 px-3 rounded-full text-[12px] font-medium transition border",
-                    active
-                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                      : "bg-[var(--ds-surface)] text-[var(--ds-muted)] border-[var(--ds-line)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60",
-                  )}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Day picker row: prev / compact date pill / next / Today */}
-          <div className="flex items-center gap-2 mb-3">
-            <button
-              type="button"
-              onClick={goPrev}
-              disabled={!canPrev}
-              className="inline-flex items-center justify-center size-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--ds-line-2)]/60 transition"
-              aria-label="Previous active day"
-              title="Previous active day"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-
-            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 h-8 px-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] font-medium tabular-nums hover:bg-[var(--ds-line-2)]/60 transition"
-                >
-                  <CalendarIcon className="size-3.5 text-[var(--ds-muted)]" />
-                  <span>{prettyDay(selectedDay)}</span>
-                  <ChevronDown className="size-3.5 text-[var(--ds-muted)]" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="p-0 w-auto">
-                <MonthGrid
-                  selectedDay={selectedDay}
-                  todayIso={today}
-                  activeDays={eventsByDay}
-                  onPick={(iso) => {
-                    setSelectedDay(iso);
-                    setPickerOpen(false);
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={!canNext}
-              className="inline-flex items-center justify-center size-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--ds-line-2)]/60 transition"
-              aria-label="Next active day"
-              title="Next active day"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSelectedDay(today)}
-              className="hidden sm:inline-flex items-center h-8 px-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] font-medium hover:bg-[var(--ds-line-2)]/60 transition"
-            >
-              Today
-            </button>
-
-            <span className="ml-auto text-[11px] tabular-nums text-[var(--ds-muted)]">
-              {draftGroups.length} {draftGroups.length === 1 ? "letter" : "letters"}
-              {" · "}
-              {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
-            </span>
-          </div>
-
-          {/* Strip of recent active days */}
-          {recentDays.length > 1 && (
-            <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1 -mx-1 px-1">
-              {recentDays.slice(0, 10).map((day) => {
-                const active = day === selectedDay;
-                const count = eventsByDay.get(day)?.length ?? 0;
-                return (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => setSelectedDay(day)}
-                    className={cn(
-                      "shrink-0 inline-flex flex-col items-start gap-0.5 rounded-md border px-2.5 py-1.5 transition",
-                      active
-                        ? "border-[var(--ds-ink)] bg-[var(--ds-line-2)]"
-                        : "border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]/40",
-                    )}
-                  >
-                    <span className="text-[10px] uppercase tracking-[0.06em] text-[var(--ds-muted)] font-medium">
-                      {relDayLabel(day, today)}
-                    </span>
-                    <span className="text-[12px] tabular-nums font-medium">
-                      {compactDay(day)} · {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           {/* Draft groups for the selected day */}
           {draftGroups.length === 0 ? (
