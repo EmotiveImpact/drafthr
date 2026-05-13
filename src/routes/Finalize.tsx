@@ -30,7 +30,10 @@ import { cn } from "@/lib/utils";
 import {
   runHealthChecks,
   computeHealthScore,
+  DIMENSION_LABELS,
+  DIMENSION_DESCRIPTIONS,
   type HealthCheck,
+  type HealthDimension,
 } from "@/lib/finalize/healthChecks";
 import { ScoreRing } from "@/components/finalize/ScoreRing";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
@@ -286,9 +289,12 @@ export function Finalize() {
           transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
           className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden mb-8"
         >
-          {/* Top: ring + verdict */}
-          <div className="flex items-center gap-5 p-5 border-b border-[var(--ds-line-2)]">
-            <ScoreRing score={scoreData.score} band={scoreData.band} />
+          {/* Top: hero ring + verdict + sub-scores. The three dimension
+           * rings sit beside the verdict text so the hero stays the focal
+           * point but the user can immediately diagnose which axis is
+           * weakest without scrolling. */}
+          <div className="flex items-start gap-5 p-5 border-b border-[var(--ds-line-2)]">
+            <ScoreRing score={scoreData.score} band={scoreData.band} size={96} />
             <div className="flex-1 min-w-0">
               <span
                 className={cn(
@@ -302,26 +308,41 @@ export function Finalize() {
               <h3 className="text-[15px] font-semibold text-[var(--ds-ink)] mb-0.5">
                 {scoreData.oneLiner}
               </h3>
-              <p className="text-[12.5px] text-[var(--ds-muted)] m-0">
-                {scoreData.passCount} of {scoreData.totalCount} static checks
-                pass
+              <p className="text-[12.5px] text-[var(--ds-muted)] m-0 mb-3.5">
+                {scoreData.passCount} of {scoreData.totalCount} checks pass
                 {scoreData.warnCount > 0 && ` · ${scoreData.warnCount} warning${scoreData.warnCount === 1 ? "" : "s"}`}
                 {scoreData.failCount > 0 && ` · ${scoreData.failCount} blocker${scoreData.failCount === 1 ? "" : "s"}`}
               </p>
+
+              {/* Three dimension rings — staggered count-up so the eye
+               * tracks across them as they fill. */}
+              <div className="flex items-start gap-5">
+                {scoreData.dimensions.map((d, i) => (
+                  <div
+                    key={d.dimension}
+                    title={DIMENSION_DESCRIPTIONS[d.dimension]}
+                    className="flex flex-col items-center"
+                  >
+                    <ScoreRing
+                      score={d.score}
+                      band={d.band}
+                      size={48}
+                      delay={0.25 + i * 0.12}
+                      label={DIMENSION_LABELS[d.dimension]}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Two-col: static checks + AI evaluation */}
+          {/* Two-col: static checks (grouped by dimension) + AI evaluation */}
           <div className="grid sm:grid-cols-2 grid-cols-1">
             <div className="p-5">
               <h4 className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mb-3">
-                Static checks
+                Checks by dimension
               </h4>
-              <ul className="space-y-2 m-0 p-0 list-none">
-                {checks.map((c, i) => (
-                  <CheckRow key={c.id} check={c} index={i} />
-                ))}
-              </ul>
+              <DimensionGroupedChecks checks={checks} />
             </div>
 
             <div className="p-5 border-t sm:border-t-0 sm:border-l border-[var(--ds-line-2)]">
@@ -539,6 +560,35 @@ function SectionHeader({
           {meta}
         </span>
       )}
+    </div>
+  );
+}
+
+function DimensionGroupedChecks({ checks }: { checks: HealthCheck[] }) {
+  // Group while preserving the dimension display order. Empty groups are
+  // hidden so a dimension with no checks (rare today, common once AI checks
+  // are sparse on simpler letters) doesn't render a phantom header.
+  const order: HealthDimension[] = ["compliance", "quality", "risk"];
+  const grouped = order
+    .map((dim) => ({ dim, items: checks.filter((c) => c.dimension === dim) }))
+    .filter((g) => g.items.length > 0);
+
+  let runningIndex = 0;
+  return (
+    <div className="space-y-4">
+      {grouped.map(({ dim, items }) => (
+        <div key={dim}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ds-subtle)] mb-1.5">
+            {DIMENSION_LABELS[dim]}
+          </div>
+          <ul className="space-y-2 m-0 p-0 list-none">
+            {items.map((c) => {
+              const idx = runningIndex++;
+              return <CheckRow key={c.id} check={c} index={idx} />;
+            })}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }

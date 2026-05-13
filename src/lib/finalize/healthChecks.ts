@@ -20,23 +20,79 @@ import type { Draft } from "@/lib/letters/types";
 
 export type HealthSeverity = "pass" | "warn" | "fail";
 
+/**
+ * Each check belongs to one of three dimensions. The Finalize page rolls
+ * checks up per-dimension and displays a sub-score ring alongside the
+ * primary score, so the user sees not just "82" but where their weakest
+ * dimension is.
+ *
+ *   compliance — legal/structural/procedural requirements
+ *                ("must have right to appeal", "no broken evidence refs")
+ *   quality    — register, persuasion, polish
+ *                ("word count in range", "signature attached")
+ *   risk       — liability, PII exposure, escalation risk
+ *                ("no NI numbers", "no admissions of liability")
+ *
+ * AI-driven checks (tone, liability scan, cross-letter consistency) slot
+ * into the same dimensions when they're added later.
+ */
+export type HealthDimension = "compliance" | "quality" | "risk";
+
 export type HealthCheck = {
   id: string;
   label: string;
   severity: HealthSeverity;
+  dimension: HealthDimension;
   detail?: string;
 };
 
 export type HealthBand = "strong" | "adequate" | "weak";
 
-export type HealthScore = {
+export type DimensionScore = {
+  dimension: HealthDimension;
   score: number; // 0-100
   band: HealthBand;
   passCount: number;
   warnCount: number;
   failCount: number;
   totalCount: number;
+};
+
+export type HealthScore = {
+  /** Primary 0-100 — the hero number, rolled up from the dimensions. */
+  score: number;
+  band: HealthBand;
+  passCount: number;
+  warnCount: number;
+  failCount: number;
+  totalCount: number;
   oneLiner: string;
+  /** Per-dimension sub-scores rendered as smaller secondary rings. */
+  dimensions: DimensionScore[];
+};
+
+/**
+ * Weights used when rolling dimension scores up into the overall. Compliance
+ * carries the most weight because a non-compliant letter literally cannot
+ * be sent — risk and quality affect *how well* it lands, not *whether* it
+ * can land. Sum is 1.
+ */
+const DIMENSION_WEIGHTS: Record<HealthDimension, number> = {
+  compliance: 0.4,
+  quality: 0.3,
+  risk: 0.3,
+};
+
+export const DIMENSION_LABELS: Record<HealthDimension, string> = {
+  compliance: "Compliance",
+  quality: "Quality",
+  risk: "Risk",
+};
+
+export const DIMENSION_DESCRIPTIONS: Record<HealthDimension, string> = {
+  compliance: "Legal, structural, and procedural requirements",
+  quality: "Tone, persuasion, and professional finish",
+  risk: "Liability exposure and data hygiene",
 };
 
 const PLACEHOLDER_RE = /\[([a-z][a-z0-9_]*)\]/gi;
@@ -92,12 +148,14 @@ function checkSections(draft: Draft): HealthCheck {
   if (ready === total) {
     return {
       id: "sections-filled",
+      dimension: "compliance",
       label: `All ${total} sections filled`,
       severity: "pass",
     };
   }
   return {
     id: "sections-filled",
+    dimension: "compliance",
     label: `${ready} of ${total} sections filled`,
     severity: ready === 0 ? "fail" : "warn",
     detail: `${total - ready} section${total - ready === 1 ? "" : "s"} still empty`,
@@ -114,6 +172,7 @@ function checkRecipientAndSender(draft: Draft): HealthCheck {
   if (hasRecipient && hasSender) {
     return {
       id: "parties",
+      dimension: "compliance",
       label: "Recipient and sender both present",
       severity: "pass",
     };
@@ -123,6 +182,7 @@ function checkRecipientAndSender(draft: Draft): HealthCheck {
     .join(" + ");
   return {
     id: "parties",
+    dimension: "compliance",
     label: `Missing ${missing}`,
     severity: "fail",
     detail: "Letter cannot be sent without both parties identified",
@@ -138,6 +198,7 @@ function checkPlaceholders(draft: Draft): HealthCheck {
   if (found.size === 0) {
     return {
       id: "placeholders",
+      dimension: "compliance",
       label: "No unresolved placeholders",
       severity: "pass",
     };
@@ -146,6 +207,7 @@ function checkPlaceholders(draft: Draft): HealthCheck {
   const more = found.size > 3 ? ` (+${found.size - 3} more)` : "";
   return {
     id: "placeholders",
+    dimension: "compliance",
     label: `${found.size} placeholder${found.size === 1 ? "" : "s"} unresolved`,
     severity: "warn",
     detail: `Still in body: ${list}${more}`,
@@ -161,12 +223,14 @@ function checkPII(draft: Draft): HealthCheck {
   if (hits.length === 0) {
     return {
       id: "pii",
+      dimension: "risk",
       label: "No PII red flags in body",
       severity: "pass",
     };
   }
   return {
     id: "pii",
+    dimension: "risk",
     label: `${hits.length} PII pattern${hits.length === 1 ? "" : "s"} detected`,
     severity: "fail",
     detail: `Found: ${hits.join(", ")}. Consider redacting before send.`,
@@ -180,12 +244,14 @@ function checkWordCount(draft: Draft): HealthCheck {
   if (words >= range.min && words <= range.max) {
     return {
       id: "wordcount",
+      dimension: "quality",
       label: `Word count in range (${words} / ${range.min}–${range.max})`,
       severity: "pass",
     };
   }
   return {
     id: "wordcount",
+    dimension: "quality",
     label: `Word count ${words < range.min ? "below" : "above"} range (${words} / ${range.min}–${range.max})`,
     severity: "warn",
     detail:
@@ -202,12 +268,14 @@ function checkSignature(draft: Draft): HealthCheck {
   if (hasSignature) {
     return {
       id: "signature",
+      dimension: "quality",
       label: "Signature attached",
       severity: "pass",
     };
   }
   return {
     id: "signature",
+    dimension: "quality",
     label: "No signature attached",
     severity: "warn",
     detail: "Sign in Settings to attach automatically to all letters",
@@ -222,6 +290,7 @@ function checkEvidenceRefs(draft: Draft): HealthCheck {
   if (refs.length === 0) {
     return {
       id: "evidence",
+      dimension: "compliance",
       label: "No evidence references to validate",
       severity: "pass",
     };
@@ -231,12 +300,14 @@ function checkEvidenceRefs(draft: Draft): HealthCheck {
   if (broken.length === 0) {
     return {
       id: "evidence",
+      dimension: "compliance",
       label: `${refs.length} evidence reference${refs.length === 1 ? "" : "s"} resolve`,
       severity: "pass",
     };
   }
   return {
     id: "evidence",
+    dimension: "compliance",
     label: `${broken.length} broken evidence reference${broken.length === 1 ? "" : "s"}`,
     severity: "fail",
     detail: `[See Fig ${broken.join(", ")}] — no matching attachment`,
@@ -249,6 +320,7 @@ function checkLetterhead(draft: Draft): HealthCheck {
   if (draft.mode === "employee") {
     return {
       id: "letterhead",
+      dimension: "quality",
       label: "Letterhead not required (employee letter)",
       severity: "pass",
     };
@@ -256,12 +328,14 @@ function checkLetterhead(draft: Draft): HealthCheck {
   if (answers.hasLetterhead || answers.letterheadDataUrl) {
     return {
       id: "letterhead",
+      dimension: "quality",
       label: "Letterhead applied",
       severity: "pass",
     };
   }
   return {
     id: "letterhead",
+    dimension: "quality",
     label: "No company letterhead",
     severity: "warn",
     detail: "Add a letterhead in Settings for a professional finish",
@@ -273,12 +347,14 @@ function checkUnresolvedComments(draft: Draft): HealthCheck {
   if (unresolved === 0) {
     return {
       id: "comments",
+      dimension: "quality",
       label: "No unresolved comments",
       severity: "pass",
     };
   }
   return {
     id: "comments",
+    dimension: "quality",
     label: `${unresolved} unresolved comment${unresolved === 1 ? "" : "s"}`,
     severity: "warn",
     detail: "Review and resolve before sending",
@@ -307,24 +383,81 @@ export function runHealthChecks(draft: Draft): HealthCheck[] {
 }
 
 /**
- * Reduce a list of checks to a 0-100 score, band, and one-line verdict.
+ * Score a single subset of checks (one dimension's worth). Shared shape with
+ * the overall scorer so the rings can render identically.
  *
  * Scoring: each pass = 1.0, each warn = 0.5, each fail = 0.0. Divide by total
- * and multiply by 100. We cap at 95 if there are any fails — even one
- * compliance failure shouldn't read as "Strong".
+ * and multiply by 100. Cap at 60 if there are any fails — a compliance
+ * blocker should never read as "Strong".
+ *
+ * If a dimension has zero checks (theoretical edge case until we add AI
+ * checks) we return a neutral 100 so it doesn't punish the overall score.
  */
-export function computeHealthScore(checks: HealthCheck[]): HealthScore {
-  const passCount = checks.filter((c) => c.severity === "pass").length;
-  const warnCount = checks.filter((c) => c.severity === "warn").length;
-  const failCount = checks.filter((c) => c.severity === "fail").length;
-  const totalCount = checks.length;
+function scoreSubset(
+  dimension: HealthDimension,
+  checks: HealthCheck[],
+): DimensionScore {
+  const subset = checks.filter((c) => c.dimension === dimension);
+  if (subset.length === 0) {
+    return {
+      dimension,
+      score: 100,
+      band: "strong",
+      passCount: 0,
+      warnCount: 0,
+      failCount: 0,
+      totalCount: 0,
+    };
+  }
+  const passCount = subset.filter((c) => c.severity === "pass").length;
+  const warnCount = subset.filter((c) => c.severity === "warn").length;
+  const failCount = subset.filter((c) => c.severity === "fail").length;
+  const totalCount = subset.length;
 
-  const raw = (passCount + warnCount * 0.5) / Math.max(totalCount, 1);
+  const raw = (passCount + warnCount * 0.5) / totalCount;
   let score = Math.round(raw * 100);
   if (failCount > 0) score = Math.min(score, 60);
 
   const band: HealthBand =
     score >= 80 ? "strong" : score >= 60 ? "adequate" : "weak";
+
+  return { dimension, score, band, passCount, warnCount, failCount, totalCount };
+}
+
+/**
+ * Reduce a list of checks to a 0-100 overall score plus three per-dimension
+ * sub-scores. The overall is a weighted average of the dimensions (see
+ * DIMENSION_WEIGHTS) — compliance carries more weight because a non-compliant
+ * letter literally cannot be sent.
+ *
+ * The Finalize page renders the overall as the hero ring and the three
+ * dimension scores as smaller secondary rings beneath the verdict.
+ */
+export function computeHealthScore(checks: HealthCheck[]): HealthScore {
+  const dimensions: DimensionScore[] = (
+    ["compliance", "quality", "risk"] as const
+  ).map((d) => scoreSubset(d, checks));
+
+  const weighted = dimensions.reduce(
+    (acc, d) => acc + d.score * DIMENSION_WEIGHTS[d.dimension],
+    0,
+  );
+  const score = Math.round(weighted);
+
+  // Counts across all dimensions for the one-line verdict + the action bar's
+  // "Mark as sent" disable rule. The page also uses these directly so the
+  // summary line under the ring matches the checklist.
+  const passCount = checks.filter((c) => c.severity === "pass").length;
+  const warnCount = checks.filter((c) => c.severity === "warn").length;
+  const failCount = checks.filter((c) => c.severity === "fail").length;
+  const totalCount = checks.length;
+
+  const band: HealthBand =
+    score >= 80 && failCount === 0
+      ? "strong"
+      : score >= 60
+        ? "adequate"
+        : "weak";
 
   const oneLiner = oneLinerFor(band, passCount, warnCount, failCount, totalCount);
 
@@ -336,6 +469,7 @@ export function computeHealthScore(checks: HealthCheck[]): HealthScore {
     failCount,
     totalCount,
     oneLiner,
+    dimensions,
   };
 }
 
