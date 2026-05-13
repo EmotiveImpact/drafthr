@@ -133,9 +133,9 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
   },
   {
     id: "deadlines",
-    title: "Date of the act complained of",
+    title: "Dates that matter",
     description:
-      "Most claims have strict limitation periods. We use this date to compute and surface the deadline.",
+      "Most claims have strict limitation periods. We use these to surface deadlines and remind you when the letter needs to go out.",
     questions: [
       {
         id: "actDate",
@@ -143,6 +143,13 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
         label: "When did the conduct or decision happen?",
         help:
           "If it's a continuing course of conduct, pick the most recent incident. UK tribunal limitation is 3 months less one day from this date.",
+      },
+      {
+        id: "sendBy",
+        type: "date",
+        label: "When does this letter need to go out by?",
+        help:
+          "Surfaces on Calendar and as a status pill. Leave blank if you'll send it as soon as it's drafted.",
       },
       {
         id: "raisedInformally",

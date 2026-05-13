@@ -72,6 +72,7 @@ export function Editor() {
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const profile = useProfileStore((s) => s.profile);
   const updateSection = useDraftStore((s) => s.updateSection);
+  const updateAnswers = useDraftStore((s) => s.updateAnswers);
   const appendToSection = useDraftStore((s) => s.appendToSection);
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
@@ -115,6 +116,7 @@ export function Editor() {
   // primary read path; this is the "sweep them all" overview surface
   // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
+  const [counselDialogOpen, setCounselDialogOpen] = useState(false);
   // Desktop right-rail collapse — Notion-style 36px vertical strip with
   // "Ask AI" label so AI stays in peripheral vision even when collapsed.
   // lg:+ only; mobile uses showRail + bottom sheet.
@@ -559,22 +561,24 @@ export function Editor() {
             {/* Counsel-review pill — only on high-risk letters or where the
              * letter type's metadata flags counsel review as required. */}
             {(meta.legalReviewRequired || meta.riskClass === "high") && (
-              <span
+              <button
+                type="button"
+                onClick={() => setCounselDialogOpen(true)}
                 className={
-                  "inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 " +
+                  "inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 transition hover:brightness-95 cursor-pointer " +
                   (counselReview
                     ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] border-[var(--ds-green-bg)]"
                     : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-bg)]")
                 }
                 title={
                   counselReview
-                    ? `Counsel-reviewed by ${counselReview.reviewedBy} on ${counselReview.reviewedOn}`
-                    : "Counsel review required before export"
+                    ? `Counsel-reviewed by ${counselReview.reviewedBy} on ${counselReview.reviewedOn}. Click to update.`
+                    : "Counsel review required before export. Click to mark reviewed."
                 }
               >
                 <ShieldCheck className="size-3" />
                 <span className="hidden md:inline">{counselReview ? "Reviewed" : "Needs review"}</span>
-              </span>
+              </button>
             )}
           </div>
 
@@ -1302,6 +1306,27 @@ export function Editor() {
         />
       )}
 
+      <CounselReviewDialog
+        open={counselDialogOpen}
+        onOpenChange={setCounselDialogOpen}
+        existing={counselReview}
+        onAttest={(reviewedBy, reviewedOn) => {
+          updateAnswers(draft.id, {
+            ...draft.answers,
+            _counselReview: { reviewedBy, reviewedOn, attestedAt: Date.now() },
+          });
+          setCounselDialogOpen(false);
+          toast.success("Marked reviewed", { id: "counsel-reviewed", duration: 1400 });
+        }}
+        onClear={() => {
+          const next = { ...draft.answers } as Record<string, unknown>;
+          delete next._counselReview;
+          updateAnswers(draft.id, next as typeof draft.answers);
+          setCounselDialogOpen(false);
+          toast.success("Cleared review attestation", { id: "counsel-cleared", duration: 1400 });
+        }}
+      />
+
       {/* Change A: All-comments index dialog. Click a row to close the
        * dialog, scroll the canvas to the highlighted text, and open
        * the FloatingCommentPanel anchored to that mark. */}
@@ -1569,4 +1594,115 @@ function commentRelTime(ts: number): string {
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d`;
   return new Date(ts).toLocaleDateString();
+}
+
+/* ----------------------------------------------------------------------------
+ * CounselReviewDialog — quick attestation surface for the topbar pill.
+ * Lets a reviewer mark a letter as counsel-reviewed without going through
+ * the Export → Review flow first. Updates draft.answers._counselReview so
+ * the existing derivation in Editor picks it up immediately.
+ * --------------------------------------------------------------------------*/
+function CounselReviewDialog({
+  open,
+  onOpenChange,
+  existing,
+  onAttest,
+  onClear,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  existing: { reviewedBy: string; reviewedOn: string } | null;
+  onAttest: (reviewedBy: string, reviewedOn: string) => void;
+  onClear: () => void;
+}) {
+  const [reviewedBy, setReviewedBy] = useState(existing?.reviewedBy ?? "");
+  const [reviewedOn, setReviewedOn] = useState(
+    existing?.reviewedOn ?? new Date().toISOString().slice(0, 10)
+  );
+
+  // Reset to existing values whenever the dialog opens.
+  useEffect(() => {
+    if (open) {
+      setReviewedBy(existing?.reviewedBy ?? "");
+      setReviewedOn(existing?.reviewedOn ?? new Date().toISOString().slice(0, 10));
+    }
+  }, [open, existing?.reviewedBy, existing?.reviewedOn]);
+
+  const canSubmit = reviewedBy.trim().length > 0 && reviewedOn.length > 0;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
+        <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-5">
+          <Dialog.Title className="m-0 text-[15px] font-semibold inline-flex items-center gap-2">
+            <ShieldCheck className="size-4 text-[var(--ds-muted)]" />
+            {existing ? "Update counsel review" : "Mark counsel-reviewed"}
+          </Dialog.Title>
+          <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mt-1 mb-4">
+            High-risk letters require sign-off before export. Recording the
+            attestation here unlocks export and stamps the audit trail.
+          </Dialog.Description>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--ds-ink)] mb-1">
+                Reviewer name *
+              </label>
+              <input
+                type="text"
+                value={reviewedBy}
+                onChange={(e) => setReviewedBy(e.target.value)}
+                placeholder="Counsel name, role"
+                className="w-full h-9 rounded-md border border-[var(--ds-line)] bg-white px-3 text-[13px] outline-none focus:border-[var(--ds-ink)]"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[var(--ds-ink)] mb-1">
+                Reviewed on *
+              </label>
+              <input
+                type="date"
+                value={reviewedOn}
+                onChange={(e) => setReviewedOn(e.target.value)}
+                className="w-full h-9 rounded-md border border-[var(--ds-line)] bg-white px-3 text-[13px] outline-none focus:border-[var(--ds-ink)]"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between mt-5">
+            <div>
+              {existing && (
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="text-[12px] text-[var(--ds-muted)] hover:text-destructive transition"
+                >
+                  Clear attestation
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="h-8 px-3 rounded-md border border-[var(--ds-line)] text-[12px] hover:bg-[var(--ds-line-2)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => onAttest(reviewedBy.trim(), reviewedOn)}
+                className="h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-medium disabled:opacity-40 hover:opacity-90"
+              >
+                {existing ? "Update" : "Mark reviewed"}
+              </button>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }

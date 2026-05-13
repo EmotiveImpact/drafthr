@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext } from "@/components/SearchPaletteContext";
+import { Onboarding } from "@/components/Onboarding";
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
@@ -26,6 +27,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <main className="flex-1 flex flex-col min-h-0">{children}</main>
           </div>
           <SearchPalette open={open} onOpenChange={setOpen} />
+          <Onboarding />
         </SearchPaletteContext.Provider>
       </TooltipProvider>
     );
@@ -42,6 +44,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </SidebarInset>
         </SidebarProvider>
         <SearchPalette open={open} onOpenChange={setOpen} />
+        <Onboarding />
       </SearchPaletteContext.Provider>
     </TooltipProvider>
   );

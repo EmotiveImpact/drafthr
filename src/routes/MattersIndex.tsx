@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Plus, FolderOpen, ArrowRight, Briefcase, UserRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
@@ -11,9 +11,20 @@ import {
   matterInitial,
 } from "@/lib/matters";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
-import type { Draft, Matter } from "@/lib/letters/types";
+import type { Draft, Matter, MatterColor, Mode } from "@/lib/letters/types";
 import { PageHeader } from "@/components/ds";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,6 +40,8 @@ export function MattersIndex() {
   const profile = useProfileStore((s) => s.profile);
   const matters = useDraftStore((s) => s.matters);
   const drafts = useDraftStore((s) => s.drafts);
+  const createMatter = useDraftStore((s) => s.createMatter);
+  const [createOpen, setCreateOpen] = useState(false);
 
   // Pick mode from profile; default to whichever side has more matters.
   const profileMode = profile.role ?? "employer";
@@ -54,13 +67,30 @@ export function MattersIndex() {
             : "Named cases bundling related letters about an employer, claim, or matter. Letters not yet in a matter live on Home — promote them with 'Make this a Matter →'."
         }
         actions={
-          <Link to={`${prefix}/new`}>
-            <Button size="sm">
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
               <Plus className="size-3.5" />
-              New letter
+              New matter
             </Button>
-          </Link>
+            <Link to={`${prefix}/new`}>
+              <Button size="sm">
+                <Plus className="size-3.5" />
+                New letter
+              </Button>
+            </Link>
+          </div>
         }
+      />
+
+      <NewMatterDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        mode={profileMode}
+        onCreate={(input) => {
+          const id = createMatter({ ...input, mode: profileMode });
+          setCreateOpen(false);
+          nav(`/matters/${id}`);
+        }}
       />
 
       {/* Empty state */}
@@ -71,14 +101,21 @@ export function MattersIndex() {
             No matters yet
           </h2>
           <p className="text-[13px] text-[var(--ds-muted)] mt-1 mb-4 m-0 max-w-md mx-auto">
-            Matters are named containers for related letters. Open <Link to={prefix} className="text-[var(--ds-ink)] underline">Home</Link> and click "Make this a Matter →" on any auto-group to create your first one.
+            Matters are named containers for related letters. Create one
+            below, or promote an auto-group on <Link to={prefix} className="text-[var(--ds-ink)] underline">Home</Link>.
           </p>
-          <Link to={prefix}>
-            <Button variant="outline" size="sm">
-              <ArrowRight className="size-3.5" />
-              Go to Home
+          <div className="inline-flex gap-2">
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-3.5" />
+              New matter
             </Button>
-          </Link>
+            <Link to={prefix}>
+              <Button variant="outline" size="sm">
+                <ArrowRight className="size-3.5" />
+                Go to Home
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 
@@ -297,4 +334,159 @@ function timeAgo(ts: number): string {
   if (days < 30) return `${days}d ago`;
   const months = Math.floor(days / 30);
   return `${months}mo ago`;
+}
+
+/* ----------------------------------------------------------------------------
+ * New matter dialog — simple name + optional context. Color suggested from
+ * mode and can be overridden. Counsel review is opt-in per matter.
+ * --------------------------------------------------------------------------*/
+function NewMatterDialog({
+  open,
+  onOpenChange,
+  mode,
+  onCreate,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+  mode: Mode;
+  onCreate: (input: {
+    name: string;
+    color: MatterColor;
+    description?: string;
+    primaryName?: string;
+    deadlineISO?: string;
+    deadlineLabel?: string;
+  }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [primaryName, setPrimaryName] = useState("");
+  const [description, setDescription] = useState("");
+  const [deadlineISO, setDeadline] = useState("");
+  const [deadlineLabel, setDeadlineLabel] = useState("");
+  const [color, setColor] = useState<MatterColor>("blue");
+
+  // Reset on open so each invocation is fresh.
+  useMemo(() => {
+    if (open) {
+      setName("");
+      setPrimaryName("");
+      setDescription("");
+      setDeadline("");
+      setDeadlineLabel("");
+      setColor("blue");
+    }
+  }, [open]);
+
+  const canSubmit = name.trim().length > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New matter</DialogTitle>
+          <DialogDescription>
+            {mode === "employer"
+              ? "Bundle related letters about a single person, hiring round, or HR workstream."
+              : "Bundle related letters about an employer, claim, or grievance you're pursuing."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="matter-name">Matter name *</Label>
+            <Input
+              id="matter-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={mode === "employer" ? "e.g. Jane Smith — performance" : "e.g. Acme Ltd — constructive dismissal"}
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="matter-primary">
+              {mode === "employer" ? "Person / role" : "Employer"} (optional)
+            </Label>
+            <Input
+              id="matter-primary"
+              value={primaryName}
+              onChange={(e) => setPrimaryName(e.target.value)}
+              placeholder={mode === "employer" ? "Jane Smith" : "Acme Holdings Limited"}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="matter-desc">Short description (optional)</Label>
+            <Textarea
+              id="matter-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="A line or two of context. Visible only to you."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="matter-deadline">Key deadline (optional)</Label>
+              <Input
+                id="matter-deadline"
+                type="date"
+                value={deadlineISO}
+                onChange={(e) => setDeadline(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="matter-deadline-label">Deadline label</Label>
+              <Input
+                id="matter-deadline-label"
+                value={deadlineLabel}
+                onChange={(e) => setDeadlineLabel(e.target.value)}
+                placeholder="e.g. ACAS EC ends"
+                disabled={!deadlineISO}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Colour</Label>
+            <div className="flex items-center gap-1.5">
+              {(["blue","green","amber","red","violet","slate"] as const satisfies readonly MatterColor[]).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  aria-label={`Colour ${c}`}
+                  className={cn(
+                    "size-6 rounded-full border transition",
+                    MATTER_COLOR_CLASSES[c].swatch,
+                    color === c ? "ring-2 ring-offset-1 ring-[var(--ds-ink)]" : "opacity-80 hover:opacity-100"
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            disabled={!canSubmit}
+            onClick={() =>
+              onCreate({
+                name: name.trim(),
+                color,
+                description: description.trim() || undefined,
+                primaryName: primaryName.trim() || undefined,
+                deadlineISO: deadlineISO || undefined,
+                deadlineLabel: deadlineLabel.trim() || undefined,
+              })
+            }
+          >
+            Create matter
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

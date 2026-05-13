@@ -292,6 +292,13 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
           { value: "recorded-delivery", label: "Recorded delivery" },
         ],
       },
+      {
+        id: "sendBy",
+        type: "date",
+        label: "Send by",
+        help:
+          "When does this letter need to go out? Appears on Calendar and as a status pill so you don't miss it.",
+      },
     ],
   },
   {

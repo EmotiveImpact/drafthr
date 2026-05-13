@@ -19,7 +19,7 @@ type Event = {
   daysAway: number;
   label: string;
   basis: string;
-  kind: "tribunal" | "acas_ec" | "advisor" | "remedy" | "appeal" | "acceptance";
+  kind: "tribunal" | "acas_ec" | "advisor" | "remedy" | "appeal" | "acceptance" | "send_by";
 };
 
 const KIND_COLOR: Record<Event["kind"], "red" | "amber" | "blue" | "purple" | "green"> = {
@@ -29,6 +29,7 @@ const KIND_COLOR: Record<Event["kind"], "red" | "amber" | "blue" | "purple" | "g
   remedy: "amber",
   appeal: "purple",
   acceptance: "green",
+  send_by: "blue",
 };
 
 const KIND_LABEL: Record<Event["kind"], string> = {
@@ -38,6 +39,7 @@ const KIND_LABEL: Record<Event["kind"], string> = {
   remedy: "remedy",
   appeal: "appeal",
   acceptance: "acceptance",
+  send_by: "send by",
 };
 
 export function Calendar() {
@@ -178,6 +180,7 @@ function extractEvents(drafts: Draft[]): Event[] {
     pushIfDate(out, d.id, a.acceptanceDeadline, `${label} — acceptance by`, "Acceptance deadline (offer)", "acceptance");
     pushIfDate(out, d.id, a.demandDeadline, `${label} — payment by`, "Pay-dispute demand deadline", "remedy");
     pushIfDate(out, d.id, a.reviewDate, `${label} — performance review`, "PIP / probation review date", "remedy");
+    pushIfDate(out, d.id, a.sendBy, `${label} — send by`, "Target date for the letter to go out", "send_by");
   }
   out.sort((a, b) => a.iso.localeCompare(b.iso));
   return out;
