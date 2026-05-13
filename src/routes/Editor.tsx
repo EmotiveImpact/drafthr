@@ -12,6 +12,7 @@ import { DocumentPopover } from "@/components/editor/DocumentPopover";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { LetterPreview } from "@/components/editor/LetterPreview";
+import type { PagedEditorActions } from "@/components/editor/paged-edit/PagedEditor";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,10 @@ import {
   MessageSquare,
   Wand2,
   FileDown,
+  Search,
+  TextSelect,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -88,9 +93,9 @@ export function Editor() {
    * exit. See public/editor-designs.html#v6 for the proposal this implements.
    */
   const [focusMode, setFocusMode] = useState(false);
-  // Edit-on-page swaps the read-only preview for inline TipTap editors
-  // on each section so the user can type / format / paste right on the
-  // rendered A4 page. Only meaningful when viewMode === "preview".
+  // Edit-on-page swaps the read-only preview for the paged.js-backed
+  // editor so the user can type / format / paste on the rendered A4 page.
+  // Only meaningful when viewMode === "preview".
   const [editOnPage, setEditOnPage] = useState(false);
   const [rightTab, setRightTab] = useState<RightRailTab>("ai");
   const [pendingComment, setPendingComment] = useState<{
@@ -224,6 +229,19 @@ export function Editor() {
   useEffect(() => {
     if (editOnPage && viewMode !== "preview") setEditOnPage(false);
   }, [viewMode, editOnPage]);
+
+  // Auto-collapse the AI rail when the user enters edit-on-page so the
+  // letter card gets the full canvas width. Doesn't auto-expand on exit
+  // — if they collapsed the rail intentionally before entering Edit, we
+  // shouldn't snap it back open under them.
+  useEffect(() => {
+    if (editOnPage) setRailCollapsed(true);
+  }, [editOnPage]);
+
+  // Imperative handle into the PagedEditor for the top File / Edit /
+  // Tools menubar. PagedEditor populates this on mount, nulls it on
+  // unmount. Read every menu click — never cache.
+  const pagedEditorActionsRef = useRef<PagedEditorActions | null>(null);
 
   if (!draft || !draftId || !meta) {
     return (
@@ -434,6 +452,53 @@ export function Editor() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {/* Edit menu — only meaningful in edit-on-page mode. Items
+               * dispatch through the PagedEditor's actionsRef so the
+               * menubar drives whatever editor is mounted. Greyed out
+               * when not in edit-on-page since the actions wouldn't
+               * have anything to act on. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-7 px-2 rounded-md text-[12px] font-medium text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
+                  >
+                    Edit
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[220px]">
+                  <DropdownMenuItem
+                    disabled={!editOnPage}
+                    onClick={() => pagedEditorActionsRef.current?.undo()}
+                  >
+                    <Undo2 className="size-4 mr-2" /> Undo
+                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘Z</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!editOnPage}
+                    onClick={() => pagedEditorActionsRef.current?.redo()}
+                  >
+                    <Redo2 className="size-4 mr-2" /> Redo
+                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘⇧Z</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={!editOnPage}
+                    onClick={() => pagedEditorActionsRef.current?.selectAll()}
+                  >
+                    <TextSelect className="size-4 mr-2" /> Select all
+                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘A</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={!editOnPage}
+                    onClick={() => pagedEditorActionsRef.current?.openFind()}
+                  >
+                    <Search className="size-4 mr-2" /> Find in letter…
+                    <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘F</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -564,8 +629,8 @@ export function Editor() {
              * Drafting indicator. ml-auto pushes them to the right edge
              * of the canvas column. */}
             <div className="ml-auto flex items-center gap-2">
-              {/* Edit-on-page — swaps the rendered preview for inline
-               * TipTap section editors. Only meaningful while Preview is
+              {/* Edit-on-page — swaps the rendered preview for the
+               * paged.js-backed editor. Only meaningful while Preview is
                * active; disabled (but visible) in Edit so the affordance
                * stays discoverable. Used to live as a floating button
                * above the page card; promoted here so it sits with the
@@ -992,6 +1057,7 @@ export function Editor() {
                 onFocusComment={onFocusComment}
                 editable={editOnPage}
                 onEditableDone={() => setEditOnPage(false)}
+                editorActionsRef={pagedEditorActionsRef}
               />
             </div>
           ) : (

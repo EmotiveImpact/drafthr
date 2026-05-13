@@ -7,6 +7,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
+  type MutableRefObject,
   type ReactNode,
 } from "react";
 import {
@@ -15,6 +16,8 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  ChevronDown,
+  ChevronUp,
   Heading2,
   Heading3,
   Image as ImageIcon,
@@ -27,6 +30,7 @@ import {
   Redo2,
   Underline as UnderlineIcon,
   Undo2,
+  X,
 } from "lucide-react";
 
 import type { Draft } from "@/lib/letters/types";
@@ -93,6 +97,12 @@ type ToolbarFormatState = {
   align: "left" | "center" | "right" | "justify" | "";
 };
 
+type EditStatus =
+  | { kind: "reflowing"; label: string }
+  | { kind: "saving"; label: string }
+  | { kind: "saved"; label: string }
+  | { kind: "error"; label: string };
+
 type PreviewerInstance = {
   preview: (
     content: string | HTMLElement,
@@ -108,12 +118,28 @@ type PreviewerInstance = {
   };
 };
 
+/**
+ * Imperative handle exposed to the parent (the Editor route) so the
+ * top File/Edit/Tools menubar can call into the active editor. Kept
+ * deliberately small — only the actions the Edit menu surfaces.
+ */
+export type PagedEditorActions = {
+  undo: () => void;
+  redo: () => void;
+  selectAll: () => void;
+  openFind: () => void;
+};
+
 export function PagedEditor({
   draft,
   onDone,
+  actionsRef,
 }: {
   draft: Draft;
   onDone: () => void;
+  /** Optional handle the parent uses to drive the editor from the
+   * top menubar (Edit → Undo / Redo / Select all / Find). */
+  actionsRef?: MutableRefObject<PagedEditorActions | null>;
 }) {
   const updateSection = useDraftStore((state) => state.updateSection);
 
@@ -145,6 +171,21 @@ export function PagedEditor({
     block: "p",
     align: "",
   });
+
+  /* Find-in-letter state. Match locations are stored as Range objects
+   * keyed against the live DOM; we register them with the CSS Custom
+   * Highlight API so highlights never touch contenteditable content
+   * (mutating the DOM would round-trip into the saved source). */
+  const [findOpen, setFindOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [findMatchCount, setFindMatchCount] = useState(0);
+  const [findIndex, setFindIndex] = useState(0);
+  /** Bumped on every successful repaginate so the find effect re-scans
+   * fresh text nodes — paged.js replaces them on each flow. */
+  const [renderToken, setRenderToken] = useState(0);
+  const findBarInputRef = useRef<HTMLInputElement>(null);
+  const findHighlightRef = useRef<Highlight | null>(null);
+  const findActiveHighlightRef = useRef<Highlight | null>(null);
 
   const refreshHistoryState = useCallback(() => {
     setHistoryState({
@@ -315,6 +356,10 @@ export function PagedEditor({
       }
       if (scrollEl) scrollEl.scrollTop = scrollTop;
       setBusy(false);
+      // Bump renderToken so the Find effect re-scans the freshly
+      // replaced text nodes — Ranges that pointed at the old DOM
+      // are dead after replaceChildren().
+      setRenderToken((token) => token + 1);
     } catch (err) {
       if (previewer) destroyPreviewer(previewer);
       staging?.remove();
@@ -518,7 +563,130 @@ export function PagedEditor({
     void repaginate(cursor);
   }, [clearPendingDebounce, commitSource, dirty, refreshHistoryState, repaginate]);
 
+  /* ----------------------------------------------------------------------
+   * Find-in-letter — runs against the live rendered DOM via the CSS
+   * Custom Highlight API. Open with Cmd-F, navigate matches with
+   * Enter / Shift-Enter, close with Esc.
+   * --------------------------------------------------------------------*/
+  const openFind = useCallback(() => {
+    rememberSelection();
+    setFindOpen(true);
+    // Defer focus until the input has rendered.
+    window.setTimeout(() => {
+      findBarInputRef.current?.focus();
+      findBarInputRef.current?.select();
+    }, 0);
+  }, [rememberSelection]);
+
+  const closeFind = useCallback(() => {
+    setFindOpen(false);
+    setFindQuery("");
+    setFindMatchCount(0);
+    setFindIndex(0);
+    findHighlightRef.current?.clear();
+    findActiveHighlightRef.current?.clear();
+    restoreRememberedSelection();
+  }, [restoreRememberedSelection]);
+
+  // Register the two highlight buckets once. Browsers that lack the
+  // Custom Highlight API (Safari < 17.2 / very old Chrome) just won't
+  // see highlights — the bar still works, navigation still scrolls.
+  useEffect(() => {
+    const hl = typeof CSS !== "undefined" && "highlights" in CSS ? CSS.highlights : null;
+    if (!hl) return;
+    const style = document.createElement("style");
+    style.textContent = `
+      ::highlight(drafthr-find) {
+        background-color: rgba(250, 204, 21, 0.35);
+      }
+      ::highlight(drafthr-find-active) {
+        background-color: rgba(250, 204, 21, 0.85);
+        color: #0f172a;
+      }
+    `;
+    document.head.appendChild(style);
+    const all = new Highlight();
+    const active = new Highlight();
+    findHighlightRef.current = all;
+    findActiveHighlightRef.current = active;
+    hl.set("drafthr-find", all);
+    hl.set("drafthr-find-active", active);
+    return () => {
+      hl.delete("drafthr-find");
+      hl.delete("drafthr-find-active");
+      findHighlightRef.current = null;
+      findActiveHighlightRef.current = null;
+      style.remove();
+    };
+  }, []);
+
+  // Recompute matches on query / open / renderToken change.
+  useEffect(() => {
+    if (!findOpen) return;
+    const container = containerRef.current;
+    const all = findHighlightRef.current;
+    const active = findActiveHighlightRef.current;
+    all?.clear();
+    active?.clear();
+    if (!findQuery || !container) {
+      setFindMatchCount(0);
+      setFindIndex(0);
+      return;
+    }
+    const matches = findAllMatches(container, findQuery);
+    if (all) for (const r of matches) all.add(r);
+    setFindMatchCount(matches.length);
+    setFindIndex((current) => {
+      if (matches.length === 0) return 0;
+      return Math.min(current, matches.length - 1);
+    });
+  }, [findOpen, findQuery, renderToken]);
+
+  // When the active index moves, refresh the focused highlight + scroll.
+  useEffect(() => {
+    if (!findOpen) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const active = findActiveHighlightRef.current;
+    active?.clear();
+    if (findMatchCount === 0) return;
+    const matches = findAllMatches(container, findQuery);
+    const target = matches[findIndex];
+    if (!target) return;
+    if (active) active.add(target);
+    const parent = target.startContainer.parentElement;
+    parent?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [findIndex, findMatchCount, findQuery, findOpen, renderToken]);
+
+  const nextMatch = useCallback(() => {
+    setFindIndex((i) => (findMatchCount === 0 ? 0 : (i + 1) % findMatchCount));
+  }, [findMatchCount]);
+  const prevMatch = useCallback(() => {
+    setFindIndex((i) => (findMatchCount === 0 ? 0 : (i - 1 + findMatchCount) % findMatchCount));
+  }, [findMatchCount]);
+
+  const selectAll = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const body = container.querySelector<HTMLElement>(
+      '.letter-body[contenteditable="true"]',
+    );
+    if (!body) return;
+    body.focus({ preventScroll: true });
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    rememberSelection();
+  }, [rememberSelection]);
+
   const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape" && findOpen) {
+      event.preventDefault();
+      closeFind();
+      return;
+    }
     const key = event.key.toLowerCase();
     const mod = event.metaKey || event.ctrlKey;
     if (!mod) return;
@@ -529,8 +697,35 @@ export function PagedEditor({
     } else if (key === "y") {
       event.preventDefault();
       handleRedo();
+    } else if (key === "f") {
+      event.preventDefault();
+      openFind();
+    } else if (key === "a") {
+      // Only intercept Cmd-A when the selection is already inside the
+      // editor — letting Cmd-A elsewhere on the page fall through to
+      // the browser's default Select All is the right behaviour.
+      if (containerRef.current && selectionInsideLetterBody(containerRef.current)) {
+        event.preventDefault();
+        selectAll();
+      }
     }
-  }, [handleRedo, handleUndo]);
+  }, [closeFind, findOpen, handleRedo, handleUndo, openFind, selectAll]);
+
+  // Publish the imperative handle for the parent menubar to call.
+  useEffect(() => {
+    if (!actionsRef) return;
+    actionsRef.current = {
+      undo: handleUndo,
+      redo: handleRedo,
+      selectAll,
+      openFind,
+    };
+    return () => {
+      if (actionsRef.current && actionsRef.current.undo === handleUndo) {
+        actionsRef.current = null;
+      }
+    };
+  }, [actionsRef, handleUndo, handleRedo, selectAll, openFind]);
 
   /* ------------------------------------------------------------------------
    * Done — flush pending edit, save, hand back to parent.
@@ -547,6 +742,7 @@ export function PagedEditor({
 
   const canUndo = dirty || historyState.canUndo;
   const canRedo = !dirty && historyState.canRedo;
+  const editStatus = getEditStatus({ busy, dirty, error, pageCount });
 
   return (
     <div className="paged-edit-shell">
@@ -695,24 +891,7 @@ export function PagedEditor({
               <Redo2 className="size-3.5" />
             </NativeToolbarButton>
           </div>
-          <span
-            className="text-[10px] text-[var(--ds-muted)] tabular-nums"
-            aria-live="polite"
-          >
-            {busy ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="size-3 animate-spin" /> Paginating…
-              </span>
-            ) : error ? (
-              <span className="text-[var(--ds-red-fg)]">{error}</span>
-            ) : dirty ? (
-              "Saving…"
-            ) : pageCount != null ? (
-              `Saved · ${pageCount} page${pageCount === 1 ? "" : "s"}`
-            ) : (
-              "Saved"
-            )}
-          </span>
+          <EditStatusPill status={editStatus} />
           <button
             type="button"
             onClick={handleDone}
@@ -722,6 +901,48 @@ export function PagedEditor({
           </button>
         </div>
       </div>
+
+      {findOpen && (
+        <div className="mx-auto mb-3 flex w-[min(8.27in,100%)] items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 text-[11px] shadow-sm">
+          <input
+            ref={findBarInputRef}
+            value={findQuery}
+            onChange={(event) => setFindQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (event.shiftKey) prevMatch();
+                else nextMatch();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                closeFind();
+              }
+            }}
+            placeholder="Find in letter"
+            className="h-7 min-w-0 flex-1 rounded-md border border-[var(--ds-line)] bg-white px-2 text-[12px] outline-none focus:border-[var(--ds-ink)]"
+          />
+          <span className="min-w-[54px] text-center text-[10px] text-[var(--ds-muted)] tabular-nums">
+            {findQuery ? `${findMatchCount === 0 ? 0 : findIndex + 1}/${findMatchCount}` : "0/0"}
+          </span>
+          <NativeToolbarButton
+            label="Previous match"
+            disabled={findMatchCount === 0}
+            onClick={prevMatch}
+          >
+            <ChevronUp className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Next match"
+            disabled={findMatchCount === 0}
+            onClick={nextMatch}
+          >
+            <ChevronDown className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton label="Close find" onClick={closeFind}>
+            <X className="size-3.5" />
+          </NativeToolbarButton>
+        </div>
+      )}
 
       {/* The paged.js render IS the editor. onInput bubbles up here from
        * every contentEditable page-content child. */}
@@ -773,6 +994,58 @@ function NativeToolbarButton({
 
 function ToolbarDivider() {
   return <span aria-hidden className="mx-1 h-5 w-px bg-[var(--ds-line)]" />;
+}
+
+function getEditStatus({
+  busy,
+  dirty,
+  error,
+  pageCount,
+}: {
+  busy: boolean;
+  dirty: boolean;
+  error: string | null;
+  pageCount: number | null;
+}): EditStatus {
+  if (error) return { kind: "error", label: error };
+  if (busy) return { kind: "reflowing", label: "Reflowing pages" };
+  if (dirty) return { kind: "saving", label: "Saving changes" };
+  if (pageCount != null) {
+    return {
+      kind: "saved",
+      label: `Saved · ${pageCount} page${pageCount === 1 ? "" : "s"}`,
+    };
+  }
+  return { kind: "saved", label: "Saved" };
+}
+
+function EditStatusPill({ status }: { status: EditStatus }) {
+  const tone =
+    status.kind === "error"
+      ? "border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]"
+      : status.kind === "saving"
+      ? "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
+      : status.kind === "reflowing"
+      ? "border-[var(--ds-blue-bg)] bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]"
+      : "border-[var(--ds-line)] bg-[var(--ds-surface-2)] text-[var(--ds-muted)]";
+
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      data-state={status.kind}
+      className={[
+        "inline-flex h-7 min-w-[128px] items-center justify-center gap-1.5 rounded-full border px-2.5",
+        "text-[10px] font-medium tabular-nums shadow-sm",
+        tone,
+      ].join(" ")}
+    >
+      {(status.kind === "saving" || status.kind === "reflowing") && (
+        <Loader2 className="size-3 animate-spin" />
+      )}
+      <span>{status.label}</span>
+    </span>
+  );
 }
 
 /* ============================================================================
@@ -918,14 +1191,13 @@ function restoreCursor(root: HTMLElement, cursor: CursorState): void {
   const end = findCursorPoint(root, cursor.end);
   if (!start || !end) return;
 
+  start.pageContent?.focus({ preventScroll: true });
   const range = document.createRange();
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
   const sel = window.getSelection();
   sel?.removeAllRanges();
   sel?.addRange(range);
-
-  start.pageContent?.focus({ preventScroll: true });
 }
 
 function findCursorPoint(
@@ -1359,31 +1631,31 @@ function isSplittableTextBlock(el: HTMLElement): boolean {
 }
 
 function splitOversizedTextBlock(element: HTMLElement, measureHost: HTMLElement): HTMLElement[] {
-  const text = compactText(element.textContent ?? "");
-  if (!text) return [element];
-  const chunks = splitTextToMeasuredChunks(element, text, measureHost);
+  if (!compactText(element.textContent ?? "")) return [element];
+  const chunks = splitElementToMeasuredChunks(element, measureHost);
   if (chunks.length <= 1) return [element];
-  return chunks.map((chunk) => cloneElementWithText(element, chunk));
+  return chunks;
 }
 
-function splitTextToMeasuredChunks(
+function splitElementToMeasuredChunks(
   template: HTMLElement,
-  text: string,
   measureHost: HTMLElement,
-): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
-  const chunks: string[] = [];
+): HTMLElement[] {
+  const wordRanges = wordRangesFor(template.textContent ?? "");
+  if (wordRanges.length === 0) return [template];
+
+  const chunks: HTMLElement[] = [];
   let index = 0;
 
-  while (index < words.length) {
+  while (index < wordRanges.length) {
     let low = 1;
-    let high = words.length - index;
+    let high = wordRanges.length - index;
     let best = 1;
 
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
-      const candidate = words.slice(index, index + mid).join(" ");
-      const clone = cloneElementWithText(template, candidate);
+      const range = textRangeForWords(wordRanges, index, mid);
+      const clone = cloneElementWithTextRange(template, range.start, range.end);
       if (measureElementHeight(clone, measureHost) <= OVERSIZED_BLOCK_MAX_HEIGHT_PX) {
         best = mid;
         low = mid + 1;
@@ -1392,12 +1664,13 @@ function splitTextToMeasuredChunks(
       }
     }
 
-    const chunk = words.slice(index, index + best).join(" ");
-    if (best === 1 && chunk.length > 500) {
-      const hardChunks = splitLongWord(chunk);
-      chunks.push(...hardChunks);
+    const range = textRangeForWords(wordRanges, index, best);
+    if (best === 1 && range.end - range.start > 500) {
+      for (const hardRange of splitLongTextRange(range.start, range.end, 500)) {
+        chunks.push(cloneElementWithTextRange(template, hardRange.start, hardRange.end));
+      }
     } else {
-      chunks.push(chunk);
+      chunks.push(cloneElementWithTextRange(template, range.start, range.end));
     }
     index += best;
   }
@@ -1405,17 +1678,96 @@ function splitTextToMeasuredChunks(
   return chunks;
 }
 
-function splitLongWord(word: string): string[] {
-  const chunks: string[] = [];
-  for (let i = 0; i < word.length; i += 500) chunks.push(word.slice(i, i + 500));
-  return chunks;
+type TextRange = { start: number; end: number };
+
+function wordRangesFor(text: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  const matcher = /\S+/g;
+  let match = matcher.exec(text);
+  while (match) {
+    ranges.push({ start: match.index, end: match.index + match[0].length });
+    match = matcher.exec(text);
+  }
+  return ranges;
 }
 
-function cloneElementWithText(template: HTMLElement, text: string): HTMLElement {
+function textRangeForWords(ranges: TextRange[], startIndex: number, wordCount: number): TextRange {
+  const first = ranges[startIndex];
+  const last = ranges[startIndex + wordCount - 1] ?? first;
+  return { start: first.start, end: last.end };
+}
+
+function splitLongTextRange(start: number, end: number, maxChars: number): TextRange[] {
+  const ranges: TextRange[] = [];
+  for (let i = start; i < end; i += maxChars) {
+    ranges.push({ start: i, end: Math.min(i + maxChars, end) });
+  }
+  return ranges;
+}
+
+function cloneElementWithTextRange(template: HTMLElement, start: number, end: number): HTMLElement {
   const clone = template.cloneNode(false) as HTMLElement;
   clone.removeAttribute("data-paged-ref");
-  clone.textContent = text;
+  clone.appendChild(cloneContentsByTextRange(template, start, end));
   return clone;
+}
+
+function cloneContentsByTextRange(root: HTMLElement, start: number, end: number): DocumentFragment {
+  const fragment = root.ownerDocument.createDocumentFragment();
+  const walker = root.ownerDocument.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+  );
+  let consumed = 0;
+  let node = walker.nextNode();
+
+  while (node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent ?? "";
+      const nodeStart = consumed;
+      const nodeEnd = consumed + text.length;
+      const sliceStart = Math.max(start, nodeStart);
+      const sliceEnd = Math.min(end, nodeEnd);
+
+      if (sliceStart < sliceEnd) {
+        const textClone = root.ownerDocument.createTextNode(
+          text.slice(sliceStart - nodeStart, sliceEnd - nodeStart),
+        );
+        appendNodeWithAncestorChain(fragment, root, node, textClone);
+      }
+
+      consumed = nodeEnd;
+    } else if (isAtomicPositionNode(node)) {
+      if (consumed >= start && consumed <= end) {
+        appendNodeWithAncestorChain(fragment, root, node, node.cloneNode(true));
+      }
+    }
+
+    if (consumed >= end) break;
+    node = walker.nextNode();
+  }
+
+  return fragment;
+}
+
+function appendNodeWithAncestorChain(
+  fragment: DocumentFragment,
+  root: HTMLElement,
+  sourceNode: Node,
+  clonedNode: Node,
+): void {
+  let next = clonedNode;
+  let parent = sourceNode.parentElement;
+
+  while (parent && parent !== root) {
+    const parentClone = parent.cloneNode(false) as HTMLElement;
+    parentClone.removeAttribute("data-paged-ref");
+    parentClone.appendChild(next);
+    next = parentClone;
+    parent = parent.parentElement;
+  }
+
+  fragment.appendChild(next);
 }
 
 function splitOversizedList(
@@ -1504,7 +1856,7 @@ function splitOversizedTableRow(row: HTMLTableRowElement, measureHost: HTMLEleme
   const cells = Array.from(row.children).filter(
     (child): child is HTMLTableCellElement => child.tagName === "TD" || child.tagName === "TH",
   );
-  const cellChunks = cells.map((cell) => chunkPlainText(compactText(cell.textContent ?? ""), 650));
+  const cellChunks = cells.map((cell) => splitTableCellContent(cell, 650));
   const chunkCount = Math.max(...cellChunks.map((chunks) => chunks.length), 1);
   const rows: HTMLTableRowElement[] = [];
 
@@ -1515,13 +1867,60 @@ function splitOversizedTableRow(row: HTMLTableRowElement, measureHost: HTMLEleme
     for (let cellIndex = 0; cellIndex < cells.length; cellIndex++) {
       const sourceCell = cells[cellIndex];
       const nextCell = sourceCell.cloneNode(false) as HTMLTableCellElement;
-      nextCell.textContent = cellChunks[cellIndex]?.[index] ?? "";
+      const fragment = cellChunks[cellIndex]?.[index] ?? sourceCell.ownerDocument.createDocumentFragment();
+      nextCell.appendChild(fragment);
       nextRow.appendChild(nextCell);
     }
     rows.push(nextRow);
   }
 
   return rows;
+}
+
+function splitTableCellContent(cell: HTMLTableCellElement, maxChars: number): DocumentFragment[] {
+  const text = cell.textContent ?? "";
+  if (!compactText(text)) return [cloneAllChildNodes(cell)];
+
+  const ranges = chunkTextRangesByMaxChars(text, maxChars);
+  return ranges.map((range) => cloneContentsByTextRange(cell, range.start, range.end));
+}
+
+function cloneAllChildNodes(root: HTMLElement): DocumentFragment {
+  const fragment = root.ownerDocument.createDocumentFragment();
+  for (const child of Array.from(root.childNodes)) {
+    fragment.appendChild(child.cloneNode(true));
+  }
+  return fragment;
+}
+
+function chunkTextRangesByMaxChars(text: string, maxChars: number): TextRange[] {
+  const words = wordRangesFor(text);
+  if (words.length === 0) return [{ start: 0, end: text.length }];
+
+  const ranges: TextRange[] = [];
+  let chunkStart = words[0].start;
+  let previousEnd = chunkStart;
+
+  for (const word of words) {
+    const wordLength = word.end - word.start;
+    if (wordLength > maxChars) {
+      if (previousEnd > chunkStart) ranges.push({ start: chunkStart, end: previousEnd });
+      ranges.push(...splitLongTextRange(word.start, word.end, maxChars));
+      chunkStart = word.end;
+      previousEnd = word.end;
+      continue;
+    }
+
+    if (previousEnd === chunkStart) chunkStart = word.start;
+    if (word.end - chunkStart > maxChars && previousEnd > chunkStart) {
+      ranges.push({ start: chunkStart, end: previousEnd });
+      chunkStart = word.start;
+    }
+    previousEnd = word.end;
+  }
+
+  if (previousEnd > chunkStart) ranges.push({ start: chunkStart, end: previousEnd });
+  return ranges;
 }
 
 function createTableShell(template: HTMLElement): HTMLElement {
@@ -1564,24 +1963,6 @@ function copySafeAttributes(from: HTMLElement, to: HTMLElement): void {
     if (attr.name === "data-paged-ref") continue;
     to.setAttribute(attr.name, attr.value);
   }
-}
-
-function chunkPlainText(text: string, maxChars: number): string[] {
-  if (!text) return [""];
-  const words = text.split(/\s+/).filter(Boolean);
-  const chunks: string[] = [];
-  let current = "";
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length > maxChars && current) {
-      chunks.push(current);
-      current = word;
-    } else {
-      current = next;
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks.length > 0 ? chunks : [text];
 }
 
 function compactText(text: string): string {
@@ -1856,6 +2237,48 @@ function insertHtmlAtCurrentSelection(root: HTMLElement | null, html: string): v
   }
 }
 
+function findAllMatches(container: HTMLElement, query: string): Range[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+
+  const matches: Range[] = [];
+  for (const root of findRenderedSourceRoots(container)) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (
+          parent.closest(
+            "[data-section-anchor], [data-generated-letter-chrome], [aria-hidden='true']",
+          )
+        ) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return compactText(node.textContent ?? "")
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      },
+    });
+
+    let node = walker.nextNode() as Text | null;
+    while (node) {
+      const text = node.textContent ?? "";
+      const haystack = text.toLowerCase();
+      let index = haystack.indexOf(needle);
+      while (index !== -1) {
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + needle.length);
+        matches.push(range);
+        index = haystack.indexOf(needle, index + needle.length);
+      }
+      node = walker.nextNode() as Text | null;
+    }
+  }
+
+  return matches;
+}
+
 function destroyPreviewer(previewer: PreviewerInstance | null): void {
   if (!previewer) return;
   try {
@@ -1896,3 +2319,15 @@ function findScrollAncestor(el: HTMLElement): HTMLElement | null {
   }
   return null;
 }
+
+export const __pagedEditorInternals = {
+  captureCursor,
+  restoreCursor,
+  reconstructSourceHtml,
+  normalizeRenderedPagedRefs,
+  normalizeSourceHtml,
+  normalizeOversizedSourceHtml,
+  sanitizePastedHtml,
+  splitBySection,
+  stampPagedRefs,
+};

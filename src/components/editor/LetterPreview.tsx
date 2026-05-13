@@ -1,6 +1,8 @@
+import type { MutableRefObject } from "react";
+
 import type { Draft } from "@/lib/letters/types";
 import { PaginatedLetter } from "./PaginatedLetter";
-import { PagedEditor } from "./paged-edit/PagedEditor";
+import { PagedEditor, type PagedEditorActions } from "./paged-edit/PagedEditor";
 
 type AddCommentOpts = {
   quote?: string;
@@ -27,6 +29,10 @@ export type LetterPreviewProps = {
   editable?: boolean;
   /** Called when the editable on-page editor signals "done". */
   onEditableDone?: () => void;
+  /** Handle the parent can call into for top-menubar Edit actions
+   * (Undo / Redo / Find / Select all). Populated by PagedEditor on
+   * mount; null when not in edit-on-page. */
+  editorActionsRef?: MutableRefObject<PagedEditorActions | null>;
 };
 
 /**
@@ -34,7 +40,12 @@ export type LetterPreviewProps = {
  * edit-on-page both use paged.js, the same print CSS, and the same
  * source composition so page size, margins, and typography stay aligned.
  */
-export function LetterPreview({ draft, editable = false, onEditableDone }: LetterPreviewProps) {
+export function LetterPreview({
+  draft,
+  editable = false,
+  onEditableDone,
+  editorActionsRef,
+}: LetterPreviewProps) {
   const empty = draft.sections.every((s) => !s.html?.trim());
 
   if (empty) {
@@ -57,5 +68,11 @@ export function LetterPreview({ draft, editable = false, onEditableDone }: Lette
   // Edit-on-page: the paged.js render IS the editor. The legacy one-long-page
   // TipTap surface is intentionally not used here; Preview and edit-preview
   // must be the same page model.
-  return <PagedEditor draft={draft} onDone={() => onEditableDone?.()} />;
+  return (
+    <PagedEditor
+      draft={draft}
+      onDone={() => onEditableDone?.()}
+      actionsRef={editorActionsRef}
+    />
+  );
 }

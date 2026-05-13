@@ -314,6 +314,19 @@
 }
 .letter-page a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
+/* Find-in-letter highlights. Painted by the CSS Custom Highlight API so
+ * the search-result colours never touch the contenteditable DOM and
+ * can't leak into the saved source HTML. PagedEditor registers Ranges
+ * against these two highlight names; the rules here just say how to
+ * paint whatever's in them. */
+::highlight(drafthr-find) {
+  background-color: rgba(250, 204, 21, 0.35);
+}
+::highlight(drafthr-find-active) {
+  background-color: rgba(250, 204, 21, 0.85);
+  color: #0f172a;
+}
+
 /* Section node decorator */
 .section-node {
   position: relative;
