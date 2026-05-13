@@ -1,7 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
-import { getFlag } from "@/lib/flags";
 import { PaginatedLetter } from "./PaginatedLetter";
-import { PaginatedEditableLetter } from "./PaginatedEditableLetter";
 import { PagedEditor } from "./paged-edit/PagedEditor";
 
 type AddCommentOpts = {
@@ -32,14 +30,9 @@ export type LetterPreviewProps = {
 };
 
 /**
- * Letter preview rendered as an A4-styled page card. When `editable`
- * is true the static rendering is swapped for inline TipTap section
- * editors so the user can type/format/insert evidence right on the
- * page — Word/Pages style. The toggle for this lives on the topbar.
- *
- * Pagination today is single-page (visible page chrome around the whole
- * letter). Real multi-page splitting is queued for a follow-up; the
- * @page CSS rule below makes the printed/PDF output paginate naturally.
+ * Letter preview rendered as A4 page cards. Read-only Preview and
+ * edit-on-page both use paged.js, the same print CSS, and the same
+ * source composition so page size, margins, and typography stay aligned.
  */
 export function LetterPreview({ draft, editable = false, onEditableDone }: LetterPreviewProps) {
   const empty = draft.sections.every((s) => !s.html?.trim());
@@ -61,18 +54,8 @@ export function LetterPreview({ draft, editable = false, onEditableDone }: Lette
     );
   }
 
-  // Edit-on-page: the paged.js render IS the editor. Each .pagedjs_page
-  // card is a contenteditable surface — same DOM, same margins, same
-  // typography as Preview. Flip pixelPerfectEdit off to fall back to
-  // the legacy single-card editor:
-  //   window.__drafthr.setFlag("pixelPerfectEdit", false)
-  if (getFlag("pixelPerfectEdit")) {
-    return <PagedEditor draft={draft} onDone={() => onEditableDone?.()} />;
-  }
-  return (
-    <PaginatedEditableLetter
-      draft={draft}
-      onDone={() => onEditableDone?.()}
-    />
-  );
+  // Edit-on-page: the paged.js render IS the editor. The legacy one-long-page
+  // TipTap surface is intentionally not used here; Preview and edit-preview
+  // must be the same page model.
+  return <PagedEditor draft={draft} onDone={() => onEditableDone?.()} />;
 }

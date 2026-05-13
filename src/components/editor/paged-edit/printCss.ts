@@ -1,12 +1,10 @@
 /**
  * Shared print CSS + page geometry for the letter render path.
  *
- * Both Preview (paged.js multi-page render) and Edit-on-page V2
- * (pixel-perfect editable mode, gated by a feature flag) need to know
+ * Both Preview (paged.js multi-page render) and edit-on-page need to know
  * the same A4 geometry and ship the same body typography rules so the
- * three letter surfaces — Edit / Edit-on-page / Preview / PDF — agree
- * on margins, fonts, list bullets and table borders down to the
- * fraction-of-a-point.
+ * two paged letter surfaces agree on margins, fonts, list bullets and
+ * table borders down to the fraction-of-a-point.
  *
  * Anything that affects how a printed page LOOKS belongs here.
  */
@@ -18,15 +16,17 @@
  * already use for printed correspondence).
  * --------------------------------------------------------------------------*/
 export const PAGE_WIDTH_PX = Math.round(8.27 * 96); // 794
+export const PAGE_HEIGHT_PX = Math.round(11.69 * 96); // 1122
 export const MARGIN_TOP_PX = Math.round(1.0 * 96); // 96
 export const MARGIN_BOTTOM_PX = Math.round(1.2 * 96); // 115
 export const MARGIN_SIDE_PX = Math.round(1.1 * 96); // 106
+export const PAGE_CONTENT_WIDTH_PX = PAGE_WIDTH_PX - MARGIN_SIDE_PX * 2; // 582
+export const PAGE_CONTENT_HEIGHT_PX = PAGE_HEIGHT_PX - MARGIN_TOP_PX - MARGIN_BOTTOM_PX; // 911
 
 /* ----------------------------------------------------------------------------
- * Full <style> body used inside the paged.js print document. paged.js
- * mounts the rendered pages inside an iframe-like detached document, so
- * these rules don't escape into the host app. Bare selectors (p, h2, …)
- * are fine here because the iframe is the scope.
+ * Full stylesheet handed to paged.js. paged.js inserts processed rules
+ * into the host document, so body typography is scoped under .pagedjs_page
+ * to avoid leaking into the app shell.
  * --------------------------------------------------------------------------*/
 export const LETTER_PRINT_CSS = `
   @page {
@@ -76,88 +76,115 @@ export const LETTER_PRINT_CSS = `
    * doesn't leak into Radix dropdown portals (which mount under
    * document.body) and turn the rest of the UI serif while Preview is
    * mounted. */
-  body { margin: 0; }
   .pagedjs_page {
     font-family: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     font-size: 11pt;
     line-height: 1.55;
     color: #0f172a;
   }
-  p { margin: 0 0 8pt 0; }
-  h1, h2, h3 { margin: 14pt 0 6pt; line-height: 1.25; }
-  h2 { font-size: 14pt; font-weight: 600; }
-  h3 { font-size: 12pt; font-weight: 600; }
-  strong { font-weight: 600; }
-  em { color: #475569; font-style: italic; }
-  ul { list-style: disc; padding-left: 1.5em; margin: 6pt 0; }
-  ol { list-style: decimal; padding-left: 1.5em; margin: 6pt 0; }
-  li { margin: 2pt 0; }
-  table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
-  th, td { border: 1px solid #cbd5e1; padding: 4pt 8pt; text-align: left; }
-  hr.letter-rule { border: none; border-top: 1px solid #cbd5e1; margin: 14pt 0; }
+  .pagedjs_page p { margin: 0 0 8pt 0; }
+  .pagedjs_page h1,
+  .pagedjs_page h2,
+  .pagedjs_page h3 { margin: 14pt 0 6pt; line-height: 1.25; }
+  .pagedjs_page h2 { font-size: 14pt; font-weight: 600; }
+  .pagedjs_page h3 { font-size: 12pt; font-weight: 600; }
+  .pagedjs_page strong { font-weight: 600; }
+  .pagedjs_page em { color: #475569; font-style: italic; }
+  .pagedjs_page ul { list-style: disc; padding-left: 1.5em; margin: 6pt 0; }
+  .pagedjs_page ol { list-style: decimal; padding-left: 1.5em; margin: 6pt 0; }
+  .pagedjs_page li { margin: 2pt 0; overflow-wrap: anywhere; }
+  .pagedjs_page table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 6pt 0; }
+  .pagedjs_page th,
+  .pagedjs_page td { border: 1px solid #cbd5e1; padding: 4pt 8pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  .pagedjs_page hr.letter-rule { border: none; border-top: 1px solid #cbd5e1; margin: 14pt 0; }
+
+  /* The edit-on-page path reconstructs source HTML from paged.js clones.
+   * Avoid splitting structures where paged.js rebuilds ancestor chains in a
+   * way that cannot be losslessly flattened back into editable source. */
+  .pagedjs_page .letter-body > p,
+  .pagedjs_page .letter-body > h1,
+  .pagedjs_page .letter-body > h2,
+  .pagedjs_page .letter-body > h3,
+  .pagedjs_page .letter-body > h4,
+  .pagedjs_page .letter-body > div:not([data-section-anchor]),
+  .pagedjs_page .letter-body > blockquote,
+  .pagedjs_page .letter-body table,
+  .pagedjs_page .letter-body figure,
+  .pagedjs_page .letter-body img,
+  .pagedjs_page .letter-body li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 
   /* Inline images / pasted screenshots inside the letter body. */
-  .letter-body img,
-  figure img { max-width: 100%; height: auto; border-radius: 3px; margin: 6pt 0; }
+  .pagedjs_page .letter-body img,
+  .pagedjs_page figure img {
+    max-width: 100%;
+    max-height: ${PAGE_CONTENT_HEIGHT_PX - 24}px;
+    height: auto;
+    object-fit: contain;
+    border-radius: 3px;
+    margin: 6pt 0;
+  }
 
-  .letterhead { text-align: center; margin-bottom: 18pt; }
-  .letterhead img { max-height: 120px; max-width: 100%; }
+  .pagedjs_page .letterhead { text-align: center; margin-bottom: 18pt; }
+  .pagedjs_page .letterhead img { max-height: 120px; max-width: 100%; }
 
-  .signature-image { margin: 6pt 0; }
-  .signature-image img { max-height: 54px; }
+  .pagedjs_page .signature-image { margin: 6pt 0; }
+  .pagedjs_page .signature-image img { max-height: 54px; }
 
   /* Figure reference token — [See Fig 1] — sits inline. */
-  .figure-ref { font-style: italic; color: #475569; }
-  .attachment-ref { font-style: italic; color: #475569; }
+  .pagedjs_page .figure-ref { font-style: italic; color: #475569; }
+  .pagedjs_page .attachment-ref { font-style: italic; color: #475569; }
 
   /* Attachments block — auto-generated at end of letter when there are
    * evidence items marked "attached". */
-  .attachments-section { margin-top: 18pt; }
-  .attachments-section h2 {
+  .pagedjs_page .attachments-section { margin-top: 18pt; }
+  .pagedjs_page .attachments-section h2 {
     font-size: 13pt;
     border-bottom: 1px solid #cbd5e1;
     padding-bottom: 4pt;
     margin-bottom: 6pt;
   }
-  .attachments-list {
+  .pagedjs_page .attachments-list {
     list-style: decimal;
     padding-left: 1.2em;
     font-size: 11pt;
   }
-  .attachments-list li { margin: 2pt 0; }
-  .attachments-list .att-num {
+  .pagedjs_page .attachments-list li { margin: 2pt 0; }
+  .pagedjs_page .attachments-list .att-num {
     color: #94a3b8;
     font-size: 9pt;
     margin-left: 6pt;
   }
 
   /* Figures appendix — own page break, numbered exhibit list. */
-  .figures-section { margin-top: 0; }
-  .figures-section h2 {
+  .pagedjs_page .figures-section { margin-top: 0; }
+  .pagedjs_page .figures-section h2 {
     font-size: 14pt;
     border-bottom: 1px solid #cbd5e1;
     padding-bottom: 4pt;
     margin-bottom: 10pt;
   }
-  .figure-item {
+  .pagedjs_page .figure-item {
     margin: 0 0 14pt 0;
     page-break-inside: avoid;
     break-inside: avoid;
   }
-  .figure-item figcaption {
+  .pagedjs_page .figure-item figcaption {
     font-family: Georgia, serif;
     font-size: 11pt;
     margin-bottom: 4pt;
     color: #0f172a;
   }
-  .figure-item img {
+  .pagedjs_page .figure-item img {
     max-width: 100%;
     max-height: 5in;
     border: 1px solid #e2e8f0;
     border-radius: 3px;
     page-break-inside: avoid;
   }
-  .figure-body {
+  .pagedjs_page .figure-body {
     font-size: 10.5pt;
     color: #334155;
     white-space: pre-wrap;
@@ -168,23 +195,16 @@ export const LETTER_PRINT_CSS = `
 
   /* Force a page break before these blocks so exhibits / attachments
    * start on their own page — tribunal-bundle convention. */
-  .page-break-before { page-break-before: always; break-before: page; }
+  .pagedjs_page .page-break-before { page-break-before: always; break-before: page; }
 
   /* Disclaimer at bottom of last letter page. */
-  .letter-disclaimer { font-size: 9.5pt; color: #64748b; }
+  .pagedjs_page .letter-disclaimer { font-size: 9.5pt; color: #64748b; }
 `;
 
-/**
- * Wrap a fragment of letter HTML in a full HTML document with the print
- * CSS attached, ready to hand to paged.js (Previewer.preview() or
- * Chunker.flow()). The fragment is dropped verbatim into <body> — caller
- * is responsible for sanitisation.
- */
-export function wrapInPrintHtml(bodyHtml: string): string {
-  return `<!doctype html>
-<html><head><meta charset="utf-8">
-<style>${LETTER_PRINT_CSS}</style></head>
-<body>
-${bodyHtml}
-</body></html>`;
+export function pagedPreviewStylesheet(): Record<string, string> {
+  const href =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/drafthr-letter-print.css`
+      : "drafthr-letter-print.css";
+  return { [href]: LETTER_PRINT_CSS };
 }

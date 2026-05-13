@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import type { Draft } from "@/lib/letters/types";
-import { sanitizeLetterHtml } from "@/lib/sanitize";
-import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
-import { resolveFigureRefsInHtml, displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { Loader2 } from "lucide-react";
-import { wrapInPrintHtml } from "./paged-edit/printCss";
+import { pagedPreviewStylesheet } from "./paged-edit/printCss";
+import { buildPreviewSourceHtml } from "./paged-edit/sourceHtml";
+
+type PreviewerInstance = {
+  preview: (
+    content: string | HTMLElement,
+    stylesheets: Array<string | Record<string, string>>,
+    renderTo: HTMLElement,
+  ) => Promise<{ total?: number | null }>;
+  chunker?: {
+    stop?: () => void;
+    destroy?: () => void;
+  };
+  polisher?: {
+    destroy?: () => void;
+  };
+};
 
 /**
  * Renders the letter as discrete A4 pages using paged.js (W3C CSS Paged
@@ -21,6 +34,7 @@ import { wrapInPrintHtml } from "./paged-edit/printCss";
  */
 export function PaginatedLetter({ draft }: { draft: Draft }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewerRef = useRef<PreviewerInstance | null>(null);
   const [busy, setBusy] = useState(true);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +43,16 @@ export function PaginatedLetter({ draft }: { draft: Draft }) {
   // resolved figure references (so [See Fig N] reflects current numbering),
   // signature embedded into the signature section, an auto-Attachments
   // block when there are attached evidence items, and the disclaimer.
-  const sourceHtml = buildSourceHtml(draft);
+  const sourceHtml = buildPreviewSourceHtml(draft);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let cancelled = false;
-    container.innerHTML = "";
+    let previewer: PreviewerInstance | null = null;
+    destroyPreviewer(previewerRef.current);
+    previewerRef.current = null;
+    container.replaceChildren();
     setBusy(true);
     setError(null);
 
@@ -44,13 +61,17 @@ export function PaginatedLetter({ draft }: { draft: Draft }) {
         // Lazy import — pagedjs is ~150 KB and only needed in preview.
         const { Previewer } = await import("pagedjs");
         if (cancelled) return;
-        const previewer = new Previewer();
-        const fullDoc = wrapInPrintHtml(sourceHtml);
-        const flow = await previewer.preview(fullDoc, [], container);
-        if (cancelled) return;
+        previewer = new Previewer() as PreviewerInstance;
+        const flow = await previewer.preview(sourceHtml, [pagedPreviewStylesheet()], container);
+        if (cancelled) {
+          destroyPreviewer(previewer);
+          return;
+        }
+        previewerRef.current = previewer;
         setPageCount(flow.total ?? null);
         setBusy(false);
       } catch (err) {
+        if (previewer) destroyPreviewer(previewer);
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to paginate");
         setBusy(false);
@@ -59,6 +80,10 @@ export function PaginatedLetter({ draft }: { draft: Draft }) {
 
     return () => {
       cancelled = true;
+      destroyPreviewer(previewer);
+      if (previewerRef.current === previewer) {
+        previewerRef.current = null;
+      }
     };
   }, [sourceHtml]);
 
@@ -90,97 +115,13 @@ export function PaginatedLetter({ draft }: { draft: Draft }) {
   );
 }
 
-/* ============================================================================
- * Source HTML composition
- * ==========================================================================*/
-
-function buildSourceHtml(draft: Draft): string {
-  const letterhead = letterheadHtml(draft);
-  const signature = signatureHtml(draft);
-  const evidence = draft.evidence ?? [];
-  const sectionsHtml = draft.sections
-    .map((s) =>
-      s.sectionId === "signature" && signature
-        ? signature + sanitizeLetterHtml(s.html)
-        : sanitizeLetterHtml(s.html)
-    )
-    .join("\n");
-  const resolved =
-    evidence.length > 0 ? resolveFigureRefsInHtml(sectionsHtml, evidence) : sectionsHtml;
-  const attachments = buildAttachmentsBlock(draft);
-  const figures = buildFiguresAppendix(draft);
-  const disclaimer = sanitizeLetterHtml(disclaimerHtmlFor(draft));
-
-  return `
-    ${letterhead}
-    <div class="letter-body">${resolved}</div>
-    ${attachments}
-    ${figures}
-    <hr class="letter-rule" />
-    <div class="letter-disclaimer">${disclaimer}</div>
-  `;
+function destroyPreviewer(previewer: PreviewerInstance | null): void {
+  if (!previewer) return;
+  try {
+    previewer.chunker?.stop?.();
+    previewer.chunker?.destroy?.();
+    previewer.polisher?.destroy?.();
+  } catch {
+    // paged.js cleanup should not mask preview rendering.
+  }
 }
-
-function letterheadHtml(draft: Draft): string {
-  const url = draft.employer.letterheadDataUrl;
-  if (!url) return "";
-  return `<div class="letterhead"><img src="${url}" alt="" /></div>`;
-}
-
-function signatureHtml(draft: Draft): string {
-  const url = draft.employer.signatureDataUrl;
-  if (!url) return "";
-  return `<div class="signature-image"><img src="${url}" alt="" /></div>`;
-}
-
-function buildAttachmentsBlock(draft: Draft): string {
-  const attached = (draft.evidence ?? []).filter((e) => displayModeOf(e) === "attached");
-  if (attached.length === 0) return "";
-  const items = attached
-    .map(
-      (e, i) =>
-        `<li><strong>${escHtml(e.filename || `${e.kind} item`)}</strong>${
-          e.content ? ` — ${escHtml(e.content)}` : ""
-        }<span class="att-num">[Attachment ${i + 1}]</span></li>`
-    )
-    .join("\n");
-  return `<section class="attachments-section page-break-before">
-    <h2>Attachments</h2>
-    <ol class="attachments-list">${items}</ol>
-  </section>`;
-}
-
-function buildFiguresAppendix(draft: Draft): string {
-  const all = draft.evidence ?? [];
-  const figs = all.filter((e) => displayModeOf(e) === "figure");
-  if (figs.length === 0) return "";
-  return `<section class="figures-section page-break-before">
-    <h2>Exhibits</h2>
-    ${figs
-      .map((item) => {
-        const label = figureLabelFor(item, all);
-        const isImage = item.mimeType?.startsWith("image/");
-        return `<figure class="figure-item">
-          <figcaption><strong>${escHtml(label)}</strong>${
-          item.filename ? ` — ${escHtml(item.filename)}` : ""
-        }</figcaption>
-          ${
-            isImage && item.fileDataUrl
-              ? `<img src="${item.fileDataUrl}" alt="${escHtml(item.filename || "")}" />`
-              : ""
-          }
-          ${item.content ? `<p class="figure-body">${escHtml(item.content)}</p>` : ""}
-        </figure>`;
-      })
-      .join("\n")}
-  </section>`;
-}
-
-function escHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-

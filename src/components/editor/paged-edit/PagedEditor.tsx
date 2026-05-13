@@ -1,11 +1,45 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  Heading2,
+  Heading3,
+  Image as ImageIcon,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Loader2,
+  Pilcrow,
+  Redo2,
+  Underline as UnderlineIcon,
+  Undo2,
+} from "lucide-react";
 
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 
-import { wrapInPrintHtml } from "./printCss";
+import {
+  PAGE_CONTENT_HEIGHT_PX,
+  PAGE_CONTENT_WIDTH_PX,
+  PAGE_WIDTH_PX,
+  pagedPreviewStylesheet,
+} from "./printCss";
+import { buildPreviewSourceHtml, signatureImageHtml } from "./sourceHtml";
 
 /**
  * Edit-on-page that IS paged.js. Each rendered .pagedjs_page card is
@@ -24,7 +58,7 @@ import { wrapInPrintHtml } from "./printCss";
  * Tradeoffs the user explicitly accepted picking this approach:
  *   - Cursor jumps briefly during re-pagination (~60-150 ms of layout)
  *   - Overflow text spills past the page bottom until re-flow lands
- *   - No collaborative cursor / undo stack (browser native only)
+ *   - No collaborative cursor; undo/redo is local to this editor session
  *
  * Tradeoffs avoided:
  *   - No fake "page-break" overlays — page breaks are real DOM
@@ -33,12 +67,45 @@ import { wrapInPrintHtml } from "./printCss";
  */
 
 const REPAGINATE_DELAY_MS = 600;
+const PAGE_WIDTH_FALLBACK_PX = PAGE_WIDTH_PX;
+const OVERSIZED_BLOCK_MAX_HEIGHT_PX = PAGE_CONTENT_HEIGHT_PX - 24;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 type CursorState = {
+  start: CursorPoint;
+  end: CursorPoint;
+};
+
+type CursorPoint = {
   /** data-paged-ref of the source block the caret is inside. */
   ref: string;
-  /** Char offset from the start of that block's text content. */
+  /** Logical offset from the start of that block. Text chars count normally; <br>/<img>/<hr> count as one. */
   offset: number;
+};
+
+type ToolbarFormatState = {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  unorderedList: boolean;
+  orderedList: boolean;
+  block: string;
+  align: "left" | "center" | "right" | "justify" | "";
+};
+
+type PreviewerInstance = {
+  preview: (
+    content: string | HTMLElement,
+    stylesheets: Array<string | Record<string, string>>,
+    renderTo: HTMLElement,
+  ) => Promise<{ total?: number | null }>;
+  chunker?: {
+    stop?: () => void;
+    destroy?: () => void;
+  };
+  polisher?: {
+    destroy?: () => void;
+  };
 };
 
 export function PagedEditor({
@@ -51,16 +118,119 @@ export function PagedEditor({
   const updateSection = useDraftStore((state) => state.updateSection);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   /** The HTML truth — kept current via reconstructSourceHtml() on every save. */
   const sourceHtmlRef = useRef<string>(buildMergedSourceHtml(draft));
   /** Monotonic token to drop stale paginations when typing fires fast. */
   const flowTokenRef = useRef(0);
   const debounceRef = useRef<number | null>(null);
+  const activePreviewerRef = useRef<PreviewerInstance | null>(null);
+  const mountedRef = useRef(false);
+  const composingRef = useRef(false);
+  const undoStackRef = useRef<string[]>([]);
+  const redoStackRef = useRef<string[]>([]);
+  const savedSelectionRef = useRef<Range | null>(null);
 
   const [busy, setBusy] = useState(true);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [layoutWarning, setLayoutWarning] = useState<string | null>(null);
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+  const [formatState, setFormatState] = useState<ToolbarFormatState>({
+    bold: false,
+    italic: false,
+    underline: false,
+    unorderedList: false,
+    orderedList: false,
+    block: "p",
+    align: "",
+  });
+
+  const refreshHistoryState = useCallback(() => {
+    setHistoryState({
+      canUndo: undoStackRef.current.length > 0,
+      canRedo: redoStackRef.current.length > 0,
+    });
+  }, []);
+
+  const clearPendingDebounce = useCallback(() => {
+    if (debounceRef.current) {
+      window.clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
+  const rememberSelection = useCallback(() => {
+    const container = containerRef.current;
+    const sel = window.getSelection();
+    if (!container || !sel || sel.rangeCount === 0 || !selectionInsideLetterBody(container)) {
+      return;
+    }
+    savedSelectionRef.current = sel.getRangeAt(0).cloneRange();
+  }, []);
+
+  const restoreRememberedSelection = useCallback(() => {
+    const container = containerRef.current;
+    const range = savedSelectionRef.current;
+    if (!container || !range || !container.contains(range.commonAncestorContainer)) return;
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }, []);
+
+  const refreshFormatState = useCallback(() => {
+    const container = containerRef.current;
+    if (!container || !selectionInsideLetterBody(container)) {
+      setFormatState((current) => ({
+        ...current,
+        bold: false,
+        italic: false,
+        underline: false,
+        unorderedList: false,
+        orderedList: false,
+        align: "",
+      }));
+      return;
+    }
+
+    const block = normalizeFormatBlock(queryCommandValue("formatBlock")) || "p";
+    const align: ToolbarFormatState["align"] = queryCommandState("justifyCenter")
+      ? "center"
+      : queryCommandState("justifyRight")
+      ? "right"
+      : queryCommandState("justifyFull")
+      ? "justify"
+      : queryCommandState("justifyLeft")
+      ? "left"
+      : "";
+    setFormatState({
+      bold: queryCommandState("bold"),
+      italic: queryCommandState("italic"),
+      underline: queryCommandState("underline"),
+      unorderedList: queryCommandState("insertUnorderedList"),
+      orderedList: queryCommandState("insertOrderedList"),
+      block,
+      align,
+    });
+  }, []);
+
+  const commitSource = useCallback((nextSource: string, pushHistory = true) => {
+    const previous = sourceHtmlRef.current;
+    const normalized = normalizeOversizedSourceHtml(
+      normalizeSourceHtml(nextSource, draft, previous),
+    );
+    if (normalized !== previous && pushHistory) {
+      undoStackRef.current.push(previous);
+      if (undoStackRef.current.length > 100) undoStackRef.current.shift();
+      redoStackRef.current = [];
+    }
+    sourceHtmlRef.current = normalized;
+    saveToStore(normalized, draft, updateSection);
+    setDirty(false);
+    refreshHistoryState();
+    return normalized !== previous;
+  }, [draft, refreshHistoryState, updateSection]);
 
   /* ------------------------------------------------------------------------
    * Render pipeline — paginate sourceHtmlRef into the container.
@@ -69,70 +239,127 @@ export function PagedEditor({
     const container = containerRef.current;
     if (!container) return;
     const token = ++flowTokenRef.current;
+    let previewer: PreviewerInstance | null = null;
+    let staging: HTMLElement | null = null;
 
     const scrollEl = findScrollAncestor(container);
     const scrollTop = scrollEl?.scrollTop ?? 0;
 
     setBusy(true);
     setError(null);
+    setLayoutWarning(null);
     try {
       const { Previewer } = await import("pagedjs");
-      if (token !== flowTokenRef.current) return;
+      if (token !== flowTokenRef.current || !mountedRef.current) return;
 
       // Stamp data-paged-ref on visible blocks before passing to paged.js
       // so we can match source positions in the rendered clones after.
+      sourceHtmlRef.current = normalizeOversizedSourceHtml(sourceHtmlRef.current);
       const stamped = stampPagedRefs(sourceHtmlRef.current);
-      const full = wrapInPrintHtml(stamped);
+      const full = buildPreviewSourceHtml(draft, { letterBodyHtml: stamped });
 
-      container.innerHTML = "";
-      const previewer = new Previewer();
-      const flow = await previewer.preview(full, [], container);
-      if (token !== flowTokenRef.current) return;
+      staging = createPaginationStagingHost(container);
+      previewer = new Previewer() as PreviewerInstance;
+      const flow = await previewer.preview(full, [pagedPreviewStylesheet()], staging);
+      if (
+        token !== flowTokenRef.current ||
+        !mountedRef.current ||
+        container !== containerRef.current
+      ) {
+        destroyPreviewer(previewer);
+        staging.remove();
+        return;
+      }
+
+      destroyPreviewer(activePreviewerRef.current);
+      activePreviewerRef.current = previewer;
+      container.replaceChildren(...Array.from(staging.childNodes));
+      staging.remove();
 
       setPageCount(flow.total ?? null);
 
-      // Turn every page's content area into an editable surface.
-      // overflow:visible so text spills past the page bottom rather than
-      // being clipped while the user types ahead of the next re-flow.
+      // Keep page content overflow visible while typing ahead of the next
+      // reflow, but only make the actual letter body editable. If the whole
+      // page content is editable, users can type into paged.js margin/chrome
+      // and that text has no section anchor to save back to.
       const pageContents =
         container.querySelectorAll<HTMLElement>(".pagedjs_page_content");
       for (const pc of pageContents) {
-        pc.contentEditable = "true";
-        pc.spellcheck = true;
-        pc.style.outline = "none";
+        pc.contentEditable = "false";
         pc.style.overflow = "visible";
       }
+      for (const body of findRenderedSourceRoots(container)) {
+        body.contentEditable = "true";
+        body.spellcheck = true;
+        body.tabIndex = 0;
+        body.setAttribute("role", "textbox");
+        body.setAttribute("aria-multiline", "true");
+        body.style.outline = "none";
+        body.style.overflow = "visible";
+      }
+      for (const anchor of container.querySelectorAll<HTMLElement>("[data-section-anchor]")) {
+        anchor.contentEditable = "false";
+        anchor.setAttribute("aria-hidden", "true");
+      }
+      for (const chrome of container.querySelectorAll<HTMLElement>(
+        ".letterhead, .attachments-section, .figures-section, .letter-disclaimer, .letter-rule, [data-generated-letter-chrome]",
+      )) {
+        chrome.contentEditable = "false";
+        chrome.setAttribute("aria-readonly", "true");
+      }
+
+      setLayoutWarning(inspectRenderedLayout(container, flow.total ?? null));
 
       // Restore caret + scroll *after* contentEditable is set, otherwise
       // some browsers reject the selection on read-only nodes.
-      if (cursor) restoreCursor(container, cursor);
+      if (cursor) {
+        restoreCursor(container, cursor);
+        rememberSelection();
+        refreshFormatState();
+      }
       if (scrollEl) scrollEl.scrollTop = scrollTop;
       setBusy(false);
     } catch (err) {
-      if (token === flowTokenRef.current) {
+      if (previewer) destroyPreviewer(previewer);
+      staging?.remove();
+      if (token === flowTokenRef.current && mountedRef.current) {
         setError(err instanceof Error ? err.message : "Failed to paginate");
         setBusy(false);
       }
     }
-  }, []);
+  }, [draft, refreshFormatState, rememberSelection]);
 
   /* ------------------------------------------------------------------------
    * Lifecycle — initial paginate + cleanup.
    * ----------------------------------------------------------------------*/
   useEffect(() => {
+    mountedRef.current = true;
+    sourceHtmlRef.current = buildMergedSourceHtml(draft);
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    refreshHistoryState();
     void repaginate(null);
     return () => {
       // Invalidate any in-flight pagination so it can't setState after unmount.
+      mountedRef.current = false;
       flowTokenRef.current++;
-      if (debounceRef.current) {
-        window.clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
+      clearPendingDebounce();
+      destroyPreviewer(activePreviewerRef.current);
+      activePreviewerRef.current = null;
     };
     // We want one paginate per draft.id — rebuilding on every render would
     // wipe the user's keystrokes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.id]);
+
+  useEffect(() => {
+    const onSelectionChange = () => {
+      rememberSelection();
+      refreshFormatState();
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [refreshFormatState, rememberSelection]);
 
   /* ------------------------------------------------------------------------
    * Input handler — debounce + reconstruct source + save + re-paginate.
@@ -140,18 +367,13 @@ export function PagedEditor({
   const flushPendingEdit = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
+    normalizeRenderedPagedRefs(container);
     const cursor = captureCursor(container);
-    const nextSource = reconstructSourceHtml(container);
-    sourceHtmlRef.current = nextSource;
-    // Save to store at section granularity so collaborators / other surfaces
-    // see updates without re-loading the whole letter.
-    saveToStore(nextSource, draft, updateSection);
-    setDirty(false);
+    commitSource(reconstructSourceHtml(container));
     void repaginate(cursor);
-  }, [draft, updateSection, repaginate]);
+  }, [commitSource, draft, repaginate]);
 
-  const onInput = useCallback(() => {
-    setDirty(true);
+  const scheduleFlush = useCallback(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       debounceRef.current = null;
@@ -159,46 +381,345 @@ export function PagedEditor({
     }, REPAGINATE_DELAY_MS);
   }, [flushPendingEdit]);
 
+  const afterToolbarMutation = useCallback(() => {
+    setDirty(true);
+    refreshFormatState();
+    scheduleFlush();
+  }, [refreshFormatState, scheduleFlush]);
+
+  const runNativeCommand = useCallback((command: string, value?: string) => {
+    const container = containerRef.current;
+    if (!container) return;
+    restoreRememberedSelection();
+    if (!selectionInsideLetterBody(container)) return;
+    focusSelectionLetterBody(container);
+    runEditorCommand(command, value);
+    rememberSelection();
+    afterToolbarMutation();
+  }, [afterToolbarMutation, rememberSelection, restoreRememberedSelection]);
+
+  const toggleBlock = useCallback((block: "h2" | "h3") => {
+    const next = formatState.block === block ? "p" : block;
+    runNativeCommand("formatBlock", next);
+  }, [formatState.block, runNativeCommand]);
+
+  const insertLink = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    rememberSelection();
+    const previous = findSelectedLinkHref(container);
+    const url = window.prompt("URL", previous ?? "https://");
+    if (url == null) return;
+    restoreRememberedSelection();
+    if (!selectionInsideLetterBody(container)) return;
+    focusSelectionLetterBody(container);
+    if (url.trim() === "") runEditorCommand("unlink");
+    else runEditorCommand("createLink", url.trim());
+    rememberSelection();
+    afterToolbarMutation();
+  }, [afterToolbarMutation, rememberSelection, restoreRememberedSelection]);
+
+  const onImageChosen = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !file.type.startsWith("image/")) return;
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      window.alert("Image larger than 5 MB — use the Evidence step for full-quality originals.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result ?? "");
+      if (!src) return;
+      restoreRememberedSelection();
+      insertHtmlAtCurrentSelection(
+        containerRef.current,
+        `<img src="${escAttr(src)}" alt="${escAttr(file.name)}" />`,
+      );
+      rememberSelection();
+      afterToolbarMutation();
+    };
+    reader.readAsDataURL(file);
+  }, [afterToolbarMutation, rememberSelection, restoreRememberedSelection]);
+
+  const onInput = useCallback((event: FormEvent<HTMLDivElement>) => {
+    rememberSelection();
+    setDirty(true);
+    if (composingRef.current || isComposingInput(event.nativeEvent)) return;
+    scheduleFlush();
+  }, [rememberSelection, scheduleFlush]);
+
+  const onCompositionStart = useCallback(() => {
+    composingRef.current = true;
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    debounceRef.current = null;
+  }, []);
+
+  const onCompositionEnd = useCallback(() => {
+    composingRef.current = false;
+    setDirty(true);
+    scheduleFlush();
+  }, [scheduleFlush]);
+
+  const onPaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const html = event.clipboardData.getData("text/html");
+    const text = event.clipboardData.getData("text/plain");
+    const safeHtml = html
+      ? sanitizePastedHtml(html)
+      : escHtml(text).replace(/\r\n|\r|\n/g, "<br>");
+
+    insertHtmlAtCurrentSelection(containerRef.current, safeHtml);
+    rememberSelection();
+    setDirty(true);
+    scheduleFlush();
+  }, [rememberSelection, scheduleFlush]);
+
+  const handleUndo = useCallback(() => {
+    clearPendingDebounce();
+    const container = containerRef.current;
+    let cursor: CursorState | null = null;
+    let liveSource = sourceHtmlRef.current;
+    let hasUnsavedDom = false;
+    if (container) {
+      normalizeRenderedPagedRefs(container);
+      cursor = captureCursor(container);
+      if (dirty) {
+        liveSource = normalizeSourceHtml(reconstructSourceHtml(container), draft, sourceHtmlRef.current);
+        hasUnsavedDom = liveSource !== sourceHtmlRef.current;
+      }
+    }
+
+    let target: string | undefined;
+    if (hasUnsavedDom) {
+      target = sourceHtmlRef.current;
+      redoStackRef.current.push(liveSource);
+    } else {
+      target = undoStackRef.current.pop();
+      if (!target) {
+        refreshHistoryState();
+        return;
+      }
+      redoStackRef.current.push(sourceHtmlRef.current);
+    }
+
+    commitSource(target, false);
+    void repaginate(cursor);
+  }, [clearPendingDebounce, commitSource, dirty, draft, refreshHistoryState, repaginate]);
+
+  const handleRedo = useCallback(() => {
+    if (dirty) return;
+    clearPendingDebounce();
+    const container = containerRef.current;
+    const cursor = container ? captureCursor(container) : null;
+    const target = redoStackRef.current.pop();
+    if (!target) {
+      refreshHistoryState();
+      return;
+    }
+    undoStackRef.current.push(sourceHtmlRef.current);
+    commitSource(target, false);
+    void repaginate(cursor);
+  }, [clearPendingDebounce, commitSource, dirty, refreshHistoryState, repaginate]);
+
+  const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    const key = event.key.toLowerCase();
+    const mod = event.metaKey || event.ctrlKey;
+    if (!mod) return;
+    if (key === "z") {
+      event.preventDefault();
+      if (event.shiftKey) handleRedo();
+      else handleUndo();
+    } else if (key === "y") {
+      event.preventDefault();
+      handleRedo();
+    }
+  }, [handleRedo, handleUndo]);
+
   /* ------------------------------------------------------------------------
    * Done — flush pending edit, save, hand back to parent.
    * ----------------------------------------------------------------------*/
   const handleDone = useCallback(() => {
-    if (debounceRef.current) {
-      window.clearTimeout(debounceRef.current);
-      debounceRef.current = null;
-    }
+    clearPendingDebounce();
     const container = containerRef.current;
     if (container) {
-      const nextSource = reconstructSourceHtml(container);
-      sourceHtmlRef.current = nextSource;
-      saveToStore(nextSource, draft, updateSection);
+      normalizeRenderedPagedRefs(container);
+      commitSource(reconstructSourceHtml(container));
     }
-    setDirty(false);
     onDone();
-  }, [draft, updateSection, onDone]);
+  }, [clearPendingDebounce, commitSource, draft, onDone]);
+
+  const canUndo = dirty || historyState.canUndo;
+  const canRedo = !dirty && historyState.canRedo;
 
   return (
     <div className="paged-edit-shell">
-      <div className="mx-auto mb-3 flex w-[min(8.27in,100%)] items-center justify-between rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-1.5 text-[11px] shadow-sm">
-        <span className="text-[var(--ds-muted)]">
-          {busy ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="size-3 animate-spin" /> Paginating…
-            </span>
-          ) : error ? (
-            <span className="text-[var(--ds-red-fg)]">{error}</span>
-          ) : pageCount != null ? (
-            `${pageCount} page${pageCount === 1 ? "" : "s"} · A4`
-          ) : (
-            ""
-          )}
-        </span>
+      <div className="mx-auto mb-3 flex w-[min(8.27in,100%)] flex-wrap items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 text-[11px] shadow-sm">
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="hidden"
+          onChange={onImageChosen}
+        />
+
+        <div className="flex items-center gap-0.5">
+          <NativeToolbarButton
+            label="Bold"
+            active={formatState.bold}
+            onClick={() => runNativeCommand("bold")}
+          >
+            <Bold className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Italic"
+            active={formatState.italic}
+            onClick={() => runNativeCommand("italic")}
+          >
+            <Italic className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Underline"
+            active={formatState.underline}
+            onClick={() => runNativeCommand("underline")}
+          >
+            <UnderlineIcon className="size-3.5" />
+          </NativeToolbarButton>
+        </div>
+
+        <ToolbarDivider />
+
+        <div className="flex items-center gap-0.5">
+          <NativeToolbarButton
+            label="Paragraph"
+            active={formatState.block === "p"}
+            onClick={() => runNativeCommand("formatBlock", "p")}
+          >
+            <Pilcrow className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Heading 2"
+            active={formatState.block === "h2"}
+            onClick={() => toggleBlock("h2")}
+          >
+            <Heading2 className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Heading 3"
+            active={formatState.block === "h3"}
+            onClick={() => toggleBlock("h3")}
+          >
+            <Heading3 className="size-3.5" />
+          </NativeToolbarButton>
+        </div>
+
+        <ToolbarDivider />
+
+        <div className="flex items-center gap-0.5">
+          <NativeToolbarButton
+            label="Bullet list"
+            active={formatState.unorderedList}
+            onClick={() => runNativeCommand("insertUnorderedList")}
+          >
+            <List className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Numbered list"
+            active={formatState.orderedList}
+            onClick={() => runNativeCommand("insertOrderedList")}
+          >
+            <ListOrdered className="size-3.5" />
+          </NativeToolbarButton>
+        </div>
+
+        <ToolbarDivider />
+
+        <div className="flex items-center gap-0.5">
+          <NativeToolbarButton
+            label="Align left"
+            active={formatState.align === "left"}
+            onClick={() => runNativeCommand("justifyLeft")}
+          >
+            <AlignLeft className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Align center"
+            active={formatState.align === "center"}
+            onClick={() => runNativeCommand("justifyCenter")}
+          >
+            <AlignCenter className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Align right"
+            active={formatState.align === "right"}
+            onClick={() => runNativeCommand("justifyRight")}
+          >
+            <AlignRight className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Justify"
+            active={formatState.align === "justify"}
+            onClick={() => runNativeCommand("justifyFull")}
+          >
+            <AlignJustify className="size-3.5" />
+          </NativeToolbarButton>
+        </div>
+
+        <ToolbarDivider />
+
+        <div className="flex items-center gap-0.5">
+          <NativeToolbarButton label="Link" onClick={insertLink}>
+            <LinkIcon className="size-3.5" />
+          </NativeToolbarButton>
+          <NativeToolbarButton
+            label="Insert image"
+            onClick={() => {
+              rememberSelection();
+              imageInputRef.current?.click();
+            }}
+          >
+            <ImageIcon className="size-3.5" />
+          </NativeToolbarButton>
+        </div>
+
         <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
+            <NativeToolbarButton
+              label="Undo"
+              disabled={!canUndo}
+              onClick={handleUndo}
+            >
+              <Undo2 className="size-3.5" />
+            </NativeToolbarButton>
+            <NativeToolbarButton
+              label="Redo"
+              disabled={!canRedo}
+              onClick={handleRedo}
+            >
+              <Redo2 className="size-3.5" />
+            </NativeToolbarButton>
+          </div>
           <span
             className="text-[10px] text-[var(--ds-muted)] tabular-nums"
             aria-live="polite"
           >
-            {dirty ? "Saving…" : "Saved"}
+            {busy ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" /> Paginating…
+              </span>
+            ) : error ? (
+              <span className="text-[var(--ds-red-fg)]">{error}</span>
+            ) : layoutWarning ? (
+              <span className="text-[var(--ds-amber-fg)]" title={layoutWarning}>
+                {layoutWarning}
+              </span>
+            ) : dirty ? (
+              "Saving…"
+            ) : pageCount != null ? (
+              `Saved · ${pageCount} page${pageCount === 1 ? "" : "s"}`
+            ) : (
+              "Saved"
+            )}
           </span>
           <button
             type="button"
@@ -216,9 +737,50 @@ export function PagedEditor({
         ref={containerRef}
         className="paged-editor-canvas"
         onInput={onInput}
+        onCompositionStart={onCompositionStart}
+        onCompositionEnd={onCompositionEnd}
+        onPaste={onPaste}
+        onKeyDown={onKeyDown}
       />
     </div>
   );
+}
+
+function NativeToolbarButton({
+  label,
+  active,
+  disabled,
+  children,
+  onClick,
+}: {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+      className={[
+        "inline-flex h-7 w-7 items-center justify-center rounded-md transition",
+        "text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]",
+        "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+        active ? "bg-[var(--ds-ink)] text-white hover:bg-[var(--ds-ink)] hover:text-white" : "",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ToolbarDivider() {
+  return <span aria-hidden className="mx-1 h-5 w-px bg-[var(--ds-line)]" />;
 }
 
 /* ============================================================================
@@ -234,7 +796,11 @@ function buildMergedSourceHtml(draft: Draft): string {
   return draft.sections
     .map((s) => {
       const anchor = `<div data-section-anchor data-section-id="${escAttr(s.id)}" style="display:none;height:0;line-height:0;margin:0;padding:0;"></div>`;
-      return anchor + sanitizeLetterHtml(s.html || "");
+      const generated =
+        s.sectionId === "signature"
+          ? signatureImageHtml(draft, ' data-generated-letter-chrome="signature" contenteditable="false"')
+          : "";
+      return anchor + generated + sanitizeLetterHtml(s.html || "");
     })
     .join("");
 }
@@ -243,19 +809,21 @@ function buildMergedSourceHtml(draft: Draft): string {
  * Stamp `data-paged-ref="0..N"` on every top-level visible block (skipping
  * section anchors). Refs are by position; they're stable for one round-trip
  * from "render → user edits → reconstruct → re-render" and that's all we
- * need.
+ * need. Returns the letter-body inner HTML; buildPreviewSourceHtml owns the
+ * outer .letter-body wrapper shared with read-only Preview.
  */
 function stampPagedRefs(html: string): string {
-  const doc = new DOMParser().parseFromString(`<div class="letter-body">${html}</div>`, "text/html");
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
   const root = doc.body.firstElementChild as HTMLElement | null;
-  if (!root) return `<div class="letter-body">${html}</div>`;
+  if (!root) return html;
   let i = 0;
   for (const child of Array.from(root.children)) {
     if (child.hasAttribute("data-section-anchor")) continue;
+    if (child.hasAttribute("data-generated-letter-chrome")) continue;
     child.setAttribute("data-paged-ref", String(i));
     i++;
   }
-  return root.outerHTML;
+  return root.innerHTML;
 }
 
 /* ============================================================================
@@ -266,15 +834,26 @@ function captureCursor(root: HTMLElement): CursorState | null {
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return null;
   const range = sel.getRangeAt(0);
-  const start = range.startContainer;
+  const start = captureCursorPoint(root, range.startContainer, range.startOffset);
+  if (!start) return null;
+  const end = range.collapsed
+    ? start
+    : captureCursorPoint(root, range.endContainer, range.endOffset);
+  return { start, end: end ?? start };
+}
+
+function captureCursorPoint(
+  root: HTMLElement,
+  target: Node,
+  targetOffset: number,
+): CursorPoint | null {
   // Only care about selections inside our editable surface — paged.js
   // chrome (page numbers, etc.) shouldn't be the cursor anchor anyway.
-  if (!root.contains(start)) return null;
-
+  if (!root.contains(target)) return null;
   let el: HTMLElement | null =
-    start.nodeType === 3
-      ? (start.parentElement as HTMLElement | null)
-      : (start as HTMLElement);
+    target.nodeType === Node.TEXT_NODE
+      ? (target.parentElement as HTMLElement | null)
+      : (target as HTMLElement);
   let refEl: HTMLElement | null = null;
   while (el && el !== root) {
     if (el.hasAttribute && el.hasAttribute("data-paged-ref")) {
@@ -285,81 +864,167 @@ function captureCursor(root: HTMLElement): CursorState | null {
   }
   if (!refEl) return null;
 
-  const offset = textOffsetWithin(refEl, start, range.startOffset);
-  return { ref: refEl.getAttribute("data-paged-ref")!, offset };
+  const ref = refEl.getAttribute("data-paged-ref")!;
+  let offset = positionOffsetWithin(refEl, target, targetOffset);
+  const matches = Array.from(
+    root.querySelectorAll<HTMLElement>(`[data-paged-ref="${CSS.escape(ref)}"]`),
+  );
+  for (const match of matches) {
+    if (match === refEl) break;
+    offset += positionLength(match);
+  }
+  return { ref, offset };
 }
 
-function textOffsetWithin(
+function positionOffsetWithin(
   root: HTMLElement,
   target: Node,
   targetOffset: number,
 ): number {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let total = 0;
-  let node = walker.nextNode();
-  while (node) {
-    if (node === target) return total + targetOffset;
-    total += (node.textContent || "").length;
-    node = walker.nextNode();
+  let found = false;
+
+  const visit = (node: Node): void => {
+    if (found) return;
+    if (isIgnoredPositionNode(node)) return;
+    if (node === target) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        total += Math.max(0, Math.min(targetOffset, node.textContent?.length ?? 0));
+      } else {
+        const children = Array.from(node.childNodes).slice(0, targetOffset);
+        total += children.reduce((sum, childNode) => sum + positionLength(childNode), 0);
+      }
+      found = true;
+      return;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE || isAtomicPositionNode(node)) {
+      total += positionLength(node);
+      return;
+    }
+
+    for (const childNode of Array.from(node.childNodes)) visit(childNode);
+  };
+
+  visit(root);
+  return total;
+}
+
+function positionLength(node: Node): number {
+  if (isIgnoredPositionNode(node)) return 0;
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent?.length ?? 0;
+  if (isAtomicPositionNode(node)) return 1;
+  let total = 0;
+  for (const child of Array.from(node.childNodes)) {
+    total += positionLength(child);
   }
   return total;
 }
 
 function restoreCursor(root: HTMLElement, cursor: CursorState): void {
+  const start = findCursorPoint(root, cursor.start);
+  const end = findCursorPoint(root, cursor.end);
+  if (!start || !end) return;
+
+  const range = document.createRange();
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+
+  start.pageContent?.focus({ preventScroll: true });
+}
+
+function findCursorPoint(
+  root: HTMLElement,
+  cursor: CursorPoint,
+): { node: Node; offset: number; pageContent: HTMLElement | null } | null {
   // A long block may have been split across multiple pages, so a single
   // data-paged-ref can appear in several rendered clones. Walk them in
   // order and decrement the offset until it lands inside one.
   const matches = Array.from(
     root.querySelectorAll<HTMLElement>(`[data-paged-ref="${CSS.escape(cursor.ref)}"]`),
   );
-  if (matches.length === 0) return;
+  if (matches.length === 0) return null;
 
   let remaining = cursor.offset;
   for (const match of matches) {
-    const len = (match.textContent || "").length;
+    const len = positionLength(match);
     if (remaining <= len) {
-      const placed = placeCaretInTextAt(match, remaining);
-      if (placed) {
-        // Make sure the caret's page-content is actually focused so
-        // typing continues, not just visually marked.
-        const pageContent = match.closest<HTMLElement>(".pagedjs_page_content");
-        pageContent?.focus({ preventScroll: true });
-        return;
-      }
+      const point = pointAtPositionOffset(match, remaining);
+      return {
+        ...point,
+        pageContent:
+          match.closest<HTMLElement>(".letter-body") ??
+          match.closest<HTMLElement>(".pagedjs_page_content"),
+      };
     }
     remaining -= len;
   }
   // Cursor fell past the content (e.g. content shrunk) — drop it at the
   // end of the last matching block instead of losing it entirely.
   const last = matches[matches.length - 1];
-  const range = document.createRange();
-  range.selectNodeContents(last);
-  range.collapse(false);
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-  sel?.addRange(range);
-  last.closest<HTMLElement>(".pagedjs_page_content")?.focus({ preventScroll: true });
+  return {
+    node: last,
+    offset: last.childNodes.length,
+    pageContent:
+      last.closest<HTMLElement>(".letter-body") ??
+      last.closest<HTMLElement>(".pagedjs_page_content"),
+  };
 }
 
-function placeCaretInTextAt(root: HTMLElement, offset: number): boolean {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let remaining = offset;
-  let node = walker.nextNode() as Text | null;
-  while (node) {
-    const len = node.textContent?.length ?? 0;
-    if (remaining <= len) {
-      const range = document.createRange();
-      range.setStart(node, remaining);
-      range.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-      return true;
+function pointAtPositionOffset(root: HTMLElement, offset: number): { node: Node; offset: number } {
+  let remaining = Math.max(0, offset);
+
+  const beforeNode = (node: Node) => ({
+    node: node.parentNode ?? root,
+    offset: node.parentNode ? Array.prototype.indexOf.call(node.parentNode.childNodes, node) : 0,
+  });
+  const afterNode = (node: Node) => ({
+    node: node.parentNode ?? root,
+    offset: node.parentNode ? Array.prototype.indexOf.call(node.parentNode.childNodes, node) + 1 : 0,
+  });
+
+  const find = (node: Node): { node: Node; offset: number } | null => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const len = node.textContent?.length ?? 0;
+      if (remaining <= len) return { node, offset: remaining };
+      remaining -= len;
+      return null;
     }
-    remaining -= len;
-    node = walker.nextNode() as Text | null;
-  }
-  return false;
+
+    if (isAtomicPositionNode(node)) {
+      if (remaining === 0) return beforeNode(node);
+      remaining -= 1;
+      if (remaining === 0) return afterNode(node);
+      return null;
+    }
+
+    for (const child of Array.from(node.childNodes)) {
+      const found = find(child);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  return find(root) ?? { node: root, offset: root.childNodes.length };
+}
+
+function isAtomicPositionNode(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  return ["BR", "IMG", "HR"].includes((node as HTMLElement).tagName);
+}
+
+function isIgnoredPositionNode(node: Node): boolean {
+  if (node.nodeType !== Node.ELEMENT_NODE) return false;
+  const el = node as HTMLElement;
+  return (
+    el.hasAttribute("data-section-anchor") ||
+    el.hasAttribute("data-generated-letter-chrome") ||
+    el.getAttribute("aria-hidden") === "true" ||
+    el.style.display === "none"
+  );
 }
 
 /* ============================================================================
@@ -374,15 +1039,14 @@ type RebuildItem =
   | { kind: "block"; ref: string; first: HTMLElement; innerParts: string[] };
 
 function reconstructSourceHtml(container: HTMLElement): string {
-  const pageContents = container.querySelectorAll<HTMLElement>(".pagedjs_page_content");
+  normalizeRenderedPagedRefs(container);
+  const roots = findRenderedSourceRoots(container);
   const items: RebuildItem[] = [];
   const blockIndex = new Map<string, number>();
   const seenAnchors = new Set<string>();
 
-  for (const pc of pageContents) {
-    const walker = document.createTreeWalker(pc, NodeFilter.SHOW_ELEMENT);
-    let node = walker.nextNode() as HTMLElement | null;
-    while (node) {
+  for (const root of roots) {
+    for (const node of Array.from(root.children) as HTMLElement[]) {
       if (node.hasAttribute("data-section-anchor")) {
         const id = node.getAttribute("data-section-id") || "";
         if (!seenAnchors.has(id)) {
@@ -393,6 +1057,8 @@ function reconstructSourceHtml(container: HTMLElement): string {
             outerHTML: anchorHtmlFor(id),
           });
         }
+      } else if (node.hasAttribute("data-generated-letter-chrome")) {
+        continue;
       } else if (node.hasAttribute("data-paged-ref")) {
         const ref = node.getAttribute("data-paged-ref")!;
         if (blockIndex.has(ref)) {
@@ -408,7 +1074,6 @@ function reconstructSourceHtml(container: HTMLElement): string {
           });
         }
       }
-      node = walker.nextNode() as HTMLElement | null;
     }
   }
 
@@ -419,12 +1084,9 @@ function reconstructSourceHtml(container: HTMLElement): string {
       continue;
     }
     const clone = item.first.cloneNode(false) as HTMLElement;
-    // paged.js stamps data-ref on every element. Strip it so the next
-    // round doesn't see stale UUIDs from this render.
-    clone.removeAttribute("data-ref");
-    clone.removeAttribute("data-id");
-    clone.removeAttribute("data-paged-ref");
     clone.innerHTML = item.innerParts.join("");
+    stripPagedArtifacts(clone);
+    clone.removeAttribute("data-paged-ref");
     parts.push(clone.outerHTML);
   }
 
@@ -433,6 +1095,118 @@ function reconstructSourceHtml(container: HTMLElement): string {
 
 function anchorHtmlFor(id: string): string {
   return `<div data-section-anchor data-section-id="${escAttr(id)}" style="display:none;height:0;line-height:0;margin:0;padding:0;"></div>`;
+}
+
+function findRenderedSourceRoots(container: HTMLElement): HTMLElement[] {
+  const pageContents = container.querySelectorAll<HTMLElement>(".pagedjs_page_content");
+  const roots: HTMLElement[] = [];
+
+  for (const pc of pageContents) {
+    const letterBodies = Array.from(pc.querySelectorAll<HTMLElement>(".letter-body"))
+      .filter((el) => !el.parentElement?.closest(".letter-body"));
+    if (letterBodies.length > 0) {
+      roots.push(...letterBodies);
+      continue;
+    }
+
+    const wrapper = pc.firstElementChild as HTMLElement | null;
+    if (wrapper && hasDirectSourceChildren(wrapper)) roots.push(wrapper);
+  }
+
+  return roots;
+}
+
+function hasDirectSourceChildren(root: HTMLElement): boolean {
+  return Array.from(root.children).some(
+    (child) =>
+      child.hasAttribute("data-section-anchor") ||
+      child.hasAttribute("data-paged-ref"),
+  );
+}
+
+function inspectRenderedLayout(container: HTMLElement, pageCount: number | null): string | null {
+  const firstPageContent = container.querySelector<HTMLElement>(".pagedjs_page_content");
+  const pageContentHeight = firstPageContent?.getBoundingClientRect().height ?? 0;
+  let oversizedBlocks = 0;
+
+  if (pageContentHeight > 0) {
+    for (const root of findRenderedSourceRoots(container)) {
+      for (const child of Array.from(root.children) as HTMLElement[]) {
+        if (child.hasAttribute("data-section-anchor")) continue;
+        if (child.hasAttribute("data-generated-letter-chrome")) continue;
+        if (child.getBoundingClientRect().height > pageContentHeight - 4) {
+          oversizedBlocks += 1;
+        }
+      }
+    }
+  }
+
+  if (oversizedBlocks > 0) {
+    return `${oversizedBlocks} block${oversizedBlocks === 1 ? "" : "s"} taller than a page`;
+  }
+  if (pageCount != null && pageCount > 20) {
+    return `Large letter · ${pageCount} pages`;
+  }
+  return null;
+}
+
+function normalizeRenderedPagedRefs(container: HTMLElement): void {
+  const roots = findRenderedSourceRoots(container);
+  const refMap = new Map<string, string>();
+  let nextRef = 0;
+
+  for (const root of roots) {
+    for (const child of Array.from(root.children) as HTMLElement[]) {
+      if (child.hasAttribute("data-section-anchor")) continue;
+      if (child.hasAttribute("data-generated-letter-chrome")) continue;
+
+      const oldRef = child.getAttribute("data-paged-ref");
+      let next = oldRef ? refMap.get(oldRef) : undefined;
+      if (next === undefined) {
+        next = String(nextRef++);
+        if (oldRef) refMap.set(oldRef, next);
+      }
+      child.setAttribute("data-paged-ref", next);
+    }
+  }
+}
+
+function stripPagedArtifacts(root: HTMLElement): void {
+  const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))];
+  for (const el of elements) {
+    if (el.classList.contains("pagedjs_hyphen")) {
+      removeGeneratedHyphen(el);
+    }
+
+    el.removeAttribute("data-ref");
+    el.removeAttribute("data-id");
+    el.removeAttribute("data-paged-ref");
+    el.removeAttribute("data-split-from");
+    el.removeAttribute("data-split-to");
+    el.removeAttribute("data-previous-break-after");
+    el.removeAttribute("data-break-before");
+    el.removeAttribute("data-undisplayed");
+    el.removeAttribute("contenteditable");
+    el.removeAttribute("spellcheck");
+
+    for (const className of Array.from(el.classList)) {
+      if (className.startsWith("pagedjs_")) el.classList.remove(className);
+    }
+    if (el.classList.length === 0) el.removeAttribute("class");
+  }
+}
+
+function removeGeneratedHyphen(el: HTMLElement): void {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let last: Text | null = null;
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    last = node;
+    node = walker.nextNode() as Text | null;
+  }
+  if (last?.textContent?.endsWith("\u2011")) {
+    last.textContent = last.textContent.slice(0, -1);
+  }
 }
 
 /* ============================================================================
@@ -446,14 +1220,35 @@ function saveToStore(
 ): void {
   const splits = splitBySection(sourceHtml);
   for (const section of draft.sections) {
-    const next = splits[section.id] ?? "";
+    if (!Object.prototype.hasOwnProperty.call(splits, section.id)) continue;
+    const next = sanitizeLetterHtml(splits[section.id] ?? "");
     if (next !== (section.html || "")) {
       updateSection(draft.id, section.id, next);
     }
   }
 }
 
-function splitBySection(sourceHtml: string): Record<string, string> {
+function normalizeSourceHtml(sourceHtml: string, draft: Draft, fallbackSourceHtml = ""): string {
+  const firstSectionId = draft.sections[0]?.id;
+  const splits = splitBySection(sourceHtml, firstSectionId);
+  const fallbackSplits = fallbackSourceHtml ? splitBySection(fallbackSourceHtml, firstSectionId) : {};
+  return draft.sections
+    .map((section) => {
+      const raw = Object.prototype.hasOwnProperty.call(splits, section.id)
+        ? splits[section.id]
+        : Object.prototype.hasOwnProperty.call(fallbackSplits, section.id)
+        ? fallbackSplits[section.id]
+        : section.html || "";
+      const generated =
+        section.sectionId === "signature"
+          ? signatureImageHtml(draft, ' data-generated-letter-chrome="signature" contenteditable="false"')
+          : "";
+      return anchorHtmlFor(section.id) + generated + sanitizeLetterHtml(raw || "");
+    })
+    .join("");
+}
+
+function splitBySection(sourceHtml: string, firstSectionId?: string): Record<string, string> {
   const doc = new DOMParser().parseFromString(`<div>${sourceHtml}</div>`, "text/html");
   const root = doc.body.firstElementChild;
   const result: Record<string, string> = {};
@@ -473,6 +1268,13 @@ function splitBySection(sourceHtml: string): Record<string, string> {
       currentId = (node as HTMLElement).getAttribute("data-section-id");
       continue;
     }
+    if (
+      node.nodeType === 1 &&
+      (node as HTMLElement).getAttribute("data-generated-letter-chrome") !== null
+    ) {
+      continue;
+    }
+    if (currentId == null && firstSectionId) currentId = firstSectionId;
     if (node.nodeType === 1) buf.push((node as HTMLElement).outerHTML);
     else if (node.nodeType === 3) buf.push(node.textContent ?? "");
   }
@@ -481,11 +1283,640 @@ function splitBySection(sourceHtml: string): Record<string, string> {
 }
 
 /* ============================================================================
+ * Oversized-block normalization
+ * ==========================================================================*/
+
+function normalizeOversizedSourceHtml(sourceHtml: string): string {
+  if (typeof document === "undefined") return sourceHtml;
+  const doc = new DOMParser().parseFromString(`<div>${sourceHtml}</div>`, "text/html");
+  const root = doc.body.firstElementChild as HTMLElement | null;
+  if (!root) return sourceHtml;
+
+  const measureHost = createMeasureHost();
+  try {
+    fitMediaElements(root);
+    normalizeOversizedChildren(root, measureHost);
+    return root.innerHTML;
+  } finally {
+    measureHost.remove();
+  }
+}
+
+function normalizeOversizedChildren(parent: HTMLElement, measureHost: HTMLElement): void {
+  for (const child of Array.from(parent.children) as HTMLElement[]) {
+    if (child.hasAttribute("data-section-anchor")) continue;
+    if (child.hasAttribute("data-generated-letter-chrome")) continue;
+
+    fitMediaElements(child);
+
+    if (isListElement(child)) {
+      replaceElement(child, splitOversizedList(child, measureHost));
+      continue;
+    }
+
+    if (child.tagName === "TABLE") {
+      replaceElement(child, splitOversizedTable(child, measureHost));
+      continue;
+    }
+
+    normalizeOversizedChildren(child, measureHost);
+
+    if (isSplittableTextBlock(child) && measureElementHeight(child, measureHost) > OVERSIZED_BLOCK_MAX_HEIGHT_PX) {
+      replaceElement(child, splitOversizedTextBlock(child, measureHost));
+    }
+  }
+}
+
+function createMeasureHost(): HTMLElement {
+  const host = document.createElement("div");
+  Object.assign(host.style, {
+    position: "absolute",
+    left: "-100000px",
+    top: "0",
+    width: `${PAGE_CONTENT_WIDTH_PX}px`,
+    visibility: "hidden",
+    pointerEvents: "none",
+    overflow: "visible",
+    fontFamily:
+      '"Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontSize: "11pt",
+    lineHeight: "1.55",
+    color: "#0f172a",
+  });
+  document.body.appendChild(host);
+  return host;
+}
+
+function measureElementHeight(element: HTMLElement, host: HTMLElement): number {
+  host.replaceChildren(document.importNode(element, true));
+  const measured = host.firstElementChild as HTMLElement | null;
+  return measured?.getBoundingClientRect().height ?? 0;
+}
+
+function replaceElement(original: HTMLElement, replacements: HTMLElement[]): void {
+  if (replacements.length === 0) {
+    original.remove();
+    return;
+  }
+  original.replaceWith(...replacements);
+}
+
+function fitMediaElements(root: HTMLElement): void {
+  const images =
+    root.tagName === "IMG"
+      ? [root as HTMLImageElement]
+      : Array.from(root.querySelectorAll<HTMLImageElement>("img"));
+  for (const img of images) {
+    appendStyleDeclarations(img, {
+      "max-width": "100%",
+      "max-height": `${OVERSIZED_BLOCK_MAX_HEIGHT_PX}px`,
+      height: "auto",
+      "object-fit": "contain",
+    });
+  }
+}
+
+function appendStyleDeclarations(el: HTMLElement, declarations: Record<string, string>): void {
+  const existing = el.getAttribute("style")?.trim();
+  const next = Object.entries(declarations)
+    .map(([prop, value]) => `${prop}: ${value};`)
+    .join(" ");
+  el.setAttribute("style", [existing, next].filter(Boolean).join(" "));
+}
+
+function isListElement(el: HTMLElement): el is HTMLOListElement | HTMLUListElement {
+  return el.tagName === "UL" || el.tagName === "OL";
+}
+
+function isSplittableTextBlock(el: HTMLElement): boolean {
+  return ["P", "DIV", "BLOCKQUOTE", "LI"].includes(el.tagName) && Boolean(compactText(el.textContent ?? ""));
+}
+
+function splitOversizedTextBlock(element: HTMLElement, measureHost: HTMLElement): HTMLElement[] {
+  const text = compactText(element.textContent ?? "");
+  if (!text) return [element];
+  const chunks = splitTextToMeasuredChunks(element, text, measureHost);
+  if (chunks.length <= 1) return [element];
+  return chunks.map((chunk) => cloneElementWithText(element, chunk));
+}
+
+function splitTextToMeasuredChunks(
+  template: HTMLElement,
+  text: string,
+  measureHost: HTMLElement,
+): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let index = 0;
+
+  while (index < words.length) {
+    let low = 1;
+    let high = words.length - index;
+    let best = 1;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = words.slice(index, index + mid).join(" ");
+      const clone = cloneElementWithText(template, candidate);
+      if (measureElementHeight(clone, measureHost) <= OVERSIZED_BLOCK_MAX_HEIGHT_PX) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    const chunk = words.slice(index, index + best).join(" ");
+    if (best === 1 && chunk.length > 500) {
+      const hardChunks = splitLongWord(chunk);
+      chunks.push(...hardChunks);
+    } else {
+      chunks.push(chunk);
+    }
+    index += best;
+  }
+
+  return chunks;
+}
+
+function splitLongWord(word: string): string[] {
+  const chunks: string[] = [];
+  for (let i = 0; i < word.length; i += 500) chunks.push(word.slice(i, i + 500));
+  return chunks;
+}
+
+function cloneElementWithText(template: HTMLElement, text: string): HTMLElement {
+  const clone = template.cloneNode(false) as HTMLElement;
+  clone.removeAttribute("data-paged-ref");
+  clone.textContent = text;
+  return clone;
+}
+
+function splitOversizedList(
+  list: HTMLOListElement | HTMLUListElement,
+  measureHost: HTMLElement,
+): HTMLElement[] {
+  const doc = list.ownerDocument;
+  const allItems = Array.from(list.children)
+    .filter((child): child is HTMLLIElement => child.tagName === "LI")
+    .flatMap((item) =>
+      measureElementHeight(item, measureHost) > OVERSIZED_BLOCK_MAX_HEIGHT_PX
+        ? splitOversizedTextBlock(item, measureHost)
+        : [item.cloneNode(true) as HTMLElement],
+    );
+
+  if (allItems.length === 0) return [list];
+
+  const chunks: HTMLElement[] = [];
+  let nextStart = Number(list.getAttribute("start") || "1");
+  let current = createListShell(list, doc, nextStart);
+
+  for (const item of allItems) {
+    current.appendChild(item.cloneNode(true));
+    if (measureElementHeight(current, measureHost) > OVERSIZED_BLOCK_MAX_HEIGHT_PX && current.children.length > 1) {
+      const moved = current.lastElementChild;
+      if (moved) current.removeChild(moved);
+      chunks.push(current);
+      nextStart += current.children.length;
+      current = createListShell(list, doc, nextStart);
+      if (moved) current.appendChild(moved);
+    }
+  }
+
+  if (current.children.length > 0) chunks.push(current);
+  return chunks;
+}
+
+function createListShell(
+  template: HTMLOListElement | HTMLUListElement,
+  doc: Document,
+  start: number,
+): HTMLElement {
+  const list = doc.createElement(template.tagName.toLowerCase());
+  copySafeAttributes(template, list);
+  list.removeAttribute("data-paged-ref");
+  if (template.tagName === "OL" && start > 1) list.setAttribute("start", String(start));
+  return list;
+}
+
+function splitOversizedTable(table: HTMLElement, measureHost: HTMLElement): HTMLElement[] {
+  const rows = collectBodyRows(table).flatMap((row) => splitOversizedTableRow(row, measureHost));
+  if (rows.length === 0) return [table];
+
+  const chunks: HTMLElement[] = [];
+  let current = createTableShell(table);
+
+  for (const row of rows) {
+    appendTableRow(current, row.cloneNode(true) as HTMLTableRowElement);
+    if (measureElementHeight(current, measureHost) > OVERSIZED_BLOCK_MAX_HEIGHT_PX && tableBodyRowCount(current) > 1) {
+      const body = current.querySelector("tbody");
+      const moved = body?.lastElementChild;
+      if (moved) body?.removeChild(moved);
+      chunks.push(current);
+      current = createTableShell(table);
+      if (moved) appendTableRow(current, moved as HTMLTableRowElement);
+    }
+  }
+
+  if (tableBodyRowCount(current) > 0) chunks.push(current);
+  return chunks;
+}
+
+function collectBodyRows(table: HTMLElement): HTMLTableRowElement[] {
+  const tbodyRows = Array.from(table.querySelectorAll<HTMLTableRowElement>("tbody > tr"));
+  if (tbodyRows.length > 0) return tbodyRows;
+  return Array.from(table.children).filter(
+    (child): child is HTMLTableRowElement => child.tagName === "TR",
+  );
+}
+
+function splitOversizedTableRow(row: HTMLTableRowElement, measureHost: HTMLElement): HTMLTableRowElement[] {
+  if (measureElementHeight(wrapRowForMeasure(row), measureHost) <= OVERSIZED_BLOCK_MAX_HEIGHT_PX) {
+    return [row.cloneNode(true) as HTMLTableRowElement];
+  }
+
+  const cells = Array.from(row.children).filter(
+    (child): child is HTMLTableCellElement => child.tagName === "TD" || child.tagName === "TH",
+  );
+  const cellChunks = cells.map((cell) => chunkPlainText(compactText(cell.textContent ?? ""), 650));
+  const chunkCount = Math.max(...cellChunks.map((chunks) => chunks.length), 1);
+  const rows: HTMLTableRowElement[] = [];
+
+  for (let index = 0; index < chunkCount; index++) {
+    const nextRow = row.ownerDocument.createElement("tr");
+    copySafeAttributes(row, nextRow);
+    nextRow.removeAttribute("data-paged-ref");
+    for (let cellIndex = 0; cellIndex < cells.length; cellIndex++) {
+      const sourceCell = cells[cellIndex];
+      const nextCell = sourceCell.cloneNode(false) as HTMLTableCellElement;
+      nextCell.textContent = cellChunks[cellIndex]?.[index] ?? "";
+      nextRow.appendChild(nextCell);
+    }
+    rows.push(nextRow);
+  }
+
+  return rows;
+}
+
+function createTableShell(template: HTMLElement): HTMLElement {
+  const table = template.ownerDocument.createElement("table");
+  copySafeAttributes(template, table);
+  table.removeAttribute("data-paged-ref");
+
+  for (const selector of [":scope > caption", ":scope > colgroup", ":scope > thead"]) {
+    const el = template.querySelector(selector);
+    if (el) table.appendChild(el.cloneNode(true));
+  }
+
+  table.appendChild(template.ownerDocument.createElement("tbody"));
+  return table;
+}
+
+function appendTableRow(table: HTMLElement, row: HTMLTableRowElement): void {
+  let body = table.querySelector("tbody");
+  if (!body) {
+    body = table.ownerDocument.createElement("tbody");
+    table.appendChild(body);
+  }
+  body.appendChild(row);
+}
+
+function tableBodyRowCount(table: HTMLElement): number {
+  return table.querySelectorAll("tbody > tr").length;
+}
+
+function wrapRowForMeasure(row: HTMLTableRowElement): HTMLElement {
+  const table = row.ownerDocument.createElement("table");
+  const body = row.ownerDocument.createElement("tbody");
+  body.appendChild(row.cloneNode(true));
+  table.appendChild(body);
+  return table;
+}
+
+function copySafeAttributes(from: HTMLElement, to: HTMLElement): void {
+  for (const attr of Array.from(from.attributes)) {
+    if (attr.name === "data-paged-ref") continue;
+    to.setAttribute(attr.name, attr.value);
+  }
+}
+
+function chunkPlainText(text: string, maxChars: number): string[] {
+  if (!text) return [""];
+  const words = text.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxChars && current) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.length > 0 ? chunks : [text];
+}
+
+function compactText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/* ============================================================================
  * Utilities
  * ==========================================================================*/
 
 function escAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function selectionInsideLetterBody(root: HTMLElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.anchorNode || !root.contains(sel.anchorNode)) {
+    return false;
+  }
+  const anchor =
+    sel.anchorNode.nodeType === Node.TEXT_NODE
+      ? sel.anchorNode.parentElement
+      : (sel.anchorNode as HTMLElement | null);
+  const focus =
+    sel.focusNode?.nodeType === Node.TEXT_NODE
+      ? sel.focusNode.parentElement
+      : (sel.focusNode as HTMLElement | null);
+  return Boolean(anchor?.closest(".letter-body") && focus?.closest(".letter-body"));
+}
+
+function focusSelectionLetterBody(root: HTMLElement): void {
+  const sel = window.getSelection();
+  if (!sel?.anchorNode || !root.contains(sel.anchorNode)) return;
+  const anchor =
+    sel.anchorNode.nodeType === Node.TEXT_NODE
+      ? sel.anchorNode.parentElement
+      : (sel.anchorNode as HTMLElement | null);
+  anchor?.closest<HTMLElement>(".letter-body")?.focus({ preventScroll: true });
+}
+
+function runEditorCommand(command: string, value?: string): boolean {
+  try {
+    document.execCommand("styleWithCSS", false, "false");
+  } catch {
+    // Some browsers ignore styleWithCSS; formatting still works without it.
+  }
+
+  if (command === "formatBlock" && value) {
+    return runFormatBlockCommand(value);
+  }
+  return execCommandSafe(command, value);
+}
+
+function runFormatBlockCommand(value: string): boolean {
+  const tag = normalizeFormatBlock(value) || "p";
+  const candidates = [tag, tag.toUpperCase(), `<${tag}>`, `<${tag.toUpperCase()}>`];
+  for (const candidate of candidates) {
+    const ok = execCommandSafe("formatBlock", candidate);
+    const applied = normalizeFormatBlock(queryCommandValue("formatBlock")) === tag;
+    if (ok && applied) return true;
+  }
+  return false;
+}
+
+function execCommandSafe(command: string, value?: string): boolean {
+  try {
+    return document.execCommand(command, false, value);
+  } catch {
+    return false;
+  }
+}
+
+function queryCommandState(command: string): boolean {
+  try {
+    return document.queryCommandState(command);
+  } catch {
+    return false;
+  }
+}
+
+function queryCommandValue(command: string): string {
+  try {
+    return String(document.queryCommandValue(command) ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function normalizeFormatBlock(value: string): string {
+  const normalized = value.replace(/[<>]/g, "").toLowerCase();
+  if (normalized === "heading 2") return "h2";
+  if (normalized === "heading 3") return "h3";
+  if (normalized === "normal" || normalized === "div") return "p";
+  return normalized;
+}
+
+function findSelectedLinkHref(root: HTMLElement): string | undefined {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.anchorNode || !root.contains(sel.anchorNode)) {
+    return undefined;
+  }
+  const anchor =
+    sel.anchorNode.nodeType === Node.TEXT_NODE
+      ? sel.anchorNode.parentElement
+      : (sel.anchorNode as HTMLElement | null);
+  return anchor?.closest<HTMLAnchorElement>("a[href]")?.href;
+}
+
+function isComposingInput(event: Event): boolean {
+  return "isComposing" in event && Boolean((event as InputEvent).isComposing);
+}
+
+function sanitizePastedHtml(html: string): string {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  normalizeOfficePaste(parsed.body);
+  convertWordListParagraphs(parsed.body);
+  const bodyHtml = parsed.body.innerHTML || html;
+  const sanitized = sanitizeLetterHtml(bodyHtml);
+  const doc = new DOMParser().parseFromString(`<div>${sanitized}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+  if (!root) return "";
+
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>("*"))) {
+    scrubPasteAttributes(el);
+  }
+
+  return root.innerHTML;
+}
+
+function normalizeOfficePaste(root: HTMLElement): void {
+  const comments = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+  const toRemove: Node[] = [];
+  let comment = comments.nextNode();
+  while (comment) {
+    toRemove.push(comment);
+    comment = comments.nextNode();
+  }
+  for (const node of toRemove) node.parentNode?.removeChild(node);
+
+  for (const selector of ["style", "meta", "link", "script"]) {
+    for (const el of Array.from(root.querySelectorAll(selector))) el.remove();
+  }
+
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>("*"))) {
+    const tag = el.tagName.toLowerCase();
+    if (tag.includes(":") || tag === "xml") {
+      el.replaceWith(...Array.from(el.childNodes));
+    }
+  }
+}
+
+function convertWordListParagraphs(root: HTMLElement): void {
+  for (const child of Array.from(root.children) as HTMLElement[]) {
+    convertWordListParagraphs(child);
+  }
+
+  let currentList: HTMLOListElement | HTMLUListElement | null = null;
+  let currentKind: "ol" | "ul" | null = null;
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType !== Node.ELEMENT_NODE || !isWordListParagraph(node as HTMLElement)) {
+      currentList = null;
+      currentKind = null;
+      continue;
+    }
+
+    const paragraph = node as HTMLElement;
+    const kind = wordListKind(paragraph);
+    if (!currentList || currentKind !== kind) {
+      currentList = document.createElement(kind);
+      currentKind = kind;
+      root.insertBefore(currentList, paragraph);
+    }
+    const li = document.createElement("li");
+    li.innerHTML = wordListItemHtml(paragraph);
+    currentList.appendChild(li);
+    paragraph.remove();
+  }
+}
+
+function isWordListParagraph(el: HTMLElement): boolean {
+  if (!["P", "DIV"].includes(el.tagName)) return false;
+  const className = el.getAttribute("class") ?? "";
+  const style = el.getAttribute("style") ?? "";
+  return /MsoListParagraph/i.test(className) || /mso-list\s*:/i.test(style);
+}
+
+function wordListKind(el: HTMLElement): "ol" | "ul" {
+  const text = (el.textContent ?? "").trim();
+  return /^(?:\d+|[a-z]|[ivxlcdm]+)[.)]\s+/i.test(text) ? "ol" : "ul";
+}
+
+function wordListItemHtml(el: HTMLElement): string {
+  const text = (el.textContent ?? "")
+    .replace(/^\s*(?:[\u2022\u00b7\u25cf\u25cb\u25aa\-\*o]|\d+|[a-z]|[ivxlcdm]+)[.)]?\s+/i, "")
+    .trim();
+  return escHtml(text);
+}
+
+function scrubPasteAttributes(el: HTMLElement): void {
+  const tag = el.tagName;
+  const allowed = new Set<string>();
+  const textAlign = safeTextAlignFromStyle(el.getAttribute("style") ?? "");
+
+  if (tag === "A") {
+    allowed.add("href");
+    allowed.add("target");
+    allowed.add("rel");
+  } else if (tag === "IMG") {
+    allowed.add("src");
+    allowed.add("alt");
+    allowed.add("title");
+    allowed.add("width");
+    allowed.add("height");
+  } else if (tag === "TD" || tag === "TH") {
+    allowed.add("colspan");
+    allowed.add("rowspan");
+  }
+  if (textAlign && /^(P|DIV|H1|H2|H3|H4|LI|TD|TH)$/.test(tag)) {
+    allowed.add("style");
+  }
+
+  for (const attr of Array.from(el.attributes)) {
+    if (!allowed.has(attr.name)) el.removeAttribute(attr.name);
+  }
+  if (textAlign) el.setAttribute("style", `text-align: ${textAlign};`);
+}
+
+function safeTextAlignFromStyle(style: string): "left" | "center" | "right" | "justify" | "" {
+  const match = /text-align\s*:\s*(left|center|right|justify)\b/i.exec(style);
+  return (match?.[1]?.toLowerCase() as "left" | "center" | "right" | "justify" | undefined) ?? "";
+}
+
+function insertHtmlAtCurrentSelection(root: HTMLElement | null, html: string): void {
+  if (!root) return;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.anchorNode || !root.contains(sel.anchorNode)) {
+    return;
+  }
+  const anchorElement =
+    sel.anchorNode.nodeType === Node.TEXT_NODE
+      ? sel.anchorNode.parentElement
+      : (sel.anchorNode as HTMLElement | null);
+  if (!anchorElement?.closest(".letter-body")) return;
+
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const source = doc.body.firstElementChild;
+  if (!source) return;
+
+  const fragment = document.createDocumentFragment();
+  for (const node of Array.from(source.childNodes)) {
+    fragment.appendChild(document.importNode(node, true));
+  }
+
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const last = fragment.lastChild;
+  range.insertNode(fragment);
+  if (last) {
+    range.setStartAfter(last);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+function destroyPreviewer(previewer: PreviewerInstance | null): void {
+  if (!previewer) return;
+  try {
+    previewer.chunker?.stop?.();
+    previewer.chunker?.destroy?.();
+    previewer.polisher?.destroy?.();
+  } catch {
+    // paged.js cleanup should not mask the edit/save path.
+  }
+}
+
+function createPaginationStagingHost(container: HTMLElement): HTMLElement {
+  const host = document.createElement("div");
+  const width = container.getBoundingClientRect().width || PAGE_WIDTH_FALLBACK_PX;
+  host.setAttribute("aria-hidden", "true");
+  Object.assign(host.style, {
+    position: "absolute",
+    left: "-100000px",
+    top: "0",
+    width: `${width}px`,
+    minHeight: "1px",
+    visibility: "hidden",
+    pointerEvents: "none",
+    overflow: "visible",
+  });
+  document.body.appendChild(host);
+  return host;
 }
 
 function findScrollAncestor(el: HTMLElement): HTMLElement | null {

@@ -30,7 +30,7 @@ import {
  *     on save we walk the doc, group children by which anchor preceded
  *     them, and emit per-section updates.
  *
- * A4 geometry (matches wrapInPrintHtml @page in PaginatedLetter):
+ * A4 geometry (matches shared paged-edit print CSS):
  *   width 794 (8.27in × 96)
  *   horizontal padding 106 (1.1in each)
  *   vertical padding 96 / 115 (1.0in / 1.2in) — top / bottom
@@ -188,7 +188,7 @@ export function PaginatedEditableLetter({
           margin: 0 !important;
         }
 
-        /* Typography matches PaginatedLetter's wrapInPrintHtml block. */
+        /* Typography matches the shared paged-edit print CSS. */
         .${styleScope} .ProseMirror > *:first-child { margin-top: 0; }
         .${styleScope} .ProseMirror > *:last-child { margin-bottom: 0; }
         .${styleScope} .ProseMirror p { margin: 0 0 8pt 0; }
@@ -254,4 +254,3 @@ export function PaginatedEditableLetter({
     </div>
   );
 }
-
