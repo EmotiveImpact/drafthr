@@ -1057,13 +1057,20 @@ export function Editor() {
          * Resizing across the breakpoint unmounts one and mounts the
          * other; conversation persists via draft.aiChat. */}
         {isLargeViewport && (
-          <aside
+          <motion.aside
             aria-hidden={railCollapsed || undefined}
+            initial={false}
+            animate={{ x: railCollapsed ? "100%" : 0 }}
+            transition={{
+              type: "spring",
+              stiffness: 380,
+              damping: 38,
+              mass: 0.85,
+            }}
             className={
               "flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
-              "transition-opacity duration-200 ease-out motion-reduce:transition-none " +
               (focusMode ? "hidden" : "") +
-              (railCollapsed ? " opacity-0 pointer-events-none" : " opacity-100")
+              (railCollapsed ? " pointer-events-none" : "")
             }
           >
             <RightRail
@@ -1075,7 +1082,7 @@ export function Editor() {
               activeSectionId={activeSectionId}
               onCollapse={() => setRailCollapsed(true)}
             />
-          </aside>
+          </motion.aside>
         )}
 
         {/* Mobile AI overlay — slides in from the right edge of the
