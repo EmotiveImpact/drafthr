@@ -53,7 +53,6 @@ import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
-import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
 import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -111,9 +110,6 @@ export function Editor() {
   // primary read path; this is the "sweep them all" overview surface
   // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
-  // Mobile bottom-sheet snap state. "closed" is driven by !showRail; the
-  // sheet ANIMATES into "half" by default when the user opens it.
-  const [sheetSnap, setSheetSnap] = useState<"half" | "full">("half");
   // Desktop right-rail collapse — Notion-style 36px vertical strip with
   // "Ask AI" label so AI stays in peripheral vision even when collapsed.
   // lg:+ only; mobile uses showRail + bottom sheet.
@@ -1082,41 +1078,39 @@ export function Editor() {
           </aside>
         )}
 
-        {/* Mobile bottom sheet — rendered ONLY below lg:. Framer Motion
-         * with drag-to-dismiss, snap points (half / full), and momentum-
-         * aware release. Tap-scrim also dismisses (handled by the scrim
-         * element below). Sibling of the desktop aside above — exactly
-         * one of these is in the tree at a time so the AIPanel/useChat
-         * lives in a single instance. */}
-        {!isLargeViewport && (
-          <MobileBottomSheet
-            open={showRail && !focusMode}
-            snap={sheetSnap}
-            onSnapChange={(next) => {
-              if (next === "closed") {
-                setShowRail(false);
-                setSheetSnap("half");
-              } else {
-                setSheetSnap(next);
-              }
-            }}
-            onDismiss={() => {
-              setShowRail(false);
-              // Reset so next open starts at half, not whatever was last set.
-              setSheetSnap("half");
-            }}
-            className=""
-          >
-            <RightRail
-              draft={draft}
-              tab={rightTab}
-              onTabChange={setRightTab}
-              pendingComment={pendingComment}
-              onPendingCommentConsumed={() => setPendingComment(null)}
-              activeSectionId={activeSectionId}
-            />
-          </MobileBottomSheet>
-        )}
+        {/* Mobile AI overlay — slides in from the right edge of the
+         * viewport, mirroring the desktop rail's location (just as a
+         * full-screen overlay instead of an inline column). Replaces
+         * the previous bottom-sheet pattern. Tap-scrim or chevron
+         * closes. AnimatePresence + spring keeps motion consistent
+         * with the rest of the app. */}
+        <AnimatePresence>
+          {!isLargeViewport && showRail && !focusMode && (
+            <motion.aside
+              key="mobile-ai-overlay"
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{
+                type: "spring",
+                stiffness: 380,
+                damping: 38,
+                mass: 0.85,
+              }}
+              className="fixed inset-y-0 right-0 z-40 w-[min(420px,90vw)] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-[-12px_0_32px_rgba(0,0,0,0.18)] flex flex-col"
+            >
+              <RightRail
+                draft={draft}
+                tab={rightTab}
+                onTabChange={setRightTab}
+                pendingComment={pendingComment}
+                onPendingCommentConsumed={() => setPendingComment(null)}
+                activeSectionId={activeSectionId}
+                onCollapse={() => setShowRail(false)}
+              />
+            </motion.aside>
+          )}
+        </AnimatePresence>
 
         {/* Mobile scrim — always mounted, fades in/out with showSidebar
          * or showRail. pointer-events-none when invisible so taps fall

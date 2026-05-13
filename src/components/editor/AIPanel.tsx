@@ -230,29 +230,28 @@ export function AIPanel({
   });
 
   // Persist text content of messages to the store on each idle tick.
+  // Skipped during streaming to avoid hammering localStorage on every
+  // token — the unmount cleanup below catches any in-flight state.
   useEffect(() => {
     if (status === "streaming" || status === "submitted") return;
-    useDraftStore.setState((s) => {
-      const d = s.drafts[draft.id];
-      if (!d) return s;
-      const previousCreatedAt = new Map((d.aiChat ?? []).map((m) => [m.id, m.createdAt]));
-      const now = Date.now();
-      return {
-        drafts: {
-          ...s.drafts,
-          [draft.id]: {
-            ...d,
-            aiChat: messages.map((m) => ({
-              id: m.id,
-              role: m.role as "user" | "assistant",
-              body: textFromParts(m),
-              createdAt: previousCreatedAt.get(m.id) ?? now,
-            })),
-          },
-        },
-      };
-    });
+    persistMessagesToStore(draft.id, messages);
   }, [messages, status, draft.id]);
+
+  // Unmount snapshot — fires when the AIPanel is about to disappear
+  // (viewport resize across the desktop/mobile breakpoint, draft
+  // switch, focus mode toggle). Captures the latest messages
+  // regardless of stream status so a mid-stream resize doesn't lose
+  // the partial assistant response. We use a ref so the cleanup
+  // function always sees the freshest messages — the effect itself
+  // only runs once per draft id, so a closure over `messages` would
+  // be stale.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  useEffect(() => {
+    return () => {
+      persistMessagesToStore(draft.id, messagesRef.current);
+    };
+  }, [draft.id]);
 
   const scopeLabel =
     scope === "section" && scopeSection
@@ -682,6 +681,37 @@ function textFromParts(m: UIMessage): string {
     .filter((p) => p.type === "text")
     .map((p) => (p as { type: "text"; text: string }).text)
     .join("");
+}
+
+/**
+ * Write the current message array to the draft's persisted aiChat field.
+ * Used by the idle-tick effect AND the unmount cleanup — extracted so
+ * both call sites stay in lockstep. The createdAt map preserves
+ * timestamps for messages we've seen before; new messages get `now`.
+ */
+function persistMessagesToStore(draftId: string, messages: UIMessage[]): void {
+  useDraftStore.setState((s) => {
+    const d = s.drafts[draftId];
+    if (!d) return s;
+    const previousCreatedAt = new Map(
+      (d.aiChat ?? []).map((m) => [m.id, m.createdAt])
+    );
+    const now = Date.now();
+    return {
+      drafts: {
+        ...s.drafts,
+        [draftId]: {
+          ...d,
+          aiChat: messages.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            body: textFromParts(m),
+            createdAt: previousCreatedAt.get(m.id) ?? now,
+          })),
+        },
+      },
+    };
+  });
 }
 
 /**
