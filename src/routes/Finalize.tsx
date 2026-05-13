@@ -24,6 +24,8 @@ import { useProfileStore } from "@/lib/profile";
 import { AI_REVIEW_COST } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/ds/BrandMark";
+import { Wordmark } from "@/components/ds/Wordmark";
 import { cn } from "@/lib/utils";
 import {
   runHealthChecks,
@@ -210,24 +212,65 @@ export function Finalize() {
   /* -------------------------- Render -------------------------- */
 
   return (
-    <div className="min-h-full bg-[var(--ds-canvas)]">
+    <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
       {showConfetti && <ConfettiBurst onDone={() => setShowConfetti(false)} />}
 
-      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-        {/* Breadcrumb + title */}
-        <div className="text-[12px] text-[var(--ds-muted)] mb-1.5">
+      {/* Branded sticky header — keeps DraftHR identity, in-flow breadcrumb,
+       * credits chip on the right so the AI specialist cost stays anchored. */}
+      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 sm:px-5 gap-3">
+        <button
+          type="button"
+          onClick={() => nav(draft.mode === "employer" ? "/hr" : "/me")}
+          className="flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-[var(--ds-line-2)] transition"
+          aria-label="Home"
+        >
+          <BrandMark size={26} />
+          <Wordmark size={15} />
+        </button>
+
+        <span className="text-[var(--ds-subtle)] hidden sm:inline">/</span>
+
+        <nav className="flex items-center gap-1.5 text-[12.5px] min-w-0">
           <button
             type="button"
             onClick={() => nav(`/editor/${draft.id}/review`)}
-            className="hover:text-[var(--ds-ink)] transition underline-offset-2 hover:underline"
+            className="text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition truncate"
           >
             Review
           </button>
-          {" · "}
-          <span>{meta.title}</span>
-          {" · "}
+          <span className="text-[var(--ds-subtle)]">·</span>
+          <span className="text-[var(--ds-muted)] truncate hidden md:inline">
+            {meta.title}
+          </span>
+          <span className="text-[var(--ds-subtle)] hidden md:inline">·</span>
           <span className="text-[var(--ds-ink)] font-medium">Finalize</span>
+        </nav>
+
+        <div className="ml-auto flex items-center gap-2">
+          {/* Credits chip — visible across the whole page so the AI specialist
+           * cost is never disconnected from the user's balance. */}
+          <div
+            className="hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--ds-line-2)] text-[12px] font-medium tabular-nums"
+            title={`${credits} AI credits remaining`}
+          >
+            <Coins className="size-3.5 text-[var(--ds-amber-fg)]" />
+            <span>{credits}</span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => nav(`/editor/${draft.id}/review`)}
+          >
+            <ArrowLeft className="size-3.5 mr-1" />
+            Review
+          </Button>
         </div>
+      </header>
+
+      {/* Scrollable body — this is the fix for the page not scrolling.
+       * The wrapper owns flex sizing; this child owns overflow + max-width. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-4 py-7 sm:px-6 sm:py-10">
         <h1 className="text-[26px] font-semibold tracking-tight">Finalize letter</h1>
         <p className="text-[14px] text-[var(--ds-muted)] mt-1.5 mb-7 max-w-[600px]">
           Last gate before this letter leaves the building. Check the health
@@ -464,6 +507,7 @@ export function Finalize() {
             <Send className="size-4 mr-1.5" />
             Mark as sent
           </Button>
+        </div>
         </div>
       </div>
     </div>
