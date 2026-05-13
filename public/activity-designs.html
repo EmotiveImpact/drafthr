@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Activity — design explorations</title>
+<style>
+  :root {
+    --ds-ink: #0f172a;
+    --ds-muted: #64748b;
+    --ds-subtle: #94a3b8;
+    --ds-line: #e2e8f0;
+    --ds-line-2: #f1f5f9;
+    --ds-surface: #ffffff;
+    --ds-bg: #fafaf9;
+    --ds-blue-bg: #dbeafe;
+    --ds-blue-fg: #1e40af;
+    --ds-green-bg: #dcfce7;
+    --ds-green-fg: #166534;
+    --ds-amber-bg: #fef3c7;
+    --ds-amber-fg: #92400e;
+    --ds-red-bg: #fee2e2;
+    --ds-red-fg: #991b1b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--ds-bg);
+    color: var(--ds-ink);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+  button { font: inherit; cursor: pointer; }
+
+  .shell {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+  .intro h1 { font-size: 22px; }
+  .intro p {
+    margin: 6px 0 0;
+    color: var(--ds-muted);
+    max-width: 700px;
+    font-size: 13px;
+  }
+
+  /* ---------- Tab bar ---------- */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin: 24px 0 16px;
+    padding: 3px;
+    background: var(--ds-line-2);
+    border-radius: 8px;
+    width: fit-content;
+  }
+  .tabs button {
+    border: 0;
+    background: transparent;
+    color: var(--ds-muted);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .tabs button:hover { color: var(--ds-ink); }
+  .tabs button.active {
+    background: var(--ds-surface);
+    color: var(--ds-ink);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .tab-note {
+    background: var(--ds-line-2);
+    border-left: 3px solid var(--ds-ink);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    color: var(--ds-muted);
+    margin-bottom: 20px;
+  }
+  .tab-note strong { color: var(--ds-ink); font-weight: 600; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ---------- Shared draft card ---------- */
+  .day-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 14px 0 8px;
+  }
+  .day-header.sticky {
+    position: sticky;
+    top: 0;
+    background: var(--ds-bg);
+    z-index: 5;
+    margin: 0 -2px;
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+  .day-header h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ds-muted);
+    font-weight: 600;
+  }
+  .day-header .count {
+    font-size: 11px;
+    color: var(--ds-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card {
+    background: var(--ds-surface);
+    border: 1px solid var(--ds-line);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: var(--ds-line-2);
+    display: grid;
+    place-items: center;
+    color: var(--ds-ink);
+    flex-shrink: 0;
+  }
+  .card-body { flex: 1; min-width: 0; }
+  .card-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ds-ink);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: var(--ds-line-2);
+    color: var(--ds-muted);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .summary {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--ds-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .summary .dot {
+    color: var(--ds-subtle);
+  }
+  .summary .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Filter chips ---------- */
+  .chip-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .chip {
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    color: var(--ds-muted);
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.12s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .chip:hover { color: var(--ds-ink); background: var(--ds-line-2); }
+  .chip.active {
+    background: var(--ds-ink);
+    border-color: var(--ds-ink);
+    color: white;
+  }
+  .chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.2);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip:not(.active) .chip-count {
+    background: var(--ds-line);
+    color: var(--ds-muted);
+  }
+
+  /* ---------- Icon buttons ---------- */
+  .icon-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    color: var(--ds-muted);
+    display: inline-grid;
+    place-items: center;
+    transition: all 0.12s;
+  }
+  .icon-btn:hover { background: var(--ds-line-2); color: var(--ds-ink); }
+
+  /* ---------- OPTION 1: Stream ---------- */
+  .stream-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--ds-bg);
+    padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border-bottom: 1px solid var(--ds-line);
+    margin-bottom: 8px;
+  }
+  .stream-toolbar .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+  .search {
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+    padding: 0 12px 0 32px;
+    border: 1px solid var(--ds-line);
+    border-radius: 6px;
+    background: var(--ds-surface) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' stroke='%2364748b' stroke-width='2' viewBox='0 0 24 24'><circle cx='11' cy='11' r='7'/><path d='m21 21-4.3-4.3'/></svg>") no-repeat 10px center;
+    font-size: 12px;
+    color: var(--ds-ink);
+    outline: none;
+  }
+  .search:focus { border-color: var(--ds-ink); }
+  .stream-feed { padding-bottom: 80px; }
+
+  /* ---------- OPTION 2: Two-pane ---------- */
+  .two-pane {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 720px) {
+    .two-pane { grid-template-columns: 1fr; }
+    .day-rail { max-height: 220px; overflow-y: auto; }
+  }
+  .day-rail {
+    background: var(--ds-surface);
+    border: 1px solid var(--ds-line);
+    border-radius: 8px;
+    padding: 6px;
+    position: sticky;
+    top: 16px;
+  }
+  .day-rail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 7px 9px;
+    border-radius: 5px;
+    border: 0;
+    background: transparent;
+    color: var(--ds-ink);
+    text-align: left;
+    font-size: 12px;
+    transition: all 0.12s;
+  }
+  .day-rail-item:hover { background: var(--ds-line-2); }
+  .day-rail-item.active {
+    background: var(--ds-line-2);
+    font-weight: 600;
+  }
+  .day-rail-item .label { display: flex; flex-direction: column; line-height: 1.3; }
+  .day-rail-item .label small {
+    color: var(--ds-muted);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .day-rail-item .badge {
+    background: var(--ds-line);
+    color: var(--ds-muted);
+  }
+  .day-rail-item.active .badge {
+    background: var(--ds-ink);
+    color: white;
+  }
+  .pane-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .pane-header h2 { font-size: 18px; }
+  .pane-header .meta {
+    font-size: 11px;
+    color: var(--ds-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .pane-chips { margin-bottom: 14px; }
+
+  /* ---------- OPTION 3: Patched ---------- */
+  .patched .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .patched .row1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .patched .date-pill {
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--ds-line);
+    border-radius: 6px;
+    background: var(--ds-surface);
+    font-size: 13px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ds-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .day-strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 4px;
+    margin: 0 -4px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .day-strip::-webkit-scrollbar { height: 0; }
+  .day-strip-item {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+    border: 1px solid var(--ds-line);
+    background: var(--ds-surface);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.2;
+  }
+  .day-strip-item:hover { background: var(--ds-line-2); }
+  .day-strip-item.active {
+    border-color: var(--ds-ink);
+    background: var(--ds-line-2);
+    font-weight: 600;
+  }
+  .day-strip-item small {
+    color: var(--ds-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+  }
+
+  /* SVG icon defaults */
+  svg { display: block; }
+  .icon { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-sm { width: 12px; height: 12px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="intro">
+    <h1>Activity — design explorations</h1>
+    <p>Three takes on the audit trail. Same sample data, same design tokens, same draft-grouped cards. Switch between tabs to compare. The goal is to pick a primary navigation axis: scroll-through-time, jump-by-day, or hybrid.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-tab="stream">1. Stream</button>
+    <button data-tab="two-pane">2. Two-pane</button>
+    <button data-tab="patched">3. Patched (current)</button>
+  </div>
+
+  <!-- ================================================================
+       OPTION 1 — STREAM / INBOX
+       ================================================================ -->
+  <div class="panel active" id="stream">
+    <div class="tab-note">
+      <strong>Stream model.</strong> Reverse-chronological feed grouped by draft, with sticky day headers as you scroll. Filter chips and search at the top stay pinned. A small calendar icon opens a date popover for the rare "jump to a specific day" case. This is what GitHub Activity, Linear inbox, and Vercel deployments all do.
+    </div>
+
+    <div class="stream-toolbar">
+      <div class="row">
+        <input class="search" placeholder="Search drafts, people, events…" />
+        <button class="icon-btn" title="Jump to date">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </button>
+      </div>
+      <div class="chip-row">
+        <button class="chip active">All <span class="chip-count">64</span></button>
+        <button class="chip">Drafts <span class="chip-count">8</span></button>
+        <button class="chip">AI <span class="chip-count">42</span></button>
+        <button class="chip">Comments <span class="chip-count">9</span></button>
+        <button class="chip">Reviews <span class="chip-count">2</span></button>
+        <button class="chip">Exports <span class="chip-count">3</span></button>
+      </div>
+    </div>
+
+    <div class="stream-feed" id="stream-feed"></div>
+  </div>
+
+  <!-- ================================================================
+       OPTION 2 — TWO-PANE
+       ================================================================ -->
+  <div class="panel" id="two-pane">
+    <div class="tab-note">
+      <strong>Two-pane model.</strong> Left rail lists every active day with its event count — you see density at a glance and click to load. Right pane shows the selected day's draft groups. Like email apps, GitHub Actions runs, log viewers. Cost: dies on mobile (left rail collapses to a horizontal scroller, less elegant).
+    </div>
+
+    <div class="two-pane">
+      <div class="day-rail" id="day-rail"></div>
+      <div>
+        <div class="pane-header">
+          <h2 id="pane-title">Today</h2>
+          <span class="meta" id="pane-meta">3 letters · 22 events</span>
+        </div>
+        <div class="pane-chips chip-row">
+          <button class="chip active">All</button>
+          <button class="chip">Drafts</button>
+          <button class="chip">AI</button>
+          <button class="chip">Comments</button>
+          <button class="chip">Reviews</button>
+          <button class="chip">Exports</button>
+        </div>
+        <div id="pane-feed"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       OPTION 3 — PATCHED
+       ================================================================ -->
+  <div class="panel patched" id="patched">
+    <div class="tab-note">
+      <strong>Patched current.</strong> Keeps the day-picker-first model but fixes the overflow: filter chips wrap cleanly, "Today" gets folded into the date popover so the prev/next/picker row is just three controls, and the recent-days strip uses scroll-snap to behave correctly on narrow screens. Smallest change, but still day-picker-first which is the wrong primary axis for most users.
+    </div>
+
+    <div class="controls">
+      <div class="chip-row">
+        <button class="chip active">All</button>
+        <button class="chip">Drafts</button>
+        <button class="chip">AI</button>
+        <button class="chip">Comments</button>
+        <button class="chip">Reviews</button>
+        <button class="chip">Exports</button>
+      </div>
+      <div class="row1">
+        <button class="icon-btn" title="Previous active day">
+          <svg class="icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button class="date-pill">
+          <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--ds-muted)"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+          Today · Wed 13 May
+          <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--ds-muted)"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <button class="icon-btn" title="Next active day">
+          <svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        <span style="margin-left:auto;font-size:11px;color:var(--ds-muted);font-variant-numeric:tabular-nums">3 letters · 22 events</span>
+      </div>
+      <div class="day-strip">
+        <button class="day-strip-item active"><small>Today</small>13 May · 22</button>
+        <button class="day-strip-item"><small>Yest</small>12 May · 34</button>
+        <button class="day-strip-item"><small>Mon</small>11 May · 8</button>
+        <button class="day-strip-item"><small>Sun</small>10 May · 2</button>
+        <button class="day-strip-item"><small>Fri</small>8 May · 17</button>
+        <button class="day-strip-item"><small>Thu</small>7 May · 5</button>
+      </div>
+    </div>
+    <div id="patched-feed"></div>
+  </div>
+</div>
+
+<script>
+  /* ---------- Sample data ---------- */
+  const DRAFTS_BY_DAY = {
+    "Today": [
+      { id: "d1", title: "Withdraw resignation", mode: "Employee", time: "16:24",
+        counts: { changes: 1, ai: 7, comments: 3, reviews: 0, exports: 0 } },
+      { id: "d2", title: "PIP response", mode: "Employee", time: "14:02",
+        counts: { changes: 2, ai: 6, comments: 1, reviews: 0, exports: 0 } },
+      { id: "d3", title: "Warning — performance", mode: "HR", time: "10:18",
+        counts: { changes: 1, ai: 0, comments: 0, reviews: 1, exports: 1 } },
+    ],
+    "Yesterday": [
+      { id: "d4", title: "Settlement agreement v3", mode: "HR", time: "17:50",
+        counts: { changes: 4, ai: 11, comments: 5, reviews: 1, exports: 1 } },
+      { id: "d5", title: "Grievance — bullying", mode: "Employee", time: "14:30",
+        counts: { changes: 1, ai: 8, comments: 2, reviews: 0, exports: 0 } },
+      { id: "d6", title: "Offer letter — Senior PM", mode: "HR", time: "11:00",
+        counts: { changes: 2, ai: 8, comments: 0, reviews: 0, exports: 1 } },
+    ],
+    "Mon 11 May": [
+      { id: "d7", title: "Reasonable adjustments request", mode: "Employee", time: "15:40",
+        counts: { changes: 1, ai: 6, comments: 1, reviews: 0, exports: 0 } },
+    ],
+    "Sun 10 May": [
+      { id: "d8", title: "Resignation — short notice", mode: "Employee", time: "20:12",
+        counts: { changes: 1, ai: 0, comments: 0, reviews: 0, exports: 1 } },
+    ],
+  };
+
+  const STAT_ICONS = {
+    changes:  '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+    ai:       '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg>',
+    comments: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    reviews:  '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    exports:  '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>',
+  };
+  const STAT_LABELS = {
+    changes: ['change','changes'],
+    ai: ['AI section','AI sections'],
+    comments: ['comment','comments'],
+    reviews: ['review','reviews'],
+    exports: ['export','exports'],
+  };
+
+  function cardHtml(d) {
+    const stats = Object.entries(d.counts)
+      .filter(([, n]) => n > 0)
+      .map(([k, n]) => `
+        <span class="stat">${STAT_ICONS[k]}<span>${n} ${STAT_LABELS[k][n === 1 ? 0 : 1]}</span></span>
+      `).join('<span class="dot">·</span>');
+    return `
+      <div class="card">
+        <div class="card-icon">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        </div>
+        <div class="card-body">
+          <div class="card-title-row">
+            <span class="card-title">${d.title}</span>
+            <span class="badge">${d.mode}</span>
+          </div>
+          <div class="summary">
+            ${stats}
+            <span class="dot">·</span>
+            <span class="stat">${d.time}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------- Build stream ---------- */
+  const streamFeed = document.getElementById('stream-feed');
+  streamFeed.innerHTML = Object.entries(DRAFTS_BY_DAY).map(([day, drafts]) => {
+    const count = drafts.reduce((s, d) => s + Object.values(d.counts).reduce((a,b) => a+b, 0), 0);
+    return `
+      <div class="day-header sticky">
+        <h3>${day}</h3>
+        <span class="count">${drafts.length} ${drafts.length === 1 ? 'letter' : 'letters'} · ${count} events</span>
+      </div>
+      ${drafts.map(cardHtml).join('')}
+    `;
+  }).join('');
+
+  /* ---------- Build two-pane ---------- */
+  const dayRail = document.getElementById('day-rail');
+  const paneFeed = document.getElementById('pane-feed');
+  const paneTitle = document.getElementById('pane-title');
+  const paneMeta = document.getElementById('pane-meta');
+  const dayKeys = Object.keys(DRAFTS_BY_DAY);
+  let activeDay = dayKeys[0];
+
+  function renderRail() {
+    dayRail.innerHTML = dayKeys.map((day) => {
+      const drafts = DRAFTS_BY_DAY[day];
+      const count = drafts.reduce((s, d) => s + Object.values(d.counts).reduce((a,b) => a+b, 0), 0);
+      return `
+        <button class="day-rail-item ${day === activeDay ? 'active' : ''}" data-day="${day}">
+          <span class="label">
+            <small>${day === 'Today' ? '' : day === 'Yesterday' ? '' : day.split(' ')[0]}</small>
+            ${day}
+          </span>
+          <span class="badge">${count}</span>
+        </button>
+      `;
+    }).join('');
+    dayRail.querySelectorAll('[data-day]').forEach((b) =>
+      b.addEventListener('click', () => { activeDay = b.dataset.day; renderRail(); renderPane(); })
+    );
+  }
+  function renderPane() {
+    const drafts = DRAFTS_BY_DAY[activeDay];
+    const count = drafts.reduce((s, d) => s + Object.values(d.counts).reduce((a,b) => a+b, 0), 0);
+    paneTitle.textContent = activeDay;
+    paneMeta.textContent = `${drafts.length} ${drafts.length === 1 ? 'letter' : 'letters'} · ${count} events`;
+    paneFeed.innerHTML = drafts.map(cardHtml).join('');
+  }
+  renderRail();
+  renderPane();
+
+  /* ---------- Build patched ---------- */
+  document.getElementById('patched-feed').innerHTML =
+    DRAFTS_BY_DAY['Today'].map(cardHtml).join('');
+
+  /* ---------- Tab switching ---------- */
+  document.querySelectorAll('.tabs button').forEach((b) => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.panel').forEach((p) =>
+        p.classList.toggle('active', p.id === b.dataset.tab)
+      );
+    });
+  });
+</script>
+</body>
+</html>

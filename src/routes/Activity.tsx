@@ -18,6 +18,8 @@ import {
   MessageSquare,
   UserPlus,
   Users,
+  Search,
+  X,
 } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/ds";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -119,6 +121,7 @@ export function Activity() {
   const mostRecentDay = events.length > 0 ? isoDay(events[0].createdAt) : today;
   const [selectedDay, setSelectedDay] = useState(mostRecentDay);
   const [filter, setFilter] = useState<TimelineCategory | "all">("all");
+  const [searchTerm, setSearchTerm] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -163,9 +166,14 @@ export function Activity() {
         });
       }
     }
-    /* Sort drafts by most-recent activity in the day. */
-    return [...groups.values()].sort((a, b) => b.lastEvent.createdAt - a.lastEvent.createdAt);
-  }, [dayEvents]);
+    /* Sort drafts by most-recent activity in the day, then filter by search. */
+    let sorted = [...groups.values()].sort((a, b) => b.lastEvent.createdAt - a.lastEvent.createdAt);
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      sorted = sorted.filter((g) => g.draftLabel.toLowerCase().includes(q));
+    }
+    return sorted;
+  }, [dayEvents, searchTerm]);
 
   /* Active days (newest first) for the strip and prev/next navigation. */
   const recentDays = useMemo(
@@ -195,8 +203,16 @@ export function Activity() {
     });
   };
 
+  /* Smooth scroll to activity section when day changes */
+  useEffect(() => {
+    const el = document.querySelector('[data-activity-section]');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedDay]);
+
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8" data-activity-section>
       <PageHeader
         crumbs={[{ label: "Activity" }]}
         title="Audit trail"
@@ -212,6 +228,28 @@ export function Activity() {
         />
       ) : (
         <>
+          {/* Search box */}
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)] pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search drafts, people, events…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 h-9 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] placeholder:text-[var(--ds-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)] focus:border-transparent transition"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+                aria-label="Clear search"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+
           {/* Filter chips */}
           <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-0.5 -mx-1 px-1">
             {CATEGORY_FILTERS.map((f) => {
@@ -285,7 +323,7 @@ export function Activity() {
             <button
               type="button"
               onClick={() => setSelectedDay(today)}
-              className="hidden sm:inline-flex h-8 px-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] font-medium hover:bg-[var(--ds-line-2)]/60 transition"
+              className="hidden sm:inline-flex items-center h-8 px-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] font-medium hover:bg-[var(--ds-line-2)]/60 transition"
             >
               Today
             </button>
