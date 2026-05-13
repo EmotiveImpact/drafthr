@@ -1030,13 +1030,13 @@ function EditStatusPill({ status }: { status: EditStatus }) {
       aria-live="polite"
       data-state={status.kind}
       className={[
-        "inline-flex h-7 min-w-[128px] items-center justify-center gap-1.5 rounded-full border px-2.5",
-        "text-[10px] font-medium tabular-nums shadow-sm",
+        "inline-flex h-5 items-center justify-center gap-1 rounded-full border px-2",
+        "text-[10px] font-medium tabular-nums",
         tone,
       ].join(" ")}
     >
       {(status.kind === "saving" || status.kind === "reflowing") && (
-        <Loader2 className="size-3 animate-spin" />
+        <Loader2 className="size-2.5 animate-spin" />
       )}
       <span>{status.label}</span>
     </span>
