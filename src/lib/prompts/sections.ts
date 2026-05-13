@@ -360,6 +360,20 @@ function relevantData(draft: Draft): string {
   const lines: string[] = [];
   for (const [k, v] of Object.entries(a)) {
     if (v == null || v === "") continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (Array.isArray(v) && typeof v[0] === "object" && v[0] !== null) {
+      // Structured repeater data — render as numbered list so the AI can
+      // map cleanly to template placeholders like {{incident1Date}} etc.
+      lines.push(`- ${k}:`);
+      (v as Array<Record<string, unknown>>).forEach((item, i) => {
+        const inner = Object.entries(item)
+          .filter(([, vv]) => vv != null && vv !== "")
+          .map(([kk, vv]) => `${kk}=${formatScalar(vv)}`)
+          .join("; ");
+        if (inner) lines.push(`  ${i + 1}. ${inner}`);
+      });
+      continue;
+    }
     lines.push(`- ${k}: ${formatValue(v)}`);
   }
   return lines.join("\n") || "(no additional data supplied)";
@@ -369,5 +383,12 @@ function formatValue(v: unknown): string {
   if (typeof v === "boolean") return v ? "yes" : "no";
   if (typeof v === "number") return String(v);
   if (typeof v === "string") return v;
+  if (Array.isArray(v)) return v.map(formatScalar).join(", ");
   return JSON.stringify(v);
+}
+
+function formatScalar(v: unknown): string {
+  if (typeof v === "boolean") return v ? "yes" : "no";
+  if (v == null) return "";
+  return String(v);
 }

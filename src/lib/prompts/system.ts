@@ -98,6 +98,15 @@ LETTER CONTEXT:
 EVIDENCE AND ATTACHMENTS:
 ${evidencePromptBlock(draft)}
 
+QUALITY BAR — NON-NEGOTIABLE:
+- These letters must be EXCEPTIONAL. They are read by HR directors, employment counsel, ACAS conciliators, employment judges, and opposing solicitors. They go on a tribunal bundle. They WIN cases.
+- Be precise, dated, named. Every assertion of fact is anchored to a date or a named person where the data allows. Vagueness loses cases.
+- Where the user has supplied a structured list (incidents, witnesses, prior raises) — preserve the order, dates, and names verbatim. Do NOT compress, paraphrase away specifics, or merge entries.
+- Where statute or case law is referenced in the template addendum, cite it correctly (s.94 ERA 1996; Western Excavating v Sharp [1978] ICR 221; Omilaju [2005] EWCA Civ 1493 — full neutral citation).
+- Tone calibrated to risk class: high-risk = surgical, restrained, no editorialising; medium = clear and firm; low = courteous and professional.
+- No filler. No throat-clearing. No "I hope this letter finds you well." Every sentence carries weight.
+- If a fact is genuinely unavailable, write [TBD] — never invent.
+
 GLOBAL OUTPUT RULES:
 - Respond in flowing paragraphs. Do NOT use bullet points, numbered lists, or section headers unless explicitly requested for that section.
 - Use ASCII punctuation only. No Chinese punctuation, no fancy quotes (' → ', " → ").

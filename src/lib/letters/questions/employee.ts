@@ -173,17 +173,24 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         "Be factual, specific, dated. The tribunal panel reads this letter; vague narratives weaken your case.",
       questions: [
         {
-          id: "factsChronology",
-          type: "textarea",
-          label: "Chronological narrative — dates, names, places, what happened",
+          id: "incidents",
+          type: "repeater",
+          label: "Incidents — chronological list",
+          help: "Oldest first, most recent last. Specific dates, named people, witnesses. The AI weaves these into a tribunal-grade chronology.",
           required: true,
-          help:
-            "Most recent at the bottom, oldest at the top. Use specific dates if you have them.",
-        },
-        {
-          id: "witnesses",
-          type: "textarea",
-          label: "Who was present or aware? (named witnesses)",
+          repeater: {
+            itemLabel: "Incident",
+            minItems: 1,
+            maxItems: 15,
+            defaultItems: 3,
+            fields: [
+              { id: "date", type: "date", label: "Date", required: true },
+              { id: "description", type: "textarea", label: "What happened? (factual, no editorialising)", required: true },
+              { id: "individuals", type: "text", label: "Person(s) involved (full names)" },
+              { id: "witnesses", type: "text", label: "Witnesses (names, if any)" },
+              { id: "documents", type: "text", label: "Supporting documents (email, calendar entry, policy)" },
+            ],
+          },
         },
         {
           id: "documents",
@@ -272,10 +279,25 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         "This letter triggers a constructive unfair dismissal claim. The breach must be fundamental (going to the root of the contract) and you must resign IN RESPONSE TO it, WITHOUT DELAY.",
       questions: [
         {
-          id: "breachParticulars",
-          type: "textarea",
-          label: "Recital of breach — specific incidents, dates, prior raises",
+          id: "incidents",
+          type: "repeater",
+          label: "Incidents — chronological list",
+          help: "List each incident the AI will weave into a tribunal-grade chronology. Include the 'last straw' as the final entry. Dates, named individuals, witnesses.",
           required: true,
+          repeater: {
+            itemLabel: "Incident",
+            minItems: 1,
+            maxItems: 12,
+            defaultItems: 3,
+            fields: [
+              { id: "date", type: "date", label: "Date", required: true },
+              { id: "description", type: "textarea", label: "What happened? (factual, no intensifiers)", required: true },
+              { id: "individuals", type: "text", label: "Person(s) involved (full names)", placeholder: "e.g. Jane Smith, HR Director" },
+              { id: "witnesses", type: "text", label: "Witnesses (names, if any)" },
+              { id: "raisedAt", type: "text", label: "If raised informally / via grievance — when, to whom?" },
+              { id: "employerResponse", type: "textarea", label: "Employer's response (or lack of one)" },
+            ],
+          },
         },
         {
           id: "responsePromptness",
@@ -488,7 +510,27 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
       id: "breach",
       title: "Breach particulars",
       questions: [
-        { id: "breachParticulars", type: "textarea", label: "Specific incidents amounting to fundamental breach", required: true },
+        {
+          id: "incidents",
+          type: "repeater",
+          label: "Incidents amounting to fundamental breach",
+          help: "Chronological list. Dates and named individuals. This drives the AI's recital — be specific.",
+          required: true,
+          repeater: {
+            itemLabel: "Incident",
+            minItems: 1,
+            maxItems: 12,
+            defaultItems: 3,
+            fields: [
+              { id: "date", type: "date", label: "Date", required: true },
+              { id: "description", type: "textarea", label: "What happened? (factual)", required: true },
+              { id: "individuals", type: "text", label: "Person(s) involved (full names)" },
+              { id: "witnesses", type: "text", label: "Witnesses" },
+              { id: "raisedAt", type: "text", label: "Previously raised? (when, to whom)" },
+              { id: "employerResponse", type: "textarea", label: "Employer's response" },
+            ],
+          },
+        },
         { id: "remedyDeadline", type: "date", label: "Deadline for the employer to remedy", required: true },
         { id: "remedyAsk", type: "textarea", label: "What remedy are you demanding?", required: true },
       ],

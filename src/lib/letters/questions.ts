@@ -12,7 +12,19 @@ export type QuestionType =
   | "select_multi"
   | "boolean"
   | "number"
-  | "currency";
+  | "currency"
+  | "repeater";
+
+export type RepeaterConfig = {
+  /** Singular noun shown on Add/Remove buttons and item headers — e.g. "Incident", "Witness". */
+  itemLabel: string;
+  /** Sub-fields rendered per item. IDs are scoped under the parent question id. */
+  fields: Question[];
+  minItems?: number;
+  maxItems?: number;
+  /** How many empty items to show on first render. Default 1. */
+  defaultItems?: number;
+};
 
 export type Question = {
   id: string;
@@ -24,7 +36,12 @@ export type Question = {
   placeholder?: string;
   jurisdiction?: "UK" | "US";
   showIf?: (answers: Record<string, unknown>) => boolean;
+  /** Only meaningful when type === "repeater". */
+  repeater?: RepeaterConfig;
 };
+
+/** Type guard for the value stored under a repeater question. */
+export type RepeaterValue = Array<Record<string, unknown>>;
 
 export type QuestionStep = {
   id: string;
