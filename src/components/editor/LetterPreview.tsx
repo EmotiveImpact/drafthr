@@ -1,5 +1,6 @@
 import type { Draft } from "@/lib/letters/types";
 import { PaginatedLetter } from "./PaginatedLetter";
+import { PaginatedEditableLetter } from "./PaginatedEditableLetter";
 
 type AddCommentOpts = {
   quote?: string;
@@ -20,19 +21,25 @@ export type LetterPreviewProps = {
   onAddComment?: (sectionId: string, opts?: AddCommentOpts) => void;
   /** Called when the user clicks an existing inline-anchored comment highlight. */
   onFocusComment?: (commentId: string) => void;
+  /** Controlled edit-on-page toggle. The parent topbar owns this state
+   * now so the affordance lives next to Edit/Preview rather than as
+   * a floating button above the page. */
+  editable?: boolean;
+  /** Called when the editable on-page editor signals "done". */
+  onEditableDone?: () => void;
 };
 
 /**
- * Letter preview rendered as A4 paper via paged.js — the canonical
- * source of truth for what the PDF export will look like. Pixel-match
- * to the print render. Read-only by design; editing happens in Edit
- * mode where the SectionEditor now uses the same Iowan Old Style 11pt
- * typography so the two surfaces feel like the same document.
+ * Letter preview rendered as an A4-styled page card. When `editable`
+ * is true the static rendering is swapped for inline TipTap section
+ * editors so the user can type/format/insert evidence right on the
+ * page — Word/Pages style. The toggle for this lives on the topbar.
  *
- * Edit-on-page (formerly a third toggleable mode using
- * tiptap-pagination-plus) was retired — see CHANGELOG 0.5.0.
+ * Pagination today is single-page (visible page chrome around the whole
+ * letter). Real multi-page splitting is queued for a follow-up; the
+ * @page CSS rule below makes the printed/PDF output paginate naturally.
  */
-export function LetterPreview({ draft }: LetterPreviewProps) {
+export function LetterPreview({ draft, editable = false, onEditableDone }: LetterPreviewProps) {
   const empty = draft.sections.every((s) => !s.html?.trim());
 
   if (empty) {
@@ -43,9 +50,21 @@ export function LetterPreview({ draft }: LetterPreviewProps) {
     );
   }
 
+  // Read-only path: hand off to paged.js for real multi-page A4 rendering.
+  if (!editable) {
+    return (
+      <div className="letter-preview-shell">
+        <PaginatedLetter draft={draft} />
+      </div>
+    );
+  }
+
+  // Edit-on-page: real paginated multi-page A4 cards via paged.js, with
+  // each page rendered as contenteditable for inline editing.
   return (
-    <div className="letter-preview-shell">
-      <PaginatedLetter draft={draft} />
-    </div>
+    <PaginatedEditableLetter
+      draft={draft}
+      onDone={() => onEditableDone?.()}
+    />
   );
 }
