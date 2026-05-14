@@ -80,53 +80,62 @@ function FixRow({
         delay: 0.15 + index * 0.06,
         ease: [0.32, 0.72, 0, 1],
       }}
-      className="flex items-center gap-3 px-5 py-3"
+      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3"
     >
-      <span
-        className={cn(
-          "inline-flex items-center justify-center size-7 rounded-md shrink-0",
-          iconCls,
-        )}
-      >
-        <Icon className="size-3.5" strokeWidth={2.4} />
-      </span>
+      {/* Severity icon + content — stays in one row even on mobile so the
+       * row reads "severity: what's wrong" without the icon orphaning above. */}
+      <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0 w-full">
+        <span
+          className={cn(
+            "inline-flex items-center justify-center size-7 rounded-md shrink-0 mt-0.5 sm:mt-0",
+            iconCls,
+          )}
+        >
+          <Icon className="size-3.5" strokeWidth={2.4} />
+        </span>
 
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[13px] font-semibold text-[var(--ds-ink)]">
-            {fix.check.label}
-          </span>
-          <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] bg-[var(--ds-line-2)] px-1.5 py-0.5 rounded">
-            {fix.check.dimension}
-          </span>
-        </div>
-        {fix.check.detail && (
-          <div className="text-[12px] text-[var(--ds-muted)] mt-0.5 leading-snug">
-            {fix.check.detail}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[13px] font-semibold text-[var(--ds-ink)]">
+              {fix.check.label}
+            </span>
+            <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] bg-[var(--ds-line-2)] px-1.5 py-0.5 rounded">
+              {fix.check.dimension}
+            </span>
           </div>
-        )}
+          {fix.check.detail && (
+            <div className="text-[12px] text-[var(--ds-muted)] mt-0.5 leading-snug">
+              {fix.check.detail}
+            </div>
+          )}
+        </div>
       </div>
 
-      {fix.impact > 0 && (
-        <span
-          className="text-[11.5px] font-semibold tabular-nums text-[var(--ds-green-fg)] shrink-0"
-          title={`Fixing this is predicted to add ${fix.impact} to the overall score`}
-        >
-          +{fix.impact}
-        </span>
-      )}
+      {/* Impact + CTA — on mobile drops onto its own row, right-aligned so
+       * the action sits at the bottom-right of the card row where the
+       * thumb naturally lands. On desktop sits inline at the row end. */}
+      <div className="flex items-center justify-end gap-3 shrink-0 ml-10 sm:ml-0">
+        {fix.impact > 0 && (
+          <span
+            className="text-[11.5px] font-semibold tabular-nums text-[var(--ds-green-fg)]"
+            title={`Fixing this is predicted to add ${fix.impact} to the overall score`}
+          >
+            +{fix.impact}
+          </span>
+        )}
 
-      <motion.button
-        type="button"
-        onClick={() => onAction(fix)}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.96 }}
-        transition={{ duration: 0.12 }}
-        className="shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition"
-      >
-        {fix.check.actionLabel ?? "Fix"}
-        <ArrowRight className="size-3.5" />
-      </motion.button>
+        <motion.button
+          type="button"
+          onClick={() => onAction(fix)}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.96 }}
+          transition={{ duration: 0.12 }}
+          className="shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition"
+        >
+          {fix.check.actionLabel ?? "Fix"}
+          <ArrowRight className="size-3.5" />
+        </motion.button>
+      </div>
     </motion.li>
   );
 }

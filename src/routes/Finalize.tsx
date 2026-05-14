@@ -315,13 +315,18 @@ export function Finalize() {
           transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
           className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden"
         >
-          {/* Top: hero ring + verdict + sub-scores. The three dimension
-           * rings sit beside the verdict text so the hero stays the focal
-           * point but the user can immediately diagnose which axis is
-           * weakest without scrolling. */}
-          <div className="flex items-start gap-5 p-5 border-b border-[var(--ds-line-2)]">
+          {/* Top: hero ring + verdict + sub-scores.
+           *
+           * Mobile (< sm): stacks vertically. Hero ring sits centred at the
+           * top with the band badge directly underneath, the verdict reads
+           * full-width below, and the three sub-score rings spread evenly
+           * across the row so they're never squeezed against the hero.
+           *
+           * Desktop (sm+): hero on the left, content (band, verdict, summary,
+           * sub-scores) flows in the right column — the original layout. */}
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 p-4 sm:p-5 border-b border-[var(--ds-line-2)]">
             <ScoreRing score={scoreData.score} band={scoreData.band} size={96} />
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 w-full text-center sm:text-left">
               <span
                 className={cn(
                   "inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider mb-1.5",
@@ -331,10 +336,10 @@ export function Finalize() {
               >
                 {BAND_LABEL[scoreData.band]}
               </span>
-              <h3 className="text-[15px] font-semibold text-[var(--ds-ink)] mb-0.5">
+              <h3 className="text-[15px] font-semibold text-[var(--ds-ink)] mb-0.5 leading-snug">
                 {scoreData.oneLiner}
               </h3>
-              <p className="text-[12.5px] text-[var(--ds-muted)] m-0 mb-3.5">
+              <p className="text-[12.5px] text-[var(--ds-muted)] m-0 mb-4">
                 {scoreData.passCount} of {scoreData.totalCount} checks pass
                 {scoreData.warnCount > 0 && ` · ${scoreData.warnCount} warning${scoreData.warnCount === 1 ? "" : "s"}`}
                 {scoreData.failCount > 0 && ` · ${scoreData.failCount} blocker${scoreData.failCount === 1 ? "" : "s"}`}
@@ -343,13 +348,18 @@ export function Finalize() {
               {/* Three dimension rings — staggered count-up so the eye
                * tracks across them as they fill. Each ring carries a
                * one-line verdict under the label so the diagnosis is
-               * scannable at a glance ("1 blocker", "All clear", etc.). */}
-              <div className="flex items-start gap-5 flex-wrap">
+               * scannable at a glance ("1 blocker", "All clear", etc.).
+               *
+               * justify-around on mobile spreads the three rings evenly
+               * across the full card width (so each gets ~33% breathing
+               * room); justify-start on desktop keeps the cluster anchored
+               * to the verdict text on the left. */}
+              <div className="flex items-start justify-around sm:justify-start gap-2 sm:gap-5 w-full">
                 {scoreData.dimensions.map((d, i) => (
                   <div
                     key={d.dimension}
                     title={DIMENSION_DESCRIPTIONS[d.dimension]}
-                    className="flex flex-col items-center gap-1"
+                    className="flex flex-col items-center gap-1 min-w-0"
                   >
                     <ScoreRing
                       score={d.score}
@@ -360,7 +370,7 @@ export function Finalize() {
                     />
                     <span
                       className={cn(
-                        "text-[10.5px] font-medium",
+                        "text-[10.5px] font-medium whitespace-nowrap",
                         d.band === "strong" && "text-[var(--ds-green-fg)]",
                         d.band === "adequate" && "text-[var(--ds-amber-fg)]",
                         d.band === "weak" && "text-[var(--ds-red-fg)]",
@@ -374,16 +384,18 @@ export function Finalize() {
             </div>
           </div>
 
-          {/* Two-col: static checks (grouped by dimension) + AI evaluation */}
+          {/* Two-col: static checks (grouped by dimension) + AI evaluation.
+           * Stacks on mobile via grid-cols-1, side-by-side on sm+. Padding
+           * tightens slightly on mobile to match the hero section above. */}
           <div className="grid sm:grid-cols-2 grid-cols-1">
-            <div className="p-5">
+            <div className="p-4 sm:p-5">
               <h4 className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mb-3">
                 Checks by dimension
               </h4>
               <DimensionGroupedChecks checks={checks} />
             </div>
 
-            <div className="p-5 border-t sm:border-t-0 sm:border-l border-[var(--ds-line-2)]">
+            <div className="p-4 sm:p-5 border-t sm:border-t-0 sm:border-l border-[var(--ds-line-2)]">
               <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mb-3">
                 <Bot className="size-3" />
                 AI evaluation
