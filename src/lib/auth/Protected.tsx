@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { SignedIn, SignedOut, SignIn } from "@clerk/clerk-react";
-import { AUTH_ENABLED } from "./index";
+import { AUTH_ENABLED, AUTH_MISCONFIGURED } from "./index";
 
 /**
- * Gates a route. If auth is disabled (no Clerk key configured), passes through.
- * If auth is enabled, requires a signed-in user; otherwise shows the Clerk
- * sign-in component.
+ * Gates a route. Local dev can pass through without auth; production without
+ * auth is blocked by AuthProvider before routes render.
  */
 export function Protected({ children }: { children: ReactNode }) {
+  if (AUTH_MISCONFIGURED) return null;
   if (!AUTH_ENABLED) return <>{children}</>;
   return (
     <>

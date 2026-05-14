@@ -22,13 +22,21 @@ const NOT_IMPLEMENTED = JSON.stringify({
 export function GET(): Response {
   return new Response(NOT_IMPLEMENTED, {
     status: 503,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }
 
 export function DELETE(): Response {
   return new Response(NOT_IMPLEMENTED, {
     status: 503,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveModelName } from "./llm-model";
+import { requireAnthropicApiKey, resolveModelName } from "./llm-model";
 
 describe("resolveModelName", () => {
   it("uses an allow-listed requested model", () => {
@@ -20,5 +20,12 @@ describe("resolveModelName", () => {
 
   it("defaults to Sonnet when no model is specified", () => {
     expect(resolveModelName(undefined, { env: {} })).toBe("claude-sonnet-4-6");
+  });
+
+  it("requires a server-side Anthropic key", () => {
+    expect(() => requireAnthropicApiKey({})).toThrow("ANTHROPIC_API_KEY");
+    expect(requireAnthropicApiKey({ ANTHROPIC_API_KEY: " anthropic-key " })).toBe(
+      "anthropic-key"
+    );
   });
 });

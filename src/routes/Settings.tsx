@@ -30,6 +30,8 @@ import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { todayDateOnly } from "@/lib/date-only";
 
+const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
+
 export function Settings() {
   const nav = useNavigate();
   const profile = useProfileStore((s) => s.profile);
@@ -65,6 +67,10 @@ export function Settings() {
   };
 
   const onImport = (file: File) => {
+    if (file.size > MAX_PROFILE_IMPORT_BYTES) {
+      alert("Import failed: profile JSON must be 256 KB or smaller.");
+      return;
+    }
     file.text().then((text) => {
       try {
         const parsed = JSON.parse(text) as Partial<typeof profile>;
@@ -76,7 +82,7 @@ export function Settings() {
         ) {
           return;
         }
-        if (parsed.role) setRole(parsed.role);
+        if (parsed.role === "employer" || parsed.role === "employee") setRole(parsed.role);
         if (parsed.personal) patchPersonal(parsed.personal);
         if (parsed.employer) patchEmployer(parsed.employer);
         if (parsed.defaults) patchDefaults(parsed.defaults);

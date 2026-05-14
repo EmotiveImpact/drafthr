@@ -2,6 +2,79 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.6.0 — 2026-05-13
+
+Security and export hardening release. This pass removes committed-secret
+fallbacks, tightens every HTML/rendering boundary that handles HR/legal draft
+content, and makes production deployments fail closed when authentication is
+not configured.
+
+### Security hardening
+
+- Removed the hardcoded Anthropic API-key fallback from `api/draft.ts`,
+  `api/agent.ts`, and `server/llm-model.ts`. `ANTHROPIC_API_KEY` is now
+  required server-side and missing/empty values fail closed.
+- Added shared API request guards under `api/_utils/`: JSON content-type
+  enforcement, request-size limits, no-store/nosniff JSON errors,
+  production same-origin checks, and lightweight per-IP rate limits for
+  `/api/draft`, `/api/agent`, and `/api/export/pdf`.
+- Production auth now fails closed if `VITE_CLERK_PUBLISHABLE_KEY` is absent.
+  Public deployments require an explicit `VITE_ALLOW_PUBLIC_APP=true` opt-in.
+- Added production security headers in `vercel.json`: CSP, no-sniff,
+  frame denial, strict referrer policy, and a restrictive permissions policy.
+- Limited the devtools feature-flag helper (`window.__drafthr`) to Vite dev
+  builds only.
+- Removed comment-author impersonation from the comments UI so new comments
+  always use the current profile identity.
+- Hardened Sentry event handling with defensive redaction of draft, section,
+  prompt, message, evidence, profile, HTML, and comment-like context keys.
+- Updated docs and changelog language so no committed text describes a
+  server-side hardcoded key fallback.
+
+### HTML, images, and paste safety
+
+- Tightened `sanitizeLetterHtml`: script/event attributes are stripped,
+  `target="_blank"` links get `rel="noopener noreferrer"`, unsafe link schemes
+  are removed, and embedded images are restricted to base64 PNG/JPEG/WEBP/GIF.
+- AI-generated proposed section HTML is sanitized before display and again
+  when accepted into canonical draft state, including previously persisted
+  pending changes.
+- Added `safe-data-url` helpers and applied them across image upload, profile
+  defaults, paged preview/edit rendering, evidence display, PDF export, DOCX
+  export, and ZIP pack rendering. SVG/unsupported image data URLs are ignored
+  even if they already exist in localStorage.
+- Added file-size limits for profile JSON import and evidence uploads before
+  reading files into memory/localStorage.
+- Encoded `mailto:` invite recipients before building the fallback invite URL.
+
+### Export hardening
+
+- Replaced vulnerable export dependencies: removed `html-to-docx` and
+  `html2pdf.js`; PDF fallback now uses `html2canvas` + `jspdf`, and DOCX
+  generation uses the in-repo OOXML writer.
+- Hardened the server-side Puppeteer PDF renderer: JavaScript disabled,
+  external network requests blocked, CSP injected into the render document,
+  body/HTML/filename limits enforced, render timeouts set, and response
+  headers set to no-store/nosniff.
+- Export pack generation now embeds sanitized PDF and DOCX outputs alongside
+  evidence, manifest, audit JSON, and the human-readable pack summary.
+- Added focused tests for DOCX image/list/table generation and store-level
+  sanitization of accepted AI proposals.
+
+### Dependency and runtime posture
+
+- Added an npm override for the vulnerable transitive `esbuild` copy pulled
+  through `drizzle-kit`; `npm audit --audit-level=moderate` is clean.
+- Vite dev server now binds to `127.0.0.1` by default. Set
+  `DRAFTHR_DEV_HOST=0.0.0.0` only when intentionally testing from another
+  device on the same network.
+- Removed Google Fonts loading from `index.html`; the app shell now uses the
+  bundled `@fontsource-variable` assets.
+
+Operational note: rotate/revoke any Anthropic key that was ever committed or
+shared in history. The current tree no longer contains provider secrets, but
+history exposure should still be treated as compromised.
+
 ## 0.5.0 — 2026-05-13
 
 Pixel-perfect Edit-on-page. The previous V1 Edit-on-page was a single
@@ -115,7 +188,7 @@ Editor restructure release. Two architectural moves — AI takes the full right 
 - Provider rotated through Qwen → Gemini → NVIDIA NIM → OpenRouter and settled on **Anthropic Claude only**. Default model is `claude-sonnet-4-6`; `claude-opus-4-7` and `claude-haiku-4-5` selectable from Settings.
 - Removed dependencies: `@ai-sdk/google`, `@ai-sdk/openai-compatible`. Removed env vars: `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `NVIDIA_API_KEY`, `NVIDIA_MODEL`, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`.
 - `api/draft.ts` / `api/agent.ts` / `server/llm-model.ts` simplified to a single `createAnthropic` path with explicit `baseURL: 'https://api.anthropic.com/v1'` (the v3.0.76 SDK was calling `/messages` without the `/v1/` prefix and returning 404).
-- API key fallback uses `||` not `??` so empty-string env vars (which some shells export) properly fall through to the hardcoded server-side key.
+- `ANTHROPIC_API_KEY` is required server-side; empty or missing env vars now fail closed instead of falling back.
 - `MODEL_OPTIONS` reduced to three Claude tiers with cost hints. Stale localStorage selections (Qwen / Gemini / NVIDIA / OpenRouter) auto-reset to the new default on next load.
 
 ### Streaming + output quality
@@ -176,7 +249,7 @@ Senior-dev cleanup release. No major UX redesign, but the AI/server internals ar
 ### AI/server architecture cleanup
 
 - Centralised model allow-listing, provider fallback, and provider client construction in `server/llm-model.ts`.
-- Added resolver tests covering allow-listed requests, `LLM_PROVIDER=claude`, env fallback, and missing-provider-key fallback (`server/llm-model.test.ts`).
+- Added resolver tests covering allow-listed requests, env model fallback, and missing-provider-key failures (`server/llm-model.test.ts`).
 - Moved server-side AI tool schemas into `server/agent-tools.ts`, shared by the Vercel `/api/agent` function and the Vite dev proxy.
 - Slimmed `api/draft.ts`, `api/agent.ts`, and `server/proxy.ts` so they focus on request parsing and streaming instead of duplicating model/tool setup.
 

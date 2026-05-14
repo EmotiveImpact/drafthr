@@ -22,15 +22,19 @@ export function resolveModelName(
   { env = process.env }: ResolveOptions = {}
 ): string {
   if (requestedModel && ALLOWED_MODELS.has(requestedModel)) return requestedModel;
-  return env.LLM_MODEL ?? DEFAULT_MODEL;
+  return env.LLM_MODEL?.trim() || DEFAULT_MODEL;
+}
+
+export function requireAnthropicApiKey(env: ModelEnv = process.env): string {
+  const apiKey = env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not configured on the server.");
+  }
+  return apiKey;
 }
 
 export function buildModel(requestedModel?: string) {
   const modelName = resolveModelName(requestedModel);
-  // Use || (not ??) so empty-string env vars fall back to the hardcoded
-  // key. Empty exports happen on some shells and Vercel projects.
-  const apiKey =
-    process.env.ANTHROPIC_API_KEY ||
-    "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";
+  const apiKey = requireAnthropicApiKey();
   return createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(modelName);
 }

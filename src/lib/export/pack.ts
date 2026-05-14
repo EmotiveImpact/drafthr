@@ -9,6 +9,7 @@ import {
 } from "@/lib/template-quality";
 import { renderLetterPdfBlob, filenameFor as pdfFilenameFor } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
+import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -27,7 +28,7 @@ type ChecklistItem = {
  * Build and download the export pack as a ZIP. Contents:
  *
  *   letter.pdf                Real PDF of the letter (server- or client-rendered)
- *   letter.docx               Real DOCX (html-to-docx)
+ *   letter.docx               Real DOCX
  *   pack-summary.html         Cover sheet + checklist + quality + timeline
  *   manifest.json             Draft metadata, contents listing, model used
  *   audit.json                Version history, AI changes, comments, exports
@@ -279,6 +280,7 @@ function renderExhibitItem(
 ): string {
   const padded = String(idx + 1).padStart(2, "0");
   const isImage = item.mimeType?.startsWith("image/");
+  const imageUrl = isImage ? imageDataUrl(item) : undefined;
   const label =
     mode === "figure"
       ? figureLabelFor(item, allEvidence)
@@ -293,7 +295,7 @@ function renderExhibitItem(
       </h3>
       ${item.sectionIds?.length ? `<div class="caption">Backs up: ${escapeHtml(sectionLabels(draft, item.sectionIds))}</div>` : ""}
       ${item.content ? `<div class="body">${escapeHtml(item.content)}</div>` : ""}
-      ${isImage && item.fileDataUrl ? `<img src="${item.fileDataUrl}" alt="${escapeHtml(item.filename || "")}" />` : ""}
+      ${imageUrl ? `<img src="${escapeAttribute(imageUrl)}" alt="${escapeHtml(item.filename || "")}" />` : ""}
       ${!isImage && item.fileDataUrl ? `<p style="margin-top:8px"><a href="./${padded}-${escapeHtml(item.filename || "file")}">Open file →</a></p>` : ""}
     </div>`;
 }
@@ -625,12 +627,12 @@ function filenameForPack(draft: Draft): string {
 
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!url?.startsWith("data:image/")) return "";
+  if (!isSafeImageDataUrl(url)) return "";
   return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${escapeAttribute(url)}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
 }
 
 function imageDataUrl(item: EvidenceItem): string | undefined {
-  if (!item.fileDataUrl?.startsWith("data:image/")) return undefined;
+  if (!isSafeImageDataUrl(item.fileDataUrl)) return undefined;
   if (!item.mimeType?.startsWith("image/")) return undefined;
   return item.fileDataUrl;
 }

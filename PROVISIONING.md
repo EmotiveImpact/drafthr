@@ -2,7 +2,7 @@
 
 The codebase ships with feature flags that activate each external service when its env var is set. This doc walks you through provisioning each one.
 
-> Local dev works without any of these. The platform falls back to localStorage, no auth, no Sentry. Production needs all of them.
+> Local dev works without auth, persistence, and Sentry. AI generation requires a server-side provider key in `.env.local`; production needs the full set below.
 
 ---
 
@@ -46,7 +46,7 @@ The cheapest production-ready auth provider for a Vite SPA. Free tier covers ~10
 4. In Clerk → User & Authentication → Email, Phone, Username — pick the methods you want.
 5. In Clerk → Sessions → set the session-cookie domain to your production domain.
 
-**When the key is unset**, the platform runs in "open mode" (no auth required). When set, every route except `/privacy` is gated behind sign-in.
+**When the key is unset**, local dev runs in open mode. Production builds fail closed by default; set `VITE_ALLOW_PUBLIC_APP=true` only for an intentional public demo. When Clerk is set, every route except `/privacy` is gated behind sign-in.
 
 **Server-side validation TODO** — `api/me/data.ts` currently reads `x-clerk-user-id` from headers. Before going live, install `@clerk/backend` and replace that with `clerkClient.verifyToken(req)` on the bearer cookie. (Listed in [Phase B follow-up](#phase-b-follow-up-not-yet-done).)
 
@@ -121,7 +121,7 @@ npm install @ai-sdk/anthropic
 Update `server/proxy.ts` and `api/draft.ts` to add the Claude branch (the abstraction is already in place — just unhide the import). Then on Vercel:
 ```
 LLM_PROVIDER=claude
-ANTHROPIC_API_KEY=sk-ant-…
+ANTHROPIC_API_KEY=<your-anthropic-api-key>
 CLAUDE_MODEL=claude-sonnet-4-5
 ```
 

@@ -21,6 +21,7 @@ const KIND_LABEL: Record<EvidenceItem["kind"], string> = {
   screenshot: "Screenshot",
   note: "Note",
 };
+const MAX_INLINE_EVIDENCE_BYTES = 10 * 1024 * 1024;
 
 function kindFromMime(mime?: string): EvidenceItem["kind"] {
   if (!mime) return "document";
@@ -71,6 +72,10 @@ export function EvidencePopover({
   const [dragOver, setDragOver] = useState(false);
 
   const addFile = async (file: File) => {
+    if (file.size > MAX_INLINE_EVIDENCE_BYTES) {
+      window.alert(`${file.name} is larger than 10 MB. Use the Evidence step to summarize it instead.`);
+      return;
+    }
     const dataUrl = (await readAsDataUrl(file)) ?? undefined;
     const item: EvidenceItem = {
       id: uid(),

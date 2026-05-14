@@ -29,6 +29,12 @@ describe("sanitizeLetterHtml", () => {
     expect(dangerous).not.toContain("javascript:");
   });
 
+  it("adds noopener noreferrer to links that open a new tab", () => {
+    const out = sanitizeLetterHtml('<a href="https://example.com" target="_blank">ok</a>');
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain('rel="noopener noreferrer"');
+  });
+
   it("preserves inline base64 images (pasted screenshots)", () => {
     const tiny =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkAAIAAAoAAv/lxKUAAAAASUVORK5CYII=";
@@ -44,5 +50,13 @@ describe("sanitizeLetterHtml", () => {
       '<img src="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==" />'
     );
     expect(evil).not.toContain("data:text/html");
+  });
+
+  it("strips SVG image payloads", () => {
+    const evil = sanitizeLetterHtml(
+      '<img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+" />'
+    );
+    expect(evil).not.toContain("<img");
+    expect(evil).not.toContain("svg+xml");
   });
 });

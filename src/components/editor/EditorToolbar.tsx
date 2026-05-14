@@ -21,10 +21,19 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Draft } from "@/lib/letters/types";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
+import {
+  isAllowedEmbeddedImageFile,
+  isSafeImageDataUrl,
+  SAFE_IMAGE_ACCEPT,
+} from "@/lib/safe-data-url";
 
 const MAX_EMBED_BYTES = 5 * 1024 * 1024;
 
 async function fileToDataUrl(file: File): Promise<string | null> {
+  if (!isAllowedEmbeddedImageFile(file)) {
+    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+    return null;
+  }
   if (file.size > MAX_EMBED_BYTES) {
     alert(
       `${file.name} is larger than 5 MB. Use the Evidence step instead — that path keeps the original file at full quality.`
@@ -33,7 +42,10 @@ async function fileToDataUrl(file: File): Promise<string | null> {
   }
   return new Promise<string | null>((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : null;
+      resolve(isSafeImageDataUrl(result) ? result : null);
+    };
     reader.onerror = () => resolve(null);
     reader.readAsDataURL(file);
   });
@@ -54,7 +66,7 @@ export function EditorToolbar({
   const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
     const src = await fileToDataUrl(file);
     if (src) {
       editor.chain().focus().setImage({ src, alt: file.name }).run();
@@ -66,7 +78,7 @@ export function EditorToolbar({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
+        accept={SAFE_IMAGE_ACCEPT}
         className="hidden"
         onChange={onFileChosen}
       />

@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
 declare module "*.css";
-declare module "html2pdf.js";
-declare module "html-to-docx";
+
+interface ImportMetaEnv {
+  readonly VITE_ALLOW_PUBLIC_APP?: string;
+  readonly VITE_CLERK_PUBLISHABLE_KEY?: string;
+}

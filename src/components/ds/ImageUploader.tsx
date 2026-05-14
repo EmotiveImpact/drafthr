@@ -1,6 +1,11 @@
 import { useRef } from "react";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  isAllowedEmbeddedImageFile,
+  isSafeImageDataUrl,
+  SAFE_IMAGE_ACCEPT,
+} from "@/lib/safe-data-url";
 
 const MAX_BYTES = 1024 * 1024; // 1 MB
 
@@ -17,7 +22,7 @@ const ASPECT: Record<"banner" | "signature" | "square", { className: string; hin
  *
  * The data-URL approach keeps everything client-side — no upload API
  * required — and round-trips cleanly through localStorage and the export
- * pipeline (html2pdf and html-to-docx both inline data URLs).
+ * pipeline (PDF and DOCX export both inline data URLs).
  */
 export function ImageUploader({
   value,
@@ -34,6 +39,10 @@ export function ImageUploader({
   const a = ASPECT[aspect];
 
   const onPick = (file: File) => {
+    if (!isAllowedEmbeddedImageFile(file)) {
+      alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+      return;
+    }
     if (file.size > MAX_BYTES) {
       alert(`That file is ${(file.size / 1024 / 1024).toFixed(1)} MB — please use one under 1 MB.`);
       return;
@@ -41,7 +50,8 @@ export function ImageUploader({
     const reader = new FileReader();
     reader.onload = () => {
       const url = typeof reader.result === "string" ? reader.result : undefined;
-      if (url) onChange(url);
+      if (isSafeImageDataUrl(url)) onChange(url);
+      else alert("That image format is not supported.");
     };
     reader.onerror = () => alert("Couldn't read that file.");
     reader.readAsDataURL(file);
@@ -52,7 +62,7 @@ export function ImageUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+        accept={SAFE_IMAGE_ACCEPT}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];

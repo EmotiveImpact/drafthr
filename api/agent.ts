@@ -23,6 +23,8 @@ import {
 } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
+import { rateLimit } from "./_utils/rate-limit";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request";
 
 /* ============================================================================
  * Inlined from server/llm-model.ts — Anthropic only.
@@ -38,15 +40,20 @@ const ALLOWED_MODELS = new Set([
 
 function resolveModelName(requested?: string): string {
   if (requested && ALLOWED_MODELS.has(requested)) return requested;
-  return process.env.LLM_MODEL ?? DEFAULT_MODEL;
+  return process.env.LLM_MODEL?.trim() || DEFAULT_MODEL;
+}
+
+function requireAnthropicApiKey(): string {
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not configured on the server.");
+  }
+  return apiKey;
 }
 
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
-  // Use || (not ??) so empty-string env vars fall back to the hardcoded key.
-  const apiKey =
-    process.env.ANTHROPIC_API_KEY ||
-    "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";
+  const apiKey = requireAnthropicApiKey();
   return createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(modelName);
 }
 
@@ -148,21 +155,17 @@ type AgentRequest = {
 };
 
 export async function POST(req: Request): Promise<Response> {
-  let body: AgentRequest;
-  try {
-    body = (await req.json()) as AgentRequest;
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  const originError = enforceSameOrigin(req);
+  if (originError) return originError;
+  const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
+  if (rateLimitError) return rateLimitError;
+
+  const parsed = await readJsonRequest<AgentRequest>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
-    return new Response(JSON.stringify({ error: "messages[] required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonError("messages[] required", 400);
   }
 
   const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
@@ -180,5 +183,10 @@ export async function POST(req: Request): Promise<Response> {
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    headers: {
+      "Cache-Control": "no-cache, no-transform",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }

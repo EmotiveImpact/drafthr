@@ -2,16 +2,38 @@ import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
+import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 
-type Html2PdfModule = {
-  default: () => Html2PdfChain;
-};
+type Html2Canvas = (
+  element: HTMLElement,
+  options: {
+    backgroundColor: string;
+    logging: boolean;
+    scale: number;
+    useCORS: boolean;
+    windowHeight: number;
+    windowWidth: number;
+  }
+) => Promise<HTMLCanvasElement>;
 
-type Html2PdfChain = {
-  set: (opts: Record<string, unknown>) => Html2PdfChain;
-  from: (el: HTMLElement) => Html2PdfChain;
-  save: () => Promise<void>;
-  output: (type: "blob") => Promise<Blob>;
+type JsPdfConstructor = new (options: {
+  unit: "in";
+  format: "a4";
+  orientation: "portrait";
+}) => JsPdfDocument;
+
+type JsPdfDocument = {
+  addImage: (
+    imageData: string,
+    format: "JPEG",
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ) => void;
+  addPage: (format?: "a4", orientation?: "portrait") => void;
+  output: (type: "blob") => Blob;
+  save: (filename: string) => void;
 };
 
 /**
@@ -21,7 +43,7 @@ type Html2PdfChain = {
  *   1. Try the server-side endpoint /api/export/pdf (Puppeteer + Chromium).
  *      This produces high-fidelity PDFs that match a real letter.
  *   2. If the server endpoint is unavailable (404 / 500 / dev with no chromium
- *      pack configured), fall back to the client-side html2pdf.js renderer.
+ *      pack configured), fall back to a client-side html2canvas + jsPDF render.
  *      Lower fidelity, but works offline.
  */
 /**
@@ -34,17 +56,19 @@ export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
   const body = letterBodyHtml(draft);
 
   // 1) Try server-side render
-  try {
-    const res = await fetch("/api/export/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html: body, filename }),
-    });
-    if (res.ok) {
-      return await res.blob();
+  if (shouldTryServerPdf()) {
+    try {
+      const res = await fetch("/api/export/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html: body, filename }),
+      });
+      if (res.ok) {
+        return await res.blob();
+      }
+    } catch {
+      // Fall through to client-side
     }
-  } catch {
-    // Fall through to client-side
   }
 
   // 2) Client-side fallback
@@ -106,89 +130,194 @@ export async function exportLetterToPdf(draft: Draft): Promise<void> {
   const body = letterBodyHtml(draft);
 
   // 1) Try server-side render
-  try {
-    const res = await fetch("/api/export/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html: body, filename }),
-    });
-    if (res.ok) {
-      const blob = await res.blob();
-      triggerDownload(blob, filename);
-      return;
+  if (shouldTryServerPdf()) {
+    try {
+      const res = await fetch("/api/export/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html: body, filename }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        triggerDownload(blob, filename);
+        return;
+      }
+      // 404 / 500 on prod misconfig: fall through.
+    } catch {
+      // Network error: silently fall back.
     }
-    // 404 in dev (no serverless function), 500 on prod misconfig — fall through
-  } catch {
-    // Network error / dev-server fallthrough — silently fall back
   }
 
-  // 2) Client-side fallback (html2pdf)
+  // 2) Client-side fallback
   await clientSidePdf(body, filename);
 }
 
 async function clientSidePdfBlob(bodyHtml: string, _filename: string): Promise<Blob> {
-  const mod = (await import("html2pdf.js")) as unknown as Html2PdfModule;
-  const html2pdf =
-    typeof mod.default === "function"
-      ? (mod.default as unknown as () => Html2PdfChain)
-      : (mod as unknown as () => Html2PdfChain);
-
-  const doc = buildPdfDoc(bodyHtml);
-  document.body.appendChild(doc);
+  const host = await createPdfHost(bodyHtml);
   try {
-    return await html2pdf()
-      .set({
-        margin: 0,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
-      })
-      .from(doc)
-      .output("blob");
+    return await renderClientSidePdf(host.doc);
   } finally {
-    doc.remove();
+    host.dispose();
   }
 }
 
-function buildPdfDoc(bodyHtml: string): HTMLElement {
-  const doc = document.createElement("div");
-  doc.className = "letter-page";
+function buildPdfDoc(bodyHtml: string, ownerDocument: Document = document): HTMLElement {
+  const doc = ownerDocument.createElement("div");
+  doc.className = "letter-export-page";
+  doc.style.boxSizing = "border-box";
   doc.style.width = "8.27in";
   doc.style.minHeight = "11.69in";
-  doc.style.background = "white";
+  doc.style.margin = "0";
+  doc.style.backgroundColor = "#ffffff";
   doc.style.color = "#0f172a";
   doc.style.fontFamily = "Iowan Old Style, Georgia, Times New Roman, serif";
   doc.style.padding = "1.2in";
   doc.style.fontSize = "11pt";
   doc.style.lineHeight = "1.55";
+  doc.style.border = "0";
+  doc.style.boxShadow = "none";
   doc.innerHTML = bodyHtml;
+  applyPdfExportStyles(doc);
   return doc;
 }
 
 async function clientSidePdf(bodyHtml: string, filename: string) {
-  const mod = (await import("html2pdf.js")) as unknown as Html2PdfModule;
-  const html2pdf =
-    typeof mod.default === "function"
-      ? (mod.default as unknown as () => Html2PdfChain)
-      : (mod as unknown as () => Html2PdfChain);
-
-  const doc = buildPdfDoc(bodyHtml);
-  document.body.appendChild(doc);
+  const host = await createPdfHost(bodyHtml);
 
   try {
-    await html2pdf()
-      .set({
-        margin: 0,
-        filename,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
-      })
-      .from(doc)
-      .save();
+    const blob = await renderClientSidePdf(host.doc);
+    triggerDownload(blob, filename);
   } finally {
-    doc.remove();
+    host.dispose();
   }
+}
+
+async function renderClientSidePdf(doc: HTMLElement): Promise<Blob> {
+  const [{ default: html2canvas }, jsPdfModule] = await Promise.all([
+    import("html2canvas") as Promise<{ default: Html2Canvas }>,
+    import("jspdf") as Promise<{ jsPDF?: JsPdfConstructor; default?: JsPdfConstructor }>,
+  ]);
+  const JsPDF = jsPdfModule.jsPDF ?? jsPdfModule.default;
+  if (!JsPDF) throw new Error("PDF renderer failed to load.");
+
+  const canvas = await html2canvas(doc, {
+    backgroundColor: "#ffffff",
+    logging: false,
+    scale: 2,
+    useCORS: true,
+    windowHeight: Math.ceil(doc.scrollHeight),
+    windowWidth: Math.ceil(doc.scrollWidth),
+  });
+  return canvasToA4PdfBlob(canvas, JsPDF);
+}
+
+function canvasToA4PdfBlob(canvas: HTMLCanvasElement, JsPDF: JsPdfConstructor): Blob {
+  const pageWidth = 8.27;
+  const pageHeight = 11.69;
+  const imageHeight = (canvas.height * pageWidth) / canvas.width;
+  const imageData = canvas.toDataURL("image/jpeg", 0.98);
+  const pdf = new JsPDF({ unit: "in", format: "a4", orientation: "portrait" });
+
+  let pageTop = 0;
+  while (pageTop < imageHeight) {
+    if (pageTop > 0) pdf.addPage("a4", "portrait");
+    pdf.addImage(imageData, "JPEG", 0, -pageTop, pageWidth, imageHeight);
+    pageTop += pageHeight;
+  }
+
+  return pdf.output("blob");
+}
+
+async function createPdfHost(
+  bodyHtml: string
+): Promise<{ doc: HTMLElement; dispose: () => void }> {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.tabIndex = -1;
+  iframe.style.position = "fixed";
+  iframe.style.left = "-10000px";
+  iframe.style.top = "0";
+  iframe.style.width = "8.27in";
+  iframe.style.height = "11.69in";
+  iframe.style.border = "0";
+  iframe.style.pointerEvents = "none";
+  document.body.appendChild(iframe);
+
+  const frameDocument = iframe.contentDocument;
+  if (!frameDocument) {
+    iframe.remove();
+    throw new Error("Unable to initialise PDF export frame.");
+  }
+
+  frameDocument.open();
+  frameDocument.write(
+    '<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#ffffff;color:#0f172a;}</style></head><body></body></html>'
+  );
+  frameDocument.close();
+
+  const doc = buildPdfDoc(bodyHtml, frameDocument);
+  frameDocument.body.appendChild(doc);
+  await waitForImages(doc);
+
+  return {
+    doc,
+    dispose: () => iframe.remove(),
+  };
+}
+
+async function waitForImages(root: HTMLElement): Promise<void> {
+  const images = Array.from(root.querySelectorAll("img"));
+  await Promise.all(
+    images.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete) {
+            resolve();
+            return;
+          }
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        })
+    )
+  );
+}
+
+function applyPdfExportStyles(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>("h1, h2, h3").forEach((el) => {
+    el.style.fontFamily = "inherit";
+    el.style.fontWeight = "600";
+    el.style.lineHeight = "1.2";
+    el.style.margin = "0 0 8pt 0";
+    if (el.tagName.toLowerCase() === "h1") el.style.fontSize = "16pt";
+    if (el.tagName.toLowerCase() === "h2") el.style.fontSize = "15pt";
+    if (el.tagName.toLowerCase() === "h3") el.style.fontSize = "13pt";
+  });
+  root.querySelectorAll<HTMLElement>("p").forEach((el) => {
+    el.style.margin = "0 0 8pt 0";
+  });
+  root.querySelectorAll<HTMLElement>("table").forEach((el) => {
+    el.style.width = "100%";
+    el.style.borderCollapse = "collapse";
+    el.style.margin = "6pt 0";
+  });
+  root.querySelectorAll<HTMLElement>("th, td").forEach((el) => {
+    el.style.border = "1px solid #cbd5e1";
+    el.style.padding = "4pt 8pt";
+    el.style.textAlign = "left";
+  });
+  root.querySelectorAll<HTMLElement>("hr").forEach((el) => {
+    el.style.border = "0";
+    el.style.borderTop = "1px solid #cbd5e1";
+    el.style.margin = "12pt 0";
+  });
+  root.querySelectorAll<HTMLImageElement>("img").forEach((el) => {
+    el.style.maxWidth = "100%";
+    el.style.height = "auto";
+  });
+  root.querySelectorAll<HTMLElement>("a").forEach((el) => {
+    el.style.color = "inherit";
+    el.style.textDecoration = "underline";
+  });
 }
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -202,6 +331,10 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function shouldTryServerPdf(): boolean {
+  return !import.meta.env.DEV;
+}
+
 export function filenameFor(draft: Draft): string {
   const safe = (draft.employee.legalName || "letter").replace(/[^a-z0-9]+/gi, "-");
   return `${draft.letterType}-${safe}-${draft.context.issueDate}.pdf`;
@@ -210,14 +343,14 @@ export function filenameFor(draft: Draft): string {
 /** Render the letterhead image (if any) as the first block of the export. */
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!url) return "";
+  if (!isSafeImageDataUrl(url)) return "";
   return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${url}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
 }
 
 /** Render the signature image (if any) inline. */
 function signatureHtml(draft: Draft): string {
   const url = draft.employer.signatureDataUrl;
-  if (!url) return "";
+  if (!isSafeImageDataUrl(url)) return "";
   return `<div style="margin:8px 0 4px 0;"><img src="${url}" style="max-height:60px;display:inline-block;" alt="" /></div>`;
 }
 

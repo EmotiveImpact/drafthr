@@ -36,6 +36,11 @@ import { toast } from "sonner";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import {
+  isAllowedEmbeddedImageFile,
+  isSafeImageDataUrl,
+  SAFE_IMAGE_ACCEPT,
+} from "@/lib/safe-data-url";
 
 import {
   PAGE_CONTENT_HEIGHT_PX,
@@ -446,7 +451,11 @@ export function PagedEditor({
   const onImageChosen = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) return;
+    if (!isAllowedEmbeddedImageFile(file)) {
+      window.alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+      return;
+    }
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
       window.alert("Image larger than 5 MB — use the Evidence step for full-quality originals.");
       return;
@@ -454,7 +463,7 @@ export function PagedEditor({
     const reader = new FileReader();
     reader.onload = () => {
       const src = String(reader.result ?? "");
-      if (!src) return;
+      if (!isSafeImageDataUrl(src)) return;
       restoreRememberedSelection();
       insertHtmlAtCurrentSelection(
         containerRef.current,
@@ -751,7 +760,7 @@ export function PagedEditor({
         <input
           ref={imageInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept={SAFE_IMAGE_ACCEPT}
           className="hidden"
           onChange={onImageChosen}
         />

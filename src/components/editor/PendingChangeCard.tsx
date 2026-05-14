@@ -1,4 +1,5 @@
 import type { Section } from "@/lib/letters/types";
+import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { Check, X, Sparkles } from "lucide-react";
 
 /**
@@ -90,10 +91,7 @@ function DiffPane({
       </p>
       <div
         className="prose prose-sm max-w-none [&_p]:my-2 [&_strong]:font-semibold text-[13px] leading-relaxed [&_img]:max-w-[120px] [&_img]:h-auto"
-        // We trust the html here — it came from our store, sanitized at
-        // section-write time. No additional sanitize on display to avoid
-        // double-work; the live editor already cleaned it.
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: sanitizeLetterHtml(html) }}
       />
     </div>
   );

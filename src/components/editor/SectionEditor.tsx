@@ -9,6 +9,7 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
+import { isAllowedEmbeddedImageFile, isSafeImageDataUrl } from "@/lib/safe-data-url";
 
 /**
  * Read an image file into a base64 data URL. Bounded at ~5MB raw to stop
@@ -18,6 +19,10 @@ import TextAlign from "@tiptap/extension-text-align";
  */
 const MAX_EMBED_BYTES = 5 * 1024 * 1024;
 async function readImageAsDataUrl(file: File): Promise<string | null> {
+  if (!isAllowedEmbeddedImageFile(file)) {
+    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+    return null;
+  }
   if (file.size > MAX_EMBED_BYTES) {
     alert(
       `${file.name} is larger than 5 MB. Add it as evidence via the 📎 button instead — that path stores the original file at full quality and references it from the section.`
@@ -26,7 +31,10 @@ async function readImageAsDataUrl(file: File): Promise<string | null> {
   }
   return new Promise<string | null>((resolve) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : null;
+      resolve(isSafeImageDataUrl(result) ? result : null);
+    };
     reader.onerror = () => resolve(null);
     reader.readAsDataURL(file);
   });

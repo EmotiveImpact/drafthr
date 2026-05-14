@@ -15,6 +15,8 @@
 
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
+import { rateLimit } from "../_utils/rate-limit";
+import { enforceSameOrigin } from "../_utils/request";
 
 export const config = {
   runtime: "nodejs",
@@ -28,6 +30,14 @@ type ExportRequest = {
 
 const DEFAULT_PACK_URL =
   "https://github.com/Sparticuz/chromium/releases/download/v148.0.0/chromium-v148.0.0-pack.x64.tar";
+
+const MAX_JSON_CHARS = 5_000_000;
+const MAX_HTML_CHARS = 4_000_000;
+const MAX_FILENAME_CHARS = 120;
+const PDF_RENDER_TIMEOUT_MS = 15_000;
+const ALLOWED_RESOURCE_TYPES = new Set(["image", "font", "media"]);
+const PDF_CSP =
+  "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-src 'none'";
 
 const A4_CSS = `
   @page { size: A4; margin: 25mm 22mm; }
@@ -47,20 +57,39 @@ const A4_CSS = `
 `;
 
 export async function POST(req: Request): Promise<Response> {
+  const originError = enforceSameOrigin(req);
+  if (originError) return originError;
+  const rateLimitError = rateLimit(req, { name: "pdf", max: 12, windowMs: 60_000 });
+  if (rateLimitError) return rateLimitError;
+
+  const contentType = req.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return jsonError("Content-Type must be application/json", 415);
+  }
+
+  const contentLength = parseContentLength(req);
+  if (contentLength !== null && contentLength > MAX_JSON_CHARS) {
+    return jsonError("Request body too large", 413);
+  }
+
   let body: ExportRequest;
   try {
-    body = (await req.json()) as ExportRequest;
+    const raw = await req.text();
+    if (raw.length > MAX_JSON_CHARS) {
+      return jsonError("Request body too large", 413);
+    }
+    body = JSON.parse(raw) as ExportRequest;
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonError("Invalid JSON", 400);
   }
   if (!body.html || typeof body.html !== "string") {
-    return new Response(JSON.stringify({ error: "html required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonError("html required", 400);
+  }
+  if (body.html.length > MAX_HTML_CHARS) {
+    return jsonError("html too large", 413);
+  }
+  if (body.filename !== undefined && typeof body.filename !== "string") {
+    return jsonError("filename must be a string", 400);
   }
 
   const packUrl = process.env.CHROMIUM_PACK_URL ?? DEFAULT_PACK_URL;
@@ -73,23 +102,72 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const page = await browser.newPage();
-    const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><style>${A4_CSS}</style></head><body>${body.html}</body></html>`;
-    await page.setContent(fullHtml, { waitUntil: "networkidle0" });
+    page.setDefaultTimeout(PDF_RENDER_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(PDF_RENDER_TIMEOUT_MS);
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on("request", async (request) => {
+      try {
+        const url = new URL(request.url());
+        const isAllowedDataResource =
+          url.protocol === "data:" && ALLOWED_RESOURCE_TYPES.has(request.resourceType());
+        if (url.protocol === "about:" || isAllowedDataResource) {
+          await request.continue();
+        } else {
+          await request.abort();
+        }
+      } catch {
+        try {
+          await request.abort();
+        } catch {
+          // Request may already be handled by Chromium.
+        }
+      }
+    });
+
+    const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${body.html}</body></html>`;
+    await page.setContent(fullHtml, { waitUntil: "load", timeout: PDF_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true,
     });
 
-    const filename = (body.filename ?? "letter.pdf").replace(/[^a-z0-9._-]+/gi, "-");
+    const filename = safePdfFilename(body.filename);
     return new Response(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } finally {
     await browser.close();
   }
+}
+
+function parseContentLength(req: Request): number | null {
+  const raw = req.headers.get("content-length");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function safePdfFilename(input: string | undefined): string {
+  const raw = (input?.trim() || "letter.pdf").slice(0, MAX_FILENAME_CHARS);
+  const cleaned = raw.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+  const filename = cleaned || "letter.pdf";
+  return filename.toLowerCase().endsWith(".pdf") ? filename : `${filename}.pdf`;
+}
+
+function jsonError(error: string, status: number): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }

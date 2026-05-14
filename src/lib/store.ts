@@ -26,6 +26,8 @@ import {
   parseDateOnly,
   todayDateOnly,
 } from "./date-only";
+import { sanitizeLetterHtml } from "./sanitize";
+import { isSafeImageDataUrl } from "./safe-data-url";
 
 type Store = {
   drafts: Record<string, Draft>;
@@ -324,8 +326,12 @@ export const useDraftStore = create<Store>()(
             address: (a.employerAddress as string) ?? "",
             registrationNumber: a.employerRegNumber as string | undefined,
             hasLetterhead: Boolean(a.hasLetterhead),
-            letterheadDataUrl: a.letterheadDataUrl as string | undefined,
-            signatureDataUrl: a.signatureDataUrl as string | undefined,
+            letterheadDataUrl: isSafeImageDataUrl(a.letterheadDataUrl)
+              ? a.letterheadDataUrl
+              : undefined,
+            signatureDataUrl: isSafeImageDataUrl(a.signatureDataUrl)
+              ? a.signatureDataUrl
+              : undefined,
             signatoryName:
               (a.signatoryName as string) ??
               (a.recipientName as string) ??
@@ -509,7 +515,7 @@ export const useDraftStore = create<Store>()(
             sec.id === sectionId
               ? {
                   ...sec,
-                  html: sec.pendingChange!.proposedHtml,
+                  html: sanitizeLetterHtml(sec.pendingChange!.proposedHtml),
                   status: "edited" as Section["status"],
                   versions: [...sec.versions, oldVersion],
                   pendingChange: undefined,
@@ -543,7 +549,7 @@ export const useDraftStore = create<Store>()(
             };
             return {
               ...sec,
-              html: sec.pendingChange.proposedHtml,
+              html: sanitizeLetterHtml(sec.pendingChange.proposedHtml),
               status: "edited" as Section["status"],
               versions: [...sec.versions, oldVersion],
               pendingChange: undefined,

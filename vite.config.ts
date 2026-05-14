@@ -23,17 +23,14 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5273,
-      // Listen on all network interfaces so devices on the same Wi-Fi
-      // (e.g. iPhone/iPad for mobile testing) can reach the dev server.
-      host: true,
+      // Keep the dev server local by default. Set DRAFTHR_DEV_HOST=0.0.0.0
+      // when intentionally testing from another device on the same network.
+      host: process.env.DRAFTHR_DEV_HOST || "127.0.0.1",
     },
     build: {
-      // Raise the warning ceiling — our largest legitimate chunk is the
-      // export pipeline (html-to-docx + html2pdf), which is genuinely big.
+      // Raise the warning ceiling: export and editor chunks are intentionally
+      // lazy-loaded and larger than the first-paint app shell.
       // Anything over this is worth investigating.
-      // Raise to 1300 because export-docx (html-to-docx) is genuinely
-      // ~1.2 MB and is only loaded at export time — it doesn't affect
-      // first-paint. We can't split it further without forking the lib.
       chunkSizeWarningLimit: 1300,
       rollupOptions: {
         output: {
@@ -61,8 +58,7 @@ export default defineConfig(({ mode }) => {
             // Markdown rendering — used by the AI panel.
             markdown: ["marked", "dompurify"],
             // Export libraries — only needed at export time.
-            "export-pdf": ["html2pdf.js", "html2canvas"],
-            "export-docx": ["html-to-docx"],
+            "export-pdf": ["html2canvas", "jspdf"],
             // Radix Themes — the heaviest UI dependency.
             "radix-themes": ["@radix-ui/themes"],
             // Icons used everywhere — give them their own chunk so a refresh

@@ -4,6 +4,7 @@ import { buildSectionPrompt } from "@/lib/prompts/sections";
 import { streamDraft } from "./client";
 import { uid } from "@/lib/utils";
 import { useProfileStore } from "@/lib/profile";
+import { sanitizeLetterHtml } from "@/lib/sanitize";
 
 /** Resolve the user's preferred Qwen model from the persisted profile. */
 function activeModel(): string | undefined {
@@ -220,5 +221,5 @@ function sanitiseHtml(s: string): string {
       .map((para) => `<p>${para.replace(/\n/g, "<br/>")}</p>`)
       .join("\n");
   }
-  return out;
+  return sanitizeLetterHtml(out);
 }

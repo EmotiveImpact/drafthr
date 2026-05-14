@@ -24,6 +24,7 @@ import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { EvidenceRequirementsList } from "@/components/editor/EvidenceRequirementsList";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { uid } from "@/lib/utils";
+import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 
 const KIND_OPTIONS: { value: EvidenceItem["kind"]; label: string }[] = [
   { value: "email", label: "Email" },
@@ -32,6 +33,8 @@ const KIND_OPTIONS: { value: EvidenceItem["kind"]; label: string }[] = [
   { value: "screenshot", label: "Screenshot" },
   { value: "note", label: "Note" },
 ];
+const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_TEXT_PREVIEW_BYTES = 512 * 1024;
 
 export function EvidenceStep() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -191,10 +194,17 @@ export function EvidenceStep() {
 
   const onUpload = async (file: File | undefined) => {
     if (!file) return;
+    if (file.size > MAX_EVIDENCE_FILE_BYTES) {
+      setNotice(`${file.name} is larger than 10 MB. Use a smaller file or summarize it as a note.`);
+      return;
+    }
     setFilename(file.name);
     setKind(file.type.startsWith("image/") ? "screenshot" : "document");
     setFileData({ dataUrl: await readAsDataUrl(file), mimeType: file.type });
-    if (file.type.startsWith("text/") || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
+    if (
+      file.size <= MAX_TEXT_PREVIEW_BYTES &&
+      (file.type.startsWith("text/") || file.name.endsWith(".txt") || file.name.endsWith(".md"))
+    ) {
       setContent(await file.text());
     } else if (!content.trim()) {
       setContent(`Uploaded file: ${file.name}`);
@@ -475,7 +485,7 @@ function EvidenceRow({
             {item.parsedSummary || item.content}
           </p>
 
-          {item.fileDataUrl && item.mimeType?.startsWith("image/") && (
+          {isSafeImageDataUrl(item.fileDataUrl) && item.mimeType?.startsWith("image/") && (
             <img
               src={item.fileDataUrl}
               alt=""

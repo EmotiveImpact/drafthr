@@ -2,6 +2,7 @@ import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { resolveFigureRefsInHtml, displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 
 export function buildPreviewSourceHtml(
   draft: Draft,
@@ -38,13 +39,13 @@ function buildStoredSectionsBodyHtml(draft: Draft): string {
 
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!url) return "";
+  if (!isSafeImageDataUrl(url)) return "";
   return `<div class="letterhead"><img src="${escAttr(url)}" alt="" /></div>`;
 }
 
 export function signatureImageHtml(draft: Draft, extraAttrs = ""): string {
   const url = draft.employer.signatureDataUrl;
-  if (!url) return "";
+  if (!isSafeImageDataUrl(url)) return "";
   return `<div class="signature-image"${extraAttrs}><img src="${escAttr(url)}" alt="" /></div>`;
 }
 
@@ -75,13 +76,16 @@ function buildFiguresAppendix(draft: Draft): string {
       .map((item) => {
         const label = figureLabelFor(item, all);
         const isImage = item.mimeType?.startsWith("image/");
+        const imageUrl = isImage && isSafeImageDataUrl(item.fileDataUrl)
+          ? item.fileDataUrl
+          : undefined;
         return `<figure class="figure-item">
           <figcaption><strong>${escHtml(label)}</strong>${
           item.filename ? ` &mdash; ${escHtml(item.filename)}` : ""
         }</figcaption>
           ${
-            isImage && item.fileDataUrl
-              ? `<img src="${escAttr(item.fileDataUrl)}" alt="${escAttr(item.filename || "")}" />`
+            imageUrl
+              ? `<img src="${escAttr(imageUrl)}" alt="${escAttr(item.filename || "")}" />`
               : ""
           }
           ${item.content ? `<p class="figure-body">${escHtml(item.content)}</p>` : ""}

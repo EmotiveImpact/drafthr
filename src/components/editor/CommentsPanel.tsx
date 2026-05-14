@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Box, Button, Flex, IconButton, Select, Text, TextArea } from "@radix-ui/themes";
+import { Badge, Box, Button, Flex, IconButton, Text, TextArea } from "@radix-ui/themes";
 import { Check, MessageSquare, Quote, Reply, Trash2 } from "lucide-react";
 import type { Comment, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -24,9 +24,8 @@ type SectionGroup = {
 };
 
 /**
- * Threaded comments anchored to letter sections. Author identity is local —
- * defaults to the profile owner ("me") and can be impersonated to any
- * collaborator from the dropdown (no real auth yet).
+ * Threaded comments anchored to letter sections. New comments always use the
+ * current profile identity so comment authorship cannot be switched in the UI.
  */
 export function CommentsPanel({
   draft,
@@ -43,8 +42,7 @@ export function CommentsPanel({
   const resolveComment = useDraftStore((s) => s.resolveComment);
 
   const identities = useMemo(() => listIdentities(draft, profile), [draft, profile]);
-  const [authorId, setAuthorId] = useState<string>(meIdentity(profile).id);
-  const me = identities.find((i) => i.id === authorId) ?? identities[0];
+  const me = useMemo(() => meIdentity(profile), [profile]);
 
   const [showResolved, setShowResolved] = useState(false);
   const [composerSection, setComposerSection] = useState<string | null>(null);
@@ -119,21 +117,6 @@ export function CommentsPanel({
           </Button>
         </Box>
       </Flex>
-
-      {/* Identity picker */}
-      <Box mb="3">
-        <Text size="1" color="gray" weight="medium" mb="1" className="block">Comment as</Text>
-        <Select.Root value={authorId} onValueChange={setAuthorId}>
-          <Select.Trigger className="w-full" />
-          <Select.Content>
-            {identities.map((i) => (
-              <Select.Item key={i.id} value={i.id}>
-                {i.name}{i.id === "me" ? " (you)" : ""}
-              </Select.Item>
-            ))}
-          </Select.Content>
-        </Select.Root>
-      </Box>
 
       {totalActive === 0 && groups.every((g) => g.threads.length === 0) ? (
         <EmptyState

@@ -70,7 +70,7 @@ ${shareLink}
 
 — sent from DRAFTHR`
       );
-      window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+      window.location.href = `mailto:${encodeURIComponent(email.trim())}?subject=${subject}&body=${body}`;
     }
     setEmail("");
     setName("");

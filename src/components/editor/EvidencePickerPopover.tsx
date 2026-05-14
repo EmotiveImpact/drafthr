@@ -4,6 +4,7 @@ import { displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FileText, Mail, NotebookText, Image as ImageIcon, CalendarDays, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
+import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 
 const KIND_ICON: Record<EvidenceItem["kind"], typeof FileText> = {
   email: Mail,
@@ -178,7 +179,7 @@ function buildInlineHtml(item: EvidenceItem): string {
   const caption = item.filename
     ? ` (${escHtml(item.filename)})`
     : "";
-  if (item.kind === "screenshot" && item.fileDataUrl?.startsWith("data:image/")) {
+  if (item.kind === "screenshot" && isSafeImageDataUrl(item.fileDataUrl)) {
     return `<figure><img src="${escAttr(item.fileDataUrl)}" alt="${escAttr(item.filename || "screenshot")}" />${
       item.content
         ? `<figcaption>${escHtml(item.content)}</figcaption>`

@@ -2,9 +2,9 @@ import type { Collaborator, Draft } from "@/lib/letters/types";
 import type { Profile } from "@/lib/profile";
 
 /**
- * Local identity helpers for commenting. With no real auth, the active
- * "user" is derived from the profile; collaborators show as their stored
- * name + email when impersonated via the comment composer's identity picker.
+ * Local identity helpers for commenting. The active "user" is derived from
+ * the profile; collaborator identities are only used to render old comments
+ * and participant lists.
  */
 
 export type CommentIdentity = {

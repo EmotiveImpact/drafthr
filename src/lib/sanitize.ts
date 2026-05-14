@@ -1,32 +1,90 @@
 import DOMPurify from "dompurify";
 
-/**
- * Restrict <img src> to data:image/* (any base64-encoded image) or
- * http(s) URLs. Anything else — including data:text/html, data:application/*,
- * javascript:, etc. — gets the whole <img> element removed. Defence in depth
- * against malformed paste payloads. Registered once at module load.
- */
-let imgHookRegistered = false;
-function registerImgHook() {
-  if (imgHookRegistered || typeof window === "undefined") return;
-  imgHookRegistered = true;
+let hooksRegistered = false;
+function registerSanitizeHooks() {
+  if (hooksRegistered || typeof window === "undefined") return;
+  hooksRegistered = true;
   DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+    const nodeName = node.nodeName.toUpperCase();
+    const attrName = data.attrName.toLowerCase();
     if (
-      node.nodeName === "IMG" &&
-      data.attrName === "src" &&
+      nodeName === "IMG" &&
+      attrName === "src" &&
       data.attrValue
     ) {
       const src = String(data.attrValue);
-      const isImageData = /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(src);
-      const isHttp = /^https?:\/\//i.test(src);
-      if (!isImageData && !isHttp) {
+      const isImageData = /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,/i.test(src);
+      if (!isImageData) {
         data.keepAttr = false;
         // Drop the whole <img> when src is unsafe — an <img> without src is
         // useless and could be re-targeted by other code paths.
         (node as Element).remove();
+      } else {
+        data.keepAttr = true;
       }
     }
+    if (nodeName === "A" && attrName === "href" && data.attrValue) {
+      const href = String(data.attrValue).trim();
+      const isSafeLink = /^(?:https?:|mailto:|tel:|\/|#)/i.test(href);
+      data.keepAttr = isSafeLink;
+    }
+    if (nodeName === "A" && attrName === "target" && data.attrValue) {
+      const target = String(data.attrValue).trim().toLowerCase();
+      data.keepAttr = target === "_blank" || target === "_self";
+    }
   });
+  DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+    if (node.nodeName.toUpperCase() !== "A") return;
+    const el = node as Element;
+    if (el.getAttribute("target") === "_blank") {
+      el.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+}
+
+function isSafeLinkHref(href: string): boolean {
+  return /^(?:https?:|mailto:|tel:|\/|#)/i.test(href.trim());
+}
+
+function collectBlankLinkHrefs(html: string): Map<string, number> {
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  const counts = new Map<string, number>();
+  root.querySelectorAll("a[target]").forEach((anchor) => {
+    const href = anchor.getAttribute("href")?.trim() ?? "";
+    const target = anchor.getAttribute("target")?.trim().toLowerCase();
+    if (target === "_blank" && href && isSafeLinkHref(href)) {
+      counts.set(href, (counts.get(href) ?? 0) + 1);
+    }
+  });
+  return counts;
+}
+
+function hardenSanitizedHtml(html: string, blankLinkHrefs: Map<string, number>): string {
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll("a").forEach((anchor) => {
+    const href = anchor.getAttribute("href")?.trim() ?? "";
+    if (href && !isSafeLinkHref(href)) {
+      anchor.removeAttribute("href");
+    }
+
+    const blankCount = href ? blankLinkHrefs.get(href) ?? 0 : 0;
+    if (blankCount > 0) {
+      anchor.setAttribute("target", "_blank");
+      anchor.setAttribute("rel", "noopener noreferrer");
+      blankLinkHrefs.set(href, blankCount - 1);
+      return;
+    }
+
+    const target = anchor.getAttribute("target");
+    if (target === "_blank") {
+      anchor.setAttribute("rel", "noopener noreferrer");
+    } else if (target && target !== "_self") {
+      anchor.removeAttribute("target");
+    }
+  });
+  return root.innerHTML;
 }
 
 const ALLOWED_TAGS = [
@@ -67,18 +125,21 @@ export function sanitizeLetterHtml(dirty: string): string {
     // SSR fallback (we don't currently SSR, but this protects against future use)
     return dirty;
   }
-  registerImgHook();
-  return DOMPurify.sanitize(dirty, {
+  registerSanitizeHooks();
+  const blankLinkHrefs = collectBlankLinkHrefs(dirty);
+  const cleaned = DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
+    ADD_ATTR: ["target"],
     ALLOW_DATA_ATTR: false,
     KEEP_CONTENT: true,
     USE_PROFILES: { html: true },
-    // Allow data: URLs but only for image MIMEs — that's how the inline
+    // Allow data: URLs but only for non-SVG image MIMEs — that's how the inline
     // image extension stores pasted screenshots (data:image/png;base64,…).
     // Plus keep DOMPurify's default-permitted schemes for href on <a>:
     // http(s), mailto, tel.
     ALLOWED_URI_REGEXP:
-      /^(?:https?:|mailto:|tel:|data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml);base64,)/i,
+      /^(?:https?:|mailto:|tel:|\/|#|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
   });
+  return hardenSanitizedHtml(cleaned, blankLinkHrefs);
 }

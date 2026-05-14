@@ -13,7 +13,7 @@ import DOMPurify from "dompurify";
 export function Markdown({ children }: { children: string }) {
   const html = useMemo(() => {
     const raw = marked.parse(children, { async: false, breaks: true, gfm: true }) as string;
-    return DOMPurify.sanitize(raw, {
+    const cleaned = DOMPurify.sanitize(raw, {
       ALLOWED_TAGS: [
         "p", "br", "strong", "em", "u", "s", "code", "pre", "blockquote",
         "ul", "ol", "li", "a", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -21,7 +21,9 @@ export function Markdown({ children }: { children: string }) {
       ],
       ALLOWED_ATTR: ["href", "target", "rel"],
       ALLOW_DATA_ATTR: false,
+      ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#)/i,
     });
+    return hardenMarkdownLinks(cleaned);
   }, [children]);
 
   return (
@@ -45,4 +47,23 @@ export function Markdown({ children }: { children: string }) {
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
+}
+
+function hardenMarkdownLinks(html: string): string {
+  if (typeof document === "undefined") return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll("a").forEach((anchor) => {
+    const href = anchor.getAttribute("href")?.trim() ?? "";
+    if (href && !/^(?:https?:|mailto:|tel:|\/|#)/i.test(href)) {
+      anchor.removeAttribute("href");
+    }
+    const target = anchor.getAttribute("target");
+    if (target === "_blank") {
+      anchor.setAttribute("rel", "noopener noreferrer");
+    } else if (target && target !== "_self") {
+      anchor.removeAttribute("target");
+    }
+  });
+  return root.innerHTML;
 }

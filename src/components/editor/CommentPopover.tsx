@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { MessageSquarePlus, Send, Quote, ExternalLink, Check } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { Avatar } from "@/components/ds";
-import { listIdentities, meIdentity, type CommentIdentity } from "@/lib/comments/identity";
+import { meIdentity } from "@/lib/comments/identity";
 
 /**
  * Inline comment composer popover.
@@ -15,8 +15,7 @@ import { listIdentities, meIdentity, type CommentIdentity } from "@/lib/comments
  * button). Pops a small textarea so the user can post a comment in
  * one click WITHOUT switching to the right rail.
  *
- * Identity picker matches the rail composer — "Comment as You" by
- * default, or impersonate any collaborator (no real auth yet).
+ * New comments use the current profile identity.
  *
  * If the trigger carried a quoted text + applyMark callback, we show
  * the quote at the top and apply the inline mark after the comment is
@@ -51,14 +50,11 @@ export function CommentPopover({
   const profile = useProfileStore((s) => s.profile);
   const addComment = useDraftStore((s) => s.addComment);
 
-  const identities = listIdentities(draft, profile);
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
 
-  const [authorId, setAuthorId] = useState<string>(meIdentity(profile).id);
-  const me: CommentIdentity =
-    identities.find((i) => i.id === authorId) ?? identities[0];
+  const me = useMemo(() => meIdentity(profile), [profile]);
   const [body, setBody] = useState("");
   const [posted, setPosted] = useState(false);
 
@@ -117,29 +113,16 @@ export function CommentPopover({
             </button>
           </div>
 
-          {/* Identity picker — match the rail's "Comment as" affordance. */}
-          {identities.length > 1 && (
-            <div className="flex items-center gap-2 mb-2">
-              <Avatar
-                seed={me.email ?? me.id}
-                name={me.name}
-                email={me.email}
-                initials={me.initials}
-                size="md"
-              />
-              <select
-                value={authorId}
-                onChange={(e) => setAuthorId(e.target.value)}
-                className="text-[11px] px-1.5 h-6 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] focus:outline-none focus:border-[var(--ds-ink)]"
-              >
-                {identities.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}{i.id === "me" ? " (you)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="flex items-center gap-2 mb-2">
+            <Avatar
+              seed={me.email ?? me.id}
+              name={me.name}
+              email={me.email}
+              initials={me.initials}
+              size="md"
+            />
+            <span className="text-[11px] text-[var(--ds-muted)]">{me.name}</span>
+          </div>
 
           {/* Anchored quote (if present). */}
           {quote && (

@@ -18,7 +18,7 @@ initSentry();
 
 // Dev helper — flip feature flags from devtools without a code change.
 // e.g. window.__drafthr.setFlag("pixelPerfectEdit", true)
-if (typeof window !== "undefined") {
+if (import.meta.env.DEV && typeof window !== "undefined") {
   (window as unknown as { __drafthr?: unknown }).__drafthr = { getFlag, setFlag };
 }
 

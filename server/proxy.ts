@@ -39,6 +39,7 @@ export async function handleDraftRequest(
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("X-Content-Type-Options", "nosniff");
 
   const encoder = new TextEncoder();
   const writeEvent = (payload: object) => {
@@ -127,5 +128,10 @@ export async function handleAgentRequest(
     },
   });
 
-  result.pipeUIMessageStreamToResponse(res);
+  result.pipeUIMessageStreamToResponse(res, {
+    headers: {
+      "Cache-Control": "no-cache, no-transform",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
