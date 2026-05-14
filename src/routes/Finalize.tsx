@@ -350,11 +350,18 @@ export function Finalize() {
                * one-line verdict under the label so the diagnosis is
                * scannable at a glance ("1 blocker", "All clear", etc.).
                *
-               * justify-around on mobile spreads the three rings evenly
-               * across the full card width (so each gets ~33% breathing
-               * room); justify-start on desktop keeps the cluster anchored
-               * to the verdict text on the left. */}
-              <div className="flex items-start justify-around sm:justify-start gap-2 sm:gap-5 w-full">
+               * Mobile (< sm): true 3-column grid so each ring centres
+               * exactly at 1/6, 1/2, 5/6 of the row regardless of how
+               * long its verdict text is. Without this, the wider
+               * "1 blocker · 1 warning" column shoves Quality and Risk
+               * off-centre. Verdict text drops `whitespace-nowrap` on
+               * mobile so long verdicts wrap to a second line within
+               * their fixed column instead of pushing the grid.
+               *
+               * Desktop (sm+): switch to a flex row anchored to the
+               * verdict column on the left; whitespace-nowrap restores
+               * since there's plenty of room. */}
+              <div className="grid grid-cols-3 gap-2 sm:flex sm:items-start sm:gap-5 w-full">
                 {scoreData.dimensions.map((d, i) => (
                   <div
                     key={d.dimension}
@@ -370,7 +377,7 @@ export function Finalize() {
                     />
                     <span
                       className={cn(
-                        "text-[10.5px] font-medium whitespace-nowrap",
+                        "text-[10.5px] font-medium text-center sm:whitespace-nowrap leading-tight",
                         d.band === "strong" && "text-[var(--ds-green-fg)]",
                         d.band === "adequate" && "text-[var(--ds-amber-fg)]",
                         d.band === "weak" && "text-[var(--ds-red-fg)]",
