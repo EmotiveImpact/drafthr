@@ -696,16 +696,6 @@ function relDayLabel(iso: string, todayIso: string): string {
   return d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-function compactDay(iso: string): string {
-  const d = parseLocalIso(iso);
-  const sameYear = d.getFullYear() === new Date().getFullYear();
-  return d.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: sameYear ? undefined : "2-digit",
-  });
-}
-
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString(undefined, {
     hour: "2-digit",

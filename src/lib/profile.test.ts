@@ -26,6 +26,7 @@ const baseProfile: Profile = {
     employeeTone: "assertive",
   },
   autoFill: true,
+  credits: 30,
 };
 
 describe("prefillsFromProfile (employee)", () => {
