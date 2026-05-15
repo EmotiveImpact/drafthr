@@ -156,7 +156,7 @@ export function Editor() {
   // Derived: the AI rail is open as the right column only when AI is pinned.
   const railCollapsed = pinnedDock !== "ai";
   const setRailCollapsed = (next: boolean) =>
-    setPinnedDock(next ? (pinnedDock === "ai" ? null : pinnedDock) : "ai");
+    setPinnedDock((prev) => (next ? (prev === "ai" ? null : prev) : "ai"));
 
   const pinEvidence = () => setPinnedDock("evidence");
   const pinAI = () => setPinnedDock("ai");
@@ -288,26 +288,27 @@ export function Editor() {
   // Falls back to tier-based default when no stored pref exists (heavy drafts
   // auto-pin Evidence on first open). The lazy useState initialiser handles
   // first mount; this effect handles subsequent draft changes in the same session.
+  //
+  // We compute the next value once and issue a single setPinnedDock call to
+  // avoid the double-render flicker that occurred when the previous version
+  // could queue two separate setState calls (one for the localStorage read,
+  // one for the tier fallback).
   useEffect(() => {
     if (!draftId) return;
     if (typeof window === "undefined") return;
+    let next: "evidence" | "ai" | null = null;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draftId));
       if (raw === "evidence" || raw === "ai") {
-        setPinnedDock(raw);
-        return;
+        next = raw;
+      } else if (draft?.evidenceTier === "heavy") {
+        next = "evidence";
       }
     } catch {
-      // ignore
+      // Fallback to tier-based default if localStorage unavailable
+      if (draft?.evidenceTier === "heavy") next = "evidence";
     }
-    // Fallback: derive initial pin from evidence tier (legacy behaviour —
-    // heavy-evidence drafts auto-pin Evidence on first open).
-    const tier = draft?.evidenceTier;
-    if (tier === "heavy") {
-      setPinnedDock("evidence");
-    } else {
-      setPinnedDock(null);
-    }
+    setPinnedDock(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
