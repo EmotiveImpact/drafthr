@@ -44,6 +44,21 @@ export const MODEL_OPTIONS: {
 export const QWEN_MODEL_OPTIONS = MODEL_OPTIONS;
 
 /**
+ * Workspace-level permission tier. Drives approval queue + editor gating.
+ * - owner:    full access, billing, members
+ * - admin:    full access except billing
+ * - drafter:  create + edit own drafts; submit for review
+ * - reviewer: drafter + can approve / request changes
+ * - viewer:   read-only
+ */
+export type WorkspaceRole =
+  | "owner"
+  | "admin"
+  | "drafter"
+  | "reviewer"
+  | "viewer";
+
+/**
  * Single source of truth for "who the user is". Persisted to localStorage now;
  * moves to Postgres when Clerk auth is wired (Phase B follow-up).
  */
@@ -96,6 +111,8 @@ export type Profile = {
   /** Credits balance for AI-powered features (e.g. AI specialist review on
    * the Finalize page). New accounts start with FREE_CREDITS_ALLOWANCE. */
   credits: number;
+  /** Workspace permission tier. Defaults to "owner" (single-user case). */
+  workspaceRole: WorkspaceRole;
 };
 
 /** Starter credits each new user gets. ~6 AI reviews at 5 credits each. */
@@ -118,6 +135,7 @@ const EMPTY_PROFILE: Profile = {
   },
   autoFill: true,
   credits: FREE_CREDITS_ALLOWANCE,
+  workspaceRole: "owner",
 };
 
 type Store = {
@@ -128,6 +146,7 @@ type Store = {
   patchEmployer: (patch: Partial<Profile["employer"]>) => void;
   patchDefaults: (patch: Partial<Profile["defaults"]>) => void;
   setAutoFill: (value: boolean) => void;
+  setWorkspaceRole: (role: WorkspaceRole) => void;
   markSetupComplete: () => void;
   /** Subtract credits (e.g. on AI review). No-op + returns false if not enough. */
   spendCredits: (amount: number) => boolean;
@@ -157,6 +176,8 @@ export const useProfileStore = create<Store>()(
         set((s) => ({ profile: { ...s.profile, defaults: { ...s.profile.defaults, ...patch } } })),
       setAutoFill: (value) =>
         set((s) => ({ profile: { ...s.profile, autoFill: value } })),
+      setWorkspaceRole: (role) =>
+        set((s) => ({ profile: { ...s.profile, workspaceRole: role } })),
       markSetupComplete: () =>
         set((s) => ({ profile: { ...s.profile, setupComplete: true } })),
       spendCredits: (amount) => {
@@ -187,6 +208,11 @@ export const useProfileStore = create<Store>()(
         // Backfill credits for pre-existing profiles (added 2026-05-13).
         if (typeof state.profile.credits !== "number") {
           state.profile.credits = FREE_CREDITS_ALLOWANCE;
+        }
+        // Backfill workspaceRole — pre-existing profiles default to "owner"
+        // so single-user installs stay fully-permissioned after upgrade.
+        if (!state.profile.workspaceRole) {
+          state.profile.workspaceRole = "owner";
         }
         // Backfill missing model.
         if (!state.profile.defaults.qwenModel) {
