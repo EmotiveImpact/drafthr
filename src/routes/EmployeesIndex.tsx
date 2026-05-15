@@ -45,7 +45,10 @@ export function EmployeesIndex() {
   const [importOpen, setImportOpen] = useState(false);
 
   const allEmployees = useMemo(() => Object.values(employees), [employees]);
-  const allDrafts = useMemo(() => Object.values(drafts), [drafts]);
+  const allDrafts = useMemo(
+    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
+    [drafts]
+  );
   const allMatters = useMemo(() => Object.values(matters), [matters]);
 
   const rows = useMemo(() => {

@@ -56,6 +56,7 @@ export function deriveEmployeesFromDrafts(
   const groups = new Map<string, Draft[]>();
   for (const draft of Object.values(drafts)) {
     if (draft.mode !== "employer") continue;
+    if (draft.isTemplateSource) continue;
     const key = normalizeName(draft.employee?.legalName);
     if (!key) continue;
     const bucket = groups.get(key);

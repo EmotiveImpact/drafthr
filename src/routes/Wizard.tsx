@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuestionField } from "@/components/wizard/QuestionField";
+import { EmployeePicker } from "@/components/wizard/EmployeePicker";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { ChevronLeft, ChevronRight, Sparkles, UserRound, X } from "lucide-react";
@@ -204,6 +205,23 @@ export function Wizard({ mode }: { mode: Mode }) {
 
       <Card>
         <CardContent className="p-4 sm:p-6 space-y-6">
+          {/* Employee directory picker — only on the step that captures
+           * the employee fields, only in HR mode, only when the workspace
+           * has anyone to pick from. */}
+          {mode === "employer" &&
+            visibleQuestions.some((q) => q.id === "employeeLegalName") && (
+              <EmployeePicker
+                answers={answers}
+                onPick={(patch) => setAnswers((a) => ({ ...a, ...patch }))}
+                onClear={() =>
+                  setAnswers((a) => {
+                    const next = { ...a };
+                    delete next.linkedEmployeeId;
+                    return next;
+                  })
+                }
+              />
+            )}
           {visibleQuestions.map((q) => (
             <QuestionField
               key={q.id}

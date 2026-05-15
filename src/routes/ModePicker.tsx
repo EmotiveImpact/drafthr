@@ -8,7 +8,9 @@ export function ModePicker() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const setRole = useProfileStore((s) => s.setRole);
-  const draftList = Object.values(drafts).sort((a, b) => b.updatedAt - a.updatedAt);
+  const draftList = Object.values(drafts)
+    .filter((d) => !d.isTemplateSource)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
   const recent = draftList.slice(0, 3);
 
   const choose = (role: "employer" | "employee") => {

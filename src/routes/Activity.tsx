@@ -89,7 +89,9 @@ export function Activity() {
   /* Flatten every draft's timeline into a single chronological list. */
   const events = useMemo<Event[]>(() => {
     const out: Event[] = [];
-    const list = Object.values(drafts).filter((d) => (role ? d.mode === role : true));
+    const list = Object.values(drafts)
+      .filter((d) => !d.isTemplateSource)
+      .filter((d) => (role ? d.mode === role : true));
     for (const d of list) {
       const label = safeMeta(d.letterType)?.shortTitle ?? d.letterType.replace(/_/g, " ");
       for (const event of buildDraftTimeline(d)) {

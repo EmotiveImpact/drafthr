@@ -31,7 +31,7 @@ import type {
   Task,
 } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { useProfileStore } from "@/lib/profile";
+import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
@@ -108,13 +108,21 @@ function HrDashboard() {
     [matters]
   );
 
-  // TODAY: open tasks due in next 7 days + matters with nextAction
-  const todayItems = useMemo(() => deriveTodayItems(tasks, matters), [tasks, matters]);
+  // TODAY: open tasks due in next 7 days + matters with nextAction +
+  // drafts in review when the current user is a reviewer (or admin/owner
+  // acting as one). Surfaces approval-queue work alongside calendar work.
+  const todayItems = useMemo(
+    () => deriveTodayItems(tasks, matters, drafts, profile.workspaceRole),
+    [tasks, matters, drafts, profile.workspaceRole]
+  );
 
   // RISK: exposure + heatmap counts. We derive each active matter's risk
   // band from its drafts when no manual override exists (effectiveRiskBand)
   // so the dashboard tells the truth out of the box.
-  const allDrafts = useMemo(() => Object.values(drafts), [drafts]);
+  const allDrafts = useMemo(
+    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
+    [drafts]
+  );
   const riskSummary = useMemo(
     () => deriveRiskSummary(activeMatters, allDrafts),
     [activeMatters, allDrafts]
@@ -337,7 +345,9 @@ type TodayItem = {
   matterId?: string;
   dueLabel: string;
   urgent: boolean;
-  kind: "task" | "next-action";
+  kind: "task" | "next-action" | "review";
+  /** Deep-link target — set on "review" items so the row jumps to the editor. */
+  draftId?: string;
 };
 
 function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
@@ -357,27 +367,36 @@ function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
       ) : (
         <>
           <ul className="m-0 p-0 list-none flex-1">
-            {items.slice(0, 5).map((it) => (
-              <li
-                key={it.id}
-                className="flex items-start gap-2.5 py-2 border-b border-[var(--ds-line-2)] last:border-b-0"
-              >
-                <AlertCircle
-                  className={`size-3.5 mt-0.5 shrink-0 ${
-                    it.urgent ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
-                  }`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold text-[var(--ds-ink)] leading-snug truncate">
-                    {it.label}
+            {items.slice(0, 5).map((it) => {
+              const onClick = it.draftId
+                ? () => nav(`/editor/${it.draftId}`)
+                : it.matterId
+                  ? () => nav(`/matters/${it.matterId}`)
+                  : undefined;
+              return (
+                <li
+                  key={it.id}
+                  className={`flex items-start gap-2.5 py-2 border-b border-[var(--ds-line-2)] last:border-b-0 ${onClick ? "cursor-pointer hover:bg-[var(--ds-line-2)]/30 -mx-2 px-2 rounded transition" : ""}`}
+                  onClick={onClick}
+                  role={onClick ? "button" : undefined}
+                >
+                  <AlertCircle
+                    className={`size-3.5 mt-0.5 shrink-0 ${
+                      it.urgent ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold text-[var(--ds-ink)] leading-snug truncate">
+                      {it.label}
+                    </div>
+                    <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
+                      {it.dueLabel}
+                      {it.matterName ? ` · ${it.matterName}` : ""}
+                    </div>
                   </div>
-                  <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
-                    {it.dueLabel}
-                    {it.matterName ? ` · ${it.matterName}` : ""}
-                  </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
           {/* Until /today is a thing, "See all tasks" lands on the matters
            * index — tasks live inside matters today, so it's the right
@@ -607,7 +626,9 @@ function PanelFooterButton({
 
 function deriveTodayItems(
   tasks: Record<string, Task>,
-  matters: Record<string, Matter>
+  matters: Record<string, Matter>,
+  drafts: Record<string, Draft>,
+  role: WorkspaceRole | undefined
 ): TodayItem[] {
   const now = Date.now();
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
@@ -655,7 +676,30 @@ function deriveTodayItems(
       kind: "next-action" as const,
     }));
 
-  return [...taskItems, ...matterNextActions];
+  // In-review drafts surface to reviewers (and admin/owner who can act as
+  // reviewer in the single-user case). Empty for drafter/viewer roles.
+  const reviewItems: TodayItem[] =
+    role && (role === "owner" || role === "admin" || role === "reviewer")
+      ? Object.values(drafts)
+          .filter(
+            (d) =>
+              d.mode === "employer" &&
+              d.reviewStatus === "in_review" &&
+              !d.isTemplateSource
+          )
+          .map((d) => ({
+            id: `review:${d.id}`,
+            label: `Review: ${d.title || d.letterType.replace(/_/g, " ")}`,
+            matterName: d.employee.legalName || undefined,
+            matterId: undefined,
+            dueLabel: "awaiting approval",
+            urgent: true,
+            kind: "review" as const,
+            draftId: d.id,
+          }))
+      : [];
+
+  return [...reviewItems, ...taskItems, ...matterNextActions];
 }
 
 function deriveRiskSummary(
@@ -685,7 +729,9 @@ function deriveComplianceSummary(
   drafts: Record<string, Draft>,
   mode: Mode
 ): ComplianceSummary {
-  const all = Object.values(drafts).filter((d) => d.mode === mode);
+  const all = Object.values(drafts).filter(
+    (d) => d.mode === mode && !d.isTemplateSource
+  );
   if (all.length === 0) {
     return { totalDrafts: 0, strongDrafts: 0, needsReview: 0, percent: 0 };
   }
@@ -721,6 +767,7 @@ function deriveRecentActivity(
   const rows: RecentItem[] = [];
   for (const d of Object.values(drafts)) {
     if (d.mode !== mode) continue;
+    if (d.isTemplateSource) continue;
     const meta = safeMeta(d.letterType);
     const title = meta?.shortTitle ?? d.letterType;
     for (const ev of d.timeline ?? []) {
@@ -779,7 +826,7 @@ function EmployeeHome({ mode }: { mode: Mode }) {
   const myDrafts = useMemo(
     () =>
       Object.values(drafts)
-        .filter((d) => d.mode === mode)
+        .filter((d) => d.mode === mode && !d.isTemplateSource)
         .sort((a, b) => b.updatedAt - a.updatedAt),
     [drafts, mode]
   );

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   Search,
@@ -40,9 +40,12 @@ type TemplatesTab = "drafthr" | "mine";
 
 export function BrowseLetters({ mode }: { mode: Mode }) {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const [activeCategory, setActiveCategory] = useState<LetterCategoryId | "all">("all");
-  const [activeTab, setActiveTab] = useState<TemplatesTab>("drafthr");
+  const [activeTab, setActiveTab] = useState<TemplatesTab>(() =>
+    searchParams.get("tab") === "mine" ? "mine" : "drafthr"
+  );
   const createDraft = useDraftStore((s) => s.createDraft);
   // Surface a count on the My Templates tab without a second selector.
   const customCount = useDraftStore(

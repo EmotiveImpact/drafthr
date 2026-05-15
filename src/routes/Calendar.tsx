@@ -46,7 +46,11 @@ export function Calendar() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
 
-  const events = useMemo(() => extractEvents(Object.values(drafts)), [drafts]);
+  const events = useMemo(
+    () =>
+      extractEvents(Object.values(drafts).filter((d) => !d.isTemplateSource)),
+    [drafts]
+  );
   const upcoming = events.filter((e) => e.daysAway >= 0);
   const past = events.filter((e) => e.daysAway < 0);
 

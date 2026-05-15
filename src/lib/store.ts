@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import type {
   AIAction,
   AIChatMessage,
+  ApprovalEntry,
   Collaborator,
   CollaboratorRole,
   Comment,
@@ -104,6 +105,16 @@ type Store = {
     draftIds: string[];
   }) => string;
   createDraft: (letterType: LetterTypeId, answers: LetterAnswers, mode?: Mode) => string;
+  /** Spawn a draft flagged as a template authoring surface. The returned
+   * draft has `isTemplateSource: true` set so the editor swaps Export
+   * → Save template. `templateName` / `templateDescription` are stashed
+   * on answers so the banner + first save can read them. */
+  createTemplateSourceDraft: (
+    letterType: LetterTypeId,
+    answers: LetterAnswers,
+    mode: Mode,
+    meta: { templateName: string; templateDescription?: string }
+  ) => string;
   updateAnswers: (id: string, answers: LetterAnswers) => void;
   /** Rename the draft's display title. Empty string clears the override
    * so the letter-type meta title takes over again. */
@@ -163,6 +174,15 @@ type Store = {
     id: string,
     event: Omit<DraftTimelineEvent, "id" | "createdAt"> & { createdAt?: number }
   ) => void;
+  /** Drafter action: ship the draft to a reviewer for sign-off. */
+  submitForReview: (id: string, reviewerName?: string, body?: string) => void;
+  /** Reviewer action: green-light the draft. Clears it to "ready to send". */
+  approveDraft: (id: string, reviewerName: string, body?: string) => void;
+  /** Reviewer action: push back with required changes. Returns the draft
+   * to "draft" state for the author to revise. */
+  requestChanges: (id: string, reviewerName: string, body: string) => void;
+  /** Author action: pull a submitted draft back before review starts. */
+  withdrawForReview: (id: string) => void;
   deleteDraft: (id: string) => void;
 };
 
@@ -607,6 +627,31 @@ export const useDraftStore = create<Store>()(
           updatedAt: now,
         };
         set((s) => ({ drafts: { ...s.drafts, [id]: draft } }));
+        return id;
+      },
+
+      createTemplateSourceDraft: (letterType, answers, mode, metaInput) => {
+        const id = get().createDraft(letterType, answers, mode);
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const nextAnswers: LetterAnswers = {
+            ...d.answers,
+            _templateName: metaInput.templateName,
+            _templateDescription: metaInput.templateDescription,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                isTemplateSource: true,
+                answers: nextAnswers,
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
         return id;
       },
 
@@ -1180,6 +1225,135 @@ export const useDraftStore = create<Store>()(
             drafts: {
               ...s.drafts,
               [id]: appendTimeline(d, timelineEvent(event.kind, event.title, event)),
+            },
+          };
+        }),
+
+      /* ----------------------------------------------------------------
+       * Approval workflow — Business-tier review queue.
+       * Status machine: draft → in_review → (approved | changes_requested → draft).
+       * Every transition logs an ApprovalEntry on draft.approvals[] AND a
+       * timeline event so existing Activity surfaces pick it up for free.
+       * ---------------------------------------------------------------*/
+
+      submitForReview: (id, reviewerName, body) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const now = Date.now();
+          const reviewer = (reviewerName ?? "").trim() || "Workspace reviewer";
+          const entry: ApprovalEntry = {
+            id: uid("apr"),
+            reviewerName: reviewer,
+            decision: "submitted",
+            body: body?.trim() || undefined,
+            createdAt: now,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "in_review",
+                  submittedForReviewAt: now,
+                  approvals: [...(d.approvals ?? []), entry],
+                },
+                timelineEvent("review_submitted", `Submitted for review to ${reviewer}`, {
+                  createdAt: now,
+                  detail: entry.body,
+                  actorName: reviewer,
+                  meta: { approvalId: entry.id },
+                })
+              ),
+            },
+          };
+        }),
+
+      approveDraft: (id, reviewerName, body) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const now = Date.now();
+          const reviewer = reviewerName.trim() || "Workspace reviewer";
+          const entry: ApprovalEntry = {
+            id: uid("apr"),
+            reviewerName: reviewer,
+            decision: "approved",
+            body: body?.trim() || undefined,
+            createdAt: now,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "approved",
+                  reviewDecidedAt: now,
+                  approvals: [...(d.approvals ?? []), entry],
+                },
+                timelineEvent("review_approved", `Approved by ${reviewer}`, {
+                  createdAt: now,
+                  detail: entry.body,
+                  actorName: reviewer,
+                  meta: { approvalId: entry.id },
+                })
+              ),
+            },
+          };
+        }),
+
+      requestChanges: (id, reviewerName, body) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const now = Date.now();
+          const reviewer = reviewerName.trim() || "Workspace reviewer";
+          const entry: ApprovalEntry = {
+            id: uid("apr"),
+            reviewerName: reviewer,
+            decision: "changes_requested",
+            body: body.trim(),
+            createdAt: now,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "changes_requested",
+                  reviewDecidedAt: now,
+                  approvals: [...(d.approvals ?? []), entry],
+                },
+                timelineEvent("review_changes_requested", `Changes requested by ${reviewer}`, {
+                  createdAt: now,
+                  detail: entry.body,
+                  actorName: reviewer,
+                  meta: { approvalId: entry.id },
+                })
+              ),
+            },
+          };
+        }),
+
+      withdrawForReview: (id) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          if (d.reviewStatus !== "in_review") return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "draft",
+                  submittedForReviewAt: undefined,
+                },
+                timelineEvent("review_withdrawn", "Withdrew from review")
+              ),
             },
           };
         }),

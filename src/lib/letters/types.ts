@@ -361,7 +361,11 @@ export type DraftTimelineEventKind =
   | "ai_applied"
   | "ai_cleared"
   | "exported"
-  | "counsel_review";
+  | "counsel_review"
+  | "review_submitted"
+  | "review_approved"
+  | "review_changes_requested"
+  | "review_withdrawn";
 
 export type DraftTimelineEvent = {
   id: string;
@@ -394,6 +398,29 @@ export type Comment = {
   quote?: string;
   createdAt: number;
   resolved?: boolean;
+};
+
+/**
+ * Approval workflow state machine for the Business-tier review queue.
+ * - draft:              author still working
+ * - in_review:          submitted, waiting on reviewer
+ * - approved:           reviewer signed off — clear to send
+ * - changes_requested:  reviewer pushed back; back to author for revision
+ */
+export type ReviewStatus =
+  | "draft"
+  | "in_review"
+  | "approved"
+  | "changes_requested";
+
+export type ApprovalEntry = {
+  id: string;
+  /** Free-text now — becomes userId when WorkOS lands. */
+  reviewerName: string;
+  decision: "approved" | "changes_requested" | "submitted";
+  /** Required on changes_requested; optional on approve/submit. */
+  body?: string;
+  createdAt: number;
 };
 
 export type Draft = {
@@ -436,6 +463,22 @@ export type Draft = {
    * resolving the full template registry on mount.
    */
   evidenceTier?: "light" | "medium" | "heavy";
+  /** When true, this draft is a template authoring surface — the editor
+   * topbar swaps "Export" for "Save template" and saves push state into
+   * the linked customTemplate row. Filter these out of normal Drafts
+   * lists (BrowseLetters, Home, etc.). */
+  isTemplateSource?: boolean;
+  /** When isTemplateSource is true, points at the CustomTemplate id this
+   * draft authors. Set on first save; updates re-save in place. */
+  templateSourceId?: string;
+  /** Approval workflow state. Defaults to "draft" for legacy + new drafts. */
+  reviewStatus?: ReviewStatus;
+  /** When the latest "submit for approval" happened. */
+  submittedForReviewAt?: number;
+  /** When the latest review decision happened. */
+  reviewDecidedAt?: number;
+  /** Append-only review history. */
+  approvals?: ApprovalEntry[];
   createdAt: number;
   updatedAt: number;
 };

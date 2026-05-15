@@ -44,7 +44,10 @@ export function MatterDetail() {
   const createDraft = useDraftStore((s) => s.createDraft);
   const assignDraftToMatter = useDraftStore((s) => s.assignDraftToMatter);
 
-  const allDrafts = useMemo(() => Object.values(drafts), [drafts]);
+  const allDrafts = useMemo(
+    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
+    [drafts]
+  );
   const matterDrafts = useMemo(
     () => (matter ? draftsInMatter(allDrafts, matter.id) : []),
     [allDrafts, matter]

@@ -46,7 +46,10 @@ export function MattersIndex() {
   // Pick mode from profile; default to whichever side has more matters.
   const profileMode = profile.role ?? "employer";
   const ownMatters = useMemo(() => Object.values(matters), [matters]);
-  const allDrafts = useMemo(() => Object.values(drafts), [drafts]);
+  const allDrafts = useMemo(
+    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
+    [drafts]
+  );
 
   const active = activeMatters(ownMatters, profileMode);
   const closed = closedMatters(ownMatters, profileMode);

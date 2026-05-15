@@ -47,7 +47,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
   }, [open]);
 
   const draftRows = useMemo(() => {
-    const all = Object.values(drafts);
+    const all = Object.values(drafts).filter((d) => !d.isTemplateSource);
     const filtered = role ? all.filter((d) => d.mode === role) : all;
     return filtered
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -82,6 +82,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
       snippet: string;
     }> = [];
     for (const d of Object.values(drafts)) {
+      if (d.isTemplateSource) continue;
       if (role && d.mode !== role) continue;
       const draftTitle = briefTitleFor(d);
       for (const s of d.sections) {
@@ -120,6 +121,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
       snippet: string;
     }> = [];
     for (const d of Object.values(drafts)) {
+      if (d.isTemplateSource) continue;
       if (role && d.mode !== role) continue;
       const draftTitle = briefTitleFor(d);
       for (const c of d.comments ?? []) {

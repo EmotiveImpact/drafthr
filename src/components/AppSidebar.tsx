@@ -53,6 +53,7 @@ import {
   FileText,
   Users,
   Layers,
+  ClipboardCheck,
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
@@ -226,9 +227,13 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
   const loc = useLocation();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
-  const notifs = deriveNotifications(Object.values(drafts), profile);
+  const realDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
+  const notifs = deriveNotifications(realDrafts, profile);
   const actionable = notifs.filter((n) => n.severity !== "info").length;
   const top = topSeverity(notifs);
+  const inReviewCount = realDrafts.filter(
+    (d) => d.reviewStatus === "in_review"
+  ).length;
   const prefix = mode === "employer" ? "/hr" : mode === "employee" ? "/me" : null;
   const search = useSearchPaletteToggle();
 
@@ -288,6 +293,13 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
 
   const watch: NavItem[] = [
     { href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Deadline reminders & compliance alerts" },
+    // HR-only — approval queue is a Business-tier feature for HR drafters
+    // shipping work to reviewers (HR Director, in-house counsel).
+    ...(mode === "employer"
+      ? ([
+          { href: "/approvals", label: "Approvals", Icon: ClipboardCheck, tooltip: "Drafts waiting for sign-off" },
+        ] satisfies NavItem[])
+      : []),
     { href: "/calendar", label: "Calendar", Icon: CalendarDays, tooltip: "Deadlines across all your drafts" },
   ];
 
@@ -297,7 +309,8 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
   ];
 
   const renderItem = (it: NavItem) => {
-    const showBadge = it.label === "Notifications" && actionable > 0 && top;
+    const showNotifBadge = it.label === "Notifications" && actionable > 0 && top;
+    const showApprovalsBadge = it.label === "Approvals" && inReviewCount > 0;
     return (
       <SidebarMenuItem key={it.label}>
         {it.href && !it.disabled ? (
@@ -317,7 +330,7 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
             <span>{it.label}</span>
           </SidebarMenuButton>
         )}
-        {showBadge && (
+        {showNotifBadge && (
           <SidebarMenuBadge
             className={cn(
               "px-1 text-[10px] text-white",
@@ -325,6 +338,11 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
             )}
           >
             {actionable > 9 ? "9+" : actionable}
+          </SidebarMenuBadge>
+        )}
+        {showApprovalsBadge && (
+          <SidebarMenuBadge className="px-1 text-[10px] text-white bg-amber-500">
+            {inReviewCount > 9 ? "9+" : inReviewCount}
           </SidebarMenuBadge>
         )}
       </SidebarMenuItem>
@@ -391,7 +409,7 @@ function NavMatters({ mode }: { mode: Mode }) {
   const drafts = useDraftStore((s) => s.drafts);
 
   const allMatters = activeMatters(Object.values(matters), mode);
-  const allDrafts = Object.values(drafts);
+  const allDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
 
   const onIndexPage = loc.pathname === "/matters";
   const activeMatterId = loc.pathname.startsWith("/matters/")
@@ -503,6 +521,7 @@ function NavRecentDrafts({ mode }: { mode: Mode | null }) {
   const deleteDraft = useDraftStore((s) => s.deleteDraft);
 
   const list = Object.values(drafts)
+    .filter((d) => !d.isTemplateSource)
     .filter((d) => (mode ? d.mode === mode : true))
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 8);

@@ -83,6 +83,9 @@ type Props = {
   isStreaming: boolean;
   active: boolean;
   onFocus: () => void;
+  /** When false (e.g. draft is awaiting review and viewer is a reviewer,
+   * or status is "approved"), Tiptap blocks edits. Defaults to true. */
+  editable?: boolean;
 };
 
 export function SectionEditor({
@@ -101,6 +104,7 @@ export function SectionEditor({
   isStreaming,
   active,
   onFocus,
+  editable = true,
 }: Props) {
   const lastWrittenContent = useRef<string>(section.html);
   const linkedEvidence = linkedEvidenceForSection(draft, section.id);
@@ -164,7 +168,7 @@ export function SectionEditor({
       }),
     ],
     content: section.html || "",
-    editable: !isStreaming,
+    editable: !isStreaming && editable,
     onUpdate: ({ editor: ed }) => {
       const html = ed.getHTML();
       if (html !== lastWrittenContent.current) {
@@ -306,11 +310,12 @@ export function SectionEditor({
     return () => clearTimeout(handle);
   }, [section.html, editor, isStreaming]);
 
-  // Toggle editability when streaming starts/stops.
+  // Toggle editability when streaming starts/stops OR when the parent
+  // flips the editable prop (e.g. draft enters review with reviewer role).
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!isStreaming);
-  }, [editor, isStreaming]);
+    editor.setEditable(!isStreaming && editable);
+  }, [editor, isStreaming, editable]);
 
   return (
     <section
