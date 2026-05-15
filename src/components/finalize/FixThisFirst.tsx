@@ -110,11 +110,13 @@ function FixRow({
         </div>
       </div>
 
-      {/* Impact pill + CTA — right-aligned in the same horizontal row, never shrinks. */}
-      <div className="flex items-center gap-2 shrink-0 mt-0.5">
+      {/* Impact pill stacks ABOVE the CTA so the right cluster stays narrow
+       * (~110px) and the title/detail get the breathing room they need at
+       * 360–420px rail widths. Both right-aligned within the column. */}
+      <div className="flex flex-col items-end gap-1.5 shrink-0 mt-0.5">
         {fix.impact > 0 && (
           <span
-            className="inline-flex items-center h-7 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[11px] font-bold tabular-nums"
+            className="inline-flex items-center h-5 px-1.5 rounded bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[10px] font-bold tabular-nums"
             title={`Fixing this is predicted to add ${fix.impact} to the overall score`}
           >
             +{fix.impact}
@@ -127,7 +129,7 @@ function FixRow({
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
           transition={{ duration: 0.12 }}
-          className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition"
+          className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition whitespace-nowrap"
         >
           {fix.check.actionLabel ?? "Fix"}
           <ArrowRight className="size-3.5" />
