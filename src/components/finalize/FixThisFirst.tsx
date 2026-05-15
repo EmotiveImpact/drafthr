@@ -111,11 +111,12 @@ function FixRow({
         </div>
       </div>
 
-      {/* Impact + CTA row, always below the text, indented to align past the icon column. */}
-      <div className="flex items-center justify-end gap-3 shrink-0 ml-10">
+      {/* Impact + CTA — pair the +N gain with the action so the value
+       * proposition is one visual unit, not two scattered bits. */}
+      <div className="flex items-center gap-2 ml-10">
         {fix.impact > 0 && (
           <span
-            className="text-[11.5px] font-semibold tabular-nums text-[var(--ds-green-fg)]"
+            className="inline-flex items-center h-7 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[11px] font-bold tabular-nums"
             title={`Fixing this is predicted to add ${fix.impact} to the overall score`}
           >
             +{fix.impact}
@@ -125,10 +126,10 @@ function FixRow({
         <motion.button
           type="button"
           onClick={() => onAction(fix)}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.96 }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
           transition={{ duration: 0.12 }}
-          className="shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition"
+          className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition"
         >
           {fix.check.actionLabel ?? "Fix"}
           <ArrowRight className="size-3.5" />

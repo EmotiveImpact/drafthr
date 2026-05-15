@@ -87,7 +87,7 @@ export function HealthTab({
     >
       {/* Score summary — overall ring on the left, band + verdict + sub-rings on the right. */}
       <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <ScoreRing score={scoreData.score} band={scoreData.band} size={72} />
           <div className="flex-1 min-w-0">
             <span
