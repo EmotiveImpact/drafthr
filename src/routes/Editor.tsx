@@ -157,10 +157,22 @@ export function Editor() {
   // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
-  // Desktop right-rail collapse — Notion-style 36px vertical strip with
-  // "Ask AI" label so AI stays in peripheral vision even when collapsed.
-  // lg:+ only; mobile uses showRail + bottom sheet.
-  const [railCollapsed, setRailCollapsed] = useState(false);
+  // Unified dock state. `pinnedDock` is the single source of truth for which
+  // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
+  // Default: null → twin pills at bottom-right, letter at full width.
+  const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(null);
+
+  // Derived: the AI rail is open as the right column only when AI is pinned.
+  const railCollapsed = pinnedDock !== "ai";
+  const setRailCollapsed = (next: boolean) =>
+    setPinnedDock(next ? (pinnedDock === "ai" ? null : pinnedDock) : "ai");
+
+  const pinEvidence = () => setPinnedDock("evidence");
+  const pinAI = () => setPinnedDock("ai");
+  const unpinAll = () => setPinnedDock(null);
+
+  // Derived: evidence is pinned when pinnedDock === "evidence".
+  const evidencePinned = pinnedDock === "evidence";
 
   /* ----------------------- Evidence drawer + pinned state -----------------
    * Two modes:
@@ -171,30 +183,19 @@ export function Editor() {
    * Pin state is localStorage-backed via PIN_KEY(draftId).
    * --------------------------------------------------------------------- */
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
-  const [evidencePinned, setEvidencePinned] = useState<boolean>(() => {
-    if (!draftId) return false;
-    const stored = readPinned(draftId);
-    if (stored !== null) return stored;
-    // No stored preference — derive from template tier. We use the
-    // letter-type-only deriver here so we don't have to await the full
-    // template registry; getEvidenceTier is the template-resolved variant
-    // for callers that already have a template handle. Reads from the
-    // draft's stored evidenceTier first if present.
-    return false; // initialised properly in the mount effect below
-  });
 
   // Persist pin changes.
   const handlePinnedChange = (next: boolean) => {
-    setEvidencePinned(next);
-    if (draftId) writePinned(draftId, next);
-    // The pinned rail mounts inside the right-rail slot. If the AI rail
-    // was previously collapsed, that slot has zero width — the pinned
-    // drawer wouldn't be visible. Force the rail open on BOTH pin AND
-    // unpin so the user sees the result of their click either way.
-    setRailCollapsed(false);
-    // Pinning also implicitly closes the floating drawer since the same
-    // surface is now permanent.
-    if (next) setEvidenceDrawerOpen(false);
+    if (next) {
+      pinEvidence();
+      if (draftId) writePinned(draftId, true);
+      // Pinning also implicitly closes the floating drawer since the same
+      // surface is now permanent.
+      setEvidenceDrawerOpen(false);
+    } else {
+      unpinAll();
+      if (draftId) writePinned(draftId, false);
+    }
   };
 
   // Handoff modal state — shown when the user clicks Review and a soft
@@ -285,14 +286,14 @@ export function Editor() {
     if (!draft || !draftId) return;
     const stored = readPinned(draftId);
     if (stored !== null) {
-      setEvidencePinned(stored);
+      setPinnedDock(stored ? "evidence" : null);
       return;
     }
     // Prefer the cached tier on the draft (set at creation time); fall back
     // to deriving it from the letter type. This avoids resolving the full
     // template registry just to read the tier.
     const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
-    setEvidencePinned(tier === "heavy");
+    setPinnedDock(tier === "heavy" ? "evidence" : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId, draft?.letterType, draft?.evidenceTier]);
 
