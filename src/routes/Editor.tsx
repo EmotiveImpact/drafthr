@@ -1460,39 +1460,59 @@ export function Editor() {
           </button>
         )}
 
-        {/* Floating "Ask AI" pill — DESKTOP.
-         * Framer Motion spring entry from the bottom-right corner when
-         * railCollapsed flips true; reverse on expand. AnimatePresence
-         * keeps the pill mounted for the exit transition. lg:+ only. */}
+        {/* Desktop dock tray — Evidence + Ask AI pills at bottom-right.
+         * Visibility rules:
+         *   pinnedDock === null      → both pills shown
+         *   pinnedDock === "evidence"→ only Ask AI pill (Evidence is the rail)
+         *   pinnedDock === "ai"      → neither pill (AI is the rail)
+         * AnimatePresence keeps the tray mounted for the exit transition. lg:+ only. */}
         <AnimatePresence>
-          {!focusMode && railCollapsed && (
-            <motion.button
-              key="desktop-ask-ai"
-              type="button"
-              onClick={() => setRailCollapsed(false)}
-              initial={{ opacity: 0, y: 24, scale: 0.85 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.9 }}
+          {!focusMode && pinnedDock !== "ai" && (
+            <motion.div
+              key="desktop-dock-tray"
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
               transition={{
-                // Entry: ~80ms delay so the rail finishes leaving before
-                // the pill starts arriving (relay, not race). Exit:
-                // no delay so it gets out of the way as the rail returns.
                 type: "spring",
                 stiffness: 380,
                 damping: 28,
                 mass: 0.7,
                 delay: 0.08,
               }}
-              whileHover={{ scale: 1.03 }}
-              whileTap={{ scale: 0.97 }}
-              className="hidden lg:inline-flex fixed bottom-4 right-4 z-30 items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-95"
-              aria-label="Open AI agent"
+              className="hidden lg:flex fixed bottom-4 right-4 z-30 items-end gap-2"
             >
-              <span className="grid place-items-center size-5 rounded-full bg-white/15">
-                <Sparkles className="size-3" />
-              </span>
-              <span className="drafthr-text-shimmer text-[12px] font-medium">Ask AI</span>
-            </motion.button>
+              {pinnedDock !== "evidence" && (
+                <button
+                  type="button"
+                  onClick={() => setEvidenceDrawerOpen(true)}
+                  className="inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border border-amber-200 shadow-[0_6px_18px_rgba(0,0,0,0.10)] hover:opacity-95"
+                  aria-label="Open evidence drawer"
+                >
+                  <span className="grid place-items-center size-5 rounded-full bg-white/40">
+                    <Paperclip className="size-3" />
+                  </span>
+                  <span className="text-[12px] font-semibold">Evidence</span>
+                  {(draft.evidence?.length ?? 0) > 0 && (
+                    <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--ds-amber-fg)] text-white text-[10px] font-bold">
+                      {draft.evidence?.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setRailCollapsed(false)}
+                className="inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-95"
+                aria-label="Open AI agent"
+              >
+                <span className="grid place-items-center size-5 rounded-full bg-white/15">
+                  <Sparkles className="size-3" />
+                </span>
+                <span className="drafthr-text-shimmer text-[12px] font-medium">Ask AI</span>
+              </button>
+            </motion.div>
           )}
         </AnimatePresence>
       </div>
