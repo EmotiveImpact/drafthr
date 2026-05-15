@@ -85,9 +85,17 @@ export async function POST(req: Request): Promise<Response> {
     typeof body.extraSystemHint === "string"
       ? body.extraSystemHint.trim().slice(0, MAX_EXTRA_HINT_CHARS)
       : "";
+  // Anthropic prompt caching: tag the leading system message(s) as
+  // ephemeral so the ~5min cache absorbs repeated calls within a single
+  // editing session / bulk batch. 90% input-token savings on hits.
+  const cacheControl = { providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } } };
+  const supplied: ModelMessage[] =
+    body.messages[0]?.role === "system"
+      ? [{ ...body.messages[0], ...cacheControl }, ...body.messages.slice(1)]
+      : body.messages;
   const messages: ModelMessage[] = hint
-    ? [{ role: "system", content: hint } as ModelMessage, ...body.messages]
-    : body.messages;
+    ? [{ role: "system", content: hint, ...cacheControl } as ModelMessage, ...supplied]
+    : supplied;
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

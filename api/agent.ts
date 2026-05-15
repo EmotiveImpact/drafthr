@@ -170,9 +170,18 @@ export async function POST(req: Request): Promise<Response> {
 
   const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
 
+  const system =
+    typeof body.system === "string" && body.system.length > 0
+      ? {
+          role: "system" as const,
+          content: body.system,
+          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" as const } } },
+        }
+      : undefined;
+
   const result = streamText({
     model: buildModel(body.model),
-    system: body.system,
+    system,
     messages: modelMessages,
     tools: agentTools,
     temperature: 0.4,
