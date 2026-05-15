@@ -98,7 +98,7 @@ function FixRow({
 
         <div className="flex-1 min-w-0">
           {/* Dimension chip dropped — severity icon colour (red = fail,
-           * amber = warn) already conveys the gist, and at 260px sidebar
+           * amber = warn) already conveys the gist, and at 300px sidebar
            * the chip pushed the title into ugly wrap territory. */}
           <span className="text-[13px] font-semibold text-[var(--ds-ink)] leading-tight">
             {fix.check.label}

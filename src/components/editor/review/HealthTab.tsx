@@ -86,7 +86,7 @@ export function HealthTab({
       className="space-y-4"
     >
       {/* Score summary — overall ring on the left, band + verdict + sub-rings on the right.
-       * Compact sizing (56px hero, 36px sub) to fit the 260px sidebar. */}
+       * Compact sizing (56px hero, 36px sub) to fit the 300px sidebar. */}
       <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-3">
         <div className="flex items-center gap-2.5">
           <ScoreRing score={scoreData.score} band={scoreData.band} size={56} />

@@ -505,13 +505,13 @@ export function Editor() {
        * the title can claim centre stage. */}
       <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
         {/* Topbar grid mirrors the body grid below it on lg+:
-         *   [260px left rail]  [1fr canvas]  [360px right rail]
+         *   [300px left rail]  [1fr canvas]  [360px right rail]
          * So the migrated secondary-toolbar items (Tone, Edit/Preview,
          * pending/drafting/regen) sit DIRECTLY ABOVE their old positions
          * over the canvas column, not jammed into the viewport-wide
          * left/right clusters. Below lg the rails are drawers and the
          * grid collapses to a single flex row. */}
-        <div className="relative h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4 lg:grid lg:grid-cols-[260px_minmax(0,1fr)_360px] lg:gap-0 lg:px-0">
+        <div className="relative h-full flex items-center gap-2 sm:gap-3 px-2 sm:px-4 lg:grid lg:grid-cols-[300px_minmax(0,1fr)_360px] lg:gap-0 lg:px-0">
           {/* Column 1 — over the left rail / viewport-left on mobile.
            * Brand mark + back-to-letters + counsel pill. */}
           <div className="flex items-center gap-1 min-w-0 lg:px-4">
@@ -1133,8 +1133,8 @@ export function Editor() {
           (focusMode
             ? "lg:grid-cols-1"
             : pinnedDock !== null
-            ? "lg:grid-cols-[260px_minmax(0,1fr)_360px]"
-            : "lg:grid-cols-[260px_minmax(0,1fr)_0px]")
+            ? "lg:grid-cols-[300px_minmax(0,1fr)_360px]"
+            : "lg:grid-cols-[300px_minmax(0,1fr)_0px]")
         }
       >
         <aside
