@@ -1,13 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
-import { Link } from "react-router-dom";
 import {
   Paperclip,
   Search,
   X,
   ArrowRight,
   Upload,
-  ExternalLink,
   FileText,
   Mail,
   NotebookText,
@@ -26,6 +24,28 @@ import {
 } from "@/components/ui/sheet";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 import { cn } from "@/lib/utils";
+import { useDraftStore } from "@/lib/store";
+import { uid } from "@/lib/utils";
+
+/** Read a File as a base64 data URL. Same pattern as EvidencePanel. */
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Map a file's MIME type to an EvidenceItem kind. */
+function kindFromFile(file: File): EvidenceItem["kind"] {
+  const t = file.type || "";
+  if (t.startsWith("image/")) return "screenshot";
+  if (t.includes("pdf") || t.includes("word") || t.includes("document")) return "document";
+  if (t.includes("calendar") || t.includes("ical")) return "calendar";
+  if (t.startsWith("message/") || file.name.endsWith(".eml")) return "email";
+  return "document";
+}
 
 /* ---------------------------------------------------------------------------
  * Kind metadata — kept local so we don't depend on imports outside scope.
@@ -43,11 +63,14 @@ const KIND_ICON: Record<Kind, typeof FileText> = {
 
 type FilterTab = "all" | "email" | "screenshot" | "document" | "note";
 
+// Short labels — long ones ("Screenshots", "Documents") overflowed the
+// pinned-rail width even with overflow-x-auto. These fit cleanly into a
+// 380px slot at every viewport without scrolling.
 const FILTER_TABS: { id: FilterTab; label: string; kind?: Kind }[] = [
   { id: "all", label: "All" },
-  { id: "email", label: "Emails", kind: "email" },
-  { id: "screenshot", label: "Screenshots", kind: "screenshot" },
-  { id: "document", label: "Documents", kind: "document" },
+  { id: "email", label: "Email", kind: "email" },
+  { id: "screenshot", label: "Screens", kind: "screenshot" },
+  { id: "document", label: "Docs", kind: "document" },
   { id: "note", label: "Notes", kind: "note" },
 ];
 
@@ -86,6 +109,42 @@ export function EvidenceDrawer({
   const allItems = draft.evidence ?? [];
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
+
+  // Inline file upload — the old "Upload new" link navigated to the
+  // /editor/:id/evidence route which 302's back to Edit, causing a
+  // visible page flash. Now we just open a native file picker, read
+  // each chosen file as a base64 data URL, and append to the draft's
+  // evidence array via setEvidence. No navigation, no flash.
+  const setEvidence = useDraftStore((s) => s.setEvidence);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const handleUploadFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadStatus(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`);
+    try {
+      const items: EvidenceItem[] = [];
+      for (const file of Array.from(files)) {
+        const dataUrl = await readAsDataUrl(file);
+        items.push({
+          id: uid("ev"),
+          kind: kindFromFile(file),
+          filename: file.name,
+          content: "",
+          fileDataUrl: dataUrl,
+          mimeType: file.type || undefined,
+          sectionIds: [],
+          uploadedAt: Date.now(),
+          includeVerbatim: false,
+        });
+      }
+      setEvidence(draft.id, [...allItems, ...items]);
+      setUploadStatus(`Added ${items.length} item${items.length > 1 ? "s" : ""}`);
+      // Clear the status banner after a moment.
+      window.setTimeout(() => setUploadStatus(null), 2400);
+    } catch (err) {
+      setUploadStatus(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   // Detect which evidence ids have already been inserted into ANY section
   // by scanning each section's HTML for `data-fig-id="ID"`. Re-computed every
@@ -280,8 +339,9 @@ export function EvidenceDrawer({
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-[var(--ds-line)] px-5 gap-1 overflow-x-auto">
+        {/* Tabs — min-w-0 on the flex container is required for overflow-x-auto
+         * to actually kick in when the inner buttons exceed the slot width. */}
+        <div className="flex border-b border-[var(--ds-line)] px-3 gap-0.5 overflow-x-auto min-w-0">
           {FILTER_TABS.map((tab) => {
             const isActive = activeTab === tab.id;
             const count = counts[tab.id];
@@ -291,7 +351,7 @@ export function EvidenceDrawer({
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "py-2.5 px-3 text-[12.5px] font-semibold border-b-2 -mb-px transition whitespace-nowrap",
+                  "py-2.5 px-2 text-[12px] font-semibold border-b-2 -mb-px transition whitespace-nowrap shrink-0",
                   isActive
                     ? "text-[var(--ds-ink)] border-[var(--ds-ink)]"
                     : "text-[var(--ds-muted)] border-transparent hover:text-[var(--ds-ink)]"
@@ -318,8 +378,7 @@ export function EvidenceDrawer({
           {filtered.length === 0 ? (
             <EmptyState
               hasAnyEvidence={allItems.length > 0}
-              draftId={draft.id}
-              onClose={() => onOpenChange(false)}
+              onUploadClick={() => fileInputRef.current?.click()}
             />
           ) : (
             <ul className="space-y-2">
@@ -431,28 +490,38 @@ export function EvidenceDrawer({
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer — Upload-new opens a native file picker (inline, no navigation),
+         * the "Manage evidence" link was removed because the drawer IS the
+         * management surface (clicking it just opened a redirect-back-to-here
+         * cycle = visible page flash). */}
         <div className="px-5 py-3 border-t border-[var(--ds-line)] bg-[var(--ds-surface-2)] flex items-center gap-3">
-          <Link
-            to={`/editor/${draft.id}/evidence`}
-            onClick={() => onOpenChange(false)}
-            className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1"
-          >
-            Manage evidence
-            <ExternalLink className="size-3" />
-          </Link>
           <span className="text-[11.5px] text-[var(--ds-muted)] tabular-nums">
             {allItems.length} {allItems.length === 1 ? "item" : "items"}
             {totalBytes > 0 && <> · {formatBytes(totalBytes)}</>}
           </span>
-          <Link
-            to={`/editor/${draft.id}/evidence?action=add`}
-            onClick={() => onOpenChange(false)}
+          {uploadStatus && (
+            <span className="text-[11px] text-[var(--ds-amber-fg)] truncate">
+              {uploadStatus}
+            </span>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              void handleUploadFiles(e.target.files);
+              e.target.value = ""; // allow re-picking the same file
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
             className="ml-auto h-[30px] px-3 bg-white border border-[var(--ds-line)] rounded-md text-[12px] font-semibold text-[var(--ds-ink)] flex items-center gap-1.5 hover:bg-[var(--ds-line-2)] transition"
           >
             <Upload className="size-3" />
             Upload new
-          </Link>
+          </button>
         </div>
     </>
   );
@@ -498,12 +567,10 @@ export function EvidenceDrawer({
  * ------------------------------------------------------------------------ */
 function EmptyState({
   hasAnyEvidence,
-  draftId,
-  onClose,
+  onUploadClick,
 }: {
   hasAnyEvidence: boolean;
-  draftId: string;
-  onClose: () => void;
+  onUploadClick: () => void;
 }) {
   if (!hasAnyEvidence) {
     return (
@@ -515,17 +582,17 @@ function EmptyState({
           No evidence yet
         </p>
         <p className="text-[11.5px] text-[var(--ds-muted)] mt-1 mb-4 max-w-[280px] mx-auto leading-snug">
-          Add emails, screenshots, documents or notes on the Evidence step.
-          You can then insert [See Fig N] references here.
+          Drop in emails, screenshots, documents or notes. They'll appear here
+          and you can insert <strong>[See Fig N]</strong> references into the letter.
         </p>
-        <Link
-          to={`/editor/${draftId}/evidence?action=add`}
-          onClick={onClose}
+        <button
+          type="button"
+          onClick={onUploadClick}
           className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-[var(--ds-ink)] text-white text-[12px] font-semibold rounded-md hover:bg-[var(--ds-ink)]/90 transition"
         >
           <Upload className="size-3" />
-          Go to Evidence
-        </Link>
+          Upload first item
+        </button>
       </div>
     );
   }

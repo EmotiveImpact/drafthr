@@ -187,9 +187,11 @@ export function Editor() {
   const handlePinnedChange = (next: boolean) => {
     setEvidencePinned(next);
     if (draftId) writePinned(draftId, next);
-    // Pinning hides the AI rail; if the rail was previously collapsed,
-    // un-collapse it on unpin so the user sees the AI rail again.
-    if (!next) setRailCollapsed(false);
+    // The pinned rail mounts inside the right-rail slot. If the AI rail
+    // was previously collapsed, that slot has zero width — the pinned
+    // drawer wouldn't be visible. Force the rail open on BOTH pin AND
+    // unpin so the user sees the result of their click either way.
+    setRailCollapsed(false);
     // Pinning also implicitly closes the floating drawer since the same
     // surface is now permanent.
     if (next) setEvidenceDrawerOpen(false);
