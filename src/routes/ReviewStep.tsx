@@ -84,15 +84,24 @@ export function ReviewStep() {
         <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
           · {meta.title}
         </span>
-        {/* Right cluster: primary forward action is Continue to Finalise.
-         * The rail also surfaces this CTA so it's discoverable from any
-         * tab; both routes lead to the same place. */}
+        {/* Right cluster: Back (paired action) + Finalise forward action.
+         * The left ghost "Edit" link acts as a breadcrumb; Back here is
+         * the action-pair for Finalise so the user can navigate either way
+         * without hunting across the header. */}
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => nav(`/editor/${draft.id}`)}
+          >
+            <ArrowLeft className="size-3.5 mr-1.5" />
+            Back
+          </Button>
           <Button
             size="sm"
             onClick={() => nav(`/editor/${draft.id}/finalize`)}
           >
-            Continue to Finalise
+            Finalise
             <ArrowRight className="size-4 ml-1.5" />
           </Button>
         </div>

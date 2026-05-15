@@ -107,7 +107,7 @@ export function ReviewRail({
           onClick={onContinueToFinalize}
           className="inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-semibold hover:opacity-90 transition"
         >
-          Continue to Finalise
+          Finalise
           <ArrowRight className="size-3.5" />
         </button>
       </div>

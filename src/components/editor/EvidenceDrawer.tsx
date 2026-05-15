@@ -498,7 +498,7 @@ export function EvidenceDrawer({
         <div className="px-5 py-3 border-t border-[var(--ds-line)] bg-[var(--ds-surface-2)] flex items-center gap-3">
           <Link
             to={`/editor/${draft.id}/evidence`}
-            onClick={() => onOpenChange(false)}
+            onClick={() => { if (!pinned) onOpenChange(false); }}
             className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1 shrink-0"
           >
             Manage evidence
