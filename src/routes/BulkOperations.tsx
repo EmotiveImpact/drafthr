@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   Download,
   FileSpreadsheet,
   Loader2,
+  Sparkles,
   Upload,
 } from "lucide-react";
 
@@ -24,8 +26,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
-import { letterCatalogByMode } from "@/lib/letters/catalog";
+import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { useDraftStore } from "@/lib/store";
+import type { LetterTypeId } from "@/lib/letters/types";
 import {
   parseCsv,
   rowToAnswers,
@@ -33,6 +36,13 @@ import {
   sampleHeadersFor,
   type CsvParseResult,
 } from "@/components/bulk/csv";
+import {
+  findUnresolvedPlaceholders,
+  generateMergeTemplate,
+  personaliseTemplate,
+  type TemplateDraft,
+  type TemplateProgress,
+} from "@/lib/bulk/mailmerge";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 type Operation = "generate" | "mass_update" | "bulk_archive";
@@ -45,28 +55,49 @@ const STEP_LABELS = [
 ] as const;
 
 /**
- * Business-tier bulk operations skeleton.
+ * Business-tier bulk operations — mail-merge implementation.
  *
  * Step 1: pick operation (only "generate from CSV" is enabled).
  * Step 2: pick an HR-side letter template.
  * Step 3: upload a CSV (with sample download).
- * Step 4: preview parsed rows + warnings, then generate N drafts via the
- *         store's existing `createDraft` action. No AI generation — each
- *         draft starts empty with answers populated from the CSV.
+ * Step 4: preview parsed rows + warnings.
+ * Step 5: results — one AI call drafts a {{placeholder}} template; we
+ *         personalise + persist N drafts client-side and show the links.
  *
- * Real AI generation per row is a follow-up.
+ * The win: ONE AI call regardless of CSV size. Drafts are created with
+ * fully-substituted section HTML and are immediately editable.
  */
+
+type GenerateState =
+  | { phase: "idle" }
+  | { phase: "drafting"; sectionTitle: string; sectionIndex: number; sectionCount: number }
+  | { phase: "personalising"; doneRows: number; totalRows: number }
+  | { phase: "error"; message: string };
+
+type GeneratedDraftSummary = {
+  draftId: string;
+  title: string;
+  /** Placeholders we couldn't fill from this CSV row. */
+  unresolved: string[];
+};
+
 export default function BulkOperations() {
   const navigate = useNavigate();
   const createDraft = useDraftStore((s) => s.createDraft);
+  const updateSection = useDraftStore((s) => s.updateSection);
+  const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
+  const setDraftTitle = useDraftStore((s) => s.setDraftTitle);
 
   const [step, setStep] = useState<Step>(1);
   const [operation, setOperation] = useState<Operation>("generate");
   const [letterType, setLetterType] = useState<string>("probation_outcome");
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [parsed, setParsed] = useState<CsvParseResult | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [createdCount, setCreatedCount] = useState(0);
+  const [generateState, setGenerateState] = useState<GenerateState>({ phase: "idle" });
+  const [generated, setGenerated] = useState<GeneratedDraftSummary[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
+  const generating =
+    generateState.phase === "drafting" || generateState.phase === "personalising";
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dropRef = useRef<HTMLDivElement | null>(null);
@@ -127,26 +158,127 @@ export default function BulkOperations() {
 
   async function handleGenerate() {
     if (!parsed || parsed.rows.length === 0) return;
-    setGenerating(true);
-    let count = 0;
-    for (const row of parsed.rows) {
-      const answers = rowToAnswers(row, letterType);
-      createDraft(letterType as Parameters<typeof createDraft>[0], answers, "employer");
-      count++;
-    }
-    setCreatedCount(count);
-    setGenerating(false);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    setGenerated([]);
     setStep(5);
-    toast.success(`Created ${count} draft${count === 1 ? "" : "s"}. Find them in Drafts.`, {
-      duration: 4000,
+
+    let template: TemplateDraft;
+    try {
+      // Phase 1: ONE AI call. Generate a {{placeholder}} template using
+      // row 1 as the seed for wizard answers. We do not persist this —
+      // the substituted output below becomes the per-row drafts.
+      const seedAnswers = rowToAnswers(parsed.rows[0], letterType);
+      template = await generateMergeTemplate({
+        letterType: letterType as LetterTypeId,
+        mode: "employer",
+        seedAnswers,
+        csvHeaders: parsed.headers,
+        signal: abortRef.current.signal,
+        onProgress: (p: TemplateProgress) => {
+          if (p.phase === "drafting") {
+            setGenerateState({
+              phase: "drafting",
+              sectionTitle: p.sectionTitle,
+              sectionIndex: p.sectionIndex,
+              sectionCount: p.sectionCount,
+            });
+          }
+          // retry events are surfaced via the existing toast / state but
+          // don't change the high-level "drafting" phase.
+        },
+      });
+    } catch (err) {
+      if (abortRef.current?.signal.aborted) {
+        setGenerateState({ phase: "idle" });
+        return;
+      }
+      const message =
+        err instanceof Error ? err.message : "We couldn't draft the template letter.";
+      setGenerateState({ phase: "error", message });
+      toast.error("Generation failed", { description: message });
+      return;
+    }
+
+    // Phase 2: client-side fan-out. For each row, personalise then
+    // persist a new draft. No AI calls beyond this point.
+    setGenerateState({
+      phase: "personalising",
+      doneRows: 0,
+      totalRows: parsed.rows.length,
     });
+    const summaries: GeneratedDraftSummary[] = [];
+    for (let i = 0; i < parsed.rows.length; i++) {
+      const row = parsed.rows[i];
+      const answers = rowToAnswers(row, letterType);
+      const draftId = createDraft(
+        letterType as Parameters<typeof createDraft>[0],
+        answers,
+        "employer"
+      );
+
+      // Find the freshly created draft to map wizard sectionId → runtime
+      // section id (the store assigns a UUID on creation; mailmerge
+      // template keys on the stable sectionId).
+      const fresh = useDraftStore.getState().drafts[draftId];
+      const sectionByWizardId = new Map(
+        fresh?.sections.map((s) => [s.sectionId, s.id]) ?? []
+      );
+
+      const personalised = personaliseTemplate(template, row);
+      const unresolvedForRow = new Set<string>();
+      for (const section of personalised) {
+        const runtimeId = sectionByWizardId.get(section.sectionId);
+        if (!runtimeId) continue;
+        updateSection(draftId, runtimeId, section.html);
+        // updateSection flips status to "edited"; for an AI-produced
+        // section the user can see as "ready", normalise that.
+        setSectionStatus(draftId, runtimeId, "ready");
+        for (const ph of findUnresolvedPlaceholders(section.html)) {
+          unresolvedForRow.add(ph);
+        }
+      }
+
+      // Personalised title — preserves the per-row identity in lists.
+      const meta = getLetterMeta(letterType as LetterTypeId);
+      const recipientName = String(row.employee_name ?? "").trim();
+      if (recipientName) {
+        setDraftTitle(draftId, `${meta.shortTitle} – ${recipientName}`);
+      }
+
+      summaries.push({
+        draftId,
+        title: recipientName
+          ? `${meta.shortTitle} – ${recipientName}`
+          : `${meta.shortTitle} – row ${i + 1}`,
+        unresolved: Array.from(unresolvedForRow),
+      });
+      // Yield to React so the progress UI can paint mid-loop.
+      if ((i & 7) === 7) {
+        await new Promise<void>((r) => setTimeout(r, 0));
+      }
+      setGenerateState({
+        phase: "personalising",
+        doneRows: i + 1,
+        totalRows: parsed.rows.length,
+      });
+    }
+
+    setGenerated(summaries);
+    setGenerateState({ phase: "idle" });
+    toast.success(
+      `Created ${summaries.length} draft${summaries.length === 1 ? "" : "s"}.`,
+      { duration: 4000 }
+    );
   }
 
   function reset() {
+    abortRef.current?.abort();
     setStep(1);
     setCsvFileName(null);
     setParsed(null);
-    setCreatedCount(0);
+    setGenerated([]);
+    setGenerateState({ phase: "idle" });
   }
 
   const canContinue =
@@ -240,7 +372,20 @@ export default function BulkOperations() {
           {step === 4 && parsed && (
             <StepPreview parsed={parsed} generating={generating} />
           )}
-          {step === 5 && <StepSuccess count={createdCount} onReset={reset} onOpenDrafts={() => navigate("/")} />}
+          {step === 5 && (
+            <StepResults
+              state={generateState}
+              generated={generated}
+              onCancel={() => abortRef.current?.abort()}
+              onReset={reset}
+              onOpenFirst={() => {
+                const first = generated[0];
+                if (first) navigate(`/editor/${first.draftId}`);
+              }}
+              onOpenDrafts={() => navigate("/")}
+              onRetry={() => void handleGenerate()}
+            />
+          )}
         </motion.div>
       </AnimatePresence>
 
@@ -594,27 +739,202 @@ function StepPreview({
   );
 }
 
-function StepSuccess({
-  count,
+function StepResults({
+  state,
+  generated,
+  onCancel,
   onReset,
+  onOpenFirst,
   onOpenDrafts,
+  onRetry,
 }: {
-  count: number;
+  state: GenerateState;
+  generated: GeneratedDraftSummary[];
+  onCancel: () => void;
   onReset: () => void;
+  onOpenFirst: () => void;
   onOpenDrafts: () => void;
+  onRetry: () => void;
 }) {
+  // PHASE: drafting template (one AI call)
+  if (state.phase === "drafting") {
+    const pct = Math.round(((state.sectionIndex + 1) / state.sectionCount) * 100);
+    return (
+      <section aria-busy>
+        <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
+          <Sparkles className="mx-auto h-10 w-10 text-foreground/70" />
+          <h2 className="mt-4 text-xl font-semibold">Drafting template letter…</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            One AI call drafts the master template. We'll personalise N copies
+            from it in a moment — no extra API cost.
+          </p>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Section {state.sectionIndex + 1} of {state.sectionCount} ·{" "}
+            <span className="font-medium text-foreground">{state.sectionTitle}</span>
+          </p>
+          <div className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-foreground/80 transition-[width] duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="mt-6 flex justify-center">
+            <Button variant="outline" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // PHASE: client-side personalisation (no AI)
+  if (state.phase === "personalising") {
+    const pct =
+      state.totalRows === 0
+        ? 0
+        : Math.round((state.doneRows / state.totalRows) * 100);
+    return (
+      <section aria-busy>
+        <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
+          <Loader2 className="mx-auto h-10 w-10 animate-spin text-foreground/70" />
+          <h2 className="mt-4 text-xl font-semibold">
+            Personalising {state.totalRows} letter{state.totalRows === 1 ? "" : "s"}…
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Substituting placeholders with each row's values. This is instant
+            and runs entirely on your device.
+          </p>
+          <p className="mt-4 text-xs text-muted-foreground">
+            {state.doneRows} of {state.totalRows} done
+          </p>
+          <div className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-foreground/80 transition-[width] duration-300"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // PHASE: error
+  if (state.phase === "error") {
+    return (
+      <section>
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-8 text-center">
+          <AlertTriangle className="mx-auto h-10 w-10 text-red-500" />
+          <h2 className="mt-4 text-xl font-semibold">Generation failed</h2>
+          <p className="mt-2 max-w-md mx-auto text-sm text-muted-foreground">
+            {state.message}
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <Button onClick={onRetry}>Try again</Button>
+            <Button variant="outline" onClick={onReset}>
+              Start over
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // PHASE: idle / done — show results if we have any, otherwise empty.
+  if (generated.length === 0) {
+    return (
+      <section>
+        <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            Cancelled. No drafts were created.
+          </p>
+          <div className="mt-4">
+            <Button variant="outline" onClick={onReset}>
+              Start over
+            </Button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const incompleteCount = generated.filter((g) => g.unresolved.length > 0).length;
+  const visible = generated.slice(0, 25);
+  const overflow = generated.length - visible.length;
+
   return (
     <section>
-      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-8 text-center">
-        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
-        <h2 className="mt-4 text-xl font-semibold">Created {count} draft{count === 1 ? "" : "s"}</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Each draft has the employee details from your CSV pre-filled. Open
-          a draft to generate the letter, review, and send.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <Button onClick={onOpenDrafts}>Open drafts</Button>
-          <Button variant="outline" onClick={onReset}>
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="h-6 w-6 flex-shrink-0 text-emerald-500" />
+          <div>
+            <h2 className="text-xl font-semibold">
+              Created {generated.length} draft{generated.length === 1 ? "" : "s"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              One AI call drafted the template; the rest is instant client-side
+              substitution. Each draft is ready to review and finalise.
+              {incompleteCount > 0 && (
+                <>
+                  {" "}
+                  <span className="font-medium text-amber-700 dark:text-amber-400">
+                    {incompleteCount} row{incompleteCount === 1 ? " has" : "s have"}{" "}
+                    unfilled placeholders — flagged below.
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <ul className="mt-6 divide-y divide-emerald-500/15 overflow-hidden rounded-xl border border-emerald-500/20 bg-background">
+          {visible.map((g) => (
+            <li
+              key={g.draftId}
+              className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                {g.unresolved.length > 0 ? (
+                  <span
+                    aria-label="Has unfilled placeholders"
+                    title={`Missing: ${g.unresolved.join(", ")}`}
+                    className="h-2 w-2 flex-shrink-0 rounded-full bg-amber-500"
+                  />
+                ) : (
+                  <span
+                    aria-label="Ready"
+                    className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500"
+                  />
+                )}
+                <span className="truncate font-medium">{g.title}</span>
+                {g.unresolved.length > 0 && (
+                  <span className="text-xs text-amber-700 dark:text-amber-400">
+                    · missing {g.unresolved.length} field
+                    {g.unresolved.length === 1 ? "" : "s"}
+                  </span>
+                )}
+              </div>
+              <Link
+                to={`/editor/${g.draftId}`}
+                className="text-xs font-medium text-foreground/70 hover:underline"
+              >
+                Open
+              </Link>
+            </li>
+          ))}
+          {overflow > 0 && (
+            <li className="px-4 py-2.5 text-xs text-muted-foreground">
+              +{overflow} more draft{overflow === 1 ? "" : "s"}…
+            </li>
+          )}
+        </ul>
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Button onClick={onOpenFirst}>Open first draft</Button>
+          <Button variant="outline" onClick={onOpenDrafts}>
+            View all in drafts
+          </Button>
+          <Button variant="ghost" onClick={onReset}>
             Run another bulk operation
           </Button>
         </div>

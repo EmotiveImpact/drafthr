@@ -47,7 +47,20 @@ type DraftRequest = {
   temperature?: number;
   maxTokens?: number;
   model?: string;
+  /**
+   * Optional system-prompt augmentation. When set, we prepend a system
+   * message with this text to the messages[] array before calling the
+   * model. Used by the bulk mail-merge flow to instruct the model to
+   * emit {{placeholder}} tokens for fields that vary per recipient.
+   *
+   * Kept additive and opt-in — default behaviour for single-letter
+   * generation is unchanged when absent. Bounded length so it can't be
+   * abused as a system-prompt-override vector.
+   */
+  extraSystemHint?: string;
 };
+
+const MAX_EXTRA_HINT_CHARS = 4_000;
 
 export async function POST(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
@@ -63,6 +76,19 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("messages[] required", 400);
   }
 
+  // Bulk mail-merge: optionally prepend a system message with the hint.
+  // We *prepend* (rather than mutate an existing message) so the existing
+  // letter system prompt's structure stays intact and the hint can't
+  // contradict the master system prompt — Claude treats it as additional
+  // top-level guidance.
+  const hint =
+    typeof body.extraSystemHint === "string"
+      ? body.extraSystemHint.trim().slice(0, MAX_EXTRA_HINT_CHARS)
+      : "";
+  const messages: ModelMessage[] = hint
+    ? [{ role: "system", content: hint } as ModelMessage, ...body.messages]
+    : body.messages;
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
@@ -75,7 +101,7 @@ export async function POST(req: Request): Promise<Response> {
       try {
         const result = streamText({
           model: buildModel(body.model),
-          messages: body.messages,
+          messages,
           temperature: body.temperature ?? 0.4,
           maxOutputTokens: body.maxTokens ?? 1200,
           onError: (err) => {
