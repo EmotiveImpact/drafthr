@@ -19,7 +19,7 @@ type Topic = {
   label: string;
 };
 
-type Consultant = {
+export type Consultant = {
   initials: string;
   name: string;
   role: string;
@@ -31,9 +31,13 @@ type Consultant = {
   /** Tailwind gradient classes for the avatar (matches Design D). */
   avatarFrom: string;
   avatarTo: string;
+  /** Real photo URL for the marketplace canvas cards. */
+  photoUrl: string;
+  /** Short marketing quote shown in the card specialty box. */
+  specialty: string;
 };
 
-const CONSULTANTS: Consultant[] = [
+export const CONSULTANTS: Consultant[] = [
   {
     initials: "SM",
     name: "Sarah Mitchell",
@@ -45,6 +49,9 @@ const CONSULTANTS: Consultant[] = [
     top: true,
     avatarFrom: "from-indigo-400",
     avatarTo: "to-violet-500",
+    photoUrl: "https://i.pravatar.cc/160?img=47",
+    specialty:
+      "Specialises in Working Time Regs + statutory leave disputes. Reviewed a similar holiday request last week.",
   },
   {
     initials: "JP",
@@ -56,6 +63,9 @@ const CONSULTANTS: Consultant[] = [
     sla: "26h",
     avatarFrom: "from-emerald-400",
     avatarTo: "to-teal-500",
+    photoUrl: "https://i.pravatar.cc/160?img=33",
+    specialty:
+      "20 years in internal HR. Best for fast turnaround on tone + escalation risk.",
   },
   {
     initials: "RS",
@@ -67,6 +77,9 @@ const CONSULTANTS: Consultant[] = [
     sla: "12h",
     avatarFrom: "from-amber-400",
     avatarTo: "to-rose-500",
+    photoUrl: "https://i.pravatar.cc/160?img=44",
+    specialty:
+      "ACAS-trained mediator. Best for letters where the relationship still matters post-send.",
   },
 ];
 
