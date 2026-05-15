@@ -568,7 +568,7 @@ export function EvidenceDrawer({
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 340, damping: 42, mass: 0.9 }}
-            className="fixed inset-y-0 right-0 z-40 w-full max-w-[560px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
+            className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
           >
             {innerBody}
           </motion.aside>
