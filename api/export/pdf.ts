@@ -19,6 +19,7 @@ import puppeteer from "puppeteer-core";
 import { rateLimit } from "../_utils/rate-limit";
 import { enforceSameOrigin } from "../_utils/request";
 import { appendAuditEvent } from "../../src/db/audit";
+import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport";
 
 export const config = {
   runtime: "nodejs",
@@ -134,7 +135,10 @@ export async function POST(req: Request): Promise<Response> {
       }
     });
 
-    const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${body.html}</body></html>`;
+    // Inline https://blob images to data: URLs before render — Puppeteer's
+    // request interceptor above blocks all non-data:/about: requests by design.
+    const inlinedHtml = await inlineImagesForExport(body.html);
+    const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${inlinedHtml}</body></html>`;
     await page.setContent(fullHtml, { waitUntil: "load", timeout: PDF_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({
       format: "A4",

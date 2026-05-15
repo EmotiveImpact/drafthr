@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Mode, Tone, EmployeeTone, UkRegion, UsState, WorkerClass } from "./letters/types";
 import { DEFAULT_MODEL } from "./llm/default-model";
-import { isSafeImageDataUrl } from "./safe-data-url";
+import { isSafeImageRef } from "./safe-data-url";
 
 /**
  * Generation model identifiers. We support two providers — Anthropic and
@@ -60,7 +60,7 @@ export type WorkspaceRole =
 
 /**
  * Single source of truth for "who the user is". Persisted to localStorage now;
- * moves to Postgres when Clerk auth is wired (Phase B follow-up).
+ * moves to Postgres when WorkOS auth is wired (Phase B follow-up).
  */
 export type Profile = {
   /** Whether the user has completed first-run setup. */
@@ -270,11 +270,12 @@ export function prefillsFromProfile(
     if (profile.employer.signatoryTitle) out.signatoryTitle = profile.employer.signatoryTitle;
     else if (profile.personal.jobTitle) out.signatoryTitle = profile.personal.jobTitle;
     // Letterhead + signature default to the employer profile.
-    if (isSafeImageDataUrl(profile.employer.letterheadDataUrl)) {
+    // Accept either legacy data: URLs or post-migration https blob URLs.
+    if (isSafeImageRef(profile.employer.letterheadDataUrl)) {
       out.letterheadDataUrl = profile.employer.letterheadDataUrl;
       out.hasLetterhead = true;
     }
-    if (isSafeImageDataUrl(profile.employer.signatureDataUrl)) {
+    if (isSafeImageRef(profile.employer.signatureDataUrl)) {
       out.signatureDataUrl = profile.employer.signatureDataUrl;
     }
   } else {
@@ -341,11 +342,11 @@ function sanitizeEmployerPatch(
   return {
     ...patch,
     letterheadDataUrl:
-      patch.letterheadDataUrl === undefined || isSafeImageDataUrl(patch.letterheadDataUrl)
+      patch.letterheadDataUrl === undefined || isSafeImageRef(patch.letterheadDataUrl)
         ? patch.letterheadDataUrl
         : undefined,
     signatureDataUrl:
-      patch.signatureDataUrl === undefined || isSafeImageDataUrl(patch.signatureDataUrl)
+      patch.signatureDataUrl === undefined || isSafeImageRef(patch.signatureDataUrl)
         ? patch.signatureDataUrl
         : undefined,
   };

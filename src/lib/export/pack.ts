@@ -9,7 +9,7 @@ import {
 } from "@/lib/template-quality";
 import { renderLetterPdfBlob, filenameFor as pdfFilenameFor } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { isSafeImageDataUrl, isSafeImageRef } from "@/lib/safe-data-url";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -627,7 +627,7 @@ function filenameForPack(draft: Draft): string {
 
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${escapeAttribute(url)}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
 }
 

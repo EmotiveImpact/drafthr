@@ -2,7 +2,7 @@ import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { resolveFigureRefsInHtml, displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { isSafeImageDataUrl, isSafeImageRef } from "@/lib/safe-data-url";
 
 export function buildPreviewSourceHtml(
   draft: Draft,
@@ -39,13 +39,13 @@ function buildStoredSectionsBodyHtml(draft: Draft): string {
 
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div class="letterhead"><img src="${escAttr(url)}" alt="" /></div>`;
 }
 
 export function signatureImageHtml(draft: Draft, extraAttrs = ""): string {
   const url = draft.employer.signatureDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div class="signature-image"${extraAttrs}><img src="${escAttr(url)}" alt="" /></div>`;
 }
 
