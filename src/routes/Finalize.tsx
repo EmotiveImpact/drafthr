@@ -11,7 +11,6 @@ import {
   FileType2,
   Send,
   ShieldCheck,
-  Sparkles,
   Star,
   ArrowRight,
   X,
@@ -237,7 +236,6 @@ export function Finalize() {
             </SectionLabel>
             <ShipChecklist
               draft={draft}
-              scoreData={scoreData}
               counselAttested={counselAttested}
               onFixClick={() => nav(`/editor/${draft.id}/review`)}
             />
@@ -606,12 +604,10 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 /** 5-item ship checklist with ✓ / ✗ / ○ visual states. */
 function ShipChecklist({
   draft,
-  scoreData,
   counselAttested,
   onFixClick,
 }: {
   draft: Draft;
-  scoreData: ReturnType<typeof computeHealthScore>;
   counselAttested: boolean;
   onFixClick: () => void;
 }) {
