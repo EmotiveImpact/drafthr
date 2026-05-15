@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import { useDraftStore } from "@/lib/store";
+import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import type { Draft } from "@/lib/letters/types";
@@ -53,6 +54,13 @@ export function Finalize() {
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const recordExport = useDraftStore((s) => s.recordExport);
+  const profile = useProfileStore((s) => s.profile);
+  // "Drafted by Jane Doe" line in the hero. Falls back gracefully when the
+  // user hasn't filled out their profile yet.
+  const draftedBy =
+    profile.personal.preferredName ||
+    profile.personal.legalName ||
+    "you";
 
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
@@ -300,26 +308,30 @@ export function Finalize() {
               />
             )}
 
-            {/* Header */}
-            <div className="flex items-center gap-3 mt-2">
-              <span className="size-9 rounded-lg bg-[var(--ds-violet-bg,#f5f3ff)] text-[var(--ds-violet-fg,#7c3aed)] grid place-items-center shrink-0">
-                <Sparkles className="size-4" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-[16px] font-semibold tracking-tight m-0">
-                  One last check — counsel review
-                </h2>
-                <p className="text-[12px] text-[var(--ds-muted)] mt-0.5 m-0">
-                  Optional second opinion before this leaves the building · most reviews back within 24h
-                </p>
-              </div>
-              <span className="text-[10px] text-[var(--ds-violet-fg,#7c3aed)] bg-[var(--ds-violet-bg,#f5f3ff)] px-2 py-1 rounded-full font-semibold shrink-0 hidden sm:inline">
-                AI MATCHED · 3 of 14 verified
-              </span>
-            </div>
+            {/* Document hero + social-proof upsell. Three blocks stacked:
+             *   1. Letter title (Playfair serif) + breadcrumb meta
+             *   2. Violet social-proof block — avatar stack + headline stat + CTA
+             *   3. Customer testimonial quote
+             *
+             * The 412 number and testimonial are placeholder data — when we
+             * have real booking metrics + permissioned testimonials, swap in
+             * via props from a stats API. Don't ship lorem-ipsum proof in
+             * production. */}
+            <DocumentHero
+              letterTitle={draft.title ?? meta.title}
+              draftedBy={draftedBy}
+              recipient={recipientNameFor(draft) ?? "HR Officer"}
+              letterTypeLabel={meta.title}
+              onSeeSpecialists={() => {
+                // Smooth-scroll to the consultant grid below
+                document
+                  .querySelector("[data-consultant-grid]")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            />
 
             {/* 3-card consultant grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+            <div data-consultant-grid className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
               {CONSULTANTS.map((c) => (
                 <ConsultantCard
                   key={c.initials}
@@ -361,6 +373,134 @@ export function Finalize() {
 /* ============================================================================
  * Subcomponents
  * ==========================================================================*/
+
+/**
+ * Document hero + social-proof upsell.
+ *
+ * Three vertically stacked sections inside one bordered card:
+ *   1. Letter title (Playfair display serif) + "drafted by X · ready for Y"
+ *      subtitle, with a Fluent Emoji 3D page icon on the left.
+ *   2. Violet-tinted social-proof block: avatar stack (4 recent bookers) +
+ *      "412 people had a specialist review..." sentence + "See specialists ↓"
+ *      CTA that smooth-scrolls to the consultant grid below.
+ *   3. Italic testimonial quote with the customer's name + resolution date.
+ *
+ * The 412 number and testimonial are placeholder copy — wire to a real
+ * bookings API + permissioned customer testimonials before promoting this
+ * to production marketing channels.
+ *
+ * Icons use Microsoft Fluent Emoji 3D (open source, CDN-hosted) so the
+ * page/paperclip/etc render identically across macOS, Windows, Linux,
+ * iOS, and Android — instead of falling back to the platform emoji font.
+ */
+function DocumentHero({
+  letterTitle,
+  draftedBy,
+  recipient,
+  letterTypeLabel,
+  onSeeSpecialists,
+}: {
+  letterTitle: string;
+  draftedBy: string;
+  recipient: string;
+  letterTypeLabel: string;
+  onSeeSpecialists: () => void;
+}) {
+  // TODO: replace with real metrics once bookings data is available.
+  // Format: "{N} people had a specialist review a {letter type} in the
+  // last 90 days." — keep the time window honest.
+  const recentBookings = 412;
+  const testimonial = {
+    quote:
+      "Sarah caught a regulation 15(3) point I'd missed entirely. The response came back two days later, settled.",
+    author: "Mark T.",
+    resolved: "March 2026",
+  };
+  // Avatar stack — random pravatar IDs picked to look like a varied set
+  // of real users. Cheap social-proof signal.
+  const avatarStack = [12, 22, 5, 18];
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+      className="mt-2 rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6 flex flex-col gap-3"
+      aria-labelledby="finalise-hero-title"
+    >
+      {/* Title row */}
+      <div className="flex items-start gap-3">
+        <img
+          src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Page%20facing%20up/3D/page_facing_up_3d.png"
+          alt=""
+          aria-hidden
+          className="size-9 shrink-0 select-none"
+          loading="lazy"
+        />
+        <div className="flex-1 min-w-0">
+          <h2
+            id="finalise-hero-title"
+            className="m-0 font-display text-[22px] sm:text-[24px] font-semibold tracking-[-.005em] leading-[1.15] text-[var(--ds-ink)]"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            {letterTitle}
+          </h2>
+          <p className="text-[12.5px] text-[var(--ds-muted)] mt-1 m-0">
+            UK · drafted by {draftedBy} · ready for {recipient}
+          </p>
+        </div>
+      </div>
+
+      {/* Social-proof block — the commercial layer */}
+      <div className="mt-1 rounded-xl border border-[var(--ds-violet-bd,#ddd6fe)] bg-gradient-to-br from-[var(--ds-violet-bg,#f5f3ff)] to-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+        {/* Avatar stack */}
+        <div className="flex shrink-0" aria-hidden>
+          {avatarStack.map((id, i) => (
+            <img
+              key={id}
+              src={`https://i.pravatar.cc/64?img=${id}`}
+              alt=""
+              className="size-8 rounded-full border-2 border-white object-cover"
+              style={{ marginLeft: i === 0 ? 0 : -10 }}
+              loading="lazy"
+            />
+          ))}
+        </div>
+
+        {/* Headline + sub */}
+        <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-[var(--ds-body)]">
+          <strong className="text-[var(--ds-ink)] font-semibold">
+            {recentBookings} people had a specialist review a {letterTypeLabel}
+          </strong>{" "}
+          in the last 90 days.{" "}
+          <span className="text-[var(--ds-muted)]">
+            Most agreed the wording got tighter and the response came back faster.
+          </span>
+        </div>
+
+        {/* CTA — smooth-scrolls to the consultant grid */}
+        <button
+          type="button"
+          onClick={onSeeSpecialists}
+          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition whitespace-nowrap"
+        >
+          See specialists
+          <ArrowRight className="size-3.5" />
+        </button>
+      </div>
+
+      {/* Testimonial — adds a human voice */}
+      <blockquote className="pt-3 border-t border-[var(--ds-line-2)] m-0 px-0">
+        <p className="m-0 text-[12.5px] italic text-[var(--ds-body)] leading-relaxed">
+          &ldquo;{testimonial.quote}&rdquo;
+        </p>
+        <footer className="mt-1.5 text-[11px] text-[var(--ds-muted)] not-italic">
+          — {testimonial.author} · Resolved {testimonial.resolved}
+        </footer>
+      </blockquote>
+    </motion.section>
+  );
+}
 
 /** Tiny uppercase section label with optional right-aligned secondary text. */
 function SectionLabel({
