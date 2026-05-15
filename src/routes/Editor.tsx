@@ -75,35 +75,17 @@ import { useIsLargeViewport } from "@/lib/use-large-viewport";
 
 
 /* ---------------------------------------------------------------------------
- * Evidence-pinned state persistence — per-draft, localStorage-backed.
+ * Unified dock persistence — per-draft, localStorage-backed.
  *
- * We store as `scribehr-evidence-pinned:{draftId}` so each draft gets its own
- * preference. On mount the Edit page reads this; if absent AND the template
- * tier is "heavy", we default to TRUE so the rail shows up automatically on
- * evidence-heavy letters (grievances, harassment complaints, etc.).
+ * We store the full `pinnedDock` value ("evidence" | "ai") under the key
+ * `drafthr.pinnedDock:{draftId}`. Absence means null (neither dock pinned).
+ * Heavy-tier drafts default to "evidence" on first open when no stored pref
+ * exists (same auto-pin behaviour as before).
+ *
+ * The old `scribehr-evidence-pinned:{draftId}` boolean key is no longer
+ * written. Existing entries in localStorage are harmless orphans.
  * ------------------------------------------------------------------------ */
-const PIN_KEY = (draftId: string) => `scribehr-evidence-pinned:${draftId}`;
-
-function readPinned(draftId: string): boolean | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(PIN_KEY(draftId));
-    if (raw === "1") return true;
-    if (raw === "0") return false;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function writePinned(draftId: string, next: boolean): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(PIN_KEY(draftId), next ? "1" : "0");
-  } catch {
-    /* localStorage might be unavailable — silently no-op */
-  }
-}
+const DOCK_KEY = (draftId: string) => `drafthr.pinnedDock:${draftId}`;
 
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -159,8 +141,17 @@ export function Editor() {
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
   // Unified dock state. `pinnedDock` is the single source of truth for which
   // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
-  // Default: null → twin pills at bottom-right, letter at full width.
-  const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(null);
+  // Lazy initialiser reads from localStorage on first mount so the correct
+  // dock is shown immediately — no flash of the unpinned state.
+  const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem(`drafthr.pinnedDock:${draft?.id ?? draftId}`);
+      return raw === "evidence" || raw === "ai" ? raw : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Derived: the AI rail is open as the right column only when AI is pinned.
   const railCollapsed = pinnedDock !== "ai";
@@ -180,17 +171,25 @@ export function Editor() {
    *   - Pinned rail — replaces the AI agent rail. Auto-enabled for "heavy"
    *     evidence-tier templates (grievance, harassment, tribunal) on first
    *     visit, persisted per draft thereafter.
-   * Pin state is localStorage-backed via PIN_KEY(draftId).
+   * Pin state is localStorage-backed via DOCK_KEY(draftId).
    * --------------------------------------------------------------------- */
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
 
   // Keep localStorage in sync whenever pinnedDock changes — regardless of
-  // which helper changed it (pinEvidence, pinAI, unpinAll). Without this,
-  // pinning AI would leave localStorage at "1" (evidence) and the next
-  // reload would wrongly restore evidencePinned = true.
+  // which helper changed it (pinEvidence, pinAI, unpinAll).
   useEffect(() => {
     if (!draftId) return;
-    writePinned(draftId, pinnedDock === "evidence");
+    if (typeof window === "undefined") return;
+    const key = DOCK_KEY(draftId);
+    try {
+      if (pinnedDock) {
+        window.localStorage.setItem(key, pinnedDock);
+      } else {
+        window.localStorage.removeItem(key);
+      }
+    } catch {
+      // localStorage may be unavailable (private mode, quota) — non-fatal.
+    }
   }, [draftId, pinnedDock]);
 
   const handlePinnedChange = (next: boolean) => {
@@ -285,23 +284,32 @@ export function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
-  // On draft change, initialise the pinned state from the template tier
-  // when localStorage has no preference. Heavy → pin by default, light/medium
-  // → floating. The user can always override by clicking Pin/Unpin.
+  // On draft change, restore pinnedDock from the unified localStorage key.
+  // Falls back to tier-based default when no stored pref exists (heavy drafts
+  // auto-pin Evidence on first open). The lazy useState initialiser handles
+  // first mount; this effect handles subsequent draft changes in the same session.
   useEffect(() => {
-    if (!draft || !draftId) return;
-    const stored = readPinned(draftId);
-    if (stored !== null) {
-      setPinnedDock(stored ? "evidence" : null);
-      return;
+    if (!draftId) return;
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(DOCK_KEY(draftId));
+      if (raw === "evidence" || raw === "ai") {
+        setPinnedDock(raw);
+        return;
+      }
+    } catch {
+      // ignore
     }
-    // Prefer the cached tier on the draft (set at creation time); fall back
-    // to deriving it from the letter type. This avoids resolving the full
-    // template registry just to read the tier.
-    const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
-    setPinnedDock(tier === "heavy" ? "evidence" : null);
+    // Fallback: derive initial pin from evidence tier (legacy behaviour —
+    // heavy-evidence drafts auto-pin Evidence on first open).
+    const tier = draft?.evidenceTier;
+    if (tier === "heavy") {
+      setPinnedDock("evidence");
+    } else {
+      setPinnedDock(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftId, draft?.letterType, draft?.evidenceTier]);
+  }, [draftId]);
 
   // Auto-open the floating evidence drawer when arriving with ?openEvidence=1
   // (used by the legacy /editor/:draftId/evidence redirect so old bookmarks
