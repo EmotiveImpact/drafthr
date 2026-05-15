@@ -66,7 +66,7 @@ export function Privacy() {
             <li><strong>Anthropic PBC</strong> — language model inference (planned).</li>
             <li><strong>Vercel Inc.</strong> — application hosting and serverless compute.</li>
             <li><strong>Neon (Databricks)</strong> — managed Postgres database.</li>
-            <li><strong>Clerk Inc.</strong> — authentication and identity.</li>
+            <li><strong>WorkOS Inc.</strong> — authentication and identity.</li>
             <li><strong>Sentry / Functional Software Inc.</strong> — error tracking and observability.</li>
           </ul>
 

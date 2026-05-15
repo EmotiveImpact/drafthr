@@ -1,5 +1,7 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useProfileStore } from "@/lib/profile";
+import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
 import { Wizard } from "@/routes/Wizard";
@@ -21,6 +23,8 @@ import { EmployeesIndex } from "@/routes/EmployeesIndex";
 import { EmployeeDetail } from "@/routes/EmployeeDetail";
 import BulkOperations from "@/routes/BulkOperations";
 import { Approvals } from "@/routes/Approvals";
+import { SignIn } from "@/routes/SignIn";
+import { AuthCallback } from "@/routes/AuthCallback";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,6 +56,20 @@ function EditorFallback() {
 
 export function App() {
   const location = useLocation();
+  // One-shot migration for existing base64 letterhead/signature → Blob URL.
+  // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
+  // swaps them out lazily so the dual-write rollout doesn't carry those blobs
+  // into Postgres. Idempotent: helper skips anything not already a data: URL.
+  useEffect(() => {
+    let cancelled = false;
+    const { profile, patchEmployer } = useProfileStore.getState();
+    void migrateEmployerImages(profile.employer).then((patch) => {
+      if (!cancelled && patch) patchEmployer(patch);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Editor routes are exempted from the page transition. The editor has
   // its own internal animations (rails, sheet, streaming) and a fade on
   // top of that double-animates and looks busy.
@@ -117,6 +135,8 @@ export function App() {
         <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
