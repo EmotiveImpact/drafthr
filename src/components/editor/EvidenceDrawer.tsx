@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import type { Editor } from "@tiptap/react";
 import {
   Paperclip,
@@ -13,6 +14,7 @@ import {
   CalendarDays,
   PinIcon,
   Undo2,
+  ExternalLink,
 } from "lucide-react";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayModeOf, figureLabelFor } from "@/lib/evidence";
@@ -490,11 +492,18 @@ export function EvidenceDrawer({
           )}
         </div>
 
-        {/* Footer — Upload-new opens a native file picker (inline, no navigation),
-         * the "Manage evidence" link was removed because the drawer IS the
-         * management surface (clicking it just opened a redirect-back-to-here
-         * cycle = visible page flash). */}
+        {/* Footer — Upload-new opens a native file picker (inline, no navigation).
+         * Manage evidence link returned per UX request — affordance for
+         * discoverability even though the route redirects back to the drawer. */}
         <div className="px-5 py-3 border-t border-[var(--ds-line)] bg-[var(--ds-surface-2)] flex items-center gap-3">
+          <Link
+            to={`/editor/${draft.id}/evidence`}
+            onClick={() => onOpenChange(false)}
+            className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1 shrink-0"
+          >
+            Manage evidence
+            <ExternalLink className="size-3" />
+          </Link>
           <span className="text-[11.5px] text-[var(--ds-muted)] tabular-nums">
             {allItems.length} {allItems.length === 1 ? "item" : "items"}
             {totalBytes > 0 && <> · {formatBytes(totalBytes)}</>}
