@@ -2,7 +2,11 @@
 
 AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, with a full-height right-rail AI agent that proposes section-level edits and inline floating comment threads anchored to the document text. Built on Vite + React 19 + TypeScript, AI SDK v6, and Anthropic Claude (`claude-sonnet-4-6` by default).
 
-**Current version:** `0.6.0`
+Two modes, two product surfaces:
+- **Employee mode** — single-letter wizard for an individual handling their own grievance / resignation / flexible-working / tribunal claim.
+- **HR/Management mode** — portfolio workbench: Employees directory, Matters with risk register, bulk CSV operations, workspace-saved Custom Templates, today/risk/compliance dashboard.
+
+**Current version:** `0.7.0`
 
 → **Live design system:** [`/public/design-system.html`](public/design-system.html)
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
@@ -11,6 +15,11 @@ AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, 
 
 ## What it does
 
+- **Portfolio dashboard (HR mode)** — Today / Risk / Compliance triptych: open tasks + matter next-actions due in 7d, risk register with £ exposure across active matters + a low/moderate/high/critical heatmap (auto-derived from health-check signals across each matter's drafts when no manual tagging exists), rolled-up compliance health. Recent-activity feed across the whole workspace.
+- **Employees directory** — `/employees`, sortable + searchable, with status filter (active / notice / on-leave / left), one-click import from existing drafts (derives unique people by normalised legal name), per-employee profile with Active matters / Letter history / Notes tabs.
+- **Matters as case files** — Matters carry type (investigation / grievance / disciplinary / performance / absence / redundancy / restructure / settlement / tribunal / onboarding / offboarding), risk band, participants (subject / manager / accused / complainant / witness / representative), tasks, calendar events, owner, next-action banner, and £ exposure. Auto-derived risk band falls back from health checks when not manually set.
+- **Bulk operations** — `/bulk`, 4-step CSV → batch drafts flow with **mail-merge economics**: one AI call drafts a template with `{{placeholder}}` tokens for every CSV column, then client-side substitution produces N personalised drafts. 50-row batch ≈ £0.20 instead of ≈£10.
+- **Custom templates** — `BrowseLetters` (`/hr/new`, `/me/new`) has a tab strip: **DraftHR** (the built-in 35 letter types) and **My Templates** (workspace-saved house phrasings). File → Save as template… in the editor captures per-section HTML + answers; starting a draft from a custom template spawns the base letter type's sections pre-filled.
 - **Wizard → draft** — 35 letter types (14 HR-side, 21 employee-side), each with a UK and US template authored as a structured scaffold (statutory anchors, hard constraints, gold-standard examples). The model fills the scaffold using the user's wizard answers; output is HTML.
 - **Per-section editor** — every letter is broken into sections (recipient, subject, opening, body, terms, closing, signature…). Each section regenerates independently, has version history, and can be refined with a freeform instruction ("more conciliatory; cite s.95(1)(c) ERA explicitly").
 - **Two editing surfaces** — section-by-section editing for structured drafting, plus edit-on-page mode that renders real paged.js A4 cards and lets the user type directly on the paginated letter. Preview uses the same A4 print geometry.
@@ -33,7 +42,7 @@ AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, 
 | Styling | Tailwind v4, Radix UI Themes (`gray` / `slate`), Source Serif 4 for marquee, Geist for sans |
 | State | Zustand stores (`useDraftStore`, `useProfileStore`, `useThemeStore`) persisted to localStorage |
 | Editor | Tiptap section editor plus paged.js edit-on-page; native toolbar commands, undo/redo, cursor restore across reflow, custom CommentMark |
-| AI | AI SDK v6 (`ai@^6`, `@ai-sdk/react@^3`) + Anthropic Claude via `@ai-sdk/anthropic@^3` — Sonnet 4.6 default, Opus 4.7 / Haiku 4.5 selectable in Settings |
+| AI | AI SDK v6 (`ai@^6`, `@ai-sdk/react@^3`) + Anthropic Claude via `@ai-sdk/anthropic@^3` — Sonnet 4.6 default, Opus 4.7 / Haiku 4.5 selectable in Settings. Anthropic native prompt caching (`cacheControl: { type: "ephemeral" }`) on `/api/draft` + `/api/agent` stable system prefixes — ~90% input-token discount on repeat calls inside the 5-min TTL |
 | Motion | Framer Motion 12 — bottom-sheet drag/snap on mobile, route cross-fade transitions |
 | Toasts | Sonner (theme-aware, swipe-dismiss, Undo affordance on accept/reject pending changes) |
 | Auth/DB | Clerk-gated production by default; localStorage persistence today; Neon Postgres planned |
@@ -98,6 +107,11 @@ src/
     editor/                   # section editor, AIPanel (full-rail), FloatingCommentPanel,
                               # CommentsPanel, TimelinePanel, MobileBottomSheet,
                               # refine popover, edit-details sheet, RightRail wrapper
+    matter/                   # MatterRiskBadge, NextActionBanner, MatterParticipants,
+                              # MatterTasks, MatterCalendar
+    employees/                # EmployeeForm modal, ImportSuggestions panel
+    templates/                # CustomTemplateCard, MyTemplatesGrid,
+                              # SaveAsTemplateModal, RenameCustomTemplateModal
     ui/                       # shadcn primitives (kept where useful)
   lib/
     letters/
@@ -109,15 +123,26 @@ src/
       draft.ts                # generate / regenerate orchestration
       agent.ts                # agent system prompt
       tools.ts                # client-side clause template metadata
+    bulk/
+      mailmerge.ts            # {{placeholder}} substitution + ONE-AI-call orchestration
+    matters/
+      risk.ts                 # auto-derive RiskBand from health-check signals
+    finalize/
+      healthChecks.ts         # static + AI-ready letter health checks per draft
     prompts/                  # buildSystemPrompt / buildSectionPrompt
     evidence.ts               # evidence filtering + prompt rendering
+    employees.ts              # deriveEmployeesFromDrafts + matchEmployeeForDraft
     template-quality.ts       # section requirement and compliance quality report
     timeline.ts               # derived + stored draft activity feed
-    store.ts                  # drafts (Zustand persist, sanitizes accepted AI HTML)
+    store.ts                  # drafts + matters + employees + tasks + events +
+                              # customTemplates (Zustand persist, sanitizes AI HTML)
     profile.ts                # user profile (Zustand persist, safe image defaults)
     safe-data-url.ts          # shared base64 image data URL validation
     tiptap/comment-mark.ts    # custom Tiptap mark for inline comments
-  routes/                     # Home, BrowseLetters, Wizard, Editor, Settings, Calendar, etc.
+  routes/                     # Home (HR triptych + Employee single-letter), BrowseLetters,
+                              # Wizard, Editor, EmployeesIndex, EmployeeDetail,
+                              # MattersIndex, MatterDetail, BulkOperations, Settings,
+                              # Calendar, Finalize, ReviewStep, EvidenceStep, etc.
 public/
   design-system.html          # canonical design tokens + page templates (static)
   regenerate-options.html     # UX proposal for refine + AI chat patterns (static)

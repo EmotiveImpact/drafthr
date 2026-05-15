@@ -2,6 +2,112 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.7.0 — 2026-05-15
+
+HR/Management portfolio release. DraftHR's HR mode flips from "single-letter
+authoring app with a thin Matter wrapper" to a portfolio workbench: a real
+Employees directory, expanded Matters with type / risk band / participants /
+tasks / events, a Today + Risk + Compliance triptych dashboard, CSV-driven
+bulk operations with mail-merge economics, and workspace-saved custom
+templates. Plus Anthropic native prompt caching on the AI routes for a ~90%
+input-token discount on repeat calls.
+
+### Portfolio dashboard (HR mode)
+
+- New HR-mode Home: Today (open tasks + matter next-actions due in 7d),
+  Risk register (heatmap across active matters + £ exposure), Compliance
+  Health (rolled-up health-check scores). Replaces the prior `Home` for
+  employer mode; employee mode keeps the existing single-letter UX.
+- Recent activity feed flattens every draft's timeline across the workspace,
+  sorted by recency.
+- Employee backfill banner — when HR has drafts but the normalised employee
+  directory is empty, a banner offers one-click migration: scans every
+  draft, groups by normalised legal name, and creates one Employee record
+  per unique person. Dismissable; remembered locally.
+- Risk panel now shows the heatmap whenever there are active matters, not
+  only when exposure is tagged. Reads true out of the box.
+
+### Employees directory
+
+- `/employees` — sortable directory with search, status filter
+  (active / notice / on-leave / left), and a multi-select import flow that
+  derives Employee suggestions from existing HR-mode drafts. New
+  `src/lib/employees.ts` helpers: `deriveEmployeesFromDrafts` (normalises
+  legal name to dedupe across drafts) + `matchEmployeeForDraft`.
+- `/employees/:employeeId` — profile with Active matters / Letter history /
+  Notes tabs, EmployeeForm modal for create/edit, archive flips status to
+  "left" without breaking historical draft links.
+- New sidebar entries in HR mode: Employees, Bulk operations.
+
+### Matters — case-management expansion
+
+- `Matter` type extended (backwards-compatible — every new field optional):
+  `type` (investigation / grievance / disciplinary / performance / absence /
+  redundancy / restructure / settlement / tribunal / onboarding /
+  offboarding / other), `riskBand` (low / moderate / high / critical),
+  `participants[]` (subject / manager / accused / complainant / witness /
+  representative / other), `ownerUserId`, `nextAction`, `exposureGBP`.
+- New `Task` + `MatterEvent` types with store slices and CRUD actions —
+  meetings, hearings, deadlines, sub-tasks on a matter calendar.
+- MatterDetail surfaces: MatterRiskBadge, NextActionBanner, MatterParticipants,
+  MatterTasks (inline add form), MatterCalendar.
+- **Auto-derive risk band** (new `src/lib/matters/risk.ts`): pure derivation
+  from health-check signals across the matter's drafts. Compliance + PII
+  fails dominate; matter type nudges the floor up (tribunal/settlement
+  start at "high"). Manual `matter.riskBand` still wins — derivation is
+  the fallback. Used by the dashboard Risk panel and the MatterDetail
+  badge so the heatmap is meaningful even with zero manual tagging.
+
+### Bulk operations (Business-tier feature)
+
+- `/bulk` — 4-step CSV → batch drafts flow: pick operation → pick template
+  → upload CSV → preview rows → generate → results.
+- **Mail-merge economics**: ONE AI call drafts a template with
+  `{{placeholder}}` tokens for every CSV column, then client-side
+  substitution produces N personalised drafts per row. 50-row batch =
+  ~£0.20 instead of ~£10 (a 50× call-N-times approach).
+- New `src/lib/bulk/mailmerge.ts`: case-insensitive whitespace-tolerant
+  `{{placeholder}}` substitution, `findUnresolvedPlaceholders` to surface
+  amber-dot rows that need attention, `placeholderKeysFor` to derive
+  expected placeholders from letter type × CSV headers,
+  `buildMergeInstruction` to augment the system prompt, abort-signal
+  support for cancel.
+- 25 unit tests cover the substitution + placeholder-detection edge cases.
+
+### Custom templates (workspace-saved house phrasings)
+
+- New `CustomTemplate` type + `customTemplates` store slice with four CRUD
+  actions: `createCustomTemplate`, `updateCustomTemplate`,
+  `deleteCustomTemplate`, `createDraftFromCustomTemplate`.
+- `BrowseLetters` (`/hr/new`, `/me/new`) gains a tab strip: **DraftHR**
+  (the existing 35 built-in letter types, unchanged) and **My Templates**
+  (workspace-saved). Mode-scoped end-to-end.
+- Editor File menu → **Save as template…** captures the current draft's
+  per-section HTML (keyed by canonical `SectionId`) plus its answers.
+- Starting a draft from a custom template spawns the base letter type's
+  sections pre-filled with the saved HTML (status `"edited"`), saved
+  jurisdiction default applied.
+- Persisted via the existing Zustand `persist` middleware — no version
+  bump on `scribehr-store-v1` (field-additive).
+
+### LLM cost levers
+
+- **Anthropic native prompt caching** on `/api/draft` + `/api/agent`.
+  Stable system prefixes tagged via `providerOptions.anthropic.cacheControl
+  = { type: "ephemeral" }`. ~90% input-token discount on repeat calls
+  within the 5-minute TTL — the single biggest cost lever in the roadmap.
+  Default behaviour byte-identical when no system prompt is present.
+- `/api/draft` already accepts an optional `extraSystemHint` (used by the
+  bulk mail-merge flow to instruct the model to emit `{{placeholder}}`
+  tokens) — now also tagged for caching across a batch.
+
+### Router + navigation
+
+- New routes: `/employees`, `/employees/:employeeId`, `/bulk`,
+  `/matters`, `/matters/:matterId`.
+- `AppSidebar` HR-mode nav extended with Employees + Bulk operations
+  entries.
+
 ## 0.6.0 — 2026-05-13
 
 Security and export hardening release. This pass removes committed-secret
