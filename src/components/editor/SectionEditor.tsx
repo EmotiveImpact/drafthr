@@ -46,8 +46,12 @@ import { Button } from "@/components/ui/button";
 import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
+import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
+import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
+import { EvidencePickerPopover } from "./EvidencePickerPopover";
+import { EvidenceDrawer } from "./EvidenceDrawer";
 import { linkedEvidenceForSection } from "@/lib/evidence";
 import { Paperclip } from "lucide-react";
 import { PendingChangeCard } from "./PendingChangeCard";
@@ -101,6 +105,13 @@ export function SectionEditor({
   const lastWrittenContent = useRef<string>(section.html);
   const linkedEvidence = linkedEvidenceForSection(draft, section.id);
 
+  // Keep a live ref to the draft so the slash-command extension always
+  // sees the latest evidence list. useEditor only runs its extensions
+  // factory once, so we can't pass `draft.evidence` directly — by the
+  // time the user opens the menu, that array would be stale.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false, code: false }),
@@ -112,6 +123,24 @@ export function SectionEditor({
       TableHeader,
       TableCell,
       CommentMark,
+      // Evidence reference tokens — render the [See Fig N] / [See Attachments]
+      // spans inserted by the picker / slash command as atomic inline nodes
+      // instead of letting Tiptap drop them on the floor as unknown HTML
+      // (which is what produced the "literal HTML appears in the editor"
+      // bug). Round-trips the existing `<span class="figure-ref" …>` and
+      // `<span class="attachment-ref" …>` HTML shape so the export pipeline
+      // (sourceHtml.ts → buildFiguresAppendix) and the figure-renumber pass
+      // (resolveFigureRefsInHtml) keep working unchanged.
+      FigureRef,
+      AttachmentRef,
+      // Pattern C: type "/" in the editor body → inline picker for
+      // evidence references. Filters draft.evidence by name/content,
+      // inserts "[See Fig N]" on Enter. The getItems closure reads
+      // from a ref so the menu reflects the current draft, not the
+      // draft snapshot at editor-mount time.
+      EvidenceSuggestion.configure({
+        getItems: () => draftRef.current.evidence ?? [],
+      }),
       // Inline images — paste/drop a screenshot or click the toolbar 🖼 button
       // to embed it directly into the section. Stored as base64 in the section
       // HTML so it travels through PDF + DOCX export untouched. Best-fit for
@@ -207,6 +236,15 @@ export function SectionEditor({
     quote?: string;
     applyMark?: (commentId: string) => void;
   }>({});
+
+  // Evidence picker (Pattern A) + drawer (Pattern D) state for the section-
+  // header paperclip. Clicking the paperclip on this section's header focuses
+  // the editor at the cursor's last position and opens the inline picker so
+  // the user can insert a [See Fig N] reference. The drawer is the overflow
+  // path when there are 5+ evidence items, triggered from the popover's
+  // "See all evidence →" link.
+  const [evidencePopoverOpen, setEvidencePopoverOpen] = useState(false);
+  const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
 
   /**
    * Open the inline CommentPopover. If text is selected we anchor the
@@ -312,34 +350,106 @@ export function SectionEditor({
           )}
         </div>
         <div className="flex items-center gap-0.5">
-          {draft.mode === "employee" && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-7 relative"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenEvidenceBinder?.();
-              }}
-              aria-label={
-                linkedEvidence.length > 0
-                  ? `${linkedEvidence.length} linked evidence items — open Evidence & Attachments`
-                  : "Open Evidence & Attachments for this section"
-              }
-              title={
-                linkedEvidence.length > 0
-                  ? `${linkedEvidence.length} linked · click to open Evidence & Attachments`
-                  : "Open Evidence & Attachments"
-              }
-            >
-              <Paperclip className="size-3.5" />
-              {linkedEvidence.length > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
-                  {linkedEvidence.length}
-                </span>
-              )}
-            </Button>
-          )}
+          {/* Section-header paperclip — the primary "insert evidence" affordance.
+           *
+           * Behaviour:
+           *   - 0 evidence items on the draft → click navigates to the Evidence
+           *     step (legacy path; user needs to add their first item before
+           *     they can reference it).
+           *   - 1+ evidence items → click opens the EvidencePickerPopover with
+           *     this section's editor as the insertion target. Picking an item
+           *     inserts a [See Fig N] reference at the cursor. At 5+ items the
+           *     popover footer offers "See all evidence →" which switches to
+           *     the full drawer (Pattern D).
+           *
+           * Visible in both employee AND employer modes — evidence is a
+           * universal HR-letter concern, not employee-specific. */}
+          {(() => {
+            const evidenceCount = (draft.evidence ?? []).length;
+            const hasEvidence = evidenceCount > 0;
+
+            // EMPTY STATE — no Radix wrapper. onClick navigates to the
+            // Evidence step (legacy fallback so the user can add their
+            // first item before they can reference anything).
+            if (!hasEvidence || !editor) {
+              return (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 relative"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenEvidenceBinder?.();
+                  }}
+                  aria-label="Open Evidence & Attachments — add evidence first"
+                  title="No evidence yet — click to open Evidence & Attachments"
+                >
+                  <Paperclip className="size-3.5" />
+                </Button>
+              );
+            }
+
+            // POPULATED STATE — wrap in EvidencePickerPopover. Radix's
+            // PopoverTrigger owns the open/close toggle on click; we MUST
+            // NOT also toggle state ourselves or the two cancel out and
+            // the popover flashes open then immediately closed.
+            //
+            // We use onMouseDown (fires BEFORE Radix's click handler) to
+            // pre-focus the section editor at end of content so [See Fig N]
+            // insertion has a valid cursor target. The popover's
+            // onOpenAutoFocus is already prevented, so the editor keeps
+            // focus while the popover is open.
+            const paperclipBtn = (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7 relative"
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (editor && !editor.isFocused) {
+                    editor.commands.focus("end");
+                  }
+                }}
+                onClick={(e) => {
+                  // Don't toggle state — Radix's PopoverTrigger does it.
+                  // We only stop propagation so the parent section card's
+                  // onClick=onFocus doesn't double-fire.
+                  e.stopPropagation();
+                }}
+                aria-label={
+                  linkedEvidence.length > 0
+                    ? `${linkedEvidence.length} linked — insert evidence at cursor`
+                    : "Insert evidence at cursor"
+                }
+                title={
+                  linkedEvidence.length > 0
+                    ? `${linkedEvidence.length} linked · click to insert at cursor`
+                    : "Insert evidence at cursor"
+                }
+              >
+                <Paperclip className="size-3.5" />
+                {linkedEvidence.length > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center size-3.5 text-[9px] font-bold rounded-full bg-[var(--accent-9)] text-[var(--accent-contrast)]">
+                    {linkedEvidence.length}
+                  </span>
+                )}
+              </Button>
+            );
+
+            return (
+              <EvidencePickerPopover
+                draft={draft}
+                editor={editor}
+                open={evidencePopoverOpen}
+                onOpenChange={setEvidencePopoverOpen}
+                onOpenDrawer={() => {
+                  setEvidencePopoverOpen(false);
+                  setEvidenceDrawerOpen(true);
+                }}
+                trigger={paperclipBtn}
+              />
+            );
+          })()}
           <CommentPopover
             draft={draft}
             sectionId={section.id}
@@ -503,6 +613,15 @@ export function SectionEditor({
           className="prose prose-sm max-w-none focus:outline-none [&_p]:my-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_a]:underline [&_table]:border [&_table]:border-letter-rule [&_th]:border [&_th]:border-letter-rule [&_td]:border [&_td]:border-letter-rule [&_th]:bg-muted/40 [&_th]:text-left [&_th]:p-2 [&_td]:p-2"
         />
       </div>
+      {/* Pattern D — Evidence drawer. Mounted once per section, opens when
+       * the popover's "See all evidence →" overflow is clicked (5+ items).
+       * Renders via Sheet's own portal so position doesn't matter. */}
+      <EvidenceDrawer
+        draft={draft}
+        editor={editor}
+        open={evidenceDrawerOpen}
+        onOpenChange={setEvidenceDrawerOpen}
+      />
     </section>
   );
 }

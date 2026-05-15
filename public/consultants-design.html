@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Finalize — three directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --star:#f59e0b; --blue:#2563eb; --blue-lt:#eff6ff;
+  --amber:#d97706; --amber-lt:#fffbeb;
+  --green:#059669; --green-lt:#ecfdf5;
+  --red:#dc2626; --red-lt:#fef2f2;
+  --purple:#7c3aed; --purple-lt:#f5f3ff;
+  --radius:14px;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+button{font:inherit;cursor:pointer;border:0;background:none}
+a{color:inherit}
+svg{display:block}
+
+/* ── topbar with picker ── */
+.topbar{height:52px;background:var(--ink);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:50;color:#fff}
+.brand{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.logo{width:26px;height:26px;background:#fff;border-radius:7px;display:grid;place-items:center;color:var(--ink)}
+.logo svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.divider{width:1px;height:18px;background:rgba(255,255,255,.15)}
+.picker{display:flex;gap:2px;background:rgba(255,255,255,.06);padding:3px;border-radius:8px}
+.pick-btn{height:30px;padding:0 14px;border-radius:6px;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.6);transition:background .12s,color .12s}
+.pick-btn:hover{color:rgba(255,255,255,.9)}
+.pick-btn.active{background:#fff;color:var(--ink);font-weight:600}
+.pick-btn small{font-size:10.5px;font-weight:500;opacity:.6;margin-left:4px}
+.pick-btn.active small{opacity:.55}
+.tb-right{margin-left:auto;font-size:11.5px;color:rgba(255,255,255,.5)}
+
+/* ── shared appbar (within each design) ── */
+.appbar{height:48px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 24px;gap:14px}
+.appbar .crumb{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.appbar .crumb svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.appbar .crumb .active{color:var(--ink);font-weight:600}
+.appbar .ab-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.appbar .credits{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border:1px solid var(--line);border-radius:13px;font-size:11.5px;font-weight:600}
+.appbar .credits svg{width:12px;height:12px;color:var(--amber)}
+.appbar .me{width:26px;height:26px;border-radius:50%;background:linear-gradient(140deg,#fef3c7,#fcd34d);display:grid;place-items:center;font-size:10.5px;font-weight:700;color:#b45309}
+
+/* ── panels ── */
+.panel{display:none}
+.panel.active{display:block}
+
+/* =================================================================
+   DESIGN A · STATUS-LED — radical simplification
+================================================================= */
+.a-page{max-width:880px;margin:0 auto;padding:32px 24px 100px}
+.a-back-row{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.a-back{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;color:var(--muted)}
+.a-back svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round}
+.a-page-h{font-size:13px;color:var(--muted);font-weight:500}
+.a-meta{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.a-meta::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--amber)}
+
+/* Hero status */
+.a-hero{background:#fff;border:1px solid var(--line);border-radius:18px;padding:32px;display:grid;grid-template-columns:auto 1fr auto;gap:32px;align-items:center;margin-bottom:24px}
+.a-ring-wrap{position:relative;width:120px;height:120px;flex-shrink:0}
+.a-ring{transform:rotate(-90deg)}
+.a-ring-track{fill:none;stroke:var(--line);stroke-width:9}
+.a-ring-fill{fill:none;stroke:var(--green);stroke-width:9;stroke-linecap:round;stroke-dasharray:314.16;stroke-dashoffset:62.83;transition:stroke-dashoffset .8s ease}
+.a-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.a-ring-num{font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.a-ring-of{font-size:11px;color:var(--subtle);font-weight:500;margin-top:2px}
+
+.a-status h1{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+.a-status h1 .band{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--green-lt);color:var(--green);padding:3px 8px;border-radius:5px;margin-left:8px;vertical-align:middle}
+.a-status p{font-size:14px;color:var(--body);line-height:1.55;max-width:340px}
+.a-status p strong{color:var(--ink);font-weight:600}
+
+.a-cta-col{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.a-cta-primary{height:42px;padding:0 20px;background:var(--ink);color:#fff;border-radius:10px;font-size:13.5px;font-weight:700;display:inline-flex;align-items:center;gap:6px;letter-spacing:-.01em}
+.a-cta-primary:hover{opacity:.88}
+.a-cta-primary svg{width:14px;height:14px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round}
+.a-cta-secondary{font-size:12px;color:var(--muted);font-weight:500}
+.a-cta-secondary:hover{color:var(--ink)}
+
+/* Issues block */
+.a-block{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.a-block-head{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line-2)}
+.a-block-head h2{font-size:14px;font-weight:700;letter-spacing:-.01em}
+.a-count{font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:2px 7px;border-radius:10px;letter-spacing:-.01em}
+.a-block-head .b-meta{margin-left:auto;font-size:11.5px;color:var(--muted)}
+
+.a-issue{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line-2);transition:background .12s}
+.a-issue:last-child{border-bottom:none}
+.a-issue:hover{background:var(--wash)}
+.a-issue-icon{width:30px;height:30px;border-radius:9px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.a-issue-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.a-issue-body{min-width:0}
+.a-issue-title-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:2px}
+.a-issue-title{font-size:13.5px;font-weight:700;letter-spacing:-.01em}
+.a-dim-chip{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--line-2);padding:2px 7px;border-radius:4px}
+.a-issue-detail{font-size:12px;color:var(--muted);line-height:1.5}
+.a-impact{font-size:13px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;text-align:right}
+.a-fix-btn{height:32px;padding:0 14px;background:var(--ink);color:#fff;border-radius:8px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:5px;flex-shrink:0}
+.a-fix-btn:hover{opacity:.85}
+.a-fix-btn svg{width:12px;height:12px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round}
+
+.a-block-foot{display:flex;align-items:center;gap:18px;padding:11px 20px;background:var(--wash);border-top:1px solid var(--line-2);font-size:12px;color:var(--muted)}
+.a-block-foot a{font-weight:600;color:var(--body);text-decoration:none;display:flex;align-items:center;gap:4px}
+.a-block-foot a:hover{color:var(--ink)}
+.a-block-foot a svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.2}
+.a-foot-sep{width:1px;height:14px;background:var(--line)}
+
+/* Get a second opinion */
+.a-section-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle);margin:32px 0 10px;display:flex;align-items:center;gap:6px}
+.a-section-title .opt{color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;font-size:11.5px}
+
+.a-opinion{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.a-lane{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px;transition:border-color .12s,transform .15s}
+.a-lane:hover{border-color:#9ca3af;transform:translateY(-1px)}
+.a-lane-icon{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.a-lane-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.a-lane-icon.b{background:var(--blue-lt);color:var(--blue)}
+.a-lane-icon.a{background:var(--amber-lt);color:var(--amber)}
+.a-lane-icon.g{background:var(--wash)}
+.a-lane-name{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.a-lane-bullets{font-size:11.5px;color:var(--muted);line-height:1.55;margin-top:auto}
+.a-lane-action{margin-top:8px;height:32px;border-radius:8px;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+.a-lane-action:hover{border-color:var(--ink)}
+.a-lane.recommended .a-lane-action{background:var(--ink);color:#fff;border-color:var(--ink)}
+.a-lane-action svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4}
+
+.a-consultants{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px}
+.a-cons-head{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.a-cons-head h3{font-size:12.5px;font-weight:700;letter-spacing:-.01em}
+.a-cons-head .why{font-size:11.5px;color:var(--muted)}
+.a-cons-head .why strong{color:var(--body);font-weight:600}
+.a-cons-head a{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted);text-decoration:none}
+.a-cons-head a:hover{color:var(--ink)}
+.a-cons-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.a-cons{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:10px;cursor:pointer;transition:border-color .12s}
+.a-cons:hover{border-color:#9ca3af}
+.a-cons-av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;flex-shrink:0;position:relative}
+.a-cons-av .vb{position:absolute;bottom:-1px;right:-1px;width:13px;height:13px;background:var(--blue);border-radius:50%;border:2px solid #fff;display:grid;place-items:center}
+.a-cons-av .vb svg{width:6px;height:6px;stroke:#fff;fill:none;stroke-width:3}
+.a-av-1{background:linear-gradient(140deg,#dbeafe,#93c5fd);color:#1d4ed8}
+.a-av-2{background:linear-gradient(140deg,#d1fae5,#6ee7b7);color:#047857}
+.a-av-3{background:linear-gradient(140deg,#fce7f3,#f9a8d4);color:#be185d}
+.a-cons-body{flex:1;min-width:0}
+.a-cons-name{font-size:13px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:5px}
+.a-cons-name .top{font-size:9.5px;font-weight:700;color:var(--star);letter-spacing:.04em;text-transform:uppercase}
+.a-cons-role{font-size:11.5px;color:var(--muted);margin-top:1px}
+.a-cons-meta{font-size:11.5px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.a-cons-meta .star{color:var(--star);font-weight:700}
+.a-cons-meta .price{color:var(--ink);font-weight:700;margin-left:6px}
+
+/* Export row */
+.a-export{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.a-fmt{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .12s}
+.a-fmt:hover{border-color:#9ca3af}
+.a-fmt-icon{width:28px;height:28px;border-radius:7px;background:var(--wash);display:grid;place-items:center;color:var(--ink);margin-bottom:8px}
+.a-fmt-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.a-fmt-name{font-size:13px;font-weight:700}
+.a-fmt-desc{font-size:11px;color:var(--muted);margin-top:1px;line-height:1.5}
+
+/* =================================================================
+   DESIGN B · EDITOR-INTEGRATED — letter on left, review rail on right
+================================================================= */
+.b-shell{display:grid;grid-template-columns:1fr 360px;height:calc(100vh - 100px);min-height:680px}
+.b-letter-wrap{overflow-y:auto;padding:32px 48px;background:#fff;border-right:1px solid var(--line)}
+.b-letter-meta{display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--muted);margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line-2)}
+.b-letter-meta .dot{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.b-letter{max-width:600px;font-family:"Source Serif 4",Georgia,serif;font-size:15px;line-height:1.7;color:var(--ink)}
+.b-letter h1{font-family:"Inter",sans-serif;font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:18px;color:var(--ink)}
+.b-letter p{margin-bottom:14px}
+.b-letter .pin{position:relative;cursor:pointer;border-radius:3px;padding:2px 0;transition:background .15s,box-shadow .15s}
+.b-letter .pin.warn{background:rgba(217,119,6,.13);box-shadow:0 0 0 1px rgba(217,119,6,.2)}
+.b-letter .pin.warn:hover,.b-letter .pin.warn.active{background:rgba(217,119,6,.25);box-shadow:0 0 0 1.5px var(--amber)}
+.b-letter .pin .pin-mark{position:absolute;left:-26px;top:1px;width:18px;height:18px;border-radius:50%;background:var(--amber);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;font-family:"Inter",sans-serif;cursor:pointer}
+.b-letter .pin .pin-mark::after{content:'';position:absolute;right:-4px;top:50%;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:5px solid var(--amber);transform:translateY(-50%)}
+
+.b-rail{background:var(--wash);overflow-y:auto;display:flex;flex-direction:column}
+.b-rail-section{padding:18px 18px;border-bottom:1px solid var(--line)}
+.b-rail-section:last-child{border-bottom:none}
+.b-rail-h{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.b-rail-h .label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--subtle)}
+.b-rail-h .val{font-size:11.5px;font-weight:700;color:var(--ink);margin-left:auto}
+
+/* Health summary in rail */
+.b-health-row{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+.b-mini-ring{position:relative;width:64px;height:64px;flex-shrink:0}
+.b-mini-ring svg{transform:rotate(-90deg)}
+.b-mini-track{fill:none;stroke:var(--line);stroke-width:6}
+.b-mini-fill{fill:none;stroke:var(--green);stroke-width:6;stroke-linecap:round}
+.b-mini-num{position:absolute;inset:0;display:grid;place-items:center;font-size:18px;font-weight:800;letter-spacing:-.02em}
+.b-health-text{flex:1}
+.b-health-band{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--green);background:var(--green-lt);padding:2px 7px;border-radius:4px;display:inline-block}
+.b-health-msg{font-size:12px;color:var(--body);margin-top:5px;line-height:1.5}
+.b-health-msg strong{color:var(--ink);font-weight:600}
+
+/* Issues in rail */
+.b-issue{display:flex;gap:10px;padding:10px;border-radius:9px;cursor:pointer;transition:background .12s;margin-bottom:4px;background:#fff;border:1px solid var(--line)}
+.b-issue:hover,.b-issue.active{border-color:var(--amber);background:#fffaf0}
+.b-issue-pin{width:20px;height:20px;border-radius:50%;background:var(--amber);color:#fff;font-size:10.5px;font-weight:700;display:grid;place-items:center;flex-shrink:0;margin-top:1px}
+.b-issue-body{flex:1;min-width:0}
+.b-issue-title{font-size:12.5px;font-weight:700;letter-spacing:-.01em;line-height:1.35}
+.b-issue-meta{font-size:11px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:5px}
+.b-issue-meta .b-dim{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);background:var(--line-2);padding:1px 5px;border-radius:3px}
+.b-issue-meta .b-imp{color:var(--green);font-weight:700}
+.b-issue-fix{align-self:center;font-size:11px;font-weight:700;color:var(--ink);background:#fff;border:1px solid var(--line);height:24px;padding:0 9px;border-radius:6px;display:flex;align-items:center;gap:3px;flex-shrink:0}
+.b-issue-fix:hover{border-color:var(--ink)}
+.b-issue-fix svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.5}
+
+/* Compact lanes & export in rail */
+.b-mini-lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.b-mini-lane{padding:10px 8px;border:1px solid var(--line);border-radius:9px;background:#fff;text-align:center;cursor:pointer;transition:border-color .12s}
+.b-mini-lane:hover{border-color:#9ca3af}
+.b-mini-lane svg{width:16px;height:16px;margin:0 auto 6px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
+.b-mini-lane .l-name{font-size:11.5px;font-weight:700}
+.b-mini-lane .l-meta{font-size:10.5px;color:var(--muted);margin-top:1px}
+
+.b-cons-row{display:flex;align-items:center;gap:8px;margin-top:10px;padding:9px 10px;background:#fff;border:1px solid var(--line);border-radius:9px;cursor:pointer;transition:border-color .12s}
+.b-cons-row:hover{border-color:#9ca3af}
+.b-cons-row .a-cons-av{width:32px;height:32px;font-size:10.5px}
+.b-cons-row .nm{font-size:12px;font-weight:700}
+.b-cons-row .rl{font-size:11px;color:var(--muted)}
+.b-cons-row .pr{margin-left:auto;font-size:12px;font-weight:700;text-align:right}
+.b-cons-row .pr small{display:block;color:var(--star);font-size:10.5px;font-weight:600}
+
+.b-export-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.b-export-pill{height:30px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.b-export-pill:hover{border-color:var(--ink)}
+.b-export-pill svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.8}
+.b-ship{width:100%;height:36px;background:var(--ink);color:#fff;border-radius:9px;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px}
+.b-ship:hover{opacity:.88}
+.b-ship svg{width:13px;height:13px;stroke:#fff;fill:none;stroke-width:2.4}
+
+/* =================================================================
+   DESIGN C · TABS — three tabbed surfaces
+================================================================= */
+.c-page{max-width:980px;margin:0 auto;padding:24px 24px 100px}
+.c-h-row{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.c-h-row h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.c-h-meta{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.c-h-meta::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.c-back{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;display:grid;place-items:center;color:var(--muted)}
+.c-back svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round}
+
+.c-tabs{display:flex;align-items:center;gap:0;background:#fff;border:1px solid var(--line);border-radius:12px;padding:5px;margin-bottom:18px}
+.c-tab{flex:1;height:42px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:8px;transition:background .12s,color .12s;position:relative}
+.c-tab:hover{color:var(--body)}
+.c-tab.active{background:var(--ink);color:#fff}
+.c-tab .t-num{width:20px;height:20px;border-radius:50%;background:var(--line);color:var(--muted);font-size:11px;font-weight:700;display:grid;place-items:center;transition:background .12s,color .12s}
+.c-tab.active .t-num{background:rgba(255,255,255,.2);color:#fff}
+.c-tab.done .t-num{background:var(--green);color:#fff}
+.c-tab.done .t-num svg{width:11px;height:11px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.c-tab .t-badge{font-size:10px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 6px;border-radius:8px;letter-spacing:-.01em}
+.c-tab.active .t-badge{background:rgba(255,255,255,.2);color:#fff}
+
+.c-pane{display:none;animation:fade .25s ease}
+.c-pane.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* Health pane */
+.c-health-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px;display:grid;grid-template-columns:auto 1fr;gap:32px;align-items:center;margin-bottom:14px}
+.c-h-ring{position:relative;width:110px;height:110px;flex-shrink:0}
+.c-h-ring svg{transform:rotate(-90deg)}
+.c-h-track{fill:none;stroke:var(--line);stroke-width:9}
+.c-h-fill{fill:none;stroke:var(--green);stroke-width:9;stroke-linecap:round;stroke-dasharray:283;stroke-dashoffset:56.6}
+.c-h-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.c-h-num strong{font-size:32px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.c-h-num small{font-size:10px;color:var(--subtle);font-weight:500;margin-top:2px}
+.c-h-info h2{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+.c-h-info h2 .band{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--green-lt);color:var(--green);padding:2px 7px;border-radius:5px;margin-left:8px;vertical-align:middle}
+.c-h-info p{font-size:13px;color:var(--body)}
+.c-h-info p strong{font-weight:700;color:var(--ink)}
+
+.c-issues-card{background:#fff;border:1px solid var(--line);border-radius:14px;border-top:2px solid var(--amber);overflow:hidden}
+.c-i-head{padding:13px 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line-2)}
+.c-i-head h3{font-size:13.5px;font-weight:700;letter-spacing:-.01em}
+.c-i-head .meta{margin-left:auto;font-size:11.5px;color:var(--muted)}
+.c-i-row{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;padding:13px 20px;border-bottom:1px solid var(--line-2)}
+.c-i-row:last-of-type{border-bottom:none}
+.c-i-row:hover{background:var(--wash)}
+.c-i-icon{width:28px;height:28px;border-radius:8px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.c-i-icon svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.c-i-body{min-width:0}
+.c-i-title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.c-i-detail{font-size:11.5px;color:var(--muted);margin-top:2px}
+.c-i-imp{font-size:12.5px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums}
+.c-i-fix{height:30px;padding:0 13px;background:var(--ink);color:#fff;border-radius:7px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:4px}
+.c-i-fix svg{width:11px;height:11px;stroke:#fff;fill:none;stroke-width:2.4}
+
+.c-foot-row{padding:11px 20px;background:var(--wash);border-top:1px solid var(--line-2);display:flex;align-items:center;gap:18px;font-size:12px;color:var(--muted)}
+.c-foot-row a{font-weight:600;color:var(--body);text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.c-foot-row a:hover{color:var(--ink)}
+
+/* Review pane */
+.c-review-grid{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.c-lanes{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--line-2)}
+.c-lane{padding:18px;border-right:1px solid var(--line-2);display:flex;flex-direction:column;gap:8px}
+.c-lane:last-child{border-right:none}
+.c-l-head{display:flex;align-items:center;gap:9px}
+.c-l-icon{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
+.c-l-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.c-l-icon.b{background:var(--blue-lt);color:var(--blue)}
+.c-l-icon.a{background:var(--amber-lt);color:var(--amber)}
+.c-l-icon.g{background:var(--wash);color:var(--muted)}
+.c-l-name{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.c-l-tag{font-size:11px;color:var(--muted)}
+.c-l-desc{font-size:12px;color:var(--body);line-height:1.55;flex:1}
+.c-l-cta{height:32px;border-radius:8px;font-size:12.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px}
+.c-l-cta.solid{background:var(--ink);color:#fff}
+.c-l-cta.outline{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.c-l-cta:hover.solid{opacity:.85} .c-l-cta:hover.outline{border-color:var(--ink)}
+.c-l-cta svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4}
+
+.c-cons-strip{padding:18px}
+.c-cs-head{display:flex;align-items:baseline;gap:8px;margin-bottom:12px}
+.c-cs-head h3{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.c-cs-head .why{font-size:11.5px;color:var(--muted)}
+.c-cs-head .why strong{color:var(--body);font-weight:600}
+.c-cs-head a{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted);text-decoration:none}
+.c-cs-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.c-cons{padding:13px;border:1px solid var(--line);border-radius:11px;cursor:pointer;transition:border-color .12s}
+.c-cons:hover{border-color:#9ca3af}
+.c-cons-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.c-cons-name{font-size:13px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:5px}
+.c-cons-name .top{font-size:9.5px;font-weight:700;color:var(--star);letter-spacing:.04em;text-transform:uppercase}
+.c-cons-role{font-size:11px;color:var(--muted);margin-top:1px}
+.c-cons-stats{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;font-variant-numeric:tabular-nums}
+.c-cons-stats .stars{color:var(--star);font-weight:700}
+.c-cons-stats .price{font-weight:700;color:var(--ink)}
+
+/* Export pane */
+.c-export-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.c-fmt{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;cursor:pointer;transition:border-color .12s}
+.c-fmt:hover{border-color:#9ca3af}
+.c-fmt-icon{width:32px;height:32px;border-radius:9px;background:var(--wash);display:grid;place-items:center;color:var(--ink);margin-bottom:10px}
+.c-fmt-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.c-fmt-name{font-size:13px;font-weight:700}
+.c-fmt-desc{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
+.c-ship{padding:18px 22px;background:var(--ink);color:#fff;border-radius:12px;display:flex;align-items:center;gap:14px}
+.c-ship-icon{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.1);display:grid;place-items:center;flex-shrink:0}
+.c-ship-icon svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:1.8}
+.c-ship h4{font-size:14px;font-weight:700}
+.c-ship p{font-size:12px;color:rgba(255,255,255,.7)}
+.c-ship-btn{margin-left:auto;height:36px;padding:0 18px;background:#fff;color:var(--ink);border-radius:9px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.c-ship-btn svg{width:13px;height:13px;stroke:var(--ink);fill:none;stroke-width:2.4}
+
+/* =================================================================
+   DESIGN D · HYBRID — letter on left + tabbed rail on right
+================================================================= */
+.d-shell{display:grid;grid-template-columns:1fr 380px;height:calc(100vh - 100px);min-height:680px}
+.d-letter-wrap{overflow-y:auto;padding:32px 48px;background:#fff;border-right:1px solid var(--line)}
+.d-letter-meta{display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--muted);margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line-2)}
+.d-letter-meta .dot{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.d-letter{max-width:600px;font-family:"Source Serif 4",Georgia,serif;font-size:15px;line-height:1.7;color:var(--ink)}
+.d-letter h1{font-family:"Inter",sans-serif;font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:18px}
+.d-letter p{margin-bottom:14px}
+.d-letter .pin{position:relative;cursor:pointer;border-radius:3px;padding:2px 0;transition:background .15s,box-shadow .15s}
+.d-letter .pin.warn{background:rgba(217,119,6,.13);box-shadow:0 0 0 1px rgba(217,119,6,.2)}
+.d-letter .pin.warn:hover,.d-letter .pin.warn.active{background:rgba(217,119,6,.28);box-shadow:0 0 0 1.5px var(--amber)}
+.d-letter .pin .pin-mark{position:absolute;left:-26px;top:1px;width:18px;height:18px;border-radius:50%;background:var(--amber);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700;font-family:"Inter",sans-serif}
+.d-letter .pin .pin-mark::after{content:'';position:absolute;right:-4px;top:50%;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:5px solid var(--amber);transform:translateY(-50%)}
+.d-letter.dim .pin{opacity:.4}
+
+/* rail */
+.d-rail{background:var(--wash);display:flex;flex-direction:column;overflow:hidden}
+.d-rail-tabs{display:flex;background:#fff;border-bottom:1px solid var(--line);padding:6px 8px;gap:2px}
+.d-rt{flex:1;height:38px;border-radius:7px;font-size:12px;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;transition:background .12s,color .12s;position:relative}
+.d-rt:hover{color:var(--body)}
+.d-rt.active{background:var(--ink);color:#fff}
+.d-rt .num{width:18px;height:18px;border-radius:50%;background:var(--line);color:var(--muted);font-size:10.5px;font-weight:700;display:grid;place-items:center;flex-shrink:0;transition:all .12s}
+.d-rt.active .num{background:rgba(255,255,255,.2);color:#fff}
+.d-rt.done .num{background:var(--green);color:#fff}
+.d-rt.done .num svg{width:9px;height:9px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.d-rt .badge{font-size:9.5px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:8px;letter-spacing:-.01em}
+.d-rt.active .badge{background:rgba(255,255,255,.22);color:#fff}
+
+.d-rail-body{flex:1;overflow-y:auto}
+.d-rp{display:none;padding:18px;animation:fade .25s ease}
+.d-rp.active{display:block}
+
+/* HEALTH pane */
+.d-h-summary{display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.d-h-ring{position:relative;width:60px;height:60px;flex-shrink:0}
+.d-h-ring svg{transform:rotate(-90deg)}
+.d-h-track{fill:none;stroke:var(--line);stroke-width:6}
+.d-h-fill{fill:none;stroke:var(--green);stroke-width:6;stroke-linecap:round}
+.d-h-num{position:absolute;inset:0;display:grid;place-items:center;font-size:17px;font-weight:800;letter-spacing:-.02em}
+.d-h-text{flex:1;min-width:0}
+.d-h-band{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--green-lt);color:var(--green);padding:2px 7px;border-radius:4px;display:inline-block}
+.d-h-msg{font-size:12px;color:var(--body);margin-top:4px;line-height:1.5}
+.d-h-msg strong{color:var(--ink);font-weight:600}
+
+.d-section-label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--subtle);margin:14px 0 8px;display:flex;align-items:center;gap:6px}
+.d-section-label .v{margin-left:auto;font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:500}
+
+.d-issue{display:flex;gap:10px;padding:11px 12px;border-radius:9px;cursor:pointer;background:#fff;border:1px solid var(--line);margin-bottom:6px;transition:border-color .12s,background .12s}
+.d-issue:hover,.d-issue.active{border-color:var(--amber);background:#fffaf0}
+.d-issue-pin{width:22px;height:22px;border-radius:50%;background:var(--amber);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0;margin-top:1px}
+.d-issue-body{flex:1;min-width:0}
+.d-issue-title{font-size:12.5px;font-weight:700;letter-spacing:-.01em;line-height:1.35}
+.d-issue-detail{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+.d-issue-meta{display:flex;align-items:center;gap:6px;margin-top:5px}
+.d-issue-meta .dim{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--line-2);padding:1px 5px;border-radius:3px}
+.d-issue-meta .imp{font-size:11px;color:var(--green);font-weight:700}
+.d-issue-fix{align-self:center;height:26px;padding:0 11px;background:var(--ink);color:#fff;border-radius:6px;font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:4px;flex-shrink:0}
+.d-issue-fix:hover{opacity:.85}
+.d-issue-fix svg{width:10px;height:10px;stroke:#fff;fill:none;stroke-width:2.5}
+
+.d-pass{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:#fff;overflow:hidden}
+.d-pass-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;font-size:11.5px;font-weight:600;color:var(--body)}
+.d-pass-head:hover{background:var(--wash)}
+.d-pass-head .caret{width:11px;height:11px;color:var(--muted);transition:transform .2s}
+.d-pass-head .caret svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.d-pass.open .caret{transform:rotate(90deg)}
+.d-pass-head .check{width:14px;height:14px;color:var(--green)}
+.d-pass-head .check svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.d-pass-head .meta{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500}
+.d-pass-list{display:none;border-top:1px solid var(--line-2);padding:6px 0}
+.d-pass.open .d-pass-list{display:block}
+.d-pass-row{padding:6px 12px 6px 32px;font-size:11.5px;color:var(--body);position:relative}
+.d-pass-row::before{content:'';position:absolute;left:14px;top:9px;width:10px;height:10px;background:var(--green-lt);border-radius:50%}
+.d-pass-row::after{content:'';position:absolute;left:17px;top:11px;width:4px;height:6px;border-right:1.5px solid var(--green);border-bottom:1.5px solid var(--green);transform:rotate(45deg)}
+.d-pass-row .by{font-size:10.5px;color:var(--subtle);margin-top:1px}
+
+.d-ai-row{margin-top:10px;display:flex;align-items:center;gap:10px;padding:10px 12px;background:linear-gradient(90deg,#f5f3ff,#eff6ff);border:1px solid #e9d5ff;border-radius:9px}
+.d-ai-row .ic{width:26px;height:26px;border-radius:7px;background:#fff;display:grid;place-items:center;color:var(--purple);flex-shrink:0;border:1px solid #e9d5ff}
+.d-ai-row .ic svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.d-ai-row .txt{flex:1;font-size:11.5px;color:var(--body)}
+.d-ai-row .txt strong{color:var(--ink);font-weight:700}
+.d-ai-btn{height:26px;padding:0 11px;background:var(--ink);color:#fff;border-radius:6px;font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:4px}
+.d-ai-btn svg{width:10px;height:10px;stroke:#fff;fill:none;stroke-width:2.4}
+
+/* REVIEW pane */
+.d-review-lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
+.d-rl{padding:11px 9px;border:1px solid var(--line);border-radius:9px;background:#fff;text-align:center;cursor:pointer;transition:border-color .12s}
+.d-rl:hover{border-color:#9ca3af}
+.d-rl svg{width:16px;height:16px;margin:0 auto 6px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
+.d-rl .n{font-size:11.5px;font-weight:700}
+.d-rl .m{font-size:10.5px;color:var(--muted);margin-top:1px}
+.d-rl.b svg{color:var(--blue)} .d-rl.a svg{color:var(--amber)}
+
+.d-cons-head{display:flex;align-items:baseline;gap:6px;margin-bottom:8px}
+.d-cons-head h3{font-size:12px;font-weight:700;letter-spacing:-.01em}
+.d-cons-head .why{font-size:11px;color:var(--muted)}
+.d-cons-head .why strong{color:var(--body);font-weight:600}
+.d-cons-card{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fff;margin-bottom:6px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.d-cons-card:hover{border-color:#9ca3af;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.d-cons-card.top{border-color:var(--ink)}
+.d-cc-head{display:flex;align-items:flex-start;gap:10px}
+.d-cc-av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;flex-shrink:0;position:relative}
+.d-cc-av .vb{position:absolute;bottom:-1px;right:-1px;width:13px;height:13px;background:var(--blue);border-radius:50%;border:2px solid #fff;display:grid;place-items:center}
+.d-cc-av .vb svg{width:6px;height:6px;stroke:#fff;fill:none;stroke-width:3}
+.d-cc-info{flex:1;min-width:0}
+.d-cc-name{font-size:12.5px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:5px}
+.d-cc-name .top{font-size:9.5px;font-weight:700;color:var(--star);letter-spacing:.04em;text-transform:uppercase}
+.d-cc-role{font-size:11px;color:var(--muted);margin-top:1px}
+.d-cc-stats{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;font-variant-numeric:tabular-nums}
+.d-cc-stars{color:var(--star);font-weight:700}
+.d-cc-price{font-weight:700;color:var(--ink)}
+.d-cc-price small{color:var(--muted);font-weight:400;margin-left:4px}
+.d-cc-book{height:30px;border-radius:7px;background:var(--ink);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;width:100%}
+.d-cc-book:hover{opacity:.85}
+.d-cc-book svg{width:11px;height:11px;stroke:#fff;fill:none;stroke-width:2.4}
+.d-see-all{display:flex;align-items:center;justify-content:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--muted);padding:10px;width:100%;border:1px dashed var(--line);border-radius:8px;background:#fff;margin-top:6px}
+.d-see-all:hover{color:var(--ink);border-color:var(--ink)}
+.d-see-all svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.2}
+
+/* EXPORT pane */
+.d-export-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.d-fmt{padding:14px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;transition:border-color .12s}
+.d-fmt:hover{border-color:#9ca3af}
+.d-fmt-icon{width:30px;height:30px;border-radius:8px;background:var(--wash);display:grid;place-items:center;color:var(--ink);margin-bottom:8px}
+.d-fmt-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.d-fmt-name{font-size:12.5px;font-weight:700}
+.d-fmt-desc{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45}
+.d-ship-card{padding:14px;background:var(--ink);color:#fff;border-radius:11px}
+.d-ship-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.d-ship-h svg{width:16px;height:16px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.d-ship-h h4{font-size:13px;font-weight:700}
+.d-ship-card p{font-size:11px;color:rgba(255,255,255,.7);margin-bottom:10px;line-height:1.5}
+.d-ship-btn{width:100%;height:34px;background:#fff;color:var(--ink);border-radius:8px;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px}
+.d-ship-btn:hover{opacity:.92}
+.d-ship-btn svg{width:13px;height:13px;stroke:var(--ink);fill:none;stroke-width:2.4}
+
+</style>
+</head>
+<body>
+
+<!-- ── design picker ── -->
+<div class="topbar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+    DraftHR
+  </div>
+  <div class="divider"></div>
+  <div class="picker">
+    <button class="pick-btn active" data-tab="a">A · Status-led <small>recommended</small></button>
+    <button class="pick-btn" data-tab="b">B · Editor-integrated</button>
+    <button class="pick-btn" data-tab="c">C · Tabs</button>
+    <button class="pick-btn" data-tab="d">D · Hybrid <small>B + C</small></button>
+  </div>
+  <div class="tb-right">3 directions for the Finalize page</div>
+</div>
+
+<!-- ════════════════ DESIGN A ════════════════ -->
+<div class="panel active" data-panel="a">
+
+  <div class="appbar">
+    <div class="crumb">
+      <span>Drafts</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span>Settlement letter</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="active">Finalize</span>
+    </div>
+    <div class="ab-right">
+      <span class="credits">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+        25 credits
+      </span>
+      <div class="me">AE</div>
+    </div>
+  </div>
+
+  <div class="a-page">
+    <div class="a-back-row">
+      <button class="a-back"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <span class="a-page-h">Finalize · Settlement letter for R. Hargreaves</span>
+      <span class="a-meta">Draft · auto-saved 2m ago</span>
+    </div>
+
+    <!-- Hero -->
+    <div class="a-hero">
+      <div class="a-ring-wrap">
+        <svg class="a-ring" width="120" height="120" viewBox="0 0 110 110">
+          <circle class="a-ring-track" cx="55" cy="55" r="50"/>
+          <circle class="a-ring-fill" cx="55" cy="55" r="50"/>
+        </svg>
+        <div class="a-ring-center">
+          <span class="a-ring-num">80</span>
+          <span class="a-ring-of">/ 100</span>
+        </div>
+      </div>
+      <div class="a-status">
+        <h1>Letter health <span class="band">Strong</span></h1>
+        <p>You can ship as-is, but <strong>3 small fixes would lift it to ~97</strong> and reduce tribunal exposure.</p>
+      </div>
+      <div class="a-cta-col">
+        <button class="a-cta-primary">
+          Continue to export
+          <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <button class="a-cta-secondary">or get a second opinion ↓</button>
+      </div>
+    </div>
+
+    <!-- Issues -->
+    <div class="a-block">
+      <div class="a-block-head">
+        <h2>Issues to fix</h2>
+        <span class="a-count">3</span>
+        <span class="b-meta">sorted by score impact</span>
+      </div>
+      <div class="a-issue">
+        <div class="a-issue-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div class="a-issue-body">
+          <div class="a-issue-title-row">
+            <span class="a-issue-title">Missing notice period reference</span>
+            <span class="a-dim-chip">Compliance</span>
+          </div>
+          <div class="a-issue-detail">Contractual notice should be cited explicitly under clause 4.</div>
+        </div>
+        <div class="a-impact">+8</div>
+        <button class="a-fix-btn">Fix <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="a-issue">
+        <div class="a-issue-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div class="a-issue-body">
+          <div class="a-issue-title-row">
+            <span class="a-issue-title">Tone reads "punitive" in §2</span>
+            <span class="a-dim-chip">Quality</span>
+          </div>
+          <div class="a-issue-detail">Phrasing implies blame — consider neutral framing.</div>
+        </div>
+        <div class="a-impact">+5</div>
+        <button class="a-fix-btn">Fix <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="a-issue">
+        <div class="a-issue-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        <div class="a-issue-body">
+          <div class="a-issue-title-row">
+            <span class="a-issue-title">No appeal route stated</span>
+            <span class="a-dim-chip">Compliance</span>
+          </div>
+          <div class="a-issue-detail">ACAS Code of Practice recommends a written appeal pathway.</div>
+        </div>
+        <div class="a-impact">+4</div>
+        <button class="a-fix-btn">Fix <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="a-block-foot">
+        <a href="#">Show 21 passing checks <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></a>
+        <span class="a-foot-sep"></span>
+        <a href="#">⚡ Run AI critique (5 credits)</a>
+      </div>
+    </div>
+
+    <!-- Get a second opinion -->
+    <div class="a-section-title">Get a second opinion <span class="opt">· optional</span></div>
+    <div class="a-opinion">
+      <div class="a-lane">
+        <div class="a-lane-icon b"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></div>
+        <div class="a-lane-name">AI specialist</div>
+        <div class="a-lane-bullets">5 credits · returns ~30s · pick a perspective</div>
+        <button class="a-lane-action">Get critique <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="a-lane">
+        <div class="a-lane-icon g"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+        <div class="a-lane-name">Your team</div>
+        <div class="a-lane-bullets">Free · async · 2 teammates online</div>
+        <button class="a-lane-action">Send <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+      <div class="a-lane recommended">
+        <div class="a-lane-icon a"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+        <div class="a-lane-name">External consultant</div>
+        <div class="a-lane-bullets">From £85 · vetted · 24–48h SLA</div>
+        <button class="a-lane-action">Browse <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+
+    <div class="a-consultants">
+      <div class="a-cons-head">
+        <h3>3 matched consultants</h3>
+        <span class="why">· matched on <strong>Settlement</strong>, <strong>Tribunal risk</strong></span>
+        <a href="#">See all 14 →</a>
+      </div>
+      <div class="a-cons-grid">
+        <div class="a-cons">
+          <div class="a-cons-av a-av-1">SM<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+          <div class="a-cons-body">
+            <div class="a-cons-name">Sarah Mitchell <span class="top">★ Top match</span></div>
+            <div class="a-cons-role">Solicitor · 12 yrs</div>
+            <div class="a-cons-meta"><span class="star">★ 4.9</span> · 87 reviews <span class="price">£120</span></div>
+          </div>
+        </div>
+        <div class="a-cons">
+          <div class="a-cons-av a-av-2">JP<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+          <div class="a-cons-body">
+            <div class="a-cons-name">James Park</div>
+            <div class="a-cons-role">HR Director · 20 yrs</div>
+            <div class="a-cons-meta"><span class="star">★ 4.8</span> · 54 reviews <span class="price">£95</span></div>
+          </div>
+        </div>
+        <div class="a-cons">
+          <div class="a-cons-av a-av-3">RS<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+          <div class="a-cons-body">
+            <div class="a-cons-name">Rachel Stein</div>
+            <div class="a-cons-role">Former ACAS · 15 yrs</div>
+            <div class="a-cons-meta"><span class="star">★ 4.9</span> · 63 reviews <span class="price">£130</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div class="a-section-title">Export</div>
+    <div class="a-export">
+      <div class="a-fmt">
+        <div class="a-fmt-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="a-fmt-name">PDF</div>
+        <div class="a-fmt-desc">Print-ready</div>
+      </div>
+      <div class="a-fmt">
+        <div class="a-fmt-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg></div>
+        <div class="a-fmt-name">DOCX</div>
+        <div class="a-fmt-desc">Editable Word</div>
+      </div>
+      <div class="a-fmt">
+        <div class="a-fmt-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <div class="a-fmt-name">Signed PDF</div>
+        <div class="a-fmt-desc">Tribunal-trail</div>
+      </div>
+      <div class="a-fmt">
+        <div class="a-fmt-icon"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+        <div class="a-fmt-name">Evidence pack</div>
+        <div class="a-fmt-desc">ZIP w/ history</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ DESIGN B ════════════════ -->
+<div class="panel" data-panel="b">
+
+  <div class="appbar">
+    <div class="crumb">
+      <span>Drafts</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span>Settlement letter</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="active">Finalize</span>
+    </div>
+    <div class="ab-right">
+      <span class="credits"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>25 credits</span>
+      <div class="me">AE</div>
+    </div>
+  </div>
+
+  <div class="b-shell">
+    <!-- Letter on the left -->
+    <div class="b-letter-wrap">
+      <div class="b-letter-meta">
+        <span class="dot"></span>
+        <strong style="color:var(--ink);font-weight:600">Settlement letter — R. Hargreaves</strong>
+        <span style="margin-left:auto">412 words · auto-saved 2m ago</span>
+      </div>
+      <div class="b-letter">
+        <h1>Settlement Agreement Letter</h1>
+        <p><strong>Dear Mr Rashid Hargreaves,</strong></p>
+        <p>This letter confirms our recent discussions regarding the termination of your employment, with effect from 15 May 2026. Following the misconduct findings of the hearing on 28 April, we have agreed to proceed with a settlement on the terms set out below.</p>
+        <p>The conduct giving rise to this action was, in our view, a clear and <span class="pin warn" data-pin="2"><span class="pin-mark">2</span>deliberate breach of your obligations to the company, and we consider that you bear sole responsibility</span> for the situation.</p>
+        <p>This letter is sent on a without-prejudice basis under s.111A ERA 1996. <span class="pin warn" data-pin="1"><span class="pin-mark">1</span>The notice arrangements applicable to your departure</span> are set out in the attached schedule.</p>
+        <p>You may be accompanied by a colleague or trade union representative at any meeting arising from this letter. <span class="pin warn" data-pin="3"><span class="pin-mark">3</span>For the avoidance of doubt, the Company does not provide for any further internal review of this decision</span>.</p>
+        <p>This letter follows the ACAS Code of Practice (2015) on disciplinary procedures. Your final pay calculation is attached as Appendix A. Both parties agree to keep the terms of this letter confidential.</p>
+        <p>If you wish to discuss the terms, please contact me by 29 May 2026.</p>
+        <p>Yours sincerely,<br/><strong>Sam Khan</strong><br/>HR Director</p>
+      </div>
+    </div>
+
+    <!-- Right rail -->
+    <div class="b-rail">
+      <!-- Health -->
+      <div class="b-rail-section">
+        <div class="b-rail-h">
+          <span class="label">Letter health</span>
+          <span class="val">Strong</span>
+        </div>
+        <div class="b-health-row">
+          <div class="b-mini-ring">
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle class="b-mini-track" cx="32" cy="32" r="26"/>
+              <circle class="b-mini-fill" cx="32" cy="32" r="26" stroke-dasharray="163.36" stroke-dashoffset="32.7"/>
+            </svg>
+            <div class="b-mini-num">80</div>
+          </div>
+          <div class="b-health-text">
+            <span class="b-health-band">Strong</span>
+            <p class="b-health-msg"><strong>3 fixes</strong> would lift to ~97. 21 of 24 checks passing.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Issues -->
+      <div class="b-rail-section">
+        <div class="b-rail-h">
+          <span class="label">Fix in letter</span>
+          <span class="val">3 issues</span>
+        </div>
+        <div class="b-issue active" data-pin="1">
+          <div class="b-issue-pin">1</div>
+          <div class="b-issue-body">
+            <div class="b-issue-title">Missing notice period reference</div>
+            <div class="b-issue-meta"><span class="b-dim">Compliance</span><span class="b-imp">+8</span></div>
+          </div>
+          <button class="b-issue-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="b-issue" data-pin="2">
+          <div class="b-issue-pin">2</div>
+          <div class="b-issue-body">
+            <div class="b-issue-title">Tone reads "punitive" in §2</div>
+            <div class="b-issue-meta"><span class="b-dim">Quality</span><span class="b-imp">+5</span></div>
+          </div>
+          <button class="b-issue-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="b-issue" data-pin="3">
+          <div class="b-issue-pin">3</div>
+          <div class="b-issue-body">
+            <div class="b-issue-title">No appeal route stated</div>
+            <div class="b-issue-meta"><span class="b-dim">Compliance</span><span class="b-imp">+4</span></div>
+          </div>
+          <button class="b-issue-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
+
+      <!-- Get a second opinion -->
+      <div class="b-rail-section">
+        <div class="b-rail-h">
+          <span class="label">Second opinion</span>
+          <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:500">optional</span>
+        </div>
+        <div class="b-mini-lanes">
+          <div class="b-mini-lane">
+            <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/></svg>
+            <div class="l-name">AI</div>
+            <div class="l-meta">5cr</div>
+          </div>
+          <div class="b-mini-lane">
+            <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <div class="l-name">Team</div>
+            <div class="l-meta">free</div>
+          </div>
+          <div class="b-mini-lane">
+            <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <div class="l-name">Expert</div>
+            <div class="l-meta">£85+</div>
+          </div>
+        </div>
+        <div class="b-cons-row">
+          <div class="a-cons-av a-av-1">SM<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+          <div>
+            <div class="nm">Sarah Mitchell</div>
+            <div class="rl">Solicitor · ★ 4.9</div>
+          </div>
+          <div class="pr">£120<small>18h</small></div>
+        </div>
+        <div class="b-cons-row">
+          <div class="a-cons-av a-av-2">JP<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+          <div>
+            <div class="nm">James Park</div>
+            <div class="rl">HR Director · ★ 4.8</div>
+          </div>
+          <div class="pr">£95<small>26h</small></div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="b-rail-section">
+        <div class="b-rail-h">
+          <span class="label">Export & ship</span>
+        </div>
+        <div class="b-export-row">
+          <button class="b-export-pill"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF</button>
+          <button class="b-export-pill"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>DOCX</button>
+          <button class="b-export-pill"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Signed</button>
+          <button class="b-export-pill"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8"/></svg>Pack</button>
+        </div>
+        <button class="b-ship">Mark as sent <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ DESIGN C ════════════════ -->
+<div class="panel" data-panel="c">
+
+  <div class="appbar">
+    <div class="crumb">
+      <span>Drafts</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span>Settlement letter</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="active">Finalize</span>
+    </div>
+    <div class="ab-right">
+      <span class="credits"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>25 credits</span>
+      <div class="me">AE</div>
+    </div>
+  </div>
+
+  <div class="c-page">
+    <div class="c-h-row">
+      <button class="c-back"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      <h1>Finalize letter</h1>
+      <span class="c-h-meta">Draft · auto-saved 2m ago</span>
+    </div>
+
+    <!-- tabs -->
+    <div class="c-tabs">
+      <button class="c-tab active" data-c="health">
+        <span class="t-num">1</span> Health <span class="t-badge">3 to fix</span>
+      </button>
+      <button class="c-tab" data-c="review">
+        <span class="t-num">2</span> Review
+      </button>
+      <button class="c-tab" data-c="export">
+        <span class="t-num">3</span> Export
+      </button>
+    </div>
+
+    <!-- Health pane -->
+    <div class="c-pane active" data-c-pane="health">
+      <div class="c-health-card">
+        <div class="c-h-ring">
+          <svg width="110" height="110" viewBox="0 0 110 110">
+            <circle class="c-h-track" cx="55" cy="55" r="45"/>
+            <circle class="c-h-fill" cx="55" cy="55" r="45"/>
+          </svg>
+          <div class="c-h-num">
+            <strong>80</strong>
+            <small>/ 100</small>
+          </div>
+        </div>
+        <div class="c-h-info">
+          <h2>Letter health <span class="band">Strong</span></h2>
+          <p>You can ship as-is, but <strong>3 small fixes would lift it to ~97</strong> and reduce tribunal exposure.</p>
+        </div>
+      </div>
+
+      <div class="c-issues-card">
+        <div class="c-i-head">
+          <h3>3 issues to fix</h3>
+          <span class="meta">sorted by score impact</span>
+        </div>
+        <div class="c-i-row">
+          <div class="c-i-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="c-i-body">
+            <div class="c-i-title">Missing notice period reference <span class="a-dim-chip">Compliance</span></div>
+            <div class="c-i-detail">Contractual notice should be cited explicitly under clause 4.</div>
+          </div>
+          <div class="c-i-imp">+8</div>
+          <button class="c-i-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="c-i-row">
+          <div class="c-i-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="c-i-body">
+            <div class="c-i-title">Tone reads "punitive" in §2 <span class="a-dim-chip">Quality</span></div>
+            <div class="c-i-detail">Phrasing implies blame — consider neutral framing.</div>
+          </div>
+          <div class="c-i-imp">+5</div>
+          <button class="c-i-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="c-i-row">
+          <div class="c-i-icon"><svg viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="c-i-body">
+            <div class="c-i-title">No appeal route stated <span class="a-dim-chip">Compliance</span></div>
+            <div class="c-i-detail">ACAS Code of Practice recommends a written appeal pathway.</div>
+          </div>
+          <div class="c-i-imp">+4</div>
+          <button class="c-i-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+        <div class="c-foot-row">
+          <a href="#">Show 21 passing checks</a>
+          <a href="#">⚡ Run AI critique (5 cr)</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Review pane -->
+    <div class="c-pane" data-c-pane="review">
+      <div class="c-review-grid">
+        <div class="c-lanes">
+          <div class="c-lane">
+            <div class="c-l-head">
+              <div class="c-l-icon b"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></div>
+              <div><div class="c-l-name">AI specialist</div><div class="c-l-tag">Instant · 5 credits</div></div>
+            </div>
+            <p class="c-l-desc">Pick a perspective — Tribunal counsel, Employee advocate, or DEI lead — and get a structured critique in under a minute.</p>
+            <button class="c-l-cta solid">Get AI critique <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="c-lane">
+            <div class="c-l-head">
+              <div class="c-l-icon g"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+              <div><div class="c-l-name">Your team</div><div class="c-l-tag">Free · async</div></div>
+            </div>
+            <p class="c-l-desc">Send to a colleague in your workspace. They can comment, suggest edits, or add a formal sign-off.</p>
+            <button class="c-l-cta outline">Send to teammate <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+          <div class="c-lane">
+            <div class="c-l-head">
+              <div class="c-l-icon a"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+              <div><div class="c-l-name">External consultant</div><div class="c-l-tag">From £85 · 24–48h</div></div>
+            </div>
+            <p class="c-l-desc">A qualified HR or employment law specialist reviews your letter, flags risk, and returns tracked edits.</p>
+            <button class="c-l-cta outline">Browse all 14 <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+        </div>
+
+        <div class="c-cons-strip">
+          <div class="c-cs-head">
+            <h3>3 matched consultants</h3>
+            <span class="why">· matched on <strong>Settlement</strong>, <strong>Tribunal risk</strong></span>
+            <a href="#">See all 14 →</a>
+          </div>
+          <div class="c-cs-grid">
+            <div class="c-cons">
+              <div class="c-cons-head">
+                <div class="a-cons-av a-av-1">SM<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+                <div>
+                  <div class="c-cons-name">Sarah Mitchell <span class="top">★ Top</span></div>
+                  <div class="c-cons-role">Solicitor · 12 yrs · ex-DLA Piper</div>
+                </div>
+              </div>
+              <div class="c-cons-stats"><span class="stars">★ 4.9 (87)</span><span class="price">£120 / letter</span></div>
+            </div>
+            <div class="c-cons">
+              <div class="c-cons-head">
+                <div class="a-cons-av a-av-2">JP<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+                <div>
+                  <div class="c-cons-name">James Park</div>
+                  <div class="c-cons-role">HR Director · 20 yrs</div>
+                </div>
+              </div>
+              <div class="c-cons-stats"><span class="stars">★ 4.8 (54)</span><span class="price">£95 / letter</span></div>
+            </div>
+            <div class="c-cons">
+              <div class="c-cons-head">
+                <div class="a-cons-av a-av-3">RS<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+                <div>
+                  <div class="c-cons-name">Rachel Stein</div>
+                  <div class="c-cons-role">Former ACAS · 15 yrs</div>
+                </div>
+              </div>
+              <div class="c-cons-stats"><span class="stars">★ 4.9 (63)</span><span class="price">£130 / letter</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export pane -->
+    <div class="c-pane" data-c-pane="export">
+      <div class="c-export-grid">
+        <div class="c-fmt"><div class="c-fmt-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="c-fmt-name">PDF</div><div class="c-fmt-desc">Print-ready document</div></div>
+        <div class="c-fmt"><div class="c-fmt-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg></div><div class="c-fmt-name">DOCX</div><div class="c-fmt-desc">Editable Word file</div></div>
+        <div class="c-fmt"><div class="c-fmt-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="c-fmt-name">Signed PDF</div><div class="c-fmt-desc">Tribunal trail</div></div>
+        <div class="c-fmt"><div class="c-fmt-icon"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div><div class="c-fmt-name">Evidence pack</div><div class="c-fmt-desc">ZIP w/ history</div></div>
+      </div>
+      <div class="c-ship">
+        <div class="c-ship-icon"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg></div>
+        <div>
+          <h4>Mark as sent</h4>
+          <p>Locks the letter, archives it to the case file, clears it from drafts.</p>
+        </div>
+        <button class="c-ship-btn">Mark as sent <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ DESIGN D · HYBRID ════════════════ -->
+<div class="panel" data-panel="d">
+
+  <div class="appbar">
+    <div class="crumb">
+      <span>Drafts</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span>Settlement letter</span>
+      <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      <span class="active">Finalize</span>
+    </div>
+    <div class="ab-right">
+      <span class="credits"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>25 credits</span>
+      <div class="me">AE</div>
+    </div>
+  </div>
+
+  <div class="d-shell">
+    <!-- Letter on the left -->
+    <div class="d-letter-wrap">
+      <div class="d-letter-meta">
+        <span class="dot"></span>
+        <strong style="color:var(--ink);font-weight:600">Settlement letter — R. Hargreaves</strong>
+        <span style="margin-left:auto">412 words · auto-saved 2m ago</span>
+      </div>
+      <div class="d-letter">
+        <h1>Settlement Agreement Letter</h1>
+        <p><strong>Dear Mr Rashid Hargreaves,</strong></p>
+        <p>This letter confirms our recent discussions regarding the termination of your employment, with effect from 15 May 2026. Following the misconduct findings of the hearing on 28 April, we have agreed to proceed with a settlement on the terms set out below.</p>
+        <p>The conduct giving rise to this action was, in our view, a clear and <span class="pin warn" data-pin="2"><span class="pin-mark">2</span>deliberate breach of your obligations to the company, and we consider that you bear sole responsibility</span> for the situation.</p>
+        <p>This letter is sent on a without-prejudice basis under s.111A ERA 1996. <span class="pin warn" data-pin="1"><span class="pin-mark">1</span>The notice arrangements applicable to your departure</span> are set out in the attached schedule.</p>
+        <p>You may be accompanied by a colleague or trade union representative at any meeting arising from this letter. <span class="pin warn" data-pin="3"><span class="pin-mark">3</span>For the avoidance of doubt, the Company does not provide for any further internal review of this decision</span>.</p>
+        <p>This letter follows the ACAS Code of Practice (2015) on disciplinary procedures. Your final pay calculation is attached as Appendix A. Both parties agree to keep the terms of this letter confidential.</p>
+        <p>If you wish to discuss the terms, please contact me by 29 May 2026.</p>
+        <p>Yours sincerely,<br/><strong>Sam Khan</strong><br/>HR Director</p>
+      </div>
+    </div>
+
+    <!-- Tabbed rail on the right -->
+    <div class="d-rail">
+      <div class="d-rail-tabs">
+        <button class="d-rt active" data-d="health"><span class="num">1</span> Health <span class="badge">3</span></button>
+        <button class="d-rt" data-d="review"><span class="num">2</span> Review</button>
+        <button class="d-rt" data-d="export"><span class="num">3</span> Export</button>
+      </div>
+
+      <div class="d-rail-body">
+
+        <!-- HEALTH -->
+        <div class="d-rp active" data-d-pane="health">
+          <div class="d-h-summary">
+            <div class="d-h-ring">
+              <svg width="60" height="60" viewBox="0 0 60 60">
+                <circle class="d-h-track" cx="30" cy="30" r="24"/>
+                <circle class="d-h-fill" cx="30" cy="30" r="24" stroke-dasharray="150.8" stroke-dashoffset="30.16"/>
+              </svg>
+              <div class="d-h-num">80</div>
+            </div>
+            <div class="d-h-text">
+              <span class="d-h-band">Strong</span>
+              <p class="d-h-msg"><strong>3 fixes</strong> would lift to ~97 · 21 of 24 checks passing</p>
+            </div>
+          </div>
+
+          <div class="d-section-label">
+            Issues to fix <span class="v">sorted by impact</span>
+          </div>
+
+          <div class="d-issue active" data-pin="1">
+            <div class="d-issue-pin">1</div>
+            <div class="d-issue-body">
+              <div class="d-issue-title">Missing notice period reference</div>
+              <div class="d-issue-detail">Contractual notice should be cited explicitly under clause 4.</div>
+              <div class="d-issue-meta"><span class="dim">Compliance</span><span class="imp">+8</span></div>
+            </div>
+            <button class="d-issue-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+
+          <div class="d-issue" data-pin="2">
+            <div class="d-issue-pin">2</div>
+            <div class="d-issue-body">
+              <div class="d-issue-title">Tone reads "punitive" in §2</div>
+              <div class="d-issue-detail">Phrasing implies blame — consider neutral framing.</div>
+              <div class="d-issue-meta"><span class="dim">Quality</span><span class="imp">+5</span></div>
+            </div>
+            <button class="d-issue-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+
+          <div class="d-issue" data-pin="3">
+            <div class="d-issue-pin">3</div>
+            <div class="d-issue-body">
+              <div class="d-issue-title">No appeal route stated</div>
+              <div class="d-issue-detail">ACAS Code recommends a written appeal pathway.</div>
+              <div class="d-issue-meta"><span class="dim">Compliance</span><span class="imp">+4</span></div>
+            </div>
+            <button class="d-issue-fix">Fix <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+
+          <div class="d-pass">
+            <div class="d-pass-head">
+              <span class="caret"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></span>
+              <span class="check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></span>
+              21 passing checks
+              <span class="meta">Compliance 9 · Quality 5 · Risk 7</span>
+            </div>
+            <div class="d-pass-list">
+              <div class="d-pass-row">Recipient legal name present</div>
+              <div class="d-pass-row">Effective date specified</div>
+              <div class="d-pass-row">ACAS Code of Practice referenced</div>
+              <div class="d-pass-row">Signatory authority confirmed</div>
+              <div class="d-pass-row">GDPR data handling clause present</div>
+              <div class="d-pass-row">Statutory minimum notice met</div>
+              <div class="d-pass-row">Right-to-be-accompanied clause</div>
+              <div class="d-pass-row">Reading age suitable (Flesch 58)</div>
+              <div class="d-pass-row">No spelling or grammar issues</div>
+              <div class="d-pass-row">Settlement wording follows BIS guidance</div>
+              <div class="d-pass-row">No discriminatory language detected</div>
+              <div class="d-pass-row">Confidentiality clause present</div>
+              <div class="d-pass-row" style="color:var(--muted);font-style:italic">… 9 more</div>
+            </div>
+          </div>
+
+          <div class="d-ai-row">
+            <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg></div>
+            <div class="txt"><strong>Run AI critique</strong> for ~12 deeper checks</div>
+            <button class="d-ai-btn">5 cr <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+        </div>
+
+        <!-- REVIEW -->
+        <div class="d-rp" data-d-pane="review">
+          <div class="d-section-label">Pick a reviewer</div>
+          <div class="d-review-lanes">
+            <div class="d-rl b">
+              <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/></svg>
+              <div class="n">AI</div>
+              <div class="m">5 cr · 30s</div>
+            </div>
+            <div class="d-rl">
+              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              <div class="n">Team</div>
+              <div class="m">free · async</div>
+            </div>
+            <div class="d-rl a">
+              <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <div class="n">Expert</div>
+              <div class="m">£85+ · 24h</div>
+            </div>
+          </div>
+
+          <div class="d-section-label">
+            Best matches <span class="v">3 of 14 verified</span>
+          </div>
+          <div class="d-cons-head">
+            <span class="why">Matched on <strong>Settlement</strong>, <strong>Tribunal risk</strong></span>
+          </div>
+
+          <div class="d-cons-card top">
+            <div class="d-cc-head">
+              <div class="d-cc-av a-av-1">SM<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+              <div class="d-cc-info">
+                <div class="d-cc-name">Sarah Mitchell <span class="top">★ Top</span></div>
+                <div class="d-cc-role">Solicitor · 12 yrs · ex-DLA Piper</div>
+              </div>
+            </div>
+            <div class="d-cc-stats">
+              <span class="d-cc-stars">★ 4.9 (87)</span>
+              <span class="d-cc-price">£120 <small>· 18h</small></span>
+            </div>
+            <button class="d-cc-book">Book Sarah <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+          </div>
+
+          <div class="d-cons-card">
+            <div class="d-cc-head">
+              <div class="d-cc-av a-av-2">JP<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+              <div class="d-cc-info">
+                <div class="d-cc-name">James Park</div>
+                <div class="d-cc-role">HR Director · 20 yrs · BBC → BAE</div>
+              </div>
+            </div>
+            <div class="d-cc-stats">
+              <span class="d-cc-stars">★ 4.8 (54)</span>
+              <span class="d-cc-price">£95 <small>· 26h</small></span>
+            </div>
+          </div>
+
+          <div class="d-cons-card">
+            <div class="d-cc-head">
+              <div class="d-cc-av a-av-3">RS<div class="vb"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div></div>
+              <div class="d-cc-info">
+                <div class="d-cc-name">Rachel Stein</div>
+                <div class="d-cc-role">Former ACAS · 15 yrs · 600+ mediations</div>
+              </div>
+            </div>
+            <div class="d-cc-stats">
+              <span class="d-cc-stars">★ 4.9 (63)</span>
+              <span class="d-cc-price">£130 <small>· 12h</small></span>
+            </div>
+          </div>
+
+          <button class="d-see-all">See all 14 consultants <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+        </div>
+
+        <!-- EXPORT -->
+        <div class="d-rp" data-d-pane="export">
+          <div class="d-section-label">Choose a format</div>
+          <div class="d-export-grid">
+            <div class="d-fmt">
+              <div class="d-fmt-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+              <div class="d-fmt-name">PDF</div>
+              <div class="d-fmt-desc">Print-ready</div>
+            </div>
+            <div class="d-fmt">
+              <div class="d-fmt-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg></div>
+              <div class="d-fmt-name">DOCX</div>
+              <div class="d-fmt-desc">Editable Word</div>
+            </div>
+            <div class="d-fmt">
+              <div class="d-fmt-icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div>
+              <div class="d-fmt-name">Signed PDF</div>
+              <div class="d-fmt-desc">Tribunal trail</div>
+            </div>
+            <div class="d-fmt">
+              <div class="d-fmt-icon"><svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+              <div class="d-fmt-name">Evidence pack</div>
+              <div class="d-fmt-desc">ZIP w/ history</div>
+            </div>
+          </div>
+
+          <div class="d-ship-card">
+            <div class="d-ship-h">
+              <svg viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>
+              <h4>Ready to ship?</h4>
+            </div>
+            <p>Locks the letter, archives it to the case file, and clears it from your active drafts.</p>
+            <button class="d-ship-btn">Mark as sent <svg viewBox="0 0 24 24" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// design picker
+document.querySelectorAll('.pick-btn[data-tab]').forEach(b => {
+  b.addEventListener('click', () => {
+    const t = b.dataset.tab;
+    document.querySelectorAll('.pick-btn[data-tab]').forEach(x => x.classList.toggle('active', x === b));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+});
+
+// design B: pin <-> issue sync
+document.querySelectorAll('[data-panel="b"] .pin').forEach(pin => {
+  pin.addEventListener('mouseenter', () => {
+    const id = pin.dataset.pin;
+    document.querySelectorAll('[data-panel="b"] .b-issue').forEach(i => i.classList.toggle('active', i.dataset.pin === id));
+  });
+});
+document.querySelectorAll('[data-panel="b"] .b-issue').forEach(issue => {
+  issue.addEventListener('mouseenter', () => {
+    const id = issue.dataset.pin;
+    document.querySelectorAll('[data-panel="b"] .pin').forEach(p => p.classList.toggle('active', p.dataset.pin === id));
+    document.querySelectorAll('[data-panel="b"] .b-issue').forEach(i => i.classList.toggle('active', i === issue));
+  });
+  issue.addEventListener('click', () => {
+    const id = issue.dataset.pin;
+    const pin = document.querySelector(`[data-panel="b"] .pin[data-pin="${id}"]`);
+    if (pin) pin.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+});
+
+// design C: tabs
+document.querySelectorAll('.c-tab').forEach(t => {
+  t.addEventListener('click', () => {
+    const k = t.dataset.c;
+    document.querySelectorAll('.c-tab').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('.c-pane').forEach(p => p.classList.toggle('active', p.dataset.cPane === k));
+  });
+});
+
+// design D: rail tabs + pin sync + pass accordion
+document.querySelectorAll('.d-rt').forEach(t => {
+  t.addEventListener('click', () => {
+    const k = t.dataset.d;
+    document.querySelectorAll('.d-rt').forEach(x => x.classList.toggle('active', x === t));
+    document.querySelectorAll('.d-rp').forEach(p => p.classList.toggle('active', p.dataset.dPane === k));
+    // dim pins when not on health
+    document.querySelector('[data-panel="d"] .d-letter')?.classList.toggle('dim', k !== 'health');
+  });
+});
+document.querySelectorAll('[data-panel="d"] .pin').forEach(pin => {
+  pin.addEventListener('mouseenter', () => {
+    const id = pin.dataset.pin;
+    document.querySelectorAll('[data-panel="d"] .d-issue').forEach(i => i.classList.toggle('active', i.dataset.pin === id));
+  });
+});
+document.querySelectorAll('[data-panel="d"] .d-issue').forEach(issue => {
+  issue.addEventListener('mouseenter', () => {
+    const id = issue.dataset.pin;
+    document.querySelectorAll('[data-panel="d"] .pin').forEach(p => p.classList.toggle('active', p.dataset.pin === id));
+    document.querySelectorAll('[data-panel="d"] .d-issue').forEach(i => i.classList.toggle('active', i === issue));
+  });
+  issue.addEventListener('click', (e) => {
+    if (e.target.closest('.d-issue-fix')) return;
+    const id = issue.dataset.pin;
+    const pin = document.querySelector(`[data-panel="d"] .pin[data-pin="${id}"]`);
+    if (pin) pin.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+});
+document.querySelectorAll('.d-pass-head').forEach(h => h.addEventListener('click', () => h.parentElement.classList.toggle('open')));
+</script>
+
+</body>
+</html>

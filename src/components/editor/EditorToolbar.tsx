@@ -18,9 +18,16 @@ import {
   Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Draft } from "@/lib/letters/types";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
+import { EvidenceDrawer } from "./EvidenceDrawer";
 import {
   isAllowedEmbeddedImageFile,
   isSafeImageDataUrl,
@@ -60,7 +67,11 @@ export function EditorToolbar({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [evidencePickerOpen, setEvidencePickerOpen] = useState(false);
+  const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
   if (!editor) return null;
+
+  const evidenceCount = draft?.evidence?.length ?? 0;
+  const hasEvidence = evidenceCount > 0;
 
   const onPickImage = () => fileInputRef.current?.click();
   const onFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -185,24 +196,69 @@ export function EditorToolbar({
         <ImageIcon className="size-3.5" />
       </ToolBtn>
 
-      {/* Evidence picker — only shown when we have a draft handle. Inserts
-       * either a [See Fig N] reference (for items marked figure) or the
-       * actual content (for items marked inline) at the cursor. */}
-      {draft && (draft.evidence?.length ?? 0) > 0 && (
+      {/* Evidence picker. Pattern A discoverability fix: the paperclip is
+       * ALWAYS visible when we have a draft handle. When evidence exists,
+       * the paperclip opens the inline popover (which itself offers a
+       * "See all evidence →" overflow at 5+ items, routing into the
+       * Pattern D drawer). When no evidence exists yet, the button is
+       * visually muted + disabled with a tooltip explaining how to
+       * populate the Evidence step. */}
+      {draft && hasEvidence && (
         <EvidencePickerPopover
           draft={draft}
           editor={editor}
           open={evidencePickerOpen}
           onOpenChange={setEvidencePickerOpen}
+          onOpenDrawer={() => setEvidenceDrawerOpen(true)}
           trigger={
             <ToolBtn
               onClick={() => setEvidencePickerOpen((v) => !v)}
               active={evidencePickerOpen}
-              label="Insert evidence at cursor"
+              label={`Insert evidence at cursor (${evidenceCount} ${
+                evidenceCount === 1 ? "item" : "items"
+              })`}
             >
               <Paperclip className="size-3.5" />
             </ToolBtn>
           }
+        />
+      )}
+      {draft && !hasEvidence && (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* Wrapper div is needed so Radix Tooltip still fires on a
+               * disabled button (browsers swallow pointer events on
+               * <button disabled>). */}
+              <span className="inline-flex">
+                <ToolBtn
+                  onClick={() => {
+                    /* no-op — disabled; tooltip explains why */
+                  }}
+                  disabled
+                  label="Add evidence on the Evidence step first to insert citations"
+                  muted
+                >
+                  <Paperclip className="size-3.5" />
+                </ToolBtn>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[260px] text-center">
+              Add evidence on the Evidence step first to insert{" "}
+              <span className="font-semibold">[See Fig N]</span> citations
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      {/* Dedicated drawer (Pattern D). Mounted unconditionally when we
+       * have a draft + at least one evidence item so the popover's
+       * "See all evidence →" handoff has a target. */}
+      {draft && hasEvidence && (
+        <EvidenceDrawer
+          draft={draft}
+          editor={editor}
+          open={evidenceDrawerOpen}
+          onOpenChange={setEvidenceDrawerOpen}
         />
       )}
 
@@ -233,12 +289,16 @@ function ToolBtn({
   onClick,
   label,
   disabled,
+  muted,
 }: {
   children: React.ReactNode;
   active?: boolean;
   onClick: () => void;
   label: string;
   disabled?: boolean;
+  /** Visually faded but still rendered — used for the disabled evidence
+   * paperclip so users can discover it before they've added evidence. */
+  muted?: boolean;
 }) {
   return (
     <Button
@@ -246,12 +306,13 @@ function ToolBtn({
       variant="ghost"
       size="icon"
       aria-label={label}
-      title={label}
+      title={muted ? undefined : label /* let Tooltip own the title when muted */}
       onClick={onClick}
       disabled={disabled}
       className={cn(
         "size-7 rounded-sm",
-        active && "bg-secondary text-secondary-foreground"
+        active && "bg-secondary text-secondary-foreground",
+        muted && "opacity-40"
       )}
     >
       {children}

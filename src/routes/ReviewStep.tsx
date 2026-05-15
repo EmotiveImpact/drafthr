@@ -129,6 +129,7 @@ export function ReviewStep() {
               nav(`/editor/${draft.id}?section=${sectionId}`)
             }
             onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
+            onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
           />
         </aside>
       </div>

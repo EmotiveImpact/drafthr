@@ -1,46 +1,168 @@
 import { useMemo } from "react";
+import { Tabs as TabsPrimitive } from "radix-ui";
+import { ArrowRight } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
-import {
-  CheckCircle2,
-  CircleAlert,
-  CircleDashed,
-  ShieldCheck,
-  Paperclip,
-  CalendarClock,
-  FileEdit,
-  Users,
-} from "lucide-react";
-
-type CheckStatus = "ok" | "warn" | "missing";
-
-type CheckRow = {
-  id: string;
-  label: string;
-  detail: string;
-  status: CheckStatus;
-  icon: React.ElementType;
-  jumpTo?: () => void;
-};
+import { cn } from "@/lib/utils";
+import { CheckIcons, type RailCheckRow } from "./review/AllChecks";
+import { HealthTab } from "./review/HealthTab";
+import { ImproveTab } from "./review/ImproveTab";
+import { ConsultTab } from "./review/ConsultTab";
 
 /**
- * Right rail on the Review step. Pulls every "is this letter ready?"
- * signal into a single panel so the centre canvas can stay focused on
- * the actual letter preview.
+ * Right rail on the Review step. Three tabs:
  *
- * Replaces the old ReviewPanel layout where the verdict + checks took
- * the centre canvas and the letter itself was nowhere to be seen until
- * export. Now the user sees the letter on Review.
+ *   1. HEALTH  — Is this letter ready? Score ring + Fix-this-first + all checks.
+ *   2. IMPROVE — Get eyes on it. AI specialist / Team / External consultant.
+ *   3. CONSULT — AI-matched marketplace surface (stubbed marketplace).
  *
- * Removed from this rail (vs. the old ReviewPanel):
- *   - The big Export button — lives in the topbar primary-CTA slot
- *   - The 4-col section grid — left rail (WizardSidebar) already
- *     lists every section
+ * The "All checks" rows (template quality, statutory compliance, evidence,
+ * counsel review, comments) are still computed here so the tab can render
+ * them — Health imports them as a prop. Consult is purely placeholder data.
+ *
+ * A sticky-style "Continue to Finalize →" CTA lives at the bottom of the
+ * rail across all tabs so the user always knows the next step out.
  */
 export function ReviewRail({
+  draft,
+  counselReviewedBy,
+  unresolvedComments,
+  onJumpToSection,
+  onJumpToEvidence,
+  onContinueToFinalize,
+}: {
+  draft: Draft;
+  counselReviewedBy?: { reviewedBy: string; reviewedOn: string } | null;
+  unresolvedComments: number;
+  onJumpToSection: (sectionId: string) => void;
+  onJumpToEvidence: () => void;
+  onContinueToFinalize: () => void;
+}) {
+  // The "All checks" list — derived from the draft and the same helpers the
+  // old flat ReviewRail used. Wrapped in useMemo because the tab content is
+  // remounted on tab switch and we don't want to re-do the template-quality
+  // walk every time.
+  const rows = useMemo<RailCheckRow[]>(
+    () =>
+      buildRailRows({
+        draft,
+        counselReviewedBy,
+        unresolvedComments,
+        onJumpToSection,
+        onJumpToEvidence,
+      }),
+    [
+      draft,
+      counselReviewedBy,
+      unresolvedComments,
+      onJumpToSection,
+      onJumpToEvidence,
+    ],
+  );
+
+  // Health-tab badge count = blockers + warnings, so a "3" on the tab maps
+  // to "3 things to look at." Pure ok states don't bump the count.
+  const issueCount = useMemo(
+    () => rows.filter((r) => r.status !== "ok").length,
+    [rows],
+  );
+
+  return (
+    <TabsPrimitive.Root
+      defaultValue="health"
+      className="flex flex-col min-h-0 h-full"
+    >
+      {/* Underline-style tab list. The active tab gets the ink color + bold
+       * weight + a 2px underline; inactive tabs sit in muted grey. Matches
+       * Design D's tab strip. */}
+      <TabsPrimitive.List
+        className="flex shrink-0 items-stretch border-b border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 gap-0"
+        aria-label="Review tabs"
+      >
+        <RailTab value="health" label="Health" badge={issueCount} />
+        <RailTab value="improve" label="Improve" />
+        <RailTab value="consult" label="Consult" />
+      </TabsPrimitive.List>
+
+      {/* Tab bodies — scrollable within the rail. */}
+      <div className="flex-1 min-h-0 overflow-auto p-3">
+        <TabsPrimitive.Content value="health" className="outline-none">
+          <HealthTab draft={draft} rows={rows} />
+        </TabsPrimitive.Content>
+        <TabsPrimitive.Content value="improve" className="outline-none">
+          <ImproveTab />
+        </TabsPrimitive.Content>
+        <TabsPrimitive.Content value="consult" className="outline-none">
+          <ConsultTab draft={draft} />
+        </TabsPrimitive.Content>
+      </div>
+
+      {/* Continue-to-Finalize CTA — same across tabs. Sits at the bottom of
+       * the rail with a border-top separator so it reads as a footer action
+       * rather than part of any single tab's content. */}
+      <div className="shrink-0 border-t border-[var(--ds-line)] bg-[var(--ds-surface)] p-3">
+        <button
+          type="button"
+          onClick={onContinueToFinalize}
+          className="inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-semibold hover:opacity-90 transition"
+        >
+          Continue to Finalize
+          <ArrowRight className="size-3.5" />
+        </button>
+      </div>
+    </TabsPrimitive.Root>
+  );
+}
+
+/* ============================================================================
+ * Internal helpers
+ * ==========================================================================*/
+
+function RailTab({
+  value,
+  label,
+  badge,
+}: {
+  value: string;
+  label: string;
+  badge?: number;
+}) {
+  return (
+    <TabsPrimitive.Trigger
+      value={value}
+      className={cn(
+        "relative inline-flex items-center justify-center gap-1.5 px-3 py-2.5 text-[12.5px] font-medium",
+        "text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition-colors",
+        "data-[state=active]:text-[var(--ds-ink)] data-[state=active]:font-semibold",
+        // Underline indicator — sits at the bottom of the trigger, visible
+        // only on the active tab. -bottom-px lines up over the rail's
+        // border-b so the active tab feels continuous with the content.
+        "after:absolute after:inset-x-2 after:-bottom-px after:h-0.5 after:bg-[var(--ds-ink)] after:opacity-0",
+        "data-[state=active]:after:opacity-100 after:transition-opacity",
+        "outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 rounded-sm",
+      )}
+    >
+      {label}
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] text-[10px] font-semibold tabular-nums">
+          {badge}
+        </span>
+      )}
+    </TabsPrimitive.Trigger>
+  );
+}
+
+/**
+ * Build the normalised "all checks" row list. Identical logic to the old
+ * flat ReviewRail body so we don't lose any signal during the refactor.
+ *
+ * Pulled out of the component so the tab + the issue-count badge can both
+ * consume it without re-running the work.
+ */
+function buildRailRows({
   draft,
   counselReviewedBy,
   unresolvedComments,
@@ -52,8 +174,8 @@ export function ReviewRail({
   unresolvedComments: number;
   onJumpToSection: (sectionId: string) => void;
   onJumpToEvidence: () => void;
-}) {
-  const quality = useMemo(() => buildTemplateQualityReport(draft), [draft]);
+}): RailCheckRow[] {
+  const quality = buildTemplateQualityReport(draft);
   const requiresCounsel = exportRequiresCounselGate(draft);
 
   const sections = draft.sections;
@@ -61,18 +183,20 @@ export function ReviewRail({
   const edited = sections.filter((s) => s.status === "edited").length;
   const empty = sections.filter((s) => s.status === "empty").length;
   const requiredEmpty = sections.filter(
-    (s) => s.required && s.status === "empty"
+    (s) => s.required && s.status === "empty",
   );
 
   const evidence = draft.evidence ?? [];
   const evidenceImages = evidence.filter(
-    (e) => e.kind === "screenshot" || e.mimeType?.startsWith("image/")
+    (e) => e.kind === "screenshot" || e.mimeType?.startsWith("image/"),
   ).length;
 
   const deadline = draft.context.protectedDeadline;
-  const deadlineDays = deadline?.iso ? daysUntilDateOnly(deadline.iso) : undefined;
+  const deadlineDays = deadline?.iso
+    ? daysUntilDateOnly(deadline.iso)
+    : undefined;
 
-  const rows: CheckRow[] = [];
+  const rows: RailCheckRow[] = [];
 
   rows.push({
     id: "completeness",
@@ -82,7 +206,7 @@ export function ReviewRail({
         ? `${requiredEmpty.length} required section${requiredEmpty.length === 1 ? "" : "s"} still empty`
         : `${ready} ready · ${edited} edited · ${empty} not started`,
     status: requiredEmpty.length > 0 ? "missing" : empty > 0 ? "warn" : "ok",
-    icon: FileEdit,
+    icon: CheckIcons.FileEdit,
     jumpTo: requiredEmpty[0]
       ? () => onJumpToSection(requiredEmpty[0].id)
       : undefined,
@@ -101,7 +225,7 @@ export function ReviewRail({
         : quality.summary.needsReview > 0
           ? "warn"
           : "ok",
-    icon: CheckCircle2,
+    icon: CheckIcons.CheckCircle2,
   });
 
   rows.push({
@@ -112,7 +236,7 @@ export function ReviewRail({
         ? `${quality.summary.complianceMissing} rule${quality.summary.complianceMissing === 1 ? "" : "s"} flagged`
         : `All ${quality.compliance.length} rules satisfied`,
     status: quality.summary.complianceMissing > 0 ? "warn" : "ok",
-    icon: ShieldCheck,
+    icon: CheckIcons.ShieldCheck,
   });
 
   if (draft.mode === "employee") {
@@ -124,7 +248,7 @@ export function ReviewRail({
           ? "No evidence attached"
           : `${evidence.length} item${evidence.length === 1 ? "" : "s"} (${evidenceImages} image${evidenceImages === 1 ? "" : "s"})`,
       status: evidence.length === 0 ? "warn" : "ok",
-      icon: Paperclip,
+      icon: CheckIcons.Paperclip,
       jumpTo: onJumpToEvidence,
     });
   }
@@ -132,10 +256,10 @@ export function ReviewRail({
   const expected = buildExpectedEvidenceStatus(draft);
   if (expected.length > 0) {
     const requiredMissing = expected.filter(
-      (e) => e.expectation.required && !e.ok
+      (e) => e.expectation.required && !e.ok,
     );
     const optionalMissing = expected.filter(
-      (e) => !e.expectation.required && !e.ok
+      (e) => !e.expectation.required && !e.ok,
     );
     const ok = expected.filter((e) => e.ok).length;
     rows.push({
@@ -153,7 +277,7 @@ export function ReviewRail({
           : optionalMissing.length > 0
             ? "warn"
             : "ok",
-      icon: Paperclip,
+      icon: CheckIcons.Paperclip,
       jumpTo: onJumpToEvidence,
     });
   }
@@ -176,7 +300,7 @@ export function ReviewRail({
           : deadlineDays !== undefined && deadlineDays <= 7
             ? "warn"
             : "ok",
-      icon: CalendarClock,
+      icon: CheckIcons.CalendarClock,
     });
   }
 
@@ -188,7 +312,7 @@ export function ReviewRail({
         ? `Reviewed by ${counselReviewedBy.reviewedBy} on ${counselReviewedBy.reviewedOn}`
         : "Required before export",
       status: counselReviewedBy ? "ok" : "missing",
-      icon: ShieldCheck,
+      icon: CheckIcons.ShieldCheck,
     });
   }
 
@@ -198,125 +322,9 @@ export function ReviewRail({
       label: "Unresolved comments",
       detail: `${unresolvedComments} thread${unresolvedComments === 1 ? "" : "s"} still open`,
       status: "warn",
-      icon: Users,
+      icon: CheckIcons.Users,
     });
   }
 
-  const blocking = rows.filter((r) => r.status === "missing").length;
-  const warnings = rows.filter((r) => r.status === "warn").length;
-  const okCount = rows.filter((r) => r.status === "ok").length;
-
-  const overall: CheckStatus =
-    blocking > 0 ? "missing" : warnings > 0 ? "warn" : "ok";
-  const overallLabel =
-    overall === "ok"
-      ? "Ready to export"
-      : overall === "warn"
-        ? "Export with caution"
-        : "Action required";
-
-  return (
-    <div className="flex flex-col min-h-0 h-full">
-      {/* Verdict banner — colour-coded, sticky-feeling at the top of the rail. */}
-      <div
-        className={
-          "border-b px-4 py-3 " +
-          (overall === "ok"
-            ? "bg-[var(--ds-green-bg)] border-[var(--ds-green-bg)]"
-            : overall === "warn"
-              ? "bg-[var(--ds-amber-bg)] border-[var(--ds-amber-bg)]"
-              : "bg-[var(--ds-red-bg)] border-[var(--ds-red-bg)]")
-        }
-      >
-        <div className="flex items-center gap-2">
-          {overall === "ok" && (
-            <CheckCircle2 className="size-4 text-[var(--ds-green-fg)] shrink-0" />
-          )}
-          {overall === "warn" && (
-            <CircleAlert className="size-4 text-[var(--ds-amber-fg)] shrink-0" />
-          )}
-          {overall === "missing" && (
-            <CircleAlert className="size-4 text-[var(--ds-red-fg)] shrink-0" />
-          )}
-          <h2
-            className={
-              "text-[13px] font-semibold " +
-              (overall === "ok"
-                ? "text-[var(--ds-green-fg)]"
-                : overall === "warn"
-                  ? "text-[var(--ds-amber-fg)]"
-                  : "text-[var(--ds-red-fg)]")
-            }
-          >
-            {overallLabel}
-          </h2>
-        </div>
-        <p
-          className={
-            "text-[11px] mt-1 " +
-            (overall === "ok"
-              ? "text-[var(--ds-green-fg)]"
-              : overall === "warn"
-                ? "text-[var(--ds-amber-fg)]"
-                : "text-[var(--ds-red-fg)]")
-          }
-        >
-          {okCount} ok · {warnings} warning{warnings === 1 ? "" : "s"} ·{" "}
-          {blocking} blocker{blocking === 1 ? "" : "s"}
-        </p>
-      </div>
-
-      {/* Checks list — scrolls within the rail. */}
-      <div className="flex-1 min-h-0 overflow-auto p-3 space-y-2">
-        {rows.map((row) => {
-          const Icon = row.icon;
-          return (
-            <div
-              key={row.id}
-              className="flex items-start gap-2 p-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)]"
-            >
-              <div
-                className={
-                  "shrink-0 mt-0.5 size-5 rounded-full grid place-items-center " +
-                  (row.status === "ok"
-                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-                    : row.status === "warn"
-                      ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
-                      : "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]")
-                }
-              >
-                {row.status === "ok" ? (
-                  <CheckCircle2 className="size-3" />
-                ) : row.status === "warn" ? (
-                  <CircleAlert className="size-3" />
-                ) : (
-                  <CircleDashed className="size-3" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline gap-1.5">
-                  <Icon className="size-3 text-[var(--ds-muted)] shrink-0" />
-                  <h3 className="text-[12px] font-medium text-[var(--ds-ink)]">
-                    {row.label}
-                  </h3>
-                </div>
-                <p className="text-[11px] text-[var(--ds-body)] mt-0.5 leading-relaxed">
-                  {row.detail}
-                </p>
-                {row.jumpTo && (
-                  <button
-                    type="button"
-                    onClick={row.jumpTo}
-                    className="mt-1 text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:underline"
-                  >
-                    Fix →
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return rows;
 }

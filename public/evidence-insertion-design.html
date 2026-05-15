@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Evidence insertion — 4 patterns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --amber:#d97706; --amber-lt:#fffbeb; --blue:#2563eb; --blue-lt:#eff6ff;
+  --green:#059669; --green-lt:#ecfdf5;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+button{font:inherit;cursor:pointer;border:0;background:none}
+svg{display:block}
+
+/* topbar */
+.topbar{height:52px;background:var(--ink);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:50;color:#fff}
+.brand{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.logo{width:26px;height:26px;background:#fff;border-radius:7px;display:grid;place-items:center;color:var(--ink)}
+.logo svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.divider{width:1px;height:18px;background:rgba(255,255,255,.15)}
+.picker{display:flex;gap:2px;background:rgba(255,255,255,.06);padding:3px;border-radius:8px}
+.pick-btn{height:30px;padding:0 14px;border-radius:6px;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.6);transition:background .12s,color .12s}
+.pick-btn:hover{color:rgba(255,255,255,.9)}
+.pick-btn.active{background:#fff;color:var(--ink);font-weight:600}
+.tb-right{margin-left:auto;font-size:11.5px;color:rgba(255,255,255,.5)}
+
+.panel{display:none}
+.panel.active{display:block}
+
+/* editor frame — common */
+.editor-frame{max-width:1400px;margin:0 auto;padding:20px;display:grid;grid-template-columns:200px 1fr 320px;gap:14px;height:calc(100vh - 92px);min-height:680px}
+.left-rail{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;font-size:12px;color:var(--muted)}
+.left-rail h3{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle);margin-bottom:10px}
+.left-rail .sect{padding:7px 9px;border-radius:7px;display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--body);cursor:pointer}
+.left-rail .sect.active{background:var(--line-2);color:var(--ink);font-weight:600}
+.left-rail .sect .num{width:18px;height:18px;border-radius:50%;background:var(--line);color:var(--muted);font-size:10px;font-weight:700;display:grid;place-items:center}
+.left-rail .sect.active .num{background:var(--ink);color:#fff}
+
+.editor-main{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+.editor-toolbar{height:38px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;padding:0 10px;gap:1px}
+.tbtn{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--muted);cursor:pointer;transition:background .12s,color .12s}
+.tbtn:hover{background:var(--wash);color:var(--ink)}
+.tbtn.active{background:var(--ink);color:#fff}
+.tbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8}
+.tdivider{width:1px;height:18px;background:var(--line);margin:0 4px}
+.evidence-tbtn{position:relative;background:var(--amber-lt);color:var(--amber)}
+.evidence-tbtn:hover{background:#fef3c7}
+.editor-body{padding:32px 48px;flex:1;overflow-y:auto;font-family:"Source Serif 4",Georgia,serif;font-size:15px;line-height:1.7;color:var(--ink);max-width:680px;margin:0 auto;width:100%}
+.editor-body h1{font-family:"Inter",sans-serif;font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:18px}
+.editor-body p{margin-bottom:14px}
+.editor-body .cursor{display:inline-block;width:1px;height:18px;background:var(--ink);animation:blink 1s infinite;vertical-align:text-bottom;margin-left:1px}
+@keyframes blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+.figref{color:var(--amber);font-style:italic;font-family:"Inter",sans-serif;background:var(--amber-lt);padding:1px 5px;border-radius:3px;font-size:13px}
+
+.right-rail{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;overflow-y:auto}
+.right-rail h3{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle);margin-bottom:10px}
+
+/* common chip */
+.evidence-chip{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:border-color .12s,background .12s}
+.evidence-chip:hover{border-color:#94a3b8;background:var(--wash)}
+.evidence-chip .ico{width:30px;height:30px;border-radius:7px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.evidence-chip .ico svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.evidence-chip .body{flex:1;min-width:0}
+.evidence-chip .name{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.evidence-chip .meta{font-size:10.5px;color:var(--muted);margin-top:1px}
+.evidence-chip .insert{font-size:10.5px;font-weight:700;color:var(--amber);background:var(--amber-lt);padding:2px 6px;border-radius:4px;flex-shrink:0}
+
+/* ============== A · Toolbar popover (current) ============== */
+.popover{position:absolute;top:44px;left:280px;width:320px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px -8px rgba(0,0,0,.15);padding:12px;z-index:20}
+.popover-h{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle);margin-bottom:8px}
+.popover-mode{display:flex;background:var(--wash);border-radius:7px;padding:3px;margin-bottom:10px}
+.popover-mode-btn{flex:1;height:26px;border-radius:5px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.popover-mode-btn.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.popover-help{font-size:11px;color:var(--subtle);margin-bottom:8px;line-height:1.5}
+
+/* ============== B · Right rail panel ============== */
+.rail-evidence-strip{font-size:11px;color:var(--muted);margin-bottom:10px;padding:8px 10px;background:var(--blue-lt);border-radius:7px;border:1px solid rgba(37,99,235,.1);line-height:1.5}
+.rail-evidence-strip strong{color:var(--blue);font-weight:600}
+.mode-toggle{display:flex;background:var(--wash);border-radius:6px;padding:2px;margin-bottom:10px}
+.mode-toggle button{flex:1;height:24px;border-radius:4px;font-size:10.5px;font-weight:600;color:var(--muted)}
+.mode-toggle button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+/* ============== C · Slash command ============== */
+.slash-menu{position:absolute;top:280px;left:320px;width:280px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px -8px rgba(0,0,0,.15);padding:6px;z-index:20}
+.slash-menu-h{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--subtle);padding:6px 10px}
+.slash-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:6px;cursor:pointer;transition:background .12s}
+.slash-item:hover,.slash-item.focused{background:var(--blue-lt)}
+.slash-item .ico{width:24px;height:24px;border-radius:5px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center}
+.slash-item .ico svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
+.slash-item .body{flex:1;min-width:0}
+.slash-item .nm{font-size:12px;font-weight:600;color:var(--ink)}
+.slash-item .mt{font-size:10.5px;color:var(--muted)}
+.slash-item .kbd{font-size:10px;font-weight:600;color:var(--subtle);background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace}
+.slash-help{font-size:11px;color:var(--muted);margin-top:8px;padding:0 20px;line-height:1.5}
+
+/* ============== D · Dedicated screen / drawer ============== */
+.drawer-overlay{position:absolute;inset:0;background:rgba(17,24,39,.4);z-index:30}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:560px;background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 32px -8px rgba(0,0,0,.1);z-index:40;display:flex;flex-direction:column;animation:slidein .25s ease}
+@keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+.drawer-h{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.drawer-h h2{font-size:15px;font-weight:700;letter-spacing:-.01em;flex:1}
+.drawer-h .close{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;color:var(--muted)}
+.drawer-h .close:hover{background:var(--wash);color:var(--ink)}
+.drawer-search{padding:12px 20px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:8px;background:var(--wash)}
+.drawer-search input{flex:1;height:30px;border:1px solid var(--line);border-radius:7px;padding:0 10px;font-size:12.5px;background:#fff}
+.drawer-search input:focus{outline:none;border-color:var(--ink)}
+.drawer-search svg{width:14px;height:14px;color:var(--muted);stroke:currentColor;fill:none;stroke-width:1.8}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--line);padding:0 20px}
+.drawer-tab{padding:10px 14px;font-size:12.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.drawer-tab.active{color:var(--ink);border-bottom-color:var(--ink)}
+.drawer-tab .count{font-size:10.5px;color:var(--muted);background:var(--wash);padding:1px 6px;border-radius:9px;margin-left:5px;font-weight:500}
+.drawer-tab.active .count{background:var(--ink);color:#fff;font-weight:600}
+.drawer-body{flex:1;overflow-y:auto;padding:14px 20px}
+.drawer-evidence-card{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.drawer-evidence-card:hover{border-color:#94a3b8;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.drawer-evidence-card .ico-lg{width:44px;height:44px;border-radius:9px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.drawer-evidence-card .ico-lg svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}
+.drawer-evidence-card .info{flex:1;min-width:0}
+.drawer-evidence-card .nm{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.drawer-evidence-card .desc{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.5}
+.drawer-evidence-card .meta{font-size:10.5px;color:var(--subtle);margin-top:4px;font-variant-numeric:tabular-nums}
+.drawer-evidence-card .actions{display:flex;flex-direction:column;gap:5px;align-items:flex-end;flex-shrink:0}
+.drawer-evidence-card .ins-btn{height:26px;padding:0 10px;background:var(--ink);color:#fff;border-radius:6px;font-size:11.5px;font-weight:600;display:flex;align-items:center;gap:4px}
+.drawer-evidence-card .ins-btn svg{width:10px;height:10px;stroke:#fff;fill:none;stroke-width:2.4}
+.drawer-evidence-card .mode-pill{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--amber);background:var(--amber-lt);padding:1.5px 6px;border-radius:3px}
+
+.drawer-foot{padding:12px 20px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;background:var(--wash);font-size:11.5px;color:var(--muted)}
+.drawer-foot button{font-size:12px;font-weight:600;color:var(--ink);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.drawer-foot .upload-btn{margin-left:auto;height:30px;padding:0 12px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:7px;text-decoration:none;display:flex;align-items:center;gap:5px}
+.drawer-foot .upload-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* shared bottom — explanation */
+.explainer{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:12.5px;display:flex;align-items:center;gap:10px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.15);max-width:90vw}
+.explainer strong{font-weight:700}
+.explainer kbd{font-family:ui-monospace,monospace;font-size:11px;background:rgba(255,255,255,.15);padding:2px 7px;border-radius:4px;font-weight:600}
+
+/* exhibits page (shared) */
+.exhibits-page{max-width:680px;margin:32px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:40px;font-family:"Source Serif 4",Georgia,serif}
+.exhibits-page h2{font-family:"Inter",sans-serif;font-size:18px;font-weight:700;letter-spacing:-.01em;margin-bottom:16px;color:var(--ink);padding-bottom:10px;border-bottom:1px solid var(--line)}
+.exhibit{margin-bottom:24px}
+.exhibit-cap{font-family:"Inter",sans-serif;font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px}
+.exhibit-cap .lbl{color:var(--amber)}
+.exhibit-img{width:100%;max-width:400px;border:1px solid var(--line);border-radius:6px;background:linear-gradient(135deg,#fef3c7,#fde68a);height:160px;display:grid;place-items:center;color:var(--amber);font-size:12px;font-weight:600;margin:0 auto 8px}
+.exhibit-body{font-size:13px;color:var(--body);line-height:1.6}
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+    DraftHR
+  </div>
+  <div class="divider"></div>
+  <div class="picker">
+    <button class="pick-btn active" data-tab="a">A · Toolbar popover (current)</button>
+    <button class="pick-btn" data-tab="b">B · Right-rail panel</button>
+    <button class="pick-btn" data-tab="c">C · Slash command</button>
+    <button class="pick-btn" data-tab="d">D · Dedicated drawer</button>
+    <button class="pick-btn" data-tab="exhibits">→ Exhibits page</button>
+  </div>
+  <div class="tb-right">Evidence insertion — 4 patterns</div>
+</div>
+
+<!-- ════════════════════ A · TOOLBAR POPOVER ════════════════════ -->
+<div class="panel active" data-panel="a">
+  <div class="editor-frame">
+    <div class="left-rail">
+      <h3>Sections</h3>
+      <div class="sect"><span class="num">1</span> Date & recipient</div>
+      <div class="sect"><span class="num">2</span> Subject</div>
+      <div class="sect"><span class="num">3</span> Salutation</div>
+      <div class="sect active"><span class="num">4</span> Body</div>
+      <div class="sect"><span class="num">5</span> Closing</div>
+      <div class="sect"><span class="num">6</span> Signature</div>
+    </div>
+
+    <div class="editor-main" style="position:relative">
+      <div class="editor-toolbar">
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M6 4h12v3M6 4v16M18 4l-3 16"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M14 4h-4v16h4M8 4H6v16h2M16 12h4"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn evidence-tbtn active">
+          <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M21 7v6h-6M3 17a9 9 0 0 1 15-6.7L21 13"/></svg></button>
+      </div>
+
+      <div class="editor-body">
+        <h1>Body</h1>
+        <p>I write to formally raise a grievance under the company's Grievance Policy regarding my treatment by Mr. Whitfield since the meeting on 14 March 2026.</p>
+        <p>On that date, Mr. Whitfield announced unilateral changes to my working pattern <span class="figref">[See Fig 1]</span> without consultation, despite my flexible-working agreement dated 12 January 2025.<span class="cursor"></span></p>
+        <p>Subsequent emails and calendar invitations</p>
+      </div>
+
+      <!-- popover -->
+      <div class="popover">
+        <div class="popover-h">Insert evidence</div>
+        <div class="popover-mode">
+          <button class="popover-mode-btn active">Figure</button>
+          <button class="popover-mode-btn">Inline</button>
+        </div>
+        <div class="popover-help">Figures get a <strong>[See Fig N]</strong> reference at the cursor + appear on an Exhibits page at the end of the letter.</div>
+        <div class="evidence-chip">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+          <div class="body"><div class="name">working-pattern-meeting.png</div><div class="meta">Screenshot · 248 KB</div></div>
+          <span class="insert">Fig 1 ✓</span>
+        </div>
+        <div class="evidence-chip">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+          <div class="body"><div class="name">whitfield-email-16mar.eml</div><div class="meta">Email · 6 KB</div></div>
+          <span class="insert">Fig 2</span>
+        </div>
+        <div class="evidence-chip">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <div class="body"><div class="name">flex-working-agreement-2025.pdf</div><div class="meta">Document · 1.2 MB</div></div>
+          <span class="insert">Fig 3</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-rail">
+      <h3>Compliance</h3>
+      <div style="font-size:12px;color:var(--muted);line-height:1.55">3 of 9 checks passing · 4 warnings</div>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <span><strong>Pattern A:</strong> Click the 📎 in the toolbar → popover lists evidence → pick one. <em>Compact, but invisible until you've added evidence.</em></span>
+  </div>
+</div>
+
+<!-- ════════════════════ B · RIGHT RAIL PANEL ════════════════════ -->
+<div class="panel" data-panel="b">
+  <div class="editor-frame">
+    <div class="left-rail">
+      <h3>Sections</h3>
+      <div class="sect"><span class="num">1</span> Date & recipient</div>
+      <div class="sect"><span class="num">2</span> Subject</div>
+      <div class="sect"><span class="num">3</span> Salutation</div>
+      <div class="sect active"><span class="num">4</span> Body</div>
+      <div class="sect"><span class="num">5</span> Closing</div>
+      <div class="sect"><span class="num">6</span> Signature</div>
+    </div>
+
+    <div class="editor-main">
+      <div class="editor-toolbar">
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M6 4h12v3M6 4v16M18 4l-3 16"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M14 4h-4v16h4"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+      </div>
+      <div class="editor-body">
+        <h1>Body</h1>
+        <p>I write to formally raise a grievance under the company's Grievance Policy regarding my treatment by Mr. Whitfield since the meeting on 14 March 2026.</p>
+        <p>On that date, Mr. Whitfield announced unilateral changes to my working pattern <span class="figref">[See Fig 1]</span> without consultation, despite my flexible-working agreement dated 12 January 2025 <span class="figref">[See Fig 3]</span>.<span class="cursor"></span></p>
+        <p>Subsequent emails and calendar invitations confirm</p>
+      </div>
+    </div>
+
+    <div class="right-rail">
+      <h3>📎 Evidence (3)</h3>
+      <div class="rail-evidence-strip">
+        Click an item to <strong>insert at cursor</strong>. Or drag onto the letter body.
+      </div>
+      <div class="mode-toggle">
+        <button class="active">As Figure</button>
+        <button>As Inline</button>
+      </div>
+      <div class="evidence-chip">
+        <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+        <div class="body"><div class="name">working-pattern-meeting.png</div><div class="meta">Fig 1 · Screenshot</div></div>
+      </div>
+      <div class="evidence-chip">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+        <div class="body"><div class="name">whitfield-email-16mar.eml</div><div class="meta">Fig 2 · Email</div></div>
+      </div>
+      <div class="evidence-chip">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="body"><div class="name">flex-working-agreement-2025.pdf</div><div class="meta">Fig 3 · Document</div></div>
+      </div>
+      <button style="margin-top:10px;width:100%;height:30px;border-radius:7px;border:1px dashed var(--line);background:#fff;font-size:11.5px;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:5px">
+        <svg width="11" height="11" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        Add evidence
+      </button>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <span><strong>Pattern B:</strong> Persistent right-rail panel. Always visible. Click to insert at cursor. <em>Discoverable + fast, but uses rail space (would compete with Compliance panel).</em></span>
+  </div>
+</div>
+
+<!-- ════════════════════ C · SLASH COMMAND ════════════════════ -->
+<div class="panel" data-panel="c">
+  <div class="editor-frame">
+    <div class="left-rail">
+      <h3>Sections</h3>
+      <div class="sect"><span class="num">1</span> Date & recipient</div>
+      <div class="sect"><span class="num">2</span> Subject</div>
+      <div class="sect"><span class="num">3</span> Salutation</div>
+      <div class="sect active"><span class="num">4</span> Body</div>
+      <div class="sect"><span class="num">5</span> Closing</div>
+      <div class="sect"><span class="num">6</span> Signature</div>
+    </div>
+
+    <div class="editor-main" style="position:relative">
+      <div class="editor-toolbar">
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M6 4h12v3M6 4v16M18 4l-3 16"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M14 4h-4v16h4"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M3 7v6h6M21 17a9 9 0 0 0-15-6.7L3 13"/></svg></button>
+      </div>
+      <div class="editor-body">
+        <h1>Body</h1>
+        <p>I write to formally raise a grievance under the company's Grievance Policy regarding my treatment by Mr. Whitfield since the meeting on 14 March 2026.</p>
+        <p>On that date, Mr. Whitfield announced unilateral changes to my working pattern <span class="figref">[See Fig 1]</span> without consultation, despite my flexible-working agreement dated 12 January 2025 <span class="figref">[See Fig 3]</span>.</p>
+        <p>Subsequent emails confirm <span style="background:var(--blue-lt);padding:1px 4px;border-radius:3px;color:var(--blue);font-family:ui-monospace,monospace;font-size:13px">/ev</span><span class="cursor"></span></p>
+      </div>
+
+      <!-- slash menu -->
+      <div class="slash-menu">
+        <div class="slash-menu-h">Evidence — 3 items match</div>
+        <div class="slash-item focused">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+          <div class="body"><div class="nm">whitfield-email-16mar.eml</div><div class="mt">Email · would insert <strong>[See Fig 2]</strong></div></div>
+          <span class="kbd">↵</span>
+        </div>
+        <div class="slash-item">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/></svg></div>
+          <div class="body"><div class="nm">working-pattern-meeting.png</div><div class="mt">Screenshot</div></div>
+        </div>
+        <div class="slash-item">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg></div>
+          <div class="body"><div class="nm">flex-working-agreement-2025.pdf</div><div class="mt">Document</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-rail">
+      <h3>Compliance</h3>
+      <div style="font-size:12px;color:var(--muted);line-height:1.55">3 of 9 checks passing · 4 warnings</div>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <span><strong>Pattern C:</strong> Type <kbd>/ev</kbd> or <kbd>@</kbd> in the letter body → inline picker. Notion / Linear-style. <em>Powerful for power users, requires teaching new users it exists.</em></span>
+  </div>
+</div>
+
+<!-- ════════════════════ D · DEDICATED DRAWER ════════════════════ -->
+<div class="panel" data-panel="d">
+  <div class="editor-frame">
+    <div class="left-rail">
+      <h3>Sections</h3>
+      <div class="sect"><span class="num">1</span> Date & recipient</div>
+      <div class="sect"><span class="num">2</span> Subject</div>
+      <div class="sect"><span class="num">3</span> Salutation</div>
+      <div class="sect active"><span class="num">4</span> Body</div>
+      <div class="sect"><span class="num">5</span> Closing</div>
+      <div class="sect"><span class="num">6</span> Signature</div>
+    </div>
+
+    <div class="editor-main" style="position:relative;overflow:hidden">
+      <div class="editor-toolbar">
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M6 4h12v3M6 4v16M18 4l-3 16"/></svg></button>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M14 4h-4v16h4"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/></svg></button>
+        <div class="tdivider"></div>
+        <button class="tbtn evidence-tbtn active">
+          <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </button>
+      </div>
+      <div class="editor-body">
+        <h1>Body</h1>
+        <p>I write to formally raise a grievance under the company's Grievance Policy regarding my treatment by Mr. Whitfield since the meeting on 14 March 2026.</p>
+        <p>On that date, Mr. Whitfield announced unilateral changes to my working pattern <span class="figref">[See Fig 1]</span> without consultation, despite my flexible-working agreement dated 12 January 2025 <span class="figref">[See Fig 3]</span>.<span class="cursor"></span></p>
+      </div>
+
+      <div class="drawer-overlay"></div>
+      <div class="drawer">
+        <div class="drawer-h">
+          <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>
+          <h2>Insert evidence</h2>
+          <span style="font-size:11.5px;color:var(--muted);font-weight:500">At cursor in §4 Body</span>
+          <button class="close"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+
+        <div class="drawer-search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input placeholder="Search by name, kind, or section…" />
+        </div>
+
+        <div class="drawer-tabs">
+          <div class="drawer-tab active">All <span class="count">3</span></div>
+          <div class="drawer-tab">Emails <span class="count">1</span></div>
+          <div class="drawer-tab">Screenshots <span class="count">1</span></div>
+          <div class="drawer-tab">Documents <span class="count">1</span></div>
+          <div class="drawer-tab">Notes <span class="count">0</span></div>
+        </div>
+
+        <div class="drawer-body">
+          <div class="drawer-evidence-card">
+            <div class="ico-lg"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+            <div class="info">
+              <div class="nm">working-pattern-meeting.png</div>
+              <div class="desc">Screenshot of the 14-Mar standup where Whitfield announced the change.</div>
+              <div class="meta">Already inserted as <strong style="color:var(--amber)">Fig 1</strong> · §4 Body</div>
+            </div>
+            <div class="actions">
+              <span class="mode-pill">As Figure</span>
+              <button class="ins-btn">Re-insert <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+            </div>
+          </div>
+
+          <div class="drawer-evidence-card">
+            <div class="ico-lg"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+            <div class="info">
+              <div class="nm">whitfield-email-16mar.eml</div>
+              <div class="desc">Manager's email confirming the unilateral change with no consultation reference.</div>
+              <div class="meta">Will insert as <strong style="color:var(--amber)">Fig 2</strong></div>
+            </div>
+            <div class="actions">
+              <span class="mode-pill">As Figure</span>
+              <button class="ins-btn">Insert <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+            </div>
+          </div>
+
+          <div class="drawer-evidence-card">
+            <div class="ico-lg"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+            <div class="info">
+              <div class="nm">flex-working-agreement-2025.pdf</div>
+              <div class="desc">Signed flexible-working agreement (12-Jan-2025) demonstrating the protected pattern.</div>
+              <div class="meta">Already inserted as <strong style="color:var(--amber)">Fig 3</strong> · §4 Body</div>
+            </div>
+            <div class="actions">
+              <span class="mode-pill">As Figure</span>
+              <button class="ins-btn">Re-insert <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="drawer-foot">
+          <button>Manage evidence →</button>
+          <span>3 items · 1.5 MB</span>
+          <button class="upload-btn">
+            <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload new
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="right-rail">
+      <h3>Compliance</h3>
+      <div style="font-size:12px;color:var(--muted);line-height:1.55">3 of 9 checks passing · 4 warnings</div>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <span><strong>Pattern D:</strong> 📎 button → dedicated drawer overlay. Search + filter + preview + Insert. <em>Most powerful + most discoverable. Best for richer evidence libraries (10+ items).</em></span>
+  </div>
+</div>
+
+<!-- ════════════════════ EXHIBITS PAGE ════════════════════ -->
+<div class="panel" data-panel="exhibits">
+  <div style="max-width:760px;margin:24px auto 0;padding:0 24px;font-size:13px;color:var(--muted)">
+    This is what the user gets in the exported PDF/DOCX <strong style="color:var(--ink)">on the page after the letter body</strong>. It's the same in every pattern (A/B/C/D) — they all use the same `[See Fig N]` references that get resolved into this Exhibits page on export. Already implemented in <code>src/components/editor/paged-edit/sourceHtml.ts:69</code>.
+  </div>
+  <div class="exhibits-page">
+    <h2>Exhibits</h2>
+
+    <div class="exhibit">
+      <div class="exhibit-cap"><span class="lbl">Fig 1</span> — working-pattern-meeting.png</div>
+      <div class="exhibit-img">[ screenshot · 248 KB ]</div>
+      <div class="exhibit-body">Screenshot of the 14-Mar standup where Whitfield announced the unilateral change to my working pattern.</div>
+    </div>
+
+    <div class="exhibit">
+      <div class="exhibit-cap"><span class="lbl">Fig 2</span> — whitfield-email-16mar.eml</div>
+      <div class="exhibit-body" style="background:var(--wash);padding:12px;border-radius:6px;border-left:3px solid var(--amber);font-family:ui-monospace,monospace;font-size:11px;color:var(--ink)">
+        From: M. Whitfield<br/>
+        To: [employee]<br/>
+        Date: 16 March 2026 09:42<br/>
+        Subject: Working hours change — effective immediately<br/><br/>
+        Just to confirm following yesterday's standup, your hours will move to 8am–5pm starting Monday. Please make arrangements accordingly. — M
+      </div>
+    </div>
+
+    <div class="exhibit">
+      <div class="exhibit-cap"><span class="lbl">Fig 3</span> — flex-working-agreement-2025.pdf</div>
+      <div class="exhibit-img">[ PDF document · 1.2 MB · 4 pages ]</div>
+      <div class="exhibit-body">Signed flexible-working agreement dated 12 January 2025 establishing the protected pattern (10am–4pm core hours, remote Tuesdays/Thursdays).</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.pick-btn[data-tab]').forEach(b => {
+    b.addEventListener('click', () => {
+      const t = b.dataset.tab;
+      document.querySelectorAll('.pick-btn[data-tab]').forEach(x => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -11,6 +11,10 @@ import { cn } from "@/lib/utils";
  *   Edit  ─  Evidence  ─  Review     (employee mode)
  *   Edit  ─  Review                  (employer mode — skips evidence)
  *
+ * Finalize is intentionally NOT part of the wizard stepper. Finalize is a
+ * separate destination (the ship gate) reached from a "Continue to Finalize →"
+ * CTA at the end of Review, not a numbered step in the linear flow.
+ *
  * Layout rules:
  *   - Each step labels sizes to its content (no flex-1, no truncate) —
  *     "Evidence" (8 chars) gets the room it needs even when "Edit" (4)
@@ -32,21 +36,19 @@ type Props = {
 };
 
 export function WizardChrome({ draftId, mode, current, disabled }: Props) {
-  // Finalize is the new ship-gate step that replaces the inline "Export pack"
-  // button at the end of Review. It applies to both modes — every letter
-  // needs the health check + handoff regardless of who's drafting it.
+  // Finalize is intentionally NOT in this stepper. It's a separate destination
+  // reached from the "Continue to Finalize →" CTA at the end of Review.
+  // The wizard is the assessment/drafting flow; Finalize is the ship gate.
   const steps: { id: Step; label: string; href: string }[] =
     mode === "employee"
       ? [
           { id: "edit", label: "Edit", href: `/editor/${draftId}` },
           { id: "evidence", label: "Evidence", href: `/editor/${draftId}/evidence` },
           { id: "review", label: "Review", href: `/editor/${draftId}/review` },
-          { id: "finalize", label: "Finalize", href: `/editor/${draftId}/finalize` },
         ]
       : [
           { id: "edit", label: "Edit", href: `/editor/${draftId}` },
           { id: "review", label: "Review", href: `/editor/${draftId}/review` },
-          { id: "finalize", label: "Finalize", href: `/editor/${draftId}/finalize` },
         ];
 
   const currentIndex = steps.findIndex((s) => s.id === current);

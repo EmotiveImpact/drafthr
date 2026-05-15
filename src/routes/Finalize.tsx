@@ -3,26 +3,19 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Bot,
   Check,
   AlertTriangle,
-  XCircle,
   FileText,
   FileDown,
   Package,
-  Sparkles,
-  Users,
-  ShieldCheck,
   Copy,
-  Coins,
   Send,
-  ArrowRight,
+  ShieldCheck,
 } from "lucide-react";
 
 import { useDraftStore } from "@/lib/store";
-import { useProfileStore } from "@/lib/profile";
-import { AI_REVIEW_COST } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/ds/BrandMark";
 import { Wordmark } from "@/components/ds/Wordmark";
@@ -30,33 +23,23 @@ import { cn } from "@/lib/utils";
 import {
   runHealthChecks,
   computeHealthScore,
-  topFixes,
-  DIMENSION_LABELS,
-  DIMENSION_DESCRIPTIONS,
   type HealthCheck,
-  type HealthDimension,
-  type DimensionScore,
-  type Fix,
 } from "@/lib/finalize/healthChecks";
-import { ScoreRing } from "@/components/finalize/ScoreRing";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
-import { FixThisFirst } from "@/components/finalize/FixThisFirst";
 
 /**
- * Finalize — the final wizard step. Replaces the old "Export pack" button
- * at the end of Review with a dedicated ship-gate page:
+ * Finalize — the ship gate.
  *
- *   1. Letter health  — static checks + AI evaluation side by side, summed
- *                       into a Letter Health Score (animated ring).
- *   2. Independent review — three lanes:
- *        • AI specialist  (credits — instant)
- *        • Your team      (free — async)
- *        • External consultant (paid — vetted human)
- *   3. Export pack    — PDF / DOCX / Signed PDF / Evidence bundle zip /
- *                       Copy as plain text. Wired to existing export libs.
+ * Previously this page carried score rings, fix-this-first, three review
+ * lanes (AI / Team / Consultant), and the export grid. Assess + improve
+ * work has moved to ReviewStep — Finalize is now just:
  *
- * After exporting (or sending), the "Mark as sent" CTA locks the letter,
- * triggers a confetti burst, and bounces the user back to the home feed.
+ *   1. A compact "ready to ship" health summary (one line, no rings).
+ *   2. The counsel-review attestation gate for high-risk letter types.
+ *   3. The export grid (PDF / DOCX / Evidence pack / Copy plain text).
+ *   4. Mark-as-sent CTA (locks the letter, archives, clears from drafts).
+ *
+ * The mental model: Review = "Is this letter good?" Finalize = "Ship it".
  */
 
 const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
@@ -65,40 +48,22 @@ const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
   weak: "Weak",
 };
 
-const BAND_CLASSES: Record<
-  "strong" | "adequate" | "weak",
-  { bg: string; text: string }
-> = {
-  strong: { bg: "bg-[var(--ds-green-bg)]", text: "text-[var(--ds-green-fg)]" },
-  adequate: { bg: "bg-[var(--ds-amber-bg)]", text: "text-[var(--ds-amber-fg)]" },
-  weak: { bg: "bg-[var(--ds-red-bg)]", text: "text-[var(--ds-red-fg)]" },
-};
-
 export function Finalize() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const recordExport = useDraftStore((s) => s.recordExport);
 
-  // Credits are read separately so spending them later updates only the
-  // chip that displays the balance, not the rest of the page.
-  const credits = useProfileStore((s) => s.profile.credits ?? 0);
-  const spendCredits = useProfileStore((s) => s.spendCredits);
-
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
-  const [aiReviewState, setAiReviewState] = useState<
-    "idle" | "running" | "complete" | "low-credits"
-  >("idle");
   const [showConfetti, setShowConfetti] = useState(false);
 
-  // Health checks + score are derived directly from the draft — re-derive
-  // any time the draft mutates (edits, comments, evidence). No effect needed.
+  // Health checks + score are derived directly from the draft. We don't
+  // render the rings here — we just need the counts for the summary strip.
   const checks = useMemo<HealthCheck[]>(
     () => (draft ? runHealthChecks(draft) : []),
     [draft],
   );
   const scoreData = useMemo(() => computeHealthScore(checks), [checks]);
-  const fixes = useMemo<Fix[]>(() => topFixes(checks, 3), [checks]);
 
   if (!draft || !draftId) {
     return (
@@ -112,6 +77,19 @@ export function Finalize() {
   }
 
   const meta = getLetterMeta(draft.letterType);
+  const counselGateRequired = exportRequiresCounselGate(draft);
+  // High-risk letters require a counsel attestation before they can ship.
+  // The attestation itself is captured in the editor (Editor.tsx writes
+  // _counselReview into draft.answers). Finalize only checks for its
+  // presence and blocks export until it's there.
+  const counselReview =
+    (draft.answers as Record<string, unknown>)._counselReview as
+      | { reviewedBy: string; reviewedOn: string; attestedAt: number }
+      | undefined;
+  const counselAttested = !counselGateRequired || Boolean(counselReview);
+
+  const readyToShip = scoreData.failCount === 0 && scoreData.band === "strong";
+  const shipBlocked = scoreData.failCount > 0 || !counselAttested;
 
   /* ---------------------------- Exports ---------------------------- */
 
@@ -126,7 +104,18 @@ export function Finalize() {
     URL.revokeObjectURL(url);
   };
 
+  const guardCounsel = (): boolean => {
+    if (counselGateRequired && !counselReview) {
+      alert(
+        "This letter type requires counsel review before export. Open the editor and attach a counsel-review attestation.",
+      );
+      return false;
+    }
+    return true;
+  };
+
   const onExportPdf = async () => {
+    if (!guardCounsel()) return;
     setBusyFormat("pdf");
     try {
       const { renderLetterPdfBlob, filenameFor } = await import(
@@ -143,6 +132,7 @@ export function Finalize() {
   };
 
   const onExportDocx = async () => {
+    if (!guardCounsel()) return;
     setBusyFormat("docx");
     try {
       const { renderLetterDocxBlob, docxFilenameFor } = await import(
@@ -159,6 +149,7 @@ export function Finalize() {
   };
 
   const onExportPack = async () => {
+    if (!guardCounsel()) return;
     setBusyFormat("pack");
     try {
       const { exportLetterPack } = await import("@/lib/export/pack");
@@ -172,6 +163,7 @@ export function Finalize() {
   };
 
   const onCopyPlain = async () => {
+    if (!guardCounsel()) return;
     setBusyFormat("copy");
     try {
       const plain = draft.sections
@@ -179,7 +171,6 @@ export function Finalize() {
         .filter(Boolean)
         .join("\n\n");
       await navigator.clipboard.writeText(plain);
-      // Tiny ack — restore button label after 800ms.
       setTimeout(() => setBusyFormat(null), 800);
       return;
     } catch (err) {
@@ -188,51 +179,12 @@ export function Finalize() {
     }
   };
 
-  /* ----------------------- AI specialist review ---------------------- */
-
-  const onAiCritique = () => {
-    if (credits < AI_REVIEW_COST) {
-      setAiReviewState("low-credits");
-      return;
-    }
-    const ok = spendCredits(AI_REVIEW_COST);
-    if (!ok) {
-      setAiReviewState("low-credits");
-      return;
-    }
-    setAiReviewState("running");
-    // Stub: real call wires to /api/agent with a "critique" intent. For now
-    // we simulate a ~2.5s response so the UX flow is testable.
-    setTimeout(() => setAiReviewState("complete"), 2500);
-  };
-
-  /* ------------------- Fix-this-first action routing ----------------- */
-
-  // Map a check's actionRoute enum to the actual URL. The route enum lives
-  // in healthChecks.ts (pure logic, doesn't know the draftId) — only the
-  // page can compose the final path.
-  const resolveActionUrl = (fix: Fix): string => {
-    switch (fix.check.actionRoute) {
-      case "evidence":
-        return `/editor/${draft.id}/evidence`;
-      case "settings":
-        return "/settings";
-      case "editor":
-      default:
-        return `/editor/${draft.id}`;
-    }
-  };
-
-  const onFix = (fix: Fix) => {
-    nav(resolveActionUrl(fix));
-  };
-
   /* --------------------- Mark as sent + confetti -------------------- */
 
   const onMarkAsSent = () => {
+    if (!guardCounsel()) return;
     setShowConfetti(true);
     recordExport(draft.id, { format: "marked-sent" });
-    // Bounce home after the burst lands.
     setTimeout(() => {
       nav(draft.mode === "employer" ? "/hr" : "/me");
     }, 1600);
@@ -244,8 +196,7 @@ export function Finalize() {
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
       {showConfetti && <ConfettiBurst onDone={() => setShowConfetti(false)} />}
 
-      {/* Branded sticky header — keeps DraftHR identity, in-flow breadcrumb,
-       * credits chip on the right so the AI specialist cost stays anchored. */}
+      {/* Branded sticky header — back to Review, breadcrumb, draft meta. */}
       <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 sm:px-5 gap-3">
         <button
           type="button"
@@ -269,324 +220,151 @@ export function Finalize() {
           </button>
           <span className="text-[var(--ds-subtle)]">·</span>
           <span className="text-[var(--ds-muted)] truncate hidden md:inline">
-            {meta.title}
+            {draft.title ?? meta.title}
           </span>
           <span className="text-[var(--ds-subtle)] hidden md:inline">·</span>
           <span className="text-[var(--ds-ink)] font-medium">Finalize</span>
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          {/* Credits chip — visible across the whole page so the AI specialist
-           * cost is never disconnected from the user's balance. */}
-          <div
-            className="hidden sm:inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[var(--ds-line-2)] text-[12px] font-medium tabular-nums"
-            title={`${credits} AI credits remaining`}
-          >
-            <Coins className="size-3.5 text-[var(--ds-amber-fg)]" />
-            <span>{credits}</span>
-          </div>
           <Button
             variant="outline"
             size="sm"
             onClick={() => nav(`/editor/${draft.id}/review`)}
           >
             <ArrowLeft className="size-3.5 mr-1" />
-            Review
+            Back to Review
           </Button>
         </div>
       </header>
 
-      {/* Scrollable body — this is the fix for the page not scrolling.
-       * The wrapper owns flex sizing; this child owns overflow + max-width. */}
+      {/* Scrollable body — narrower than before since this is now a focused
+       * ship gate, not a multi-section workspace. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-7 sm:px-6 sm:py-10">
-        <h1 className="text-[26px] font-semibold tracking-tight">Finalize letter</h1>
-        <p className="text-[14px] text-[var(--ds-muted)] mt-1.5 mb-7 max-w-[600px]">
-          Last gate before this letter leaves the building. Check the health
-          score, get independent eyes if it matters, and export the formats
-          you need.
-        </p>
+        <div className="mx-auto max-w-[720px] px-4 py-7 sm:px-6 sm:py-10">
+          <h1 className="text-[24px] font-semibold tracking-tight">
+            Ship this letter
+          </h1>
+          <p className="text-[13.5px] text-[var(--ds-muted)] mt-1.5 mb-6 max-w-[560px]">
+            Last gate before the letter leaves the building. Export the
+            formats you need, then mark as sent to archive the draft.
+          </p>
 
-        {/* ───────── Step 1: Letter health ───────── */}
-        <SectionHeader step={1} title="Letter health" />
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-          className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden"
-        >
-          {/* Top: hero ring + verdict + sub-scores.
-           *
-           * Mobile (< sm): stacks vertically. Hero ring sits centred at the
-           * top with the band badge directly underneath, the verdict reads
-           * full-width below, and the three sub-score rings spread evenly
-           * across the row so they're never squeezed against the hero.
-           *
-           * Desktop (sm+): hero on the left, content (band, verdict, summary,
-           * sub-scores) flows in the right column — the original layout. */}
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5 p-4 sm:p-5 border-b border-[var(--ds-line-2)]">
-            <ScoreRing score={scoreData.score} band={scoreData.band} size={96} />
-            <div className="flex-1 min-w-0 w-full text-center sm:text-left">
-              <span
-                className={cn(
-                  "inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider mb-1.5",
-                  BAND_CLASSES[scoreData.band].bg,
-                  BAND_CLASSES[scoreData.band].text,
-                )}
-              >
-                {BAND_LABEL[scoreData.band]}
-              </span>
-              <h3 className="text-[15px] font-semibold text-[var(--ds-ink)] mb-0.5 leading-snug">
-                {scoreData.oneLiner}
-              </h3>
-              <p className="text-[12.5px] text-[var(--ds-muted)] m-0 mb-4">
-                {scoreData.passCount} of {scoreData.totalCount} checks pass
-                {scoreData.warnCount > 0 && ` · ${scoreData.warnCount} warning${scoreData.warnCount === 1 ? "" : "s"}`}
-                {scoreData.failCount > 0 && ` · ${scoreData.failCount} blocker${scoreData.failCount === 1 ? "" : "s"}`}
-              </p>
+          {/* ───────── Compact health summary strip ───────── */}
+          <ReadyStrip
+            ready={readyToShip}
+            score={scoreData.score}
+            band={scoreData.band}
+            passCount={scoreData.passCount}
+            totalCount={scoreData.totalCount}
+            warnCount={scoreData.warnCount}
+            failCount={scoreData.failCount}
+            onBack={() => nav(`/editor/${draft.id}/review`)}
+          />
 
-              {/* Three dimension rings — staggered count-up so the eye
-               * tracks across them as they fill. Each ring carries a
-               * one-line verdict under the label so the diagnosis is
-               * scannable at a glance ("1 blocker", "All clear", etc.).
-               *
-               * Mobile (< sm): true 3-column grid so each ring centres
-               * exactly at 1/6, 1/2, 5/6 of the row regardless of how
-               * long its verdict text is. Without this, the wider
-               * "1 blocker · 1 warning" column shoves Quality and Risk
-               * off-centre. Verdict text drops `whitespace-nowrap` on
-               * mobile so long verdicts wrap to a second line within
-               * their fixed column instead of pushing the grid.
-               *
-               * Desktop (sm+): switch to a flex row anchored to the
-               * verdict column on the left; whitespace-nowrap restores
-               * since there's plenty of room. */}
-              <div className="grid grid-cols-3 gap-2 sm:flex sm:items-start sm:gap-5 w-full">
-                {scoreData.dimensions.map((d, i) => (
-                  <div
-                    key={d.dimension}
-                    title={DIMENSION_DESCRIPTIONS[d.dimension]}
-                    className="flex flex-col items-center gap-1 min-w-0"
-                  >
-                    <ScoreRing
-                      score={d.score}
-                      band={d.band}
-                      size={48}
-                      delay={0.25 + i * 0.12}
-                      label={DIMENSION_LABELS[d.dimension]}
-                    />
-                    <span
-                      className={cn(
-                        "text-[10.5px] font-medium text-center sm:whitespace-nowrap leading-tight",
-                        d.band === "strong" && "text-[var(--ds-green-fg)]",
-                        d.band === "adequate" && "text-[var(--ds-amber-fg)]",
-                        d.band === "weak" && "text-[var(--ds-red-fg)]",
-                      )}
-                    >
-                      {dimensionVerdict(d)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Two-col: static checks (grouped by dimension) + AI evaluation.
-           * Stacks on mobile via grid-cols-1, side-by-side on sm+. Padding
-           * tightens slightly on mobile to match the hero section above. */}
-          <div className="grid sm:grid-cols-2 grid-cols-1">
-            <div className="p-4 sm:p-5">
-              <h4 className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mb-3">
-                Checks by dimension
-              </h4>
-              <DimensionGroupedChecks checks={checks} />
-            </div>
-
-            <div className="p-4 sm:p-5 border-t sm:border-t-0 sm:border-l border-[var(--ds-line-2)]">
-              <div className="flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mb-3">
-                <Bot className="size-3" />
-                AI evaluation
-              </div>
-              <div className="space-y-3">
-                {scoreData.dimensions.map((d) => (
-                  <AiDimensionParagraph
-                    key={d.dimension}
-                    dim={d}
-                    checks={checks}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Actionable top-3 fixes — the bridge between the score and the
-         * editor. Hidden when the draft has zero issues so the page
-         * doesn't carry an empty card. */}
-        <FixThisFirst fixes={fixes} onAction={onFix} />
-
-        <div className="mb-8" />
-
-        {/* ───────── Step 2: Independent review ───────── */}
-        <SectionHeader
-          step={2}
-          title="Independent review"
-          meta="Optional · recommended for high-stakes letters"
-        />
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 0.05, ease: [0.32, 0.72, 0, 1] }}
-          className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden mb-8"
-        >
-          <div className="grid md:grid-cols-3 grid-cols-1 divide-y md:divide-y-0 md:divide-x divide-[var(--ds-line-2)]">
-            {/* AI specialist */}
-            <ReviewLane
-              icon={<Sparkles className="size-4" />}
-              title="AI specialist"
-              desc="Pick a perspective — Tribunal counsel, Employee advocate, or DEI lead — for an instant structured critique."
-              statLabel="Cost"
-              statValue={
-                <span className="inline-flex items-center gap-1">
-                  <Coins className="size-3 text-[var(--ds-amber-fg)]" />
-                  {AI_REVIEW_COST} credits
-                </span>
-              }
-              timeLabel="Returns in"
-              timeValue="~30s"
-              cta={
-                aiReviewState === "running"
-                  ? "Analysing…"
-                  : aiReviewState === "complete"
-                    ? "View critique"
-                    : aiReviewState === "low-credits"
-                      ? "Top up credits"
-                      : "Get AI critique"
-              }
-              ctaIcon={
-                aiReviewState === "running" ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                  >
-                    <Sparkles className="size-3.5" />
-                  </motion.div>
-                ) : (
-                  <ArrowRight className="size-3.5" />
-                )
-              }
-              onClick={onAiCritique}
-              primary
-              footer={
-                <span className="text-[10.5px] text-[var(--ds-muted)] inline-flex items-center gap-1">
-                  <Coins className="size-3" /> {credits} credits available
-                </span>
-              }
+          {/* ───────── Counsel-review attestation gate ───────── */}
+          {counselGateRequired && (
+            <CounselGate
+              attested={Boolean(counselReview)}
+              review={counselReview}
+              onAttach={() => nav(`/editor/${draft.id}`)}
             />
+          )}
 
-            {/* Your team */}
-            <ReviewLane
-              icon={<Users className="size-4" />}
-              title="Your team"
-              desc="Send to a colleague you've added. They can edit, comment, or sign off. Free, async."
-              statLabel="Cost"
-              statValue={<>Free</>}
-              timeLabel="Returns in"
-              timeValue="Async"
-              cta="Send to teammate"
-              ctaIcon={<ArrowRight className="size-3.5" />}
-              onClick={() => alert("Team review — coming soon")}
-            />
-
-            {/* External consultant */}
-            <ReviewLane
-              icon={<ShieldCheck className="size-4" />}
-              title="External consultant"
-              desc="Vetted HR/employment specialist reviews and edits. Best for settlements, dismissals, tribunal-bound letters."
-              statLabel="From"
-              statValue={<>£85</>}
-              timeLabel="SLA"
-              timeValue="24–48h"
-              cta="Browse consultants"
-              ctaIcon={<ArrowRight className="size-3.5" />}
-              onClick={() => alert("Consultant marketplace — coming soon")}
-            />
-          </div>
-        </motion.div>
-
-        {/* ───────── Step 3: Export ───────── */}
-        <SectionHeader
-          step={3}
-          title="Export"
-          meta="Download what you need · all files include an attestation hash"
-        />
-        <motion.div
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 0.1, ease: [0.32, 0.72, 0, 1] }}
-          className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden mb-8"
-        >
-          <ul className="m-0 p-0 list-none divide-y divide-[var(--ds-line-2)]">
-            <ExportRow
-              icon={<FileText className="size-4" />}
-              title="PDF — print-ready"
-              desc="A4 paged render with letterhead and signature. Most common format."
-              cta="Download"
-              busy={busyFormat === "pdf"}
-              primary
-              onClick={onExportPdf}
-            />
-            <ExportRow
-              icon={<FileText className="size-4" />}
-              title="DOCX — editable"
-              desc="Microsoft Word format. Useful if recipient needs to amend."
-              cta="Download"
-              busy={busyFormat === "docx"}
-              onClick={onExportDocx}
-            />
-            <ExportRow
-              icon={<Package className="size-4" />}
-              title="Evidence bundle — zip"
-              desc="PDF + DOCX + all attached evidence + change history + audit. One package for handover."
-              cta="Download"
-              busy={busyFormat === "pack"}
-              onClick={onExportPack}
-            />
-            <ExportRow
-              icon={<Copy className="size-4" />}
-              title="Copy as plain text"
-              desc="For pasting directly into an email body. Strips formatting, keeps structure."
-              cta={busyFormat === "copy" ? "Copied ✓" : "Copy"}
-              busy={false}
-              onClick={onCopyPlain}
-            />
-          </ul>
-
-          <div className="flex items-center gap-2 px-5 py-3 bg-[var(--ds-line-2)] text-[12px] text-[var(--ds-muted)]">
-            <ShieldCheck className="size-3.5 shrink-0" />
-            <span className="flex-1">
-              Every download is logged in Activity with an attestation hash.
-            </span>
-          </div>
-        </motion.div>
-
-        {/* ───────── Final action bar ───────── */}
-        <div className="flex flex-wrap items-center gap-3 pt-5 border-t border-[var(--ds-line)]">
-          <span className="text-[12.5px] text-[var(--ds-muted)] flex-1 min-w-[200px]">
-            Marking as sent locks this letter and moves it to Archive.
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => nav(`/editor/${draft.id}/review`)}
+          {/* ───────── Export formats ───────── */}
+          <h2 className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mt-7 mb-3">
+            Export formats
+          </h2>
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+            className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden"
           >
-            <ArrowLeft className="size-4 mr-1.5" />
-            Back to Review
-          </Button>
-          <Button onClick={onMarkAsSent} disabled={scoreData.failCount > 0}>
-            <Send className="size-4 mr-1.5" />
-            Mark as sent
-          </Button>
-        </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-[var(--ds-line-2)] [&>*:nth-child(-n+2)]:border-t-0 md:[&>*]:border-t-0">
+              <FormatTile
+                icon={<FileText className="size-4" />}
+                title="PDF"
+                desc="Print-ready"
+                cta="Download"
+                busy={busyFormat === "pdf"}
+                onClick={onExportPdf}
+                disabled={!counselAttested}
+                primary
+              />
+              <FormatTile
+                icon={<FileText className="size-4" />}
+                title="DOCX"
+                desc="Editable Word"
+                cta="Download"
+                busy={busyFormat === "docx"}
+                onClick={onExportDocx}
+                disabled={!counselAttested}
+              />
+              <FormatTile
+                icon={<Package className="size-4" />}
+                title="Evidence pack"
+                desc="ZIP with audit"
+                cta="Download"
+                busy={busyFormat === "pack"}
+                onClick={onExportPack}
+                disabled={!counselAttested}
+              />
+              <FormatTile
+                icon={<Copy className="size-4" />}
+                title="Plain text"
+                desc="Paste into email"
+                cta={busyFormat === "copy" ? "Copied" : "Copy"}
+                busy={false}
+                onClick={onCopyPlain}
+                disabled={!counselAttested}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-[var(--ds-line-2)] text-[11.5px] text-[var(--ds-muted)] border-t border-[var(--ds-line-2)]">
+              <ShieldCheck className="size-3.5 shrink-0" />
+              <span className="flex-1">
+                Every download is logged in Activity with an attestation hash.
+              </span>
+            </div>
+          </motion.div>
+
+          {/* ───────── Mark-as-sent ship CTA ───────── */}
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.08, ease: [0.32, 0.72, 0, 1] }}
+            className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 mt-6 flex flex-wrap items-center gap-4"
+          >
+            <div className="flex items-start gap-3 flex-1 min-w-[240px]">
+              <span className="inline-flex items-center justify-center size-9 rounded-lg bg-[var(--ds-line-2)] text-[var(--ds-ink)] shrink-0">
+                <Send className="size-4" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-[14px] font-semibold m-0 mb-0.5">
+                  Ready to send?
+                </h3>
+                <p className="text-[12.5px] text-[var(--ds-muted)] m-0 leading-snug">
+                  Locks the letter, archives it to the case file, and clears
+                  it from drafts.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={onMarkAsSent}
+              disabled={shipBlocked}
+              title={
+                shipBlocked
+                  ? scoreData.failCount > 0
+                    ? "Resolve blockers in Review before sending"
+                    : "Counsel review required before sending"
+                  : undefined
+              }
+            >
+              Mark as sent
+              <Send className="size-4 ml-1.5" />
+            </Button>
+          </motion.div>
         </div>
       </div>
     </div>
@@ -594,331 +372,152 @@ export function Finalize() {
 }
 
 /* ============================================================================
- * Subcomponents — defined at module level (avoid the rerender-no-inline-
- * components anti-pattern of declaring them inside Finalize).
+ * Subcomponents
  * ==========================================================================*/
 
-function SectionHeader({
-  step,
-  title,
-  meta,
+/**
+ * One-line health summary at the top of Finalize. No rings — those live
+ * in ReviewStep. This just answers the question "can I ship this?" with
+ * a single icon, a verdict, and the numerics.
+ */
+function ReadyStrip({
+  ready,
+  score,
+  band,
+  passCount,
+  totalCount,
+  warnCount,
+  failCount,
+  onBack,
 }: {
-  step: number;
-  title: string;
-  meta?: string;
+  ready: boolean;
+  score: number;
+  band: "strong" | "adequate" | "weak";
+  passCount: number;
+  totalCount: number;
+  warnCount: number;
+  failCount: number;
+  onBack: () => void;
 }) {
+  const hasUnresolved = warnCount > 0 || failCount > 0;
   return (
-    <div className="flex items-baseline gap-2.5 mb-3">
-      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--ds-ink)] text-white text-[11px] font-semibold">
-        {step}
-      </span>
-      <h2 className="text-[15px] font-semibold m-0">{title}</h2>
-      {meta && (
-        <span className="ml-auto text-[12px] text-[var(--ds-muted)] truncate">
-          {meta}
-        </span>
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+      className={cn(
+        "rounded-xl border px-4 py-3 flex items-center gap-3",
+        ready
+          ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
+          : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
       )}
-    </div>
-  );
-}
-
-/**
- * One-line verdict shown under each sub-score ring. Stays terse: "1 blocker
- * · 2 warnings", "All clear", "2 polish notes". The Finalize page lets the
- * verdict carry the colour cue (red/amber/green) — keeps the ring label
- * itself uncluttered.
- */
-function dimensionVerdict(d: DimensionScore): string {
-  if (d.totalCount === 0) return "Not assessed";
-  if (d.failCount === 0 && d.warnCount === 0) return "All clear";
-  const parts: string[] = [];
-  if (d.failCount > 0) {
-    parts.push(`${d.failCount} blocker${d.failCount === 1 ? "" : "s"}`);
-  }
-  if (d.warnCount > 0) {
-    parts.push(`${d.warnCount} warning${d.warnCount === 1 ? "" : "s"}`);
-  }
-  return parts.join(" · ");
-}
-
-/**
- * Per-dimension AI evaluation paragraph. Replaces the previous flat
- * two-bullet stub with a coloured pill + adaptive prose that varies by
- * the dimension's score and the specific failing checks. The prose is
- * deterministic today (lookup-based) and will be swapped for a real AI
- * call when the AI specialist flow lands — same shape, real content.
- */
-const DIM_PILL_CLASSES: Record<HealthDimension, string> = {
-  compliance: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-  quality: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-  risk: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-};
-
-function AiDimensionParagraph({
-  dim,
-  checks,
-}: {
-  dim: DimensionScore;
-  checks: HealthCheck[];
-}) {
-  const dimChecks = checks.filter((c) => c.dimension === dim.dimension);
-  const fails = dimChecks.filter((c) => c.severity === "fail");
-  const warns = dimChecks.filter((c) => c.severity === "warn");
-
-  let prose: React.ReactNode;
-  if (dim.dimension === "compliance") {
-    if (fails.length > 0) {
-      prose = (
-        <>
-          <strong>{fails.length} structural issue{fails.length === 1 ? "" : "s"} block send.</strong>{" "}
-          The blockers are administrative ({fails[0].label.toLowerCase()}) rather
-          than legal — clear them and compliance jumps materially. Procedural
-          framing and section structure are otherwise intact.
-        </>
-      );
-    } else if (warns.length > 0) {
-      prose = (
-        <>
-          <strong>Structurally intact.</strong> Every required section is present
-          and procedural references are correctly framed.{" "}
-          {warns.length} polish note{warns.length === 1 ? "" : "s"} remain — mostly
-          fillable in under a minute.
-        </>
-      );
-    } else {
-      prose = (
-        <>
-          <strong>Compliance is locked in.</strong> Required sections, parties,
-          and references all in place. Nothing here will block send.
-        </>
-      );
-    }
-  } else if (dim.dimension === "quality") {
-    if (fails.length + warns.length > 0) {
-      const wc = dimChecks.find((c) => c.id === "wordcount");
-      const sig = dimChecks.find((c) => c.id === "signature" && c.severity !== "pass");
-      prose = (
-        <>
-          <strong>Tone is measured and procedural.</strong> Register holds
-          throughout. The main polish opportunity is{" "}
-          {wc && wc.severity !== "pass"
-            ? "the length — consider trimming the longest section"
-            : sig
-              ? "the missing signature — usually a Settings issue, not a draft issue"
-              : "captured in the warnings on the left"}
-          .
-        </>
-      );
-    } else {
-      prose = (
-        <>
-          <strong>Tone is measured and procedural.</strong> Register, length,
-          and presentation all sit in the sweet spot for this letter type.
-          Nothing to polish.
-        </>
-      );
-    }
-  } else {
-    // risk
-    if (fails.length > 0) {
-      prose = (
-        <>
-          <strong>Risk flagged.</strong> {fails[0].label} —{" "}
-          {fails[0].detail ?? "redact before sending."}
-        </>
-      );
-    } else {
-      prose = (
-        <>
-          <strong>Low risk profile.</strong> No statements that could be
-          construed as admission of liability. Grievance procedure references
-          correctly framed. <em>Safe to send as a record.</em>
-        </>
-      );
-    }
-  }
-
-  return (
-    <div>
-      <span
-        className={cn(
-          "inline-block text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded mb-1.5",
-          DIM_PILL_CLASSES[dim.dimension],
-        )}
-      >
-        {DIMENSION_LABELS[dim.dimension]}
-      </span>
-      <p className="text-[12.5px] text-[var(--ds-body)] m-0 leading-relaxed">
-        {prose}
-      </p>
-    </div>
-  );
-}
-
-function DimensionGroupedChecks({ checks }: { checks: HealthCheck[] }) {
-  // Group while preserving the dimension display order. Empty groups are
-  // hidden so a dimension with no checks (rare today, common once AI checks
-  // are sparse on simpler letters) doesn't render a phantom header.
-  const order: HealthDimension[] = ["compliance", "quality", "risk"];
-  const grouped = order
-    .map((dim) => ({ dim, items: checks.filter((c) => c.dimension === dim) }))
-    .filter((g) => g.items.length > 0);
-
-  let runningIndex = 0;
-  return (
-    <div className="space-y-4">
-      {grouped.map(({ dim, items }) => (
-        <div key={dim}>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--ds-subtle)] mb-1.5">
-            {DIMENSION_LABELS[dim]}
-          </div>
-          <ul className="space-y-2 m-0 p-0 list-none">
-            {items.map((c) => {
-              const idx = runningIndex++;
-              return <CheckRow key={c.id} check={c} index={idx} />;
-            })}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function CheckRow({ check, index }: { check: HealthCheck; index: number }) {
-  const iconClass =
-    check.severity === "pass"
-      ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-      : check.severity === "warn"
-        ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
-        : "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]";
-  const Icon =
-    check.severity === "pass"
-      ? Check
-      : check.severity === "warn"
-        ? AlertTriangle
-        : XCircle;
-  return (
-    <motion.li
-      initial={{ opacity: 0, x: -4 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{
-        duration: 0.22,
-        delay: 0.05 + index * 0.04,
-        ease: [0.32, 0.72, 0, 1],
-      }}
-      className="flex items-start gap-2.5 text-[12.5px]"
     >
       <span
         className={cn(
-          "inline-flex items-center justify-center size-4 rounded-full shrink-0 mt-0.5",
-          iconClass,
+          "inline-flex items-center justify-center size-7 rounded-full shrink-0",
+          ready
+            ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
+            : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
         )}
       >
-        <Icon className="size-2.5" strokeWidth={2.5} />
+        {ready ? (
+          <Check className="size-4" strokeWidth={2.5} />
+        ) : (
+          <AlertTriangle className="size-4" strokeWidth={2.5} />
+        )}
       </span>
       <div className="flex-1 min-w-0">
-        <div
-          className={cn(
-            check.severity === "pass"
-              ? "text-[var(--ds-ink)]"
-              : "text-[var(--ds-ink)]",
-          )}
-        >
-          {check.label}
+        <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
+          {ready
+            ? "Ready to ship"
+            : failCount > 0
+              ? "Resolve blockers before sending"
+              : "Review remaining warnings before sending"}
         </div>
-        {check.detail && (
-          <div className="text-[11.5px] text-[var(--ds-muted)] mt-0.5">
-            {check.detail}
-          </div>
-        )}
+        <div className="text-[12px] text-[var(--ds-muted)] mt-0.5 tabular-nums">
+          Letter health: {score}/100 · {BAND_LABEL[band]} · {passCount} of{" "}
+          {totalCount} checks passing
+          {failCount > 0 && ` · ${failCount} blocker${failCount === 1 ? "" : "s"}`}
+          {warnCount > 0 && ` · ${warnCount} warning${warnCount === 1 ? "" : "s"}`}
+        </div>
       </div>
-    </motion.li>
+      {hasUnresolved && (
+        <Button variant="outline" size="sm" onClick={onBack}>
+          <ArrowLeft className="size-3.5 mr-1" />
+          Back to Review
+        </Button>
+      )}
+    </motion.div>
   );
 }
 
-function ReviewLane({
-  icon,
-  title,
-  desc,
-  statLabel,
-  statValue,
-  timeLabel,
-  timeValue,
-  cta,
-  ctaIcon,
-  onClick,
-  primary,
-  footer,
+/**
+ * Counsel-review attestation gate. Only renders for high-risk letter
+ * types (tribunal-bound / legal-review-required per exportRequiresCounselGate).
+ * Blocks export until a counsel attestation has been attached in the editor.
+ */
+function CounselGate({
+  attested,
+  review,
+  onAttach,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  statLabel: string;
-  statValue: React.ReactNode;
-  timeLabel: string;
-  timeValue: React.ReactNode;
-  cta: string;
-  ctaIcon: React.ReactNode;
-  onClick: () => void;
-  primary?: boolean;
-  footer?: React.ReactNode;
+  attested: boolean;
+  review:
+    | { reviewedBy: string; reviewedOn: string; attestedAt: number }
+    | undefined;
+  onAttach: () => void;
 }) {
   return (
-    <div className="p-4 flex flex-col min-h-[220px]">
-      <div className="inline-flex items-center justify-center size-8 rounded-lg bg-[var(--ds-line-2)] text-[var(--ds-ink)] mb-2.5">
-        {icon}
-      </div>
-      <h3 className="text-[14px] font-semibold m-0 mb-1">{title}</h3>
-      <p className="text-[12.5px] text-[var(--ds-muted)] m-0 mb-3 leading-snug">{desc}</p>
-
-      <div className="flex gap-3 px-3 py-2 bg-[var(--ds-line-2)] rounded-md mb-3">
-        <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--ds-muted)] font-semibold">
-            {statLabel}
-          </span>
-          <span className="text-[12px] font-semibold tabular-nums">
-            {statValue}
-          </span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--ds-muted)] font-semibold">
-            {timeLabel}
-          </span>
-          <span className="text-[12px] font-semibold tabular-nums">
-            {timeValue}
-          </span>
-        </div>
-      </div>
-
-      <motion.button
-        type="button"
-        onClick={onClick}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.97 }}
-        transition={{ duration: 0.12 }}
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.26, delay: 0.04, ease: [0.32, 0.72, 0, 1] }}
+      className={cn(
+        "rounded-xl border px-4 py-3 mt-3 flex items-center gap-3",
+        attested
+          ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
+          : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
+      )}
+    >
+      <span
         className={cn(
-          "mt-auto inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition",
-          primary
-            ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
-            : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
+          "inline-flex items-center justify-center size-7 rounded-full shrink-0",
+          attested
+            ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
+            : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
         )}
       >
-        {cta}
-        {ctaIcon}
-      </motion.button>
-
-      {footer && <div className="mt-2">{footer}</div>}
-    </div>
+        <ShieldCheck className="size-4" strokeWidth={2.5} />
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
+          {attested
+            ? "Counsel review attached"
+            : "Counsel review required"}
+        </div>
+        <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
+          {attested && review
+            ? `Reviewed by ${review.reviewedBy} on ${review.reviewedOn}.`
+            : "This letter type must be reviewed by qualified employment counsel before export."}
+        </div>
+      </div>
+      {!attested && (
+        <Button variant="outline" size="sm" onClick={onAttach}>
+          Attach review
+        </Button>
+      )}
+    </motion.div>
   );
 }
 
-function ExportRow({
+function FormatTile({
   icon,
   title,
   desc,
   cta,
   busy,
   primary,
+  disabled,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -927,43 +526,47 @@ function ExportRow({
   cta: string;
   busy: boolean;
   primary?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
-    <li className="flex items-center gap-3.5 px-5 py-3">
-      <div className="inline-flex items-center justify-center size-9 rounded-lg bg-[var(--ds-line-2)] text-[var(--ds-ink)] shrink-0">
+    <div className="flex flex-col items-start gap-2 p-4">
+      <div className="inline-flex items-center justify-center size-8 rounded-lg bg-[var(--ds-line-2)] text-[var(--ds-ink)]">
         {icon}
       </div>
-      <div className="flex-1 min-w-0">
-        <h4 className="text-[13px] font-semibold m-0 mb-0.5">{title}</h4>
-        <p className="text-[12px] text-[var(--ds-muted)] m-0">{desc}</p>
+      <div className="flex-1">
+        <h4 className="text-[13px] font-semibold m-0 leading-tight">{title}</h4>
+        <p className="text-[11.5px] text-[var(--ds-muted)] m-0 mt-0.5 leading-snug">
+          {desc}
+        </p>
       </div>
       <motion.button
         type="button"
         onClick={onClick}
-        disabled={busy}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.96 }}
+        disabled={busy || disabled}
+        whileHover={{ scale: disabled ? 1 : 1.02 }}
+        whileTap={{ scale: disabled ? 1 : 0.97 }}
         transition={{ duration: 0.12 }}
         className={cn(
-          "shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[12px] font-semibold transition disabled:opacity-60 disabled:cursor-wait",
+          "mt-1 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed",
           primary
             ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
             : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
         )}
       >
         {busy ? (
-          <motion.div
+          <motion.span
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="inline-flex"
           >
             <FileDown className="size-3.5" />
-          </motion.div>
+          </motion.span>
         ) : (
           <FileDown className="size-3.5" />
         )}
         {busy ? "…" : cta}
       </motion.button>
-    </li>
+    </div>
   );
 }

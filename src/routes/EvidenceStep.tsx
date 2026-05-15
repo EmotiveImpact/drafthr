@@ -1,41 +1,51 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
-  FileText,
-  Image as ImageIcon,
-  Link2,
-  ListPlus,
-  Mail,
-  NotebookText,
+  Loader2,
+  PanelLeft,
+  PanelRight,
   Paperclip,
-  Quote,
-  Trash2,
-  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
+import type { EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { sectionLabels, buildExpectedEvidenceStatus } from "@/lib/evidence";
+import { buildExpectedEvidenceStatus } from "@/lib/evidence";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { EvidenceRequirementsList } from "@/components/editor/EvidenceRequirementsList";
-import { sanitizeLetterHtml } from "@/lib/sanitize";
-import { uid } from "@/lib/utils";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { EditableTitleBar } from "@/components/editor/EditableTitleBar";
+import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
+import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
+import { SectionEditor } from "@/components/editor/SectionEditor";
+import {
+  EvidencePanel,
+  appendEvidenceHtml,
+  buildEvidenceQuoteHtml,
+  buildEvidenceReferenceHtml,
+  findTargetSectionForItem,
+} from "@/components/editor/EvidencePanel";
+import { regenerateSection } from "@/lib/llm/draft";
 
-const KIND_OPTIONS: { value: EvidenceItem["kind"]; label: string }[] = [
-  { value: "email", label: "Email" },
-  { value: "calendar", label: "Calendar" },
-  { value: "document", label: "Document" },
-  { value: "screenshot", label: "Screenshot" },
-  { value: "note", label: "Note" },
-];
-const MAX_EVIDENCE_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_TEXT_PREVIEW_BYTES = 512 * 1024;
-
+/**
+ * Evidence step — wizard's middle stop on the employee track.
+ *
+ * Layout deliberately mirrors the Edit page so users don't feel a visual
+ * flinch crossing from Edit → Evidence:
+ *
+ *   - Header bar mirrors the Editor's compact 48px header (back button,
+ *     title, next CTA).
+ *   - Left rail: WizardSidebar with Sections + Required tabs (unchanged).
+ *   - Center: stacked SectionEditor cards — same component as the Edit
+ *     page, so prose styling, toolbar, and editing affordances are
+ *     identical. A banner above explains this is Evidence linking mode.
+ *   - Right rail: EvidencePanel — replaces the AI panel from Edit. Search,
+ *     kind filters, evidence cards, inline edit, and an Add-new form.
+ *
+ * The previous bespoke "Selected section" + "Add evidence" layout is gone;
+ * everything that used to live in those panels now lives in EvidencePanel.
+ */
 export function EvidenceStep() {
   const { draftId } = useParams<{ draftId: string }>();
   const [params] = useSearchParams();
@@ -43,36 +53,55 @@ export function EvidenceStep() {
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const setEvidence = useDraftStore((s) => s.setEvidence);
   const updateSection = useDraftStore((s) => s.updateSection);
+  const appendToSection = useDraftStore((s) => s.appendToSection);
+  const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
+  const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
 
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(
-    params.get("section")
+  // Which section card is currently "active" — drives:
+  //   - left rail's section highlight
+  //   - the right rail's "Reference / Quote / Link to active" buttons
+  //   - URL persistence so deep links land on the right section
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(
+    params.get("section"),
   );
-  const [kind, setKind] = useState<EvidenceItem["kind"]>("note");
-  const [filename, setFilename] = useState("");
-  const [content, setContent] = useState("");
-  const [includeVerbatim, setIncludeVerbatim] = useState(false);
-  const [sectionIds, setSectionIds] = useState<string[]>([]);
-  const [fileData, setFileData] = useState<{ dataUrl?: string; mimeType?: string }>({});
+
+  // Auto-open the Add form when arriving via ?action=add from the
+  // EvidenceDrawer's "Upload new" link.
+  const [autoOpenAdd, setAutoOpenAdd] = useState<boolean>(
+    params.get("action") === "add",
+  );
+
+  // Per-section regen streaming flag. We can't run a global generate-all
+  // from this step (the right rail isn't the AI panel), but a user CAN
+  // still hit the per-section Regenerate button on a SectionEditor card,
+  // so we wire up the same actions Editor.tsx uses.
+  const [streamingSectionId, setStreamingSectionId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const evidence = draft?.evidence ?? [];
-  const selectedSection = useMemo(
-    () => draft?.sections.find((section) => section.id === selectedSectionId) ?? defaultEvidenceSection(draft),
-    [draft, selectedSectionId]
-  );
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [showRail, setShowRail] = useState(false);
 
+  // Sync the URL section param into local state when it changes.
   useEffect(() => {
     if (!draft) return;
     const requested = params.get("section");
-    const exists = requested && draft.sections.some((section) => section.id === requested);
-    setSelectedSectionId(exists ? requested : defaultEvidenceSection(draft)?.id ?? null);
-  }, [draft, params]);
+    if (requested && draft.sections.some((section) => section.id === requested)) {
+      setActiveSectionId(requested);
+    } else if (!activeSectionId) {
+      setActiveSectionId(defaultEvidenceSectionId(draft.sections));
+    }
+    // We only want to react to incoming param changes / draft changes here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.id, params]);
 
+  // Clear autoOpenAdd once consumed — without this, every re-render would
+  // try to re-open the form even after the user closes it.
   useEffect(() => {
-    if (!selectedSection?.id) return;
-    if (sectionIds.length > 0 || filename.trim() || content.trim() || fileData.dataUrl) return;
-    setSectionIds([selectedSection.id]);
-  }, [content, fileData.dataUrl, filename, sectionIds.length, selectedSection?.id]);
+    if (autoOpenAdd) {
+      const handle = setTimeout(() => setAutoOpenAdd(false), 0);
+      return () => clearTimeout(handle);
+    }
+  }, [autoOpenAdd]);
 
   if (!draft || !draftId) {
     return (
@@ -85,182 +114,164 @@ export function EvidenceStep() {
     );
   }
 
-  const selectSection = (sectionId: string) => {
-    setSelectedSectionId(sectionId);
-    setSectionIds((current) => (current.length === 0 ? [sectionId] : current));
+  const onChangeEvidence = (items: EvidenceItem[]) => {
+    setEvidence(draft.id, items);
   };
 
-  const resetForm = () => {
-    setKind("note");
-    setFilename("");
-    setContent("");
-    setIncludeVerbatim(false);
-    setSectionIds(selectedSection?.id ? [selectedSection.id] : []);
-    setFileData({});
-  };
-
-  const addEvidence = () => {
-    const text = content.trim();
-    const name = filename.trim();
-    if (!text && !name && !fileData.dataUrl) return;
-
-    const item: EvidenceItem = {
-      id: uid("ev"),
-      kind,
-      filename: name || undefined,
-      content: text || (name ? `Uploaded file: ${name}` : "Evidence item"),
-      uploadedAt: Date.now(),
-      includeVerbatim,
-      sectionIds,
-      fileDataUrl: fileData.dataUrl,
-      mimeType: fileData.mimeType,
-    };
-    setEvidence(draft.id, [...evidence, item]);
-    setNotice(`Added ${item.filename || labelFor(item.kind)}.`);
-    resetForm();
-  };
-
-  const removeEvidence = (id: string) => {
-    setEvidence(draft.id, evidence.filter((item) => item.id !== id));
-  };
-
-  const toggleFormSection = (id: string) => {
-    setSectionIds((current) =>
-      current.includes(id) ? current.filter((candidate) => candidate !== id) : [...current, id]
-    );
-  };
-
-  const toggleItemSection = (item: EvidenceItem, sectionId: string) => {
-    const current = item.sectionIds ?? [];
-    const next = current.includes(sectionId)
-      ? current.filter((candidate) => candidate !== sectionId)
-      : [...current, sectionId];
-    setEvidence(
-      draft.id,
-      evidence.map((candidate) =>
-        candidate.id === item.id ? { ...candidate, sectionIds: next } : candidate
-      )
-    );
-  };
-
-  const insertReference = (item: EvidenceItem) => {
-    const target = targetSectionForItem(draft, item, selectedSection?.id);
+  const onInsertAtSection = (
+    item: EvidenceItem,
+    kind: "reference" | "quote",
+  ) => {
+    const target = findTargetSectionForItem(draft, item, activeSectionId);
     if (!target) return;
-    updateSection(
-      draft.id,
-      target.id,
-      appendHtml(
-        target.html,
-        `<p>I refer to ${escapeHtml(displayName(item))} as supporting evidence for the matters set out in this section.</p>`
-      )
+    const html =
+      kind === "quote"
+        ? buildEvidenceQuoteHtml(item)
+        : buildEvidenceReferenceHtml(item);
+    if (!html) return;
+    updateSection(draft.id, target.id, appendEvidenceHtml(target.html, html));
+    setActiveSectionId(target.id);
+    setNotice(
+      `${kind === "quote" ? "Quoted" : "Referenced"} ${item.filename || item.kind} in ${target.title}.`,
     );
-    setNotice(`Referenced ${displayName(item)} in ${target.title}.`);
   };
 
-  const insertQuote = (item: EvidenceItem) => {
-    const target = targetSectionForItem(draft, item, selectedSection?.id);
-    const quote = item.content.trim();
-    if (!target || !quote) return;
-    updateSection(
-      draft.id,
-      target.id,
-      appendHtml(
-        target.html,
-        `<p>I rely on the following excerpt from ${escapeHtml(displayName(item))}:</p><blockquote><p>${escapeHtml(truncate(quote, 700))}</p></blockquote>`
-      )
-    );
-    setNotice(`Quoted ${displayName(item)} in ${target.title}.`);
-  };
-
-  const insertAttachmentList = () => {
-    if (evidence.length === 0) return;
-    const target =
-      draft.sections.find((section) => section.sectionId === "evidence_attached") ??
-      draft.sections.find((section) => section.sectionId === "witnesses") ??
-      selectedSection;
-    if (!target) return;
-    updateSection(
-      draft.id,
-      target.id,
-      appendHtml(
-        target.html,
-        `<p><strong>Evidence and attachments</strong></p><ul>${evidence
-          .map((item) => `<li>${escapeHtml(displayName(item))}${item.sectionIds?.length ? ` (${escapeHtml(sectionLabels(draft, item.sectionIds))})` : ""}</li>`)
-          .join("")}</ul>`
-      )
-    );
-    setNotice(`Inserted attachment list in ${target.title}.`);
-  };
-
-  const onUpload = async (file: File | undefined) => {
-    if (!file) return;
-    if (file.size > MAX_EVIDENCE_FILE_BYTES) {
-      setNotice(`${file.name} is larger than 10 MB. Use a smaller file or summarize it as a note.`);
-      return;
-    }
-    setFilename(file.name);
-    setKind(file.type.startsWith("image/") ? "screenshot" : "document");
-    setFileData({ dataUrl: await readAsDataUrl(file), mimeType: file.type });
-    if (
-      file.size <= MAX_TEXT_PREVIEW_BYTES &&
-      (file.type.startsWith("text/") || file.name.endsWith(".txt") || file.name.endsWith(".md"))
-    ) {
-      setContent(await file.text());
-    } else if (!content.trim()) {
-      setContent(`Uploaded file: ${file.name}`);
+  const onRegenerateSection = async (section: Section, instruction?: string) => {
+    if (streamingSectionId) return;
+    setStreamingSectionId(section.id);
+    const abort = new AbortController();
+    try {
+      await regenerateSection(
+        draft,
+        section,
+        {
+          appendToSection,
+          setSectionStatus,
+          pushSectionVersion,
+          updateSection,
+        },
+        abort.signal,
+        {},
+        instruction,
+      );
+    } catch (err) {
+      console.error(err);
+      alert(
+        "Regeneration failed: " +
+          (err instanceof Error ? err.message : "unknown error"),
+      );
+    } finally {
+      setStreamingSectionId(null);
     }
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--ds-canvas)]">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] px-4">
-        <Button variant="ghost" size="icon-sm" onClick={() => nav(`/editor/${draft.id}`)} aria-label="Back to letter">
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Mirrors the Editor's compact 48px header so the wizard chrome
+       * doesn't shift when crossing Edit → Evidence. Brand mark + back
+       * to letters on the left; centred title; next CTA on the right. */}
+      <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center gap-3 px-3 sm:px-4">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => nav(`/editor/${draft.id}`)}
+          aria-label="Back to letter"
+        >
           <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-          Evidence & Attachments
-        </h1>
-        <span className="text-[12px] text-[var(--ds-muted)] truncate hidden md:inline">
-          · {draft.employee.legalName || draft.employer.legalName || "Draft"}
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Paperclip className="size-4 text-[var(--ds-muted)] shrink-0" />
+          <h1 className="m-0 truncate text-[13px] font-semibold text-[var(--ds-ink)]">
+            Evidence & Attachments
+          </h1>
+          <span className="hidden md:inline text-[12px] text-[var(--ds-muted)] truncate">
+            ·{" "}
+            {draft.employee.legalName || draft.employer.legalName || "Draft"}
+          </span>
+        </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/editor/${draft.id}`}>Back to letter</Link>
+          {/* Mobile rail toggles — mirror the Editor's mobile pattern. */}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="lg:hidden"
+            onClick={() => setShowSidebar((current) => !current)}
+            aria-label="Toggle sections rail"
+            title="Sections"
+          >
+            <PanelLeft className="size-4" />
           </Button>
-          <Button size="sm" onClick={() => nav(`/editor/${draft.id}/review`)}>
-            Next: Review <ArrowRight className="size-4" />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="lg:hidden"
+            onClick={() => setShowRail((current) => !current)}
+            aria-label="Toggle evidence rail"
+            title="Evidence"
+          >
+            <PanelRight className="size-4" />
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/editor/${draft.id}`}>
+              <span className="hidden sm:inline">Back to letter</span>
+              <ArrowLeft className="size-4 sm:hidden" />
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => nav(`/editor/${draft.id}/review`)}
+            aria-label="Next: Review"
+            className="px-2 sm:px-3"
+          >
+            <span className="hidden sm:inline">Review</span>
+            <ArrowRight className="size-4 sm:ml-1.5" />
           </Button>
         </div>
       </header>
 
+      {/* One-line notice strip — appears after a Reference / Quote insert.
+       * Click to dismiss. Same styling as the previous EvidenceStep. */}
       {notice && (
         <button
           type="button"
           onClick={() => setNotice(null)}
-          className="flex shrink-0 items-center justify-center gap-2 border-b border-[var(--ds-line)] bg-[var(--ds-green-bg)] px-4 py-2 text-[12px] text-[var(--ds-green-fg)]"
+          className="flex shrink-0 items-center justify-center gap-2 border-b border-[var(--ds-line)] bg-[var(--ds-green-bg)] px-4 py-1.5 text-[12px] text-[var(--ds-green-fg)] hover:brightness-95 transition"
         >
           <CheckCircle2 className="size-3.5" />
           {notice}
         </button>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
-        {/* Left rail: tabs — Sections | Required. Mirrors Edit's
-         * Sections | Rights pattern so the wizard rail has one
-         * mental model: "Sections" is always the first tab, the
-         * page-specific secondary tab is the second. */}
-        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
+      {/* Three-column shell — same proportions as Editor.tsx so the visual
+       * grid is identical. Below lg both rails become drawers (mobile
+       * pattern unchanged from the previous EvidenceStep). */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px] min-h-0 relative overflow-hidden">
+        {/* Left rail — Sections + Required tabs. Identical to the previous
+         * EvidenceStep's left rail (which already matched Edit). */}
+        <aside
+          className={
+            "border-r border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 flex flex-col overflow-hidden " +
+            (showSidebar
+              ? "absolute inset-y-0 left-0 z-40 w-[280px] shadow-xl lg:static lg:shadow-none lg:w-auto"
+              : "hidden lg:flex")
+          }
+        >
           <WizardSidebar
             draft={draft}
             current="evidence"
-            activeSectionId={selectedSection?.id}
-            onSelectSection={(id) => selectSection(id)}
+            activeSectionId={activeSectionId}
+            onSelectSection={(id) => {
+              setActiveSectionId(id);
+              setShowSidebar(false);
+              const el = document.querySelector(`[data-section-id="${id}"]`);
+              el?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
             secondaryTabLabel="Required"
             secondaryTabBadge={(() => {
               const status = buildExpectedEvidenceStatus(draft);
               if (status.length === 0) return undefined;
-              const ok = status.filter((s) => s.ok).length;
+              const ok = status.filter((row) => row.ok).length;
               return `${ok}/${status.length}`;
             })()}
             secondaryTab={
@@ -271,371 +282,126 @@ export function EvidenceStep() {
           />
         </aside>
 
-        <main className="min-h-0 overflow-auto p-4 sm:p-6 space-y-4">
-          <section className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-                  Selected section
+        {/* Center column — the letter view. Same stacked SectionEditor
+         * cards Edit uses. EditableTitleBar + InlineDisclaimer +
+         * DeadlineBanner at the top, then sections. A small banner just
+         * below the title reminds the user this is Evidence linking mode. */}
+        <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0 relative">
+          <div className="flex-1 overflow-auto min-h-0">
+            <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
+              <EditableTitleBar draft={draft} />
+              <InlineDisclaimer draft={draft} />
+              <DeadlineBanner draft={draft} />
+
+              {/* Mode banner — telegraphs that the right rail isn't the AI
+               * agent here, it's evidence. Identical visual weight to the
+               * InlineDisclaimer it sits beneath, so the page doesn't get
+               * top-heavy. */}
+              <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-amber-bg)]/40 px-3 py-2 text-[11.5px] leading-relaxed text-[var(--ds-amber-fg)] flex items-start gap-2">
+                <Paperclip className="size-3.5 mt-0.5 shrink-0" />
+                <span>
+                  <strong className="font-semibold">Evidence linking mode.</strong>{" "}
+                  Click any section to make it the active target, then use the
+                  Evidence panel on the right to add items, link them, or insert
+                  references / quotes at the cursor.
+                </span>
+              </div>
+
+              {draft.sections.map((section) => (
+                <SectionEditor
+                  key={section.id}
+                  draft={draft}
+                  section={section}
+                  isStreaming={streamingSectionId === section.id}
+                  active={activeSectionId === section.id}
+                  onFocus={() => setActiveSectionId(section.id)}
+                  onChange={(html) => updateSection(draft.id, section.id, html)}
+                  onRegenerate={(instr) => onRegenerateSection(section, instr)}
+                  onClear={() => updateSection(draft.id, section.id, "")}
+                  onShowHistory={() => {
+                    // History dialog lives on the Edit page; from here we
+                    // just jump back to Edit with the section selected.
+                    nav(`/editor/${draft.id}?section=${section.id}`);
+                  }}
+                  onOpenEvidenceBinder={() => {
+                    // Already on the Evidence step — just focus this section
+                    // and scroll its card into view.
+                    setActiveSectionId(section.id);
+                    const el = document.querySelector(
+                      `[data-section-id="${section.id}"]`,
+                    );
+                    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  // Comments / pending-change flows live on the Edit page —
+                  // from Evidence we just no-op. SectionEditor renders the
+                  // section content + a minimal toolbar either way.
+                  onAcceptPending={undefined}
+                  onRejectPending={undefined}
+                />
+              ))}
+              {streamingSectionId && (
+                <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
+                  <Loader2 className="size-3 animate-spin" />
+                  Regenerating section…
                 </p>
-                <h2 className="m-0 mt-1 truncate text-[17px] font-semibold text-[var(--ds-ink)]">
-                  {selectedSection?.title ?? "No section selected"}
-                </h2>
-              </div>
-              <Button variant="outline" size="sm" onClick={insertAttachmentList} disabled={evidence.length === 0}>
-                <ListPlus className="size-4" />
-                Insert attachment list
-              </Button>
+              )}
             </div>
-            {selectedSection?.html ? (
-              <div
-                className="mt-3 max-h-36 overflow-auto rounded-md bg-[var(--ds-canvas)] px-3 py-2 text-[12px] leading-relaxed text-[var(--ds-body)]"
-                dangerouslySetInnerHTML={{ __html: sanitizeLetterHtml(selectedSection.html) }}
-              />
-            ) : (
-              <p className="mt-3 rounded-md bg-[var(--ds-canvas)] px-3 py-2 text-[12px] text-[var(--ds-muted)]">
-                This section has no text yet.
-              </p>
-            )}
-          </section>
-
-          <section className="mt-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="m-0 text-[13px] font-semibold text-[var(--ds-ink)]">
-                Evidence items
-              </h2>
-              <span className="text-[11px] text-[var(--ds-muted)]">
-                Reference, quote, or list each item before review.
-              </span>
-            </div>
-
-            {evidence.length === 0 ? (
-              <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-8 text-center text-[13px] text-[var(--ds-muted)]">
-                No evidence yet. Add notes, files, screenshots, or email excerpts from the panel on the right.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {evidence.map((item) => (
-                  <EvidenceRow
-                    key={item.id}
-                    draft={draft}
-                    item={item}
-                    selectedSectionId={selectedSection?.id}
-                    onToggleSection={(sectionId) => toggleItemSection(item, sectionId)}
-                    onReference={() => insertReference(item)}
-                    onQuote={() => insertQuote(item)}
-                    onDelete={() => removeEvidence(item.id)}
-                    onUpdate={(patch) => {
-                      setEvidence(
-                        draft.id,
-                        evidence.map((e) => (e.id === item.id ? { ...e, ...patch } : e))
-                      );
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
+          </div>
         </main>
 
-        <aside className="min-h-0 overflow-auto border-t border-[var(--ds-line)] bg-[var(--ds-surface)] p-4 lg:border-l lg:border-t-0">
-          <section>
-            <div className="mb-3 flex items-center gap-2">
-              <Paperclip className="size-4 text-[var(--ds-muted)]" />
-              <h2 className="m-0 text-[13px] font-semibold text-[var(--ds-ink)]">
-                Add evidence
-              </h2>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[11px] text-[var(--ds-muted)]">
-                Type
-                <select
-                  value={kind}
-                  onChange={(event) => setKind(event.target.value as EvidenceItem["kind"])}
-                  className="mt-1 h-8 w-full rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12px] text-[var(--ds-ink)]"
-                >
-                  {KIND_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-[11px] text-[var(--ds-muted)]">
-                File or label
-                <input
-                  value={filename}
-                  onChange={(event) => setFilename(event.target.value)}
-                  placeholder="email.pdf"
-                  className="mt-1 h-8 w-full rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12px] text-[var(--ds-ink)]"
-                />
-              </label>
-            </div>
-
-            <label className="mt-2 flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-[var(--ds-line)] text-[12px] text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)]">
-              <Upload className="size-3.5" />
-              Upload file
-              <input type="file" className="hidden" onChange={(event) => void onUpload(event.target.files?.[0])} />
-            </label>
-
-            <textarea
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-              placeholder="Paste key text, quote, or write a short factual summary."
-              rows={7}
-              className="mt-2 w-full resize-y rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-2 text-[12px] leading-relaxed text-[var(--ds-ink)] focus:border-[var(--ds-ink)] focus:outline-none"
-            />
-
-            <div className="mt-2 rounded-md bg-[var(--ds-line-2)] p-2">
-              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--ds-muted)]">
-                <Link2 className="size-3" />
-                Link to sections
-              </div>
-              <div className="max-h-44 space-y-1 overflow-auto pr-1">
-                {draft.sections.map((section) => (
-                  <label
-                    key={section.id}
-                    className="flex items-center gap-2 text-[11px] text-[var(--ds-body)]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={sectionIds.includes(section.id)}
-                      onChange={() => toggleFormSection(section.id)}
-                    />
-                    <span className="truncate">{section.title}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <label className="mt-2 flex items-start gap-2 text-[11px] leading-relaxed text-[var(--ds-muted)]">
-              <input
-                type="checkbox"
-                checked={includeVerbatim}
-                onChange={(event) => setIncludeVerbatim(event.target.checked)}
-                className="mt-0.5"
-              />
-              Include exact content in AI prompts when the wording matters.
-            </label>
-
-            <Button
-              className="mt-3 w-full"
-              onClick={addEvidence}
-              disabled={!content.trim() && !filename.trim() && !fileData.dataUrl}
-            >
-              Add evidence
-            </Button>
-          </section>
+        {/* Right rail — Evidence management. Replaces the AI agent panel
+         * from Edit. Permanent on lg:+, sliding drawer on mobile. */}
+        <aside
+          className={
+            "border-l border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 flex flex-col overflow-hidden " +
+            (showRail
+              ? "fixed inset-y-0 right-0 z-40 w-[min(420px,90vw)] shadow-[-12px_0_32px_rgba(0,0,0,0.18)] lg:static lg:shadow-none lg:w-auto"
+              : "hidden lg:flex")
+          }
+        >
+          <EvidencePanel
+            draft={draft}
+            activeSectionId={activeSectionId}
+            onChangeEvidence={onChangeEvidence}
+            onInsertAtSection={onInsertAtSection}
+            autoOpenAdd={autoOpenAdd}
+          />
         </aside>
+
+        {/* Mobile scrim — fades over the canvas when either rail is open
+         * on small viewports. Mirrors the Editor's pattern. */}
+        <button
+          type="button"
+          className={
+            "lg:hidden fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 motion-reduce:transition-none " +
+            (showSidebar || showRail
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none")
+          }
+          aria-label="Close panel"
+          aria-hidden={!(showSidebar || showRail) || undefined}
+          tabIndex={!(showSidebar || showRail) ? -1 : undefined}
+          onClick={() => {
+            setShowSidebar(false);
+            setShowRail(false);
+          }}
+        />
       </div>
     </div>
   );
 }
 
-function EvidenceRow({
-  draft,
-  item,
-  selectedSectionId,
-  onToggleSection,
-  onReference,
-  onQuote,
-  onDelete,
-  onUpdate,
-}: {
-  draft: Draft;
-  item: EvidenceItem;
-  selectedSectionId?: string;
-  onToggleSection: (sectionId: string) => void;
-  onReference: () => void;
-  onQuote: () => void;
-  onDelete: () => void;
-  onUpdate: (patch: Partial<EvidenceItem>) => void;
-}) {
-  const Icon = iconFor(item.kind);
-  const linked = sectionLabels(draft, item.sectionIds);
-  const selectedLinked = selectedSectionId ? item.sectionIds?.includes(selectedSectionId) : false;
-
-  return (
-    <article className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-      <div className="flex items-start gap-3">
-        <Icon className="mt-0.5 size-4 shrink-0 text-[var(--ds-muted)]" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className="m-0 truncate text-[13px] font-semibold text-[var(--ds-ink)]">
-                {displayName(item)}
-              </h3>
-              <p className="m-0 mt-0.5 text-[11px] text-[var(--ds-muted)]">
-                {labelFor(item.kind)} · {linked || "General evidence"}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={onDelete}
-              className="grid size-7 shrink-0 place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
-              aria-label="Delete evidence"
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          </div>
-
-          <p className="mt-2 line-clamp-3 text-[12px] leading-relaxed text-[var(--ds-body)]">
-            {item.parsedSummary || item.content}
-          </p>
-
-          {isSafeImageDataUrl(item.fileDataUrl) && item.mimeType?.startsWith("image/") && (
-            <img
-              src={item.fileDataUrl}
-              alt=""
-              className="mt-2 max-h-40 w-full rounded-md border border-[var(--ds-line)] object-cover"
-            />
-          )}
-
-          {/* Display-mode chip strip — figure / inline / attached / pack-only. */}
-          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--ds-muted)] mr-1">
-              Show as
-            </span>
-            {(["figure", "inline", "attached", "pack_only"] as const).map((mode) => {
-              const active = (item.displayMode ?? "figure") === mode;
-              const labels: Record<typeof mode, string> = {
-                figure: "Fig (numbered)",
-                inline: "Inline at cursor",
-                attached: "Attachment",
-                pack_only: "Pack only",
-              };
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => onUpdate({ displayMode: mode })}
-                  className={
-                    "text-[10.5px] px-2 py-0.5 rounded-full border transition " +
-                    (active
-                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                      : "bg-white text-[var(--ds-muted)] border-[var(--ds-line)] hover:border-[var(--ds-subtle)]")
-                  }
-                >
-                  {labels[mode]}
-                </button>
-              );
-            })}
-            {(item.displayMode ?? "figure") === "figure" && (
-              <input
-                type="text"
-                value={item.figureLabel ?? ""}
-                placeholder="auto: Fig N"
-                onChange={(e) => onUpdate({ figureLabel: e.target.value })}
-                title="Custom label (e.g. 'Exhibit A'). Leave blank for auto-numbered Fig N."
-                className="ml-1 text-[11px] px-2 py-0.5 rounded-md border border-[var(--ds-line)] bg-white outline-none focus:border-[var(--ds-ink)] w-[110px]"
-              />
-            )}
-          </div>
-
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Button size="xs" variant="outline" onClick={onReference}>
-              <Link2 className="size-3" />
-              Reference in section
-            </Button>
-            <Button size="xs" variant="outline" onClick={onQuote} disabled={!item.content.trim()}>
-              <Quote className="size-3" />
-              Quote in section
-            </Button>
-            {selectedSectionId && (
-              <Button size="xs" variant={selectedLinked ? "secondary" : "outline"} onClick={() => onToggleSection(selectedSectionId)}>
-                {selectedLinked ? "Linked here" : "Link to selected"}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-
-function targetSectionForItem(
-  draft: Draft,
-  item: EvidenceItem,
-  selectedSectionId: string | undefined
-): Section | undefined {
-  if (selectedSectionId) return draft.sections.find((section) => section.id === selectedSectionId);
-  const firstLinked = item.sectionIds?.[0];
-  return firstLinked
-    ? draft.sections.find((section) => section.id === firstLinked)
-    : draft.sections[0];
-}
-
-function defaultEvidenceSection(draft: Draft | undefined): Section | undefined {
-  if (!draft) return undefined;
-  return (
-    draft.sections.find((section) => section.sectionId === "chronology") ??
-    draft.sections.find((section) => section.sectionId === "witnesses") ??
-    draft.sections.find((section) => section.sectionId === "body") ??
-    draft.sections.find((section) => section.sectionId === "opening") ??
-    draft.sections[0]
-  );
-}
-
-function appendHtml(current: string, next: string): string {
-  return `${current.trim()}${current.trim() ? "\n" : ""}${next}`;
-}
-
-function displayName(item: EvidenceItem): string {
-  return item.filename || labelFor(item.kind);
-}
-
-function iconFor(kind: EvidenceItem["kind"]) {
-  switch (kind) {
-    case "email":
-      return Mail;
-    case "calendar":
-      return CalendarDays;
-    case "document":
-      return FileText;
-    case "screenshot":
-      return ImageIcon;
-    default:
-      return NotebookText;
+/**
+ * Pick the most useful default-active section when the user lands on the
+ * Evidence step without a ?section= hint. Chronology + witnesses are the
+ * most evidence-heavy sections in practice, so we bias toward them.
+ */
+function defaultEvidenceSectionId(sections: Section[]): string | null {
+  if (sections.length === 0) return null;
+  const preferred = ["chronology", "witnesses", "body", "opening"] as const;
+  for (const sectionId of preferred) {
+    const match = sections.find((section) => section.sectionId === sectionId);
+    if (match) return match.id;
   }
-}
-
-function labelFor(kind: EvidenceItem["kind"]): string {
-  return KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind;
-}
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-function truncate(value: string, max: number): string {
-  const compact = value.replace(/\s+/g, " ").trim();
-  if (compact.length <= max) return compact;
-  return `${compact.slice(0, max - 1).trim()}...`;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case "&":
-        return "&amp;";
-      case "<":
-        return "&lt;";
-      case ">":
-        return "&gt;";
-      case '"':
-        return "&quot;";
-      case "'":
-        return "&#39;";
-      default:
-        return char;
-    }
-  });
+  return sections[0].id;
 }
