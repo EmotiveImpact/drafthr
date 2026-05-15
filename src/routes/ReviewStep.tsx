@@ -67,8 +67,10 @@ export function ReviewStep() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      {/* Breadcrumb header. Back-link points to Edit now that Evidence
-       * has left the wizard (it's a drawer in Edit). */}
+      {/* Header. Brand + breadcrumb text on the left; step navigation
+       * buttons on the right (Edit ↔ Finalise). The old ghost ← Edit
+       * back-link was removed — the right-side "Edit" button is the
+       * single, explicit back-to-Edit action, paired with Finalise. */}
       <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
         <Link
           to="/"
@@ -78,21 +80,11 @@ export function ReviewStep() {
           <BrandMark size={36} />
           <Wordmark size={16} className="hidden sm:inline" />
         </Link>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => nav(`/editor/${draft.id}`)}
-          className="text-[12px]"
-        >
-          <ArrowLeft className="size-3.5 mr-1.5" />
-          Edit
-        </Button>
-        <span className="text-[var(--ds-subtle)]">/</span>
         <span className="text-[13px] font-medium text-[var(--ds-ink)]">Review</span>
         <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
           · {meta.title}
         </span>
-        {/* Right cluster: Back (paired action) + Finalise forward action. */}
+        {/* Right cluster: Edit (back to previous step) + Finalise (forward). */}
         <div className="ml-auto flex items-center gap-2">
           <Button
             variant="outline"
@@ -100,7 +92,7 @@ export function ReviewStep() {
             onClick={() => nav(`/editor/${draft.id}`)}
           >
             <ArrowLeft className="size-3.5 mr-1.5" />
-            Back
+            Edit
           </Button>
           <Button
             size="sm"
