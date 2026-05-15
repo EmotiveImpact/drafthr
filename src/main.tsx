@@ -8,6 +8,8 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { initSentry } from "@/lib/observability/sentry";
 import { bootstrapTheme } from "@/lib/theme";
 import { getFlag, setFlag } from "@/lib/flags";
+import "@fontsource/playfair-display/400.css";
+import "@fontsource/playfair-display/600.css";
 import "./styles/globals.css";
 // Radix Themes CSS must come AFTER ./styles/globals.css so Tailwind's preflight
 // doesn't strip Radix component backgrounds. (See RADIX-THEMES-MIGRATION.md.)

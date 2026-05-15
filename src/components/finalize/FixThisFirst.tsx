@@ -80,14 +80,13 @@ function FixRow({
         delay: 0.15 + index * 0.06,
         ease: [0.32, 0.72, 0, 1],
       }}
-      className="flex flex-col gap-2 px-4 sm:px-5 py-3"
+      className="flex items-start gap-3 px-4 sm:px-5 py-3"
     >
-      {/* Severity icon + content — stays in one row even on mobile so the
-       * row reads "severity: what's wrong" without the icon orphaning above. */}
-      <div className="flex items-start sm:items-center gap-3 flex-1 min-w-0 w-full">
+      {/* Severity icon + content — title, chip, detail — fills remaining space. */}
+      <div className="flex items-start gap-3 flex-1 min-w-0">
         <span
           className={cn(
-            "inline-flex items-center justify-center size-7 rounded-md shrink-0 mt-0.5 sm:mt-0",
+            "inline-flex items-center justify-center size-7 rounded-md shrink-0 mt-0.5",
             iconCls,
           )}
         >
@@ -111,9 +110,8 @@ function FixRow({
         </div>
       </div>
 
-      {/* Impact + CTA — pair the +N gain with the action so the value
-       * proposition is one visual unit, not two scattered bits. */}
-      <div className="flex items-center gap-2 ml-10">
+      {/* Impact pill + CTA — right-aligned in the same horizontal row, never shrinks. */}
+      <div className="flex items-center gap-2 shrink-0 mt-0.5">
         {fix.impact > 0 && (
           <span
             className="inline-flex items-center h-7 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[11px] font-bold tabular-nums"
