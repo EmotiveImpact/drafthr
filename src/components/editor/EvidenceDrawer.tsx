@@ -310,14 +310,14 @@ export function EvidenceDrawer({
         type="button"
         onClick={() => onPinnedChange(false)}
         aria-label="Unpin evidence — return AI agent rail"
-        title="Unpin — return to floating drawer (AI agent rail comes back)"
+        title="Unpin — return both Evidence and Ask AI to pills"
         className="h-6 px-2 inline-flex items-center gap-1 rounded-md text-[11px] font-semibold text-[var(--ds-amber-fg)] hover:bg-[var(--ds-amber-bg)] transition"
       >
         <Undo2 className="size-3" />
         Unpin
       </button>
       <span className="text-[11px] text-[var(--ds-muted)]">
-        Evidence rail · AI agent hidden while pinned
+        Evidence pinned · Ask AI is a pill at bottom-right
       </span>
     </div>
   ) : null;
