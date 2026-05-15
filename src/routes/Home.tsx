@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import { formatDistanceToNowStrict } from "date-fns";
 import {
   PlusCircle,
   FileText,
@@ -14,14 +16,25 @@ import {
   CalendarClock,
   ArrowRight,
   AlertCircle,
+  Clock,
+  TrendingUp,
+  Activity,
 } from "lucide-react";
-import type { LetterTypeId, Mode } from "@/lib/letters/types";
+import type {
+  Draft,
+  LetterTypeId,
+  Matter,
+  Mode,
+  RiskBand,
+  Task,
+} from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { EmptyState } from "@/components/ds";
+import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
 
 /* ============================================================================
  * Home — the landing dashboard.
@@ -49,6 +62,609 @@ import { EmptyState } from "@/components/ds";
  * ==========================================================================*/
 
 export function Home({ mode }: { mode: Mode }) {
+  if (mode === "employer") {
+    return <HrDashboard />;
+  }
+  return <EmployeeHome mode={mode} />;
+}
+
+/* ============================================================================
+ * HR Dashboard — portfolio view for HR/Management mode
+ * ==========================================================================*/
+
+function HrDashboard() {
+  const nav = useNavigate();
+  const drafts = useDraftStore((s) => s.drafts);
+  const matters = useDraftStore((s) => s.matters);
+  const tasks = useDraftStore((s) => s.tasks);
+  const profile = useProfileStore((s) => s.profile);
+
+  const prefix = "/hr";
+  const firstName =
+    profile.personal.preferredName ||
+    profile.personal.legalName?.split(/\s+/)[0] ||
+    "";
+
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    const slot = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+    return firstName ? `${slot}, ${firstName}` : `${slot}, there`;
+  }, [firstName]);
+
+  const activeMatters = useMemo(
+    () =>
+      Object.values(matters).filter(
+        (m) => m.mode === "employer" && m.status === "active"
+      ),
+    [matters]
+  );
+
+  // TODAY: open tasks due in next 7 days + matters with nextAction
+  const todayItems = useMemo(() => deriveTodayItems(tasks, matters), [tasks, matters]);
+
+  // RISK: exposure + heatmap counts
+  const riskSummary = useMemo(() => deriveRiskSummary(activeMatters), [activeMatters]);
+
+  // COMPLIANCE: roll up health across HR-mode drafts
+  const complianceSummary = useMemo(() => deriveComplianceSummary(drafts, "employer"), [drafts]);
+
+  // RECENT ACTIVITY: flatten draft timelines, sort, take 5
+  const recent = useMemo(() => deriveRecentActivity(drafts, "employer"), [drafts]);
+
+  const fade = {
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.35, ease: [0.32, 0.72, 0, 1] as const },
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
+        <span>HR / Management</span>
+        <span className="opacity-40">/</span>
+        <span className="text-[var(--ds-ink)] font-medium">Dashboard</span>
+      </div>
+
+      {/* Greeting */}
+      <motion.header {...fade} className="mb-6">
+        <h1
+          className="m-0 text-[var(--ds-ink)] font-semibold"
+          style={{
+            fontSize: "clamp(26px, 4vw, 34px)",
+            lineHeight: 1.15,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {greeting}.
+        </h1>
+        <p className="m-0 mt-1.5 text-[14.5px] text-[var(--ds-body)]">
+          You own{" "}
+          <span className="font-semibold text-[var(--ds-ink)]">
+            {activeMatters.length} active {activeMatters.length === 1 ? "matter" : "matters"}
+          </span>
+          {todayItems.length > 0 ? (
+            <>
+              {" · "}
+              <span className="font-semibold text-[var(--ds-amber-fg)]">
+                {todayItems.length} need{todayItems.length === 1 ? "s" : ""} you today
+              </span>
+            </>
+          ) : null}
+        </p>
+      </motion.header>
+
+      {/* Three-panel row */}
+      <motion.div
+        {...fade}
+        transition={{ ...fade.transition, delay: 0.06 }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-7"
+      >
+        <TodayCard items={todayItems} prefix={prefix} />
+        <RiskRegister summary={riskSummary} prefix={prefix} />
+        <ComplianceHealth summary={complianceSummary} prefix={prefix} />
+      </motion.div>
+
+      {/* Recent activity */}
+      <motion.section
+        {...fade}
+        transition={{ ...fade.transition, delay: 0.12 }}
+        className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden mb-6"
+      >
+        <header className="flex items-center justify-between px-[18px] py-3.5 border-b border-[var(--ds-line-2)]">
+          <h3 className="m-0 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-2">
+            <Activity className="size-3.5" />
+            Recent activity
+          </h3>
+        </header>
+        {recent.length === 0 ? (
+          <div className="px-[18px] py-5 text-[13px] text-[var(--ds-muted)]">
+            Activity will appear here as you draft, edit, and export letters.
+          </div>
+        ) : (
+          <ul className="m-0 p-0 list-none">
+            {recent.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0"
+              >
+                <span
+                  aria-hidden
+                  className="w-1.5 h-1.5 rounded-full bg-[var(--ds-subtle)] shrink-0"
+                />
+                <span className="text-[13px] text-[var(--ds-body)] flex-1 min-w-0 truncate">
+                  {r.label}
+                </span>
+                <span className="text-[11px] text-[var(--ds-muted)] tabular-nums shrink-0">
+                  {r.ago}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </motion.section>
+
+      {/* Footer CTAs */}
+      <motion.div
+        {...fade}
+        transition={{ ...fade.transition, delay: 0.18 }}
+        className="flex flex-wrap items-center gap-2.5 mb-2"
+      >
+        <button
+          type="button"
+          onClick={() => nav(`${prefix}/matters`)}
+          className="inline-flex items-center gap-2 px-[16px] py-[10px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px] shadow-sm hover:-translate-y-px hover:shadow-md transition"
+        >
+          <PlusCircle className="size-4" />
+          New matter
+        </button>
+        <Link
+          to={`${prefix}/new`}
+          className="inline-flex items-center gap-2 px-[16px] py-[10px] rounded-[9px] bg-transparent text-[var(--ds-ink)] font-semibold text-[13.5px] border border-[var(--ds-line)] hover:bg-white hover:border-[var(--ds-subtle)] transition"
+        >
+          Browse templates
+          <ArrowRight className="size-3.5 opacity-70" />
+        </Link>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ─── Dashboard panels ─────────────────────────────────────────────────── */
+
+type TodayItem = {
+  id: string;
+  label: string;
+  matterName?: string;
+  matterId?: string;
+  dueLabel: string;
+  urgent: boolean;
+  kind: "task" | "next-action";
+};
+
+function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
+  const nav = useNavigate();
+  return (
+    <DashboardPanel
+      icon={Clock}
+      title="Today"
+      badge={items.length > 0 ? String(items.length) : undefined}
+    >
+      {items.length === 0 ? (
+        <PanelEmpty
+          body="Nothing due today."
+          ctaLabel="Start your first letter"
+          onClick={() => nav(`${prefix}/new`)}
+        />
+      ) : (
+        <>
+          <ul className="m-0 p-0 list-none flex-1">
+            {items.slice(0, 5).map((it) => (
+              <li
+                key={it.id}
+                className="flex items-start gap-2.5 py-2 border-b border-[var(--ds-line-2)] last:border-b-0"
+              >
+                <AlertCircle
+                  className={`size-3.5 mt-0.5 shrink-0 ${
+                    it.urgent ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
+                  }`}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold text-[var(--ds-ink)] leading-snug truncate">
+                    {it.label}
+                  </div>
+                  <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
+                    {it.dueLabel}
+                    {it.matterName ? ` · ${it.matterName}` : ""}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <PanelFooterButton
+            onClick={() => {
+              alert("Today view coming next wave");
+            }}
+            label="See all tasks"
+          />
+        </>
+      )}
+    </DashboardPanel>
+  );
+}
+
+type RiskSummary = {
+  totalExposure: number;
+  matterCount: number;
+  bands: Record<RiskBand, number>;
+  hasAnyExposure: boolean;
+};
+
+function RiskRegister({ summary, prefix }: { summary: RiskSummary; prefix: string }) {
+  const nav = useNavigate();
+  const bands: RiskBand[] = ["low", "moderate", "high", "critical"];
+  return (
+    <DashboardPanel icon={TrendingUp} title="Risk">
+      {!summary.hasAnyExposure ? (
+        <PanelEmpty
+          body="Risk register populates as you tag exposure on matters."
+          ctaLabel="Browse templates"
+          onClick={() => nav(`${prefix}/new`)}
+        />
+      ) : (
+        <>
+          <div className="flex-1">
+            <div
+              className="text-[var(--ds-ink)] font-semibold tabular-nums"
+              style={{
+                fontSize: "clamp(22px, 3vw, 28px)",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.1,
+              }}
+            >
+              {formatGBP(summary.totalExposure)}
+            </div>
+            <div className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-snug">
+              tribunal-style exposure across {summary.matterCount} active{" "}
+              {summary.matterCount === 1 ? "case" : "cases"}
+            </div>
+
+            {/* Tiny heatmap */}
+            <div className="mt-4 grid grid-cols-4 gap-1.5" role="img" aria-label="Risk band heatmap">
+              {bands.map((b) => {
+                const count = summary.bands[b];
+                const tone = bandTone(b);
+                return (
+                  <div
+                    key={b}
+                    className="rounded-[6px] px-1.5 py-1.5 text-center"
+                    style={{ background: tone.bg }}
+                  >
+                    <div
+                      className="text-[13px] font-semibold tabular-nums leading-none"
+                      style={{ color: tone.fg }}
+                    >
+                      {count}
+                    </div>
+                    <div
+                      className="text-[9px] uppercase tracking-wider mt-1"
+                      style={{ color: tone.fg, opacity: 0.85 }}
+                    >
+                      {b}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <PanelFooterButton
+            onClick={() => nav(`${prefix}/matters`)}
+            label="Risk register"
+          />
+        </>
+      )}
+    </DashboardPanel>
+  );
+}
+
+type ComplianceSummary = {
+  totalDrafts: number;
+  strongDrafts: number;
+  needsReview: number;
+  percent: number;
+};
+
+function ComplianceHealth({
+  summary,
+  prefix,
+}: {
+  summary: ComplianceSummary;
+  prefix: string;
+}) {
+  const nav = useNavigate();
+  return (
+    <DashboardPanel icon={ShieldCheck} title="Compliance">
+      {summary.totalDrafts === 0 ? (
+        <PanelEmpty
+          body="No letters drafted yet."
+          ctaLabel="Browse templates"
+          onClick={() => nav(`${prefix}/new`)}
+        />
+      ) : (
+        <>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-1.5">
+              <div
+                className="text-[var(--ds-ink)] font-semibold tabular-nums"
+                style={{
+                  fontSize: "clamp(22px, 3vw, 28px)",
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.1,
+                }}
+              >
+                {summary.percent}%
+              </div>
+              <TrendingUp className="size-3.5 text-[var(--ds-green-fg)]" />
+            </div>
+            <div className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-snug">
+              {summary.strongDrafts} of {summary.totalDrafts} clearing all health checks
+            </div>
+
+            {summary.needsReview > 0 && (
+              <div className="mt-4 text-[12px] text-[var(--ds-body)] leading-snug bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] rounded-[8px] px-2.5 py-2 font-medium">
+                {summary.needsReview} letter{summary.needsReview === 1 ? "" : "s"} need counsel
+                review before send
+              </div>
+            )}
+          </div>
+          <PanelFooterButton
+            onClick={() => nav("/activity")}
+            label="Audit log"
+          />
+        </>
+      )}
+    </DashboardPanel>
+  );
+}
+
+/* ─── Panel primitives ─────────────────────────────────────────────────── */
+
+function DashboardPanel({
+  icon: Icon,
+  title,
+  badge,
+  children,
+}: {
+  icon: typeof Clock;
+  title: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] p-[18px] flex flex-col min-h-[200px]">
+      <header className="flex items-center justify-between mb-3">
+        <h3 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5">
+          <Icon className="size-3.5" />
+          {title}
+        </h3>
+        {badge ? (
+          <span className="text-[11px] text-[var(--ds-muted)] font-semibold tabular-nums bg-[var(--ds-surface-2)] px-2 py-0.5 rounded-full">
+            {badge}
+          </span>
+        ) : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function PanelEmpty({
+  body,
+  ctaLabel,
+  onClick,
+}: {
+  body: string;
+  ctaLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col justify-center">
+      <p className="m-0 text-[13px] text-[var(--ds-muted)] leading-snug">{body}</p>
+      <button
+        type="button"
+        onClick={onClick}
+        className="mt-3 self-start inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-ink)] hover:underline"
+      >
+        {ctaLabel}
+        <ArrowRight className="size-3" />
+      </button>
+    </div>
+  );
+}
+
+function PanelFooterButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-3 self-start inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+    >
+      {label}
+      <ArrowRight className="size-3" />
+    </button>
+  );
+}
+
+/* ─── Dashboard data derivation ────────────────────────────────────────── */
+
+function deriveTodayItems(
+  tasks: Record<string, Task>,
+  matters: Record<string, Matter>
+): TodayItem[] {
+  const now = Date.now();
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+  const taskItems: TodayItem[] = Object.values(tasks)
+    .filter((t) => t.status === "open")
+    .filter((t) => {
+      if (!t.dueISO) return false;
+      const due = parseISODateTime(t.dueISO);
+      if (due == null) return false;
+      return due - now <= sevenDays;
+    })
+    .map((t) => {
+      const matter = matters[t.matterId];
+      const days = t.dueISO ? daysUntilDateOnly(t.dueISO) : null;
+      const urgent = days != null && days <= 2;
+      return {
+        id: `task:${t.id}`,
+        label: t.label,
+        matterName: matter?.name,
+        matterId: matter?.id,
+        dueLabel:
+          days == null
+            ? "due soon"
+            : days < 0
+            ? `${Math.abs(days)}d overdue`
+            : days === 0
+            ? "due today"
+            : `due in ${days}d`,
+        urgent,
+        kind: "task" as const,
+      };
+    })
+    .sort((a, b) => a.dueLabel.localeCompare(b.dueLabel));
+
+  const matterNextActions: TodayItem[] = Object.values(matters)
+    .filter((m) => m.mode === "employer" && m.status === "active" && m.nextAction)
+    .map((m) => ({
+      id: `matter:${m.id}`,
+      label: m.nextAction!,
+      matterName: m.name,
+      matterId: m.id,
+      dueLabel: "next action",
+      urgent: m.riskBand === "high" || m.riskBand === "critical",
+      kind: "next-action" as const,
+    }));
+
+  return [...taskItems, ...matterNextActions];
+}
+
+function deriveRiskSummary(activeMatters: Matter[]): RiskSummary {
+  const bands: Record<RiskBand, number> = { low: 0, moderate: 0, high: 0, critical: 0 };
+  let totalExposure = 0;
+  let hasAnyExposure = false;
+  for (const m of activeMatters) {
+    if (typeof m.exposureGBP === "number" && m.exposureGBP > 0) {
+      totalExposure += m.exposureGBP;
+      hasAnyExposure = true;
+    }
+    if (m.riskBand) bands[m.riskBand] += 1;
+  }
+  return {
+    totalExposure,
+    matterCount: activeMatters.length,
+    bands,
+    hasAnyExposure,
+  };
+}
+
+function deriveComplianceSummary(
+  drafts: Record<string, Draft>,
+  mode: Mode
+): ComplianceSummary {
+  const all = Object.values(drafts).filter((d) => d.mode === mode);
+  if (all.length === 0) {
+    return { totalDrafts: 0, strongDrafts: 0, needsReview: 0, percent: 0 };
+  }
+  let strong = 0;
+  let needsReview = 0;
+  for (const d of all) {
+    try {
+      const checks = runHealthChecks(d);
+      const score = computeHealthScore(checks);
+      if (score.band === "strong" && score.failCount === 0) {
+        strong += 1;
+      } else if (score.failCount > 0 || score.band === "weak") {
+        needsReview += 1;
+      }
+    } catch {
+      // skip drafts that can't be scored yet
+    }
+  }
+  return {
+    totalDrafts: all.length,
+    strongDrafts: strong,
+    needsReview,
+    percent: Math.round((strong / all.length) * 100),
+  };
+}
+
+type RecentItem = { id: string; label: string; ago: string; ts: number };
+
+function deriveRecentActivity(
+  drafts: Record<string, Draft>,
+  mode: Mode
+): RecentItem[] {
+  const rows: RecentItem[] = [];
+  for (const d of Object.values(drafts)) {
+    if (d.mode !== mode) continue;
+    const meta = safeMeta(d.letterType);
+    const title = meta?.shortTitle ?? d.letterType;
+    for (const ev of d.timeline ?? []) {
+      rows.push({
+        id: `${d.id}:${ev.id}`,
+        label: `${ev.title} · ${title}`,
+        ts: ev.createdAt,
+        ago: formatDistanceToNowStrict(ev.createdAt, { addSuffix: true }),
+      });
+    }
+  }
+  rows.sort((a, b) => b.ts - a.ts);
+  return rows.slice(0, 5);
+}
+
+function parseISODateTime(iso: string): number | null {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+}
+
+function formatGBP(n: number): string {
+  try {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "GBP",
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    return `£${Math.round(n).toLocaleString()}`;
+  }
+}
+
+function bandTone(band: RiskBand): { bg: string; fg: string } {
+  switch (band) {
+    case "critical":
+      return { bg: "var(--ds-red-bg)", fg: "var(--ds-red-fg)" };
+    case "high":
+      return { bg: "var(--ds-amber-bg)", fg: "var(--ds-amber-fg)" };
+    case "moderate":
+      return { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" };
+    case "low":
+    default:
+      return { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" };
+  }
+}
+
+/* ============================================================================
+ * Employee-mode Home — preserved from prior implementation
+ * ==========================================================================*/
+
+function EmployeeHome({ mode }: { mode: Mode }) {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
@@ -66,7 +682,7 @@ export function Home({ mode }: { mode: Mode }) {
   const catalog = letterCatalogByMode(mode);
   const flagship = catalog.filter((l) => l.flagshipV1);
 
-  const prefix = mode === "employer" ? "/hr" : "/me";
+  const prefix = "/me";
   const name =
     profile.personal.preferredName ||
     profile.personal.legalName?.split(/\s+/)[0] ||
@@ -87,7 +703,7 @@ export function Home({ mode }: { mode: Mode }) {
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       {/* Breadcrumb */}
       <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
-        <span>{mode === "employer" ? "HR / Management" : "Employee workspace"}</span>
+        <span>Employee workspace</span>
         <span className="opacity-40">/</span>
         <span className="text-[var(--ds-ink)] font-medium">Home</span>
       </div>
