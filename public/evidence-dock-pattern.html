@@ -115,6 +115,9 @@ svg{display:block}
 .dock-pill .ct{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;background:var(--amber);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px}
 .dock-pill.messaging{background:var(--ink);color:#fff}
 .dock-pill.messaging .ico{color:#fff}
+.dock-pill.ai{background:var(--violet-lt);border-color:#ddd6fe;color:#5b21b6}
+.dock-pill.ai .ico{color:var(--violet)}
+.dock-pill.ai:hover{background:#ede9fe}
 
 /* ════════════════════ DOCKED DRAWER (expanded) ════════════════════ */
 .dock-drawer{position:absolute;bottom:14px;right:18px;width:420px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 40px -8px rgba(0,0,0,.18);z-index:30;display:flex;flex-direction:column;overflow:hidden;animation:slideup .25s cubic-bezier(.2,.7,.2,1)}
@@ -234,9 +237,9 @@ svg{display:block}
 <div class="scene">
 
   <div class="intro">
-    <h1>State 1 · Rest — pill at bottom-right</h1>
-    <p>Default state. <strong>The pill is the resting form</strong> of evidence — small, low-weight, doesn't fight any other UI. Sits in the bottom-right corner alongside other future docks (Messaging, etc.). Letter is full-bright, AI agent visible, evidence is "there if you need it" but invisible until you do.</p>
-    <p style="margin-top:6px"><strong>Top-bar order fix:</strong> People/invite pill moves BEFORE the Evidence pill in the right cluster. Evidence sits closer to the Review CTA where its forward-momentum value lives.</p>
+    <h1>State 1 · Rest — twin pills at bottom-right</h1>
+    <p>Default state. <strong>Evidence and Ask AI are both docks</strong> — twin pills at bottom-right, low-weight, symmetric. No permanent right rail eating letter width. Either can be clicked open into a 420×600 drawer, either can be pinned to a full-height rail. <strong>Only one rail at a time</strong> — pinning Evidence collapses Ask AI back to a pill, and vice versa. Forces the user to declare the dominant work mode.</p>
+    <p style="margin-top:6px"><strong>Why kill the permanent AI rail?</strong> It costs ~320px of letter width 100% of the time, but users only consult AI suggestions in bursts. Pill-on-demand respects the writing surface; pinning is the escape hatch for AI-heavy sessions.</p>
   </div>
 
   <div class="app">
@@ -268,9 +271,9 @@ svg{display:block}
         <span class="arrow">·</span>
         <div class="step"><div class="num">3</div>Finalise</div>
       </div>
-      <div class="step-meta">Evidence is a dock, not a forced step</div>
+      <div class="step-meta">Letter at full width · twin docks at bottom-right</div>
     </div>
-    <div class="body">
+    <div class="body" style="grid-template-columns:200px 1fr">
       <div class="col">
         <h3>Sections 2/6</h3>
         <div class="row"><span class="num">1</span>Date & recipient</div>
@@ -294,33 +297,27 @@ svg{display:block}
           <div class="section-head">Dates & basis</div>
           <p>I formally request annual leave under regulation 15 <span class="figref">[See Fig 2]</span> of the Working Time Regulations 1998. The notice given by this letter exceeds twice the period of leave requested.</p>
           <p>I am entitled to a minimum of 28 days' paid annual leave in the current leave year by virtue of regulations 13 and 13A of the same instrument.</p>
+          <p>I would appreciate confirmation by no later than [TBD]. Please treat this letter as my notice under regulation 15(3) of the same instrument.</p>
         </div>
-      </div>
-      <div class="col ai-rail">
-        <h3><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>AI agent</h3>
-        <div class="ai-card"><div class="t">Tighten to ~180 words</div><div class="d">Cut adjectives without dropping facts.</div></div>
-        <div class="ai-card"><div class="t">Make it tribunal-ready</div><div class="d">Strict, factual, statutory anchors.</div></div>
-        <div class="ai-card"><div class="t">Add confidentiality</div><div class="d">3-year survival default.</div></div>
       </div>
     </div>
 
-    <!-- THE DOCK TRAY — bottom-right, low-weight pills -->
+    <!-- THE DOCK TRAY — twin pills, same behaviour -->
     <div class="dock-tray">
       <button class="dock-pill">
         <div class="ico"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></div>
         Evidence
         <span class="ct">3</span>
       </button>
-      <!-- Future: messaging dock, comments dock, etc. -->
-      <button class="dock-pill messaging">
-        <div class="ico"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
-        Messages
+      <button class="dock-pill ai">
+        <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/><circle cx="12" cy="12" r="3"/></svg></div>
+        Ask AI
       </button>
     </div>
   </div>
 
   <div class="explainer">
-    <span><strong>State 1:</strong> The Evidence pill sits at the bottom-right. One click expands it into the docked drawer (State 2). Notice top-bar: <strong>Invite pill comes before</strong> the Review CTA.</span>
+    <span><strong>State 1:</strong> Twin pills at bottom-right, letter at full width. Click either → drawer pops up. Pin either → it converts to a full-height rail (the other stays a pill).</span>
   </div>
 </div>
 </div>
@@ -331,7 +328,7 @@ svg{display:block}
 
   <div class="intro">
     <h1>State 2 · Docked drawer — working with evidence</h1>
-    <p>Click the pill → drawer pops up from the dock corner. <strong>420×600px panel anchored bottom-right.</strong> No backdrop dim. Letter and AI agent remain visible behind. Three header controls: <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">⌃</kbd> collapse · <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">⤢</kbd> expand-fullheight · <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">📌 Pin</kbd> convert-to-rail.</p>
+    <p>Click the Evidence pill → drawer pops up from the dock corner. <strong>420×600px panel anchored bottom-right.</strong> No backdrop dim. Letter remains full-bright behind. <strong>Ask AI pill stays visible</strong> just below the drawer — one click away if you need a suggestion. Three header controls: <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">⌃</kbd> collapse · <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">⤢</kbd> expand-fullheight · <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">📌 Pin</kbd> convert-to-rail.</p>
   </div>
 
   <div class="app">
@@ -359,9 +356,9 @@ svg{display:block}
         <span class="arrow">·</span>
         <div class="step"><div class="num">3</div>Finalise</div>
       </div>
-      <div class="step-meta">Drawer open · letter still bright · AI still visible</div>
+      <div class="step-meta">Evidence drawer open · letter full-bright · Ask AI pill nearby</div>
     </div>
-    <div class="body">
+    <div class="body" style="grid-template-columns:200px 1fr">
       <div class="col">
         <h3>Sections 2/6</h3>
         <div class="row"><span class="num">1</span>Date & recipient</div>
@@ -382,12 +379,9 @@ svg{display:block}
         <div class="section-card">
           <div class="section-head">Dates & basis</div>
           <p>I formally request annual leave from [TBD] to [TBD] inclusive ([TBD] working days). My remaining statutory and contractual leave balance stands at [TBD] days.</p>
+          <p>The notice given by this letter exceeds twice the period of leave requested under regulation 15 of the Working Time Regulations 1998.</p>
+          <p>I would appreciate confirmation by no later than [TBD]. Please treat this letter as my notice under regulation 15(3).</p>
         </div>
-      </div>
-      <div class="col ai-rail">
-        <h3><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4"/></svg>AI agent</h3>
-        <div class="ai-card"><div class="t">Tighten to ~180 words</div></div>
-        <div class="ai-card"><div class="t">Make it tribunal-ready</div></div>
       </div>
     </div>
 
@@ -451,10 +445,18 @@ svg{display:block}
         <button class="upload"><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload new</button>
       </div>
     </div>
+
+    <!-- Ask AI pill remains visible alongside the open Evidence drawer -->
+    <div class="dock-tray" style="right:454px">
+      <button class="dock-pill ai">
+        <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/><circle cx="12" cy="12" r="3"/></svg></div>
+        Ask AI
+      </button>
+    </div>
   </div>
 
   <div class="explainer">
-    <span><strong>State 2:</strong> 420×600 panel docked to bottom-right. Letter visible. AI agent visible. Pick an item → insert → drawer stays open for the next pick.</span>
+    <span><strong>State 2:</strong> 420×600 Evidence drawer docked bottom-right. <strong>Ask AI pill sits to its left</strong> — still one click away. Pick an item → insert → drawer stays open for the next pick.</span>
   </div>
 </div>
 </div>
@@ -465,7 +467,7 @@ svg{display:block}
 
   <div class="intro">
     <h1>State 3 · Pinned rail — heavy evidence work</h1>
-    <p>Click <strong>📌 Pin</strong> inside the docked drawer. Drawer collapses, evidence becomes the <strong>right rail</strong> (replaces AI agent). This is the existing pinned behavior — preserved for tribunal-bound, 15-exhibit matters where evidence IS the work.</p>
+    <p>Click <strong>📌 Pin</strong> inside the docked drawer. Drawer collapses, evidence becomes the <strong>right rail</strong>. Preserved for tribunal-bound, 15-exhibit matters where evidence IS the work. <strong>Ask AI stays as a pill</strong> at bottom-right — pinning one dock automatically unpins the other (mutually exclusive rail). Symmetry: pinning Ask AI gives you a permanent AI rail and Evidence collapses back to a pill.</p>
   </div>
 
   <div class="app">
@@ -493,7 +495,7 @@ svg{display:block}
         <span class="arrow">·</span>
         <div class="step"><div class="num">3</div>Finalise</div>
       </div>
-      <div class="step-meta" style="color:var(--ink);font-weight:600">Pinned · AI agent collapsed</div>
+      <div class="step-meta" style="color:var(--ink);font-weight:600">Evidence pinned · Ask AI collapsed to pill</div>
     </div>
     <div class="body" style="grid-template-columns:200px 1fr 380px">
       <div class="col">
@@ -524,7 +526,7 @@ svg{display:block}
             Unpin
           </button>
         </div>
-        <div class="pinned-explainer">Pinned rail · <strong>AI agent collapsed</strong> · click Unpin to return</div>
+        <div class="pinned-explainer">Pinned rail · <strong>Ask AI is a pill at bottom-right</strong> · click Unpin to return both to pills</div>
         <div style="padding:9px 12px;border-bottom:1px solid var(--line-2)">
           <input style="width:100%;height:24px;border:1px solid var(--line);border-radius:5px;padding:0 8px;font-size:11px" placeholder="Search by name, kind, section…" />
         </div>
@@ -548,11 +550,17 @@ svg{display:block}
       </div>
     </div>
 
-    <!-- The dock tray is hidden in pinned mode — the rail IS the surface -->
+    <!-- Ask AI remains as a pill when Evidence is pinned (exclusive rail) -->
+    <div class="dock-tray">
+      <button class="dock-pill ai">
+        <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/><circle cx="12" cy="12" r="3"/></svg></div>
+        Ask AI
+      </button>
+    </div>
   </div>
 
   <div class="explainer">
-    <span><strong>State 3:</strong> Pinned rail — same as current behavior but reached via the dock progression. No drawer/pill; the rail IS the surface.</span>
+    <span><strong>State 3:</strong> Evidence pinned as the right rail. Ask AI remains accessible as a pill. Pin is mutually exclusive — only one dock can become a rail at a time.</span>
   </div>
 </div>
 </div>
@@ -562,27 +570,31 @@ svg{display:block}
 <div class="scene">
 
   <div class="intro">
-    <h1>The three states — progressive disclosure</h1>
-    <p>User climbs the ladder based on workload. Default is the lightest state (pill). The user opts up only when they need more space. <strong>State is per-draft</strong> — a tribunal claim might live in Pinned mode; a holiday request never leaves the Pill.</p>
+    <h1>The unified dock model — twin pills, exclusive pin</h1>
+    <p>Two docks behave the same way: <strong>Evidence</strong> and <strong>Ask AI</strong>. Each climbs the same ladder (pill → drawer → rail). Permanent right-column AI rail is removed — letter gets its full width back. Pin is mutually exclusive: pin one, the other collapses to a pill. Forces a clean declaration of "what's the dominant work mode right now?".</p>
   </div>
 
   <div class="progression">
-    <h2>State ladder</h2>
-    <div class="note">Click ↑ to climb. Click ↓ to step back down. Per-draft state persists in localStorage.</div>
+    <h2>State ladder · same for both docks</h2>
+    <div class="note">Click ↑ to climb. Click ↓ to step back down. Per-draft state persists in localStorage. Pinning one dock unpins the other automatically.</div>
 
     <div class="three-states">
       <div class="state">
         <div class="pin-name">State 1</div>
-        <div class="title">Pill (rest)</div>
+        <div class="title">Twin pills (rest)</div>
         <div class="demo">
           <div class="mini-letter" style="left:8px;right:8px;width:auto"></div>
-          <div class="mini-pill">
+          <div class="mini-pill" style="right:60px">
             <span class="ic">📎</span>
             Evidence
             <span class="ct">3</span>
           </div>
+          <div class="mini-pill" style="background:var(--violet-lt);border-color:#ddd6fe;color:#5b21b6;right:8px">
+            <span class="ic" style="color:var(--violet)">✦</span>
+            Ask AI
+          </div>
         </div>
-        <div class="desc"><strong>Visual weight:</strong> tiny pill, ~120×32px. <strong>Click:</strong> opens drawer. <strong>Best for:</strong> when evidence is absent or rare. <strong>Letter:</strong> full-bright. <strong>AI rail:</strong> visible.</div>
+        <div class="desc"><strong>Visual weight:</strong> two tiny pills at bottom-right. <strong>Click either:</strong> opens that dock's drawer. <strong>Letter:</strong> full-bright, full-width — no permanent rail eating space. <strong>Best for:</strong> 90% of writing sessions.</div>
       </div>
 
       <div class="state">
@@ -594,54 +606,64 @@ svg{display:block}
             <div class="mh"><span class="am">📎</span>Evidence</div>
             <div class="mb">Search…<br>· All 3<br>· working-pattern.png<br>· whitfield-email</div>
           </div>
+          <div class="mini-pill" style="background:var(--violet-lt);border-color:#ddd6fe;color:#5b21b6;right:auto;left:8px;bottom:8px">
+            <span class="ic" style="color:var(--violet)">✦</span>
+            Ask AI
+          </div>
         </div>
-        <div class="desc"><strong>Size:</strong> 420×600 panel docked bottom-right. <strong>Controls:</strong> collapse (↓ pill) · expand-fullheight · pin. <strong>Best for:</strong> normal inserts while writing. <strong>Letter:</strong> visible. <strong>AI rail:</strong> visible.</div>
+        <div class="desc"><strong>Size:</strong> 420×600 docked bottom-right. <strong>Controls:</strong> collapse · expand-fullheight · pin. <strong>The other pill stays visible</strong> alongside — one click away. Same drawer chrome for both Evidence and Ask AI.</div>
       </div>
 
       <div class="state">
         <div class="pin-name">State 3</div>
-        <div class="title">Pinned rail</div>
+        <div class="title">Pinned rail (exclusive)</div>
         <div class="demo">
           <div class="mini-letter" style="width:55%"></div>
           <div class="mini-rail">
             <div class="mh">Evidence library</div>
             <div class="mb">Fig 1 ✓<br>Fig 2 ✓<br>Fig 3 ✓<br>Fig 4 ✓<br>Fig 5 ✓</div>
           </div>
+          <div class="mini-pill" style="background:var(--violet-lt);border-color:#ddd6fe;color:#5b21b6;right:auto;left:8px;bottom:8px">
+            <span class="ic" style="color:var(--violet)">✦</span>
+            Ask AI
+          </div>
         </div>
-        <div class="desc"><strong>Size:</strong> 380px full-height right column. <strong>Replaces:</strong> AI agent rail. <strong>Best for:</strong> tribunal-bound matters, 5+ exhibits, cross-referencing. <strong>Persistence:</strong> per-draft, survives reload.</div>
+        <div class="desc"><strong>Size:</strong> 380px full-height right column. <strong>Mutually exclusive:</strong> pinning one collapses the other to a pill. <strong>Best for:</strong> tribunal evidence work OR AI-heavy rewriting. The user declares which.</div>
       </div>
     </div>
 
     <div class="legend">
-      <span>💡 <strong>Each state is one click away from the next.</strong> Pill → click → Drawer. Drawer → Pin → Rail. Rail → Unpin → Drawer. Drawer → ↓ → Pill. No forced wizard, no separate routes.</span>
+      <span>💡 <strong>One dock pattern, two payloads.</strong> Same behaviours, same chrome, same gestures. Evidence and Ask AI are interchangeable from a UX standpoint — only the contents differ.</span>
     </div>
   </div>
 
   <div class="notes">
     <div class="note-card win">
-      <h4>Wins vs current side-Sheet drawer</h4>
-      <p>• <strong>Letter never dimmed.</strong> Always full-bright behind the dock.<br>
-        • <strong>AI agent stays.</strong> Drawer doesn't overlay or replace it (until State 3 pin).<br>
-        • <strong>Lower visual weight at rest.</strong> Pill is 32px tall, not a 28px toolbar button users have to discover.<br>
-        • <strong>Familiar.</strong> LinkedIn Messaging, Gmail chat, Intercom widget all use it.<br>
-        • <strong>Mobile-graceful.</strong> Pill → full-width bottom sheet → known mobile pattern.<br>
-        • <strong>Future-proof.</strong> Dock tray can host Messaging, Comments, Notifications without UI churn.</p>
+      <h4>Wins of the unified dock model</h4>
+      <p>• <strong>Letter gets its width back.</strong> No permanent ~320px right rail at rest — full canvas for writing.<br>
+        • <strong>Symmetry is teachable.</strong> Learn the pattern once, applies to both docks. Future docks inherit it.<br>
+        • <strong>Pin = mode declaration.</strong> User explicitly says "this session is about evidence" or "about AI" by pinning one.<br>
+        • <strong>Mobile-graceful.</strong> Same pattern collapses to a single bottom-sheet on small screens.<br>
+        • <strong>Familiar.</strong> LinkedIn Messaging, Gmail chat, Intercom — bottom-right docks are a known pattern.<br>
+        • <strong>Future-proof.</strong> Comments, Notifications, Messaging can join the dock tray without UI churn.</p>
     </div>
     <div class="note-card cost">
       <h4>Costs</h4>
-      <p>• <strong>New control surface.</strong> The "expand fullheight" + "collapse to pill" gestures need teaching (tooltip on first hover).<br>
-        • <strong>Drawer is narrower</strong> (420px vs 560px). Heavy-evidence sessions should pin straight to State 3.<br>
-        • <strong>State complexity.</strong> 3 visual states vs the current 2 (drawer/pinned). Worth it because each does one thing well.<br>
-        • <strong>Bottom-of-screen real estate</strong> now reserved for docks. Future toasts/snackbars need to clear this zone.</p>
+      <p>• <strong>Loss of always-on AI suggestions.</strong> Users who relied on the right-rail glance must now click the pill. Mitigation: pill shows a subtle badge when AI has a new suggestion.<br>
+        • <strong>Mutually exclusive pinning</strong> may frustrate power users who want both rails up. But two simultaneous rails would squeeze the letter to ~600px — too narrow for serif body copy.<br>
+        • <strong>New gestures to teach</strong> — expand-fullheight, collapse-to-pill, pin/unpin (tooltip on first hover).<br>
+        • <strong>Bottom-of-screen real estate</strong> reserved for docks — future toasts/snackbars must clear this zone.</p>
     </div>
   </div>
 
   <div style="margin-top:18px;padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px">
-    <h2 style="font-size:14px;font-weight:700;letter-spacing:-.01em;margin-bottom:8px">Migration path — 3 commits</h2>
+    <h2 style="font-size:14px;font-weight:700;letter-spacing:-.01em;margin-bottom:8px">Migration path — 5 commits</h2>
     <ol style="font-size:12px;line-height:1.7;padding-left:24px;color:var(--body)">
-      <li><strong>Replace Sheet with bottom-docked panel.</strong> EvidenceDrawer's floating mode swaps from Radix Sheet (right-side overlay) to a fixed-positioned div at bottom-right. Same content, different shell.</li>
-      <li><strong>Add the pill (rest state).</strong> Mounts always at <code>bottom-right</code> when drawer is closed. Replaces the top-bar Evidence button (or keep both — toolbar pill becomes the shortcut, dock pill is the resting form).</li>
-      <li><strong>Reorder toolbar.</strong> People/Invite pill moves before the avatar cluster (or wherever feels right — closer to where users go to invite).</li>
+      <li><strong>Extract a reusable <code>&lt;Dock&gt;</code> shell.</strong> One component that handles pill ↔ drawer ↔ rail state transitions. Slots for header, body, footer. Used by both Evidence and Ask AI.</li>
+      <li><strong>Convert EvidenceDrawer to use Dock.</strong> Existing content moves into the Dock body. Drawer dimensions become 420×600 bottom-right (was Radix Sheet right-side overlay).</li>
+      <li><strong>Convert AI rail to use Dock.</strong> Remove the permanent right column. AI suggestions render inside the Dock body. Pill appears at bottom-right alongside Evidence.</li>
+      <li><strong>Add mutually-exclusive pin state.</strong> Pinning one dock unpins the other (with a 200ms transition). State stored per-draft in localStorage as <code>{ pinnedDock: 'evidence' | 'ai' | null }</code>.</li>
+      <li><strong>Reorder toolbar.</strong> Invite pill before Review CTA. Top-bar Evidence and Ask AI buttons removed (the pills replace them).</li>
     </ol>
   </div>
 
