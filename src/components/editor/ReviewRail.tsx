@@ -10,18 +10,20 @@ import { cn } from "@/lib/utils";
 import { CheckIcons, type RailCheckRow } from "./review/AllChecks";
 import { HealthTab } from "./review/HealthTab";
 import { ImproveTab } from "./review/ImproveTab";
-import { ConsultTab } from "./review/ConsultTab";
 
 /**
- * Right rail on the Review step. Three tabs:
+ * Right rail on the Review step. Two tabs:
  *
  *   1. HEALTH  — Is this letter ready? Score ring + Fix-this-first + all checks.
  *   2. IMPROVE — Get eyes on it. AI specialist / Team / External consultant.
- *   3. CONSULT — AI-matched marketplace surface (stubbed marketplace).
+ *
+ * Note: the CONSULT marketplace surface moved to Finalise — it's the last
+ * upsell moment before the letter ships, so it reads more deliberately
+ * there than buried in a Review tab.
  *
  * The "All checks" rows (template quality, statutory compliance, evidence,
  * counsel review, comments) are still computed here so the tab can render
- * them — Health imports them as a prop. Consult is purely placeholder data.
+ * them — Health imports them as a prop.
  *
  * A sticky-style "Continue to Finalise →" CTA lives at the bottom of the
  * rail across all tabs so the user always knows the next step out.
@@ -84,7 +86,6 @@ export function ReviewRail({
       >
         <RailTab value="health" label="Health" badge={issueCount} />
         <RailTab value="improve" label="Improve" />
-        <RailTab value="consult" label="Consult" />
       </TabsPrimitive.List>
 
       {/* Tab bodies — scrollable within the rail. */}
@@ -94,9 +95,6 @@ export function ReviewRail({
         </TabsPrimitive.Content>
         <TabsPrimitive.Content value="improve" className="outline-none">
           <ImproveTab />
-        </TabsPrimitive.Content>
-        <TabsPrimitive.Content value="consult" className="outline-none">
-          <ConsultTab draft={draft} />
         </TabsPrimitive.Content>
       </div>
 

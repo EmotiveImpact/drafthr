@@ -16,6 +16,7 @@ import {
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
+import type { Draft } from "@/lib/letters/types";
 import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/ds/BrandMark";
 import { Wordmark } from "@/components/ds/Wordmark";
@@ -26,6 +27,7 @@ import {
   type HealthCheck,
 } from "@/lib/finalize/healthChecks";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
+import { ConsultTab } from "@/components/editor/review/ConsultTab";
 
 /**
  * Finalise — the ship gate.
@@ -312,6 +314,19 @@ export function Finalize() {
               onToggle={() => setCounselConfirmed((v) => !v)}
             />
           )}
+
+          {/* ───────── One last check — counsel review ─────────
+           * The marketplace upsell, deliberately positioned as the final
+           * pause before export. Sits between the recap and the export
+           * tiles so it reads as "before you ship, want a second pair of
+           * eyes?" rather than a side-tab. For letters that already
+           * require counsel review (tribunal-bound / legal-review-
+           * required), the section reframes itself as a booking surface
+           * rather than an upsell. */}
+          <ConsultSection
+            required={counselGateRequired}
+            draft={draft}
+          />
 
           {/* ───────── Export formats ───────── */}
           <h2 className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mt-7 mb-3">
@@ -600,5 +615,75 @@ function FormatTile({
         {busy ? "…" : "Download"}
       </motion.button>
     </div>
+  );
+}
+
+/**
+ * Counsel-review marketplace section. Sits between the verdict recap and
+ * the export tiles — the deliberate "before you ship, want a second pair
+ * of eyes?" moment.
+ *
+ * Two variants:
+ *   - required = false → soft upsell. Header reads "One last check"; copy
+ *     frames the booking as an optional second opinion before the letter
+ *     leaves the building.
+ *   - required = true  → directive booking surface. The letter type already
+ *     requires counsel review (see exportRequiresCounselGate) so the page
+ *     also shows the attestation checkbox above. Header reads "Book counsel
+ *     review" and copy reflects the obligation rather than the upsell.
+ *
+ * Both variants render the same ConsultTab marketplace UI underneath — the
+ * consultant cards, AI-matched chip, and CTAs are unchanged. Only the
+ * framing header above the marketplace shifts.
+ */
+function ConsultSection({
+  required,
+  draft,
+}: {
+  required: boolean;
+  draft: Draft;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, delay: 0.06, ease: [0.32, 0.72, 0, 1] }}
+      className="mt-7"
+      aria-labelledby="consult-section-heading"
+    >
+      <h2
+        id="consult-section-heading"
+        className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mb-3"
+      >
+        {required ? "Counsel review · required" : "One last check"}
+      </h2>
+      <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4 sm:p-5">
+        <div className="flex items-start gap-3 mb-4">
+          <span
+            className={cn(
+              "inline-flex items-center justify-center size-9 rounded-lg shrink-0",
+              required
+                ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
+                : "bg-[var(--ds-line-2)] text-[var(--ds-ink)]",
+            )}
+          >
+            <ShieldCheck className="size-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-semibold m-0 mb-0.5">
+              {required
+                ? "This letter requires counsel review"
+                : "Want counsel review before this leaves the building?"}
+            </h3>
+            <p className="text-[12.5px] text-[var(--ds-muted)] m-0 leading-snug">
+              {required
+                ? "Tribunal-bound or legal-review-required — book a UK-qualified solicitor below. Once they sign off, tick the attestation above and you're clear to export."
+                : "Optional second opinion from a UK-qualified solicitor or HR specialist. Most reviews back within 24h — cheaper than a tribunal."}
+            </p>
+          </div>
+        </div>
+        <ConsultTab draft={draft} />
+      </div>
+    </motion.section>
   );
 }

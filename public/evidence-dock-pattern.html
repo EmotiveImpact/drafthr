@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Evidence — dock pattern</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --amber:#d97706; --amber-lt:#fffbeb; --amber-bd:#fde68a;
+  --blue:#2563eb; --blue-lt:#eff6ff;
+  --green:#059669; --green-lt:#ecfdf5;
+  --violet:#7c3aed; --violet-lt:#f5f3ff;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+button{font:inherit;cursor:pointer;border:0;background:none}
+svg{display:block}
+
+/* topbar */
+.topbar{height:52px;background:var(--ink);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:50;color:#fff}
+.brand{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.logo{width:26px;height:26px;background:#fff;border-radius:7px;display:grid;place-items:center;color:var(--ink)}
+.logo svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.divider{width:1px;height:18px;background:rgba(255,255,255,.15)}
+.picker{display:flex;gap:2px;background:rgba(255,255,255,.06);padding:3px;border-radius:8px}
+.pick-btn{height:30px;padding:0 14px;border-radius:6px;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.6);transition:background .12s,color .12s}
+.pick-btn:hover{color:rgba(255,255,255,.9)}
+.pick-btn.active{background:#fff;color:var(--ink);font-weight:600}
+.tb-right{margin-left:auto;font-size:11.5px;color:rgba(255,255,255,.5)}
+
+.scene{max-width:1300px;margin:0 auto;padding:20px}
+.intro{padding:0 6px 16px}
+.intro h1{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.intro p{font-size:13px;color:var(--body);line-height:1.55;max-width:880px}
+.intro .meta{display:flex;gap:14px;margin-top:10px;font-size:11.5px;color:var(--muted)}
+.intro .meta strong{color:var(--ink);font-weight:600}
+
+.panel{display:none}
+.panel.active{display:block}
+
+/* App frame */
+.app{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03);position:relative;min-height:620px}
+
+.app-bar{height:46px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:12px}
+.app-bar .lf{display:flex;align-items:center;gap:10px}
+.app-bar .menus{display:flex;gap:10px;font-size:12.5px;color:var(--body)}
+.app-bar .menus span{cursor:pointer;padding:2px 4px;border-radius:4px}
+.app-bar .menus span:hover{background:var(--wash)}
+.app-bar .center{display:flex;gap:2px;margin:0 auto;background:var(--wash);border-radius:7px;padding:2px}
+.app-bar .center button{height:26px;padding:0 12px;border-radius:5px;font-size:12px;font-weight:500;color:var(--muted)}
+.app-bar .center button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:600}
+.app-bar .right{display:flex;gap:8px;align-items:center}
+
+/* Toolbar pills — new order: people FIRST, then evidence, then avatars (existing), then CTA */
+.tb-pill{display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:600;color:var(--body);background:#fff;transition:background .15s,border-color .15s}
+.tb-pill:hover{background:var(--wash);border-color:#cbd5e1}
+.tb-pill svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
+.tb-pill.evidence{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
+.tb-pill.evidence:hover{background:#fef3c7}
+.tb-pill .ct{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;background:var(--ink);color:#fff;font-size:9.5px;font-weight:700;border-radius:99px;padding:0 4px}
+.tb-pill.evidence .ct{background:var(--amber);color:#fff}
+.tb-pill.active-pinned{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tb-pill.active-pinned .ct{background:#fff;color:var(--ink)}
+.tb-cta{height:30px;padding:0 13px;background:var(--ink);color:#fff;border-radius:7px;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:5px}
+.tb-cta svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4}
+.avatars{display:flex;align-items:center}
+.av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#fcd34d,#f59e0b);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid #fff;margin-left:-6px}
+.av:first-child{margin-left:0}
+.av.b{background:linear-gradient(135deg,#a78bfa,#7c3aed)}
+
+/* stepper */
+.stepper-row{height:42px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;padding:0 20px;background:var(--wash);gap:14px;font-size:12px;color:var(--muted);font-weight:500}
+.stepper{display:flex;align-items:center;gap:8px}
+.step{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:7px}
+.step .num{width:18px;height:18px;border-radius:50%;background:var(--line);color:var(--muted);font-size:10.5px;font-weight:700;display:grid;place-items:center}
+.step.active{background:#fff;border:1px solid var(--line);color:var(--ink);font-weight:600}
+.step.active .num{background:var(--ink);color:#fff}
+.arrow{color:var(--subtle)}
+.step-meta{margin-left:auto;font-size:11px;color:var(--subtle)}
+
+/* body — letter centred, AI rail right */
+.body{display:grid;grid-template-columns:200px 1fr 320px;gap:14px;padding:14px 14px 80px;min-height:540px;background:var(--wash)}
+.col{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:12px;color:var(--body);overflow:hidden}
+.col h3{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle);margin-bottom:9px}
+.col .row{padding:7px 9px;border-radius:6px;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--body)}
+.col .row .num{width:18px;height:18px;border-radius:50%;background:var(--line);color:var(--muted);font-size:10px;font-weight:700;display:grid;place-items:center}
+.col .row.active{background:var(--wash);color:var(--ink);font-weight:600}
+.col .row.active .num{background:var(--ink);color:#fff}
+.col .row .dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--amber)}
+
+.letter{font-family:"Source Serif 4",Georgia,serif;color:var(--ink);overflow-y:auto;max-height:540px;padding:18px 24px}
+.letter h1{font-family:"Inter",sans-serif;font-size:18px;font-weight:700;letter-spacing:-.01em;margin-bottom:14px}
+.letter p{margin-bottom:8px;font-size:13px;line-height:1.65}
+.figref{display:inline-flex;align-items:center;padding:1px 5px;background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd);border-radius:4px;font-family:"Inter",sans-serif;font-size:11px;font-weight:600;margin-right:2px}
+.section-card{border-bottom:1px solid var(--line-2);padding:12px 0}
+.section-head{font-family:"Inter",sans-serif;font-size:9.5px;font-weight:700;color:var(--subtle);letter-spacing:.12em;text-transform:uppercase;margin-bottom:7px}
+
+.ai-rail h3 svg{display:inline-block;width:12px;height:12px;color:var(--violet);stroke:currentColor;fill:none;stroke-width:1.8;margin-right:5px;vertical-align:-2px}
+.ai-card{background:var(--wash);border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:6px;font-size:11.5px}
+.ai-card .t{font-weight:600;color:var(--ink);margin-bottom:2px}
+.ai-card .d{color:var(--muted);font-size:10.5px;line-height:1.4}
+
+/* ════════════════════ DOCK PILL (rest state) ════════════════════ */
+.dock-tray{position:absolute;bottom:14px;right:18px;display:flex;gap:8px;align-items:flex-end;z-index:20}
+.dock-pill{display:flex;align-items:center;gap:7px;height:36px;padding:0 13px;background:#fff;border:1px solid var(--line);border-radius:99px;font-size:12.5px;font-weight:600;color:var(--ink);box-shadow:0 4px 10px -2px rgba(0,0,0,.08);transition:transform .15s,box-shadow .15s}
+.dock-pill:hover{transform:translateY(-2px);box-shadow:0 8px 16px -4px rgba(0,0,0,.12)}
+.dock-pill .ico{width:18px;height:18px;display:grid;place-items:center;color:var(--amber)}
+.dock-pill .ico svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8}
+.dock-pill .ct{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;background:var(--amber);color:#fff;font-size:10px;font-weight:700;border-radius:99px;padding:0 5px}
+.dock-pill.messaging{background:var(--ink);color:#fff}
+.dock-pill.messaging .ico{color:#fff}
+
+/* ════════════════════ DOCKED DRAWER (expanded) ════════════════════ */
+.dock-drawer{position:absolute;bottom:14px;right:18px;width:420px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 40px -8px rgba(0,0,0,.18);z-index:30;display:flex;flex-direction:column;overflow:hidden;animation:slideup .25s cubic-bezier(.2,.7,.2,1)}
+.dock-drawer.tall{height:600px}
+.dock-drawer.short{height:200px}
+@keyframes slideup{from{transform:translateY(20px);opacity:.5}to{transform:translateY(0);opacity:1}}
+.dock-head{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;background:var(--wash)}
+.dock-head .ico{width:18px;height:18px;color:var(--amber)}
+.dock-head .ico svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.dock-head h2{font-size:13.5px;font-weight:700;letter-spacing:-.01em;flex:1}
+.dock-head .ctx{font-size:10.5px;color:var(--muted);font-weight:500}
+.dock-head .controls{display:flex;gap:1px}
+.dock-head .controls button{width:24px;height:24px;border-radius:5px;display:grid;place-items:center;color:var(--muted)}
+.dock-head .controls button:hover{background:#fff;color:var(--ink)}
+.dock-head .controls button svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+.dock-head .controls button.pin{background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd);padding:0 7px;width:auto;height:24px;display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:700;border-radius:5px}
+.dock-head .controls button.pin svg{stroke:currentColor}
+
+.dock-search{padding:9px 14px;border-bottom:1px solid var(--line-2);background:var(--wash);display:flex;gap:6px;align-items:center}
+.dock-search input{flex:1;height:26px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:11.5px;background:#fff}
+.dock-search input:focus{outline:none;border-color:var(--ink)}
+
+.dock-tabs{display:flex;border-bottom:1px solid var(--line);padding:0 12px;gap:0}
+.dock-tab{padding:8px 9px;font-size:11.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer;white-space:nowrap}
+.dock-tab.active{color:var(--ink);border-bottom-color:var(--ink)}
+.dock-tab .ct{font-size:10px;background:var(--wash);color:var(--muted);padding:1px 5px;border-radius:8px;margin-left:3px;font-weight:500}
+.dock-tab.active .ct{background:var(--ink);color:#fff;font-weight:600}
+
+.dock-body{flex:1;overflow-y:auto;padding:8px 14px}
+.dock-card{display:flex;gap:8px;padding:9px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:border-color .12s}
+.dock-card:hover{border-color:#94a3b8;background:#fdfdfd}
+.dock-card .ico-lg{width:32px;height:32px;border-radius:7px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.dock-card .ico-lg svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.dock-card .info{flex:1;min-width:0}
+.dock-card .nm{font-size:11.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dock-card .mt{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.45}
+.dock-card .actions{display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex-shrink:0}
+.dock-card .pill{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px}
+.dock-card .ins-btn{height:22px;padding:0 8px;background:var(--ink);color:#fff;border-radius:5px;font-size:10.5px;font-weight:600;display:flex;align-items:center;gap:3px}
+.dock-card .ins-btn svg{width:9px;height:9px;stroke:#fff;fill:none;stroke-width:2.4}
+
+.dock-foot{padding:8px 14px;border-top:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--muted)}
+.dock-foot .upload{margin-left:auto;height:24px;padding:0 9px;font-size:10.5px;font-weight:600;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:#fff;display:flex;align-items:center;gap:4px}
+.dock-foot .upload svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* ════════════════════ PINNED RAIL ════════════════════ */
+.pinned-rail{display:flex;flex-direction:column;padding:0;background:#fff}
+.pinned-head{padding:9px 12px;border-bottom:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:7px}
+.pinned-head svg.led{width:13px;height:13px;color:var(--amber);stroke:currentColor;fill:none;stroke-width:1.8}
+.pinned-head .t{font-size:12px;font-weight:700;color:var(--ink);flex:1}
+.pinned-head .ct{font-size:10px;color:var(--muted)}
+.pinned-head .unpin{display:flex;align-items:center;gap:3px;height:22px;padding:0 7px;border:1px solid var(--line);border-radius:5px;font-size:10px;font-weight:600;color:var(--body);background:#fff}
+.pinned-head .unpin svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2}
+.pinned-explainer{padding:6px 12px;font-size:10.5px;color:var(--muted);background:var(--amber-lt);border-bottom:1px solid var(--amber-bd)}
+.pinned-explainer strong{color:var(--amber)}
+
+/* PROGRESSION DIAGRAM */
+.progression{margin-top:32px;padding:18px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.progression h2{font-size:15px;font-weight:700;letter-spacing:-.01em;margin-bottom:10px}
+.progression .note{font-size:12px;color:var(--body);margin-bottom:14px;line-height:1.6}
+.three-states{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.three-states .state{background:var(--wash);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.three-states .state .pin-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--subtle)}
+.three-states .state .title{font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+.three-states .state .demo{height:120px;display:grid;place-items:center;width:100%;background:#fff;border:1px solid var(--line);border-radius:8px;position:relative;overflow:hidden}
+.three-states .state .demo .mini-pill{position:absolute;bottom:8px;right:8px;height:24px;padding:0 8px;background:#fff;border:1px solid var(--line);border-radius:99px;font-size:10px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:4px;box-shadow:0 2px 6px -1px rgba(0,0,0,.08)}
+.three-states .state .demo .mini-pill .ic{color:var(--amber);font-size:10px}
+.three-states .state .demo .mini-pill .ct{background:var(--amber);color:#fff;padding:0 4px;border-radius:8px;font-size:8.5px;min-width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center}
+.three-states .state .demo .mini-drawer{position:absolute;bottom:8px;right:8px;width:60%;height:75%;background:#fff;border:1px solid var(--line);border-radius:7px;box-shadow:0 4px 10px -2px rgba(0,0,0,.12);display:flex;flex-direction:column;font-size:9px}
+.three-states .state .demo .mini-drawer .mh{padding:5px 7px;border-bottom:1px solid var(--line-2);font-weight:700;display:flex;align-items:center;gap:4px;font-size:9px}
+.three-states .state .demo .mini-drawer .mh .am{color:var(--amber)}
+.three-states .state .demo .mini-drawer .mb{padding:5px 7px;color:var(--muted);font-size:8.5px}
+.three-states .state .demo .mini-rail{position:absolute;top:8px;right:8px;bottom:8px;width:32%;background:#fff;border:1px solid var(--line);border-radius:6px;font-size:8.5px}
+.three-states .state .demo .mini-rail .mh{padding:4px 6px;background:var(--wash);border-bottom:1px solid var(--line-2);font-weight:700;font-size:8.5px;color:var(--amber)}
+.three-states .state .demo .mini-rail .mb{padding:4px 6px;color:var(--muted)}
+.three-states .state .demo .mini-letter{position:absolute;top:8px;left:8px;bottom:8px;width:50%;background:var(--wash);border-radius:5px}
+.three-states .state .desc{font-size:11.5px;color:var(--body);line-height:1.55;text-align:left;align-self:stretch}
+
+.progression .legend{margin-top:14px;display:flex;align-items:center;gap:14px;padding:10px;background:var(--amber-lt);border:1px solid var(--amber-bd);border-radius:8px;font-size:11.5px;color:var(--amber)}
+.progression .legend strong{color:#92400e}
+
+/* Notes */
+.notes{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.note-card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px}
+.note-card h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--subtle);margin-bottom:7px}
+.note-card p{font-size:12px;color:var(--body);line-height:1.55}
+.note-card p strong{color:var(--ink)}
+.note-card.win{background:linear-gradient(135deg,var(--green-lt),#fff);border-color:#a7f3d0}
+.note-card.win h4{color:var(--green)}
+.note-card.cost{background:linear-gradient(135deg,#fef2f2,#fff);border-color:#fecaca}
+.note-card.cost h4{color:#dc2626}
+
+/* explainer */
+.explainer{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:12.5px;display:flex;align-items:center;gap:10px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.15);max-width:90vw}
+.explainer kbd{font-family:ui-monospace,monospace;font-size:11px;background:rgba(255,255,255,.15);padding:2px 7px;border-radius:4px;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+    DraftHR
+  </div>
+  <div class="divider"></div>
+  <div class="picker">
+    <button class="pick-btn active" data-tab="rest">Rest · pill at bottom</button>
+    <button class="pick-btn" data-tab="docked">Docked drawer</button>
+    <button class="pick-btn" data-tab="pinned">Pinned rail (heavy work)</button>
+    <button class="pick-btn" data-tab="prog">Progression</button>
+  </div>
+  <div class="tb-right">Evidence — dock pattern</div>
+</div>
+
+<!-- ════════════════════ STATE 1: REST PILL ════════════════════ -->
+<div class="panel active" data-panel="rest">
+<div class="scene">
+
+  <div class="intro">
+    <h1>State 1 · Rest — pill at bottom-right</h1>
+    <p>Default state. <strong>The pill is the resting form</strong> of evidence — small, low-weight, doesn't fight any other UI. Sits in the bottom-right corner alongside other future docks (Messaging, etc.). Letter is full-bright, AI agent visible, evidence is "there if you need it" but invisible until you do.</p>
+    <p style="margin-top:6px"><strong>Top-bar order fix:</strong> People/invite pill moves BEFORE the Evidence pill in the right cluster. Evidence sits closer to the Review CTA where its forward-momentum value lives.</p>
+  </div>
+
+  <div class="app">
+    <div class="app-bar">
+      <div class="lf">
+        <div class="menus"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      </div>
+      <div class="center"><button class="active">Edit</button><button>Preview</button></div>
+      <div class="right">
+        <!-- People/Invite pill — moved to come FIRST (before evidence) -->
+        <button class="tb-pill">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M5.5 21a7 7 0 0 1 7-7 7 7 0 0 1 7 7"/><path d="m16 11 2 2 4-4"/></svg>
+          Invite
+        </button>
+        <!-- Avatar group — still a pill -->
+        <div class="avatars">
+          <div class="av">Y</div>
+          <div class="av b">+1</div>
+        </div>
+        <!-- (Evidence pill now lives at the bottom dock — see below) -->
+        <button class="tb-cta">Review →</button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+      <div class="step-meta">Evidence is a dock, not a forced step</div>
+    </div>
+    <div class="body">
+      <div class="col">
+        <h3>Sections 2/6</h3>
+        <div class="row"><span class="num">1</span>Date & recipient</div>
+        <div class="row"><span class="num">2</span>Subject</div>
+        <div class="row active"><span class="num">3</span>Dates & basis</div>
+        <div class="row"><span class="num">4</span>Closing</div>
+        <div class="row"><span class="num">5</span>Signature</div>
+      </div>
+      <div class="col letter">
+        <h1>Holiday Request / Refusal Challenge</h1>
+        <div class="section-card">
+          <div class="section-head">Date & recipient · edited</div>
+          <p><span class="figref">[See Fig 1]</span> 15 May 2026</p>
+          <p>To: HR Officer</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Subject</div>
+          <p>Annual Leave Request — [TBD] to [TBD] [TBD] 2026</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Dates & basis</div>
+          <p>I formally request annual leave under regulation 15 <span class="figref">[See Fig 2]</span> of the Working Time Regulations 1998. The notice given by this letter exceeds twice the period of leave requested.</p>
+          <p>I am entitled to a minimum of 28 days' paid annual leave in the current leave year by virtue of regulations 13 and 13A of the same instrument.</p>
+        </div>
+      </div>
+      <div class="col ai-rail">
+        <h3><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>AI agent</h3>
+        <div class="ai-card"><div class="t">Tighten to ~180 words</div><div class="d">Cut adjectives without dropping facts.</div></div>
+        <div class="ai-card"><div class="t">Make it tribunal-ready</div><div class="d">Strict, factual, statutory anchors.</div></div>
+        <div class="ai-card"><div class="t">Add confidentiality</div><div class="d">3-year survival default.</div></div>
+      </div>
+    </div>
+
+    <!-- THE DOCK TRAY — bottom-right, low-weight pills -->
+    <div class="dock-tray">
+      <button class="dock-pill">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></div>
+        Evidence
+        <span class="ct">3</span>
+      </button>
+      <!-- Future: messaging dock, comments dock, etc. -->
+      <button class="dock-pill messaging">
+        <div class="ico"><svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
+        Messages
+      </button>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <span><strong>State 1:</strong> The Evidence pill sits at the bottom-right. One click expands it into the docked drawer (State 2). Notice top-bar: <strong>Invite pill comes before</strong> the Review CTA.</span>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════ STATE 2: DOCKED DRAWER ════════════════════ -->
+<div class="panel" data-panel="docked">
+<div class="scene">
+
+  <div class="intro">
+    <h1>State 2 · Docked drawer — working with evidence</h1>
+    <p>Click the pill → drawer pops up from the dock corner. <strong>420×600px panel anchored bottom-right.</strong> No backdrop dim. Letter and AI agent remain visible behind. Three header controls: <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">⌃</kbd> collapse · <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">⤢</kbd> expand-fullheight · <kbd style="background:var(--wash);padding:1px 5px;border-radius:3px;font-family:ui-monospace,monospace;font-size:11px">📌 Pin</kbd> convert-to-rail.</p>
+  </div>
+
+  <div class="app">
+    <div class="app-bar">
+      <div class="lf">
+        <div class="menus"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      </div>
+      <div class="center"><button class="active">Edit</button><button>Preview</button></div>
+      <div class="right">
+        <button class="tb-pill">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M5.5 21a7 7 0 0 1 7-7 7 7 0 0 1 7 7"/><path d="m16 11 2 2 4-4"/></svg>
+          Invite
+        </button>
+        <div class="avatars">
+          <div class="av">Y</div>
+        </div>
+        <button class="tb-cta">Review →</button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+      <div class="step-meta">Drawer open · letter still bright · AI still visible</div>
+    </div>
+    <div class="body">
+      <div class="col">
+        <h3>Sections 2/6</h3>
+        <div class="row"><span class="num">1</span>Date & recipient</div>
+        <div class="row active"><span class="num">2</span>Subject</div>
+        <div class="row"><span class="num">3</span>Dates & basis</div>
+        <div class="row"><span class="num">4</span>Closing</div>
+      </div>
+      <div class="col letter">
+        <h1>Holiday Request / Refusal Challenge</h1>
+        <div class="section-card">
+          <div class="section-head">Date & recipient</div>
+          <p><span class="figref">[See Fig 1]</span> 15 May 2026</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Subject · holiday request</div>
+          <p>Annual Leave Request — [TBD] to [TBD] [TBD] 2026</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Dates & basis</div>
+          <p>I formally request annual leave from [TBD] to [TBD] inclusive ([TBD] working days). My remaining statutory and contractual leave balance stands at [TBD] days.</p>
+        </div>
+      </div>
+      <div class="col ai-rail">
+        <h3><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4"/></svg>AI agent</h3>
+        <div class="ai-card"><div class="t">Tighten to ~180 words</div></div>
+        <div class="ai-card"><div class="t">Make it tribunal-ready</div></div>
+      </div>
+    </div>
+
+    <!-- THE DOCKED DRAWER -->
+    <div class="dock-drawer tall">
+      <div class="dock-head">
+        <div class="ico"><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg></div>
+        <h2>Evidence</h2>
+        <span class="ctx">At cursor in §Dates & basis</span>
+        <div class="controls">
+          <button class="pin">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 17v5M9 10.76V6h6v4.76A6 6 0 0 1 12 22a6 6 0 0 1-3-11.24z"/></svg>
+            Pin →
+          </button>
+          <button title="Expand to full height">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M3 14h7v7M21 10h-7V3M14 10l7-7M3 21l7-7"/></svg>
+          </button>
+          <button title="Collapse to pill">
+            <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="dock-search">
+        <input placeholder="Search by name, kind, or section…" />
+      </div>
+      <div class="dock-tabs">
+        <div class="dock-tab active">All <span class="ct">3</span></div>
+        <div class="dock-tab">Email <span class="ct">1</span></div>
+        <div class="dock-tab">Screens <span class="ct">1</span></div>
+        <div class="dock-tab">Docs <span class="ct">1</span></div>
+        <div class="dock-tab">Notes <span class="ct">0</span></div>
+      </div>
+      <div class="dock-body">
+        <div class="dock-card">
+          <div class="ico-lg"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+          <div class="info">
+            <div class="nm">working-pattern-meeting.png</div>
+            <div class="mt">Inserted as <strong style="color:var(--amber)">Fig 1</strong> · §Date & recipient</div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins-btn">Re-insert<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+        <div class="dock-card">
+          <div class="ico-lg"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+          <div class="info">
+            <div class="nm">whitfield-email-16mar.eml</div>
+            <div class="mt">Will insert as <strong style="color:var(--amber)">Fig 2</strong></div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins-btn">Insert<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+        <div class="dock-card">
+          <div class="ico-lg"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <div class="info">
+            <div class="nm">flex-working-agreement-2025.pdf</div>
+            <div class="mt">Will insert as <strong style="color:var(--amber)">Fig 3</strong></div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins-btn">Insert<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+      </div>
+      <div class="dock-foot">
+        <span>3 items · 1.5 MB</span>
+        <button class="upload"><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload new</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="explainer">
+    <span><strong>State 2:</strong> 420×600 panel docked to bottom-right. Letter visible. AI agent visible. Pick an item → insert → drawer stays open for the next pick.</span>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════ STATE 3: PINNED RAIL ════════════════════ -->
+<div class="panel" data-panel="pinned">
+<div class="scene">
+
+  <div class="intro">
+    <h1>State 3 · Pinned rail — heavy evidence work</h1>
+    <p>Click <strong>📌 Pin</strong> inside the docked drawer. Drawer collapses, evidence becomes the <strong>right rail</strong> (replaces AI agent). This is the existing pinned behavior — preserved for tribunal-bound, 15-exhibit matters where evidence IS the work.</p>
+  </div>
+
+  <div class="app">
+    <div class="app-bar">
+      <div class="lf">
+        <div class="menus"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      </div>
+      <div class="center"><button class="active">Edit</button><button>Preview</button></div>
+      <div class="right">
+        <button class="tb-pill">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M5.5 21a7 7 0 0 1 7-7 7 7 0 0 1 7 7"/><path d="m16 11 2 2 4-4"/></svg>
+          Invite
+        </button>
+        <div class="avatars">
+          <div class="av">Y</div>
+        </div>
+        <button class="tb-cta">Review →</button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+      <div class="step-meta" style="color:var(--ink);font-weight:600">Pinned · AI agent collapsed</div>
+    </div>
+    <div class="body" style="grid-template-columns:200px 1fr 380px">
+      <div class="col">
+        <h3>Sections 2/6</h3>
+        <div class="row"><span class="num">1</span>Background</div>
+        <div class="row active"><span class="num">2</span>Particulars</div>
+        <div class="row"><span class="num">3</span>Remedies</div>
+      </div>
+      <div class="col letter">
+        <h1>Constructive Dismissal — Pre-Resignation Notice</h1>
+        <div class="section-card">
+          <div class="section-head">Background</div>
+          <p>On 14 March 2026 <span class="figref">[See Fig 1]</span>, Mr Whitfield announced unilateral changes to my working pattern without consultation, despite my flexible-working agreement <span class="figref">[See Fig 3]</span>.</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Particulars</div>
+          <p>Subsequent emails <span class="figref">[See Fig 2]</span> confirm the position. Contract clause 4.2 <span class="figref">[See Fig 4]</span> expressly required notice and consultation.</p>
+          <p>Pay records for Jan–Mar <span class="figref">[See Fig 5]</span> show…</p>
+        </div>
+      </div>
+      <div class="col pinned-rail">
+        <div class="pinned-head">
+          <svg class="led" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>
+          <span class="t">Evidence library</span>
+          <span class="ct">5 items</span>
+          <button class="unpin">
+            <svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h16"/></svg>
+            Unpin
+          </button>
+        </div>
+        <div class="pinned-explainer">Pinned rail · <strong>AI agent collapsed</strong> · click Unpin to return</div>
+        <div style="padding:9px 12px;border-bottom:1px solid var(--line-2)">
+          <input style="width:100%;height:24px;border:1px solid var(--line);border-radius:5px;padding:0 8px;font-size:11px" placeholder="Search by name, kind, section…" />
+        </div>
+        <div class="dock-tabs" style="padding:0 8px">
+          <div class="dock-tab active" style="padding:7px 6px;font-size:10.5px">All <span class="ct">5</span></div>
+          <div class="dock-tab" style="padding:7px 6px;font-size:10.5px">Email <span class="ct">2</span></div>
+          <div class="dock-tab" style="padding:7px 6px;font-size:10.5px">Screens <span class="ct">1</span></div>
+          <div class="dock-tab" style="padding:7px 6px;font-size:10.5px">Docs <span class="ct">2</span></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:8px 10px;font-size:11.5px">
+          <div class="dock-card" style="padding:7px;margin-bottom:5px"><div class="ico-lg" style="width:28px;height:28px"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div><div class="info"><div class="nm" style="font-size:11px">working-pattern-mtg.png</div><div class="mt" style="font-size:9.5px">Fig 1 · cited</div></div></div>
+          <div class="dock-card" style="padding:7px;margin-bottom:5px"><div class="ico-lg" style="width:28px;height:28px"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12"/></svg></div><div class="info"><div class="nm" style="font-size:11px">whitfield-email-16mar.eml</div><div class="mt" style="font-size:9.5px">Fig 2 · cited</div></div></div>
+          <div class="dock-card" style="padding:7px;margin-bottom:5px"><div class="ico-lg" style="width:28px;height:28px"><svg viewBox="0 0 24 24"><path d="M14 2H6"/></svg></div><div class="info"><div class="nm" style="font-size:11px">flex-agreement.pdf</div><div class="mt" style="font-size:9.5px">Fig 3 · cited</div></div></div>
+          <div class="dock-card" style="padding:7px;margin-bottom:5px"><div class="ico-lg" style="width:28px;height:28px"><svg viewBox="0 0 24 24"><path d="M14 2H6"/></svg></div><div class="info"><div class="nm" style="font-size:11px">contract-clause-4.2.pdf</div><div class="mt" style="font-size:9.5px">Fig 4 · cited</div></div></div>
+          <div class="dock-card" style="padding:7px;margin-bottom:5px"><div class="ico-lg" style="width:28px;height:28px"><svg viewBox="0 0 24 24"><path d="M4 4h16"/></svg></div><div class="info"><div class="nm" style="font-size:11px">payroll-jan-mar.eml</div><div class="mt" style="font-size:9.5px">Fig 5 · cited</div></div></div>
+        </div>
+        <div style="padding:7px 12px;border-top:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)">
+          <span>5 items · 5/5 cited</span>
+          <button style="margin-left:auto;height:22px;padding:0 8px;font-size:10px;font-weight:600;border:1px solid var(--ink);border-radius:5px;color:var(--ink);background:#fff">+ Upload</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- The dock tray is hidden in pinned mode — the rail IS the surface -->
+  </div>
+
+  <div class="explainer">
+    <span><strong>State 3:</strong> Pinned rail — same as current behavior but reached via the dock progression. No drawer/pill; the rail IS the surface.</span>
+  </div>
+</div>
+</div>
+
+<!-- ════════════════════ PROGRESSION DIAGRAM ════════════════════ -->
+<div class="panel" data-panel="prog">
+<div class="scene">
+
+  <div class="intro">
+    <h1>The three states — progressive disclosure</h1>
+    <p>User climbs the ladder based on workload. Default is the lightest state (pill). The user opts up only when they need more space. <strong>State is per-draft</strong> — a tribunal claim might live in Pinned mode; a holiday request never leaves the Pill.</p>
+  </div>
+
+  <div class="progression">
+    <h2>State ladder</h2>
+    <div class="note">Click ↑ to climb. Click ↓ to step back down. Per-draft state persists in localStorage.</div>
+
+    <div class="three-states">
+      <div class="state">
+        <div class="pin-name">State 1</div>
+        <div class="title">Pill (rest)</div>
+        <div class="demo">
+          <div class="mini-letter" style="left:8px;right:8px;width:auto"></div>
+          <div class="mini-pill">
+            <span class="ic">📎</span>
+            Evidence
+            <span class="ct">3</span>
+          </div>
+        </div>
+        <div class="desc"><strong>Visual weight:</strong> tiny pill, ~120×32px. <strong>Click:</strong> opens drawer. <strong>Best for:</strong> when evidence is absent or rare. <strong>Letter:</strong> full-bright. <strong>AI rail:</strong> visible.</div>
+      </div>
+
+      <div class="state">
+        <div class="pin-name">State 2</div>
+        <div class="title">Docked drawer</div>
+        <div class="demo">
+          <div class="mini-letter"></div>
+          <div class="mini-drawer">
+            <div class="mh"><span class="am">📎</span>Evidence</div>
+            <div class="mb">Search…<br>· All 3<br>· working-pattern.png<br>· whitfield-email</div>
+          </div>
+        </div>
+        <div class="desc"><strong>Size:</strong> 420×600 panel docked bottom-right. <strong>Controls:</strong> collapse (↓ pill) · expand-fullheight · pin. <strong>Best for:</strong> normal inserts while writing. <strong>Letter:</strong> visible. <strong>AI rail:</strong> visible.</div>
+      </div>
+
+      <div class="state">
+        <div class="pin-name">State 3</div>
+        <div class="title">Pinned rail</div>
+        <div class="demo">
+          <div class="mini-letter" style="width:55%"></div>
+          <div class="mini-rail">
+            <div class="mh">Evidence library</div>
+            <div class="mb">Fig 1 ✓<br>Fig 2 ✓<br>Fig 3 ✓<br>Fig 4 ✓<br>Fig 5 ✓</div>
+          </div>
+        </div>
+        <div class="desc"><strong>Size:</strong> 380px full-height right column. <strong>Replaces:</strong> AI agent rail. <strong>Best for:</strong> tribunal-bound matters, 5+ exhibits, cross-referencing. <strong>Persistence:</strong> per-draft, survives reload.</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span>💡 <strong>Each state is one click away from the next.</strong> Pill → click → Drawer. Drawer → Pin → Rail. Rail → Unpin → Drawer. Drawer → ↓ → Pill. No forced wizard, no separate routes.</span>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note-card win">
+      <h4>Wins vs current side-Sheet drawer</h4>
+      <p>• <strong>Letter never dimmed.</strong> Always full-bright behind the dock.<br>
+        • <strong>AI agent stays.</strong> Drawer doesn't overlay or replace it (until State 3 pin).<br>
+        • <strong>Lower visual weight at rest.</strong> Pill is 32px tall, not a 28px toolbar button users have to discover.<br>
+        • <strong>Familiar.</strong> LinkedIn Messaging, Gmail chat, Intercom widget all use it.<br>
+        • <strong>Mobile-graceful.</strong> Pill → full-width bottom sheet → known mobile pattern.<br>
+        • <strong>Future-proof.</strong> Dock tray can host Messaging, Comments, Notifications without UI churn.</p>
+    </div>
+    <div class="note-card cost">
+      <h4>Costs</h4>
+      <p>• <strong>New control surface.</strong> The "expand fullheight" + "collapse to pill" gestures need teaching (tooltip on first hover).<br>
+        • <strong>Drawer is narrower</strong> (420px vs 560px). Heavy-evidence sessions should pin straight to State 3.<br>
+        • <strong>State complexity.</strong> 3 visual states vs the current 2 (drawer/pinned). Worth it because each does one thing well.<br>
+        • <strong>Bottom-of-screen real estate</strong> now reserved for docks. Future toasts/snackbars need to clear this zone.</p>
+    </div>
+  </div>
+
+  <div style="margin-top:18px;padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px">
+    <h2 style="font-size:14px;font-weight:700;letter-spacing:-.01em;margin-bottom:8px">Migration path — 3 commits</h2>
+    <ol style="font-size:12px;line-height:1.7;padding-left:24px;color:var(--body)">
+      <li><strong>Replace Sheet with bottom-docked panel.</strong> EvidenceDrawer's floating mode swaps from Radix Sheet (right-side overlay) to a fixed-positioned div at bottom-right. Same content, different shell.</li>
+      <li><strong>Add the pill (rest state).</strong> Mounts always at <code>bottom-right</code> when drawer is closed. Replaces the top-bar Evidence button (or keep both — toolbar pill becomes the shortcut, dock pill is the resting form).</li>
+      <li><strong>Reorder toolbar.</strong> People/Invite pill moves before the avatar cluster (or wherever feels right — closer to where users go to invite).</li>
+    </ol>
+  </div>
+
+</div>
+</div>
+
+<script>
+  document.querySelectorAll('.pick-btn[data-tab]').forEach(b => {
+    b.addEventListener('click', () => {
+      const t = b.dataset.tab;
+      document.querySelectorAll('.pick-btn[data-tab]').forEach(x => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
+</script>
+
+</body>
+</html>

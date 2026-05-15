@@ -866,10 +866,57 @@ export function Editor() {
           </div>
 
           {/* Column 3 — over the right rail / viewport-right on mobile.
-           * People → ⋯ → primary CTA. (Pending/Drafting/Regenerate moved
-           * into column 2 — the canvas column — so they sit above their
-           * old secondary-toolbar positions.) */}
+           * People → Evidence → ⋯ → primary CTA. (Pending/Drafting/
+           * Regenerate moved into column 2 — the canvas column — so they
+           * sit above their old secondary-toolbar positions.) */}
           <div className="ml-auto lg:ml-0 flex items-center gap-2 justify-end min-w-0 lg:px-4">
+            {/* People / Invite — sits to the left of Evidence so the cluster
+             * reads "who's on this letter → what's attached → next step".
+             * AvatarStack is the trigger when collaborators exist; otherwise
+             * a plain Invite button. */}
+            <InvitePopover
+              draft={draft}
+              open={invitePopoverOpen}
+              onOpenChange={setInvitePopoverOpen}
+              trigger={
+                identities.length > 0 ? (
+                  <button
+                    type="button"
+                    className="hidden md:flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 -my-0.5 hover:bg-[var(--ds-line-2)] transition"
+                    aria-label="People on this letter — click to manage or invite"
+                    title="Manage people"
+                  >
+                    <AvatarStack
+                      size="md"
+                      max={2}
+                      people={identities.map((i) => ({
+                        seed: i.email ?? i.id,
+                        email: i.email,
+                        name: i.name,
+                        initials: i.initials,
+                        title: i.name + (i.email ? ` <${i.email}>` : ""),
+                      }))}
+                    />
+                    <span
+                      className="grid place-items-center size-5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
+                      aria-hidden
+                    >
+                      <UserPlus className="size-3" />
+                    </span>
+                  </button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden md:inline-flex px-2 sm:px-3"
+                    aria-label="Invite"
+                  >
+                    <UserPlus className="size-3.5" />
+                    <span className="hidden md:inline">Invite</span>
+                  </Button>
+                )
+              }
+            />
             {/* Evidence button — primary discoverability path for the
              * hybrid drawer. Tap to toggle the floating drawer; when
              * pinned, this tap focuses the rail (which is always visible).
@@ -934,49 +981,6 @@ export function Editor() {
                 </button>
               );
             })()}
-            <InvitePopover
-              draft={draft}
-              open={invitePopoverOpen}
-              onOpenChange={setInvitePopoverOpen}
-              trigger={
-                identities.length > 0 ? (
-                  <button
-                    type="button"
-                    className="hidden md:flex items-center gap-1 rounded-full pl-0.5 pr-1.5 py-0.5 -my-0.5 hover:bg-[var(--ds-line-2)] transition"
-                    aria-label="People on this letter — click to manage or invite"
-                    title="Manage people"
-                  >
-                    <AvatarStack
-                      size="md"
-                      max={2}
-                      people={identities.map((i) => ({
-                        seed: i.email ?? i.id,
-                        email: i.email,
-                        name: i.name,
-                        initials: i.initials,
-                        title: i.name + (i.email ? ` <${i.email}>` : ""),
-                      }))}
-                    />
-                    <span
-                      className="grid place-items-center size-5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]"
-                      aria-hidden
-                    >
-                      <UserPlus className="size-3" />
-                    </span>
-                  </button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="hidden md:inline-flex px-2 sm:px-3"
-                    aria-label="Invite"
-                  >
-                    <UserPlus className="size-3.5" />
-                    <span className="hidden md:inline">Invite</span>
-                  </Button>
-                )
-              }
-            />
             {/* Mobile-only ⋯ overflow — on md:+ all these actions live in
              * the File/Tools/View menubar at the start of column 2. */}
             <DropdownMenu>
