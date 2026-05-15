@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff } from "lucide-react";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -144,6 +144,7 @@ export function AIPanel({
   activeSectionId,
   onCollapse,
   onPin,
+  onUnpin,
   isPinned,
 }: {
   draft: Draft;
@@ -156,6 +157,9 @@ export function AIPanel({
    * next to the collapse chevron. Pin is mutually exclusive with Evidence pin
    * — the parent enforces this via the shared `pinnedDock` state. */
   onPin?: () => void;
+  /** Unpin the AI rail (returns to twin pills). When supplied and isPinned is
+   * true, clicking the pin button will call this instead of onPin. */
+  onUnpin?: () => void;
   isPinned?: boolean;
 }) {
   const profile = useProfileStore((s) => s.profile);
@@ -497,21 +501,32 @@ export function AIPanel({
               <Trash2 className="size-3.5" />
             </button>
           )}
-          {onPin && (
+          {(onPin || onUnpin) && (
             <button
               type="button"
-              onClick={onPin}
+              onClick={isPinned ? (onUnpin ?? onPin) : onPin}
               className={
-                "inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[10.5px] font-bold uppercase tracking-[0.04em] border " +
+                "group inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[10.5px] font-bold uppercase tracking-[0.04em] border transition-colors " +
                 (isPinned
-                  ? "bg-[var(--ds-violet-bg)] text-[var(--ds-violet-fg)] border-violet-200"
+                  ? "bg-[var(--ds-violet-bg)] text-[var(--ds-violet-fg)] border-violet-200 hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] hover:border-[var(--ds-line)]"
                   : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
               }
-              title={isPinned ? "Pinned — click to unpin" : "Pin Ask AI as the right rail (collapses Evidence)"}
+              title={isPinned ? "Click to unpin (back to twin pills)" : "Pin Ask AI as the right rail (collapses Evidence)"}
               aria-pressed={isPinned}
             >
-              <Pin className="size-3" />
-              {isPinned ? "Pinned" : "Pin"}
+              {isPinned ? (
+                <>
+                  <Pin className="size-3 group-hover:hidden" />
+                  <PinOff className="size-3 hidden group-hover:inline" />
+                  <span className="group-hover:hidden">Pinned</span>
+                  <span className="hidden group-hover:inline">Unpin</span>
+                </>
+              ) : (
+                <>
+                  <Pin className="size-3" />
+                  <span>Pin</span>
+                </>
+              )}
             </button>
           )}
           {onCollapse && (

@@ -982,7 +982,9 @@ export function Editor() {
                       : "Open evidence drawer (Pin → for a permanent rail)"
                   }
                   className={
-                    "inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-md border text-[12px] font-semibold transition shrink-0 " +
+                    "inline-flex items-center gap-1.5 h-7 transition shrink-0 rounded-md border " +
+                    (hasEvidence ? "px-2" : "w-7 justify-center") +
+                    " " +
                     (active
                       ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
                       : hasEvidence
@@ -991,7 +993,6 @@ export function Editor() {
                   }
                 >
                   <Paperclip className="size-3.5" />
-                  <span className="hidden sm:inline">Evidence</span>
                   {hasEvidence && (
                     <span
                       className={
@@ -1375,6 +1376,7 @@ export function Editor() {
               activeSectionId={activeSectionId}
               onCollapse={unpinAll}
               onPin={pinAI}
+              onUnpin={unpinAll}
               isPinned
             />
           </aside>
@@ -1419,6 +1421,7 @@ export function Editor() {
                 activeSectionId={activeSectionId}
                 onCollapse={() => setAiDrawerOpen(false)}
                 onPin={() => { pinAI(); setAiDrawerOpen(false); }}
+                onUnpin={unpinAll}
                 isPinned={false}
               />
             </motion.aside>

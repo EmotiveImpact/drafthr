@@ -80,7 +80,7 @@ function FixRow({
         delay: 0.15 + index * 0.06,
         ease: [0.32, 0.72, 0, 1],
       }}
-      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3"
+      className="flex flex-col gap-2 px-4 sm:px-5 py-3"
     >
       {/* Severity icon + content — stays in one row even on mobile so the
        * row reads "severity: what's wrong" without the icon orphaning above. */}
@@ -111,10 +111,8 @@ function FixRow({
         </div>
       </div>
 
-      {/* Impact + CTA — on mobile drops onto its own row, right-aligned so
-       * the action sits at the bottom-right of the card row where the
-       * thumb naturally lands. On desktop sits inline at the row end. */}
-      <div className="flex items-center justify-end gap-3 shrink-0 ml-10 sm:ml-0">
+      {/* Impact + CTA row, always below the text, indented to align past the icon column. */}
+      <div className="flex items-center justify-end gap-3 shrink-0 ml-10">
         {fix.impact > 0 && (
           <span
             className="text-[11.5px] font-semibold tabular-nums text-[var(--ds-green-fg)]"

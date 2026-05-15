@@ -23,6 +23,7 @@ export function RightRail({
   activeSectionId,
   onCollapse,
   onPin,
+  onUnpin,
   isPinned,
 }: {
   draft: Draft;
@@ -38,6 +39,9 @@ export function RightRail({
   /** Desktop pin handler — forwarded into AIPanel so the pin button
    * sits next to the collapse chevron in the AI agent header. */
   onPin?: () => void;
+  /** Unpin handler — forwarded into AIPanel. When supplied and isPinned
+   * is true, clicking the pin button calls this to return to twin pills. */
+  onUnpin?: () => void;
   isPinned?: boolean;
 }) {
   return (
@@ -47,6 +51,7 @@ export function RightRail({
         activeSectionId={activeSectionId ?? null}
         onCollapse={onCollapse}
         onPin={onPin}
+        onUnpin={onUnpin}
         isPinned={isPinned}
       />
     </div>
