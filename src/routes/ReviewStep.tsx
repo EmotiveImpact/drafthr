@@ -7,7 +7,7 @@ import { LetterPreview } from "@/components/editor/LetterPreview";
 import { ReviewRail } from "@/components/editor/ReviewRail";
 import { Button } from "@/components/ui/button";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { WizardSidebar } from "@/components/editor/WizardSidebar";
+import { WizardChrome } from "@/components/editor/WizardChrome";
 
 /**
  * Review step — the assessment page between Edit and Finalise. 2-column
@@ -112,30 +112,23 @@ export function ReviewStep() {
         </div>
       </header>
 
-      {/* Layout — 2 columns: left sidebar (Sections | Health) + letter canvas.
-       *   [WizardSidebar 340px] [LetterPreview — full remaining width]
-       * 340px gives the Health tab content (score ring + sub-rings + Fix
-       * this first rows) enough breathing room. The Sections tab fits
-       * comfortably too — labels rarely run longer than ~24 characters. */}
+      {/* Layout — 2 columns: left sidebar (Health-only) + letter canvas.
+       *   [Stepper + ReviewRail 340px] [LetterPreview — full remaining width]
+       * Sections tab dropped on Review — you're reviewing, not editing.
+       * The stepper (WizardChrome) stays so you can step Edit ↔ Review ↔
+       * Finalise from this rail; the rest of the rail is ReviewRail. */}
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardSidebar
+          <WizardChrome draftId={draft.id} mode={draft.mode} current="review" />
+          <ReviewRail
             draft={draft}
-            current="review"
-            onSelectSection={(id) => nav(`/editor/${draft.id}?section=${id}`)}
-            secondaryTabLabel="Health"
-            secondaryTab={
-              <ReviewRail
-                draft={draft}
-                counselReviewedBy={counselReview}
-                unresolvedComments={unresolvedCommentCount}
-                onJumpToSection={(sectionId) =>
-                  nav(`/editor/${draft.id}?section=${sectionId}`)
-                }
-                onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
-                onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
-              />
+            counselReviewedBy={counselReview}
+            unresolvedComments={unresolvedCommentCount}
+            onJumpToSection={(sectionId) =>
+              nav(`/editor/${draft.id}?section=${sectionId}`)
             }
+            onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
+            onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
           />
         </aside>
 
