@@ -2,6 +2,119 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.8.0 — 2026-05-15
+
+The defensibility release. Three structural moves: a Business-tier approval
+workflow with workspace roles, an editor wave that wires the Employees
+directory and Custom Templates directly into draft authoring, and the audit
+moat — a hash-chained append-only event log running live against Neon
+Postgres. The third one is the structural moat for tribunal defensibility:
+any retroactive edit to an audit row breaks the chain at that row and every
+row after it, detectable in milliseconds.
+
+### Approval queue + workspace RBAC (Business-tier)
+
+- State machine on every draft: `draft` → `in_review` → `approved` |
+  `changes_requested`. Each transition appends an `ApprovalEntry` to
+  `draft.approvals[]` plus a corresponding timeline event for the
+  Activity feed.
+- `WorkspaceRole` on profile (`owner` / `admin` / `drafter` / `reviewer`
+  / `viewer`). `src/lib/permissions.ts` centralises the role checks
+  (`canApprove`, `canSubmitForReview`, `canEditDraft`) — no inline role
+  conditions scattered through UI.
+- Editor topbar gains a colored status pill (muted / amber / green /
+  red) and a File-menu surface for the four review actions: Submit for
+  approval, Withdraw, Approve, Request changes.
+- During `in_review` AND when the current role can approve, the editor
+  canvas locks read-only with an explanatory banner. Approved drafts
+  also lock — they're shippable artefacts.
+- `changes_requested` unlocks the editor for the author and surfaces a
+  feedback panel showing the reviewer's verbatim note + a one-click
+  Re-submit CTA.
+- New `/approvals` page lists in-review drafts with mode/search/sort
+  filters; HR sidebar gets an "Approvals" nav item with a count badge.
+- Home Today panel surfaces in-review drafts to reviewer-capable roles
+  so they're seen alongside calendar work.
+- Settings → Workspace card with a role picker for the local
+  single-user case (lets you simulate the reviewer side for screencasts
+  and demos).
+
+### Editor wave (employee prefill + templates from scratch)
+
+- **`Draft.isTemplateSource` + `Draft.templateSourceId`** — additive,
+  no store-version bump.
+- HR-mode wizard gains a "Pick from your employees" affordance on the
+  employee-details step. Selecting populates legalName, jobTitle,
+  department, email, startDate, and stamps `answers.linkedEmployeeId`.
+- Editor topbar renders a **Matter breadcrumb** (with status colour
+  dot, linking to `/matters/<id>`) and an **Employee chip** with a
+  popover that links to the employee profile. Both desktop-only.
+- **"New template" button** on the My Templates tab + empty-state
+  callout. Opens `NewTemplateModal` (name, description, base letter
+  type, jurisdiction), then spawns a template-source draft and lands
+  the user in the editor.
+- Editor in template mode: swaps the Review CTA for **"Save template"**,
+  shows a "Editing template: …" banner with Discard, and hides the
+  redundant File → "Save as template…" item.
+- "Save template" creates or updates the linked `CustomTemplate` in
+  place. Re-saves stay on the same row — no duplicates on every save.
+- Template-source drafts filtered out of every regular draft surface:
+  Home, MattersIndex, MatterDetail, EmployeesIndex, EmployeeDetail,
+  AppSidebar, SearchPalette, NotificationsBell, Notifications,
+  Activity, Exported, Calendar, Approvals, ModePicker.
+
+### Persistence — Drizzle + Neon Postgres + audit hash chain ★
+
+- Full Drizzle schema landed live in Neon (eu-central-1, Frankfurt):
+  `tenants`, `users`, `employees`, `matters`, `matter_participants`,
+  `drafts`, `sections`, `section_versions`, `comments`, `evidence`,
+  `custom_templates`, `approvals`, `audit_events` — 13 tables, FKs,
+  indexes.
+- `@neondatabase/serverless` driver — best cold-start behaviour on
+  Vercel functions.
+- `audit_events` table is the moat. Each row carries `prev_hash` +
+  `row_hash` where `row_hash = sha256(prev_hash || ':' ||
+  canonical_json(payload) || ':' || kind || ':' || subject_id ||
+  ':' || created_at_epoch_ms)`. Hash chain is per-tenant; genesis
+  prev_hash is 64 zeros. UNIQUE constraint on `(tenant_id, row_hash)`,
+  INDEX on `(tenant_id, created_at DESC)`, CHECK that row_hash is 64
+  hex chars.
+- `src/db/audit.ts` — `appendAuditEvent()` runs SELECT-previous-then-
+  INSERT inside a Drizzle transaction so concurrent appends can't race.
+- `src/db/audit-verify.ts` — `verifyAuditChain(tenantId)` walks every
+  row in order, recomputes each hash, returns the first mismatch.
+  Tribunal demo: prove the chain holds, or pinpoint exactly where it
+  was tampered.
+- `scripts/db-verify.ts` — live test harness: lists tables, inserts a
+  test tenant, appends 3 events, verifies clean, tampers with a row,
+  verifies it now breaks, cleans up. Run via `npx dotenv -e .env.local
+  -- npx tsx scripts/db-verify.ts`.
+- First end-to-end caller: `api/export/pdf.ts` appends a
+  `draft.exported` audit event with the rendered PDF's SHA-256 + the
+  reviewer's attestation. Wrapped in try/catch — **PDF export does NOT
+  fail if Postgres is down**. Defensive degradation.
+- `DRAFTHR_DUAL_WRITE` feature flag (default `false`) gates future
+  table-by-table dual-write rollout. Drafts → Postgres, then matters,
+  then employees, etc. — one wave per table family, easy to roll back.
+- `drizzle.config.ts` reads `DATABASE_URL_UNPOOLED` for migrations
+  (DDL + advisory locks need the direct connection — pooler can't
+  expose them). Runtime queries from API routes use the pooled
+  `DATABASE_URL`.
+
+### Config + tooling
+
+- `.env.example` documents `DATABASE_URL` (pooled, runtime),
+  `DATABASE_URL_UNPOOLED` (direct, migrations), `DRAFTHR_DUAL_WRITE`,
+  and `DRAFTHR_DEFAULT_TENANT_ID` (single-tenant local dev tenant).
+- `tsconfig.{app,node}.json` updated to include `src/db/` and
+  `scripts/`.
+- Migrations committed under `drizzle/migrations/` for replayability.
+
+Operational note: dual-write stays off; localStorage remains the source
+of truth until you flip the flag. The PDF-export audit event is the
+only path that touches Postgres in default config — and it degrades
+gracefully if the DB is unreachable.
+
 ## 0.7.0 — 2026-05-15
 
 HR/Management portfolio release. DraftHR's HR mode flips from "single-letter
