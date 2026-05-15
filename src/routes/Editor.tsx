@@ -184,17 +184,23 @@ export function Editor() {
    * --------------------------------------------------------------------- */
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
 
-  // Persist pin changes.
+  // Keep localStorage in sync whenever pinnedDock changes — regardless of
+  // which helper changed it (pinEvidence, pinAI, unpinAll). Without this,
+  // pinning AI would leave localStorage at "1" (evidence) and the next
+  // reload would wrongly restore evidencePinned = true.
+  useEffect(() => {
+    if (!draftId) return;
+    writePinned(draftId, pinnedDock === "evidence");
+  }, [draftId, pinnedDock]);
+
   const handlePinnedChange = (next: boolean) => {
     if (next) {
       pinEvidence();
-      if (draftId) writePinned(draftId, true);
       // Pinning also implicitly closes the floating drawer since the same
       // surface is now permanent.
       setEvidenceDrawerOpen(false);
     } else {
       unpinAll();
-      if (draftId) writePinned(draftId, false);
     }
   };
 
