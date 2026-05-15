@@ -17,6 +17,9 @@ import { ReviewStep } from "@/routes/ReviewStep";
 import { Finalize } from "@/routes/Finalize";
 import { MattersIndex } from "@/routes/MattersIndex";
 import { MatterDetail } from "@/routes/MatterDetail";
+import { EmployeesIndex } from "@/routes/EmployeesIndex";
+import { EmployeeDetail } from "@/routes/EmployeeDetail";
+import BulkOperations from "@/routes/BulkOperations";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -102,6 +105,9 @@ export function App() {
         <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
         <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />
         <Route path="/matters/:matterId" element={<Protected><MatterDetail /></Protected>} />
+        <Route path="/employees" element={<Protected><EmployeesIndex /></Protected>} />
+        <Route path="/employees/:employeeId" element={<Protected><EmployeeDetail /></Protected>} />
+        <Route path="/bulk" element={<Protected><BulkOperations /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />
