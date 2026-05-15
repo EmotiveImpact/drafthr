@@ -406,10 +406,16 @@ function DocumentHero({
   letterTypeLabel: string;
   onSeeSpecialists: () => void;
 }) {
-  // TODO: replace with real metrics once bookings data is available.
-  // Format: "{N} people had a specialist review a {letter type} in the
-  // last 90 days." — keep the time window honest.
+  // PLACEHOLDER STATS — replace with real metrics once we have booking data.
+  // Three numbers, stacked to combine social proof + outcome + speed:
+  //   recentBookings   — how many peers chose this (lateral pressure)
+  //   resolutionRate   — outcome statistic (vertical pressure)
+  //   speedDaysFaster  — concrete behavioural benefit
+  // Keep all three honest or we destroy the trust the rest of the product
+  // is building.
   const recentBookings = 412;
+  const resolutionRate = 73;
+  const speedDaysFaster = 2;
   const testimonial = {
     quote:
       "Sarah caught a regulation 15(3) point I'd missed entirely. The response came back two days later, settled.",
@@ -476,14 +482,22 @@ function DocumentHero({
           ))}
         </div>
 
-        {/* Headline + sub */}
+        {/* Headline + sub. Variant B (stacked) — three persuasion modes in
+         * one sentence: social proof (recentBookings) + outcome
+         * (resolutionRate) + behavioural specificity (speedDaysFaster).
+         * Reads anxious-first ("did others do this?") then analytical
+         * ("what did it get them?"). */}
         <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-[var(--ds-body)]">
           <strong className="text-[var(--ds-ink)] font-semibold">
-            {recentBookings} people had a specialist review a {letterTypeLabel}
+            {recentBookings} people had a {letterTypeLabel} reviewed by a specialist
+          </strong>
+          {" — "}
+          <strong className="text-[var(--ds-violet-fg,#7c3aed)] font-semibold">
+            {resolutionRate}%
           </strong>{" "}
-          in the last 90 days.{" "}
+          landed the outcome they wanted.{" "}
           <span className="text-[var(--ds-muted)]">
-            Most agreed the wording got tighter and the response came back faster.
+            Average response: {speedDaysFaster} days faster.
           </span>
         </div>
 
