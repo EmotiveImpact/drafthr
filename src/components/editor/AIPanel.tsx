@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin } from "lucide-react";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -143,6 +143,8 @@ export function AIPanel({
   draft,
   activeSectionId,
   onCollapse,
+  onPin,
+  isPinned,
 }: {
   draft: Draft;
   activeSectionId: string | null;
@@ -150,6 +152,11 @@ export function AIPanel({
    * chevron renders at the far right of the header row. Editor passes this
    * so the chevron lives on the same line as "AI agent · model · date". */
   onCollapse?: () => void;
+  /** Convert the rail to "pinned" mode. When supplied, renders a pin button
+   * next to the collapse chevron. Pin is mutually exclusive with Evidence pin
+   * — the parent enforces this via the shared `pinnedDock` state. */
+  onPin?: () => void;
+  isPinned?: boolean;
 }) {
   const profile = useProfileStore((s) => s.profile);
   const me = meIdentity(profile);
@@ -488,6 +495,23 @@ export function AIPanel({
               title="Clear chat thread"
             >
               <Trash2 className="size-3.5" />
+            </button>
+          )}
+          {onPin && (
+            <button
+              type="button"
+              onClick={onPin}
+              className={
+                "inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[10.5px] font-bold uppercase tracking-[0.04em] border " +
+                (isPinned
+                  ? "bg-[var(--ds-violet-bg)] text-[var(--ds-violet-fg)] border-violet-200"
+                  : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
+              }
+              title={isPinned ? "Pinned — click to unpin" : "Pin Ask AI as the right rail (collapses Evidence)"}
+              aria-pressed={isPinned}
+            >
+              <Pin className="size-3" />
+              {isPinned ? "Pinned" : "Pin"}
             </button>
           )}
           {onCollapse && (

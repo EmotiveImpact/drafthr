@@ -1373,6 +1373,8 @@ export function Editor() {
               onPendingCommentConsumed={() => setPendingComment(null)}
               activeSectionId={activeSectionId}
               onCollapse={() => setRailCollapsed(true)}
+              onPin={pinAI}
+              isPinned={pinnedDock === "ai"}
             />
           </motion.aside>
         )}

@@ -22,6 +22,8 @@ export function RightRail({
   draft,
   activeSectionId,
   onCollapse,
+  onPin,
+  isPinned,
 }: {
   draft: Draft;
   /** Legacy — accepted but ignored under Change A. */
@@ -33,6 +35,10 @@ export function RightRail({
   /** Desktop rail-collapse handler — forwarded into AIPanel so the
    * chevron sits on the same row as the AI agent header. */
   onCollapse?: () => void;
+  /** Desktop pin handler — forwarded into AIPanel so the pin button
+   * sits next to the collapse chevron in the AI agent header. */
+  onPin?: () => void;
+  isPinned?: boolean;
 }) {
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -40,6 +46,8 @@ export function RightRail({
         draft={draft}
         activeSectionId={activeSectionId ?? null}
         onCollapse={onCollapse}
+        onPin={onPin}
+        isPinned={isPinned}
       />
     </div>
   );
