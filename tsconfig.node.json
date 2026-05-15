@@ -17,5 +17,14 @@
     "noUncheckedSideEffectImports": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "drizzle.config.ts", "dev/**/*.ts", "server/**/*.ts", "api/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "drizzle.config.ts",
+    "dev/**/*.ts",
+    "server/**/*.ts",
+    "api/**/*.ts",
+    "src/db/**/*.ts",
+    "scripts/**/*.ts"
+  ]
 }
