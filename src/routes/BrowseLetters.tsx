@@ -22,6 +22,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MyTemplatesGrid } from "@/components/templates/MyTemplatesGrid";
 
 /**
  * Template library. Categorised grid of every letter type with risk
@@ -35,11 +36,18 @@ import { Input } from "@/components/ui/input";
  *    LETTER_UK + LETTER_US exports. Updates can be made per jurisdiction
  *    without touching the other.
  */
+type TemplatesTab = "drafthr" | "mine";
+
 export function BrowseLetters({ mode }: { mode: Mode }) {
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const [activeCategory, setActiveCategory] = useState<LetterCategoryId | "all">("all");
+  const [activeTab, setActiveTab] = useState<TemplatesTab>("drafthr");
   const createDraft = useDraftStore((s) => s.createDraft);
+  // Surface a count on the My Templates tab without a second selector.
+  const customCount = useDraftStore(
+    (s) => Object.values(s.customTemplates).filter((t) => t.mode === mode).length
+  );
   const profile = useProfileStore((s) => s.profile);
   const [jurisdiction, setJurisdiction] = useState<Jurisdiction>(profile.defaults.jurisdiction);
 
@@ -109,6 +117,80 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
         closeTo={prefix}
       />
 
+      {/* Tab strip — DraftHR (built-in) vs My Templates (custom). Sits
+       * between the page header and the filter bar. */}
+      <div
+        role="tablist"
+        aria-label="Template source"
+        className="flex items-center gap-1 border-b border-[var(--ds-line)] mb-4"
+      >
+        <TabButton
+          active={activeTab === "drafthr"}
+          onClick={() => setActiveTab("drafthr")}
+          label="DraftHR"
+        />
+        <TabButton
+          active={activeTab === "mine"}
+          onClick={() => setActiveTab("mine")}
+          label="My Templates"
+          count={customCount}
+        />
+      </div>
+
+      {activeTab === "mine" ? (
+        <MyTemplatesGrid mode={mode} />
+      ) : (
+        <BuiltInBrowser
+          q={q}
+          setQ={setQ}
+          jurisdiction={jurisdiction}
+          setJurisdiction={setJurisdiction}
+          activeCategory={activeCategory}
+          setActiveCategory={setActiveCategory}
+          filtered={filtered}
+          countByCategory={countByCategory}
+          byCategory={byCategory}
+          profile={profile}
+          startFromTemplate={startFromTemplate}
+          nav={nav}
+          prefix={prefix}
+        />
+      )}
+    </div>
+  );
+}
+
+function BuiltInBrowser({
+  q,
+  setQ,
+  jurisdiction,
+  setJurisdiction,
+  activeCategory,
+  setActiveCategory,
+  filtered,
+  countByCategory,
+  byCategory,
+  profile,
+  startFromTemplate,
+  nav,
+  prefix,
+}: {
+  q: string;
+  setQ: (s: string) => void;
+  jurisdiction: Jurisdiction;
+  setJurisdiction: (j: Jurisdiction) => void;
+  activeCategory: LetterCategoryId | "all";
+  setActiveCategory: (c: LetterCategoryId | "all") => void;
+  filtered: LetterTypeMeta[];
+  countByCategory: Map<string, number>;
+  byCategory: Map<string, LetterTypeMeta[]>;
+  profile: ReturnType<typeof useProfileStore.getState>["profile"];
+  startFromTemplate: (id: LetterTypeId) => void;
+  nav: ReturnType<typeof useNavigate>;
+  prefix: string;
+}) {
+  return (
+    <>
       {/* Filter bar: search + jurisdiction toggle. Sticky so it stays
        * visible as the user scrolls through long category lists. */}
       <div className="sticky top-0 z-20 bg-[var(--ds-canvas)] py-3 mb-4 -mx-4 px-4 sm:-mx-6 sm:px-6">
@@ -252,7 +334,48 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
           </div>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count?: number;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={
+        "relative inline-flex items-center gap-2 px-3 h-9 text-[13px] font-medium transition border-b-2 -mb-px " +
+        (active
+          ? "border-[var(--ds-ink)] text-[var(--ds-ink)]"
+          : "border-transparent text-[var(--ds-muted)] hover:text-[var(--ds-body)]")
+      }
+    >
+      {label}
+      {typeof count === "number" && count > 0 && (
+        <span
+          className={
+            "tabular-nums text-[10.5px] font-semibold rounded-full px-1.5 py-0.5 min-w-[18px] text-center " +
+            (active
+              ? "bg-[var(--ds-ink)] text-white"
+              : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]")
+          }
+        >
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 

@@ -49,6 +49,7 @@ import {
   Undo2,
   Redo2,
   Paperclip,
+  BookmarkPlus,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -63,6 +64,7 @@ import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
 import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
+import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal";
 import {
   EvidenceHandoff,
   evaluateEvidenceHandoff,
@@ -145,6 +147,7 @@ export function Editor() {
   // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
   // Unified dock state. `pinnedDock` is the single source of truth for which
   // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
   // Lazy initialiser reads from localStorage on first mount so the correct
@@ -551,6 +554,9 @@ export function Editor() {
                     onClick={() => nav(`/editor/${draft.id}/review`)}
                   >
                     <FileDown className="size-4 mr-2" /> Export…
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSaveAsTemplateOpen(true)}>
+                    <BookmarkPlus className="size-4 mr-2" /> Save as template…
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => nav("/settings")}>
@@ -1728,6 +1734,12 @@ export function Editor() {
         open={editDetailsOpen}
         onOpenChange={setEditDetailsOpen}
         draft={draft}
+      />
+
+      <SaveAsTemplateModal
+        draft={draft}
+        open={saveAsTemplateOpen}
+        onOpenChange={setSaveAsTemplateOpen}
       />
 
       {/* Refine dialog — Preview's entry point into the per-section refine

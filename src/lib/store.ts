@@ -6,6 +6,7 @@ import type {
   Collaborator,
   CollaboratorRole,
   Comment,
+  CustomTemplate,
   Draft,
   DraftTimelineEvent,
   Employee,
@@ -50,6 +51,16 @@ type Store = {
   tasks: Record<string, Task>;
   /** Meetings, hearings, deadlines on a Matter calendar. */
   events: Record<string, MatterEvent>;
+  /** Workspace-saved reusable templates — user-defined "house phrasings". */
+  customTemplates: Record<string, CustomTemplate>;
+  createCustomTemplate: (
+    input: Omit<CustomTemplate, "id" | "createdAt" | "updatedAt">
+  ) => string;
+  updateCustomTemplate: (id: string, patch: Partial<CustomTemplate>) => void;
+  deleteCustomTemplate: (id: string) => void;
+  /** Spawn a new draft from a saved custom template. Returns the new
+   * draft id, or null when the template id doesn't exist. */
+  createDraftFromCustomTemplate: (templateId: string, mode?: Mode) => string | null;
   createEmployee: (input: Omit<Employee, "id" | "createdAt" | "updatedAt">) => string;
   updateEmployee: (id: string, patch: Partial<Employee>) => void;
   /** Soft-archive — flips status to "left" and stamps endDate if absent. */
@@ -168,6 +179,80 @@ export const useDraftStore = create<Store>()(
       employees: {},
       tasks: {},
       events: {},
+      customTemplates: {},
+
+      /* ----------------------------------------------------------------
+       * Custom templates — workspace-saved reusable letters. A user-named
+       * snapshot of a draft's per-section HTML + answers, keyed by the
+       * canonical SectionId (not the per-draft Section.id) so it can be
+       * applied to a freshly-spawned outline from the same baseLetterType.
+       * ---------------------------------------------------------------*/
+
+      createCustomTemplate: (input) => {
+        const id = uid("tpl");
+        const now = Date.now();
+        const tpl: CustomTemplate = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ customTemplates: { ...s.customTemplates, [id]: tpl } }));
+        return id;
+      },
+
+      updateCustomTemplate: (id, patch) =>
+        set((s) => {
+          const t = s.customTemplates[id];
+          if (!t) return s;
+          return {
+            customTemplates: {
+              ...s.customTemplates,
+              [id]: { ...t, ...patch, updatedAt: Date.now() },
+            },
+          };
+        }),
+
+      deleteCustomTemplate: (id) =>
+        set((s) => {
+          if (!s.customTemplates[id]) return s;
+          const { [id]: _removed, ...remaining } = s.customTemplates;
+          return { customTemplates: remaining };
+        }),
+
+      createDraftFromCustomTemplate: (templateId, modeOverride) => {
+        const tpl = get().customTemplates[templateId];
+        if (!tpl) return null;
+        // Seed answers from the template, plus jurisdiction default so
+        // wizard-derived fields downstream pick the right region.
+        const seededAnswers: LetterAnswers = {
+          ...(tpl.answers ?? {}),
+          ...(tpl.jurisdiction ? { jurisdiction: tpl.jurisdiction } : {}),
+        };
+        const newDraftId = get().createDraft(
+          tpl.baseLetterType,
+          seededAnswers,
+          modeOverride ?? tpl.mode
+        );
+        // Pre-fill section html from the template, keyed by canonical SectionId.
+        set((s) => {
+          const d = s.drafts[newDraftId];
+          if (!d) return s;
+          const sections = d.sections.map((sec) => {
+            const html = tpl.sectionHtml[sec.sectionId];
+            if (!html) return sec;
+            return {
+              ...sec,
+              html: sanitizeLetterHtml(html),
+              status: "edited" as Section["status"],
+            };
+          });
+          return {
+            drafts: { ...s.drafts, [newDraftId]: { ...d, sections, updatedAt: Date.now() } },
+          };
+        });
+        return newDraftId;
+      },
 
       /* ----------------------------------------------------------------
        * Employees — workspace-level normalized people directory.

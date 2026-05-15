@@ -612,3 +612,32 @@ export type MatterParticipant = {
   name: string;
   role: MatterParticipantRole;
 };
+
+/* ============================================================================
+ * Custom templates — workspace-saved reusable letters.
+ *
+ * A user-defined template captured from an existing draft. Starting a new
+ * draft from one pre-fills sections (keyed by canonical SectionId) and
+ * answers. The base letter type still drives section outline + meta on
+ * render — the custom template just supplies starting content.
+ * ==========================================================================*/
+export type CustomTemplate = {
+  id: string;
+  /** User-given name. Required. */
+  name: string;
+  /** Optional one-liner. */
+  description?: string;
+  /** Base letter type — drives the default sections + meta on render. */
+  baseLetterType: LetterTypeId;
+  mode: Mode;
+  /** Optional jurisdiction default — UK or US — to pre-set when starting a new draft from this template. */
+  jurisdiction?: Jurisdiction;
+  /** Per-section starting HTML. Map keyed by sectionId (Section.sectionId, the canonical id like "opening" / "body"), not the per-draft Section.id. */
+  sectionHtml: Partial<Record<SectionId, string>>;
+  /** Initial answers — copied verbatim into LetterAnswers when a new draft is created. */
+  answers?: LetterAnswers;
+  createdAt: number;
+  updatedAt: number;
+  /** Optional emoji or short label for the card thumbnail. */
+  emoji?: string;
+};
