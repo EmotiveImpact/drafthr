@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const SETTLEMENT_COVER_UK: LetterTemplate = {
   letterType: "settlement_cover",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Settlement Agreement Cover Letter):
 - A Settlement Agreement under section 203 of the Employment Rights Act 1996 must be in writing, identify the particular complaint(s) being waived, and state that the employee has received independent legal advice from a relevant adviser (qualified solicitor, certified union representative, or advice-centre worker), the adviser is identified, and the adviser is covered by professional indemnity insurance — see s.203(3) ERA 1996.
 - The cover letter and the agreement itself should be marked 'Without Prejudice and Subject to Contract' to engage the protection of the without-prejudice rule (Rush & Tompkins v GLC [1989]) and the s.111A ERA 1996 statutory protection for pre-termination settlement discussions.
@@ -145,6 +146,7 @@ export const SETTLEMENT_COVER_UK: LetterTemplate = {
 export const SETTLEMENT_COVER_US: LetterTemplate = {
   letterType: "settlement_cover",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Separation Agreement / Severance Cover Letter):
 - For employees aged 40 or older, any release of ADEA claims must comply with the Older Workers Benefit Protection Act (OWBPA), 29 USC section 626(f): writing, plain language, advice to consult counsel, 21 days to consider (or 45 days where a group exit/RIF is involved), 7 days to revoke after signing, identification of the ADEA claim being waived, and disclosures of the decisional unit and ages of selected/not-selected employees in a group setting.
 - Section 409A of the Internal Revenue Code (26 USC 409A) governs the timing of deferred-compensation payments; severance must be timed to the end of the consideration/revocation period or qualify as a short-term deferral.

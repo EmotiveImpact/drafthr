@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const REFERENCE_UK: LetterTemplate = {
   letterType: "reference",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Reference / Employment Verification):
 - The default for employer references in the UK is fact-only: dates of employment and last-held position. This limits exposure under the Spring v Guardian Assurance plc [1995] line of authority, which imposes a duty of care to provide a fair, accurate, true, and not misleading reference.
 - A character reference (with views on performance and conduct) is permitted with authority but elevates risk. Where the employer chooses to provide one, statements must be balanced and based on documented evidence.
@@ -96,6 +97,7 @@ export const REFERENCE_UK: LetterTemplate = {
 export const REFERENCE_US: LetterTemplate = {
   letterType: "reference",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Reference / Employment Verification):
 - The dominant US practice is fact-only verification: dates of employment, last-held title, and (where authorized in writing by the former employee) salary. Many states grant good-faith immunity for truthful references (e.g., Cal. Civ. Code 47(c) qualified privilege; Tex. Lab. Code 103.003).
 - 'Blacklisting' (preventing a former employee from securing employment by communicating false statements) is unlawful in California (Lab. Code 1050–1054), Colorado (C.R.S. 8-2-110), Indiana (IC 22-5-3-2), and other states. Stick to fact-only or fact-plus-positive.

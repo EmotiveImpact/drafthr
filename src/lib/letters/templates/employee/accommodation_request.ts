@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const ACCOMMODATION_REQUEST_UK: LetterTemplate = {
   letterType: "accommodation_request",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Reasonable Adjustments — EMPLOYEE MODE):
 - Equality Act 2010 ss.20-22 — duty to make reasonable adjustments where a provision, criterion or practice (PCP), a physical feature, or the absence of an auxiliary aid places a disabled employee at a substantial disadvantage compared with non-disabled comparators.
 - "Disability" under s.6 EqA: a physical or mental impairment with a substantial and long-term adverse effect on the ability to carry out normal day-to-day activities.
@@ -140,6 +141,7 @@ export const ACCOMMODATION_REQUEST_UK: LetterTemplate = {
 export const ACCOMMODATION_REQUEST_US: LetterTemplate = {
   letterType: "accommodation_request",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US ADA / PWFA Accommodation Request — EMPLOYEE MODE):
 - Americans with Disabilities Act (ADA) Title I, 42 U.S.C. §12112(b)(5) — duty to provide reasonable accommodation to a qualified individual with a disability, absent undue hardship.
 - The interactive process is triggered once the employee requests an accommodation; the employer must engage in good-faith dialogue (29 C.F.R. §1630.2(o)(3); EEOC Enforcement Guidance).

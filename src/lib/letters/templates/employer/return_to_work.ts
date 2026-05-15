@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RETURN_TO_WORK_UK: LetterTemplate = {
   letterType: "return_to_work",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Return to Work):
 - After Ordinary Maternity Leave (first 26 weeks), the employee has the right to return to the same job under section 71 of the Employment Rights Act 1996. After Additional Maternity Leave (weeks 27–52), the right is to the same job or, if not reasonably practicable, a suitable alternative on no less favourable terms (regulation 18 of the Maternity and Parental Leave etc. Regulations 1999).
 - Equality Act 2010 sections 20–22 impose a duty to make reasonable adjustments where a provision, criterion, or practice places a disabled returning employee at substantial disadvantage. Document any adjustments agreed.
@@ -111,6 +112,7 @@ export const RETURN_TO_WORK_UK: LetterTemplate = {
 export const RETURN_TO_WORK_US: LetterTemplate = {
   letterType: "return_to_work",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Return to Work):
 - FMLA: an employee returning from FMLA leave is entitled to be restored to the same or an equivalent position, with the same pay, benefits, and other terms and conditions of employment, under 29 USC section 2614(a)(1) and 29 CFR 825.214.
 - Pregnancy Workers Fairness Act (PWFA), 42 USC 2000gg: reasonable accommodations for known limitations related to pregnancy, childbirth, or related medical conditions, including post-partum recovery, breastfeeding/lactation accommodations.

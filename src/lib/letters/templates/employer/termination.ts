@@ -8,6 +8,7 @@ import type { LetterTemplate } from "../types";
 export const TERMINATION_UK: LetterTemplate = {
   letterType: "termination",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Termination):
 - This letter is a "potentially fair" dismissal under s.98 Employment Rights Act 1996. Name the s.98 reason expressly (capability, conduct, redundancy, statutory illegality, or some other substantial reason).
 - Comply with the ACAS Code of Practice on Disciplinary and Grievance Procedures. Reference the disciplinary hearing date and outcome.
@@ -167,6 +168,7 @@ export const TERMINATION_UK: LetterTemplate = {
 export const TERMINATION_US: LetterTemplate = {
   letterType: "termination",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Termination):
 - US employment is presumptively at-will (except Montana after probation, MCA 39-2-904). The letter does not need to state a statutory reason but should document a legitimate, non-discriminatory business reason to defeat claims under Title VII (42 USC 2000e-2), the ADA (42 USC 12112), the ADEA (29 USC 623), the FMLA (29 USC 2615), and state analogs (e.g., FEHA Cal. Gov. Code 12940).
 - Final-pay timing is state-specific and strict. California: all final wages, including accrued unused vacation, due immediately on the day of termination for involuntary separation under Lab. Code 201, with waiting-time penalties under Lab. Code 203 for non-compliance. New York: by the next regular payday under Labor Law 191. Texas: next regular payday under Lab. Code 61.014. Massachusetts: on the day of discharge under M.G.L. c.149 148. Verify the applicable state rule.

@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const SICKNESS_NOTIFICATION_UK: LetterTemplate = {
   letterType: "sickness_notification",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Sickness Notification — EMPLOYEE MODE):
 - Statutory Sick Pay (SSP) under the Social Security Contributions and Benefits Act 1992 from day 4 of incapacity (subject to qualifying conditions; the lower earnings limit is recalculated annually).
 - Self-certification (form SC2 or employer equivalent) for absences of 7 calendar days or fewer; a fit note (Med 3) from a registered healthcare professional is required from day 8 of absence.
@@ -90,6 +91,7 @@ export const SICKNESS_NOTIFICATION_UK: LetterTemplate = {
 export const SICKNESS_NOTIFICATION_US: LetterTemplate = {
   letterType: "sickness_notification",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Sickness / FMLA Notification — EMPLOYEE MODE):
 - Family and Medical Leave Act (FMLA), 29 U.S.C. §2601 et seq. — up to 12 weeks of unpaid, job-protected leave per 12-month period for a serious health condition (employee or qualifying family member); covered employers (50+ employees within 75 miles); 12-month and 1,250-hour service.
 - The notice need not mention FMLA — the burden is on the employer to designate (29 C.F.R. §825.301). However, providing enough information to put the employer on notice triggers the duty.

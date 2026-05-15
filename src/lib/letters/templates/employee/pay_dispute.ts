@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const PAY_DISPUTE_UK: LetterTemplate = {
   letterType: "pay_dispute",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Pay Dispute / Unauthorised Deductions — EMPLOYEE MODE):
 - Statutory basis: s.13 Employment Rights Act 1996 — an employer must not make any deduction from a worker's wages unless authorised by statute, an express contractual provision, or written consent given before the deduction.
 - Limitation: 3 months less one day from the date of payment of the underpaid wages (s.23 ERA), subject to ACAS Early Conciliation extension. Bear Scotland Ltd v Fulton [2014] UKEAT 0047/13/0411 — a "series of deductions" can extend back, but Deduction from Wages (Limitation) Regulations 2014 cap the look-back at 2 years for claims presented on or after 1 July 2015.
@@ -119,6 +120,7 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
 export const PAY_DISPUTE_US: LetterTemplate = {
   letterType: "pay_dispute",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Wage Claim — EMPLOYEE MODE):
 - Federal: Fair Labor Standards Act (FLSA) 29 U.S.C. §201 et seq. — minimum wage and overtime; private right of action under §216(b); 2-year statute (3-year for willful violations).
 - State wage payment laws are typically more protective:

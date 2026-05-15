@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RESIGNATION_WITHDRAWAL_UK: LetterTemplate = {
   letterType: "resignation_withdrawal",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Resignation Withdrawal — EMPLOYEE MODE):
 - The general rule is that a resignation, once given clearly and in unambiguous terms, cannot be unilaterally withdrawn without the employer's consent (Riordan v War Office [1959] 1 WLR 1046).
 - Sothern v Franks Charlesly & Co [1981] IRLR 278 (CA) provides the principal exception: where words of resignation were spoken in heat or anger, or in special circumstances, the employer should allow a reasonable cooling-off period before treating them as final. The key indicator is whether the words were unequivocal at the time. Promptness in withdrawing is the single most important factor.
@@ -74,6 +75,7 @@ export const RESIGNATION_WITHDRAWAL_UK: LetterTemplate = {
 export const RESIGNATION_WITHDRAWAL_US: LetterTemplate = {
   letterType: "resignation_withdrawal",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Resignation Withdrawal — EMPLOYEE MODE):
 - In at-will employment, an employee can generally withdraw a resignation only with the employer's consent. Some courts have applied a "heat of the moment" cooling-off principle (Wendell v. Wendell, illustrative; doctrine varies by state) where words were not clearly intended as a final resignation.
 - Tone: prompt, factual, brief. Build the record. American English.`,

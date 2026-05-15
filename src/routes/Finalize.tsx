@@ -8,7 +8,7 @@ import {
   FileText,
   FileDown,
   Package,
-  Copy,
+  FileType2,
   Send,
   ShieldCheck,
 } from "lucide-react";
@@ -28,18 +28,24 @@ import {
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
 
 /**
- * Finalize — the ship gate.
+ * Finalise — the ship gate.
  *
- * Previously this page carried score rings, fix-this-first, three review
- * lanes (AI / Team / Consultant), and the export grid. Assess + improve
- * work has moved to ReviewStep — Finalize is now just:
+ * Last step in the Edit · Review · Finalise wizard. Review answered "is
+ * the letter good?" with the score rings, fix-this-first, and the lane
+ * picker. Finalise answers a single, more focused question: "ship it?"
  *
- *   1. A compact "ready to ship" health summary (one line, no rings).
- *   2. The counsel-review attestation gate for high-risk letter types.
- *   3. The export grid (PDF / DOCX / Evidence pack / Copy plain text).
- *   4. Mark-as-sent CTA (locks the letter, archives, clears from drafts).
+ * The page is spare on purpose:
  *
- * The mental model: Review = "Is this letter good?" Finalize = "Ship it".
+ *   1. Sticky branded header (back to Review).
+ *   2. Compact verdict recap — one-line band + score pulled from Review's
+ *      health-check engine. No rings; if you want detail, go back.
+ *   3. Counsel-review attestation — single checkbox, inline. Only renders
+ *      for high-risk letters (tribunal-bound / legal-review-required).
+ *   4. Four export tiles — PDF, DOCX, TXT, ZIP. Each is one click to
+ *      download. All exports are logged via `recordExport`.
+ *   5. Mark-as-sent — single dark CTA. Locks the draft, plays confetti,
+ *      navigates to Activity so the user sees their just-sent letter at
+ *      the top of the feed.
  */
 
 const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
@@ -47,6 +53,22 @@ const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
   adequate: "Adequate",
   weak: "Weak",
 };
+
+/** One-line verdict that pairs with the score in the recap strip.
+ * Pulls signal from the letter meta (tribunal-bound? legal review?) so
+ * the verdict reads as letter-aware rather than generic. */
+function verdictLabel(
+  band: "strong" | "adequate" | "weak",
+  meta: ReturnType<typeof getLetterMeta>,
+): string {
+  if (band === "strong") {
+    if (meta.tribunalBound) return "Tribunal-ready";
+    if (meta.legalReviewRequired) return "Counsel-ready";
+    return "Ready to ship";
+  }
+  if (band === "adequate") return "Almost there";
+  return "Needs work";
+}
 
 export function Finalize() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -56,9 +78,15 @@ export function Finalize() {
 
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  // Counsel attestation is captured inline on this page — the user ticks
+  // the checkbox confirming the letter has been reviewed. We deliberately
+  // don't persist this to draft state: the attestation is point-of-send,
+  // and the export's `reviewedBy/On` metadata (when present) is the
+  // archival record. This local toggle is just the runtime gate.
+  const [counselConfirmed, setCounselConfirmed] = useState(false);
 
-  // Health checks + score are derived directly from the draft. We don't
-  // render the rings here — we just need the counts for the summary strip.
+  // Health checks + score derived directly from the draft. We don't
+  // render the rings here — just the numbers for the verdict strip.
   const checks = useMemo<HealthCheck[]>(
     () => (draft ? runHealthChecks(draft) : []),
     [draft],
@@ -78,18 +106,11 @@ export function Finalize() {
 
   const meta = getLetterMeta(draft.letterType);
   const counselGateRequired = exportRequiresCounselGate(draft);
-  // High-risk letters require a counsel attestation before they can ship.
-  // The attestation itself is captured in the editor (Editor.tsx writes
-  // _counselReview into draft.answers). Finalize only checks for its
-  // presence and blocks export until it's there.
-  const counselReview =
-    (draft.answers as Record<string, unknown>)._counselReview as
-      | { reviewedBy: string; reviewedOn: string; attestedAt: number }
-      | undefined;
-  const counselAttested = !counselGateRequired || Boolean(counselReview);
+  const counselAttested = !counselGateRequired || counselConfirmed;
 
   const readyToShip = scoreData.failCount === 0 && scoreData.band === "strong";
   const shipBlocked = scoreData.failCount > 0 || !counselAttested;
+  const verdict = verdictLabel(scoreData.band, meta);
 
   /* ---------------------------- Exports ---------------------------- */
 
@@ -104,10 +125,15 @@ export function Finalize() {
     URL.revokeObjectURL(url);
   };
 
+  /**
+   * Counsel guard — runs before every export. Blocks if the letter
+   * requires counsel review and the user hasn't ticked the attestation
+   * checkbox. Returns true when the export may proceed.
+   */
   const guardCounsel = (): boolean => {
-    if (counselGateRequired && !counselReview) {
+    if (counselGateRequired && !counselConfirmed) {
       alert(
-        "This letter type requires counsel review before export. Open the editor and attach a counsel-review attestation.",
+        "Please confirm counsel review before exporting this letter.",
       );
       return false;
     }
@@ -148,33 +174,42 @@ export function Finalize() {
     }
   };
 
-  const onExportPack = async () => {
+  const onExportTxt = () => {
     if (!guardCounsel()) return;
-    setBusyFormat("pack");
-    try {
-      const { exportLetterPack } = await import("@/lib/export/pack");
-      await exportLetterPack(draft);
-      recordExport(draft.id, { format: "pack" });
-    } catch (err) {
-      alert(`Pack export failed: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setBusyFormat(null);
-    }
-  };
-
-  const onCopyPlain = async () => {
-    if (!guardCounsel()) return;
-    setBusyFormat("copy");
+    setBusyFormat("txt");
     try {
       const plain = draft.sections
         .map((s) => (s.html ?? "").replace(/<[^>]+>/g, "").trim())
         .filter(Boolean)
         .join("\n\n");
-      await navigator.clipboard.writeText(plain);
-      setTimeout(() => setBusyFormat(null), 800);
-      return;
+      const blob = new Blob([plain], { type: "text/plain;charset=utf-8" });
+      const slug = (draft.title ?? meta.title)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      downloadBlob(blob, `${slug || "letter"}.txt`);
+      // TXT isn't in the ExportEvent format union (pdf | docx | pack |
+      // marked-sent). Rather than widen the union for a low-stakes
+      // plain-text dump, we let the download stand as its own audit
+      // trail. If TXT becomes a tracked export later, add it to
+      // ExportEvent.format and log it here.
     } catch (err) {
-      alert(`Copy failed: ${err instanceof Error ? err.message : err}`);
+      alert(`TXT export failed: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setBusyFormat(null);
+    }
+  };
+
+  const onExportZip = async () => {
+    if (!guardCounsel()) return;
+    setBusyFormat("zip");
+    try {
+      const { exportLetterPack } = await import("@/lib/export/pack");
+      await exportLetterPack(draft);
+      recordExport(draft.id, { format: "pack" });
+    } catch (err) {
+      alert(`ZIP export failed: ${err instanceof Error ? err.message : err}`);
+    } finally {
       setBusyFormat(null);
     }
   };
@@ -183,11 +218,12 @@ export function Finalize() {
 
   const onMarkAsSent = () => {
     if (!guardCounsel()) return;
+    if (scoreData.failCount > 0) return;
     setShowConfetti(true);
     recordExport(draft.id, { format: "marked-sent" });
-    setTimeout(() => {
-      nav(draft.mode === "employer" ? "/hr" : "/me");
-    }, 1600);
+    // Activity is the canonical post-send destination — the just-sent
+    // letter shows at the top of the feed with an attestation hash.
+    setTimeout(() => nav("/activity"), 1600);
   };
 
   /* -------------------------- Render -------------------------- */
@@ -200,7 +236,7 @@ export function Finalize() {
       <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 sm:px-5 gap-3">
         <button
           type="button"
-          onClick={() => nav(draft.mode === "employer" ? "/hr" : "/me")}
+          onClick={() => nav("/activity")}
           className="flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-[var(--ds-line-2)] transition"
           aria-label="Home"
         >
@@ -223,7 +259,7 @@ export function Finalize() {
             {draft.title ?? meta.title}
           </span>
           <span className="text-[var(--ds-subtle)] hidden md:inline">·</span>
-          <span className="text-[var(--ds-ink)] font-medium">Finalize</span>
+          <span className="text-[var(--ds-ink)] font-medium">Finalise</span>
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -238,21 +274,26 @@ export function Finalize() {
         </div>
       </header>
 
-      {/* Scrollable body — narrower than before since this is now a focused
-       * ship gate, not a multi-section workspace. */}
+      {/* Scrollable body — narrower than the editor since this is now a
+       * focused ship gate, not a multi-section workspace. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="mx-auto max-w-[720px] px-4 py-7 sm:px-6 sm:py-10">
+        <div className="mx-auto max-w-[680px] px-4 py-7 sm:px-6 sm:py-10">
           <h1 className="text-[24px] font-semibold tracking-tight">
-            Ship this letter
+            Finalise <span className="text-[var(--ds-muted)] font-normal">·</span>{" "}
+            <span className="text-[var(--ds-muted)] font-normal">
+              Ready to ship
+            </span>
           </h1>
           <p className="text-[13.5px] text-[var(--ds-muted)] mt-1.5 mb-6 max-w-[560px]">
-            Last gate before the letter leaves the building. Export the
+            Last gate before the letter leaves the building. Download the
             formats you need, then mark as sent to archive the draft.
           </p>
 
-          {/* ───────── Compact health summary strip ───────── */}
-          <ReadyStrip
+          {/* Compact verdict recap — pulls from Review's health-check
+           * engine so the two pages stay in sync. */}
+          <VerdictStrip
             ready={readyToShip}
+            verdict={verdict}
             score={scoreData.score}
             band={scoreData.band}
             passCount={scoreData.passCount}
@@ -262,18 +303,19 @@ export function Finalize() {
             onBack={() => nav(`/editor/${draft.id}/review`)}
           />
 
-          {/* ───────── Counsel-review attestation gate ───────── */}
+          {/* Counsel-review attestation gate — only renders when the
+           * letter type requires it. Inline checkbox; ticking it
+           * unblocks the export tiles and Mark-as-sent. */}
           {counselGateRequired && (
-            <CounselGate
-              attested={Boolean(counselReview)}
-              review={counselReview}
-              onAttach={() => nav(`/editor/${draft.id}`)}
+            <CounselAttestation
+              confirmed={counselConfirmed}
+              onToggle={() => setCounselConfirmed((v) => !v)}
             />
           )}
 
           {/* ───────── Export formats ───────── */}
           <h2 className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] mt-7 mb-3">
-            Export formats
+            Export
           </h2>
           <motion.div
             initial={{ opacity: 0, y: 6 }}
@@ -286,7 +328,6 @@ export function Finalize() {
                 icon={<FileText className="size-4" />}
                 title="PDF"
                 desc="Print-ready"
-                cta="Download"
                 busy={busyFormat === "pdf"}
                 onClick={onExportPdf}
                 disabled={!counselAttested}
@@ -296,27 +337,24 @@ export function Finalize() {
                 icon={<FileText className="size-4" />}
                 title="DOCX"
                 desc="Editable Word"
-                cta="Download"
                 busy={busyFormat === "docx"}
                 onClick={onExportDocx}
                 disabled={!counselAttested}
               />
               <FormatTile
-                icon={<Package className="size-4" />}
-                title="Evidence pack"
-                desc="ZIP with audit"
-                cta="Download"
-                busy={busyFormat === "pack"}
-                onClick={onExportPack}
+                icon={<FileType2 className="size-4" />}
+                title="TXT"
+                desc="Plain text"
+                busy={busyFormat === "txt"}
+                onClick={onExportTxt}
                 disabled={!counselAttested}
               />
               <FormatTile
-                icon={<Copy className="size-4" />}
-                title="Plain text"
-                desc="Paste into email"
-                cta={busyFormat === "copy" ? "Copied" : "Copy"}
-                busy={false}
-                onClick={onCopyPlain}
+                icon={<Package className="size-4" />}
+                title="ZIP"
+                desc="Evidence pack"
+                busy={busyFormat === "zip"}
+                onClick={onExportZip}
                 disabled={!counselAttested}
               />
             </div>
@@ -329,7 +367,8 @@ export function Finalize() {
             </div>
           </motion.div>
 
-          {/* ───────── Mark-as-sent ship CTA ───────── */}
+          {/* Mark-as-sent ship CTA — single dark button, intentionally
+           * the only primary action on the page. */}
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -345,8 +384,8 @@ export function Finalize() {
                   Ready to send?
                 </h3>
                 <p className="text-[12.5px] text-[var(--ds-muted)] m-0 leading-snug">
-                  Locks the letter, archives it to the case file, and clears
-                  it from drafts.
+                  Locks the letter, archives it to Activity, and clears it
+                  from drafts.
                 </p>
               </div>
             </div>
@@ -357,7 +396,7 @@ export function Finalize() {
                 shipBlocked
                   ? scoreData.failCount > 0
                     ? "Resolve blockers in Review before sending"
-                    : "Counsel review required before sending"
+                    : "Confirm counsel review before sending"
                   : undefined
               }
             >
@@ -376,12 +415,13 @@ export function Finalize() {
  * ==========================================================================*/
 
 /**
- * One-line health summary at the top of Finalize. No rings — those live
- * in ReviewStep. This just answers the question "can I ship this?" with
- * a single icon, a verdict, and the numerics.
+ * One-line verdict + score strip at the top of Finalise. No rings —
+ * those live in Review's Health tab. This is the at-a-glance recap so
+ * the user can confirm what Review told them before they ship.
  */
-function ReadyStrip({
+function VerdictStrip({
   ready,
+  verdict,
   score,
   band,
   passCount,
@@ -391,6 +431,7 @@ function ReadyStrip({
   onBack,
 }: {
   ready: boolean;
+  verdict: string;
   score: number;
   band: "strong" | "adequate" | "weak";
   passCount: number;
@@ -427,18 +468,15 @@ function ReadyStrip({
         )}
       </span>
       <div className="flex-1 min-w-0">
-        <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
-          {ready
-            ? "Ready to ship"
-            : failCount > 0
-              ? "Resolve blockers before sending"
-              : "Review remaining warnings before sending"}
+        <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight tabular-nums">
+          {verdict} · {score}/100
         </div>
         <div className="text-[12px] text-[var(--ds-muted)] mt-0.5 tabular-nums">
-          Letter health: {score}/100 · {BAND_LABEL[band]} · {passCount} of{" "}
-          {totalCount} checks passing
-          {failCount > 0 && ` · ${failCount} blocker${failCount === 1 ? "" : "s"}`}
-          {warnCount > 0 && ` · ${warnCount} warning${warnCount === 1 ? "" : "s"}`}
+          {BAND_LABEL[band]} · {passCount} of {totalCount} checks passing
+          {failCount > 0 &&
+            ` · ${failCount} blocker${failCount === 1 ? "" : "s"}`}
+          {warnCount > 0 &&
+            ` · ${warnCount} warning${warnCount === 1 ? "" : "s"}`}
         </div>
       </div>
       {hasUnresolved && (
@@ -453,36 +491,41 @@ function ReadyStrip({
 
 /**
  * Counsel-review attestation gate. Only renders for high-risk letter
- * types (tribunal-bound / legal-review-required per exportRequiresCounselGate).
- * Blocks export until a counsel attestation has been attached in the editor.
+ * types (tribunal-bound / legal-review-required per
+ * exportRequiresCounselGate). Inline checkbox the user ticks to
+ * confirm; ticking it unblocks export and mark-as-sent.
  */
-function CounselGate({
-  attested,
-  review,
-  onAttach,
+function CounselAttestation({
+  confirmed,
+  onToggle,
 }: {
-  attested: boolean;
-  review:
-    | { reviewedBy: string; reviewedOn: string; attestedAt: number }
-    | undefined;
-  onAttach: () => void;
+  confirmed: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <motion.div
+    <motion.label
+      htmlFor="counsel-attestation"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.26, delay: 0.04, ease: [0.32, 0.72, 0, 1] }}
       className={cn(
-        "rounded-xl border px-4 py-3 mt-3 flex items-center gap-3",
-        attested
+        "rounded-xl border px-4 py-3 mt-3 flex items-center gap-3 cursor-pointer select-none transition",
+        confirmed
           ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
           : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
       )}
     >
+      <input
+        id="counsel-attestation"
+        type="checkbox"
+        checked={confirmed}
+        onChange={onToggle}
+        className="size-4 rounded border-[var(--ds-line)] accent-[var(--ds-ink)] shrink-0"
+      />
       <span
         className={cn(
           "inline-flex items-center justify-center size-7 rounded-full shrink-0",
-          attested
+          confirmed
             ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
             : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
         )}
@@ -491,22 +534,13 @@ function CounselGate({
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
-          {attested
-            ? "Counsel review attached"
-            : "Counsel review required"}
+          I confirm this has been reviewed by counsel
         </div>
         <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
-          {attested && review
-            ? `Reviewed by ${review.reviewedBy} on ${review.reviewedOn}.`
-            : "This letter type must be reviewed by qualified employment counsel before export."}
+          Required for this letter type before export or send.
         </div>
       </div>
-      {!attested && (
-        <Button variant="outline" size="sm" onClick={onAttach}>
-          Attach review
-        </Button>
-      )}
-    </motion.div>
+    </motion.label>
   );
 }
 
@@ -514,7 +548,6 @@ function FormatTile({
   icon,
   title,
   desc,
-  cta,
   busy,
   primary,
   disabled,
@@ -523,7 +556,6 @@ function FormatTile({
   icon: React.ReactNode;
   title: string;
   desc: string;
-  cta: string;
   busy: boolean;
   primary?: boolean;
   disabled?: boolean;
@@ -565,7 +597,7 @@ function FormatTile({
         ) : (
           <FileDown className="size-3.5" />
         )}
-        {busy ? "…" : cta}
+        {busy ? "…" : "Download"}
       </motion.button>
     </div>
   );

@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const APPEAL_UK: LetterTemplate = {
   letterType: "appeal",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Internal Appeal — EMPLOYEE MODE):
 - Step 4 of the ACAS Code of Practice on Disciplinary and Grievance Procedures: appeal against any disciplinary, capability, or grievance outcome.
 - Failure to use the internal appeal route may result in a Polkey deduction (Polkey v AE Dayton Services Ltd [1987] UKHL 8) — the tribunal can reduce the compensatory award where the procedural defect would not have changed the outcome — and may suggest the dismissal would have happened anyway.
@@ -158,6 +159,7 @@ export const APPEAL_UK: LetterTemplate = {
 export const APPEAL_US: LetterTemplate = {
   letterType: "appeal",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Internal Appeal — EMPLOYEE MODE):
 - There is no federal procedural appeal right for at-will employees, but where the employer has a written disciplinary or grievance policy with an appeal step, exhausting it is generally good practice and may be relevant to subsequent EEOC charge or court litigation.
 - Where the underlying decision is alleged to be discriminatory, the appeal letter helps document the employer's response and is useful evidence for an EEOC charge.

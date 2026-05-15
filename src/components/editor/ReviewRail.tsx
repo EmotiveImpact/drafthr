@@ -23,7 +23,7 @@ import { ConsultTab } from "./review/ConsultTab";
  * counsel review, comments) are still computed here so the tab can render
  * them — Health imports them as a prop. Consult is purely placeholder data.
  *
- * A sticky-style "Continue to Finalize →" CTA lives at the bottom of the
+ * A sticky-style "Continue to Finalise →" CTA lives at the bottom of the
  * rail across all tabs so the user always knows the next step out.
  */
 export function ReviewRail({
@@ -100,16 +100,16 @@ export function ReviewRail({
         </TabsPrimitive.Content>
       </div>
 
-      {/* Continue-to-Finalize CTA — same across tabs. Sits at the bottom of
-       * the rail with a border-top separator so it reads as a footer action
-       * rather than part of any single tab's content. */}
+      {/* Continue-to-Finalise CTA — same across tabs. Sits at the bottom
+       * of the rail with a border-top separator so it reads as a footer
+       * action rather than part of any single tab's content. */}
       <div className="shrink-0 border-t border-[var(--ds-line)] bg-[var(--ds-surface)] p-3">
         <button
           type="button"
           onClick={onContinueToFinalize}
           className="inline-flex items-center justify-center gap-1.5 w-full h-9 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-semibold hover:opacity-90 transition"
         >
-          Continue to Finalize
+          Continue to Finalise
           <ArrowRight className="size-3.5" />
         </button>
       </div>

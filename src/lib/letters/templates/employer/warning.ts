@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const WARNING_UK: LetterTemplate = {
   letterType: "warning",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Disciplinary / Performance Warning):
 - Comply with the ACAS Code of Practice on Disciplinary and Grievance Procedures. Non-compliance may attract a 25% uplift on tribunal awards under s.207A TULRCA 1992.
 - Reference the disciplinary hearing by date and chair. The right to be accompanied at the hearing under s.10 Employment Relations Act 1999 must have been offered.
@@ -143,6 +144,7 @@ export const WARNING_UK: LetterTemplate = {
 export const WARNING_US: LetterTemplate = {
   letterType: "warning",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Performance / Disciplinary Warning):
 - US employment is at-will; a formal warning is not statutorily required, but documentation defeats discrimination claims under Title VII (42 USC 2000e-2), the ADA (42 USC 12112), the ADEA (29 USC 623), and analogous state law (FEHA Cal. Gov. Code 12940 et seq.).
 - Reference the company's progressive-discipline policy if one is in place; otherwise frame as documentation of the issue and improvement expectation.

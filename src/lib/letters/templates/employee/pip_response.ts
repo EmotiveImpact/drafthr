@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const PIP_RESPONSE_UK: LetterTemplate = {
   letterType: "pip_response",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK PIP Response — EMPLOYEE MODE):
 - Performance Improvement Plan (PIP) typically precedes capability dismissal under s.98(2)(a) ERA 1996. Engaging with the PIP — without conceding the underlying performance issue — preserves the writer's position and may demonstrate that any subsequent dismissal failed the band-of-reasonable-responses test (Iceland Frozen Foods v Jones [1983]).
 - ACAS Code applies to capability process: warnings, hearings, the right to be accompanied (s.10 ERelA 1999).
@@ -162,6 +163,7 @@ export const PIP_RESPONSE_UK: LetterTemplate = {
 export const PIP_RESPONSE_US: LetterTemplate = {
   letterType: "pip_response",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US PIP Response — EMPLOYEE MODE):
 - A PIP often precedes for-cause termination in at-will employment. Documenting engagement is important for: (i) defeating later assertions of unsatisfactory performance; (ii) preserving discrimination / retaliation arguments; (iii) demonstrating good-faith engagement.
 - Where ADA disability is implicated, the interactive process should be triggered alongside the PIP.

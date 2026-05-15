@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const ACAS_EC_NOTIFICATION_UK: LetterTemplate = {
   letterType: "acas_ec_notification",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK ACAS Early Conciliation Cover — EMPLOYEE MODE):
 - ACAS Early Conciliation is mandatory before presenting an ET1 in most tribunal claims (Employment Tribunals Act 1996 s.18A; Employment Tribunals (Early Conciliation: Exemptions and Rules of Procedure) Regulations 2014 (as amended)).
 - Limitation: s.111 ERA 1996 — an unfair dismissal claim must be presented within 3 months less one day from the effective date of termination (subject to the EC stop-the-clock under s.207B). Discrimination claims under EqA 2010 — 3 months less one day from the act complained of (s.123 EqA).
@@ -100,6 +101,7 @@ export const ACAS_EC_NOTIFICATION_UK: LetterTemplate = {
 export const ACAS_EC_NOTIFICATION_US: LetterTemplate = {
   letterType: "acas_ec_notification",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US EEOC Charge Cover — EMPLOYEE MODE):
 - Cover for an EEOC charge of discrimination under Title VII / ADA / ADEA / GINA / PWFA. Note: the EEOC charge itself is the operative document; this letter is a cover or notice to the prospective respondent.
 - Filing windows: 180 days from the alleged discriminatory act (extended to 300 days where a state or local FEPA also processes the charge).

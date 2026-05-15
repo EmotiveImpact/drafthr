@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const SUBJECT_ACCESS_REQUEST_UK: LetterTemplate = {
   letterType: "subject_access_request",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Subject Access Request — EMPLOYEE MODE):
 - Statutory request under Article 15 UK GDPR and s.45 Data Protection Act 2018.
 - Statutory response window: one month from receipt (Art. 12(3) UK GDPR), extendable by up to two further months for complex / multiple requests, with notification to the data subject within the first month.
@@ -143,6 +144,7 @@ export const SUBJECT_ACCESS_REQUEST_UK: LetterTemplate = {
 export const SUBJECT_ACCESS_REQUEST_US: LetterTemplate = {
   letterType: "subject_access_request",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Personnel File / CCPA Request — EMPLOYEE MODE):
 - US has no general federal employee data-access right. Rights are state-based:
   - California: Cal. Lab. Code §1198.5 (personnel file, 30 days), §226 (payroll records, 21 days), §432 (signed documents). CCPA/CPRA Cal. Civ. Code §1798.100 et seq. applies to employee data since January 1, 2023, with a 45-day response window.

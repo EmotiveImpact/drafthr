@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const OFFER_UK: LetterTemplate = {
   letterType: "offer",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Offer of Employment):
 - The offer letter is the precursor to the s.1 Employment Rights Act 1996 written statement of particulars, which must be issued on or before day one of employment. Reference that the s.1 statement will follow.
 - The offer is conditional on satisfactory right-to-work documentation under the Immigration, Asylum and Nationality Act 2006 (List A / List B / Home Office share code).
@@ -180,6 +181,7 @@ export const OFFER_UK: LetterTemplate = {
 export const OFFER_US: LetterTemplate = {
   letterType: "offer",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Offer of Employment):
 - This is an offer letter, NOT a contract for any specific term. The letter MUST contain an explicit at-will statement except where prohibited (Montana good-cause after probation under MCA 39-2-904).
 - FLSA classification (exempt vs non-exempt) must be stated; the duties must support the classification under 29 USC 213(a)(1) and 29 CFR Part 541.

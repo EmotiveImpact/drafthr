@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const LEAVE_APPROVAL_UK: LetterTemplate = {
   letterType: "leave_approval",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Leave Approval):
 - Identify the applicable statutory regime: Statutory Maternity Leave (s.71–73 ERA 1996, MPLR 1999); Statutory Paternity Leave (PPLR 2002); Shared Parental Leave (CSPLR 2014); Adoption Leave (s.75A ERA); Carer's Leave (Carer's Leave Regulations 2024); Statutory Sick Pay (Social Security Contributions and Benefits Act 1992); Unpaid Parental Leave (MPLR 1999); Bereavement Leave / Parental Bereavement Leave (Parental Bereavement (Leave and Pay) Act 2018).
 - State the pay arrangement (SMP/SPP/ShPP/SSP at statutory rate; any contractual enhancement). For SMP: 90% of average weekly earnings for first 6 weeks, then statutory rate or 90% (whichever is lower) for next 33 weeks. For SSP: standard weekly rate from day 4 of incapacity, up to 28 weeks.
@@ -112,6 +113,7 @@ export const LEAVE_APPROVAL_UK: LetterTemplate = {
 export const LEAVE_APPROVAL_US: LetterTemplate = {
   letterType: "leave_approval",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Leave Approval):
 - Identify the applicable regime. Federal: Family and Medical Leave Act (FMLA) 29 USC 2612 — up to 12 weeks unpaid for eligible employees of covered employers (50+ employees within 75 miles); 26 weeks for military caregiver leave. Pregnancy Workers Fairness Act (42 USC 2000gg) — reasonable accommodation for pregnancy, childbirth, and related conditions. ADA (42 USC 12112) — leave can be a reasonable accommodation. USERRA (38 USC 4312) — military leave protections.
 - State paid family leave (PFL) regimes: California PFL (Unemp. Ins. Code 3300 et seq.); New York PFL (Workers' Comp. Law 200 et seq.); New Jersey FLI (N.J.S.A. 43:21-39.1); Massachusetts PFML (M.G.L. c.175M); Washington PFML (RCW 50A); Colorado FAMLI (C.R.S. 8-13.3-501); Connecticut PFMLA; Oregon Paid Leave; etc. State-by-state pay rate, duration, and benefits.

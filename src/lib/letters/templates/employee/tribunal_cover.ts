@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const TRIBUNAL_COVER_UK: LetterTemplate = {
   letterType: "tribunal_cover",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Employment Tribunal Cover — EMPLOYEE MODE):
 - This is the cover letter accompanying a Form ET1 (or a copy served on the respondent in parallel with online filing). The substantive claim is in the form itself.
 - Reference: ACAS Early Conciliation certificate number; date of filing of the ET1; nature of the claim in the briefest possible headline terms.
@@ -80,6 +81,7 @@ export const TRIBUNAL_COVER_UK: LetterTemplate = {
 export const TRIBUNAL_COVER_US: LetterTemplate = {
   letterType: "tribunal_cover",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Court Complaint Cover — EMPLOYEE MODE):
 - Cover letter accompanying a federal or state court complaint, served alongside or shortly after filing.
 - Reference: EEOC right-to-sue notice (where Title VII / ADA / ADEA); date of filing; case number; court; nature of claim in headline terms.

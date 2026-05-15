@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RESIGNATION_WITH_GRIEVANCE_UK: LetterTemplate = {
   letterType: "resignation_with_grievance",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Resignation + Concurrent Grievance — EMPLOYEE MODE):
 - A two-track letter: notice of resignation AND a formal grievance lodged in the same instrument. The grievance survives the resignation — the employer's investigative duty under the ACAS Code persists at least to allow paper consideration (Jagex Ltd v McCambridge [2019] UKEAT).
 - This is NOT a constructive resignation. The employee is not asserting fundamental breach. They are leaving on contractual notice while preserving the grievance.
@@ -154,6 +155,7 @@ export const RESIGNATION_WITH_GRIEVANCE_UK: LetterTemplate = {
 export const RESIGNATION_WITH_GRIEVANCE_US: LetterTemplate = {
   letterType: "resignation_with_grievance",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Resignation + Concurrent Internal Complaint — EMPLOYEE MODE):
 - A two-track letter: resignation AND a formal internal complaint. Notice of complaint preserves Faragher–Ellerth posture.
 - This is NOT a constructive discharge letter. The employee is not asserting intolerable conditions forcing resignation.

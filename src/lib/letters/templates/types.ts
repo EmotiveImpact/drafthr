@@ -39,6 +39,19 @@ export type SectionTemplate = {
 };
 
 /**
+ * How structurally important evidence is to a given letter type. Drives the
+ * Edit page's default UX:
+ *  - "light":  routine letters — no evidence prompts, drawer stays closed.
+ *  - "medium": evidence helps but isn't required — subtle hint to add it.
+ *  - "heavy":  evidence is structural — auto-pin the evidence drawer as a
+ *              sidebar and show a stronger handoff card before Review.
+ *
+ * Templates may set this explicitly. When unset, `getEvidenceTier()` derives
+ * it from category + risk so every template has a sensible default.
+ */
+export type EvidenceTier = "light" | "medium" | "heavy";
+
+/**
  * A single evidence requirement the template suggests. Surfaced as a
  * checklist on the Evidence step + a warning row on the Review step.
  * Templates that don't declare anything here just don't show the
@@ -75,6 +88,13 @@ export type LetterTemplate = {
    * templates without this just don't show the checklist.
    */
   expectedEvidence?: ExpectedEvidence[];
+  /**
+   * How structurally important evidence is for this letter. Drives the
+   * Edit page's default behaviour for the evidence drawer + handoff card.
+   * When omitted, `getEvidenceTier()` derives a tier from the letter's
+   * category and risk. Set explicitly to override the derivation.
+   */
+  evidenceTier?: EvidenceTier;
 };
 
 export type LetterTemplateKey = `${LetterTypeId}__${Jurisdiction}`;

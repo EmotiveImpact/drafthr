@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const FLEXIBLE_WORKING_REQUEST_UK: LetterTemplate = {
   letterType: "flexible_working_request",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Statutory Flexible Working Request — EMPLOYEE MODE):
 - Statutory request under s.80F Employment Rights Act 1996, as amended by the Flexible Working (Amendment) Regulations 2023 (in force 6 April 2024).
 - Day-one right since April 2024 — no minimum service required.
@@ -139,6 +140,7 @@ export const FLEXIBLE_WORKING_REQUEST_UK: LetterTemplate = {
 export const FLEXIBLE_WORKING_REQUEST_US: LetterTemplate = {
   letterType: "flexible_working_request",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Flexible Work Request — EMPLOYEE MODE):
 - Federal law: there is no general statutory right to request flexible working in the US, except where the request is a reasonable accommodation under the ADA (use the accommodation_request template instead) or PWFA (pregnancy).
 - State / local right-to-request frameworks exist in a handful of jurisdictions: Vermont (21 V.S.A. §309), New Hampshire (RSA 275:37-b), San Francisco (Family Friendly Workplace Ordinance), Seattle (Secure Scheduling Ordinance — predictive scheduling).

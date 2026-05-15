@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const CONSTRUCTIVE_DISMISSAL_WARNING_UK: LetterTemplate = {
   letterType: "constructive_dismissal_warning",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Notice of Fundamental Breach (Pre-Resignation) — EMPLOYEE MODE — TRIBUNAL CRITICAL):
 - This letter is sent BEFORE resigning under constructive dismissal — its purpose is to (i) put the employer on formal notice of the conduct treated as fundamental breach, (ii) demand specific remedy by a specific deadline, and (iii) preserve the writer's position so as to pre-empt the affirmation argument under Western Excavating (ECC) Ltd v Sharp [1978] ICR 221 (CA).
 - The letter MUST state that the writer is NOT YET RESIGNING but reserves the right to treat the contract as discharged if the breach is not remedied.
@@ -153,6 +154,7 @@ export const CONSTRUCTIVE_DISMISSAL_WARNING_UK: LetterTemplate = {
 export const CONSTRUCTIVE_DISMISSAL_WARNING_US: LetterTemplate = {
   letterType: "constructive_dismissal_warning",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Pre-Resignation Notice of Constructive Discharge Concerns — EMPLOYEE MODE — LITIGATION CRITICAL):
 - This letter is sent BEFORE resigning to (i) put the employer on notice of conduct that, if not remedied, will be treated as constructive discharge; (ii) demand specific remedy; (iii) preserve the writer's position. It also documents the employer's notice for purposes of any subsequent EEOC charge or court complaint.
 - US constructive discharge standard: working conditions so intolerable that a reasonable person would feel compelled to resign (Pennsylvania State Police v. Suders, 542 U.S. 129 (2004); Cal. Turner v. Anheuser-Busch, 7 Cal. 4th 1238 (1994)).

@@ -8,19 +8,20 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 
 /**
- * Review step — the page between Evidence & Attachments and the new
- * Finalize ship-gate. 3-column layout matching the rest of the wizard:
+ * Review step — the assessment page between Edit and Finalise. 3-column
+ * layout matching the rest of the wizard:
  *
  *   [WizardSidebar] [LetterPreview]  [ReviewRail]
- *      sections        clean letter     verdict + checks
+ *      sections        clean letter     Health / Improve / Consult
  *
- *   Edit → Evidence → REVIEW → Finalize (export + sign-off lives there)
+ *   Edit → REVIEW → Finalise (ship gate lives there)
  *
  * The letter is actually visible on Review — the right rail (ReviewRail)
- * handles all the "is this ready?" signals before the user steps into
- * Finalize. Export and counsel-gate logic moved to Finalize so the user
- * gets one consolidated ship surface instead of a button-driven export
- * scattered across pages.
+ * handles all the "is this ready?" signals (Health/Improve/Consult tabs)
+ * before the user steps into Finalise. Export, counsel-gate, and
+ * Mark-as-sent all live on Finalise so the user gets one consolidated
+ * ship surface instead of having ship-gate logic scattered across pages.
+ * Evidence is a drawer accessible from Edit; it is no longer a wizard step.
  */
 export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -66,37 +67,32 @@ export function ReviewStep() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      {/* Breadcrumb header */}
+      {/* Breadcrumb header. Back-link points to Edit now that Evidence
+       * has left the wizard (it's a drawer in Edit). */}
       <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => nav(`/editor/${draft.id}/evidence`)}
+          onClick={() => nav(`/editor/${draft.id}`)}
           className="text-[12px]"
         >
           <ArrowLeft className="size-3.5 mr-1.5" />
-          Evidence
+          Edit
         </Button>
         <span className="text-[var(--ds-subtle)]">/</span>
         <span className="text-[13px] font-medium text-[var(--ds-ink)]">Review</span>
         <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
           · {meta.title}
         </span>
-        {/* Right cluster — mirrors Evidence's topbar pattern:
-         *   [outline back-to-previous-step] [primary next-action] */}
+        {/* Right cluster: primary forward action is Continue to Finalise.
+         * The rail also surfaces this CTA so it's discoverable from any
+         * tab; both routes lead to the same place. */}
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => nav(`/editor/${draft.id}`)}
-          >
-            Back to editor
-          </Button>
           <Button
             size="sm"
             onClick={() => nav(`/editor/${draft.id}/finalize`)}
           >
-            Finalize
+            Continue to Finalise
             <ArrowRight className="size-4 ml-1.5" />
           </Button>
         </div>

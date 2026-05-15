@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { EmployeeRail } from "@/components/editor/EmployeeRail";
@@ -48,6 +48,7 @@ import {
   TextSelect,
   Undo2,
   Redo2,
+  Paperclip,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -60,14 +61,53 @@ import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
 import { TimelinePanel } from "@/components/editor/TimelinePanel";
+import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
+import {
+  EvidenceHandoff,
+  evaluateEvidenceHandoff,
+  type EvidenceHandoffReason,
+} from "@/components/editor/EvidenceHandoff";
+import { deriveEvidenceTier } from "@/lib/letters/templates";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { useIsLargeViewport } from "@/lib/use-large-viewport";
 
 
+/* ---------------------------------------------------------------------------
+ * Evidence-pinned state persistence — per-draft, localStorage-backed.
+ *
+ * We store as `scribehr-evidence-pinned:{draftId}` so each draft gets its own
+ * preference. On mount the Edit page reads this; if absent AND the template
+ * tier is "heavy", we default to TRUE so the rail shows up automatically on
+ * evidence-heavy letters (grievances, harassment complaints, etc.).
+ * ------------------------------------------------------------------------ */
+const PIN_KEY = (draftId: string) => `scribehr-evidence-pinned:${draftId}`;
+
+function readPinned(draftId: string): boolean | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PIN_KEY(draftId));
+    if (raw === "1") return true;
+    if (raw === "0") return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writePinned(draftId: string, next: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PIN_KEY(draftId), next ? "1" : "0");
+  } catch {
+    /* localStorage might be unavailable — silently no-op */
+  }
+}
+
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const profile = useProfileStore((s) => s.profile);
@@ -121,6 +161,46 @@ export function Editor() {
   // "Ask AI" label so AI stays in peripheral vision even when collapsed.
   // lg:+ only; mobile uses showRail + bottom sheet.
   const [railCollapsed, setRailCollapsed] = useState(false);
+
+  /* ----------------------- Evidence drawer + pinned state -----------------
+   * Two modes:
+   *   - Floating drawer (Sheet overlay) — default for routine letters.
+   *   - Pinned rail — replaces the AI agent rail. Auto-enabled for "heavy"
+   *     evidence-tier templates (grievance, harassment, tribunal) on first
+   *     visit, persisted per draft thereafter.
+   * Pin state is localStorage-backed via PIN_KEY(draftId).
+   * --------------------------------------------------------------------- */
+  const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
+  const [evidencePinned, setEvidencePinned] = useState<boolean>(() => {
+    if (!draftId) return false;
+    const stored = readPinned(draftId);
+    if (stored !== null) return stored;
+    // No stored preference — derive from template tier. We use the
+    // letter-type-only deriver here so we don't have to await the full
+    // template registry; getEvidenceTier is the template-resolved variant
+    // for callers that already have a template handle. Reads from the
+    // draft's stored evidenceTier first if present.
+    return false; // initialised properly in the mount effect below
+  });
+
+  // Persist pin changes.
+  const handlePinnedChange = (next: boolean) => {
+    setEvidencePinned(next);
+    if (draftId) writePinned(draftId, next);
+    // Pinning hides the AI rail; if the rail was previously collapsed,
+    // un-collapse it on unpin so the user sees the AI rail again.
+    if (!next) setRailCollapsed(false);
+    // Pinning also implicitly closes the floating drawer since the same
+    // surface is now permanent.
+    if (next) setEvidenceDrawerOpen(false);
+  };
+
+  // Handoff modal state — shown when the user clicks Review and a soft
+  // evidence check trips. Lives at the editor level so we can swap the
+  // CTA's onClick handler.
+  const [handoffReason, setHandoffReason] = useState<EvidenceHandoffReason | null>(
+    null
+  );
   // Gate which AI surface mounts — exactly one at a time. Crossing
   // the breakpoint unmounts the previous surface (its useChat persists
   // to draft.aiChat on idle ticks) and mounts the new one (its useChat
@@ -195,6 +275,41 @@ export function Editor() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
+
+  // On draft change, initialise the pinned state from the template tier
+  // when localStorage has no preference. Heavy → pin by default, light/medium
+  // → floating. The user can always override by clicking Pin/Unpin.
+  useEffect(() => {
+    if (!draft || !draftId) return;
+    const stored = readPinned(draftId);
+    if (stored !== null) {
+      setEvidencePinned(stored);
+      return;
+    }
+    // Prefer the cached tier on the draft (set at creation time); fall back
+    // to deriving it from the letter type. This avoids resolving the full
+    // template registry just to read the tier.
+    const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
+    setEvidencePinned(tier === "heavy");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, draft?.letterType, draft?.evidenceTier]);
+
+  // Auto-open the floating evidence drawer when arriving with ?openEvidence=1
+  // (used by the legacy /editor/:draftId/evidence redirect so old bookmarks
+  // land on something useful). Clears the query param after consumption so a
+  // refresh doesn't re-open the drawer indefinitely.
+  useEffect(() => {
+    if (searchParams.get("openEvidence") !== "1") return;
+    if (evidencePinned) {
+      // Pinned rail is already showing — nothing to "open". Just clear the param.
+    } else {
+      setEvidenceDrawerOpen(true);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("openEvidence");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, evidencePinned]);
 
   // Esc exits Focus mode. Bound at the route level so it works from any
   // child surface (canvas, floating composer, etc.). We listen on keydown
@@ -753,6 +868,70 @@ export function Editor() {
            * into column 2 — the canvas column — so they sit above their
            * old secondary-toolbar positions.) */}
           <div className="ml-auto lg:ml-0 flex items-center gap-2 justify-end min-w-0 lg:px-4">
+            {/* Evidence button — primary discoverability path for the
+             * hybrid drawer. Tap to toggle the floating drawer; when
+             * pinned, this tap focuses the rail (which is always visible).
+             * Amber-tinted when there's evidence, muted when zero. Filled
+             * dark when the drawer is open OR pinned. */}
+            {(() => {
+              const evidenceCount = draft.evidence?.length ?? 0;
+              const hasEvidence = evidenceCount > 0;
+              const active = evidenceDrawerOpen || evidencePinned;
+              const onClick = () => {
+                if (evidencePinned) {
+                  // Focus the pinned rail — scroll-into-view + focus the
+                  // search input so keyboard users land somewhere useful.
+                  const search = document.querySelector<HTMLInputElement>(
+                    '[data-evidence-rail] input[type="search"]'
+                  );
+                  search?.focus();
+                  return;
+                }
+                setEvidenceDrawerOpen((v) => !v);
+              };
+              return (
+                <button
+                  type="button"
+                  onClick={onClick}
+                  aria-pressed={active}
+                  aria-label={
+                    evidencePinned
+                      ? "Focus pinned evidence rail"
+                      : evidenceDrawerOpen
+                      ? "Close evidence drawer"
+                      : "Open evidence drawer"
+                  }
+                  title={
+                    evidencePinned
+                      ? "Evidence is pinned — focus the rail"
+                      : "Open evidence drawer (Pin → for a permanent rail)"
+                  }
+                  className={
+                    "inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-md border text-[12px] font-semibold transition shrink-0 " +
+                    (active
+                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
+                      : hasEvidence
+                      ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-fg)]/25 hover:border-[var(--ds-amber-fg)]/50"
+                      : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
+                  }
+                >
+                  <Paperclip className="size-3.5" />
+                  <span className="hidden sm:inline">Evidence</span>
+                  {hasEvidence && (
+                    <span
+                      className={
+                        "tabular-nums text-[10px] font-bold px-1.5 py-px rounded-full min-w-[18px] text-center " +
+                        (active
+                          ? "bg-white/20 text-white"
+                          : "bg-white/70 text-[var(--ds-amber-fg)]")
+                      }
+                    >
+                      {evidenceCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
             <InvitePopover
               draft={draft}
               open={invitePopoverOpen}
@@ -869,37 +1048,31 @@ export function Editor() {
              * choose format after the final checklist. Editor stays focused
              * on writing.
              *
-             * Employee drafts go Edit → Evidence → Review → Export.
-             * Employer drafts skip Evidence (rare to need a bundle) and
-             * go Edit → Review → Export. Both end at the same place. */}
-            {/* Next step button — icon-only on mobile (just arrow) so the
-             * other topbar items have room. Expands to "Next: Evidence"
-             * / "Next: Review" at sm:+. */}
-            {draft.mode === "employee" ? (
-              <Button
-                size="sm"
-                disabled={globallyStreaming}
-                onClick={() => nav(`/editor/${draft.id}/evidence${activeSectionId ? `?section=${activeSectionId}` : ""}`)}
-                aria-label="Next: Evidence"
-                title="Next: Evidence"
-                className="px-2 sm:px-3"
-              >
-                <span className="hidden sm:inline">Evidence</span>
-                <ArrowRight className="size-4 sm:ml-1.5" />
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled={globallyStreaming}
-                onClick={() => nav(`/editor/${draft.id}/review`)}
-                aria-label="Next: Review"
-                title="Next: Review"
-                className="px-2 sm:px-3"
-              >
-                <span className="hidden sm:inline">Review</span>
-                <ArrowRight className="size-4 sm:ml-1.5" />
-              </Button>
-            )}
+             * Hybrid evidence: the dedicated Evidence step is gone; both
+             * modes go Edit → Review. The handoff card below the CTA gates
+             * the transition when evidence is missing / unused. */}
+            <Button
+              size="sm"
+              disabled={globallyStreaming}
+              onClick={() => {
+                // Soft check — opens the handoff card only when the
+                // soft-rule trips. Light tier always proceeds; if the user
+                // hit "Don't ask for this draft", proceed silently too.
+                const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
+                const reason = evaluateEvidenceHandoff(draft, tier);
+                if (reason) {
+                  setHandoffReason(reason);
+                  return;
+                }
+                nav(`/editor/${draft.id}/review`);
+              }}
+              aria-label="Next: Review"
+              title="Next: Review"
+              className="px-2 sm:px-3"
+            >
+              <span className="hidden sm:inline">Review</span>
+              <ArrowRight className="size-4 sm:ml-1.5" />
+            </Button>
           </div>
         </div>
       </header>
@@ -1137,12 +1310,34 @@ export function Editor() {
          * is true the rail is removed from the grid entirely (canvas takes
          * full width) and a floating "Ask AI" pill in the bottom-right
          * brings it back — mobile-mirror pattern. */}
-        {/* Desktop AI rail — rendered ONLY at lg:+. The mobile bottom
-         * sheet below is hidden in this branch so there's exactly one
-         * AIPanel (and one useChat instance) in the tree at any time.
-         * Resizing across the breakpoint unmounts one and mounts the
-         * other; conversation persists via draft.aiChat. */}
-        {isLargeViewport && (
+        {/* Desktop right rail — rendered ONLY at lg:+. Two surfaces share
+         * the slot:
+         *   - Evidence rail (pinned mode, evidence-heavy work)
+         *   - AI agent rail (default)
+         * Exactly one mounts at a time. Pinning toggles between them. The
+         * mobile overlay below is hidden in this branch so there's exactly
+         * one AIPanel (and one useChat) in the tree at any time. Resizing
+         * across the breakpoint unmounts one and mounts the other;
+         * conversation persists via draft.aiChat. */}
+        {isLargeViewport && evidencePinned && (
+          <aside
+            data-evidence-rail
+            className={
+              "flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
+              (focusMode ? "hidden" : "")
+            }
+          >
+            <EvidenceDrawer
+              draft={draft}
+              editor={null}
+              open
+              onOpenChange={() => { /* pinned mode ignores Sheet open state */ }}
+              pinned
+              onPinnedChange={handlePinnedChange}
+            />
+          </aside>
+        )}
+        {isLargeViewport && !evidencePinned && (
           <motion.aside
             aria-hidden={railCollapsed || undefined}
             initial={false}
@@ -1305,6 +1500,43 @@ export function Editor() {
           onClose={() => setFloatingComment(null)}
         />
       )}
+
+      {/* Floating evidence drawer — only rendered when NOT pinned. When the
+       * user pins it, the same component is mounted inside the right-rail
+       * slot above (with `pinned` set). editor=null because the section-
+       * level editors each own their own Tiptap instance; the top-level
+       * drawer surfaces evidence for browsing/management, and the section
+       * pickers handle in-cursor insertion. */}
+      {!evidencePinned && (
+        <EvidenceDrawer
+          draft={draft}
+          editor={null}
+          open={evidenceDrawerOpen}
+          onOpenChange={setEvidenceDrawerOpen}
+          pinned={false}
+          onPinnedChange={handlePinnedChange}
+        />
+      )}
+
+      {/* Handoff card — opens when the Review CTA detects a soft evidence
+       * issue (unused items, or heavy-tier with too few items). */}
+      <EvidenceHandoff
+        open={handoffReason !== null}
+        reason={handoffReason}
+        draftId={draft.id}
+        onOpenChange={(next) => {
+          if (!next) setHandoffReason(null);
+        }}
+        onOpenDrawer={() => {
+          setHandoffReason(null);
+          if (!evidencePinned) setEvidenceDrawerOpen(true);
+          // When pinned, the rail is already visible — nothing to "open".
+        }}
+        onContinue={() => {
+          setHandoffReason(null);
+          nav(`/editor/${draft.id}/review`);
+        }}
+      />
 
       <CounselReviewDialog
         open={counselDialogOpen}

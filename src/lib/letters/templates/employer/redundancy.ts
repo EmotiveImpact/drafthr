@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const REDUNDANCY_UK: LetterTemplate = {
   letterType: "redundancy",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Redundancy):
 - 'Redundancy' is one of the s.98 ERA 1996 potentially fair reasons for dismissal, defined in s.139 ERA 1996 (cessation of business, cessation at the workplace, or diminishing requirement for employees to do work of a particular kind).
 - Where 20 or more dismissals are proposed at one establishment within 90 days, collective consultation under s.188 TULRCA 1992 applies: 30 days minimum (45 days if 100+). Failure to consult exposes the employer to a protective award of up to 90 days' pay per affected employee under s.189 TULRCA.
@@ -150,6 +151,7 @@ export const REDUNDANCY_UK: LetterTemplate = {
 export const REDUNDANCY_US: LetterTemplate = {
   letterType: "redundancy",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Layoff / Reduction in Force):
 - A reduction in force is an at-will termination but documentation is critical to defeat disparate-impact claims under Title VII (42 USC 2000e-2(k)) and the ADEA (29 USC 623), particularly where the selected employees skew toward protected groups.
 - Federal WARN Act (29 USC 2101 et seq.): 60 calendar days written notice required for plant closings or mass layoffs by employers with 100+ full-time employees, where 50+ employees are affected at a single site (or 33% of the workforce). Notice must be given to affected employees, the state dislocated worker unit, and the chief elected local official.

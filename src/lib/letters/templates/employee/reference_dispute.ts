@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const REFERENCE_DISPUTE_UK: LetterTemplate = {
   letterType: "reference_dispute",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Reference Dispute — EMPLOYEE MODE):
 - Spring v Guardian Assurance plc [1995] 2 AC 296 — an employer owes the subject of a reference a duty of care to take reasonable care that the reference is fair, accurate, true, and not misleading. Negligent inaccuracies that cause loss are actionable.
 - Defamation Act 2013 — defamatory statements may be actionable; references generally attract qualified privilege which is defeated by malice (Horrocks v Lowe [1975] AC 135).
@@ -122,6 +123,7 @@ export const REFERENCE_DISPUTE_UK: LetterTemplate = {
 export const REFERENCE_DISPUTE_US: LetterTemplate = {
   letterType: "reference_dispute",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Reference Dispute — EMPLOYEE MODE):
 - US references generally attract qualified privilege which is defeated by malice or knowing falsity (Restatement (Second) of Torts §595; Kennedy v. Children's Service Society, 17 F.3d 980 (7th Cir. 1994)).
 - Cal. Lab. Code §1050-1052 — it is unlawful to "blacklist" a former employee with intent to prevent obtaining employment. Cal. Lab. Code §1053 makes a former employer liable for treble damages.

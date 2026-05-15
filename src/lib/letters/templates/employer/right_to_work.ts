@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RIGHT_TO_WORK_UK: LetterTemplate = {
   letterType: "right_to_work",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Right-to-Work / Skilled Worker Sponsorship Letter):
 - The Skilled Worker route requires a sponsor licence held by the employer (Home Office Sponsor Guidance, current edition) and the assignment of a Certificate of Sponsorship (CoS) — defined (for switching from outside the UK) or undefined (for in-country switches and certain extensions).
 - Salary thresholds (in force from 4 April 2024 / and updates): general threshold 38,700 pounds per year for new entrants and ordinary applicants; the going rate for the relevant Standard Occupational Classification (SOC) code; or shortage / 'going-rate discount' rules where applicable. Confirm both the salary and the SOC code in the letter.
@@ -99,6 +100,7 @@ export const RIGHT_TO_WORK_UK: LetterTemplate = {
 export const RIGHT_TO_WORK_US: LetterTemplate = {
   letterType: "right_to_work",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Immigration Support Letter):
 - Identify the visa lane being supported. H-1B specialty occupation under 8 USC 1101(a)(15)(H)(i)(b) and 8 CFR 214.2(h): bachelor's degree minimum in the specialty, employer-employee relationship, prevailing wage certified on the LCA (ETA Form 9035), USCIS petition (Form I-129).
 - L-1A (intracompany transferee, executive/managerial) and L-1B (specialized knowledge) under 8 USC 1101(a)(15)(L) and 8 CFR 214.2(l): 1 of 3 years' qualifying foreign employment with a parent, branch, subsidiary, or affiliate of the US petitioner; managerial/executive or specialized-knowledge role.

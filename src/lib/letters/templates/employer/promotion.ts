@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const PROMOTION_UK: LetterTemplate = {
   letterType: "promotion",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Promotion):
 - A promotion is a variation of contractual terms. The employer must issue a written statement of changes within one month under section 4 of the Employment Rights Act 1996.
 - Continuity of service must be expressly preserved (s.218 ERA 1996); the new role does not break continuity.
@@ -146,6 +147,7 @@ export const PROMOTION_UK: LetterTemplate = {
 export const PROMOTION_US: LetterTemplate = {
   letterType: "promotion",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Promotion):
 - A promotion may change the FLSA classification (exempt vs non-exempt) under 29 USC 213(a)(1) and 29 CFR Part 541. Re-evaluate the duties test and the salary basis test for the new role.
 - California: re-issue the Wage Theft Prevention Act notice (Lab. Code 2810.5) within 7 calendar days for non-exempt employees.

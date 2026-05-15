@@ -8,22 +8,25 @@ import { cn } from "@/lib/utils";
  * rail. Shows the user where they are in the editor wizard without
  * moving the primary Next-step CTA out of the topbar.
  *
- *   Edit  ─  Evidence  ─  Review     (employee mode)
- *   Edit  ─  Review                  (employer mode — skips evidence)
+ *   Edit  ─  Review  ─  Finalise        (both employee and employer)
  *
- * Finalize is intentionally NOT part of the wizard stepper. Finalize is a
- * separate destination (the ship gate) reached from a "Continue to Finalize →"
- * CTA at the end of Review, not a numbered step in the linear flow.
+ * Evidence is intentionally NOT part of the wizard stepper any more —
+ * it's accessible as a drawer from anywhere in Edit, so it doesn't need
+ * a numbered slot in the linear progression. Finalise IS a step now —
+ * it's the explicit ship-gate destination at the end of the flow.
  *
  * Layout rules:
- *   - Each step labels sizes to its content (no flex-1, no truncate) —
- *     "Evidence" (8 chars) gets the room it needs even when "Edit" (4)
- *     and "Review" (6) don't. Prevents the cut-off bug where mid-length
- *     labels collide with the connector line in the 232px rail.
+ *   - Each step label sizes to its content (no flex-1, no truncate) —
+ *     longer labels like "Finalise" get the room they need.
+ *     Prevents the cut-off bug where mid-length labels collide with the
+ *     connector line in the 232px rail.
  *   - Connectors are the only flex children — they absorb leftover
  *     width, so the row stays balanced regardless of label length.
  *   - Steps are links; clicking the current step is a no-op, clicking
  *     a future step navigates forward (matches the topbar CTA).
+ *   - `mode` is accepted for backwards-compat with all WizardSidebar
+ *     callers but no longer affects the stepper — both employee and
+ *     employer flows are Edit · Review · Finalise.
  */
 type Step = "edit" | "evidence" | "review" | "finalize";
 
@@ -35,21 +38,17 @@ type Props = {
   disabled?: boolean;
 };
 
-export function WizardChrome({ draftId, mode, current, disabled }: Props) {
-  // Finalize is intentionally NOT in this stepper. It's a separate destination
-  // reached from the "Continue to Finalize →" CTA at the end of Review.
-  // The wizard is the assessment/drafting flow; Finalize is the ship gate.
-  const steps: { id: Step; label: string; href: string }[] =
-    mode === "employee"
-      ? [
-          { id: "edit", label: "Edit", href: `/editor/${draftId}` },
-          { id: "evidence", label: "Evidence", href: `/editor/${draftId}/evidence` },
-          { id: "review", label: "Review", href: `/editor/${draftId}/review` },
-        ]
-      : [
-          { id: "edit", label: "Edit", href: `/editor/${draftId}` },
-          { id: "review", label: "Review", href: `/editor/${draftId}/review` },
-        ];
+export function WizardChrome({ draftId, mode: _mode, current, disabled }: Props) {
+  // Same three steps for everyone — Evidence is a drawer now, not a step.
+  // Finalise is the ship gate at the end of the flow.
+  // Note: when `current` is "evidence" (legacy callers still pass it) it
+  // won't match any step in this list, so no step renders as active —
+  // that's correct: the evidence drawer isn't a wizard destination.
+  const steps: { id: Step; label: string; href: string }[] = [
+    { id: "edit", label: "Edit", href: `/editor/${draftId}` },
+    { id: "review", label: "Review", href: `/editor/${draftId}/review` },
+    { id: "finalize", label: "Finalise", href: `/editor/${draftId}/finalize` },
+  ];
 
   const currentIndex = steps.findIndex((s) => s.id === current);
 

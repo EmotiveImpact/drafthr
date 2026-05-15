@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RESIGNATION_CONSTRUCTIVE_UK: LetterTemplate = {
   letterType: "resignation_constructive",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Constructive Resignation — EMPLOYEE MODE — TRIBUNAL CRITICAL):
 - This letter triggers a claim of constructive unfair dismissal under s.95(1)(c) Employment Rights Act 1996. The legal test is set out in Western Excavating (ECC) Ltd v Sharp [1978] ICR 221 (CA): (i) a fundamental / repudiatory breach of contract by the employer; (ii) the employee resigning IN RESPONSE to that breach; (iii) without delay (delay = affirmation = claim defeated); (iv) the breach need not be a single incident — it can be a "last straw" in a course of conduct (Omilaju v Waltham Forest LBC [2005] EWCA Civ 1493).
 - The implied term of mutual trust and confidence (Malik v BCCI [1997] UKHL 23) is the most commonly relied-upon term: the employer must not, without reasonable and proper cause, conduct itself in a manner calculated or likely to destroy or seriously damage the relationship of trust and confidence.
@@ -167,6 +168,7 @@ export const RESIGNATION_CONSTRUCTIVE_UK: LetterTemplate = {
 export const RESIGNATION_CONSTRUCTIVE_US: LetterTemplate = {
   letterType: "resignation_constructive",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Constructive Discharge — EMPLOYEE MODE — LITIGATION CRITICAL):
 - This letter triggers a claim of constructive discharge. The federal standard (Pennsylvania State Police v. Suders, 542 U.S. 129 (2004)) requires that working conditions were so intolerable that a reasonable person in the employee's position would have felt compelled to resign, AND the employer's conduct was directly attributable to the protected basis or other unlawful conduct.
 - State analogues exist: California (Turner v. Anheuser-Busch, 7 Cal. 4th 1238 (1994) — "objectively intolerable"); New York; etc.

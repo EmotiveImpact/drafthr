@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const PROBATION_OUTCOME_UK: LetterTemplate = {
   letterType: "probation_outcome",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Probation Outcome):
 - An employee with under two years' continuous service generally has no ordinary unfair-dismissal claim under s.108 ERA 1996, but exceptions apply: discrimination (Equality Act 2010), whistleblowing (s.103A ERA 1996), and other automatic-unfair categories (ss.99–105 ERA 1996).
 - The ACAS Code of Practice on Disciplinary and Grievance Procedures applies to capability dismissals as best practice; non-compliance may attract a 25% uplift on tribunal awards under s.207A TULRCA 1992.
@@ -125,6 +126,7 @@ export const PROBATION_OUTCOME_UK: LetterTemplate = {
 export const PROBATION_OUTCOME_US: LetterTemplate = {
   letterType: "probation_outcome",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Probation Outcome):
 - US employment is at-will throughout any introductory or probationary period; the employer may terminate at any time without cause. Document the legitimate business reason for any Fail outcome to defeat discrimination claims (Title VII, ADA, ADEA, FEHA, state analogs).
 - On Fail / termination at end of probation: California requires immediate payment of all final wages on the last day for employer-initiated terminations (Lab. Code 201; Lab. Code 203 waiting-time penalty for non-compliance). NY: next regular payday. TX: next regular payday under Lab. Code 61.014. Verify state rule.

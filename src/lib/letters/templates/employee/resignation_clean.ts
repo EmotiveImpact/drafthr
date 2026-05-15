@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RESIGNATION_CLEAN_UK: LetterTemplate = {
   letterType: "resignation_clean",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Clean Resignation — EMPLOYEE MODE):
 - A clean exit. Use only when the relationship has ended on neutral or positive terms and there is NO live grievance, no breach, no protected disclosure to preserve.
 - Notice period is the contractual notice or, if longer, the statutory minimum under s.86 ERA 1996 (1 week per year of service to a maximum of 12).
@@ -106,6 +107,7 @@ export const RESIGNATION_CLEAN_UK: LetterTemplate = {
 export const RESIGNATION_CLEAN_US: LetterTemplate = {
   letterType: "resignation_clean",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Clean Resignation — EMPLOYEE MODE):
 - 'Two weeks' notice' is custom, not law. Most US employment is at-will. State the last working day clearly.
 - Tone: warm but professional. American English.

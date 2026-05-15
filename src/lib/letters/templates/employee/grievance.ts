@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const GRIEVANCE_UK: LetterTemplate = {
   letterType: "grievance",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Formal Grievance — EMPLOYEE MODE):
 - This is Step 1 of the ACAS Code of Practice on Disciplinary and Grievance Procedures. The letter must be in writing and set out the basis of the grievance plainly.
 - Failure to follow the ACAS Code on either side may lead the tribunal to adjust awards by up to 25% under s.207A TULRCA 1992.
@@ -233,6 +234,7 @@ export const GRIEVANCE_UK: LetterTemplate = {
 export const GRIEVANCE_US: LetterTemplate = {
   letterType: "grievance",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Internal Complaint — EMPLOYEE MODE):
 - This letter puts the employer on formal notice for Faragher v. City of Boca Raton / Burlington Industries v. Ellerth purposes — the employer's affirmative defense to vicarious liability for hostile work environment turns on whether it had the chance to respond.
 - Title VII / ADA / ADEA / FEHA / state anti-discrimination law: where a protected characteristic is implicated, frame as 'I believe I was treated differently because of my [characteristic]'. NEVER state discrimination as a legal conclusion.

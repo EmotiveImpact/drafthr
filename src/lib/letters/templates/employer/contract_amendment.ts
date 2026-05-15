@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const CONTRACT_AMENDMENT_UK: LetterTemplate = {
   letterType: "contract_amendment",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Contract Amendment / Variation):
 - Variation of contractual terms requires mutual agreement, unless an express variation clause exists. Imposed unilateral variation may be a fundamental breach giving rise to a constructive dismissal claim under s.95(1)(c) ERA 1996 (Western Excavating v Sharp [1978]).
 - Section 4 of the Employment Rights Act 1996 requires the employer to provide a written statement of the change within one month of the change taking effect.
@@ -124,6 +125,7 @@ export const CONTRACT_AMENDMENT_UK: LetterTemplate = {
 export const CONTRACT_AMENDMENT_US: LetterTemplate = {
   letterType: "contract_amendment",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Contract / Terms Amendment):
 - Most US employment is at-will, so prospective unilateral changes to terms (with notice) are generally permissible. However, written agreements, offer letters with binding terms, executive contracts, and union agreements may require mutual consent.
 - California: a Wage Theft Prevention Act amended notice (Labor Code 2810.5) MUST be issued in writing within 7 calendar days of the change for non-exempt employees.

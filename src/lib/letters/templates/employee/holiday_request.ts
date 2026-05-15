@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const HOLIDAY_REQUEST_UK: LetterTemplate = {
   letterType: "holiday_request",
   jurisdiction: "UK",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Holiday Request — EMPLOYEE MODE):
 - Working Time Regulations 1998: reg.13 (4 weeks WTD), reg.13A (additional 1.6 weeks UK), reg.15 (notice of intention to take leave — at least twice the period of leave to be taken).
 - Refusal: the employer can refuse on giving counter-notice equal to the period of leave (reg.15(4)) — but the refusal must be reasonable and consistent with the contract.
@@ -73,6 +74,7 @@ export const HOLIDAY_REQUEST_UK: LetterTemplate = {
 export const HOLIDAY_REQUEST_US: LetterTemplate = {
   letterType: "holiday_request",
   jurisdiction: "US",
+  evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US PTO / Vacation Request — EMPLOYEE MODE):
 - No federal statutory PTO entitlement. Most US PTO is governed by employer policy.
 - Some states protect accrued PTO as wages (CA, CO, MA, IL, NE, ND) — Cal. Lab. Code §227.3 makes accrued vacation a vested wage, payable on separation.

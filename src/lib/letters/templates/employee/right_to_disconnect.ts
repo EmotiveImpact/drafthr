@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RIGHT_TO_DISCONNECT_UK: LetterTemplate = {
   letterType: "right_to_disconnect",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Right to Disconnect / Overtime Objection — EMPLOYEE MODE):
 - The UK has no standalone "right to disconnect" statute. The relevant frame:
   - Working Time Regulations 1998 (WTR): 48-hour weekly average working time (reg.4) — opt-out is voluntary and revocable on 7 days' notice (reg.5(2)); 11 hours' daily rest (reg.10); 24 hours' weekly rest (reg.11).
@@ -82,6 +83,7 @@ export const RIGHT_TO_DISCONNECT_UK: LetterTemplate = {
 export const RIGHT_TO_DISCONNECT_US: LetterTemplate = {
   letterType: "right_to_disconnect",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Overtime Objection / Off-the-Clock Work — EMPLOYEE MODE):
 - No federal "right to disconnect" statute. Relevant frames:
   - Fair Labor Standards Act (FLSA) 29 U.S.C. §207 — overtime at 1.5x for non-exempt employees over 40 hours / week. "Off-the-clock" work that the employer knows or should know about must be paid (29 C.F.R. §785.11-13).

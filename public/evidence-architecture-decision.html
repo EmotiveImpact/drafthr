@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Evidence architecture — step vs drawer + Finalise as last step</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --amber:#d97706; --amber-lt:#fffbeb; --amber-bd:#fde68a;
+  --blue:#2563eb; --blue-lt:#eff6ff;
+  --green:#059669; --green-lt:#ecfdf5;
+  --red:#dc2626; --red-lt:#fef2f2;
+  --violet:#7c3aed; --violet-lt:#f5f3ff;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5}
+button{font:inherit;cursor:pointer;border:0;background:none}
+svg{display:block}
+
+/* topbar */
+.topbar{height:52px;background:var(--ink);display:flex;align-items:center;padding:0 24px;gap:14px;position:sticky;top:0;z-index:50;color:#fff}
+.brand{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.logo{width:26px;height:26px;background:#fff;border-radius:7px;display:grid;place-items:center;color:var(--ink)}
+.logo svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.divider{width:1px;height:18px;background:rgba(255,255,255,.15)}
+.picker{display:flex;gap:2px;background:rgba(255,255,255,.06);padding:3px;border-radius:8px}
+.pick-btn{height:30px;padding:0 14px;border-radius:6px;font-size:12.5px;font-weight:500;color:rgba(255,255,255,.6);transition:background .12s,color .12s}
+.pick-btn:hover{color:rgba(255,255,255,.9)}
+.pick-btn.active{background:#fff;color:var(--ink);font-weight:600}
+.tb-right{margin-left:auto;font-size:11.5px;color:rgba(255,255,255,.5)}
+
+.panel{display:none}
+.panel.active{display:block}
+
+/* ============== SHARED LAYOUT ============== */
+.scene{max-width:1300px;margin:0 auto;padding:20px}
+.intro{padding:0 6px 16px}
+.intro h1{font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.intro p{font-size:13px;color:var(--body);line-height:1.55;max-width:880px}
+.intro .meta{display:flex;gap:14px;margin-top:10px;font-size:11.5px;color:var(--muted)}
+.intro .meta strong{color:var(--ink);font-weight:600}
+
+/* App frame */
+.app{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.app-bar{height:44px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 14px;gap:10px}
+.app-bar .ico-btn{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--muted)}
+.app-bar .ico-btn:hover{background:var(--wash);color:var(--ink)}
+.app-bar .ico-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.app-bar .menu{display:flex;gap:10px;font-size:12.5px;color:var(--body)}
+.app-bar .menu span{cursor:pointer;padding:2px 4px;border-radius:4px}
+.app-bar .menu span:hover{background:var(--wash)}
+.app-bar .center{display:flex;gap:2px;margin:0 auto;background:var(--wash);border-radius:7px;padding:2px}
+.app-bar .center button{height:26px;padding:0 12px;border-radius:5px;font-size:12px;font-weight:500;color:var(--muted)}
+.app-bar .center button.active{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:600}
+.app-bar .right{display:flex;gap:7px;align-items:center}
+.app-bar .cta{height:28px;padding:0 12px;background:var(--ink);color:#fff;border-radius:7px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px}
+.app-bar .cta svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.4}
+
+/* stepper area */
+.stepper-row{height:42px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;padding:0 20px;background:var(--wash);gap:14px;font-size:12px;color:var(--muted);font-weight:500}
+.stepper{display:flex;align-items:center;gap:8px}
+.step{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:7px;cursor:pointer;transition:background .12s}
+.step .num{width:18px;height:18px;border-radius:50%;background:var(--line);color:var(--muted);font-size:10.5px;font-weight:700;display:grid;place-items:center}
+.step .num.done{background:var(--green);color:#fff}
+.step.active{background:#fff;border:1px solid var(--line)}
+.step.active .num{background:var(--ink);color:#fff}
+.step.active{color:var(--ink);font-weight:600}
+.step .check{width:14px;height:14px}
+.arrow{color:var(--subtle);font-size:11px}
+.step-meta{margin-left:auto;display:flex;gap:14px;font-size:11px;color:var(--subtle)}
+
+/* main layout */
+.body{display:grid;grid-template-columns:200px 1fr 320px;gap:14px;padding:14px;min-height:580px;background:var(--wash)}
+.body.no-right{grid-template-columns:200px 1fr}
+.col{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:12px;color:var(--body);overflow:hidden}
+.col h3{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--subtle);margin-bottom:9px}
+.col .row{padding:7px 9px;border-radius:6px;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--body)}
+.col .row .num{width:18px;height:18px;border-radius:50%;background:var(--line);color:var(--muted);font-size:10px;font-weight:700;display:grid;place-items:center}
+.col .row.active{background:var(--wash);color:var(--ink);font-weight:600}
+.col .row.active .num{background:var(--ink);color:#fff}
+.col .row .dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.col-tab-row{display:flex;border-bottom:1px solid var(--line-2);margin:-12px -12px 8px;padding:0 6px}
+.col-tab-row button{padding:8px 10px;font-size:11.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.col-tab-row button.active{color:var(--ink);border-color:var(--ink)}
+
+/* letter view */
+.letter{font-family:"Source Serif 4",Georgia,serif;color:var(--ink);overflow-y:auto;max-height:580px;padding:20px 28px}
+.letter h1{font-family:"Inter",sans-serif;font-size:18px;font-weight:700;letter-spacing:-.01em;margin-bottom:14px}
+.letter .section-card{border-bottom:1px solid var(--line-2);padding:14px 0;position:relative}
+.letter .section-card:first-of-type{padding-top:6px}
+.letter .section-head{display:flex;align-items:center;gap:7px;font-family:"Inter",sans-serif;font-size:9.5px;font-weight:700;color:var(--subtle);letter-spacing:.12em;text-transform:uppercase;margin-bottom:9px}
+.letter .section-head .icons{margin-left:auto;display:flex;gap:3px}
+.letter .section-head .icons .iconbtn{width:22px;height:22px;border-radius:5px;display:grid;place-items:center;color:var(--subtle);position:relative}
+.letter .section-head .icons .iconbtn:hover{background:var(--wash);color:var(--ink)}
+.letter .section-head .icons .iconbtn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.8}
+.letter .section-head .badge{position:absolute;top:-2px;right:-2px;width:11px;height:11px;background:var(--amber);color:#fff;font-family:"Inter",sans-serif;font-size:8px;font-weight:700;border-radius:50%;display:grid;place-items:center}
+.letter p{margin-bottom:8px;font-size:13px;line-height:1.65}
+.figref{display:inline-flex;align-items:center;padding:1px 5px;background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd);border-radius:4px;font-family:"Inter",sans-serif;font-size:11px;font-weight:600;font-style:normal;margin-right:2px}
+
+/* right rail variants */
+.ai-rail h3 svg{display:inline-block;width:12px;height:12px;color:var(--violet);stroke:currentColor;fill:none;stroke-width:1.8;margin-right:5px;vertical-align:-2px}
+.ai-card{background:var(--wash);border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:6px;font-size:11.5px}
+.ai-card .t{font-weight:600;color:var(--ink);margin-bottom:2px;display:flex;align-items:center;gap:5px}
+.ai-card .t svg{width:11px;height:11px;color:var(--muted);stroke:currentColor;fill:none;stroke-width:1.8}
+.ai-card .d{color:var(--muted);font-size:10.5px;line-height:1.4}
+
+.evidence-rail h3 svg{display:inline-block;width:12px;height:12px;color:var(--amber);stroke:currentColor;fill:none;stroke-width:1.8;margin-right:5px;vertical-align:-2px}
+.evidence-rail .header-row{display:flex;align-items:center;margin-bottom:9px}
+.evidence-rail .header-row .count{font-size:10.5px;color:var(--muted);margin-left:auto;margin-right:8px}
+.evidence-rail .header-row .add-btn{height:24px;padding:0 9px;border:1px solid var(--ink);border-radius:6px;font-size:10.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:4px}
+.evidence-rail .header-row .add-btn svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.4}
+.search-input{width:100%;height:26px;border:1px solid var(--line);border-radius:6px;padding:0 8px 0 26px;font-size:11.5px;background:#fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round'><circle cx='11' cy='11' r='8'/><path d='m21 21-4.35-4.35'/></svg>") no-repeat 7px center;background-size:11px}
+.search-input:focus{outline:none;border-color:var(--ink)}
+.filter-tabs{display:flex;gap:0;margin:8px 0;border-bottom:1px solid var(--line-2)}
+.filter-tabs button{padding:6px 7px;font-size:10.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.filter-tabs button.active{color:var(--ink);border-color:var(--ink)}
+.filter-tabs button .ct{font-size:9.5px;background:var(--wash);color:var(--muted);padding:0.5px 4px;border-radius:8px;margin-left:3px;font-weight:500}
+.filter-tabs button.active .ct{background:var(--ink);color:#fff;font-weight:600}
+.ev-card{border:1px solid var(--line);border-radius:8px;padding:9px;margin-bottom:6px;display:flex;gap:8px;align-items:flex-start}
+.ev-card .ico{width:30px;height:30px;border-radius:6px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.ev-card .ico svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.ev-card .meta{flex:1;min-width:0}
+.ev-card .nm{font-size:11.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev-card .mt{font-size:10px;color:var(--muted);margin-top:1px}
+.ev-card .actions{display:flex;gap:4px;margin-top:6px}
+.ev-card .actions button{height:21px;padding:0 7px;font-size:10px;font-weight:600;border:1px solid var(--line);border-radius:4px;color:var(--body)}
+.ev-card .actions button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+/* ============== OPTION A — Step model (current) ============== */
+.option-a .step-meta{color:var(--blue)}
+
+/* ============== OPTION B — Drawer model (proposed) ============== */
+.option-b .body{grid-template-columns:200px 1fr 320px}
+.evidence-tb-btn{position:relative;display:flex;align-items:center;gap:5px;height:28px;padding:0 10px;background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd);border-radius:7px;font-size:11.5px;font-weight:600}
+.evidence-tb-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
+.evidence-tb-btn .ct{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;background:var(--amber);color:#fff;font-size:9px;font-weight:700;border-radius:50%}
+
+/* drawer overlay (option B) */
+.drawer-scene{position:relative;overflow:hidden;border-radius:14px}
+.drawer-overlay{position:absolute;inset:0;background:rgba(17,24,39,.5);z-index:5;animation:fadein .25s ease}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.drawer-panel{position:absolute;top:0;right:0;bottom:0;width:560px;background:#fff;border-left:1px solid var(--line);box-shadow:-12px 0 32px -8px rgba(0,0,0,.2);z-index:10;display:flex;flex-direction:column;animation:slidein .28s ease}
+@keyframes slidein{from{transform:translateX(20px);opacity:.7}to{transform:translateX(0);opacity:1}}
+.drawer-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.drawer-head svg.lead{width:16px;height:16px;color:var(--amber);stroke:currentColor;fill:none;stroke-width:1.8}
+.drawer-head h2{font-size:14px;font-weight:700;letter-spacing:-.01em;flex:1}
+.drawer-head .ctx{font-size:11px;color:var(--muted);font-weight:500}
+.drawer-head .close{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;color:var(--muted)}
+.drawer-head .close:hover{background:var(--wash);color:var(--ink)}
+.drawer-head .close svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.drawer-search{padding:10px 18px;border-bottom:1px solid var(--line-2);background:var(--wash);display:flex;gap:7px;align-items:center}
+.drawer-search input{flex:1;height:28px;border:1px solid var(--line);border-radius:6px;padding:0 9px;font-size:12px;background:#fff}
+.drawer-search button{height:28px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid var(--line);border-radius:6px;color:var(--body);background:#fff}
+.drawer-tabs{display:flex;border-bottom:1px solid var(--line);padding:0 18px}
+.drawer-tab{padding:9px 12px;font-size:11.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.drawer-tab.active{color:var(--ink);border-bottom-color:var(--ink)}
+.drawer-tab .ct{font-size:10px;background:var(--wash);color:var(--muted);padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:500}
+.drawer-tab.active .ct{background:var(--ink);color:#fff;font-weight:600}
+.drawer-body{flex:1;overflow-y:auto;padding:12px 18px;max-height:520px}
+.drawer-card{display:flex;align-items:flex-start;gap:10px;padding:11px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;cursor:pointer}
+.drawer-card:hover{border-color:#94a3b8;background:#fdfdfd}
+.drawer-card .ico{width:38px;height:38px;border-radius:8px;background:var(--amber-lt);color:var(--amber);display:grid;place-items:center;flex-shrink:0}
+.drawer-card .ico svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8}
+.drawer-card .info{flex:1;min-width:0}
+.drawer-card .nm{font-size:12px;font-weight:700;letter-spacing:-.01em}
+.drawer-card .ds{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.5}
+.drawer-card .mt{font-size:9.5px;color:var(--subtle);margin-top:3px;font-variant-numeric:tabular-nums}
+.drawer-card .mt strong{color:var(--amber);font-weight:600}
+.drawer-card .actions{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.drawer-card .pill{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--amber);background:var(--amber-lt);padding:1px 5px;border-radius:3px}
+.drawer-card .ins{height:24px;padding:0 9px;background:var(--ink);color:#fff;border-radius:5px;font-size:10.5px;font-weight:600;display:flex;align-items:center;gap:3px}
+.drawer-card .ins svg{width:9px;height:9px;stroke:#fff;fill:none;stroke-width:2.4}
+.drawer-foot{padding:10px 18px;border-top:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted)}
+.drawer-foot .manage{color:var(--ink);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.drawer-foot .upload{margin-left:auto;height:26px;padding:0 10px;font-size:11px;font-weight:600;border:1px solid var(--line);border-radius:6px;color:var(--ink);background:#fff;display:flex;align-items:center;gap:4px}
+.drawer-foot .upload svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* handoff card (option B) */
+.handoff{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 18px;box-shadow:0 12px 32px -8px rgba(0,0,0,.12);width:520px;z-index:15}
+.handoff h3{font-size:13px;font-weight:700;display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.handoff h3 svg{width:14px;height:14px;color:var(--amber);stroke:currentColor;fill:none;stroke-width:1.8}
+.handoff p{font-size:11.5px;color:var(--body);line-height:1.55;margin-bottom:10px}
+.handoff p strong{color:var(--ink);font-weight:600}
+.handoff-actions{display:flex;gap:7px}
+.handoff-actions button{height:28px;padding:0 11px;font-size:11.5px;font-weight:600;border-radius:7px;display:flex;align-items:center;gap:4px}
+.handoff-actions .primary{background:var(--ink);color:#fff;margin-left:auto}
+.handoff-actions .primary svg{width:10px;height:10px;stroke:#fff;fill:none;stroke-width:2.4}
+.handoff-actions .secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}
+
+/* finalise-as-step section */
+.finalise-section{margin-top:32px;padding:18px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.finalise-section h2{font-size:15px;font-weight:700;margin-bottom:8px;letter-spacing:-.01em}
+.finalise-section .note{font-size:12px;color:var(--body);line-height:1.6;margin-bottom:14px}
+.finalise-section .note strong{color:var(--ink)}
+.flowdiff{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.flowdiff .card{background:var(--wash);border:1px solid var(--line);border-radius:10px;padding:14px}
+.flowdiff .card h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--subtle);margin-bottom:9px}
+.flowdiff .card .title{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:10px;letter-spacing:-.01em}
+.minisstepper{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.minisstepper .ms{display:flex;align-items:center;gap:5px;padding:5px 9px;background:#fff;border:1px solid var(--line);border-radius:7px;font-size:11.5px;font-weight:500;color:var(--muted)}
+.minisstepper .ms.active{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+.minisstepper .ms .n{width:15px;height:15px;border-radius:50%;background:var(--line);color:var(--muted);font-size:9.5px;font-weight:700;display:grid;place-items:center}
+.minisstepper .ms.active .n{background:#fff;color:var(--ink)}
+.minisstepper .arr{color:var(--subtle);font-size:11px}
+.flowdiff .desc{font-size:11.5px;color:var(--body);line-height:1.55}
+.flowdiff .desc strong{color:var(--ink)}
+
+/* mode badge */
+.mode-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
+.mode-badge.now{background:#fef3c7;color:#92400e}
+.mode-badge.prop{background:#d1fae5;color:#065f46}
+
+/* compare table */
+.tradeoff{margin-top:18px;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:11.5px}
+.tradeoff table{width:100%;border-collapse:collapse}
+.tradeoff th{background:var(--wash);font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:9px 14px;text-align:left;border-bottom:1px solid var(--line)}
+.tradeoff th:nth-child(2),.tradeoff th:nth-child(3){width:30%}
+.tradeoff td{padding:8px 14px;border-bottom:1px solid var(--line-2);color:var(--body)}
+.tradeoff td:nth-child(1){font-weight:600;color:var(--ink);width:40%}
+.tradeoff tr:last-child td{border-bottom:0}
+.tradeoff .win{color:var(--green);font-weight:600}
+.tradeoff .lose{color:var(--red);font-weight:500}
+.tradeoff .neutral{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+    DraftHR
+  </div>
+  <div class="divider"></div>
+  <div class="picker">
+    <button class="pick-btn" data-tab="a">A · Step model (current)</button>
+    <button class="pick-btn" data-tab="b">B · Drawer + Finalise</button>
+    <button class="pick-btn active" data-tab="hybrid">C · Hybrid (pinnable rail)</button>
+    <button class="pick-btn" data-tab="compare">Tradeoffs</button>
+  </div>
+  <div class="tb-right">Evidence architecture decision</div>
+</div>
+
+<!-- ════════════════════ OPTION A — STEP MODEL (current) ════════════════════ -->
+<div class="panel option-a" data-panel="a">
+<div class="scene">
+
+  <div class="intro">
+    <h1>Option A · Step model — what's shipping today</h1>
+    <p>Evidence is a forced wizard step. The user moves <strong>Edit → Evidence → Review</strong> in order. The Evidence step mirrors Edit's chrome (sections rail left, letter cards center) but swaps the right rail from "AI agent" to "Evidence panel". <span class="mode-badge now">Live in dd974d1</span></p>
+    <div class="meta"><span><strong>Steps:</strong> 3</span><span><strong>Evidence surfaces:</strong> 2 (popover + sidebar)</span><span><strong>Modal drawer:</strong> still available from popover overflow</span></div>
+  </div>
+
+  <div class="app">
+    <div class="app-bar">
+      <div class="ico-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18"/></svg></div>
+      <div class="menu"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      <div class="center"><button>Edit</button><button class="active">Preview</button></div>
+      <div class="right"><div class="ico-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg></div><button class="cta">Review<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step"><div class="num done"><svg viewBox="0 0 24 24" stroke="#fff" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="check"><polyline points="20 6 9 17 4 12"/></svg></div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step active"><div class="num">2</div>Evidence</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Review</div>
+      </div>
+      <div class="step-meta"><span>3-step workflow</span></div>
+    </div>
+    <div class="body">
+      <div class="col">
+        <div class="col-tab-row"><button class="active">Sections <span style="color:var(--subtle);font-weight:500">0/6</span></button><button>Required</button></div>
+        <div class="row"><span class="num">1</span>Date & recipient<span class="dot"></span></div>
+        <div class="row"><span class="num">2</span>Subject<span class="dot"></span></div>
+        <div class="row active"><span class="num">3</span>Dates & basis<span class="dot"></span></div>
+        <div class="row"><span class="num">4</span>Closing<span class="dot"></span></div>
+        <div class="row"><span class="num">5</span>Signature<span class="dot"></span></div>
+      </div>
+      <div class="col letter">
+        <h1>Holiday Request / Refusal Challenge</h1>
+        <div class="section-card">
+          <div class="section-head">Date & recipient · edited
+            <div class="icons"><div class="iconbtn"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><span class="badge">1</span></div></div>
+          </div>
+          <p><span class="figref">[See Fig 1]</span> 15 May 2026</p>
+          <p>To: HR Officer</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Subject · holiday request
+            <div class="icons"><div class="iconbtn"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg></div></div>
+          </div>
+          <p>Annual Leave Request — [TBD] to [TBD]</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Dates & basis
+            <div class="icons"><div class="iconbtn"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg></div></div>
+          </div>
+          <p>I formally request annual leave from [TBD] to [TBD]…</p>
+        </div>
+      </div>
+      <div class="col evidence-rail">
+        <div class="header-row">
+          <h3><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>Evidence</h3>
+          <span class="count">1 item</span>
+          <button class="add-btn"><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add</button>
+        </div>
+        <input class="search-input" placeholder="Search evidence…" />
+        <div class="filter-tabs">
+          <button class="active">All <span class="ct">1</span></button>
+          <button>Emails <span class="ct">0</span></button>
+          <button>Screens <span class="ct">1</span></button>
+          <button>Docs <span class="ct">0</span></button>
+        </div>
+        <div class="ev-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+          <div class="meta">
+            <div class="nm">working-pattern-mtg.png</div>
+            <div class="mt">Screenshot · Fig 1 · linked to §1</div>
+            <div class="actions"><button>Reference</button><button>Quote</button><button class="primary">Linked here</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="intro" style="margin-top:18px">
+    <h1 style="font-size:14px">What this is good at</h1>
+    <p style="font-size:12px">• Wizard enforces a pre-flight check — you literally can't reach Review without seeing the Evidence step<br>• Generous real estate for evidence work (full-width content + 360px panel)<br>• Letter is visible while you manage evidence — sidebar persistence is genuinely useful</p>
+    <h1 style="font-size:14px;margin-top:14px">What it's bad at</h1>
+    <p style="font-size:12px">• 80% of letters don't need evidence at all — the step is dead weight for sick-leave, holiday requests, etc.<br>• You can never escape the visual flinch — even if the layout matches, the user notices "I'm on a different page now"<br>• Mobile: forces you through a wizard step that's just a stacked column of cards on small screens<br>• Two surfaces (popover + sidebar) on the same page is inherently confusing</p>
+  </div>
+
+</div>
+</div>
+
+<!-- ════════════════════ OPTION B — DRAWER + FINALISE ════════════════════ -->
+<div class="panel option-b" data-panel="b">
+<div class="scene">
+
+  <div class="intro">
+    <h1>Option B · Drawer + Finalise as the last step</h1>
+    <p>Evidence becomes a <strong>tool, not a step</strong>. A dedicated drawer button lives in the top toolbar (always one click away). The wizard becomes <strong>Edit → Review → Finalise</strong> — three steps that map to the actual mental model: write, check, ship. A handoff card asks about evidence completeness when moving Edit → Review. <span class="mode-badge prop">Proposed</span></p>
+    <div class="meta"><span><strong>Steps:</strong> 3 (Edit · Review · Finalise)</span><span><strong>Evidence surfaces:</strong> 1 (drawer only)</span><span><strong>Free real estate:</strong> the right rail is whatever the current step needs</span></div>
+  </div>
+
+  <div class="app drawer-scene">
+    <div class="app-bar">
+      <div class="ico-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M3 9h18"/></svg></div>
+      <div class="menu"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      <div class="center"><button class="active">Edit</button><button>Preview</button></div>
+      <div class="right">
+        <!-- NEW evidence toolbar button — always visible, count badge -->
+        <button class="evidence-tb-btn">
+          <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Evidence
+          <span class="ct">3</span>
+        </button>
+        <div class="ico-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg></div>
+        <button class="cta">Review<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+      <div class="step-meta"><span>Evidence is a tool, not a step</span></div>
+    </div>
+    <div class="body" style="grid-template-columns:200px 1fr 320px">
+      <div class="col">
+        <div class="col-tab-row"><button class="active">Sections <span style="color:var(--subtle);font-weight:500">2/6</span></button><button>Rights</button></div>
+        <div class="row"><span class="num">1</span>Date & recipient<span class="dot"></span></div>
+        <div class="row"><span class="num">2</span>Subject<span class="dot"></span></div>
+        <div class="row active"><span class="num">3</span>Dates & basis<span class="dot"></span></div>
+        <div class="row"><span class="num">4</span>Closing<span class="dot"></span></div>
+        <div class="row"><span class="num">5</span>Signature<span class="dot"></span></div>
+      </div>
+      <div class="col letter">
+        <h1>Holiday Request / Refusal Challenge</h1>
+        <div class="section-card">
+          <div class="section-head">Date & recipient · edited
+            <div class="icons"><div class="iconbtn"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg></div></div>
+          </div>
+          <p><span class="figref">[See Fig 1]</span> 15 May 2026</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Dates & basis
+            <div class="icons"><div class="iconbtn"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg></div></div>
+          </div>
+          <p>I formally request annual leave under regulation 15 <span class="figref">[See Fig 2]</span> of the Working Time Regulations 1998…</p>
+          <p>I am entitled to 28 days' paid annual leave by virtue of regulations 13 and 13A.</p>
+        </div>
+      </div>
+      <div class="col ai-rail">
+        <h3><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>AI agent</h3>
+        <div class="ai-card"><div class="t"><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4"/></svg>Tighten to ~180 words</div><div class="d">Cut adjectives without dropping facts or clauses.</div></div>
+        <div class="ai-card"><div class="t"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Make it tribunal-ready</div><div class="d">Strict, factual, statutory anchors explicit.</div></div>
+        <div class="ai-card"><div class="t">Add a confidentiality clause</div><div class="d">Three-year survival post-termination by default.</div></div>
+      </div>
+    </div>
+
+    <!-- DRAWER OPEN OVERLAY -->
+    <div class="drawer-overlay"></div>
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <svg class="lead" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        <h2>Evidence</h2>
+        <span class="ctx">At cursor in §Dates & basis</span>
+        <button class="close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="drawer-search">
+        <input placeholder="Search by name, kind, or section…" />
+        <button>+ New</button>
+      </div>
+      <div class="drawer-tabs">
+        <div class="drawer-tab active">All <span class="ct">3</span></div>
+        <div class="drawer-tab">Emails <span class="ct">1</span></div>
+        <div class="drawer-tab">Screens <span class="ct">1</span></div>
+        <div class="drawer-tab">Docs <span class="ct">1</span></div>
+        <div class="drawer-tab">Notes <span class="ct">0</span></div>
+      </div>
+      <div class="drawer-body">
+        <div class="drawer-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+          <div class="info">
+            <div class="nm">working-pattern-meeting.png</div>
+            <div class="ds">Screenshot of the 14-Mar standup where Whitfield announced the change.</div>
+            <div class="mt">Inserted as <strong>Fig 1</strong> · §Date & recipient</div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins">Re-insert<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+        <div class="drawer-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+          <div class="info">
+            <div class="nm">whitfield-email-16mar.eml</div>
+            <div class="ds">Manager's email confirming the unilateral change with no consultation reference.</div>
+            <div class="mt">Will insert as <strong>Fig 2</strong></div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins">Insert<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+        <div class="drawer-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <div class="info">
+            <div class="nm">flex-working-agreement-2025.pdf</div>
+            <div class="ds">Signed flexible-working agreement establishing the protected pattern.</div>
+            <div class="mt">Will insert as <strong>Fig 3</strong></div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins">Insert<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+      </div>
+      <div class="drawer-foot">
+        <span class="manage">Manage evidence ↗</span>
+        <span>3 items · 1.5 MB</span>
+        <button class="upload"><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload new</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Second app frame — handoff card on Edit → Review -->
+  <div style="margin-top:24px" class="intro"><h1 style="font-size:14px">The handoff: clicking <em>Review →</em> with unused evidence</h1><p style="font-size:12px">Soft gate, not blocking. Auto-dismissed when there's no evidence at all. For evidence-heavy letter types (tribunal, settlement), this becomes stronger copy.</p></div>
+
+  <div class="app drawer-scene">
+    <div class="app-bar">
+      <div class="ico-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+      <div class="menu"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      <div class="right">
+        <button class="evidence-tb-btn">
+          <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>Evidence<span class="ct">3</span>
+        </button>
+        <button class="cta">Review<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+    </div>
+    <div class="body" style="grid-template-columns:200px 1fr 320px;min-height:330px;filter:blur(.4px);opacity:.7">
+      <div class="col"><h3>Sections 2/6</h3><div class="row"><span class="num">1</span>Date & recipient</div><div class="row"><span class="num">2</span>Subject</div><div class="row"><span class="num">3</span>Dates & basis</div></div>
+      <div class="col letter"><h1>Holiday Request / Refusal Challenge</h1><p>I formally request annual leave from [TBD] to [TBD]…</p></div>
+      <div class="col"><h3>AI agent</h3></div>
+    </div>
+
+    <div class="handoff">
+      <h3><svg viewBox="0 0 24 24" stroke-linecap="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>Evidence check before Review</h3>
+      <p>You have <strong>3 evidence items</strong>. <strong>2 are referenced</strong> in the letter as <span class="figref">[See Fig 1]</span> and <span class="figref">[See Fig 2]</span>. <strong>1 is unused</strong> — flex-working-agreement-2025.pdf isn't cited anywhere in the body.</p>
+      <p style="margin-bottom:0;color:var(--muted)">Unused exhibits will still be bundled in the export ZIP, but won't appear on the Exhibits page unless they're referenced.</p>
+      <div class="handoff-actions" style="margin-top:10px">
+        <button class="secondary">Open Evidence drawer</button>
+        <button class="secondary">Don't ask again for this draft</button>
+        <button class="primary">Continue to Review<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Finalise as last step explainer -->
+  <div class="finalise-section">
+    <h2>Why "Finalise" makes sense as the last step</h2>
+    <div class="note">Earlier we removed Finalize from the wizard chrome and folded its job into Review's right rail. That made Review do two jobs — assessing AND shipping. The clean split: <strong>Review = is this good?</strong> · <strong>Finalise = ship it.</strong></div>
+
+    <div class="flowdiff">
+      <div class="card">
+        <h4>Today</h4>
+        <div class="minisstepper">
+          <div class="ms"><div class="n">1</div>Edit</div><div class="arr">·</div>
+          <div class="ms active"><div class="n">2</div>Evidence</div><div class="arr">·</div>
+          <div class="ms"><div class="n">3</div>Review<span style="margin-left:5px;font-size:9.5px;color:var(--amber);font-weight:700;background:var(--amber-lt);padding:1px 5px;border-radius:99px">+ Finalise inline</span></div>
+        </div>
+        <div class="desc">Review and Finalise are conflated. The user has to scroll past the assessment tabs to find "Mark as sent" + format tiles. Two distinct jobs in one surface.</div>
+      </div>
+      <div class="card">
+        <h4>Proposed</h4>
+        <div class="minisstepper">
+          <div class="ms"><div class="n">1</div>Edit</div><div class="arr">·</div>
+          <div class="ms"><div class="n">2</div>Review</div><div class="arr">·</div>
+          <div class="ms active"><div class="n">3</div>Finalise</div>
+        </div>
+        <div class="desc"><strong>Edit</strong> = write the prose · <strong>Review</strong> = check Health/Improve/Consult tabs · <strong>Finalise</strong> = lock the draft, pick export format, mark as sent. Each step does one job. Evidence is a drawer accessible from any step.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ════════════════════ OPTION C — HYBRID (pinnable rail) ════════════════════ -->
+<div class="panel active" data-panel="hybrid">
+<div class="scene">
+
+  <div class="intro">
+    <h1>Option C · Hybrid — the pinnable evidence rail</h1>
+    <p>Same wizard as Option B: <strong>Edit · Review · Finalise</strong> (no forced Evidence step). But the evidence drawer can be <strong>pinned</strong> — converting it from a transient overlay into a persistent right rail that replaces the AI agent panel. Two modes for evidence, user picks based on their workload. <span class="mode-badge prop">Proposed hybrid</span></p>
+    <div class="meta">
+      <span><strong>Wizard:</strong> 3 steps (Edit · Review · Finalise)</span>
+      <span><strong>Evidence states:</strong> floating drawer OR pinned rail</span>
+      <span><strong>User chooses:</strong> light workflow vs heavy workflow per-draft</span>
+    </div>
+  </div>
+
+  <!-- ═══════ MODE 1: FLOATING DRAWER ═══════ -->
+  <div class="intro" style="margin-top:14px"><h1 style="font-size:14px">Mode 1 · <em>Floating</em> — quick reference insertion</h1><p style="font-size:12px">Default state. Click the Evidence button in the toolbar → drawer slides in over the editor. Pick an item, insert at cursor, drawer closes. <strong>For when evidence is a side-quest to the prose you're writing.</strong></p></div>
+
+  <div class="app drawer-scene">
+    <div class="app-bar">
+      <div class="ico-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+      <div class="menu"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      <div class="center"><button class="active">Edit</button><button>Preview</button></div>
+      <div class="right">
+        <button class="evidence-tb-btn">
+          <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Evidence<span class="ct">3</span>
+        </button>
+        <button class="cta">Review<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+      <div class="step-meta"><span>Floating drawer</span></div>
+    </div>
+    <div class="body" style="grid-template-columns:200px 1fr 320px">
+      <div class="col">
+        <h3>Sections 2/6</h3>
+        <div class="row"><span class="num">1</span>Date & recipient</div>
+        <div class="row"><span class="num">2</span>Subject</div>
+        <div class="row active"><span class="num">3</span>Dates & basis</div>
+        <div class="row"><span class="num">4</span>Closing</div>
+      </div>
+      <div class="col letter">
+        <h1>Holiday Request / Refusal Challenge</h1>
+        <div class="section-card">
+          <div class="section-head">Date & recipient · edited</div>
+          <p><span class="figref">[See Fig 1]</span> 15 May 2026</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Dates & basis</div>
+          <p>I formally request annual leave from [TBD] under regulation 15 <span class="figref">[See Fig 2]</span>…</p>
+        </div>
+      </div>
+      <div class="col ai-rail">
+        <h3><svg viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>AI agent</h3>
+        <div class="ai-card"><div class="t">Tighten to ~180 words</div><div class="d">Cut adjectives without dropping facts.</div></div>
+        <div class="ai-card"><div class="t">Make it tribunal-ready</div><div class="d">Strict, factual, statutory anchors.</div></div>
+      </div>
+    </div>
+    <div class="drawer-overlay"></div>
+    <div class="drawer-panel">
+      <div class="drawer-head">
+        <svg class="lead" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>
+        <h2>Evidence</h2>
+        <span class="ctx">At cursor in §Dates & basis</span>
+        <!-- THE KEY AFFORDANCE: PIN button -->
+        <button style="display:flex;align-items:center;gap:4px;height:26px;padding:0 9px;border:1px solid var(--ink);border-radius:6px;font-size:11px;font-weight:600;color:var(--ink);background:#fff" title="Convert this drawer to a permanent right-rail panel">
+          <svg width="11" height="11" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 17v5M9 10.76V6h6v4.76A6 6 0 0 1 12 22a6 6 0 0 1-3-11.24z"/></svg>
+          Pin →
+        </button>
+        <button class="close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <div class="drawer-search">
+        <input placeholder="Search by name, kind, or section…" />
+        <button>+ New</button>
+      </div>
+      <div class="drawer-tabs">
+        <div class="drawer-tab active">All <span class="ct">3</span></div>
+        <div class="drawer-tab">Emails <span class="ct">1</span></div>
+        <div class="drawer-tab">Screens <span class="ct">1</span></div>
+        <div class="drawer-tab">Docs <span class="ct">1</span></div>
+      </div>
+      <div class="drawer-body">
+        <div class="drawer-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>
+          <div class="info">
+            <div class="nm">working-pattern-meeting.png</div>
+            <div class="ds">Screenshot of 14-Mar standup.</div>
+            <div class="mt">Inserted as <strong>Fig 1</strong> · §Date & recipient</div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins">Re-insert<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+        <div class="drawer-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+          <div class="info">
+            <div class="nm">whitfield-email-16mar.eml</div>
+            <div class="ds">Manager confirming unilateral change.</div>
+            <div class="mt">Inserted as <strong>Fig 2</strong> · §Dates & basis</div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins">Re-insert<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+        <div class="drawer-card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <div class="info">
+            <div class="nm">flex-working-agreement-2025.pdf</div>
+            <div class="ds">Signed flexible-working agreement.</div>
+            <div class="mt">Will insert as <strong>Fig 3</strong></div>
+          </div>
+          <div class="actions"><span class="pill">Figure</span><button class="ins">Insert<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button></div>
+        </div>
+      </div>
+      <div class="drawer-foot">
+        <span class="manage">Manage evidence ↗</span>
+        <span>3 items · 1.5 MB</span>
+        <button class="upload"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ MODE 2: PINNED RAIL ═══════ -->
+  <div class="intro" style="margin-top:24px"><h1 style="font-size:14px">Mode 2 · <em>Pinned</em> — heavy evidence work</h1><p style="font-size:12px">User clicks the <strong>Pin →</strong> button in the drawer header. Drawer converts into a permanent right rail, replacing the AI agent. Letter stays in the center, evidence is always visible. <strong>For tribunal-bound matters, settlement counter-offers, anything with 5+ exhibits.</strong> A "↩ Unpin" button at the top of the rail returns to floating mode.</p></div>
+
+  <div class="app">
+    <div class="app-bar">
+      <div class="ico-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+      <div class="menu"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      <div class="center"><button class="active">Edit</button><button>Preview</button></div>
+      <div class="right">
+        <!-- Evidence button is now showing "pinned" state -->
+        <button class="evidence-tb-btn" style="background:var(--ink);color:#fff;border-color:var(--ink)">
+          <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Evidence<span class="ct" style="background:#fff;color:var(--ink)">3</span>
+        </button>
+        <button class="cta">Review<svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div>
+        <span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+      <div class="step-meta"><span style="color:var(--ink);font-weight:600">Evidence pinned — AI agent collapsed</span></div>
+    </div>
+    <div class="body" style="grid-template-columns:200px 1fr 380px">
+      <div class="col">
+        <h3>Sections 2/6</h3>
+        <div class="row"><span class="num">1</span>Date & recipient</div>
+        <div class="row"><span class="num">2</span>Subject</div>
+        <div class="row active"><span class="num">3</span>Dates & basis</div>
+        <div class="row"><span class="num">4</span>Closing</div>
+        <div class="row"><span class="num">5</span>Signature</div>
+      </div>
+      <div class="col letter">
+        <h1>Constructive Dismissal — Pre-Resignation Notice</h1>
+        <div class="section-card">
+          <div class="section-head">Background</div>
+          <p>On 14 March 2026 <span class="figref">[See Fig 1]</span>, Mr Whitfield announced unilateral changes to my working pattern without consultation, despite my flexible-working agreement <span class="figref">[See Fig 3]</span>.</p>
+        </div>
+        <div class="section-card">
+          <div class="section-head">Particulars</div>
+          <p>Subsequent emails <span class="figref">[See Fig 2]</span> confirm the position. My contract clause 4.2 <span class="figref">[See Fig 4]</span> expressly required notice and consultation.</p>
+          <p>The pay records for January through March <span class="figref">[See Fig 5]</span> show…</p>
+        </div>
+      </div>
+      <!-- The pinned evidence rail — same content as the drawer but permanent -->
+      <div class="col evidence-rail" style="display:flex;flex-direction:column;padding:0">
+        <div style="padding:10px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;background:var(--wash)">
+          <svg width="14" height="14" viewBox="0 0 24 24" stroke="var(--amber)" fill="none" stroke-width="1.8"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>
+          <span style="font-size:12.5px;font-weight:700;color:var(--ink);flex:1">Evidence library</span>
+          <span style="font-size:10.5px;color:var(--muted)">5 items</span>
+          <!-- THE UNPIN button -->
+          <button style="display:flex;align-items:center;gap:3px;height:22px;padding:0 7px;border:1px solid var(--line);border-radius:5px;font-size:10.5px;font-weight:600;color:var(--body);background:#fff" title="Return to floating drawer mode">
+            <svg width="9" height="9" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M9 14 4 9l5-5M4 9h16"/></svg>
+            Unpin
+          </button>
+        </div>
+        <div style="padding:9px 12px;border-bottom:1px solid var(--line-2)">
+          <input class="search-input" placeholder="Search by name, kind, section…" />
+          <div class="filter-tabs" style="margin:6px 0 0">
+            <button class="active">All <span class="ct">5</span></button>
+            <button>Emails <span class="ct">2</span></button>
+            <button>Screens <span class="ct">1</span></button>
+            <button>Docs <span class="ct">2</span></button>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:8px 12px">
+          <div class="ev-card">
+            <div class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/></svg></div>
+            <div class="meta">
+              <div class="nm">working-pattern-mtg.png</div>
+              <div class="mt">Fig 1 · §Background · ✓ cited</div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12"/><polyline points="22,6 12,13 2,6"/></svg></div>
+            <div class="meta">
+              <div class="nm">whitfield-email-16mar.eml</div>
+              <div class="mt">Fig 2 · §Particulars · ✓ cited</div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12"/></svg></div>
+            <div class="meta">
+              <div class="nm">flex-agreement.pdf</div>
+              <div class="mt">Fig 3 · §Background · ✓ cited</div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16"/></svg></div>
+            <div class="meta">
+              <div class="nm">contract-employment.pdf</div>
+              <div class="mt">Fig 4 · §Particulars · ✓ cited</div>
+            </div>
+          </div>
+          <div class="ev-card">
+            <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12"/></svg></div>
+            <div class="meta">
+              <div class="nm">payroll-jan-mar.eml</div>
+              <div class="mt">Fig 5 · §Particulars · ✓ cited</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:8px 12px;border-top:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--muted)">
+          <span style="font-weight:600;color:var(--ink)">Manage ↗</span>
+          <span>· 5 items · 5/5 cited</span>
+          <button style="margin-left:auto;height:24px;padding:0 9px;font-size:10.5px;font-weight:600;border:1px solid var(--ink);border-radius:6px;color:var(--ink);background:#fff;display:flex;align-items:center;gap:4px">+ Upload</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ STATE DIAGRAM ═══════ -->
+  <div class="finalise-section">
+    <h2>The two modes — what flips between them</h2>
+    <div class="note">Per-draft state, persisted to localStorage. Returning users land in whichever mode they last used. For evidence-heavy template types (tribunal, grievance, settlement) the default could be Pinned; everything else defaults to Floating.</div>
+
+    <div class="flowdiff">
+      <div class="card">
+        <h4>Floating · default</h4>
+        <div class="title">Drawer overlays the editor</div>
+        <div class="desc">
+          <strong>When:</strong> light letters, quick reference insertion, narrative-first workflow.<br>
+          <strong>Trigger:</strong> click toolbar Evidence button → drawer opens.<br>
+          <strong>Closes:</strong> after Insert, on Esc, on backdrop click, or via × close.<br>
+          <strong>AI agent rail:</strong> visible (drawer overlays it).<br>
+          <strong>Width:</strong> 560px sheet.
+        </div>
+      </div>
+      <div class="card">
+        <h4>Pinned · heavy work</h4>
+        <div class="title">Rail replaces AI agent</div>
+        <div class="desc">
+          <strong>When:</strong> evidence-heavy letters, 5+ exhibits, tribunal-bound matters.<br>
+          <strong>Trigger:</strong> click "Pin →" inside the drawer header.<br>
+          <strong>Persists:</strong> across navigation. Survives reload via per-draft state.<br>
+          <strong>AI agent rail:</strong> collapsed; can be summoned via inline button if needed.<br>
+          <strong>Width:</strong> 380px column.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ HANDOFF CARD STILL APPLIES ═══════ -->
+  <div class="intro" style="margin-top:24px"><h1 style="font-size:14px">The handoff card still fires on Review →</h1><p style="font-size:12px">Identical to Option B. The check runs regardless of whether evidence was managed via floating drawer or pinned rail. Same nudge: "you have N unused exhibits."</p></div>
+
+  <div class="app drawer-scene">
+    <div class="app-bar">
+      <div class="ico-btn"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+      <div class="menu"><span>File</span><span>Tools</span><span>Edit</span><span>View</span></div>
+      <div class="right">
+        <button class="evidence-tb-btn"><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>Evidence<span class="ct">3</span></button>
+        <button class="cta">Review<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+    <div class="stepper-row">
+      <div class="stepper">
+        <div class="step active"><div class="num">1</div>Edit</div><span class="arrow">·</span>
+        <div class="step"><div class="num">2</div>Review</div><span class="arrow">·</span>
+        <div class="step"><div class="num">3</div>Finalise</div>
+      </div>
+    </div>
+    <div class="body" style="grid-template-columns:200px 1fr 320px;min-height:280px;filter:blur(.4px);opacity:.7">
+      <div class="col"><h3>Sections 2/6</h3><div class="row"><span class="num">1</span>Date & recipient</div><div class="row"><span class="num">2</span>Subject</div></div>
+      <div class="col letter"><h1>Holiday Request</h1><p>I formally request annual leave from [TBD] to [TBD]…</p></div>
+      <div class="col"><h3>AI agent</h3></div>
+    </div>
+    <div class="handoff">
+      <h3><svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66"/></svg>Evidence check before Review</h3>
+      <p>You have <strong>3 evidence items</strong>. <strong>2 are referenced</strong> in the letter. <strong>1 is unused</strong> — <em>flex-working-agreement-2025.pdf</em> isn't cited anywhere.</p>
+      <p style="margin-bottom:0;color:var(--muted)">Unused exhibits still bundle in the export ZIP, but won't appear on the Exhibits page unless they're referenced in the body.</p>
+      <div class="handoff-actions" style="margin-top:10px">
+        <button class="secondary">Open Evidence drawer</button>
+        <button class="secondary">Don't ask for this draft</button>
+        <button class="primary">Continue to Review<svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ WHY THIS IS THE BEST OF BOTH ═══════ -->
+  <div class="finalise-section" style="background:linear-gradient(135deg,var(--amber-lt),#fff)">
+    <h2 style="display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--amber)" fill="none" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Why C wins over A and B</h2>
+    <div class="note" style="margin-bottom:14px">
+      <strong>From A</strong> — we keep the persistent rail (Pinned mode) so heavy evidence work has full space. <strong>From B</strong> — we keep the clean 3-step wizard (Edit · Review · Finalise) and the drawer for transient lookups. The user picks their workflow per-draft. Nothing is forced.
+    </div>
+    <div class="flowdiff" style="grid-template-columns:repeat(3,1fr)">
+      <div class="card">
+        <h4>Light letter — holiday request</h4>
+        <div class="desc"><strong>Workflow:</strong> stays Floating. User doesn't even notice evidence as a concept. Skips drawer entirely. Goes Edit → Review → Finalise in 3 clicks. <strong>Time to ship:</strong> ~2 minutes.</div>
+      </div>
+      <div class="card">
+        <h4>Medium letter — grievance</h4>
+        <div class="desc"><strong>Workflow:</strong> writes prose, clicks Evidence button, drawer slides in, inserts 3 refs, closes drawer, continues writing. Handoff card on Review nudges if any are unused. <strong>Time to ship:</strong> ~10 minutes.</div>
+      </div>
+      <div class="card">
+        <h4>Heavy letter — tribunal claim</h4>
+        <div class="desc"><strong>Workflow:</strong> opens drawer, clicks <strong>Pin →</strong>. Evidence rail stays visible for the entire drafting session. Picks/inserts/cross-references 15 exhibits without context-switching. <strong>Time to ship:</strong> hours, but every minute spent inside the editor instead of bouncing between routes.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ════════════════════ TRADEOFFS ════════════════════ -->
+<div class="panel" data-panel="compare">
+<div class="scene">
+
+  <div class="intro">
+    <h1>Side-by-side tradeoff</h1>
+    <p>Honest evaluation across the dimensions that matter. <span class="win">Green</span> = wins clearly. <span class="lose">Red</span> = loses clearly. Grey = even.</p>
+  </div>
+
+  <div class="tradeoff">
+    <table>
+      <thead><tr><th>Dimension</th><th>A · Step model</th><th>B · Drawer only</th><th>C · Hybrid (pinnable)</th></tr></thead>
+      <tbody>
+        <tr><td>Mental model clarity</td><td class="neutral">Wizard tells you where</td><td class="win">3 steps · clean</td><td class="win">3 steps + 2 evidence modes</td></tr>
+        <tr><td>Speed for light letters</td><td class="lose">Forced Evidence step</td><td class="win">Skip entirely</td><td class="win">Default Floating · skip entirely</td></tr>
+        <tr><td>Speed for heavy letters</td><td class="win">Full real estate</td><td class="lose">Cramped 560px drawer</td><td class="win">Pin to 380px rail · permanent</td></tr>
+        <tr><td>Letter visibility while doing evidence</td><td class="win">Always</td><td class="neutral">Dimmed during drawer</td><td class="win">Always (Pinned) or transient (Floating)</td></tr>
+        <tr><td>Mobile</td><td class="lose">Vertical scroll hell</td><td class="win">Full-screen drawer</td><td class="win">Same · Pinned collapses to drawer on mobile</td></tr>
+        <tr><td>Discoverability of evidence</td><td class="win">Impossible to miss</td><td class="neutral">Toolbar button + handoff</td><td class="win">Toolbar button + handoff · same</td></tr>
+        <tr><td>Risk: ships without evidence</td><td class="win">Wizard forces stop</td><td class="neutral">Handoff nudges</td><td class="neutral">Handoff nudges</td></tr>
+        <tr><td>Review/Finalise split</td><td class="lose">Conflated</td><td class="win">Each step does one job</td><td class="win">Each step does one job</td></tr>
+        <tr><td>Code complexity (after migration)</td><td class="lose">3 surfaces</td><td class="win">1 surface (drawer)</td><td class="neutral">1 component · 2 mount points</td></tr>
+        <tr><td>User can choose their workflow</td><td class="lose">No · forced</td><td class="lose">No · drawer only</td><td class="win">Yes · pin/unpin per-draft</td></tr>
+        <tr><td>Wizard step count</td><td>3 (Edit · Evidence · Review)</td><td>3 (Edit · Review · Finalise)</td><td>3 (Edit · Review · Finalise)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="intro" style="margin-top:18px">
+    <h1 style="font-size:14px">Honest take</h1>
+    <p style="font-size:12px"><strong>C wins on 9 of 11 dimensions.</strong> The two it ties on (risk of skipping evidence; discoverability) it matches B, not loses to A. The cost: one extra piece of state (pinned/floating) and one extra UI control (Pin button). Worth it.</p>
+    <p style="font-size:12px;margin-top:10px"><strong>Why C beats both pure options:</strong> users self-select their workflow. The default (Floating) optimises for the 80% of letters that don't need persistent evidence work. The escape hatch (Pinned) gives the 20% the real estate they need without forcing it on everyone else.</p>
+    <p style="font-size:12px;margin-top:10px"><strong>Migration path (4 commits):</strong></p>
+    <ol style="font-size:12px;line-height:1.7;padding-left:24px;color:var(--body)">
+      <li>WizardChrome: re-add Finalise as Step 3. Wizard becomes Edit · Review · Finalise for all drafts.</li>
+      <li>EditorToolbar: dedicated <strong>Evidence</strong> button with count badge. Clicking opens the drawer (Floating mode).</li>
+      <li>EvidenceDrawer: add a Pin button in the header. When pinned, the drawer-shape mounts as the Edit-step right rail (replacing the AI agent panel). Persist `evidencePinned: true` per-draft in localStorage.</li>
+      <li>Deprecate `/editor/:id/evidence` route — 302 redirect to `/editor/:id?openEvidence=1` so old bookmarks still land somewhere useful. Keep EvidencePanel.tsx for one release in case revert is needed.</li>
+    </ol>
+  </div>
+
+</div>
+</div>
+
+<script>
+  document.querySelectorAll('.pick-btn[data-tab]').forEach(b => {
+    b.addEventListener('click', () => {
+      const t = b.dataset.tab;
+      document.querySelectorAll('.pick-btn[data-tab]').forEach(x => x.classList.toggle('active', x === b));
+      document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === t));
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
+</script>
+
+</body>
+</html>

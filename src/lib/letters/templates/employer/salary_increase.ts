@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const SALARY_INCREASE_UK: LetterTemplate = {
   letterType: "salary_increase",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Salary Increase):
 - A salary change is a variation of contractual terms. The employer must provide a written statement of the change within one month under section 4 of the Employment Rights Act 1996.
 - Auto-enrolment pension contributions under the Pensions Act 2008 will recompute on the new pensionable pay where applicable.
@@ -107,6 +108,7 @@ export const SALARY_INCREASE_UK: LetterTemplate = {
 export const SALARY_INCREASE_US: LetterTemplate = {
   letterType: "salary_increase",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Salary Increase):
 - California: a Wage Theft Prevention Act amended notice (Lab. Code 2810.5) MUST be issued within 7 calendar days for non-exempt employees on a wage rate change.
 - New York: section 195(2) of the Labor Law requires written notice in advance of any decrease, and within 10 business days for any change for non-exempt employees on hire under section 195(1).

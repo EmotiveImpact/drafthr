@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
 import { Wizard } from "@/routes/Wizard";
@@ -13,7 +13,6 @@ import { Calendar } from "@/routes/Calendar";
 import { Exported } from "@/routes/Exported";
 import { Activity } from "@/routes/Activity";
 import { Notifications } from "@/routes/Notifications";
-import { EvidenceStep } from "@/routes/EvidenceStep";
 import { ReviewStep } from "@/routes/ReviewStep";
 import { Finalize } from "@/routes/Finalize";
 import { MattersIndex } from "@/routes/MattersIndex";
@@ -27,6 +26,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 const Editor = lazy(() =>
   import("@/routes/Editor").then((m) => ({ default: m.Editor }))
 );
+
+/**
+ * Legacy redirect — the Evidence step is no longer a forced wizard step in
+ * the hybrid evidence-drawer architecture. Old bookmarks to
+ * `/editor/:draftId/evidence` land on the editor with `?openEvidence=1`,
+ * which the editor consumes by auto-opening the drawer (or, when pinned,
+ * focusing the rail).
+ *
+ * `EvidenceStep.tsx` and `EvidencePanel.tsx` are intentionally left in the
+ * repo as a revert safety net for one release.
+ */
+function EvidenceRedirect() {
+  const { draftId } = useParams<{ draftId: string }>();
+  if (!draftId) return <Navigate to="/" replace />;
+  return <Navigate to={`/editor/${draftId}?openEvidence=1`} replace />;
+}
 
 function EditorFallback() {
   return (
@@ -80,7 +95,7 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/editor/:draftId/evidence" element={<Protected><EvidenceStep /></Protected>} />
+        <Route path="/editor/:draftId/evidence" element={<Protected><EvidenceRedirect /></Protected>} />
         <Route path="/editor/:draftId/review" element={<Protected><ReviewStep /></Protected>} />
         <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
         <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />

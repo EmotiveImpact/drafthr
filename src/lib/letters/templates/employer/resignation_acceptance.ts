@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const RESIGNATION_ACCEPTANCE_UK: LetterTemplate = {
   letterType: "resignation_acceptance",
   jurisdiction: "UK",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Resignation Acceptance):
 - Confirm the contractual notice period and the resulting last day of employment. Statutory minimum notice from the employee under s.86 ERA 1996 is 1 week once 1 month's service is reached; contractual notice may be longer.
 - Garden leave may only be imposed if there is an express contractual right; otherwise the employer must allow the employee to perform their duties (the Christel-Houston-style implied 'work' obligation has been considered in cases such as William Hill v Tucker [1998]).
@@ -108,6 +109,7 @@ export const RESIGNATION_ACCEPTANCE_UK: LetterTemplate = {
 export const RESIGNATION_ACCEPTANCE_US: LetterTemplate = {
   letterType: "resignation_acceptance",
   jurisdiction: "US",
+  evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Resignation Acceptance):
 - 'Two weeks' notice' is custom and not statutorily required in most states; the employer cannot generally require notice unless the employment agreement provides for it.
 - Final-pay timing is state-specific. California (Lab. Code 202): if the employee gives at least 72 hours' notice, all wages are due on the last day; otherwise within 72 hours of the resignation. New York (Labor Law 191): next regular payday. Texas (Lab. Code 61.014): next regular payday. Massachusetts (M.G.L. c.149 148): next regular payday for voluntary separation.

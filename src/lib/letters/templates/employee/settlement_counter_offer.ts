@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const SETTLEMENT_COUNTER_OFFER_UK: LetterTemplate = {
   letterType: "settlement_counter_offer",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Settlement Counter — EMPLOYEE MODE — WITHOUT PREJUDICE):
 - WITHOUT PREJUDICE AND SUBJECT TO CONTRACT — open the letter with this header in <strong>. The without-prejudice rule (Rush & Tompkins v Greater London Council [1989] AC 1280) applies to genuine attempts to compromise an existing dispute; "subject to contract" prevents inadvertent contract formation.
 - Section 111A ERA 1996 protected conversations apply to ordinary unfair dismissal claims even where there is no pre-existing dispute, BUT the protection is lost where there is "improper behaviour" (s.111A(4)) and does NOT apply to discrimination, whistleblowing, or breach-of-contract claims — for those, rely on common-law without-prejudice privilege which requires a pre-existing dispute.
@@ -143,6 +144,7 @@ export const SETTLEMENT_COUNTER_OFFER_UK: LetterTemplate = {
 export const SETTLEMENT_COUNTER_OFFER_US: LetterTemplate = {
   letterType: "settlement_counter_offer",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Settlement Counter — EMPLOYEE MODE — CONFIDENTIAL):
 - Mark "Confidential — For Settlement Purposes Only — Fed. R. Evid. 408" at the head. FRE 408 protects compromise negotiations from being admitted to prove liability.
 - OWBPA, 29 U.S.C. §626(f) — release of ADEA claims (employee 40+) requires: written, advised to consult attorney, 21-day consideration (45 in group RIF), 7-day revocation, specific reference to ADEA waived, no waiver of post-execution rights.

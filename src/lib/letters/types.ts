@@ -427,6 +427,15 @@ export type Draft = {
    * Falls back to the letter-type meta title when unset. Persists with
    * the draft so renames survive reloads + show in sidebars / lists. */
   title?: string;
+  /**
+   * Cached evidence tier derived from the source template at draft
+   * creation time. Drives the Edit page's default behaviour for the
+   * evidence drawer + handoff card. When unset, consumers can compute
+   * it via `getEvidenceTier()` against the draft's letter type. Stored
+   * on the draft so the Edit page can render the right default without
+   * resolving the full template registry on mount.
+   */
+  evidenceTier?: "light" | "medium" | "heavy";
   createdAt: number;
   updatedAt: number;
 };

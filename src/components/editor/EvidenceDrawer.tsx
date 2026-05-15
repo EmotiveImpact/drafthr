@@ -13,6 +13,8 @@ import {
   NotebookText,
   Image as ImageIcon,
   CalendarDays,
+  PinIcon,
+  Undo2,
 } from "lucide-react";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayModeOf, figureLabelFor } from "@/lib/evidence";
@@ -51,17 +53,35 @@ const FILTER_TABS: { id: FilterTab; label: string; kind?: Kind }[] = [
 
 /* ---------------------------------------------------------------------------
  * Component
+ *
+ * The EvidenceDrawer has two render modes:
+ *  - "floating" (default): a Sheet overlay that slides over the canvas. Used
+ *    when the user is dipping in occasionally to insert a single citation.
+ *  - "pinned": a permanent right column that REPLACES the AI agent rail. Used
+ *    when the user is doing heavy evidence work (e.g. medical-leave letters
+ *    where every paragraph cites a screenshot or email). Pinning persists per
+ *    draft in localStorage so it survives page reloads.
+ *
+ * The Pin button (in the header) toggles between the two; the Edit page reads
+ * the pinned state and uses it to choose which rail to mount (AI vs Evidence).
  * ------------------------------------------------------------------------ */
 export function EvidenceDrawer({
   draft,
   editor,
   open,
   onOpenChange,
+  pinned = false,
+  onPinnedChange,
 }: {
   draft: Draft;
   editor: Editor | null;
+  /** Only relevant in floating mode — controls the Sheet open state. */
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When true, render as a permanent right rail instead of a Sheet. */
+  pinned?: boolean;
+  /** Toggle pinned mode. When omitted, the Pin button is hidden. */
+  onPinnedChange?: (next: boolean) => void;
 }) {
   const allItems = draft.evidence ?? [];
   const [query, setQuery] = useState("");
@@ -69,9 +89,11 @@ export function EvidenceDrawer({
 
   // Detect which evidence ids have already been inserted into ANY section
   // by scanning each section's HTML for `data-fig-id="ID"`. Re-computed every
-  // open so the drawer reflects the current draft state.
+  // open so the drawer reflects the current draft state. When pinned, the
+  // drawer is always "open" so we recompute on any section-html change.
+  const visible = open || pinned;
   const insertedIds = useMemo(() => {
-    if (!open) return new Set<string>();
+    if (!visible) return new Set<string>();
     const set = new Set<string>();
     for (const section of draft.sections) {
       const html = section.html ?? "";
@@ -83,7 +105,7 @@ export function EvidenceDrawer({
       while ((m = attRe.exec(html))) set.add(m[1]);
     }
     return set;
-  }, [draft.sections, open]);
+  }, [draft.sections, visible]);
 
   // Counts per tab — used for the small badges.
   const counts = useMemo(() => {
@@ -147,7 +169,7 @@ export function EvidenceDrawer({
     const id = node?.dataset.sectionId;
     if (!id) return "";
     return draft.sections.find((s) => s.id === id)?.title ?? "";
-  }, [editor, draft.sections, open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [editor, draft.sections, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insert = (item: EvidenceItem) => {
     if (!editor) return;
@@ -172,55 +194,79 @@ export function EvidenceDrawer({
         )
         .run();
     }
-    onOpenChange(false);
+    // When floating, the user expects the drawer to dismiss after insert
+    // (the canvas is what they want to see next). When pinned, leave it open
+    // — they're doing batched insertions and will dismiss themselves.
+    if (!pinned) onOpenChange(false);
   };
 
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        className={cn(
-          // Override the shadcn default max-w-sm so we get a true 560px drawer
-          // on desktop, full-screen on mobile.
-          "p-0 sm:max-w-[560px] w-full",
-          "bg-white text-[var(--ds-ink)]",
-          "flex flex-col"
-        )}
+  // ----------------- Shared body (used by both render modes) -----------------
+  const headerNode = (
+    <div className="px-5 py-4 border-b border-[var(--ds-line)] flex items-center gap-2.5">
+      <div
+        className="size-9 rounded-lg grid place-items-center bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] shrink-0"
+        aria-hidden
       >
-        {/* a11y title/desc — visually hidden via sr-only utility */}
-        <SheetTitle className="sr-only">Insert evidence</SheetTitle>
-        <SheetDescription className="sr-only">
-          Search and pick an evidence item to insert at the cursor in your letter.
-        </SheetDescription>
+        <Paperclip className="size-[18px]" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
+          Insert evidence
+        </h2>
+        {cursorSectionTitle && (
+          <p className="text-[11.5px] text-[var(--ds-muted)] mt-0.5 truncate">
+            At cursor in §{cursorSectionTitle}
+          </p>
+        )}
+      </div>
+      {onPinnedChange && !pinned && (
+        <button
+          type="button"
+          onClick={() => onPinnedChange(true)}
+          aria-label="Pin evidence as a permanent right rail"
+          title="Pin → make this a permanent right rail (replaces AI agent panel)"
+          className="h-7 px-2 inline-flex items-center gap-1 rounded-md text-[11.5px] font-semibold text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+        >
+          <PinIcon className="size-3.5" />
+          Pin
+          <ArrowRight className="size-3" />
+        </button>
+      )}
+      {!pinned && (
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          aria-label="Close evidence drawer"
+          className="size-7 rounded-md grid place-items-center text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
 
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-[var(--ds-line)] flex items-center gap-2.5">
-          <div
-            className="size-9 rounded-lg grid place-items-center bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] shrink-0"
-            aria-hidden
-          >
-            <Paperclip className="size-[18px]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
-              Insert evidence
-            </h2>
-            {cursorSectionTitle && (
-              <p className="text-[11.5px] text-[var(--ds-muted)] mt-0.5 truncate">
-                At cursor in §{cursorSectionTitle}
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label="Close evidence drawer"
-            className="size-7 rounded-md grid place-items-center text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+  const unpinBar = pinned && onPinnedChange ? (
+    <div className="px-5 py-2 border-b border-[var(--ds-line-2)] bg-[var(--ds-amber-bg)]/40 flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onPinnedChange(false)}
+        aria-label="Unpin evidence — return AI agent rail"
+        title="Unpin — return to floating drawer (AI agent rail comes back)"
+        className="h-6 px-2 inline-flex items-center gap-1 rounded-md text-[11px] font-semibold text-[var(--ds-amber-fg)] hover:bg-[var(--ds-amber-bg)] transition"
+      >
+        <Undo2 className="size-3" />
+        Unpin
+      </button>
+      <span className="text-[11px] text-[var(--ds-muted)]">
+        Evidence rail · AI agent hidden while pinned
+      </span>
+    </div>
+  ) : null;
+
+  const innerBody = (
+    <>
+      {unpinBar}
+      {headerNode}
 
         {/* Search */}
         <div className="px-5 py-3 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface-2)] flex items-center gap-2">
@@ -408,6 +454,40 @@ export function EvidenceDrawer({
             Upload new
           </Link>
         </div>
+    </>
+  );
+
+  // Pinned mode — render as a plain column. The Edit page mounts this in
+  // place of the AI rail when pinned. Width/height come from the parent rail
+  // slot so we just fill the slot.
+  if (pinned) {
+    return (
+      <div className="flex flex-col h-full min-h-0 bg-white text-[var(--ds-ink)]">
+        {innerBody}
+      </div>
+    );
+  }
+
+  // Floating mode — Radix Sheet overlay (default).
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className={cn(
+          // Override the shadcn default max-w-sm so we get a true 560px drawer
+          // on desktop, full-screen on mobile.
+          "p-0 sm:max-w-[560px] w-full",
+          "bg-white text-[var(--ds-ink)]",
+          "flex flex-col"
+        )}
+      >
+        {/* a11y title/desc — visually hidden via sr-only utility */}
+        <SheetTitle className="sr-only">Insert evidence</SheetTitle>
+        <SheetDescription className="sr-only">
+          Search and pick an evidence item to insert at the cursor in your letter.
+        </SheetDescription>
+        {innerBody}
       </SheetContent>
     </Sheet>
   );

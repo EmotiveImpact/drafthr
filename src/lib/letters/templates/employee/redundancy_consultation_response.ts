@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const REDUNDANCY_CONSULTATION_RESPONSE_UK: LetterTemplate = {
   letterType: "redundancy_consultation_response",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Redundancy Consultation Response — EMPLOYEE MODE):
 - Williams v Compair Maxam [1982] ICR 156 framework: warning, consultation, fair selection criteria, fair scoring, consideration of alternative employment.
 - A redundancy is potentially fair under s.98(2)(c) ERA 1996 only if the employer follows a fair process; failures of consultation or selection found unfair dismissal even where the redundancy reason is genuine (Polkey v AE Dayton Services [1987]).
@@ -139,6 +140,7 @@ export const REDUNDANCY_CONSULTATION_RESPONSE_UK: LetterTemplate = {
 export const REDUNDANCY_CONSULTATION_RESPONSE_US: LetterTemplate = {
   letterType: "redundancy_consultation_response",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Layoff / RIF Response — EMPLOYEE MODE):
 - "Redundancy" in US parlance is "reduction in force" (RIF) or "layoff". At-will employment generally permits layoffs without statutory consultation, BUT:
   - WARN Act (29 U.S.C. §2101 et seq.): 60-day notice for plant closings or mass layoffs by employers with 100+ employees, where 50+ employees are affected at a single site within a 30-day window.

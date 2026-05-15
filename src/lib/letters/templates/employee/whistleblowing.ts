@@ -3,6 +3,7 @@ import type { LetterTemplate } from "../types";
 export const WHISTLEBLOWING_UK: LetterTemplate = {
   letterType: "whistleblowing",
   jurisdiction: "UK",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Protected Disclosure / PIDA — EMPLOYEE MODE — TRIBUNAL CRITICAL):
 - Statutory regime: Public Interest Disclosure Act 1998, inserted into the Employment Rights Act 1996 as ss.43A-43L.
 - A "qualifying disclosure" under s.43B is a disclosure of INFORMATION (not a mere allegation — Cavendish Munro Professional Risks Management Ltd v Geduld [2010] IRLR 38) which the worker reasonably believes:
@@ -180,6 +181,7 @@ export const WHISTLEBLOWING_UK: LetterTemplate = {
 export const WHISTLEBLOWING_US: LetterTemplate = {
   letterType: "whistleblowing",
   jurisdiction: "US",
+  evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Whistleblower Disclosure — EMPLOYEE MODE — LITIGATION CRITICAL):
 - Multiple federal and state statutes provide whistleblower protection. Identify the applicable statute(s) precisely:
   - Sarbanes-Oxley §806 (18 U.S.C. §1514A) — publicly traded companies; 180-day window to file with OSHA after retaliation.
