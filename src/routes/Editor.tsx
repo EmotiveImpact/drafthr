@@ -107,7 +107,12 @@ export function Editor() {
   // the editor anymore. Kept the type alias below for any future surface
   // that needs to type a format string.
   const [showSidebar, setShowSidebar] = useState(false);
-  const [showRail, setShowRail] = useState(false);
+  // Controls the AI drawer (Sheet overlay) — independent of pin state.
+  // When `pinnedDock === "ai"`, the AI rail mounts inline in the grid and
+  // this state is irrelevant. When `pinnedDock !== "ai"`, this controls
+  // whether the AI slides in as a Sheet overlay (scrim, full-height) on
+  // top of the content.
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   /**
    * Focus mode — collapses both rails + the secondary toolbar so the writer
@@ -153,10 +158,18 @@ export function Editor() {
     }
   });
 
-  // Derived: the AI rail is open as the right column only when AI is pinned.
-  const railCollapsed = pinnedDock !== "ai";
-  const setRailCollapsed = (next: boolean) =>
-    setPinnedDock((prev) => (next ? (prev === "ai" ? null : prev) : "ai"));
+  // Imperative helper: collapse/expand the AI surface. Used by auto-collapse
+  // effects (preview, edit-on-page) and the focus-mode AI bar.
+  const setRailCollapsed = (next: boolean) => {
+    if (next) {
+      // collapse: close drawer + unpin
+      setAiDrawerOpen(false);
+      setPinnedDock((prev) => (prev === "ai" ? null : prev));
+    } else {
+      // expand: open as drawer (NOT pin)
+      setAiDrawerOpen(true);
+    }
+  };
 
   const pinEvidence = () => setPinnedDock("evidence");
   const pinAI = () => setPinnedDock("ai");
@@ -345,7 +358,7 @@ export function Editor() {
         e.preventDefault();
         setFocusMode(false);
         setRightTab("ai");
-        setShowRail(true);
+        setAiDrawerOpen(true);
         requestAnimationFrame(() => {
           const el = document.querySelector<HTMLTextAreaElement>(
             'textarea[placeholder*="Rewrite a section"]'
@@ -684,7 +697,7 @@ export function Editor() {
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     className="lg:hidden"
-                    onClick={() => setShowRail((s) => !s)}
+                    onClick={() => setAiDrawerOpen((s) => !s)}
                   >
                     <PanelRight className="size-4 mr-2" /> AI rail
                   </DropdownMenuItem>
@@ -1056,7 +1069,7 @@ export function Editor() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="lg:hidden"
-                  onClick={() => setShowRail((s) => !s)}
+                  onClick={() => setAiDrawerOpen((s) => !s)}
                 >
                   <PanelRight className="size-4 mr-2" /> Toggle details rail
                 </DropdownMenuItem>
@@ -1103,20 +1116,16 @@ export function Editor() {
       <div
         className={
           "flex-1 grid grid-cols-1 min-h-0 relative overflow-hidden " +
-          // Keep three tracks at lg:+ even when the rail is collapsed —
-          // shrink the last track to 0px instead of removing it. Browsers
-          // can interpolate grid-template-columns when track counts match,
-          // so the column smoothly animates from 360px to 0px and the
-          // canvas grows in lockstep. Duration calibrated to the spring's
-          // settle time (~360ms) so the canvas reflow finishes when the
-          // rail finishes sliding — no half-beat gap. ease-out matches
-          // the spring's deceleration curve.
+          // The 3rd grid column is only non-zero when AI is pinned inline.
+          // In drawer mode the AI overlay is fixed-position (doesn't take
+          // grid space), so the canvas always gets the full remaining width
+          // until the user pins. Evidence pinned uses the same 360px slot.
           "lg:transition-[grid-template-columns] lg:duration-[360ms] lg:ease-out motion-reduce:lg:transition-none " +
           (focusMode
             ? "lg:grid-cols-1"
-            : railCollapsed
-            ? "lg:grid-cols-[260px_minmax(0,1fr)_0px]"
-            : "lg:grid-cols-[260px_minmax(0,1fr)_360px]")
+            : pinnedDock !== null
+            ? "lg:grid-cols-[260px_minmax(0,1fr)_360px]"
+            : "lg:grid-cols-[260px_minmax(0,1fr)_0px]")
         }
       >
         <aside
@@ -1202,7 +1211,7 @@ export function Editor() {
                 onClick={() => {
                   setFocusMode(false);
                   setRightTab("ai");
-                  setShowRail(true);
+                  setAiDrawerOpen(true);
                   requestAnimationFrame(() => {
                     const el = document.querySelector<HTMLTextAreaElement>(
                       'textarea[placeholder*="Rewrite a section"]'
@@ -1324,18 +1333,12 @@ export function Editor() {
           </div>
         </main>
 
-        {/* Desktop right rail — inline, persistent. Hidden below lg: where
-         * the bottom sheet handles things. Collapsible: when railCollapsed
-         * is true the rail is removed from the grid entirely (canvas takes
-         * full width) and a floating "Ask AI" pill in the bottom-right
-         * brings it back — mobile-mirror pattern. */}
-        {/* Desktop right rail — rendered ONLY at lg:+. Two surfaces share
-         * the slot:
+        {/* Desktop right rail — rendered ONLY at lg:+ when AI is pinned.
+         * Two surfaces share the slot:
          *   - Evidence rail (pinned mode, evidence-heavy work)
-         *   - AI agent rail (default)
-         * Exactly one mounts at a time. Pinning toggles between them. The
-         * mobile overlay below is hidden in this branch so there's exactly
-         * one AIPanel (and one useChat) in the tree at any time. Resizing
+         *   - AI agent rail (pinned mode only; unpinned → drawer overlay)
+         * Exactly one mounts at a time. The AI drawer overlay below handles
+         * the unpinned case at all viewports. Resizing
          * across the breakpoint unmounts one and mounts the other;
          * conversation persists via draft.aiChat. */}
         {isLargeViewport && evidencePinned && (
@@ -1356,26 +1359,12 @@ export function Editor() {
             />
           </aside>
         )}
-        {isLargeViewport && !evidencePinned && (
-          <motion.aside
-            aria-hidden={railCollapsed || undefined}
-            initial={false}
-            animate={{ x: railCollapsed ? "100%" : 0 }}
-            transition={{
-              // Slightly heavier damping than the mobile overlay so the
-              // rail settles without a perceptible spring-back at the
-              // end of the slide. Stiffness lowered a touch to match
-              // the longer travel distance on desktop.
-              type: "spring",
-              stiffness: 340,
-              damping: 42,
-              mass: 0.9,
-            }}
-            className={
-              "flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
-              (focusMode ? "hidden" : "") +
-              (railCollapsed ? " pointer-events-none" : "")
-            }
+        {/* Desktop pinned AI rail — inline in the grid, no animation.
+         * Only mounts when AI is explicitly pinned. When unpinned the
+         * grid 3rd column collapses to 0px so the canvas reclaims space. */}
+        {isLargeViewport && !evidencePinned && pinnedDock === "ai" && !focusMode && (
+          <aside
+            className="flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)]"
           >
             <RightRail
               draft={draft}
@@ -1384,33 +1373,42 @@ export function Editor() {
               pendingComment={pendingComment}
               onPendingCommentConsumed={() => setPendingComment(null)}
               activeSectionId={activeSectionId}
-              onCollapse={() => setRailCollapsed(true)}
+              onCollapse={unpinAll}
               onPin={pinAI}
-              isPinned={pinnedDock === "ai"}
+              isPinned
             />
-          </motion.aside>
+          </aside>
         )}
 
-        {/* Mobile AI overlay — slides in from the right edge of the
-         * viewport, mirroring the desktop rail's location (just as a
-         * full-screen overlay instead of an inline column). Replaces
-         * the previous bottom-sheet pattern. Tap-scrim or chevron
-         * closes. AnimatePresence + spring keeps motion consistent
-         * with the rest of the app. */}
+        {/* AI drawer overlay — slides in from the right as a Sheet overlay
+         * at ALL viewports. Scrim behind. Tap scrim or chevron to close.
+         * Pin button converts to inline pinned rail (closes this overlay). */}
+        <button
+          type="button"
+          className={
+            "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none " +
+            (aiDrawerOpen && pinnedDock !== "ai"
+              ? "opacity-100"
+              : "opacity-0 pointer-events-none")
+          }
+          aria-label="Close AI drawer"
+          aria-hidden={(!aiDrawerOpen || pinnedDock === "ai") || undefined}
+          onClick={() => setAiDrawerOpen(false)}
+        />
         <AnimatePresence>
-          {!isLargeViewport && showRail && !focusMode && (
+          {aiDrawerOpen && pinnedDock !== "ai" && !focusMode && (
             <motion.aside
-              key="mobile-ai-overlay"
+              key="ai-drawer-overlay"
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{
                 type: "spring",
-                stiffness: 380,
-                damping: 38,
-                mass: 0.85,
+                stiffness: 340,
+                damping: 42,
+                mass: 0.9,
               }}
-              className="fixed inset-y-0 right-0 z-40 w-[min(420px,90vw)] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-[-12px_0_32px_rgba(0,0,0,0.18)] flex flex-col"
+              className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
             >
               <RightRail
                 draft={draft}
@@ -1419,53 +1417,53 @@ export function Editor() {
                 pendingComment={pendingComment}
                 onPendingCommentConsumed={() => setPendingComment(null)}
                 activeSectionId={activeSectionId}
-                onCollapse={() => setShowRail(false)}
+                onCollapse={() => setAiDrawerOpen(false)}
+                onPin={() => { pinAI(); setAiDrawerOpen(false); }}
+                isPinned={false}
               />
             </motion.aside>
           )}
         </AnimatePresence>
 
-        {/* Mobile scrim — always mounted, fades in/out with showSidebar
-         * or showRail. pointer-events-none when invisible so taps fall
-         * through to the canvas. */}
+        {/* Mobile scrim — only covers showSidebar (sections rail overlay).
+         * The AI drawer has its own all-viewport scrim above. */}
         <button
           type="button"
           className={
             "lg:hidden fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 motion-reduce:transition-none " +
-            (showSidebar || showRail
+            (showSidebar
               ? "opacity-100"
               : "opacity-0 pointer-events-none")
           }
           aria-label="Close panel"
-          aria-hidden={!(showSidebar || showRail) || undefined}
-          tabIndex={!(showSidebar || showRail) ? -1 : undefined}
+          aria-hidden={!showSidebar || undefined}
+          tabIndex={!showSidebar ? -1 : undefined}
           onClick={() => {
             setShowSidebar(false);
-            setShowRail(false);
           }}
         />
 
         {/* Floating "Ask AI" pill — MOBILE.
-         * lg:hidden so it only shows below the bottom-sheet breakpoint.
-         * Visible whenever the sheet is closed; fades + scales away
-         * while it's open. */}
+         * lg:hidden so it only shows below the desktop breakpoint.
+         * Visible whenever the AI drawer is closed; fades + scales away
+         * while it's open. Now mirrors desktop: opens drawer overlay. */}
         {!focusMode && (
           <button
             type="button"
             onClick={() => {
               setRightTab("ai");
-              setShowRail(true);
+              setAiDrawerOpen(true);
             }}
             className={
               "lg:hidden fixed bottom-4 right-4 z-30 inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-90 active:scale-[0.98] " +
               "transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none " +
-              (showRail
+              (aiDrawerOpen
                 ? "opacity-0 scale-90 pointer-events-none"
                 : "opacity-100 scale-100")
             }
             aria-label="Open AI agent"
-            aria-hidden={showRail || undefined}
-            tabIndex={showRail ? -1 : undefined}
+            aria-hidden={aiDrawerOpen || undefined}
+            tabIndex={aiDrawerOpen ? -1 : undefined}
           >
             <span className="grid place-items-center size-5 rounded-full bg-white/15">
               <Sparkles className="size-3" />
@@ -1517,7 +1515,7 @@ export function Editor() {
 
               <button
                 type="button"
-                onClick={() => setRailCollapsed(false)}
+                onClick={() => setAiDrawerOpen(true)}
                 className="inline-flex items-center gap-1.5 h-9 pl-2 pr-3 rounded-full bg-[var(--ds-ink)] text-white shadow-[0_6px_18px_rgba(0,0,0,0.16)] hover:opacity-95"
                 aria-label="Open AI agent"
               >
