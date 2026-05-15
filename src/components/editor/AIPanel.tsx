@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical } from "lucide-react";
+import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
+import { uid } from "@/lib/utils";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -172,6 +174,16 @@ export function AIPanel({
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
   const clearAIChat = useDraftStore((s) => s.clearAIChat);
   const recordTimelineEvent = useDraftStore((s) => s.recordTimelineEvent);
+  const acceptAllSuggestions = useDraftStore((s) => s.acceptAllSuggestions);
+  const rejectAllSuggestions = useDraftStore((s) => s.rejectAllSuggestions);
+
+  // Track-changes affordance — derive once per draft change whether any
+  // section still has pending suggestion marks. Cheap because the helper
+  // string-probes before any DOM parse. Drives the Accept/Reject strip.
+  const anyPending = useMemo(
+    () => draft.sections.some((sec) => hasPendingSuggestions(sec.html)),
+    [draft.sections]
+  );
 
   const [scope, setScope] = useState<AIChatScope>("letter");
   const [input, setInput] = useState("");
@@ -544,6 +556,14 @@ export function AIPanel({
       </div>
 
       <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
+        <SuggestionTestStrip
+          draft={draft}
+          activeSectionId={activeSectionId}
+          anyPending={anyPending}
+          onAcceptAll={() => acceptAllSuggestions(draft.id)}
+          onRejectAll={() => rejectAllSuggestions(draft.id)}
+          insertTest={() => insertTestSuggestion(draft, activeSectionId, updateSection)}
+        />
         {messages.length === 0 && (
           // Empty state — brand mark + tagline at the top, then a clickable
           // suggestion grid (one prompt per tool, so the user discovers
@@ -712,6 +732,93 @@ export function AIPanel({
       </form>
     </div>
   );
+}
+
+/**
+ * Track-changes affordance + DEV debug button. Rendered at the top of the
+ * AI scroller so the four downstream surfaces (consultant review, AI critique
+ * diff, threaded comments, co-edit cursors) have a working primitive to
+ * exercise. The "Test suggestion" button is gated to DEV — it injects a
+ * green-underlined <ins> at the start of the active section so we can prove
+ * the merge / accept / reject paths end-to-end. The Accept/Reject row only
+ * shows when there's at least one pending suggestion in the draft.
+ */
+function SuggestionTestStrip(props: {
+  draft: Draft;
+  activeSectionId: string | null;
+  anyPending: boolean;
+  onAcceptAll: () => void;
+  onRejectAll: () => void;
+  insertTest: () => void;
+}): ReactElement | null {
+  const isDev = import.meta.env.DEV;
+  if (!isDev && !props.anyPending) return null;
+  return (
+    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2 text-[11.5px] flex items-center gap-2 flex-wrap">
+      <span className="text-[var(--ds-muted)] inline-flex items-center gap-1">
+        <FlaskConical className="size-3.5" />
+        Track-changes
+      </span>
+      {props.anyPending ? (
+        <>
+          <span className="text-[var(--ds-ink)]">Pending suggestions</span>
+          <span className="ml-auto inline-flex items-center gap-1">
+            <button
+              type="button"
+              onClick={props.onAcceptAll}
+              className="h-6 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] hover:opacity-90 transition text-[11px] font-medium"
+              title="Accept every pending suggestion in this draft"
+            >
+              Accept all
+            </button>
+            <button
+              type="button"
+              onClick={props.onRejectAll}
+              className="h-6 px-2 rounded-md bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] hover:opacity-90 transition text-[11px] font-medium"
+              title="Reject every pending suggestion — text stays, marks mute"
+            >
+              Reject all
+            </button>
+          </span>
+        </>
+      ) : (
+        <span className="text-[var(--ds-subtle)]">No pending suggestions</span>
+      )}
+      {isDev && (
+        <button
+          type="button"
+          onClick={props.insertTest}
+          className="h-6 px-2 rounded-md border border-dashed border-[var(--ds-line)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition text-[11px]"
+          title="DEV: inject a fake suggestion into the active section"
+        >
+          Test suggestion
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** DEV helper: append a pending <ins> to the active section's HTML so the
+ * accept / reject paths have something to chew on. Reads-then-writes via
+ * updateSection so it goes through the canonical sanitiser. */
+function insertTestSuggestion(
+  draft: Draft,
+  activeSectionId: string | null,
+  updateSection: (draftId: string, sectionId: string, html: string) => void,
+): void {
+  const section =
+    draft.sections.find((s) => s.id === activeSectionId) ?? draft.sections[0];
+  if (!section) return;
+  const id = uid("sug");
+  const created = Date.now();
+  // <p> wrapper keeps the editor's block schema happy — bare inline marks at
+  // the doc level get re-wrapped on next parse anyway.
+  const inserted =
+    `<p><ins data-suggestion-id="${id}" data-suggestion-kind="insertion" ` +
+    `data-author="Test reviewer" data-created-at="${created}" ` +
+    `data-status="pending" data-body="DEV: synthetic suggestion" ` +
+    `class="ds-suggestion ds-suggestion-ins ds-suggestion-pending">[TEST INSERT]</ins></p>`;
+  updateSection(draft.id, section.id, `${section.html ?? ""}${inserted}`);
 }
 
 /** Concatenate text-type parts from a v6 UIMessage. */

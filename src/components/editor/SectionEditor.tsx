@@ -46,6 +46,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
+import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { RefinePopover } from "./RefinePopover";
@@ -127,6 +128,10 @@ export function SectionEditor({
       TableHeader,
       TableCell,
       CommentMark,
+      // Track-changes primitive — see src/lib/tiptap/suggestion-mark.ts. Marks
+      // proposed reviewer / AI / consultant edits as <ins>/<del> with status
+      // attributes; merge helpers fold accepted edits into canonical text.
+      SuggestionMark,
       // Evidence reference tokens — render the [See Fig N] / [See Attachments]
       // spans inserted by the picker / slash command as atomic inline nodes
       // instead of letting Tiptap drop them on the floor as unknown HTML

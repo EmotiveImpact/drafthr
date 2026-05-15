@@ -1,8 +1,9 @@
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
-import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize";
+import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { isSafeImageRef } from "@/lib/safe-data-url";
 
 type Html2Canvas = (
   element: HTMLElement,
@@ -343,14 +344,14 @@ export function filenameFor(draft: Draft): string {
 /** Render the letterhead image (if any) as the first block of the export. */
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${url}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
 }
 
 /** Render the signature image (if any) inline. */
 function signatureHtml(draft: Draft): string {
   const url = draft.employer.signatureDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div style="margin:8px 0 4px 0;"><img src="${url}" style="max-height:60px;display:inline-block;" alt="" /></div>`;
 }
 
@@ -364,7 +365,11 @@ function injectSignatureIntoSignatureSection(
   section: { sectionId?: string; html: string },
   signature: string
 ): string {
-  const html = sanitizeLetterHtml(section.html);
+  // Merge any accepted suggestions, then run the export-flavour sanitiser
+  // which strips any remaining <ins>/<del> wrappers so reviewer track-changes
+  // never leak into the rendered document.
+  const merged = mergeAcceptedSuggestionsHtml(section.html);
+  const html = sanitizeLetterHtmlForExport(merged);
   if (!signature) return html;
   if (section.sectionId === "signature") {
     // Prepend the signature image at the top of the signature block.

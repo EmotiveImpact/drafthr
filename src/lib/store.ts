@@ -32,7 +32,11 @@ import {
   todayDateOnly,
 } from "./date-only";
 import { sanitizeLetterHtml } from "./sanitize";
-import { isSafeImageDataUrl } from "./safe-data-url";
+import { isSafeImageRef } from "./safe-data-url";
+import {
+  hasPendingSuggestions,
+  mergeAcceptedSuggestionsHtml,
+} from "./tiptap/suggestion-merge";
 
 type Store = {
   drafts: Record<string, Draft>;
@@ -135,6 +139,21 @@ type Store = {
   /** Accept (or reject) every pending change in the draft. */
   acceptAllPending: (id: string) => void;
   rejectAllPending: (id: string) => void;
+  /** Track-changes — flip a single suggestion mark's status across all
+   * sections of the draft. Used by the Accept / Reject affordances on each
+   * inline pill. Does NOT rewrite the underlying text. */
+  setSuggestionStatus: (
+    draftId: string,
+    suggestionId: string,
+    status: "accepted" | "rejected" | "pending"
+  ) => void;
+  /** Accept every pending suggestion: walks each section, applies
+   * mergeAcceptedSuggestionsHtml to fold accepted insertions in / drop
+   * accepted deletions, versions the prior html, marks the section edited. */
+  acceptAllSuggestions: (draftId: string) => void;
+  /** Reject every pending suggestion without modifying the underlying text —
+   * marks stay so the reviewer's intent is auditable. */
+  rejectAllSuggestions: (draftId: string) => void;
   setSections: (id: string, sections: Section[]) => void;
   setWithoutPrejudice: (id: string, value: boolean) => void;
   setEvidence: (id: string, items: EvidenceItem[]) => void;
@@ -584,10 +603,10 @@ export const useDraftStore = create<Store>()(
             address: (a.employerAddress as string) ?? "",
             registrationNumber: a.employerRegNumber as string | undefined,
             hasLetterhead: Boolean(a.hasLetterhead),
-            letterheadDataUrl: isSafeImageDataUrl(a.letterheadDataUrl)
+            letterheadDataUrl: isSafeImageRef(a.letterheadDataUrl)
               ? a.letterheadDataUrl
               : undefined,
-            signatureDataUrl: isSafeImageDataUrl(a.signatureDataUrl)
+            signatureDataUrl: isSafeImageRef(a.signatureDataUrl)
               ? a.signatureDataUrl
               : undefined,
             signatoryName:
@@ -849,6 +868,95 @@ export const useDraftStore = create<Store>()(
             sec.pendingChange ? { ...sec, pendingChange: undefined } : sec
           );
           return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+        }),
+
+      /* ------------------------------------------------------------------
+       * Track-changes (Suggestion mark) lifecycle. The mark lives inside
+       * section.html as <ins data-suggestion-id=…> / <del …>. These
+       * actions either flip a single mark's status across all sections
+       * (setSuggestionStatus) or fan-out across the whole draft (accept-
+       * all merges marks destructively, reject-all leaves marks intact
+       * but flips them visually muted).
+       * ----------------------------------------------------------------*/
+
+      setSuggestionStatus: (draftId, suggestionId, status) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          const escaped = suggestionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          // Rewrite data-status on any <ins>/<del> that owns this id. Done
+          // via regex because we only touch one attribute — DOMParser would
+          // pay reparse cost on every keystroke if the rail batches calls.
+          const re = new RegExp(
+            `(<(?:ins|del)\\b[^>]*\\bdata-suggestion-id="${escaped}"[^>]*)\\bdata-status="[^"]*"`,
+            "g"
+          );
+          let touched = false;
+          const sections = d.sections.map((sec) => {
+            if (!sec.html?.includes("data-suggestion-id")) return sec;
+            const next = sec.html.replace(re, `$1data-status="${status}"`);
+            if (next === sec.html) return sec;
+            touched = true;
+            return { ...sec, html: next };
+          });
+          if (!touched) return s;
+          return {
+            drafts: { ...s.drafts, [draftId]: { ...d, sections, updatedAt: Date.now() } },
+          };
+        }),
+
+      acceptAllSuggestions: (draftId) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          let touched = false;
+          const now = Date.now();
+          const sections = d.sections.map((sec) => {
+            if (!hasPendingSuggestions(sec.html)) return sec;
+            // Flip pending → accepted, then merge to fold accepted edits in.
+            const flipped = sec.html.replace(
+              /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
+              `$1data-status="accepted"`
+            );
+            const merged = sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(flipped));
+            const oldVersion: SectionVersion = {
+              id: `suggestion-accept-${sec.id}-${now}`,
+              createdAt: now,
+              html: sec.html,
+            };
+            touched = true;
+            return {
+              ...sec,
+              html: merged,
+              status: "edited" as Section["status"],
+              versions: [...sec.versions, oldVersion],
+            };
+          });
+          if (!touched) return s;
+          return {
+            drafts: { ...s.drafts, [draftId]: { ...d, sections, updatedAt: now } },
+          };
+        }),
+
+      rejectAllSuggestions: (draftId) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          let touched = false;
+          const sections = d.sections.map((sec) => {
+            if (!hasPendingSuggestions(sec.html)) return sec;
+            const next = sec.html.replace(
+              /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
+              `$1data-status="rejected"`
+            );
+            if (next === sec.html) return sec;
+            touched = true;
+            return { ...sec, html: next };
+          });
+          if (!touched) return s;
+          return {
+            drafts: { ...s.drafts, [draftId]: { ...d, sections, updatedAt: Date.now() } },
+          };
         }),
 
       setWithoutPrejudice: (id, value) =>
