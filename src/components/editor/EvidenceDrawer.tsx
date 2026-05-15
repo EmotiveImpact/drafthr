@@ -16,14 +16,9 @@ import {
   Undo2,
   ExternalLink,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayModeOf, figureLabelFor } from "@/lib/evidence";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
@@ -546,28 +541,40 @@ export function EvidenceDrawer({
     );
   }
 
-  // Floating mode — Radix Sheet overlay (default).
+  // Floating mode — Framer Motion overlay matching the AI drawer animation.
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        showCloseButton={false}
+    <>
+      {/* Scrim — same styling as the AI drawer scrim in Editor.tsx */}
+      <button
+        type="button"
         className={cn(
-          // Override the shadcn default max-w-sm so we get a true 560px drawer
-          // on desktop, full-screen on mobile.
-          "p-0 sm:max-w-[560px] w-full",
-          "bg-white text-[var(--ds-ink)]",
-          "flex flex-col"
+          "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none",
+          open ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
-      >
-        {/* a11y title/desc — visually hidden via sr-only utility */}
-        <SheetTitle className="sr-only">Insert evidence</SheetTitle>
-        <SheetDescription className="sr-only">
-          Search and pick an evidence item to insert at the cursor in your letter.
-        </SheetDescription>
-        {innerBody}
-      </SheetContent>
-    </Sheet>
+        aria-label="Close evidence drawer"
+        aria-hidden={!open || undefined}
+        tabIndex={open ? undefined : -1}
+        onClick={() => onOpenChange(false)}
+      />
+      {/* Overlay — spring constants identical to the AI drawer */}
+      <AnimatePresence>
+        {open && (
+          <motion.aside
+            key="evidence-drawer-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Insert evidence"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 340, damping: 42, mass: 0.9 }}
+            className="fixed inset-y-0 right-0 z-40 w-full max-w-[560px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
+          >
+            {innerBody}
+          </motion.aside>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

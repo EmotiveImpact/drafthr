@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
 import { Wizard } from "@/routes/Wizard";
@@ -27,21 +27,14 @@ const Editor = lazy(() =>
   import("@/routes/Editor").then((m) => ({ default: m.Editor }))
 );
 
-/**
- * Legacy redirect — the Evidence step is no longer a forced wizard step in
- * the hybrid evidence-drawer architecture. Old bookmarks to
- * `/editor/:draftId/evidence` land on the editor with `?openEvidence=1`,
- * which the editor consumes by auto-opening the drawer (or, when pinned,
- * focusing the rail).
- *
- * `EvidenceStep.tsx` and `EvidencePanel.tsx` are intentionally left in the
- * repo as a revert safety net for one release.
- */
-function EvidenceRedirect() {
-  const { draftId } = useParams<{ draftId: string }>();
-  if (!draftId) return <Navigate to="/" replace />;
-  return <Navigate to={`/editor/${draftId}?openEvidence=1`} replace />;
-}
+// EvidenceStep is the full-page evidence management surface. Lazy-loaded so
+// it doesn't bloat the main bundle — it shares code with Editor but the
+// EvidencePanel + EvidenceRequirementsList are non-trivial. Accessed via
+// "Manage evidence" in the EvidenceDrawer footer, and from the per-section
+// "Open evidence" shortcut inside the letter editor.
+const EvidenceStep = lazy(() =>
+  import("@/routes/EvidenceStep").then((m) => ({ default: m.EvidenceStep }))
+);
 
 function EditorFallback() {
   return (
@@ -95,7 +88,16 @@ export function App() {
             </Protected>
           }
         />
-        <Route path="/editor/:draftId/evidence" element={<Protected><EvidenceRedirect /></Protected>} />
+        <Route
+          path="/editor/:draftId/evidence"
+          element={
+            <Protected>
+              <Suspense fallback={<EditorFallback />}>
+                <EvidenceStep />
+              </Suspense>
+            </Protected>
+          }
+        />
         <Route path="/editor/:draftId/review" element={<Protected><ReviewStep /></Protected>} />
         <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
         <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />
