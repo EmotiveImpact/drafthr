@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Plus, Settings2, Archive, Trash2, FolderPlus } f
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
 import { draftsInMatter, MATTER_COLOR_CLASSES, matterInitial } from "@/lib/matters";
+import { effectiveRiskBand } from "@/lib/matters/risk";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
@@ -222,7 +223,7 @@ export function MatterDetail() {
             />
             {matter.counselReviewed && <Pill tone="amber" label="⚠ Counsel-reviewed" />}
             {matter.type && <Pill tone="blue" label={matterTypeLabel(matter.type)} />}
-            <MatterRiskBadge band={matter.riskBand} />
+            <MatterRiskBadge band={effectiveRiskBand(matter, matterDrafts)} />
             <Pill
               tone="muted"
               label={`${matterDrafts.length} letter${matterDrafts.length === 1 ? "" : "s"}`}

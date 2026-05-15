@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -19,6 +19,8 @@ import {
   Clock,
   TrendingUp,
   Activity,
+  Users,
+  X,
 } from "lucide-react";
 import type {
   Draft,
@@ -35,6 +37,11 @@ import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { EmptyState } from "@/components/ds";
 import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
+import { deriveEmployeesFromDrafts } from "@/lib/employees";
+import { draftsInMatter } from "@/lib/matters";
+import { effectiveRiskBand } from "@/lib/matters/risk";
+
+const BACKFILL_DISMISS_KEY = "drafthr.hr.employeeBackfillDismissed.v1";
 
 /* ============================================================================
  * Home — the landing dashboard.
@@ -77,6 +84,8 @@ function HrDashboard() {
   const drafts = useDraftStore((s) => s.drafts);
   const matters = useDraftStore((s) => s.matters);
   const tasks = useDraftStore((s) => s.tasks);
+  const employees = useDraftStore((s) => s.employees);
+  const createEmployee = useDraftStore((s) => s.createEmployee);
   const profile = useProfileStore((s) => s.profile);
 
   const prefix = "/hr";
@@ -102,8 +111,44 @@ function HrDashboard() {
   // TODAY: open tasks due in next 7 days + matters with nextAction
   const todayItems = useMemo(() => deriveTodayItems(tasks, matters), [tasks, matters]);
 
-  // RISK: exposure + heatmap counts
-  const riskSummary = useMemo(() => deriveRiskSummary(activeMatters), [activeMatters]);
+  // RISK: exposure + heatmap counts. We derive each active matter's risk
+  // band from its drafts when no manual override exists (effectiveRiskBand)
+  // so the dashboard tells the truth out of the box.
+  const allDrafts = useMemo(() => Object.values(drafts), [drafts]);
+  const riskSummary = useMemo(
+    () => deriveRiskSummary(activeMatters, allDrafts),
+    [activeMatters, allDrafts]
+  );
+
+  // Employee backfill: when HR has drafts but no normalised employee records,
+  // surface a one-click import banner. Dismissable; remembered locally so it
+  // doesn't nag once the user has decided.
+  const [dismissed, setDismissed] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(BACKFILL_DISMISS_KEY) === "1"
+  );
+  const backfillCount = useMemo(() => {
+    if (dismissed) return 0;
+    if (Object.keys(employees).length > 0) return 0;
+    return deriveEmployeesFromDrafts(drafts).length;
+  }, [dismissed, drafts, employees]);
+
+  const onImportEmployees = () => {
+    const suggestions = deriveEmployeesFromDrafts(drafts);
+    for (const s of suggestions) {
+      const { draftCount: _d, lastSeenAt: _l, ...rest } = s;
+      createEmployee(rest);
+    }
+    window.localStorage.setItem(BACKFILL_DISMISS_KEY, "1");
+    setDismissed(true);
+    nav("/employees");
+  };
+
+  const onDismissBackfill = () => {
+    window.localStorage.setItem(BACKFILL_DISMISS_KEY, "1");
+    setDismissed(true);
+  };
 
   // COMPLIANCE: roll up health across HR-mode drafts
   const complianceSummary = useMemo(() => deriveComplianceSummary(drafts, "employer"), [drafts]);
@@ -124,6 +169,60 @@ function HrDashboard() {
         <span className="opacity-40">/</span>
         <span className="text-[var(--ds-ink)] font-medium">Dashboard</span>
       </div>
+
+      {/* Employee backfill — surfaces once when HR has drafts but the
+       * normalised employee directory is empty. One click migrates every
+       * person mentioned in existing drafts into the workspace directory. */}
+      {backfillCount > 0 && (
+        <motion.div
+          {...fade}
+          className="mb-5 rounded-[12px] border border-[var(--ds-line)] bg-gradient-to-r from-[var(--ds-blue-bg)]/40 to-[var(--ds-surface)] px-4 py-3.5 flex items-start gap-3"
+        >
+          <span
+            aria-hidden
+            className="mt-0.5 size-9 shrink-0 rounded-[9px] bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)] grid place-items-center"
+          >
+            <Users className="size-[18px]" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <h3 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)]">
+              Build your employee directory from existing drafts
+            </h3>
+            <p className="m-0 text-[12.5px] text-[var(--ds-body)] mt-0.5 leading-snug">
+              {backfillCount} unique{" "}
+              {backfillCount === 1 ? "person" : "people"} appear across your
+              drafts. Import them so future letters, matters, and the new
+              Employees page link to one record per person.
+            </p>
+            <div className="flex items-center gap-2 mt-2.5">
+              <button
+                type="button"
+                onClick={onImportEmployees}
+                className="inline-flex items-center gap-1.5 px-3 py-[6px] rounded-[7px] bg-[var(--ds-ink)] text-white font-semibold text-[12px] hover:-translate-y-px transition"
+              >
+                Import {backfillCount}{" "}
+                {backfillCount === 1 ? "employee" : "employees"}
+                <ArrowRight className="size-3" />
+              </button>
+              <Link
+                to="/employees"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+              >
+                Open Employees
+                <ArrowRight className="size-3 opacity-70" />
+              </Link>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onDismissBackfill}
+            aria-label="Dismiss"
+            className="text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition shrink-0 -m-1 p-1"
+          >
+            <X className="size-3.5" />
+          </button>
+        </motion.div>
+      )}
 
       {/* Greeting */}
       <motion.header {...fade} className="mb-6">
@@ -303,11 +402,13 @@ type RiskSummary = {
 function RiskRegister({ summary, prefix }: { summary: RiskSummary; prefix: string }) {
   const nav = useNavigate();
   const bands: RiskBand[] = ["low", "moderate", "high", "critical"];
+  // Show the panel when there are matters at all — even with zero
+  // tagged exposure, the derived band heatmap is useful signal.
   return (
     <DashboardPanel icon={TrendingUp} title="Risk">
-      {!summary.hasAnyExposure ? (
+      {summary.matterCount === 0 ? (
         <PanelEmpty
-          body="Risk register populates as you tag exposure on matters."
+          body="Risk register populates as you open matters."
           ctaLabel="Browse matters"
           onClick={() => nav('/matters')}
         />
@@ -322,11 +423,12 @@ function RiskRegister({ summary, prefix }: { summary: RiskSummary; prefix: strin
                 lineHeight: 1.1,
               }}
             >
-              {formatGBP(summary.totalExposure)}
+              {summary.hasAnyExposure ? formatGBP(summary.totalExposure) : "—"}
             </div>
             <div className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-snug">
-              tribunal-style exposure across {summary.matterCount} active{" "}
-              {summary.matterCount === 1 ? "case" : "cases"}
+              {summary.hasAnyExposure
+                ? `tribunal-style exposure across ${summary.matterCount} active ${summary.matterCount === 1 ? "case" : "cases"}`
+                : `${summary.matterCount} active ${summary.matterCount === 1 ? "case" : "cases"} — add exposure on a matter to track £`}
             </div>
 
             {/* Tiny heatmap */}
@@ -556,7 +658,10 @@ function deriveTodayItems(
   return [...taskItems, ...matterNextActions];
 }
 
-function deriveRiskSummary(activeMatters: Matter[]): RiskSummary {
+function deriveRiskSummary(
+  activeMatters: Matter[],
+  allDrafts: Draft[]
+): RiskSummary {
   const bands: Record<RiskBand, number> = { low: 0, moderate: 0, high: 0, critical: 0 };
   let totalExposure = 0;
   let hasAnyExposure = false;
@@ -565,7 +670,8 @@ function deriveRiskSummary(activeMatters: Matter[]): RiskSummary {
       totalExposure += m.exposureGBP;
       hasAnyExposure = true;
     }
-    if (m.riskBand) bands[m.riskBand] += 1;
+    const band = effectiveRiskBand(m, draftsInMatter(allDrafts, m.id));
+    if (band) bands[band] += 1;
   }
   return {
     totalExposure,
