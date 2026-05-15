@@ -428,15 +428,24 @@ function DocumentHero({
       className="mt-2 rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6 flex flex-col gap-3"
       aria-labelledby="finalise-hero-title"
     >
-      {/* Title row */}
+      {/* Title row.
+       *
+       * The page icon is the raw Unicode `📄` (Page Facing Up) character. On
+       * macOS/iOS it renders as Apple Color Emoji — the warm white document
+       * with horizontal lines that the design mockup used. Windows users
+       * see Segoe UI Emoji; Android users see Noto Color Emoji. We accept
+       * the platform drift in exchange for the warmth Apple's emoji has
+       * (Microsoft Fluent Emoji 3D was tried and rejected — it renders as
+       * a purple Microsoft-house-style document that doesn't match the
+       * mockup's softness). */}
       <div className="flex items-start gap-3">
-        <img
-          src="https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji@main/assets/Page%20facing%20up/3D/page_facing_up_3d.png"
-          alt=""
+        <div
           aria-hidden
-          className="size-9 shrink-0 select-none"
-          loading="lazy"
-        />
+          className="text-[36px] leading-none shrink-0 select-none"
+          style={{ fontFamily: 'apple color emoji, "segoe ui emoji", "noto color emoji", emoji, system-ui, sans-serif' }}
+        >
+          📄
+        </div>
         <div className="flex-1 min-w-0">
           <h2
             id="finalise-hero-title"
