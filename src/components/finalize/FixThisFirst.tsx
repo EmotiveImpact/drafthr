@@ -80,13 +80,13 @@ function FixRow({
         delay: 0.15 + index * 0.06,
         ease: [0.32, 0.72, 0, 1],
       }}
-      className="flex items-start gap-3 px-4 sm:px-5 py-3"
+      className="flex flex-col gap-2 px-4 sm:px-5 py-3"
     >
-      {/* Severity icon + content — title, chip, detail — fills remaining space. */}
-      <div className="flex items-start gap-3 flex-1 min-w-0">
+      {/* Severity icon + content row — title, chip, detail. */}
+      <div className="flex items-start gap-3">
         <span
           className={cn(
-            "inline-flex items-center justify-center size-7 rounded-md shrink-0 mt-0.5",
+            "inline-flex items-center justify-center size-7 rounded-md shrink-0",
             iconCls,
           )}
         >
@@ -110,13 +110,13 @@ function FixRow({
         </div>
       </div>
 
-      {/* Impact pill stacks ABOVE the CTA so the right cluster stays narrow
-       * (~110px) and the title/detail get the breathing room they need at
-       * 360–420px rail widths. Both right-aligned within the column. */}
-      <div className="flex flex-col items-end gap-1.5 shrink-0 mt-0.5">
+      {/* Impact + CTA row below the description, indented to align past the
+       * icon column. Stacks vertically so the layout works at 300px sidebar
+       * widths without forcing the title/detail to wrap awkwardly. */}
+      <div className="flex items-center justify-end gap-2 ml-10">
         {fix.impact > 0 && (
           <span
-            className="inline-flex items-center h-5 px-1.5 rounded bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[10px] font-bold tabular-nums"
+            className="inline-flex items-center h-7 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[11px] font-bold tabular-nums"
             title={`Fixing this is predicted to add ${fix.impact} to the overall score`}
           >
             +{fix.impact}

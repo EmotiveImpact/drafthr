@@ -113,9 +113,11 @@ export function ReviewStep() {
       </header>
 
       {/* Layout — 2 columns: left sidebar (Sections | Health) + letter canvas.
-       *   [WizardSidebar 300px] [LetterPreview — full remaining width]
-       * 300px gives Health content enough room without crowding the letter. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+       *   [WizardSidebar 340px] [LetterPreview — full remaining width]
+       * 340px gives the Health tab content (score ring + sub-rings + Fix
+       * this first rows) enough breathing room. The Sections tab fits
+       * comfortably too — labels rarely run longer than ~24 characters. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
           <WizardSidebar
             draft={draft}
