@@ -7,9 +7,14 @@ import { draftsInMatter, MATTER_COLOR_CLASSES, matterInitial } from "@/lib/matte
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
-import type { Draft, LetterTypeId } from "@/lib/letters/types";
+import type { Draft, LetterTypeId, MatterType } from "@/lib/letters/types";
 import { PageHeader } from "@/components/ds";
 import { Button } from "@/components/ui/button";
+import { MatterRiskBadge } from "@/components/matter/MatterRiskBadge";
+import { NextActionBanner } from "@/components/matter/NextActionBanner";
+import { MatterParticipants } from "@/components/matter/MatterParticipants";
+import { MatterTasks } from "@/components/matter/MatterTasks";
+import { MatterCalendar } from "@/components/matter/MatterCalendar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +47,23 @@ export function MatterDetail() {
   const matterDrafts = useMemo(
     () => (matter ? draftsInMatter(allDrafts, matter.id) : []),
     [allDrafts, matter]
+  );
+
+  const tasksMap = useDraftStore((s) => s.tasks);
+  const eventsMap = useDraftStore((s) => s.events);
+  const matterTasks = useMemo(
+    () =>
+      matter
+        ? Object.values(tasksMap).filter((t) => t.matterId === matter.id)
+        : [],
+    [tasksMap, matter]
+  );
+  const matterEvents = useMemo(
+    () =>
+      matter
+        ? Object.values(eventsMap).filter((e) => e.matterId === matter.id)
+        : [],
+    [eventsMap, matter]
   );
 
   const [showAddLetter, setShowAddLetter] = useState(false);
@@ -199,6 +221,8 @@ export function MatterDetail() {
               }
             />
             {matter.counselReviewed && <Pill tone="amber" label="⚠ Counsel-reviewed" />}
+            {matter.type && <Pill tone="blue" label={matterTypeLabel(matter.type)} />}
+            <MatterRiskBadge band={matter.riskBand} />
             <Pill
               tone="muted"
               label={`${matterDrafts.length} letter${matterDrafts.length === 1 ? "" : "s"}`}
@@ -236,6 +260,22 @@ export function MatterDetail() {
           </div>
         )}
       </div>
+
+      {/* Next-action banner — derived from matter.nextAction or soonest open task */}
+      <NextActionBanner
+        matter={matter}
+        tasks={matterTasks}
+        onGenerate={() => setShowAddLetter(true)}
+      />
+
+      {/* Participants */}
+      <MatterParticipants participants={matter.participants ?? []} />
+
+      {/* Tasks */}
+      <MatterTasks matterId={matter.id} tasks={matterTasks} />
+
+      {/* Calendar */}
+      <MatterCalendar matterId={matter.id} events={matterEvents} />
 
       {/* Add letter quick picker */}
       {showAddLetter && (
@@ -517,6 +557,25 @@ function MatterTimeline({ drafts }: { drafts: Draft[] }) {
       </div>
     </section>
   );
+}
+
+const MATTER_TYPE_LABEL: Record<MatterType, string> = {
+  investigation: "Investigation",
+  grievance: "Grievance",
+  disciplinary: "Disciplinary",
+  performance: "Performance",
+  absence: "Absence",
+  redundancy: "Redundancy",
+  restructure: "Restructure",
+  settlement: "Settlement",
+  tribunal: "Tribunal",
+  onboarding: "Onboarding",
+  offboarding: "Offboarding",
+  other: "Other",
+};
+
+function matterTypeLabel(type: MatterType): string {
+  return MATTER_TYPE_LABEL[type] ?? type;
 }
 
 function timeAgoShort(ts: number): string {
