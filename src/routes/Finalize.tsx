@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -28,6 +28,8 @@ import {
 } from "@/lib/finalize/healthChecks";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
 import { ConsultTab } from "@/components/editor/review/ConsultTab";
+import { WizardChrome } from "@/components/editor/WizardChrome";
+import { ReviewRail } from "@/components/editor/ReviewRail";
 
 /**
  * Finalise — the ship gate.
@@ -107,6 +109,28 @@ export function Finalize() {
   }
 
   const meta = getLetterMeta(draft.letterType);
+
+  const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
+    const last = (draft.exports ?? [])
+      .slice()
+      .sort((a, b) => b.exportedAt - a.exportedAt)
+      .find((e) => e.reviewedBy);
+    if (last?.reviewedBy && last.reviewedOn) {
+      return { reviewedBy: last.reviewedBy, reviewedOn: last.reviewedOn };
+    }
+    const manual = (draft.answers as Record<string, unknown>)._counselReview as
+      | { reviewedBy?: string; reviewedOn?: string }
+      | undefined;
+    if (manual?.reviewedBy && manual.reviewedOn) {
+      return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
+    }
+    return null;
+  })();
+
+  const unresolvedCommentCount = (draft.comments ?? []).filter(
+    (c) => !c.resolved
+  ).length;
+
   const counselGateRequired = exportRequiresCounselGate(draft);
   const counselAttested = !counselGateRequired || counselConfirmed;
 
@@ -234,77 +258,50 @@ export function Finalize() {
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
       {showConfetti && <ConfettiBurst onDone={() => setShowConfetti(false)} />}
 
-      {/* Branded sticky header — back to Review, breadcrumb, draft meta. */}
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 sm:px-5 gap-3">
-        <button
-          type="button"
-          onClick={() => nav("/activity")}
-          className="flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-[var(--ds-line-2)] transition"
+      {/* Branded sticky header — Logo · Finalise · <title>  …  [← Review] */}
+      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
+        <Link
+          to="/"
           aria-label="Home"
+          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
         >
           <BrandMark size={36} />
-          <Wordmark size={16} />
-        </button>
-
-        <span className="text-[var(--ds-subtle)] hidden sm:inline">/</span>
-
-        <nav className="flex items-center gap-1.5 text-[12.5px] min-w-0">
-          <button
-            type="button"
-            onClick={() => nav(`/editor/${draft.id}/review`)}
-            className="text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition truncate"
-          >
-            Review
-          </button>
-          <span className="text-[var(--ds-subtle)]">·</span>
-          <span className="text-[var(--ds-muted)] truncate hidden md:inline">
-            {draft.title ?? meta.title}
-          </span>
-          <span className="text-[var(--ds-subtle)] hidden md:inline">·</span>
-          <span className="text-[var(--ds-ink)] font-medium">Finalise</span>
-        </nav>
-
+          <Wordmark size={16} className="hidden sm:inline" />
+        </Link>
+        <span className="text-[13px] font-medium text-[var(--ds-ink)]">Finalise</span>
+        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
+          · {draft.title ?? meta.title}
+        </span>
         <div className="ml-auto flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => nav(`/editor/${draft.id}/review`)}
           >
-            <ArrowLeft className="size-3.5 mr-1" />
-            Back to Review
+            <ArrowLeft className="size-3.5 mr-1.5" />
+            Review
           </Button>
         </div>
       </header>
 
-      {/* Scrollable body — narrower than the editor since this is now a
-       * focused ship gate, not a multi-section workspace. */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="mx-auto max-w-[680px] px-4 py-7 sm:px-6 sm:py-10">
-          <h1 className="text-[24px] font-semibold tracking-tight">
-            Finalise <span className="text-[var(--ds-muted)] font-normal">·</span>{" "}
-            <span className="text-[var(--ds-muted)] font-normal">
-              Ready to ship
-            </span>
-          </h1>
-          <p className="text-[13.5px] text-[var(--ds-muted)] mt-1.5 mb-6 max-w-[560px]">
-            Last gate before the letter leaves the building. Download the
-            formats you need, then mark as sent to archive the draft.
-          </p>
-
-          {/* Compact verdict recap — pulls from Review's health-check
-           * engine so the two pages stay in sync. */}
-          <VerdictStrip
-            ready={readyToShip}
-            verdict={verdict}
-            score={scoreData.score}
-            band={scoreData.band}
-            passCount={scoreData.passCount}
-            totalCount={scoreData.totalCount}
-            warnCount={scoreData.warnCount}
-            failCount={scoreData.failCount}
-            onBack={() => nav(`/editor/${draft.id}/review`)}
+      {/* 2-column layout: 300px sidebar (stepper + health) + scrollable body */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
+          <WizardChrome draftId={draft.id} mode={draft.mode} current="finalize" />
+          <ReviewRail
+            draft={draft}
+            counselReviewedBy={counselReview}
+            unresolvedComments={unresolvedCommentCount}
+            onJumpToSection={(sectionId) =>
+              nav(`/editor/${draft.id}?section=${sectionId}`)
+            }
+            onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
+            onContinueToFinalize={() => { /* already on finalise */ }}
           />
+        </aside>
 
+        <main className="min-h-0 overflow-y-auto">
+          <div className="mx-auto max-w-[680px] px-4 py-7 sm:px-6 sm:py-10">
           {/* Counsel-review attestation gate — only renders when the
            * letter type requires it. Inline checkbox; ticking it
            * unblocks the export tiles and Mark-as-sent. */}
@@ -419,7 +416,8 @@ export function Finalize() {
               <Send className="size-4 ml-1.5" />
             </Button>
           </motion.div>
-        </div>
+          </div>
+        </main>
       </div>
     </div>
   );
@@ -430,9 +428,9 @@ export function Finalize() {
  * ==========================================================================*/
 
 /**
- * One-line verdict + score strip at the top of Finalise. No rings —
- * those live in Review's Health tab. This is the at-a-glance recap so
- * the user can confirm what Review told them before they ship.
+ * One-line verdict + score strip — kept as a dead subcomponent in case
+ * it's needed elsewhere in future; no longer rendered in the Finalize body
+ * (the sidebar's ReviewRail now surfaces the same data).
  */
 function VerdictStrip({
   ready,
