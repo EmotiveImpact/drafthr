@@ -2,6 +2,134 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.9.0 — 2026-05-16
+
+Platform wave. Three independent landings: a Tiptap track-changes primitive
+that future-proofs four downstream surfaces, a Vercel Blob image pipeline
+that gets us off base64-in-localStorage, and the auth foundation swapped
+from Clerk to WorkOS for B2B-grade SSO/SAML/SCIM from day 1.
+
+### Suggestion-mark Tiptap primitive
+
+- New `src/lib/tiptap/suggestion-mark.ts` — a Tiptap Mark named
+  `suggestion` rendering `<ins>` (insertions) and `<del>` (deletions)
+  with attributes `{ id, kind, author, authorId?, body?, createdAt,
+  status }` where status ∈ `pending | accepted | rejected`. The single
+  primitive serves four future surfaces: consultant marketplace
+  review track-changes, AI inline-diff critiques, richer threaded
+  comments, future co-edit cursors.
+- Visual: pending insertions get a green underline + tint background,
+  pending deletions get red strikethrough + tint. Rejected marks go
+  to 0.4 opacity. Accepted marks shouldn't appear in practice — the
+  merge function strips them.
+- `src/lib/tiptap/suggestion-merge.ts` — pure functions on Tiptap doc
+  JSON: `mergeAcceptedSuggestions` applies accepted marks
+  destructively (insertions merge into prose, deletions remove the
+  wrapped text); pending insertions vanish (no decision = don't
+  apply); pending deletions keep their text. `listSuggestions`
+  returns one summary per mark. `hasPendingSuggestions` short-
+  circuits.
+- Store gains `setSuggestionStatus`, `acceptAllSuggestions` (versions
+  the prior html into `section.versions` before merging),
+  `rejectAllSuggestions`.
+- Sanitiser split: `sanitizeLetterHtml` allows `<ins>` / `<del>` on
+  the authoring path; new `sanitizeLetterHtmlForExport` strips them
+  so reviewer state can't leak into the final letter. PDF + DOCX
+  export pipe through merge + export-flavoured sanitise — defence in
+  depth.
+- AIPanel adds a `SuggestionTestStrip`: Accept-all / Reject-all pair
+  lights up when pending suggestions exist; a DEV-gated "Test
+  suggestion" button injects a fake suggestion at the cursor for
+  quick manual verification.
+- 14 new unit tests covering insertion vs deletion × accepted vs
+  rejected vs pending, mark stripping, multi-fragment dedup,
+  preservation of other marks (bold) during suggestion strip.
+
+### Vercel Blob image upload
+
+- New `api/upload/image.ts` — POST endpoint accepting multipart OR
+  `{ dataUrl, filename }` JSON. Validates mime (PNG/JPEG/WEBP/GIF
+  only, matches the 0.6.0 image policy), validates size (<2 MB),
+  computes SHA-256 for content-addressed dedup storage at
+  `/letterheads/{sha256}.{ext}`, uploads via `@vercel/blob` `put()`
+  with `allowOverwrite: true`. Soft-fails when `BLOB_READ_WRITE_TOKEN`
+  is missing so local dev without Vercel Blob configured still works.
+- Client helper `src/lib/storage/uploadImage.ts` — one fetch + retry-
+  once on 5xx + fallback to the original data URL on soft-fail. Used
+  by `ImageUploader` after FileReader; shows "Uploading…" busy state.
+- `isSafeImageRef` (new in `src/lib/safe-data-url.ts`) accepts data:
+  OR https: URLs. Rolled out across `profile.ts`, store wizard-answer
+  sanitize, paged preview `sourceHtml`, PDF + DOCX export, ZIP pack.
+- PDF server-side preserves the 0.6.0 network-block security posture
+  by fetching images BEFORE `page.setContent` in
+  `inlineImagesForExport` — the request never goes through
+  Puppeteer's interceptor. Browser CSP already allowed `img-src
+  https:` so on-screen + client-side fallback need no `vercel.json`
+  change.
+- One-shot migration `src/lib/storage/migrate.ts` runs on app mount
+  to swap legacy base64 letterhead/signature for Blob URLs. Failures
+  leave the data URL untouched and retry next session.
+- 10 new unit tests across `uploadImage` (success, soft-fail,
+  retry-on-5xx, network reject, non-data passthrough) and
+  `inlineImagesForExport` (no-op, replace, dedup, fetch failure,
+  content-type guard).
+
+### Clerk → WorkOS migration ★
+
+Skipped Clerk entirely per the roadmap's long-term auth choice. WorkOS
+is what Persona C/D need from day 1 — SSO/SAML, SCIM, audit log,
+organisations all first-class. Marketplace consultants will live in a
+separate WorkOS Project when the first consultant onboards (Option
+B → A migration is the forcing function for that week).
+
+- New server helpers `api/_utils/workos.ts`: `getWorkos()` singleton,
+  `getSessionFromRequest`, `buildSessionCookie`, `buildClearCookie`,
+  `buildStateCookie` + `readStateCookie` (for CSRF on the OAuth
+  dance), `requireSession` with a discriminated-union return shape.
+- New routes: `/api/auth/url` (mints WorkOS authorize URL + sets
+  short-lived CSRF state cookie), `/api/auth/callback` (verifies
+  state, exchanges code via `workos.userManagement.
+  authenticateWithCode({ sealSession: true })`, sets encrypted
+  session cookie), `/api/auth/session` (reads cookie, returns user),
+  `/api/auth/sign-out` (clears cookie).
+- New client routes `/sign-in` (auto-redirects to WorkOS) +
+  `/auth/callback` (handles return from WorkOS, POSTs code to the
+  server callback, refreshes session, navigates to `?redirect=`).
+- `AuthProvider` rewritten as a React Context — public surface
+  preserved (`useAuth()` exposes `{ user, isLoaded, signIn, signOut,
+  refresh }`). Refresh on focus/visibility so stale cookies don't
+  linger.
+- `Protected` redirects to `/sign-in?redirect=...` while
+  unauthenticated; Skeleton while loading.
+- `UserChip` internal swap from Clerk's `<UserButton>` to Radix
+  Avatar + DropdownMenu. Public API unchanged.
+- Session cookie uses `iron-session` v8's low-level
+  `sealData`/`unsealData` (no Next.js bindings needed). HttpOnly +
+  Secure (production) + SameSite=Lax + 7-day max-age + encrypted with
+  `WORKOS_COOKIE_PASSWORD`.
+- Production fail-closed: AuthProvider renders a configuration-error
+  page when `VITE_WORKOS_CLIENT_ID` is missing AND
+  `VITE_ALLOW_PUBLIC_APP !== 'true'`. Mirrors the existing Clerk-
+  fail-closed posture.
+- CSP (`vercel.json`): `clerk.*` allowances removed; `api.workos.com`
+  added to `connect-src`; `*.authkit.app` added to `form-action`
+  (covers the WorkOS-hosted login POST). Sentry preserved.
+- Privacy page sub-processor list: Clerk Inc. → WorkOS Inc.
+- Deps: `@workos-inc/node` + `iron-session` added; `@clerk/clerk-
+  react` removed.
+
+### Action items for deploy
+
+1. WorkOS dashboard → Redirect URIs: add the production callback
+   `https://<your-domain>/auth/callback`. Local dev already wired to
+   `http://localhost:5273/auth/callback`.
+2. Vercel project env vars: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`,
+   `VITE_WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI`,
+   `VITE_WORKOS_REDIRECT_URI`, `WORKOS_COOKIE_PASSWORD`,
+   `BLOB_READ_WRITE_TOKEN` (Vercel dashboard → Storage → Blob).
+3. Provision Vercel Blob store (or skip — endpoint soft-fails and
+   clients keep data URLs locally).
+
 ## 0.8.0 — 2026-05-15
 
 The defensibility release. Three structural moves: a Business-tier approval
