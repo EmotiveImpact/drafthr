@@ -8,15 +8,18 @@ import type {
   Comment,
   Draft,
   DraftTimelineEvent,
+  Employee,
   EvidenceItem,
   ExportEvent,
   LetterAnswers,
   LetterTypeId,
   Matter,
   MatterColor,
+  MatterEvent,
   Mode,
   Section,
   SectionVersion,
+  Task,
 } from "./letters/types";
 import { uid } from "./utils";
 import { getLetterMeta } from "./letters/catalog";
@@ -37,6 +40,27 @@ type Store = {
    * draft store — they're not per-draft state.
    */
   matters: Record<string, Matter>;
+  /**
+   * Workspace-level normalized people directory. Lifted out of Draft.employee
+   * so one person can appear across many drafts/matters without duplication.
+   * HR mode owns this; employee-mode users have at most one record (themselves).
+   */
+  employees: Record<string, Employee>;
+  /** Actionable next steps attached to a Matter. */
+  tasks: Record<string, Task>;
+  /** Meetings, hearings, deadlines on a Matter calendar. */
+  events: Record<string, MatterEvent>;
+  createEmployee: (input: Omit<Employee, "id" | "createdAt" | "updatedAt">) => string;
+  updateEmployee: (id: string, patch: Partial<Employee>) => void;
+  /** Soft-archive — flips status to "left" and stamps endDate if absent. */
+  archiveEmployee: (id: string) => void;
+  createTask: (input: Omit<Task, "id" | "createdAt" | "updatedAt">) => string;
+  updateTask: (id: string, patch: Partial<Task>) => void;
+  completeTask: (id: string) => void;
+  deleteTask: (id: string) => void;
+  createEvent: (input: Omit<MatterEvent, "id" | "createdAt">) => string;
+  updateEvent: (id: string, patch: Partial<MatterEvent>) => void;
+  deleteEvent: (id: string) => void;
   createMatter: (input: {
     name: string;
     mode: Mode;
@@ -141,6 +165,135 @@ export const useDraftStore = create<Store>()(
     (set, get) => ({
       drafts: {},
       matters: {},
+      employees: {},
+      tasks: {},
+      events: {},
+
+      /* ----------------------------------------------------------------
+       * Employees — workspace-level normalized people directory.
+       * Additive lifecycle: create / update / archive. Drafts and Matters
+       * reference these by id (via Matter.participants[].employeeId). We
+       * intentionally don't cascade-delete: archive flips status so
+       * historical drafts keep their link, and the directory stays clean.
+       * ---------------------------------------------------------------*/
+
+      createEmployee: (input) => {
+        const id = uid("emp");
+        const now = Date.now();
+        const employee: Employee = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ employees: { ...s.employees, [id]: employee } }));
+        return id;
+      },
+
+      updateEmployee: (id, patch) =>
+        set((s) => {
+          const e = s.employees[id];
+          if (!e) return s;
+          return {
+            employees: { ...s.employees, [id]: { ...e, ...patch, updatedAt: Date.now() } },
+          };
+        }),
+
+      archiveEmployee: (id) =>
+        set((s) => {
+          const e = s.employees[id];
+          if (!e) return s;
+          const now = Date.now();
+          return {
+            employees: {
+              ...s.employees,
+              [id]: {
+                ...e,
+                status: "left",
+                endDate: e.endDate ?? todayDateOnly(),
+                updatedAt: now,
+              },
+            },
+          };
+        }),
+
+      /* ----------------------------------------------------------------
+       * Tasks — actionable next steps tied to a Matter.
+       * ---------------------------------------------------------------*/
+
+      createTask: (input) => {
+        const id = uid("task");
+        const now = Date.now();
+        const task: Task = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ tasks: { ...s.tasks, [id]: task } }));
+        return id;
+      },
+
+      updateTask: (id, patch) =>
+        set((s) => {
+          const t = s.tasks[id];
+          if (!t) return s;
+          return {
+            tasks: { ...s.tasks, [id]: { ...t, ...patch, updatedAt: Date.now() } },
+          };
+        }),
+
+      completeTask: (id) =>
+        set((s) => {
+          const t = s.tasks[id];
+          if (!t) return s;
+          const now = Date.now();
+          return {
+            tasks: {
+              ...s.tasks,
+              [id]: { ...t, status: "done", doneAt: now, updatedAt: now },
+            },
+          };
+        }),
+
+      deleteTask: (id) =>
+        set((s) => {
+          if (!s.tasks[id]) return s;
+          const { [id]: _removed, ...remaining } = s.tasks;
+          return { tasks: remaining };
+        }),
+
+      /* ----------------------------------------------------------------
+       * Events — meetings / hearings / deadlines on a Matter calendar.
+       * ---------------------------------------------------------------*/
+
+      createEvent: (input) => {
+        const id = uid("evt");
+        const now = Date.now();
+        const event: MatterEvent = {
+          ...input,
+          id,
+          createdAt: now,
+        };
+        set((s) => ({ events: { ...s.events, [id]: event } }));
+        return id;
+      },
+
+      updateEvent: (id, patch) =>
+        set((s) => {
+          const e = s.events[id];
+          if (!e) return s;
+          return {
+            events: { ...s.events, [id]: { ...e, ...patch } },
+          };
+        }),
+
+      deleteEvent: (id) =>
+        set((s) => {
+          if (!s.events[id]) return s;
+          const { [id]: _removed, ...remaining } = s.events;
+          return { events: remaining };
+        }),
 
       /* ----------------------------------------------------------------
        * Matters lifecycle

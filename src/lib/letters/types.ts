@@ -488,7 +488,127 @@ export type Matter = {
   deadlineLabel?: string;
   /** Counsel-reviewed flag — surfaces a chip on the matter hero. */
   counselReviewed?: boolean;
+  /** Case type — what kind of HR matter this is. Defaults to "investigation"
+   * for legacy matters that pre-date this field. */
+  type?: MatterType;
+  /** Risk band — drives the risk register surface on the Dashboard. */
+  riskBand?: RiskBand;
+  /** Participants beyond the primary subject. */
+  participants?: MatterParticipant[];
+  /** Who owns this matter in the workspace. Free-text userId-or-name for now. */
+  ownerUserId?: string;
+  /** Short label for the dashboard "what needs doing next" card. */
+  nextAction?: string;
+  /** Estimated tribunal/dispute exposure in pounds, for the risk register
+   * heatmap. AI-derived from the draft content. */
+  exposureGBP?: number;
   createdAt: number;
   updatedAt: number;
   archivedAt?: number;
+};
+
+/* ============================================================================
+ * Employee — normalized HR-side party (HR mode only)
+ *
+ * Today the "employee" appears denormalized on every Draft. For the
+ * HR/Management portal at scale we lift it to a workspace-level entity:
+ * one record per person across many drafts and many matters. Employee
+ * mode users never have more than one Employee record (themselves).
+ * ==========================================================================*/
+export type EmploymentStatus = "active" | "notice" | "left" | "on-leave";
+
+export type Employee = {
+  id: string;
+  legalName: string;
+  preferredName?: string;
+  jobTitle?: string;
+  department?: string;
+  managerName?: string;
+  managerEmail?: string;
+  email?: string;
+  startDate?: string;     // ISO date
+  endDate?: string;       // ISO date — set when status flips to "left"
+  workerClass?: WorkerClass;
+  status: EmploymentStatus;
+  /** Personal note jot — never sent to AI. */
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/* ============================================================================
+ * Tasks — actionable next steps on a Matter (HR mode primarily)
+ * ==========================================================================*/
+export type TaskStatus = "open" | "done" | "skipped";
+
+export type Task = {
+  id: string;
+  matterId: string;
+  label: string;
+  /** ISO date — when this needs to happen. */
+  dueISO?: string;
+  status: TaskStatus;
+  /** Who owns it. Free-text for now (will become userId when WorkOS ships). */
+  assignee?: string;
+  createdAt: number;
+  updatedAt: number;
+  doneAt?: number;
+};
+
+/* ============================================================================
+ * Events — meetings, hearings, deadlines on a Matter calendar
+ * ==========================================================================*/
+export type EventKind = "meeting" | "hearing" | "deadline" | "review";
+
+export type MatterEvent = {
+  id: string;
+  matterId: string;
+  kind: EventKind;
+  label: string;
+  /** ISO datetime (when known to the minute) or ISO date. */
+  whenISO: string;
+  /** Optional secondary line — location, participants, etc. */
+  detail?: string;
+  createdAt: number;
+};
+
+/* ============================================================================
+ * Matter expansion — type, risk, participants, owner, nextAction
+ *
+ * Backwards-compatible: every field added below is optional. Existing
+ * Matters in the persisted store load fine.
+ * ==========================================================================*/
+export type MatterType =
+  | "investigation"
+  | "grievance"
+  | "disciplinary"
+  | "performance"
+  | "absence"
+  | "redundancy"
+  | "restructure"
+  | "settlement"
+  | "tribunal"
+  | "onboarding"
+  | "offboarding"
+  | "other";
+
+export type RiskBand = "low" | "moderate" | "high" | "critical";
+
+/** A participant in a Matter beyond the primary subject. E.g. for a
+ * grievance: grievant + accused + 2 witnesses. */
+export type MatterParticipantRole =
+  | "subject"          // The primary person the matter is about
+  | "manager"
+  | "accused"
+  | "complainant"
+  | "witness"
+  | "representative"
+  | "other";
+
+export type MatterParticipant = {
+  /** Employee id if known; null for external parties (witnesses from another company). */
+  employeeId: string | null;
+  /** Display name fallback when employeeId is null. */
+  name: string;
+  role: MatterParticipantRole;
 };
