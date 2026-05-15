@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Review sidebar — shrink options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@400;600&family=Source+Serif+4:wght@400&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --amber:#d97706; --amber-lt:#fffbeb; --amber-bd:#fde68a;
+  --green:#059669; --green-lt:#ecfdf5;
+  --red:#dc2626; --red-lt:#fef2f2;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;padding:20px}
+button{font:inherit;cursor:pointer;border:0;background:none}
+
+.page-head{max-width:1400px;margin:0 auto 24px;text-align:center}
+.page-head h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.page-head p{font-size:13px;color:var(--body);max-width:720px;margin:0 auto;line-height:1.55}
+
+.options{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+
+.opt{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.opt-head{padding:14px 18px;border-bottom:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:8px}
+.opt-head .badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;font-weight:700}
+.opt-head h2{font-size:14px;font-weight:700;letter-spacing:-.01em;margin:0;flex:1}
+.opt-head .width{font-size:11px;color:var(--muted);background:#fff;border:1px solid var(--line);padding:2px 7px;border-radius:99px;font-family:ui-monospace,monospace}
+.opt-head .width.match{background:#dcfce7;color:#15803d;border-color:#86efac}
+.opt-head .width.bigger{background:#fef3c7;color:#92400e;border-color:#fde68a}
+
+.opt-body{padding:18px;background:var(--wash)}
+.opt-frame{position:relative;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;height:520px;display:flex}
+
+/* Top stepper bar inside each frame */
+.stepper{height:34px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;padding:0 12px;gap:10px;font-size:11px;color:var(--muted);background:#fff;flex-shrink:0}
+.stepper .s{display:flex;align-items:center;gap:5px;padding:2px 6px;border-radius:5px}
+.stepper .s .n{width:14px;height:14px;border-radius:50%;background:var(--line);color:var(--muted);font-size:9px;font-weight:700;display:grid;place-items:center}
+.stepper .s.done .n{background:var(--green);color:#fff}
+.stepper .s.active{background:var(--wash)}
+.stepper .s.active .n{background:var(--ink);color:#fff}
+.stepper .arr{color:var(--subtle)}
+
+/* SIDEBAR — varies per option */
+.sidebar{background:var(--wash);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+.sidebar.w260{width:260px}
+.sidebar.w340{width:340px}
+
+/* sub-tabs */
+.subtabs{display:flex;border-bottom:1px solid var(--line);padding:0 12px;background:#fff;gap:0;flex-shrink:0}
+.subtab{padding:9px 8px;font-size:11.5px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:4px}
+.subtab.active{color:var(--ink);border-bottom-color:var(--ink)}
+.subtab .ct{font-size:9.5px;background:var(--amber);color:#fff;padding:1px 5px;border-radius:8px;font-weight:700}
+
+.content{padding:12px;display:flex;flex-direction:column;gap:10px}
+
+/* Score block — Option A (compact rings) */
+.score-row{display:flex;align-items:center;gap:10px}
+.ring{position:relative;display:grid;place-items:center;flex-shrink:0}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute;font-size:14px;font-weight:700}
+.ring .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;margin-top:2px;text-align:center}
+
+.verdict{flex:1;min-width:0}
+.verdict .band{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;background:var(--amber-lt);color:#92400e;margin-bottom:3px}
+.verdict h3{font-size:12px;font-weight:600;color:var(--ink);line-height:1.3;margin:0 0 2px 0}
+.verdict .sub{font-size:10px;color:var(--muted);line-height:1.4}
+
+.sub-rings{display:flex;justify-content:space-around;align-items:flex-start;gap:6px;padding-top:6px}
+.sub-rings .sr{display:flex;flex-direction:column;align-items:center;gap:2px}
+
+/* Score block — Option B (text sub-scores) */
+.text-subscores{display:flex;flex-wrap:wrap;gap:8px;padding:6px 4px 0;font-size:11px}
+.text-subscores .ts{display:flex;align-items:center;gap:4px;color:var(--body)}
+.text-subscores .ts .dot{width:7px;height:7px;border-radius:50%}
+.text-subscores .ts .dot.compl{background:var(--amber)}
+.text-subscores .ts .dot.qual{background:var(--green)}
+.text-subscores .ts .dot.risk{background:var(--green)}
+.text-subscores .ts .name{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.text-subscores .ts .v{font-weight:700;color:var(--ink);font-size:11.5px;font-feature-settings:"tnum"}
+
+/* Banner — Option C */
+.score-banner{height:78px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:14px;flex-shrink:0}
+.score-banner .verdict-mini{display:flex;flex-direction:column;gap:1px}
+.score-banner .verdict-mini .band{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;background:var(--amber-lt);color:#92400e;align-self:flex-start}
+.score-banner .verdict-mini .summary{font-size:11.5px;color:var(--ink);font-weight:600;margin-top:2px}
+.score-banner .sep{width:1px;height:50px;background:var(--line)}
+.score-banner .three{display:flex;gap:18px;align-items:center}
+
+/* Fix this first */
+.fix-card{background:#fff;border:1px solid var(--amber-bd);border-top:2px solid var(--amber);border-radius:8px;overflow:hidden;margin-top:4px}
+.fix-card-head{padding:7px 10px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700}
+.fix-card-head .zap{color:var(--amber)}
+.fix-card-head .by{margin-left:auto;font-size:9.5px;color:var(--muted);font-weight:500}
+
+.fix-row{padding:8px 10px;border-bottom:1px solid var(--line-2);display:flex;flex-direction:column;gap:6px}
+.fix-row:last-child{border-bottom:0}
+.fix-row .top{display:flex;align-items:flex-start;gap:7px}
+.fix-row .sev{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;font-size:11px;font-weight:800}
+.fix-row .sev.red{background:var(--red-lt);color:var(--red)}
+.fix-row .sev.amber{background:var(--amber-lt);color:var(--amber)}
+.fix-row .info{flex:1;min-width:0}
+.fix-row .title{font-size:11.5px;font-weight:600;color:var(--ink);line-height:1.3}
+.fix-row .chip{display:inline-block;font-size:8.5px;background:var(--line-2);color:var(--muted);padding:1px 5px;border-radius:3px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-left:4px;vertical-align:1px}
+.fix-row .detail{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4}
+.fix-row .action{display:flex;justify-content:flex-end;gap:5px;align-items:center;margin-left:28px}
+.fix-row .impact{font-size:9.5px;font-weight:700;background:var(--green-lt);color:var(--green);padding:2px 5px;border-radius:3px}
+.fix-row .btn{font-size:10px;font-weight:600;background:var(--ink);color:#fff;padding:3px 7px;border-radius:4px;display:inline-flex;align-items:center;gap:3px}
+
+/* All checks (compact for Option A) */
+.all-checks h4{font-size:9.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:8px;margin-bottom:5px}
+.all-checks .row{display:flex;align-items:center;gap:6px;padding:5px 4px;font-size:11px;color:var(--body);border-bottom:1px solid var(--line-2)}
+.all-checks .row .ok{color:var(--green);font-weight:700;font-size:11px;width:14px;text-align:center}
+.all-checks .row .warn{color:var(--amber);font-weight:700;font-size:11px;width:14px;text-align:center}
+
+/* Finalise CTA */
+.cta{margin-top:auto;background:var(--ink);color:#fff;text-align:center;font-size:11.5px;font-weight:700;padding:9px 12px;flex-shrink:0}
+
+/* Letter canvas */
+.letter{flex:1;background:var(--wash);padding:14px;overflow-y:auto;display:flex;flex-direction:column}
+.letter-paper{flex:1;background:#fff;border:1px solid var(--line);border-radius:6px;padding:16px;font-family:"Source Serif 4",Georgia,serif;font-size:11px;line-height:1.65;color:var(--ink)}
+.letter-paper h4{font-family:"Inter",sans-serif;font-size:11px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+.letter-paper p{margin-bottom:7px}
+
+.commentary{margin-top:14px;padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:12px;color:var(--body);line-height:1.6}
+.commentary strong{color:var(--ink)}
+.commentary .win{color:var(--green);font-weight:700}
+.commentary .cost{color:var(--red);font-weight:700}
+
+.legend{max-width:1400px;margin:24px auto 0;padding:14px 18px;background:linear-gradient(135deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:10px;font-size:12px;color:#1e40af;text-align:center}
+.legend strong{color:#1e3a8a}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Review sidebar — shrink options</h1>
+  <p>Today's Review sidebar is <strong>340px</strong> to fit the Health content. Edit's sidebar is <strong>260px</strong>. Four ways to make them match while keeping Health readable.</p>
+</div>
+
+<div class="options">
+
+  <!-- ════════ Option A — Compact rings ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">A</span>
+      <h2>Compact rings — shrink everything proportionally</h2>
+      <span class="width match">260px</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame">
+        <div class="sidebar w260">
+          <div class="stepper">
+            <div class="s done"><span class="n">✓</span>Edit</div>
+            <span class="arr">·</span>
+            <div class="s active"><span class="n">2</span>Review</div>
+            <span class="arr">·</span>
+            <div class="s"><span class="n">3</span>Finalise</div>
+          </div>
+          <div class="subtabs">
+            <div class="subtab active">Health <span class="ct">1</span></div>
+            <div class="subtab">Improve</div>
+          </div>
+          <div class="content">
+            <div class="score-row">
+              <div class="ring" style="width:48px;height:48px">
+                <svg width="48" height="48" viewBox="0 0 48 48">
+                  <circle cx="24" cy="24" r="20" fill="none" stroke="#f3f4f6" stroke-width="4"/>
+                  <circle cx="24" cy="24" r="20" fill="none" stroke="#d97706" stroke-width="4" stroke-dasharray="125.6" stroke-dashoffset="25.1" stroke-linecap="round"/>
+                </svg>
+                <span class="val" style="font-size:12px">80</span>
+              </div>
+              <div class="verdict">
+                <span class="band">Adequate</span>
+                <h3>1 compliance issue must be resolved.</h3>
+                <p class="sub">6 of 9 pass · 2 warn · 1 block</p>
+              </div>
+            </div>
+            <div class="sub-rings">
+              <div class="sr">
+                <div class="ring" style="width:30px;height:30px">
+                  <svg width="30" height="30" viewBox="0 0 30 30">
+                    <circle cx="15" cy="15" r="12" fill="none" stroke="#f3f4f6" stroke-width="3"/>
+                    <circle cx="15" cy="15" r="12" fill="none" stroke="#d97706" stroke-width="3" stroke-dasharray="75.4" stroke-dashoffset="30.2" stroke-linecap="round"/>
+                  </svg>
+                  <span class="val" style="font-size:9px">60</span>
+                </div>
+                <span class="lbl">Compl.</span>
+              </div>
+              <div class="sr">
+                <div class="ring" style="width:30px;height:30px">
+                  <svg width="30" height="30" viewBox="0 0 30 30">
+                    <circle cx="15" cy="15" r="12" fill="none" stroke="#f3f4f6" stroke-width="3"/>
+                    <circle cx="15" cy="15" r="12" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="75.4" stroke-dashoffset="9" stroke-linecap="round"/>
+                  </svg>
+                  <span class="val" style="font-size:9px">88</span>
+                </div>
+                <span class="lbl">Quality</span>
+              </div>
+              <div class="sr">
+                <div class="ring" style="width:30px;height:30px">
+                  <svg width="30" height="30" viewBox="0 0 30 30">
+                    <circle cx="15" cy="15" r="12" fill="none" stroke="#f3f4f6" stroke-width="3"/>
+                    <circle cx="15" cy="15" r="12" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="75.4" stroke-dashoffset="0" stroke-linecap="round"/>
+                  </svg>
+                  <span class="val" style="font-size:9px">100</span>
+                </div>
+                <span class="lbl">Risk</span>
+              </div>
+            </div>
+            <div class="fix-card">
+              <div class="fix-card-head">
+                <span class="zap">⚡</span> Fix this first
+                <span class="by">By impact</span>
+              </div>
+              <div class="fix-row">
+                <div class="top">
+                  <div class="sev red">⊗</div>
+                  <div class="info">
+                    <div class="title">Missing recipient + sender</div>
+                    <div class="detail">Letter cannot be sent without both parties</div>
+                  </div>
+                </div>
+                <div class="action">
+                  <span class="impact">+12</span>
+                  <span class="btn">Add details →</span>
+                </div>
+              </div>
+              <div class="fix-row">
+                <div class="top">
+                  <div class="sev amber">⚠</div>
+                  <div class="info">
+                    <div class="title">No signature attached</div>
+                    <div class="detail">Sign in Settings to attach automatically</div>
+                  </div>
+                </div>
+                <div class="action">
+                  <span class="impact">+4</span>
+                  <span class="btn">Add in Settings →</span>
+                </div>
+              </div>
+            </div>
+            <div class="all-checks">
+              <h4>All Checks</h4>
+              <div class="row"><span class="ok">✓</span>Section completeness</div>
+              <div class="row"><span class="warn">○</span>Template quality</div>
+              <div class="row"><span class="ok">✓</span>Statutory compliance</div>
+            </div>
+          </div>
+          <div class="cta">Finalise →</div>
+        </div>
+        <div class="letter">
+          <div class="letter-paper">
+            <h4>Holiday Request</h4>
+            <p>15 May 2026</p>
+            <p>To: Senior HR Officer</p>
+            <p>I formally request annual leave from [TBD] to [TBD]…</p>
+            <p>I am entitled to a minimum of 28 days' paid annual leave in the current leave year by virtue of regulations 13 and 13A of the Working Time Regulations 1998.</p>
+            <p>The notice given by this letter exceeds twice the period of leave requested.</p>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <p><span class="win">✓ Win:</span> matches Edit at 260px. Hero ring still readable. <span class="cost">✗ Cost:</span> sub-rings get small (30px); chips dropped from Fix rows.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Option B — Text sub-scores ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">B</span>
+      <h2>Sub-scores as text — keep hero ring big</h2>
+      <span class="width match">260px</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame">
+        <div class="sidebar w260">
+          <div class="stepper">
+            <div class="s done"><span class="n">✓</span>Edit</div>
+            <span class="arr">·</span>
+            <div class="s active"><span class="n">2</span>Review</div>
+            <span class="arr">·</span>
+            <div class="s"><span class="n">3</span>Finalise</div>
+          </div>
+          <div class="subtabs">
+            <div class="subtab active">Health <span class="ct">1</span></div>
+            <div class="subtab">Improve</div>
+          </div>
+          <div class="content">
+            <div class="score-row">
+              <div class="ring" style="width:60px;height:60px">
+                <svg width="60" height="60" viewBox="0 0 60 60">
+                  <circle cx="30" cy="30" r="25" fill="none" stroke="#f3f4f6" stroke-width="5"/>
+                  <circle cx="30" cy="30" r="25" fill="none" stroke="#d97706" stroke-width="5" stroke-dasharray="157" stroke-dashoffset="31.4" stroke-linecap="round"/>
+                </svg>
+                <span class="val" style="font-size:16px">80</span>
+              </div>
+              <div class="verdict">
+                <span class="band">Adequate</span>
+                <h3>1 compliance issue must be resolved.</h3>
+                <p class="sub">6 of 9 pass · 2 warn · 1 block</p>
+              </div>
+            </div>
+            <div class="text-subscores">
+              <div class="ts"><div class="dot compl"></div><span class="name">Compl</span><span class="v">60</span></div>
+              <div class="ts"><div class="dot qual"></div><span class="name">Qual</span><span class="v">88</span></div>
+              <div class="ts"><div class="dot risk"></div><span class="name">Risk</span><span class="v">100</span></div>
+            </div>
+            <div class="fix-card">
+              <div class="fix-card-head">
+                <span class="zap">⚡</span> Fix this first
+                <span class="by">By impact</span>
+              </div>
+              <div class="fix-row">
+                <div class="top">
+                  <div class="sev red">⊗</div>
+                  <div class="info">
+                    <div class="title">Missing recipient + sender <span class="chip">Compl</span></div>
+                    <div class="detail">Letter cannot be sent without both parties identified</div>
+                  </div>
+                </div>
+                <div class="action">
+                  <span class="impact">+12</span>
+                  <span class="btn">Add details →</span>
+                </div>
+              </div>
+              <div class="fix-row">
+                <div class="top">
+                  <div class="sev amber">⚠</div>
+                  <div class="info">
+                    <div class="title">No signature <span class="chip">Qual</span></div>
+                    <div class="detail">Sign in Settings to attach automatically</div>
+                  </div>
+                </div>
+                <div class="action">
+                  <span class="impact">+4</span>
+                  <span class="btn">Add in Settings →</span>
+                </div>
+              </div>
+            </div>
+            <div class="all-checks">
+              <h4>All Checks</h4>
+              <div class="row"><span class="ok">✓</span>Section completeness</div>
+              <div class="row"><span class="warn">○</span>Template quality</div>
+              <div class="row"><span class="ok">✓</span>Statutory compliance</div>
+            </div>
+          </div>
+          <div class="cta">Finalise →</div>
+        </div>
+        <div class="letter">
+          <div class="letter-paper">
+            <h4>Holiday Request</h4>
+            <p>15 May 2026</p>
+            <p>To: Senior HR Officer</p>
+            <p>I formally request annual leave from [TBD] to [TBD]…</p>
+            <p>I am entitled to a minimum of 28 days' paid annual leave in the current leave year by virtue of regulations 13 and 13A of the Working Time Regulations 1998.</p>
+            <p>The notice given by this letter exceeds twice the period of leave requested.</p>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <p><span class="win">✓ Win:</span> 260px match. Hero ring stays prominent. Sub-scores compact but readable. <span class="cost">✗ Cost:</span> lose at-a-glance "three rings of equal weight" comparison.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Option C — Score banner ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">C</span>
+      <h2>Score banner above letter — sidebar slimmer</h2>
+      <span class="width match">260px</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame" style="flex-direction:column">
+        <div class="score-banner">
+          <div class="ring" style="width:54px;height:54px">
+            <svg width="54" height="54" viewBox="0 0 54 54">
+              <circle cx="27" cy="27" r="22" fill="none" stroke="#f3f4f6" stroke-width="4"/>
+              <circle cx="27" cy="27" r="22" fill="none" stroke="#d97706" stroke-width="4" stroke-dasharray="138.2" stroke-dashoffset="27.6" stroke-linecap="round"/>
+            </svg>
+            <span class="val" style="font-size:14px">80</span>
+          </div>
+          <div class="verdict-mini">
+            <span class="band">Adequate</span>
+            <span class="summary">1 compliance issue · 6 of 9 pass</span>
+          </div>
+          <div class="sep"></div>
+          <div class="three">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div class="ring" style="width:32px;height:32px">
+                <svg width="32" height="32" viewBox="0 0 32 32">
+                  <circle cx="16" cy="16" r="13" fill="none" stroke="#f3f4f6" stroke-width="3"/>
+                  <circle cx="16" cy="16" r="13" fill="none" stroke="#d97706" stroke-width="3" stroke-dasharray="81.6" stroke-dashoffset="32.7" stroke-linecap="round"/>
+                </svg>
+                <span class="val" style="font-size:10px">60</span>
+              </div>
+              <span class="lbl">Compl.</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div class="ring" style="width:32px;height:32px">
+                <svg width="32" height="32" viewBox="0 0 32 32">
+                  <circle cx="16" cy="16" r="13" fill="none" stroke="#f3f4f6" stroke-width="3"/>
+                  <circle cx="16" cy="16" r="13" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="81.6" stroke-dashoffset="9.8" stroke-linecap="round"/>
+                </svg>
+                <span class="val" style="font-size:10px">88</span>
+              </div>
+              <span class="lbl">Quality</span>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div class="ring" style="width:32px;height:32px">
+                <svg width="32" height="32" viewBox="0 0 32 32">
+                  <circle cx="16" cy="16" r="13" fill="none" stroke="#f3f4f6" stroke-width="3"/>
+                  <circle cx="16" cy="16" r="13" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="81.6" stroke-dashoffset="0" stroke-linecap="round"/>
+                </svg>
+                <span class="val" style="font-size:10px">100</span>
+              </div>
+              <span class="lbl">Risk</span>
+            </div>
+          </div>
+          <div style="margin-left:auto;font-size:11.5px;font-weight:700;background:#111827;color:#fff;padding:6px 12px;border-radius:6px">Finalise →</div>
+        </div>
+        <div style="display:flex;flex:1;min-height:0">
+          <div class="sidebar w260">
+            <div class="stepper">
+              <div class="s done"><span class="n">✓</span>Edit</div>
+              <span class="arr">·</span>
+              <div class="s active"><span class="n">2</span>Review</div>
+              <span class="arr">·</span>
+              <div class="s"><span class="n">3</span>Finalise</div>
+            </div>
+            <div class="subtabs">
+              <div class="subtab active">Health <span class="ct">1</span></div>
+              <div class="subtab">Improve</div>
+            </div>
+            <div class="content">
+              <div class="fix-card">
+                <div class="fix-card-head">
+                  <span class="zap">⚡</span> Fix this first
+                  <span class="by">By impact</span>
+                </div>
+                <div class="fix-row">
+                  <div class="top">
+                    <div class="sev red">⊗</div>
+                    <div class="info">
+                      <div class="title">Missing recipient + sender</div>
+                      <div class="detail">Letter cannot be sent without both parties identified</div>
+                    </div>
+                  </div>
+                  <div class="action">
+                    <span class="impact">+12</span>
+                    <span class="btn">Add details →</span>
+                  </div>
+                </div>
+                <div class="fix-row">
+                  <div class="top">
+                    <div class="sev amber">⚠</div>
+                    <div class="info">
+                      <div class="title">No signature attached</div>
+                      <div class="detail">Sign in Settings to attach automatically</div>
+                    </div>
+                  </div>
+                  <div class="action">
+                    <span class="impact">+4</span>
+                    <span class="btn">Add in Settings →</span>
+                  </div>
+                </div>
+                <div class="fix-row">
+                  <div class="top">
+                    <div class="sev amber">⚠</div>
+                    <div class="info">
+                      <div class="title">1 placeholder unresolved</div>
+                      <div class="detail">Still in body: TBD</div>
+                    </div>
+                  </div>
+                  <div class="action">
+                    <span class="btn">Open editor →</span>
+                  </div>
+                </div>
+              </div>
+              <div class="all-checks">
+                <h4>All Checks</h4>
+                <div class="row"><span class="ok">✓</span>Section completeness</div>
+                <div class="row"><span class="warn">○</span>Template quality</div>
+                <div class="row"><span class="ok">✓</span>Statutory compliance</div>
+                <div class="row"><span class="ok">✓</span>Evidence references</div>
+              </div>
+            </div>
+          </div>
+          <div class="letter">
+            <div class="letter-paper" style="font-size:10.5px">
+              <h4>Holiday Request</h4>
+              <p>15 May 2026</p>
+              <p>To: Senior HR Officer</p>
+              <p>I formally request annual leave from [TBD] to [TBD]…</p>
+              <p>The notice given by this letter exceeds twice the period of leave requested.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <p><span class="win">✓ Win:</span> score becomes the verdict banner — heroic. Sidebar much lighter. <span class="cost">✗ Cost:</span> letter loses ~80px vertical space; banner duplicates info already in Fix rows.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ Option D — Keep 340 ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">D</span>
+      <h2>Keep current 340px — accept inconsistency</h2>
+      <span class="width bigger">340px</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame">
+        <div class="sidebar w340">
+          <div class="stepper">
+            <div class="s done"><span class="n">✓</span>Edit</div>
+            <span class="arr">·</span>
+            <div class="s active"><span class="n">2</span>Review</div>
+            <span class="arr">·</span>
+            <div class="s"><span class="n">3</span>Finalise</div>
+          </div>
+          <div class="subtabs">
+            <div class="subtab active">Health <span class="ct">1</span></div>
+            <div class="subtab">Improve</div>
+          </div>
+          <div class="content">
+            <div class="score-row">
+              <div class="ring" style="width:72px;height:72px">
+                <svg width="72" height="72" viewBox="0 0 72 72">
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="#f3f4f6" stroke-width="6"/>
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="#d97706" stroke-width="6" stroke-dasharray="188.5" stroke-dashoffset="37.7" stroke-linecap="round"/>
+                </svg>
+                <span class="val" style="font-size:20px">80</span>
+              </div>
+              <div class="verdict">
+                <span class="band">Adequate</span>
+                <h3>1 compliance issue must be resolved before sending.</h3>
+                <p class="sub">6 of 9 checks pass · 2 warnings · 1 blocker</p>
+              </div>
+            </div>
+            <div class="sub-rings">
+              <div class="sr">
+                <div class="ring" style="width:44px;height:44px">
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#f3f4f6" stroke-width="4"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#d97706" stroke-width="4" stroke-dasharray="113.1" stroke-dashoffset="45.2" stroke-linecap="round"/>
+                  </svg>
+                  <span class="val" style="font-size:12px">60</span>
+                </div>
+                <span class="lbl">Compl.</span>
+              </div>
+              <div class="sr">
+                <div class="ring" style="width:44px;height:44px">
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#f3f4f6" stroke-width="4"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#059669" stroke-width="4" stroke-dasharray="113.1" stroke-dashoffset="13.6" stroke-linecap="round"/>
+                  </svg>
+                  <span class="val" style="font-size:12px">88</span>
+                </div>
+                <span class="lbl">Quality</span>
+              </div>
+              <div class="sr">
+                <div class="ring" style="width:44px;height:44px">
+                  <svg width="44" height="44" viewBox="0 0 44 44">
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#f3f4f6" stroke-width="4"/>
+                    <circle cx="22" cy="22" r="18" fill="none" stroke="#059669" stroke-width="4" stroke-dasharray="113.1" stroke-dashoffset="0" stroke-linecap="round"/>
+                  </svg>
+                  <span class="val" style="font-size:12px">100</span>
+                </div>
+                <span class="lbl">Risk</span>
+              </div>
+            </div>
+            <div class="fix-card">
+              <div class="fix-card-head">
+                <span class="zap">⚡</span> Fix this first
+                <span class="by">Sorted by impact</span>
+              </div>
+              <div class="fix-row">
+                <div class="top">
+                  <div class="sev red">⊗</div>
+                  <div class="info">
+                    <div class="title">Missing recipient + sender <span class="chip">Compliance</span></div>
+                    <div class="detail">Letter cannot be sent without both parties identified</div>
+                  </div>
+                </div>
+                <div class="action">
+                  <span class="impact">+12</span>
+                  <span class="btn">Add details →</span>
+                </div>
+              </div>
+              <div class="fix-row">
+                <div class="top">
+                  <div class="sev amber">⚠</div>
+                  <div class="info">
+                    <div class="title">No signature attached <span class="chip">Quality</span></div>
+                    <div class="detail">Sign in Settings to attach automatically to all letters</div>
+                  </div>
+                </div>
+                <div class="action">
+                  <span class="impact">+4</span>
+                  <span class="btn">Add in Settings →</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="cta">Finalise →</div>
+        </div>
+        <div class="letter">
+          <div class="letter-paper">
+            <h4>Holiday Request</h4>
+            <p>15 May 2026</p>
+            <p>To: Senior HR Officer</p>
+            <p>I formally request annual leave from [TBD] to [TBD]…</p>
+            <p>I am entitled to a minimum of 28 days' paid annual leave in the current leave year by virtue of regulations 13 and 13A of the Working Time Regulations 1998.</p>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <p><span class="win">✓ Win:</span> nothing changes; current shipped design. Health content breathes. <span class="cost">✗ Cost:</span> Edit (260) and Review (340) sidebars don't match — the inconsistency you're pushing on.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  💡 <strong>My read:</strong> <strong>Option B</strong> is the lightest-touch win — hero ring stays prominent, sub-scores demoted to text (which is arguably more readable than three small rings competing with the hero), and the sidebar drops to 260 to match Edit. Option C is interesting if you want the score to feel like a verdict banner. Avoid A — small rings look like specks. D is "do nothing".
+</div>
+
+</body>
+</html>

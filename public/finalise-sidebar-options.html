@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Finalise sidebar — content options v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@400;600&family=Source+Serif+4:wght@400&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --amber:#d97706; --amber-lt:#fffbeb; --amber-bd:#fde68a;
+  --green:#059669; --green-lt:#ecfdf5;
+  --red:#dc2626; --red-lt:#fef2f2;
+  --violet:#7c3aed; --violet-lt:#f5f3ff;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;padding:20px}
+button{font:inherit;cursor:pointer;border:0;background:none}
+
+.page-head{max-width:1400px;margin:0 auto 24px;text-align:center}
+.page-head h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.page-head p{font-size:13px;color:var(--body);max-width:780px;margin:0 auto;line-height:1.55}
+
+.section-title{max-width:1400px;margin:32px auto 12px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.12em}
+
+.options{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:24px}
+
+.opt{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.opt-head{padding:14px 18px;border-bottom:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:8px}
+.opt-head .badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;font-weight:700}
+.opt-head h2{font-size:14px;font-weight:700;letter-spacing:-.01em;margin:0;flex:1}
+.opt-head .tag{font-size:10px;background:#dcfce7;color:#15803d;border:1px solid #86efac;padding:2px 7px;border-radius:99px;font-weight:600}
+.opt-head .tag.new{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
+
+.opt-body{padding:16px;background:var(--wash)}
+.opt-frame{position:relative;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;height:640px;display:flex}
+
+.sidebar{width:300px;background:var(--wash);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+
+.stepper{height:34px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;padding:0 12px;gap:10px;font-size:11px;color:var(--muted);background:#fff;flex-shrink:0}
+.stepper .s{display:flex;align-items:center;gap:5px;padding:2px 6px;border-radius:5px}
+.stepper .s .n{width:14px;height:14px;border-radius:50%;background:var(--line);color:var(--muted);font-size:9px;font-weight:700;display:grid;place-items:center}
+.stepper .s.done .n{background:var(--green);color:#fff}
+.stepper .s.done{color:var(--ink)}
+.stepper .s.active{background:var(--wash)}
+.stepper .s.active .n{background:var(--ink);color:#fff}
+.stepper .s.active{color:var(--ink);font-weight:600}
+.stepper .arr{color:var(--subtle)}
+
+.content{padding:14px 12px;display:flex;flex-direction:column;gap:12px;flex:1;min-height:0}
+
+.section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:4px}
+.section-label .right{float:right;text-transform:none;letter-spacing:0;color:var(--subtle);font-weight:500}
+
+.cta-primary{margin-top:auto;background:var(--ink);color:#fff;text-align:center;font-size:13px;font-weight:700;padding:11px 12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:6px}
+.cta-primary.disabled{background:var(--line);color:var(--muted)}
+
+/* Mini thumbnail + summary */
+.combo-thumb{background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px;display:flex;align-items:flex-start;gap:9px}
+.combo-thumb .mini-paper{flex-shrink:0;width:58px;height:82px;background:#fff;border:1px solid var(--line);border-radius:3px;box-shadow:0 2px 4px -1px rgba(0,0,0,.06);padding:5px;font-size:3.5px;line-height:1.3;color:var(--muted);font-family:"Source Serif 4",Georgia,serif;overflow:hidden}
+.combo-thumb .mini-paper p{margin-bottom:1px}
+.combo-thumb .summary{flex:1;font-size:10px;color:var(--muted);line-height:1.45}
+.combo-thumb .summary .title{color:var(--ink);font-weight:600;font-size:11.5px;margin-bottom:2px}
+.combo-thumb .summary .meta-row{display:flex;gap:6px;align-items:center;margin-top:1px}
+.combo-thumb .summary .meta-row .k{font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--subtle);font-weight:600;min-width:50px}
+
+/* Verdict block */
+.verdict-block{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;align-items:center;gap:10px}
+.ring{position:relative;display:grid;place-items:center;flex-shrink:0}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute;font-size:11px;font-weight:700}
+.verdict-text{flex:1;min-width:0}
+.verdict-text .band{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;background:var(--amber-lt);color:#92400e;margin-bottom:3px}
+.verdict-text h3{font-size:11.5px;font-weight:600;color:var(--ink);line-height:1.3;margin:0}
+
+/* Full checklist with tick states */
+.checklist{background:#fff;border:1px solid var(--line);border-radius:8px;padding:0;overflow:hidden}
+.checklist .item{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;font-size:11.5px;color:var(--body);border-bottom:1px solid var(--line-2);line-height:1.35}
+.checklist .item:last-child{border-bottom:0}
+.checklist .item .icon-w{width:17px;height:17px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;margin-top:1px;font-size:10px;font-weight:800;line-height:1}
+.checklist .item .icon-w.ok{background:var(--green-lt);color:var(--green)}
+.checklist .item .icon-w.warn{background:var(--amber-lt);color:var(--amber)}
+.checklist .item .icon-w.fail{background:var(--red-lt);color:var(--red)}
+.checklist .item .icon-w.pending{background:var(--line-2);color:var(--subtle)}
+.checklist .item .text{flex:1;min-width:0}
+.checklist .item .text .ttl{color:var(--ink);font-weight:600}
+.checklist .item .text .ttl.muted{color:var(--muted);font-weight:500}
+.checklist .item .text .sub{color:var(--muted);font-size:10.5px;margin-top:1px}
+.checklist .item .right-cta{font-size:10px;font-weight:600;color:var(--ink);background:var(--line-2);padding:2px 6px;border-radius:4px;align-self:center;flex-shrink:0}
+.checklist .item.actionable{cursor:pointer}
+.checklist .item.actionable:hover{background:var(--wash)}
+
+/* Consultant cards (sidebar) */
+.consult-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:7px}
+.consult-row{display:flex;align-items:center;gap:8px;padding-bottom:7px;border-bottom:1px solid var(--line-2)}
+.consult-row:last-child{padding-bottom:0;border-bottom:0}
+.consult-row .av{width:30px;height:30px;border-radius:50%;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;flex-shrink:0}
+.consult-row .av.a{background:linear-gradient(135deg,#a78bfa,#7c3aed)}
+.consult-row .av.b{background:linear-gradient(135deg,#34d399,#059669)}
+.consult-row .av.c{background:linear-gradient(135deg,#fb7185,#e11d48)}
+.consult-row .info{flex:1;min-width:0}
+.consult-row .info .nm{font-size:11.5px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:4px}
+.consult-row .info .nm .top{font-size:8.5px;background:var(--amber);color:#fff;padding:0 4px;border-radius:3px;font-weight:700;letter-spacing:.04em}
+.consult-row .info .role{font-size:10px;color:var(--muted);margin-top:1px}
+.consult-row .info .rating{font-size:10px;color:var(--amber);margin-top:1px}
+.consult-row .price{text-align:right;flex-shrink:0}
+.consult-row .price .p{font-size:11px;font-weight:700;color:var(--ink)}
+.consult-row .price .sla{font-size:9.5px;color:var(--muted);margin-top:1px}
+.consult-row .book{margin-top:5px;font-size:10px;background:var(--ink);color:#fff;padding:4px 0;border-radius:5px;text-align:center;font-weight:600;width:100%;align-self:stretch}
+.consult-foot{padding:6px 10px;background:var(--wash);border-top:1px solid var(--line-2);font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.consult-foot .arrow{margin-left:auto;color:var(--ink);font-weight:600}
+
+/* canvas (body) */
+.canvas{flex:1;background:var(--wash);padding:18px 22px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.canvas h3{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.canvas .card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:11px;color:var(--body);line-height:1.5}
+.canvas .formats{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.canvas .fmt{background:#fff;border:1px solid var(--line);border-radius:7px;padding:11px 12px;font-size:11.5px;font-weight:600;color:var(--ink);display:flex;flex-direction:column;align-items:flex-start;gap:6px;cursor:pointer}
+.canvas .fmt:hover{border-color:var(--ink)}
+.canvas .fmt .ic{width:24px;height:24px;background:var(--line-2);border-radius:5px;display:grid;place-items:center;color:var(--muted);font-size:13px}
+.canvas .fmt .nm{display:flex;flex-direction:column}
+.canvas .fmt .desc{font-size:9.5px;color:var(--muted);font-weight:400}
+.canvas .fmt.primary{background:var(--ink);color:#fff}
+.canvas .fmt.primary .ic{background:rgba(255,255,255,.12);color:#fff}
+.canvas .fmt.primary .desc{color:rgba(255,255,255,.7)}
+.canvas .body-checklist{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.canvas .body-checklist .h{padding:10px 14px;border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--ink)}
+.canvas .body-checklist .h .ct{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500}
+.canvas .send-bar{margin-top:auto;padding:14px;background:#fff;border:1px solid var(--line);border-radius:10px;display:flex;align-items:center;gap:10px}
+.canvas .send-bar .left{flex:1}
+.canvas .send-bar .left .lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.canvas .send-bar .left .meta{font-size:11.5px;color:var(--ink);margin-top:2px}
+.canvas .send-bar .btn{background:var(--ink);color:#fff;font-size:12px;font-weight:700;padding:9px 16px;border-radius:6px;display:flex;align-items:center;gap:5px;cursor:pointer}
+.canvas .send-bar .btn.disabled{background:var(--line);color:var(--muted)}
+
+.commentary{margin-top:14px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:11.5px;color:var(--body);line-height:1.5}
+.commentary strong{color:var(--ink)}
+.commentary .win{color:var(--green);font-weight:700}
+.commentary .cost{color:var(--red);font-weight:700}
+
+.legend{max-width:1400px;margin:24px auto 0;padding:14px 18px;background:linear-gradient(135deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:10px;font-size:12px;color:#1e40af;text-align:center;line-height:1.6}
+.legend strong{color:#1e3a8a}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Finalise sidebar — two refined options</h1>
+  <p>Both keep the sidebar at <strong>300px</strong> (same as Edit/Review). <strong>Option E*</strong> is your "Combo + full checklist with ticks" pick. <strong>Option G</strong> is your new idea: sidebar = top-3 consultant upsell, body = checklist above export.</p>
+</div>
+
+<div class="section-title">Option E* — Combo with full ticked checklist</div>
+<div class="options">
+
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">E*</span>
+      <h2>Thumbnail + verdict + full checklist + commit</h2>
+      <span class="tag">Your pick</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame">
+        <div class="sidebar">
+          <div class="stepper">
+            <div class="s done"><span class="n">✓</span>Edit</div>
+            <span class="arr">·</span>
+            <div class="s done"><span class="n">✓</span>Review</div>
+            <span class="arr">·</span>
+            <div class="s active"><span class="n">3</span>Finalise</div>
+          </div>
+          <div class="content">
+            <div class="section-label">What you're sending</div>
+            <div class="combo-thumb">
+              <div class="mini-paper">
+                <p>15 May 2026</p>
+                <p>To: HR</p>
+                <p>Re: Annual Leave</p>
+                <p>Dear [TBD],</p>
+                <p>I formally request annual leave from [TBD] to [TBD]…</p>
+                <p>I am entitled to 28 days...</p>
+                <p>The notice exceeds twice...</p>
+                <p>Yours sincerely,</p>
+              </div>
+              <div class="summary">
+                <div class="title">Annual Leave Request</div>
+                <div class="meta-row"><span class="k">Pages</span>2 · A4</div>
+                <div class="meta-row"><span class="k">To</span>Senior HR Officer</div>
+                <div class="meta-row"><span class="k">Evidence</span>1 file</div>
+              </div>
+            </div>
+
+            <div class="section-label">Ready to ship <span class="right">80 · Adequate</span></div>
+            <div class="checklist">
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text">
+                  <div class="ttl">All sections written</div>
+                  <div class="sub">6 of 6 marked ready</div>
+                </div>
+              </div>
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text">
+                  <div class="ttl">Evidence linked</div>
+                  <div class="sub">1 file · referenced as Fig 1</div>
+                </div>
+              </div>
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text">
+                  <div class="ttl">Letterhead attached</div>
+                </div>
+              </div>
+              <div class="item actionable">
+                <div class="icon-w fail">✗</div>
+                <div class="text">
+                  <div class="ttl">Recipient + sender details</div>
+                  <div class="sub">Missing — letter cannot be sent</div>
+                </div>
+                <div class="right-cta">Fix →</div>
+              </div>
+              <div class="item">
+                <div class="icon-w pending">○</div>
+                <div class="text">
+                  <div class="ttl muted">Counsel review</div>
+                  <div class="sub">Optional · upsell on the right</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="cta-primary disabled">⚑ Mark as sent</div>
+        </div>
+        <div class="canvas">
+          <h3>Export</h3>
+          <div class="formats">
+            <div class="fmt primary">
+              <div class="ic" style="background:rgba(255,255,255,.15)">📄</div>
+              <div class="nm">PDF<span class="desc">Print-ready</span></div>
+            </div>
+            <div class="fmt">
+              <div class="ic">📝</div>
+              <div class="nm">DOCX<span class="desc">Editable</span></div>
+            </div>
+            <div class="fmt">
+              <div class="ic">📃</div>
+              <div class="nm">TXT<span class="desc">Plain</span></div>
+            </div>
+            <div class="fmt">
+              <div class="ic">📦</div>
+              <div class="nm">ZIP<span class="desc">Evidence pack</span></div>
+            </div>
+          </div>
+          <h3 style="margin-top:6px">One last check — counsel review</h3>
+          <div class="card">
+            Optional second opinion from a UK-qualified solicitor or HR specialist.
+            Most reviews back within 24h — cheaper than a tribunal.
+            <div style="margin-top:8px;display:flex;gap:6px"><span style="background:var(--violet-lt);color:var(--violet);padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600">AI MATCHED</span><span style="color:var(--muted);font-size:10px">3 of 14 verified</span></div>
+          </div>
+          <div class="card" style="border-color:var(--amber-bd);background:var(--amber-lt);color:#92400e;font-weight:600">⚠ 1 fix in the sidebar will unblock Mark-as-sent.</div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓</span> Full readiness picture in one sidebar — thumbnail, verdict, every check with tick/cross, plus one actionable "Fix" affordance. <span class="cost">✗</span> Tall sidebar — checklist eats vertical real estate, might scroll on shorter laptops.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-title">Option G — Sidebar = consultant upsell · Body = checklist above export</div>
+<div class="options">
+
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">G</span>
+      <h2>Top-3 consultants in sidebar · final checklist above export</h2>
+      <span class="tag new">New</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame">
+        <div class="sidebar">
+          <div class="stepper">
+            <div class="s done"><span class="n">✓</span>Edit</div>
+            <span class="arr">·</span>
+            <div class="s done"><span class="n">✓</span>Review</div>
+            <span class="arr">·</span>
+            <div class="s active"><span class="n">3</span>Finalise</div>
+          </div>
+          <div class="content">
+            <div class="section-label">One last check <span class="right">AI matched</span></div>
+            <div style="font-size:11px;color:var(--muted);padding:0 2px;line-height:1.5">
+              Optional — get a UK-qualified second opinion before this leaves the building.
+            </div>
+            <div class="consult-card">
+              <div class="consult-row">
+                <div class="av a">SM</div>
+                <div class="info">
+                  <div class="nm">Sarah Mitchell <span class="top">TOP</span></div>
+                  <div class="role">Solicitor · 12 yrs · ex-DLA Piper</div>
+                  <div class="rating">★ 4.9 (87)</div>
+                </div>
+                <div class="price">
+                  <div class="p">£120</div>
+                  <div class="sla">18h</div>
+                </div>
+              </div>
+              <div class="consult-row">
+                <div class="av b">JP</div>
+                <div class="info">
+                  <div class="nm">James Park</div>
+                  <div class="role">HR Director · 20 yrs · BBC → BAE</div>
+                  <div class="rating">★ 4.8 (54)</div>
+                </div>
+                <div class="price">
+                  <div class="p">£95</div>
+                  <div class="sla">26h</div>
+                </div>
+              </div>
+              <div class="consult-row">
+                <div class="av c">RS</div>
+                <div class="info">
+                  <div class="nm">Rachel Stein</div>
+                  <div class="role">Former ACAS · 15 yrs</div>
+                  <div class="rating">★ 4.9 (63)</div>
+                </div>
+                <div class="price">
+                  <div class="p">£130</div>
+                  <div class="sla">12h</div>
+                </div>
+              </div>
+              <button class="book">Book Sarah · £120 →</button>
+            </div>
+            <div class="consult-foot">
+              See all 14 consultants <span class="arrow">→</span>
+            </div>
+          </div>
+          <div class="cta-primary disabled">⚑ Mark as sent</div>
+        </div>
+        <div class="canvas">
+          <div class="body-checklist">
+            <div class="h">
+              <span style="color:var(--amber)">⚑</span>
+              Ready to ship
+              <span class="ct">4 of 5 · 1 fix needed</span>
+            </div>
+            <div class="checklist" style="border:0;border-radius:0">
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text"><div class="ttl">All sections written</div></div>
+              </div>
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text"><div class="ttl">Evidence linked (1 file)</div></div>
+              </div>
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text"><div class="ttl">Letterhead attached</div></div>
+              </div>
+              <div class="item actionable">
+                <div class="icon-w fail">✗</div>
+                <div class="text">
+                  <div class="ttl">Recipient + sender details missing</div>
+                  <div class="sub">Letter cannot be sent without both parties identified</div>
+                </div>
+                <div class="right-cta">Fix in Review →</div>
+              </div>
+              <div class="item">
+                <div class="icon-w pending">○</div>
+                <div class="text"><div class="ttl muted">Counsel review</div><div class="sub">Optional — see sidebar</div></div>
+              </div>
+            </div>
+          </div>
+          <h3>Export</h3>
+          <div class="formats">
+            <div class="fmt primary">
+              <div class="ic">📄</div>
+              <div class="nm">PDF<span class="desc">Print-ready</span></div>
+            </div>
+            <div class="fmt">
+              <div class="ic">📝</div>
+              <div class="nm">DOCX<span class="desc">Editable</span></div>
+            </div>
+            <div class="fmt">
+              <div class="ic">📃</div>
+              <div class="nm">TXT<span class="desc">Plain</span></div>
+            </div>
+            <div class="fmt">
+              <div class="ic">📦</div>
+              <div class="nm">ZIP<span class="desc">Evidence pack</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓</span> Sidebar pulls its weight — concrete upsell with named consultants, prices, SLAs. Body stays focused on the two ship actions: confirm checklist + pick export. <span class="cost">✗</span> Upsell is heavy-handed if user already declined counsel review on a previous letter; needs a dismiss/snooze.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section-title">Option H — Flipped: ship in sidebar · consultants featured in body</div>
+<div class="options">
+
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">H</span>
+      <h2>Thumbnail + checklist + export in sidebar · 3 consultants featured in canvas</h2>
+      <span class="tag new">Updated</span>
+    </div>
+    <div class="opt-body">
+      <div class="opt-frame" style="height:780px">
+        <div class="sidebar">
+          <div class="stepper">
+            <div class="s done"><span class="n">✓</span>Edit</div>
+            <span class="arr">·</span>
+            <div class="s done"><span class="n">✓</span>Review</div>
+            <span class="arr">·</span>
+            <div class="s active"><span class="n">3</span>Finalise</div>
+          </div>
+          <div class="content">
+            <div class="section-label">What you're sending</div>
+            <div class="combo-thumb">
+              <div class="mini-paper">
+                <p>15 May 2026</p>
+                <p>To: HR</p>
+                <p>Re: Annual Leave</p>
+                <p>Dear [TBD],</p>
+                <p>I formally request annual leave from [TBD] to [TBD]…</p>
+                <p>I am entitled to 28 days...</p>
+                <p>The notice exceeds twice...</p>
+                <p>Yours sincerely,</p>
+              </div>
+              <div class="summary">
+                <div class="title">Annual Leave Request</div>
+                <div class="meta-row"><span class="k">Pages</span>2 · A4</div>
+                <div class="meta-row"><span class="k">To</span>Senior HR Officer</div>
+                <div class="meta-row"><span class="k">Evidence</span>1 file</div>
+              </div>
+            </div>
+
+            <div class="section-label">Ready to ship <span class="right">80 · Adequate</span></div>
+            <div class="checklist">
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text"><div class="ttl">All sections written</div></div>
+              </div>
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text"><div class="ttl">Evidence linked</div><div class="sub">1 file · Fig 1</div></div>
+              </div>
+              <div class="item">
+                <div class="icon-w ok">✓</div>
+                <div class="text"><div class="ttl">Letterhead attached</div></div>
+              </div>
+              <div class="item actionable">
+                <div class="icon-w fail">✗</div>
+                <div class="text">
+                  <div class="ttl">Recipient details</div>
+                  <div class="sub">Missing — required</div>
+                </div>
+                <div class="right-cta">Fix →</div>
+              </div>
+              <div class="item">
+                <div class="icon-w pending">○</div>
+                <div class="text"><div class="ttl muted">Counsel review</div><div class="sub">Optional</div></div>
+              </div>
+            </div>
+
+            <div class="section-label">Export</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div style="background:var(--ink);color:#fff;padding:8px 9px;border-radius:6px;font-size:11px;font-weight:600;display:flex;flex-direction:column;gap:1px;cursor:pointer">
+                <span>PDF</span>
+                <span style="font-size:9px;color:rgba(255,255,255,.7);font-weight:400">Print-ready</span>
+              </div>
+              <div style="background:#fff;border:1px solid var(--line);padding:8px 9px;border-radius:6px;font-size:11px;font-weight:600;color:var(--ink);display:flex;flex-direction:column;gap:1px;cursor:pointer">
+                <span>DOCX</span>
+                <span style="font-size:9px;color:var(--muted);font-weight:400">Editable</span>
+              </div>
+              <div style="background:#fff;border:1px solid var(--line);padding:8px 9px;border-radius:6px;font-size:11px;font-weight:600;color:var(--ink);display:flex;flex-direction:column;gap:1px;cursor:pointer">
+                <span>TXT</span>
+                <span style="font-size:9px;color:var(--muted);font-weight:400">Plain</span>
+              </div>
+              <div style="background:#fff;border:1px solid var(--line);padding:8px 9px;border-radius:6px;font-size:11px;font-weight:600;color:var(--ink);display:flex;flex-direction:column;gap:1px;cursor:pointer">
+                <span>ZIP</span>
+                <span style="font-size:9px;color:var(--muted);font-weight:400">Pack</span>
+              </div>
+            </div>
+          </div>
+          <div class="cta-primary disabled">⚑ Mark as sent</div>
+        </div>
+
+        <div class="canvas" style="padding:22px 26px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:var(--violet-lt);color:var(--violet);font-size:17px;flex-shrink:0">✦</span>
+            <div>
+              <h3 style="font-size:16px;font-weight:700;margin:0;letter-spacing:-.01em">One last check — counsel review</h3>
+              <p style="font-size:12px;color:var(--muted);margin-top:2px">Optional second opinion before this leaves the building · most reviews back within 24h</p>
+            </div>
+            <span style="margin-left:auto;font-size:10px;color:var(--violet);background:var(--violet-lt);padding:4px 8px;border-radius:99px;font-weight:600">AI MATCHED · 3 of 14 verified</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+
+            <!-- Sarah Mitchell (Top match) -->
+            <div style="background:#fff;border:2px solid var(--ink);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;position:relative">
+              <span style="position:absolute;top:-9px;left:14px;background:var(--ink);color:#fff;padding:2px 8px;border-radius:4px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">★ Top match</span>
+              <img src="https://i.pravatar.cc/160?img=47" alt="Sarah Mitchell" style="width:64px;height:64px;border-radius:50%;object-fit:cover;align-self:center;margin-top:4px;border:3px solid var(--white);box-shadow:0 0 0 1px var(--line-2)" />
+              <div style="text-align:center">
+                <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Sarah Mitchell</div>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:1px">Solicitor · ex-DLA Piper</div>
+                <div style="font-size:10.5px;color:var(--amber);margin-top:2px;font-weight:600">★ 4.9 <span style="color:var(--muted);font-weight:400">(87)</span></div>
+              </div>
+              <div style="font-size:10.5px;color:var(--body);padding:8px;background:var(--wash);border-radius:6px;line-height:1.4;border-left:2px solid var(--violet)">
+                "Specialises in <strong>Working Time Regs</strong> + statutory leave disputes. Reviewed a similar holiday request last week."
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid var(--line-2)">
+                <div>
+                  <div style="font-size:14px;font-weight:700;color:var(--ink)">£120</div>
+                  <div style="font-size:10px;color:var(--muted)">18h SLA</div>
+                </div>
+                <div style="font-size:10px;color:var(--green);font-weight:600">● Online now</div>
+              </div>
+              <button style="background:var(--ink);color:#fff;padding:9px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Book Sarah →</button>
+            </div>
+
+            <!-- James Park -->
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px">
+              <img src="https://i.pravatar.cc/160?img=33" alt="James Park" style="width:64px;height:64px;border-radius:50%;object-fit:cover;align-self:center;margin-top:14px;border:3px solid var(--white);box-shadow:0 0 0 1px var(--line-2)" />
+              <div style="text-align:center">
+                <div style="font-size:13.5px;font-weight:700;color:var(--ink)">James Park</div>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:1px">HR Director · BBC → BAE</div>
+                <div style="font-size:10.5px;color:var(--amber);margin-top:2px;font-weight:600">★ 4.8 <span style="color:var(--muted);font-weight:400">(54)</span></div>
+              </div>
+              <div style="font-size:10.5px;color:var(--body);padding:8px;background:var(--wash);border-radius:6px;line-height:1.4">
+                "20 years in <strong>internal HR</strong>. Best for fast turnaround on tone + escalation risk."
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid var(--line-2)">
+                <div>
+                  <div style="font-size:14px;font-weight:700;color:var(--ink)">£95</div>
+                  <div style="font-size:10px;color:var(--muted)">26h SLA</div>
+                </div>
+                <div style="font-size:10px;color:var(--muted);font-weight:600">● Last seen 2h ago</div>
+              </div>
+              <button style="background:#fff;color:var(--ink);border:1px solid var(--line);padding:9px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Book James →</button>
+            </div>
+
+            <!-- Rachel Stein -->
+            <div style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px">
+              <img src="https://i.pravatar.cc/160?img=44" alt="Rachel Stein" style="width:64px;height:64px;border-radius:50%;object-fit:cover;align-self:center;margin-top:14px;border:3px solid var(--white);box-shadow:0 0 0 1px var(--line-2)" />
+              <div style="text-align:center">
+                <div style="font-size:13.5px;font-weight:700;color:var(--ink)">Rachel Stein</div>
+                <div style="font-size:10.5px;color:var(--muted);margin-top:1px">Former ACAS · 15 yrs</div>
+                <div style="font-size:10.5px;color:var(--amber);margin-top:2px;font-weight:600">★ 4.9 <span style="color:var(--muted);font-weight:400">(63)</span></div>
+              </div>
+              <div style="font-size:10.5px;color:var(--body);padding:8px;background:var(--wash);border-radius:6px;line-height:1.4">
+                "ACAS-trained mediator. Best for letters where the relationship still matters post-send."
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid var(--line-2)">
+                <div>
+                  <div style="font-size:14px;font-weight:700;color:var(--ink)">£130</div>
+                  <div style="font-size:10px;color:var(--muted)">12h SLA</div>
+                </div>
+                <div style="font-size:10px;color:var(--green);font-weight:600">● Online now</div>
+              </div>
+              <button style="background:#fff;color:var(--ink);border:1px solid var(--line);padding:9px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Book Rachel →</button>
+            </div>
+
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--wash);border:1px solid var(--line);border-radius:8px">
+            <span style="font-size:11.5px;color:var(--muted)">All UK-qualified · £1M PI insurance · ICO registered · 4.86 avg rating</span>
+            <span style="margin-left:auto;font-size:11.5px;font-weight:600;color:var(--ink);cursor:pointer">See all 14 →</span>
+          </div>
+
+          <div style="padding:12px 14px;background:var(--wash);border:1px dashed var(--line);border-radius:8px;font-size:11.5px;color:var(--muted);text-align:center;margin-top:auto">
+            Or skip — <a href="#" style="color:var(--ink);font-weight:600;text-decoration:underline">mark as sent</a> without a second opinion
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓</span> Sidebar tells the full ship story — what you're sending → ready check → how to send. Canvas becomes a real marketplace: 3 equally-featured photos, specialty quotes, online-status, full social proof. <span class="cost">✗</span> Sidebar is dense (thumbnail + 5-item checklist + 2×2 export grid + sticky CTA = ~660px tall); on shorter laptops the export tiles will require scrolling within the sidebar.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  💡 <strong>E*</strong> = user-protective (full readiness picture). <strong>G</strong> = consultants in sidebar (light commercial). <strong>H (this one)</strong> = consultants in the canvas (heavy commercial — they're the visual centrepiece). Sidebar all three keep at 300px. H reads as "the letter is ready; the upsell IS the page" — strongest monetization play.
+</div>
+
+</body>
+</html>

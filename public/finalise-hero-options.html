@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Finalise hero — options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827; --body:#374151; --muted:#6b7280; --subtle:#9ca3af;
+  --line:#e5e7eb; --line-2:#f3f4f6; --wash:#f9fafb; --white:#fff;
+  --amber:#d97706; --amber-lt:#fffbeb; --amber-bd:#fde68a;
+  --green:#059669; --green-lt:#ecfdf5;
+  --red:#dc2626; --red-lt:#fef2f2;
+  --violet:#7c3aed; --violet-lt:#f5f3ff;
+  --blue:#2563eb; --blue-lt:#eff6ff;
+}
+html{font-size:15px}
+body{font-family:"Inter",ui-sans-serif,system-ui,sans-serif;background:var(--wash);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.5;padding:24px}
+button{font:inherit;cursor:pointer;border:0;background:none}
+
+.page-head{max-width:1100px;margin:0 auto 28px;text-align:center}
+.page-head h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px}
+.page-head p{font-size:13px;color:var(--body);max-width:780px;margin:0 auto;line-height:1.55}
+
+.options{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr;gap:24px}
+
+.opt{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.opt-head{padding:12px 16px;border-bottom:1px solid var(--line);background:var(--wash);display:flex;align-items:center;gap:8px}
+.opt-head .badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;font-weight:700}
+.opt-head h2{font-size:14px;font-weight:700;letter-spacing:-.01em;margin:0;flex:1}
+.opt-head .tag{font-size:10px;background:#dcfce7;color:#15803d;border:1px solid #86efac;padding:2px 7px;border-radius:99px;font-weight:600}
+.opt-head .toggle{font-size:10px;color:var(--muted);background:#fff;border:1px solid var(--line);padding:2px 7px;border-radius:99px;font-weight:500}
+
+.canvas-pad{padding:18px;background:var(--wash)}
+.canvas-frame{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;padding:22px 26px;display:flex;flex-direction:column;gap:18px}
+
+/* HERO BASE STYLES */
+.hero{display:flex;align-items:center;gap:14px;padding:18px 20px;border-radius:12px;border:1px solid var(--line)}
+.hero .icon{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;font-size:20px}
+.hero .text{flex:1;min-width:0}
+.hero .title{font-size:18px;font-weight:700;letter-spacing:-.015em;color:var(--ink);line-height:1.25}
+.hero .sub{font-size:12.5px;color:var(--body);margin-top:3px;line-height:1.5}
+
+/* Option A — Status-aware */
+.hero-a-ready{background:linear-gradient(135deg,var(--green-lt),#fff);border-color:#86efac}
+.hero-a-ready .icon{background:#fff;color:var(--green);border:1px solid #86efac}
+.hero-a-blocked{background:linear-gradient(135deg,var(--amber-lt),#fff);border-color:var(--amber-bd)}
+.hero-a-blocked .icon{background:#fff;color:var(--amber);border:1px solid var(--amber-bd)}
+.hero-a-blocked .progress{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted)}
+.hero-a-blocked .progress .bar{flex:1;max-width:140px;height:5px;background:var(--line-2);border-radius:99px;overflow:hidden}
+.hero-a-blocked .progress .fill{height:100%;width:80%;background:var(--amber);border-radius:99px}
+
+/* Option B — Confidence */
+.hero-b{background:linear-gradient(135deg,var(--blue-lt),#fff);border-color:#bfdbfe}
+.hero-b .icon{background:#fff;color:var(--blue);border:1px solid #bfdbfe}
+
+/* Option C — Upsell */
+.hero-c{background:linear-gradient(135deg,var(--violet-lt),#fff);border-color:#ddd6fe}
+.hero-c .icon{background:#fff;color:var(--violet);border:1px solid #ddd6fe}
+.hero-c .stat-strip{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:11px;color:var(--body)}
+.hero-c .stat{padding:2px 8px;background:var(--violet-lt);color:var(--violet);border-radius:99px;font-weight:600;font-size:10.5px}
+
+/* Option D — Trust + identity */
+.hero-d{background:#fff;border-color:var(--line);padding:20px 22px;flex-direction:column;align-items:flex-start;gap:8px}
+.hero-d .top{display:flex;align-items:flex-start;gap:10px;width:100%}
+.hero-d .top .icon{width:32px;height:32px;font-size:14px;border-radius:8px;background:var(--line-2);color:var(--ink);border:0}
+.hero-d .top .title{font-family:"Playfair Display",Georgia,serif;font-size:22px;font-weight:600;letter-spacing:-.005em;line-height:1.2}
+.hero-d .top .sub{font-size:12px;color:var(--muted)}
+.hero-d .meta-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;padding-top:10px;border-top:1px solid var(--line-2);width:100%}
+.hero-d .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--wash);border:1px solid var(--line);padding:3px 9px;border-radius:99px;color:var(--body)}
+.hero-d .chip strong{color:var(--ink);font-weight:600}
+
+/* Marketplace preview (small) */
+.market{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.consult{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center}
+.consult.top{border-width:2px;border-color:var(--ink);position:relative}
+.consult.top::before{content:"★ TOP MATCH";position:absolute;top:-8px;left:8px;background:var(--ink);color:#fff;padding:1px 6px;border-radius:3px;font-size:8.5px;font-weight:700;letter-spacing:.04em}
+.consult img{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--white);box-shadow:0 0 0 1px var(--line-2)}
+.consult .nm{font-size:11.5px;font-weight:700}
+.consult .role{font-size:9.5px;color:var(--muted)}
+.consult .price{font-size:11px;font-weight:700;margin-top:2px}
+.consult .price small{color:var(--muted);font-weight:500;font-size:9.5px}
+.consult .btn{margin-top:4px;font-size:10.5px;font-weight:600;padding:5px 0;border-radius:5px;width:100%}
+.consult .btn.fill{background:var(--ink);color:#fff}
+.consult .btn.out{background:#fff;border:1px solid var(--line);color:var(--ink)}
+
+.commentary{margin-top:12px;padding:11px 14px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:11.5px;color:var(--body);line-height:1.5}
+.commentary strong{color:var(--ink)}
+.commentary .win{color:var(--green);font-weight:700}
+.commentary .cost{color:var(--red);font-weight:700}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Finalise canvas — hero options</h1>
+  <p>The canvas currently dives straight into "One last check". A hero section would set the tone above the marketplace. Four directions — each shown above a tiny marketplace stub for context.</p>
+</div>
+
+<div class="options">
+
+  <!-- ════════ A — Status-aware (READY) ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">A</span>
+      <h2>Status-aware — adapts to readiness</h2>
+      <span class="tag">Recommended</span>
+      <span class="toggle">Ready state</span>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-a-ready">
+          <div class="icon">✓</div>
+          <div class="text">
+            <div class="title">Ready to send.</div>
+            <div class="sub">Your letter has cleared every check. Pick a format on the left and ship it — or get a second opinion below.</div>
+          </div>
+        </div>
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ A — Status-aware (BLOCKED) ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">A</span>
+      <h2>Same as above — when there's a blocker</h2>
+      <span class="toggle">Blocked state</span>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-a-blocked">
+          <div class="icon">⚠</div>
+          <div class="text">
+            <div class="title">Almost ready — 1 fix to clear.</div>
+            <div class="sub">4 of 5 checks pass. Add recipient details on Review and you're cleared to send.</div>
+            <div class="progress">
+              <span>4 of 5</span>
+              <div class="bar"><div class="fill"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓ Win:</span> the hero text changes with the state. Green/celebratory when ready · amber/instructive when blocked. The 4/5 progress bar mirrors the sidebar checklist count. <span class="cost">✗ Cost:</span> two visual states to maintain in code.
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ B — Confidence framing ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">B</span>
+      <h2>Confidence framing — no upsell pressure</h2>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-b">
+          <div class="icon">🛡</div>
+          <div class="text">
+            <div class="title">Send with confidence.</div>
+            <div class="sub">This letter was drafted with AI guardrails, validated against UK employment law, and is archived to Activity with an attestation hash on send.</div>
+          </div>
+        </div>
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓ Win:</span> reassures anxious users at the ship gate (HR letters carry weight). Brand-voice opportunity. <span class="cost">✗ Cost:</span> static — same text whether the letter is ready or blocked.
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ C — Upsell framing ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">C</span>
+      <h2>Upsell framing — lean into the marketplace</h2>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-c">
+          <div class="icon">✦</div>
+          <div class="text">
+            <div class="title">Before this leaves the building…</div>
+            <div class="sub">A quick second opinion from a UK-qualified specialist takes the edge off. Pick someone below or skip and ship.</div>
+            <div class="stat-strip">
+              <span class="stat">67% changed</span>
+              <span>of users who booked counsel review said it changed how they negotiated the response.</span>
+            </div>
+          </div>
+        </div>
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓ Win:</span> strongest commercial pull — primes the user for booking before they even see the cards. <span class="cost">✗ Cost:</span> reads as salesy; 67% stat needs to be real. Could feel pushy on letters where the user already declined consultation.
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ D+C v2 — social proof, no chip row ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge" style="background:linear-gradient(135deg,#059669,#047857)">D+C v2</span>
+      <h2>Document hero + social-proof upsell (no chip row)</h2>
+      <span class="tag" style="background:#dcfce7;color:#15803d;border-color:#86efac">Latest</span>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-d" style="gap:14px;padding:22px 24px">
+          <div class="top">
+            <div class="icon" style="background:transparent;border:0;font-size:38px;width:auto;height:auto">📄</div>
+            <div style="flex:1">
+              <div class="title" style="font-size:24px">Holiday Request / Refusal Challenge</div>
+              <div class="sub" style="font-size:13px">UK · drafted by Jane Doe · ready for HR Officer</div>
+            </div>
+          </div>
+
+          <!-- social-proof upsell block — replaces the chip row -->
+          <div style="margin-top:6px;padding:14px 16px;background:linear-gradient(135deg,var(--violet-lt),#fff);border:1px solid #ddd6fe;border-radius:12px;display:flex;align-items:center;gap:14px;width:100%">
+            <!-- avatar stack of recent bookers -->
+            <div style="display:flex;flex-shrink:0">
+              <img src="https://i.pravatar.cc/64?img=12" alt="" style="width:34px;height:34px;border-radius:50%;border:2px solid #fff;object-fit:cover">
+              <img src="https://i.pravatar.cc/64?img=22" alt="" style="width:34px;height:34px;border-radius:50%;border:2px solid #fff;object-fit:cover;margin-left:-10px">
+              <img src="https://i.pravatar.cc/64?img=5" alt="" style="width:34px;height:34px;border-radius:50%;border:2px solid #fff;object-fit:cover;margin-left:-10px">
+              <img src="https://i.pravatar.cc/64?img=18" alt="" style="width:34px;height:34px;border-radius:50%;border:2px solid #fff;object-fit:cover;margin-left:-10px">
+            </div>
+            <div style="flex:1;font-size:12.5px;color:var(--body);line-height:1.5">
+              <strong style="color:var(--ink)">412 people had a specialist review a Holiday Request</strong> in the last 90 days.
+              <span style="color:var(--muted)">Most agreed the wording got tighter and the response came back faster.</span>
+            </div>
+            <button style="flex-shrink:0;background:var(--ink);color:#fff;padding:9px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">See specialists ↓</button>
+          </div>
+
+          <!-- testimonial quote — adds human voice -->
+          <div style="font-size:12.5px;color:var(--body);font-style:italic;padding:6px 4px 0;line-height:1.55;border-top:1px solid var(--line-2);width:100%;padding-top:12px">
+            "Sarah caught a regulation 15(3) point I'd missed entirely. The response came back two days later, settled."
+            <span style="display:block;margin-top:2px;font-style:normal;font-size:11px;color:var(--muted)">— Mark T. · Resolved March 2026</span>
+          </div>
+        </div>
+
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓ Win:</span> chip row gone (sidebar already does that job). Avatar stack + concrete number ("412 people") + named testimonial does the work that the +67% stat tried to do, but without the made-up percentage. <strong>Real social proof</strong>: "people like you bought this." <span class="cost">✗ Cost:</span> the 412 number needs to be real (or sampled from real data); the testimonial needs an actual customer name + permission. Don't ship lorem-ipsum proof.
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ D+C combo — Trust styling + commercial pull ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge" style="background:linear-gradient(135deg,var(--violet),#5b21b6)">D+C</span>
+      <h2>D styling + C upsell framing — letter-as-document with commercial pull</h2>
+      <span class="tag" style="background:#ede9fe;color:#5b21b6;border-color:#ddd6fe">New combo</span>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-d">
+          <div class="top">
+            <div class="icon">📄</div>
+            <div style="flex:1">
+              <div class="title">Holiday Request / Refusal Challenge</div>
+              <div class="sub">UK · drafted by Jane Doe · ready for HR Officer</div>
+            </div>
+            <span style="font-size:10px;color:var(--violet);background:var(--violet-lt);padding:4px 9px;border-radius:99px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;flex-shrink:0">✦ Specialist match</span>
+          </div>
+          <div class="meta-row">
+            <span class="chip">📄 <strong>2 pages</strong> · A4</span>
+            <span class="chip">📎 <strong>1 evidence file</strong></span>
+            <span class="chip">✓ Letterhead</span>
+            <span class="chip">✓ AI-drafted · validated</span>
+            <span class="chip" style="background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)">⚠ 1 fix</span>
+          </div>
+          <!-- the C commercial layer — a single sentence + stat strip, embedded at the bottom of the hero -->
+          <div style="margin-top:14px;padding:12px 14px;background:var(--violet-lt);border:1px solid #ddd6fe;border-radius:10px;display:flex;align-items:center;gap:12px;width:100%">
+            <div style="display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #ddd6fe;border-radius:8px;padding:6px 10px;min-width:74px">
+              <div style="font-size:18px;font-weight:800;color:var(--violet);line-height:1">+67%</div>
+              <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;margin-top:1px">Stronger response</div>
+            </div>
+            <div style="flex:1;font-size:12px;color:var(--body);line-height:1.5">
+              <strong style="color:var(--ink)">Letters reviewed by a UK specialist</strong> get a measurably stronger response — better wording, anchored statutory references, less back-and-forth. <span style="color:var(--violet);font-weight:600;cursor:pointer">See how →</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓ Win:</span> the document chrome (serif title + chip row) frames the letter as something serious, then the violet stat block embeds the upsell inside the hero rather than as a separate banner. One unit. <span class="cost">✗ Cost:</span> the violet stat strip needs a real number — "+67% stronger response" must come from real data or be reworded ("Letters reviewed by a specialist often land harder").
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ D — Trust + identity ════════ -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="badge">D</span>
+      <h2>Trust + identity — letter-as-document</h2>
+    </div>
+    <div class="canvas-pad">
+      <div class="canvas-frame">
+        <div class="hero hero-d">
+          <div class="top">
+            <div class="icon">📄</div>
+            <div style="flex:1">
+              <div class="title">Holiday Request / Refusal Challenge</div>
+              <div class="sub">UK · drafted by Jane Doe · ready for HR Officer</div>
+            </div>
+          </div>
+          <div class="meta-row">
+            <span class="chip">📄 <strong>2 pages</strong> · A4</span>
+            <span class="chip">📎 <strong>1 evidence file</strong></span>
+            <span class="chip">✓ Letterhead</span>
+            <span class="chip">✓ AI-drafted · validated</span>
+            <span class="chip" style="background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)">⚠ 1 fix</span>
+          </div>
+        </div>
+        <div class="market">
+          <div class="consult top">
+            <img src="https://i.pravatar.cc/120?img=47" alt="">
+            <div class="nm">Sarah Mitchell</div>
+            <div class="role">Solicitor · ex-DLA</div>
+            <div class="price">£120 <small>· 18h</small></div>
+            <div class="btn fill">Book Sarah →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=33" alt="">
+            <div class="nm">James Park</div>
+            <div class="role">HR Director · 20 yrs</div>
+            <div class="price">£95 <small>· 26h</small></div>
+            <div class="btn out">Book James →</div>
+          </div>
+          <div class="consult">
+            <img src="https://i.pravatar.cc/120?img=44" alt="">
+            <div class="nm">Rachel Stein</div>
+            <div class="role">Former ACAS · 15 yrs</div>
+            <div class="price">£130 <small>· 12h</small></div>
+            <div class="btn out">Book Rachel →</div>
+          </div>
+        </div>
+      </div>
+      <div class="commentary">
+        <span class="win">✓ Win:</span> letter feels weighty — like opening an actual envelope. The chip row is a quick "I checked everything" mental ticklist. <span class="cost">✗ Cost:</span> heavy duplication with the sidebar thumbnail ("To: HR Officer" appears twice). Skip if sidebar already does this job.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="max-width:1100px;margin:28px auto 0;padding:14px 18px;background:linear-gradient(135deg,#eff6ff,#fff);border:1px solid #bfdbfe;border-radius:10px;font-size:12px;color:#1e40af;line-height:1.6">
+  💡 <strong>My pick:</strong> <strong>Option A (status-aware)</strong>. It earns the screen space because the message actually changes — green/celebratory when ready, amber/instructive when blocked, with a progress bar that mirrors the sidebar checklist. B is calmer if you don't want emotional swings. C is the heaviest commercial pull. D duplicates the sidebar thumbnail.
+</div>
+
+</body>
+</html>
