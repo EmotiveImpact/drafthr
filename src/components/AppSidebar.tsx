@@ -51,6 +51,8 @@ import {
   FolderOpen,
   ChevronDown,
   FileText,
+  Users,
+  Layers,
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
@@ -273,6 +275,15 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
   const primary: NavItem[] = [
     { href: prefix, label: "Home", Icon: LayoutDashboard, tooltip: "Dashboard" },
     { href: `${prefix}/new`, label: "New letter", Icon: PlusCircle, tooltip: "Browse letter types" },
+    // Portfolio-level surfaces — HR mode only (the multi-employee workbench).
+    // Employee mode users have one self-record + one matter; these surfaces
+    // would be empty noise for them.
+    ...(mode === "employer"
+      ? ([
+          { href: "/employees", label: "Employees", Icon: Users, tooltip: "Workspace employee directory" },
+          { href: "/bulk", label: "Bulk operations", Icon: Layers, tooltip: "CSV → batch drafts" },
+        ] satisfies NavItem[])
+      : []),
   ];
 
   const watch: NavItem[] = [

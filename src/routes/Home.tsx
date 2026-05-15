@@ -280,11 +280,12 @@ function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
               </li>
             ))}
           </ul>
+          {/* Until /today is a thing, "See all tasks" lands on the matters
+           * index — tasks live inside matters today, so it's the right
+           * destination by content even if not by name. */}
           <PanelFooterButton
-            onClick={() => {
-              alert("Today view coming next wave");
-            }}
-            label="See all tasks"
+            onClick={() => nav('/matters')}
+            label="See all in matters"
           />
         </>
       )}
@@ -307,8 +308,8 @@ function RiskRegister({ summary, prefix }: { summary: RiskSummary; prefix: strin
       {!summary.hasAnyExposure ? (
         <PanelEmpty
           body="Risk register populates as you tag exposure on matters."
-          ctaLabel="Browse templates"
-          onClick={() => nav(`${prefix}/new`)}
+          ctaLabel="Browse matters"
+          onClick={() => nav('/matters')}
         />
       ) : (
         <>
