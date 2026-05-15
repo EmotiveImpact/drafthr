@@ -1,5 +1,7 @@
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+import { BrandMark } from "@/components/ds";
+import { Wordmark } from "@/components/ds/Wordmark";
 import { useDraftStore } from "@/lib/store";
 import { LetterPreview } from "@/components/editor/LetterPreview";
 import { ReviewRail } from "@/components/editor/ReviewRail";
@@ -69,7 +71,15 @@ export function ReviewStep() {
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
       {/* Breadcrumb header. Back-link points to Edit now that Evidence
        * has left the wizard (it's a drawer in Edit). */}
-      <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
+      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
+        <Link
+          to="/"
+          aria-label="Home"
+          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
+        >
+          <BrandMark size={36} />
+          <Wordmark size={16} className="hidden sm:inline" />
+        </Link>
         <Button
           variant="ghost"
           size="sm"

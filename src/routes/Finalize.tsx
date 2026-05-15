@@ -242,8 +242,8 @@ export function Finalize() {
           className="flex items-center gap-2 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-[var(--ds-line-2)] transition"
           aria-label="Home"
         >
-          <BrandMark size={26} />
-          <Wordmark size={15} />
+          <BrandMark size={36} />
+          <Wordmark size={16} />
         </button>
 
         <span className="text-[var(--ds-subtle)] hidden sm:inline">/</span>

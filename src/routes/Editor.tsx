@@ -54,6 +54,7 @@ import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { BrandMark, AvatarStack } from "@/components/ds";
+import { Wordmark } from "@/components/ds/Wordmark";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities } from "@/lib/comments/identity";
 import { InvitePopover } from "@/components/editor/InvitePopover";
@@ -502,7 +503,7 @@ export function Editor() {
        * Layout: [brand · ← Letters · counsel pill] [TITLE centred + submeta]
        * [avatars · actions]. Edit/Preview moved to the secondary toolbar so
        * the title can claim centre stage. */}
-      <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
+      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30">
         {/* Topbar grid mirrors the body grid below it on lg+:
          *   [260px left rail]  [1fr canvas]  [360px right rail]
          * So the migrated secondary-toolbar items (Tone, Edit/Preview,
@@ -522,9 +523,10 @@ export function Editor() {
               to={backTo}
               aria-label="Back to letters"
               title="Back to letters"
-              className="shrink-0 rounded-md hover:opacity-80 transition px-1 grid place-items-center h-8"
+              className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10"
             >
-              <BrandMark size={32} />
+              <BrandMark size={36} />
+              <Wordmark size={16} className="hidden sm:inline" />
             </Link>
 
             {/* Change C: top menubar — File / Tools / View. Conventional
