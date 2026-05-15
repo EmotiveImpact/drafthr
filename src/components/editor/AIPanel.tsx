@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
@@ -462,13 +462,13 @@ export function AIPanel({
    * back to the model so it knows the marker landed. The actual
    * summary is in the model's text reply.
    */
-  const applySummarise = (toolCallId: string, input: SummariseInput): void => {
+  const applySummarise = useCallback((toolCallId: string, input: SummariseInput): void => {
     addToolResult({
       tool: "summariseForCounsel",
       toolCallId,
       output: { ok: true, audience: input.audience ?? "counsel" },
     });
-  };
+  }, [addToolResult]);
 
   return (
     <div className="flex flex-col h-full min-h-0">

@@ -358,7 +358,13 @@ export function Editor() {
         e.preventDefault();
         setFocusMode(false);
         setRightTab("ai");
-        setAiDrawerOpen(true);
+        // Only open the drawer when AI is not already pinned as the inline
+        // rail. Setting aiDrawerOpen while pinnedDock==="ai" would leave a
+        // ghost true value that causes the scrim + drawer overlay to appear
+        // the moment the user later unpins — without any deliberate action.
+        if (pinnedDock !== "ai") {
+          setAiDrawerOpen(true);
+        }
         requestAnimationFrame(() => {
           const el = document.querySelector<HTMLTextAreaElement>(
             'textarea[placeholder*="Rewrite a section"]'
@@ -369,7 +375,7 @@ export function Editor() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusMode]);
+  }, [focusMode, pinnedDock]);
 
   // Edit-on-page is only meaningful in Preview. Leaving Preview while
   // it's active would strand the user in an invisible state, so we
