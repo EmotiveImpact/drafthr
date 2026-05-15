@@ -105,11 +105,11 @@ export function ReviewStep() {
       </header>
 
       {/* Layout — 2 columns: left sidebar (Health-only) + letter canvas.
-       *   [Stepper + ReviewRail 340px] [LetterPreview — full remaining width]
-       * Sections tab dropped on Review — you're reviewing, not editing.
-       * The stepper (WizardChrome) stays so you can step Edit ↔ Review ↔
-       * Finalise from this rail; the rest of the rail is ReviewRail. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)]">
+       *   [Stepper + ReviewRail 260px] [LetterPreview — full remaining width]
+       * 260px matches the Edit sidebar so the wizard step transitions
+       * don't shift the canvas. Health content is sized to fit at this
+       * width (smaller rings, no chips on Fix rows). */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
           <WizardChrome draftId={draft.id} mode={draft.mode} current="review" />
           <ReviewRail

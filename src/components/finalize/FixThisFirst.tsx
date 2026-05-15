@@ -35,15 +35,18 @@ export function FixThisFirst({ fixes, onAction }: Props) {
       className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden mt-3.5"
       style={{ borderTop: "2px solid var(--ds-amber-fg)" }}
     >
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-[var(--ds-line-2)]">
+      <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-[var(--ds-line-2)]">
         <Zap
-          className="size-4 text-[var(--ds-amber-fg)]"
+          className="size-3.5 text-[var(--ds-amber-fg)] shrink-0"
           fill="currentColor"
           strokeWidth={1.5}
         />
-        <h3 className="text-[14px] font-semibold m-0">Fix this first</h3>
-        <span className="ml-auto text-[11px] text-[var(--ds-muted)]">
-          Sorted by score impact
+        <h3 className="text-[13px] font-semibold m-0 truncate">Fix this first</h3>
+        <span
+          className="ml-auto text-[10px] text-[var(--ds-muted)] shrink-0 whitespace-nowrap"
+          title="Sorted by predicted score impact"
+        >
+          By impact
         </span>
       </div>
 
@@ -94,16 +97,14 @@ function FixRow({
         </span>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-semibold text-[var(--ds-ink)]">
-              {fix.check.label}
-            </span>
-            <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider text-[var(--ds-muted)] bg-[var(--ds-line-2)] px-1.5 py-0.5 rounded">
-              {fix.check.dimension}
-            </span>
-          </div>
+          {/* Dimension chip dropped — severity icon colour (red = fail,
+           * amber = warn) already conveys the gist, and at 260px sidebar
+           * the chip pushed the title into ugly wrap territory. */}
+          <span className="text-[13px] font-semibold text-[var(--ds-ink)] leading-tight">
+            {fix.check.label}
+          </span>
           {fix.check.detail && (
-            <div className="text-[12px] text-[var(--ds-muted)] mt-0.5 leading-snug">
+            <div className="text-[11.5px] text-[var(--ds-muted)] mt-0.5 leading-snug">
               {fix.check.detail}
             </div>
           )}

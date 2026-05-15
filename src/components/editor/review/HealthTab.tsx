@@ -85,10 +85,11 @@ export function HealthTab({
       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
       className="space-y-4"
     >
-      {/* Score summary — overall ring on the left, band + verdict + sub-rings on the right. */}
-      <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-        <div className="flex items-center gap-3">
-          <ScoreRing score={scoreData.score} band={scoreData.band} size={72} />
+      {/* Score summary — overall ring on the left, band + verdict + sub-rings on the right.
+       * Compact sizing (56px hero, 36px sub) to fit the 260px sidebar. */}
+      <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-3">
+        <div className="flex items-center gap-2.5">
+          <ScoreRing score={scoreData.score} band={scoreData.band} size={56} />
           <div className="flex-1 min-w-0">
             <span
               className={cn(
@@ -125,7 +126,7 @@ export function HealthTab({
               <ScoreRing
                 score={d.score}
                 band={d.band}
-                size={44}
+                size={36}
                 delay={0.2 + i * 0.1}
                 label={DIMENSION_LABELS[d.dimension]}
               />
