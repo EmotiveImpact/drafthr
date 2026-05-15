@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Tabs as TabsPrimitive } from "radix-ui";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Pin, PinOff, X } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
@@ -35,6 +35,10 @@ export function ReviewRail({
   onJumpToSection,
   onJumpToEvidence,
   onContinueToFinalize,
+  isPinned,
+  onPin,
+  onUnpin,
+  onClose,
 }: {
   draft: Draft;
   counselReviewedBy?: { reviewedBy: string; reviewedOn: string } | null;
@@ -42,6 +46,14 @@ export function ReviewRail({
   onJumpToSection: (sectionId: string) => void;
   onJumpToEvidence: () => void;
   onContinueToFinalize: () => void;
+  /** True when this rail is pinned as an inline grid column. */
+  isPinned?: boolean;
+  /** Called when the user clicks Pin (drawer mode → pinned). */
+  onPin?: () => void;
+  /** Called when the user clicks Unpin (pinned mode → pill). */
+  onUnpin?: () => void;
+  /** Called when the user clicks the X close button (drawer mode only). */
+  onClose?: () => void;
 }) {
   // The "All checks" list — derived from the draft and the same helpers the
   // old flat ReviewRail used. Wrapped in useMemo because the tab content is
@@ -77,6 +89,60 @@ export function ReviewRail({
       defaultValue="health"
       className="flex flex-col min-h-0 h-full"
     >
+      {/* Header bar — Pin/Unpin + optional Close, matches AIPanel's header
+       * row. Only rendered when at least one action prop is supplied so the
+       * component still works in bare/read-only embed contexts. */}
+      {(onPin || onUnpin || onClose) && (
+        <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] shrink-0">
+          <span className="text-[12px] font-semibold text-[var(--ds-ink)] mr-auto select-none">
+            Health
+          </span>
+          {(onPin || onUnpin) && (
+            <button
+              type="button"
+              onClick={isPinned ? (onUnpin ?? onPin) : onPin}
+              className={cn(
+                "group inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[10.5px] font-bold uppercase tracking-[0.04em] border transition-colors",
+                isPinned
+                  ? "bg-[var(--ds-violet-bg)] text-[var(--ds-violet-fg)] border-violet-200 hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] hover:border-[var(--ds-line)]"
+                  : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line-2)] hover:text-[var(--ds-ink)]",
+              )}
+              title={
+                isPinned
+                  ? "Click to unpin (back to pill)"
+                  : "Pin Health as an inline right rail"
+              }
+              aria-pressed={isPinned}
+            >
+              {isPinned ? (
+                <>
+                  <Pin className="size-3 group-hover:hidden" />
+                  <PinOff className="size-3 hidden group-hover:inline" />
+                  <span className="group-hover:hidden">Pinned</span>
+                  <span className="hidden group-hover:inline">Unpin</span>
+                </>
+              ) : (
+                <>
+                  <Pin className="size-3" />
+                  <span>Pin</span>
+                </>
+              )}
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+              aria-label="Close Health rail"
+              title="Close Health rail"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Underline-style tab list. The active tab gets the ink color + bold
        * weight + a 2px underline; inactive tabs sit in muted grey. Matches
        * Design D's tab strip. */}
