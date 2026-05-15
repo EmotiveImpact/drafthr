@@ -873,14 +873,12 @@ export function Editor() {
           </div>
 
           {/* Column 3 — over the right rail / viewport-right on mobile.
-           * People → Evidence → ⋯ → primary CTA. (Pending/Drafting/
-           * Regenerate moved into column 2 — the canvas column — so they
-           * sit above their old secondary-toolbar positions.) */}
+           * People/Invite → ⋯ → primary CTA. Evidence pill lives in the
+           * bottom-right dock (Task 2) so the top-bar stays uncluttered.
+           * (Pending/Drafting/Regenerate moved into column 2.) */}
           <div className="ml-auto lg:ml-0 flex items-center gap-2 justify-end min-w-0 lg:px-4">
-            {/* People / Invite — sits to the left of Evidence so the cluster
-             * reads "who's on this letter → what's attached → next step".
-             * AvatarStack is the trigger when collaborators exist; otherwise
-             * a plain Invite button. */}
+            {/* People / Invite — AvatarStack is the trigger when
+             * collaborators exist; otherwise a plain Invite button. */}
             <InvitePopover
               draft={draft}
               open={invitePopoverOpen}
@@ -924,70 +922,6 @@ export function Editor() {
                 )
               }
             />
-            {/* Evidence button — primary discoverability path for the
-             * hybrid drawer. Tap to toggle the floating drawer; when
-             * pinned, this tap focuses the rail (which is always visible).
-             * Amber-tinted when there's evidence, muted when zero. Filled
-             * dark when the drawer is open OR pinned. */}
-            {(() => {
-              const evidenceCount = draft.evidence?.length ?? 0;
-              const hasEvidence = evidenceCount > 0;
-              const active = evidenceDrawerOpen || evidencePinned;
-              const onClick = () => {
-                if (evidencePinned) {
-                  // Focus the pinned rail — scroll-into-view + focus the
-                  // search input so keyboard users land somewhere useful.
-                  const search = document.querySelector<HTMLInputElement>(
-                    '[data-evidence-rail] input[type="search"]'
-                  );
-                  search?.focus();
-                  return;
-                }
-                setEvidenceDrawerOpen((v) => !v);
-              };
-              return (
-                <button
-                  type="button"
-                  onClick={onClick}
-                  aria-pressed={active}
-                  aria-label={
-                    evidencePinned
-                      ? "Focus pinned evidence rail"
-                      : evidenceDrawerOpen
-                      ? "Close evidence drawer"
-                      : "Open evidence drawer"
-                  }
-                  title={
-                    evidencePinned
-                      ? "Evidence is pinned — focus the rail"
-                      : "Open evidence drawer (Pin → for a permanent rail)"
-                  }
-                  className={
-                    "inline-flex items-center gap-1.5 h-7 px-2 sm:px-2.5 rounded-md border text-[12px] font-semibold transition shrink-0 " +
-                    (active
-                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                      : hasEvidence
-                      ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-fg)]/25 hover:border-[var(--ds-amber-fg)]/50"
-                      : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
-                  }
-                >
-                  <Paperclip className="size-3.5" />
-                  <span className="hidden sm:inline">Evidence</span>
-                  {hasEvidence && (
-                    <span
-                      className={
-                        "tabular-nums text-[10px] font-bold px-1.5 py-px rounded-full min-w-[18px] text-center " +
-                        (active
-                          ? "bg-white/20 text-white"
-                          : "bg-white/70 text-[var(--ds-amber-fg)]")
-                      }
-                    >
-                      {evidenceCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })()}
             {/* Mobile-only ⋯ overflow — on md:+ all these actions live in
              * the File/Tools/View menubar at the start of column 2. */}
             <DropdownMenu>
