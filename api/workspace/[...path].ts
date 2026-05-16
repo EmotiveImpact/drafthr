@@ -20,27 +20,28 @@ type HandlerModule = {
 };
 
 async function loadHandler(path: string): Promise<HandlerModule | null> {
+  // .js extensions required at runtime — see auth dispatcher for why.
   switch (path) {
     case "create":
-      return import("./_handlers/create");
+      return import("./_handlers/create.js");
     case "list":
-      return import("./_handlers/list");
+      return import("./_handlers/list.js");
     case "switch":
-      return import("./_handlers/switch");
+      return import("./_handlers/switch.js");
     case "invite":
-      return import("./_handlers/invite");
+      return import("./_handlers/invite.js");
     case "invites":
-      return import("./_handlers/invites");
+      return import("./_handlers/invites.js");
     case "accept-invite":
-      return import("./_handlers/accept-invite");
+      return import("./_handlers/accept-invite.js");
     case "members":
-      return import("./_handlers/members");
+      return import("./_handlers/members.js");
     case "invite/revoke":
-      return import("./_handlers/invite/revoke");
+      return import("./_handlers/invite/revoke.js");
     case "member/role":
-      return import("./_handlers/member/role");
+      return import("./_handlers/member/role.js");
     case "member/remove":
-      return import("./_handlers/member/remove");
+      return import("./_handlers/member/remove.js");
     default:
       return null;
   }

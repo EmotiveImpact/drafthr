@@ -20,15 +20,19 @@ type HandlerModule = {
 };
 
 async function loadHandler(action: string): Promise<HandlerModule | null> {
+  // .js extensions are mandatory at runtime here — package.json sets
+  // "type": "module", which means Node resolves these via nodenext rules.
+  // Build-time TS doesn't complain (api/tsconfig.json uses bundler
+  // resolution), but Node at runtime is strict. Keep .js.
   switch (action) {
     case "url":
-      return import("./_handlers/url");
+      return import("./_handlers/url.js");
     case "callback":
-      return import("./_handlers/callback");
+      return import("./_handlers/callback.js");
     case "session":
-      return import("./_handlers/session");
+      return import("./_handlers/session.js");
     case "sign-out":
-      return import("./_handlers/sign-out");
+      return import("./_handlers/sign-out.js");
     default:
       return null;
   }
