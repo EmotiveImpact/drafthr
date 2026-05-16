@@ -296,6 +296,7 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
   const [role, setRole] = useState("drafter");
   const [busy, setBusy] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const onSubmit = async () => {
@@ -317,8 +318,12 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
         setError(data.error ?? "Failed to create invite");
         return;
       }
-      const data = (await res.json()) as { invite: { inviteLink: string } };
+      const data = (await res.json()) as {
+        invite: { inviteLink: string };
+        emailSent?: boolean;
+      };
       setInviteLink(data.invite.inviteLink);
+      setEmailSent(data.emailSent ?? false);
       onInvited();
     } finally {
       setBusy(false);
@@ -341,12 +346,19 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
         <Dialog.Title>Invite member</Dialog.Title>
         <Dialog.Description>
           {inviteLink
-            ? "Share this link with the invitee. It expires in 7 days."
-            : "We'll generate an invite link you can share. Email delivery comes online once Resend is wired up."}
+            ? emailSent
+              ? "Email sent. The link is also below if you'd like to share it directly."
+              : "Email delivery isn't configured — share this link with the invitee. It expires in 7 days."
+            : "We'll email the invite if Resend is configured, and always return a copy-able link as a fallback."}
         </Dialog.Description>
 
         {inviteLink ? (
           <Flex direction="column" gap="3" mt="3">
+            {emailSent !== null && (
+              <Badge color={emailSent ? "green" : "amber"} size="2">
+                {emailSent ? "Email sent" : "Couldn't email — copy link manually"}
+              </Badge>
+            )}
             <TextField.Root value={inviteLink} readOnly>
               <TextField.Slot side="right">
                 <IconButton variant="ghost" onClick={onCopy} aria-label="Copy">
@@ -383,6 +395,10 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
                 </Select.Content>
               </Select.Root>
             </label>
+            <Text size="1" color="gray">
+              We'll email the invitee if email delivery is configured. Either way you'll get a
+              copy-able link as a fallback.
+            </Text>
             {error && <Badge color="red">{error}</Badge>}
             <Flex justify="end" gap="2">
               <Dialog.Close>

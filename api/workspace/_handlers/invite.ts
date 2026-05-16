@@ -10,6 +10,8 @@ import { randomBytes } from "node:crypto";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { sendEmail } from "../../_utils/email.js";
+import { workspaceInviteEmail } from "../../_utils/email-templates/invite.js";
 import { getDb } from "../../../src/db/index.js";
 import { invites } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
@@ -66,6 +68,30 @@ export async function POST(req: Request): Promise<Response> {
       payload: { email, role },
     });
 
+    // Best-effort email — never block the invite creation on send failure.
+    // The frontend still has inviteLink in the response for manual share.
+    const inviterName = auth.userRow.legalName ?? auth.userRow.email ?? "A teammate";
+    const inviterEmail = auth.userRow.email ?? "";
+    const emailResult = await sendEmail({
+      to: email,
+      ...workspaceInviteEmail({
+        inviterName,
+        inviterEmail,
+        workspaceName: auth.activeTenant.name,
+        role,
+        inviteUrl: inviteLink,
+        expiresAt: invite.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      }),
+      ...(inviterEmail ? { replyTo: inviterEmail } : {}),
+      tags: [
+        { name: "kind", value: "workspace-invite" },
+        { name: "tenant", value: auth.activeTenant.id },
+      ],
+    });
+    if (!emailResult.ok) {
+      console.warn("[workspace/invite] email send failed:", emailResult.error);
+    }
+
     return new Response(
       JSON.stringify({
         invite: {
@@ -76,6 +102,7 @@ export async function POST(req: Request): Promise<Response> {
           inviteLink,
           expiresAt: invite.expiresAt,
         },
+        emailSent: emailResult.ok,
       }),
       { status: 201, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } },
     );
