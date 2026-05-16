@@ -12,12 +12,12 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, lte } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
 import { getDb } from "../../src/db/index.js";
-import { drafts, sections } from "../../src/db/schema.js";
+import { customTemplates, drafts, matters, sections } from "../../src/db/schema.js";
 import { appendAuditEvent } from "../../src/db/audit.js";
 
 export const config = { runtime: "nodejs" };
@@ -46,9 +46,18 @@ type DraftInput = {
   employee?: Record<string, unknown> | null;
   answers?: Record<string, unknown> | null;
   sections?: SectionInput[];
+  clientRevision?: number | null;
 };
 
 export async function POST(req: Request): Promise<Response> {
+  return writeDraft(req, "POST");
+}
+
+export async function PATCH(req: Request): Promise<Response> {
+  return writeDraft(req, "PATCH");
+}
+
+async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Response> {
   const guard = await guardWrite(req);
   if (!guard.ok) return guard.response;
 
@@ -65,8 +74,10 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const db = getDb();
     const titleSummary = summariseTitle(body);
+    const matterId = normalizeOptionalId(body.matterId);
+    const templateSourceId = normalizeOptionalId(body.templateSourceId);
     const existingDraft = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId })
+      .select({ id: drafts.id, tenantId: drafts.tenantId, updatedAt: drafts.updatedAt })
       .from(drafts)
       .where(eq(drafts.id, body.id))
       .limit(1);
@@ -76,45 +87,57 @@ export async function POST(req: Request): Promise<Response> {
       return jsonError("Draft belongs to a different workspace", 403);
     }
     const isCreate = existingDraft.length === 0;
+    const clientRevision = parseClientRevision(body.clientRevision);
+    if (!isCreate && (clientRevision === null || clientRevision < existingDraft[0].updatedAt.getTime())) {
+      return staleRevisionResponse();
+    }
 
-    await db.transaction(async (tx) => {
+    const referenceError = await validateTenantReferences(db, tenantId, matterId, templateSourceId);
+    if (referenceError) return referenceError;
+
+    const acceptedRevision = new Date(clientRevision ?? Date.now());
+
+    const writeResult = await db.transaction(async (tx) => {
       if (isCreate) {
         await tx.insert(drafts).values({
           id: body.id,
           tenantId,
           authorUserId: auth.userRow.id,
-          matterId: body.matterId ?? null,
+          matterId,
           letterType: body.letterType,
           mode: body.mode,
           title: body.title ?? null,
           jurisdiction: body.jurisdiction ?? null,
           reviewStatus: body.reviewStatus ?? "draft",
           isTemplateSource: Boolean(body.isTemplateSource),
-          templateSourceId: body.templateSourceId ?? null,
+          templateSourceId,
           contextJson: body.context,
           employerJson: body.employer ?? null,
           employeeJson: body.employee ?? null,
           answersJson: body.answers ?? null,
+          updatedAt: acceptedRevision,
         });
       } else {
-        await tx
+        const updated = await tx
           .update(drafts)
           .set({
-            matterId: body.matterId ?? null,
+            matterId,
             letterType: body.letterType,
             mode: body.mode,
             title: body.title ?? null,
             jurisdiction: body.jurisdiction ?? null,
             reviewStatus: body.reviewStatus ?? "draft",
             isTemplateSource: Boolean(body.isTemplateSource),
-            templateSourceId: body.templateSourceId ?? null,
+            templateSourceId,
             contextJson: body.context,
             employerJson: body.employer ?? null,
             employeeJson: body.employee ?? null,
             answersJson: body.answers ?? null,
-            updatedAt: new Date(),
+            updatedAt: acceptedRevision,
           })
-          .where(eq(drafts.id, body.id));
+          .where(and(eq(drafts.id, body.id), eq(drafts.tenantId, tenantId), lte(drafts.updatedAt, acceptedRevision)))
+          .returning({ id: drafts.id });
+        if (updated.length === 0) return { stale: true as const };
       }
 
       if (Array.isArray(body.sections)) {
@@ -133,7 +156,9 @@ export async function POST(req: Request): Promise<Response> {
           });
         }
       }
+      return { stale: false as const };
     });
+    if (writeResult.stale) return staleRevisionResponse();
 
     await safelyAppendAudit({
       tenantId,
@@ -160,7 +185,7 @@ export async function POST(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   } catch (err) {
-    console.error("[store/drafts POST] failed", err);
+    console.error(`[store/drafts ${method}] failed`, err);
     return jsonError("Draft sync failed", 500);
   }
 }
@@ -232,6 +257,60 @@ async function guardWrite(req: Request): Promise<GuardResult> {
 function summariseTitle(body: DraftInput): string {
   if (body.title && body.title.trim()) return body.title.trim();
   return body.letterType;
+}
+
+async function validateTenantReferences(
+  db: ReturnType<typeof getDb>,
+  tenantId: string,
+  matterId: string | null,
+  templateSourceId: string | null,
+): Promise<Response | null> {
+  if (matterId) {
+    if (!isUuid(matterId)) return jsonError("matterId belongs to a different workspace", 409);
+    const [matter] = await db
+      .select({ id: matters.id })
+      .from(matters)
+      .where(and(eq(matters.id, matterId), eq(matters.tenantId, tenantId)))
+      .limit(1);
+    if (!matter) return jsonError("matterId belongs to a different workspace", 409);
+  }
+
+  if (templateSourceId) {
+    if (!isUuid(templateSourceId)) {
+      return jsonError("templateSourceId belongs to a different workspace", 409);
+    }
+    const [template] = await db
+      .select({ id: customTemplates.id })
+      .from(customTemplates)
+      .where(and(eq(customTemplates.id, templateSourceId), eq(customTemplates.tenantId, tenantId)))
+      .limit(1);
+    if (!template) return jsonError("templateSourceId belongs to a different workspace", 409);
+  }
+
+  return null;
+}
+
+function normalizeOptionalId(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseClientRevision(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function staleRevisionResponse(): Response {
+  return new Response(JSON.stringify({ ok: false, error: "stale revision" }), {
+    status: 409,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 async function safelyAppendAudit(input: Parameters<typeof appendAuditEvent>[0]): Promise<void> {

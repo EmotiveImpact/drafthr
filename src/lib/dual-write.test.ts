@@ -5,6 +5,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Draft } from "./letters/types";
 
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+  },
+}));
+
 beforeEach(() => {
   vi.stubEnv("VITE_DRAFTHR_DUAL_WRITE", "true");
   vi.useFakeTimers();
@@ -17,7 +23,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function makeDraft(id: string): Draft {
+function makeDraft(id: string, updatedAt = Date.now()): Draft {
   return {
     id,
     mode: "employer",
@@ -57,8 +63,8 @@ function makeDraft(id: string): Draft {
     sections: [
       { id: "sec_1", sectionId: "intro", title: "Intro", html: "<p>Hi</p>", required: true, status: "ready", versions: [] },
     ],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: updatedAt,
+    updatedAt,
   } as unknown as Draft;
 }
 
@@ -68,7 +74,8 @@ describe("dual-write enqueueSync", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const mod = await import("./dual-write");
-    mod.setDualWriteSnapshotGetter(() => makeDraft("draft_1"));
+    const draft = makeDraft("draft_1", 1_768_000_000_000);
+    mod.setDualWriteSnapshotGetter(() => draft);
 
     mod.enqueueSync("draft_1");
     mod.enqueueSync("draft_1");
@@ -87,6 +94,7 @@ describe("dual-write enqueueSync", () => {
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
     expect(body.id).toBe("draft_1");
+    expect(body.clientRevision).toBe(draft.updatedAt);
     expect(body.sections).toHaveLength(1);
   });
 
@@ -114,5 +122,46 @@ describe("dual-write enqueueSync", () => {
     const result = await mod.syncAllPending(() => [makeDraft("a"), makeDraft("b"), makeDraft("c")]);
     expect(result).toEqual({ ok: 3, failed: 0 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not retry a stale snapshot until a newer revision exists", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: false, error: "stale revision" }), { status: 409 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    let draft = makeDraft("stale_1", 100);
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    await mod.syncDraft("stale_1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("[dual-write] stale snapshot skipped", "stale_1", 409);
+
+    mod.enqueueSync("stale_1");
+    await vi.advanceTimersByTimeAsync(450);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    draft = makeDraft("stale_1", 101);
+    mod.enqueueSync("stale_1");
+    await vi.advanceTimersByTimeAsync(450);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("logs failed deletes and shows one toast after consecutive failures", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { toast } = await import("sonner");
+    const mod = await import("./dual-write");
+
+    await mod.deleteDraftRemotely("delete_1");
+    await mod.deleteDraftRemotely("delete_2");
+    await mod.deleteDraftRemotely("delete_3");
+    await mod.deleteDraftRemotely("delete_4");
+    await mod.deleteDraftRemotely("delete_5");
+
+    expect(warn).toHaveBeenCalledTimes(5);
+    expect(toast.error).toHaveBeenCalledTimes(1);
   });
 });

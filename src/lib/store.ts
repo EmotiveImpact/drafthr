@@ -1568,6 +1568,7 @@ export const useDraftStore = create<Store>()(
 // importing the store module (avoids a circular import).
 import {
   enqueueSync as _dualWriteEnqueueSync,
+  deleteDraftRemotely as _dualWriteDeleteDraftRemotely,
   setDualWriteSnapshotGetter as _setDualWriteSnapshotGetter,
   isDualWriteEnabled as _isDualWriteEnabled,
   syncDraft as _dualWriteSyncDraft,
@@ -1590,14 +1591,7 @@ if (_isDualWriteEnabled()) {
       if (!(id in next)) {
         // Fire-and-forget delete. We do NOT debounce deletions — they're rare
         // and the user expects them to land immediately.
-        void fetch("/api/store/drafts", {
-          method: "DELETE",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ id }),
-        }).catch(() => {
-          /* defensive — local delete already succeeded */
-        });
+        void _dualWriteDeleteDraftRemotely(id);
       }
     }
     prevDrafts = next;

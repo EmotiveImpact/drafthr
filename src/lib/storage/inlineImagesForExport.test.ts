@@ -64,14 +64,22 @@ describe("inlineImagesForExport", () => {
 
 function makeFetcher(map: Record<string, { bytes: Uint8Array; contentType: string }> = {}) {
   return vi.fn(async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input.toString();
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : input.toString();
     const entry = map[url];
     if (!entry) return new Response("not found", { status: 404 });
-    // Wrap in Blob — Response BodyInit doesn't accept raw Uint8Array under
-    // current lib.dom types (jsdom env).
-    return new Response(new Blob([new Uint8Array(entry.bytes)]), {
-      status: 200,
-      headers: { "Content-Type": entry.contentType },
-    });
+    const body = new ArrayBuffer(entry.bytes.byteLength);
+    new Uint8Array(body).set(entry.bytes);
+    return {
+      ok: true,
+      headers: {
+        get: (name: string) => (name.toLowerCase() === "content-type" ? entry.contentType : null),
+      },
+      arrayBuffer: async () => body,
+    } as Response;
   }) as unknown as typeof fetch;
 }

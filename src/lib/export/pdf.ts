@@ -62,7 +62,7 @@ export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
       const res = await fetch("/api/export/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: body, filename }),
+        body: JSON.stringify({ html: body, filename, draftId: draft.id }),
       });
       if (res.ok) {
         return await res.blob();
@@ -136,7 +136,7 @@ export async function exportLetterToPdf(draft: Draft): Promise<void> {
       const res = await fetch("/api/export/pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: body, filename }),
+        body: JSON.stringify({ html: body, filename, draftId: draft.id }),
       });
       if (res.ok) {
         const blob = await res.blob();

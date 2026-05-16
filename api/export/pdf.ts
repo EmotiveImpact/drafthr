@@ -14,12 +14,16 @@
  */
 
 import { createHash } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin } from "../_utils/request.js";
+import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
 import { parseTsr, requestTsr } from "../_utils/tsa.js";
 import { appendAuditEvent } from "../../src/db/audit.js";
+import { getDb } from "../../src/db/index.js";
+import { drafts } from "../../src/db/schema.js";
 import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
 
 export const config = {
@@ -33,8 +37,6 @@ type ExportRequest = {
   // Audit metadata — all optional. Missing values are tolerated; the audit
   // write is best-effort and never blocks the PDF response.
   draftId?: string;
-  tenantId?: string;
-  actorUserId?: string;
   reviewedBy?: string;
   reviewedOn?: string;
 };
@@ -73,6 +75,12 @@ export async function POST(req: Request): Promise<Response> {
   const rateLimitError = rateLimit(req, { name: "pdf", max: 12, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
 
+  const auth = await requireSessionAndTenant(req);
+  if (!auth.ok) return auth.response;
+  if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const tenantId = auth.activeTenant.id;
+  const actorUserId = auth.userRow.id;
+
   const contentType = req.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
     return jsonError("Content-Type must be application/json", 415);
@@ -101,6 +109,12 @@ export async function POST(req: Request): Promise<Response> {
   }
   if (body.filename !== undefined && typeof body.filename !== "string") {
     return jsonError("filename must be a string", 400);
+  }
+
+  const draftId = typeof body.draftId === "string" ? body.draftId.trim() : "";
+  const draftExists = draftId ? await draftBelongsToTenant(draftId, tenantId) : false;
+  if (!draftExists) {
+    return jsonError("draft not found in active tenant", 404);
   }
 
   const packUrl = process.env.CHROMIUM_PACK_URL ?? DEFAULT_PACK_URL;
@@ -160,7 +174,19 @@ export async function POST(req: Request): Promise<Response> {
 
     // Best-effort audit write. The export must not fail if Postgres is down,
     // so we swallow every error and log for backfill.
-    await tryAppendExportAudit(req, body, pdfBytes, sha256, tsr, tsrParsed).catch(() => {});
+    await tryAppendExportAudit(
+      req,
+      body,
+      {
+        tenantId,
+        draftId,
+        actorUserId,
+      },
+      pdfBytes,
+      sha256,
+      tsr,
+      tsrParsed,
+    ).catch(() => {});
 
     const filename = safePdfFilename(body.filename);
     // Audit-aware clients can read these headers and persist the TSR
@@ -188,18 +214,13 @@ export async function POST(req: Request): Promise<Response> {
 async function tryAppendExportAudit(
   req: Request,
   body: ExportRequest,
+  auditSubject: { tenantId: string; draftId: string; actorUserId: string },
   pdfBytes: Uint8Array,
   sha256: string,
   tsr: Buffer | null,
   tsrParsed: ReturnType<typeof parseTsr> | null,
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
-  const tenantId = body.tenantId ?? process.env.DRAFTHR_DEFAULT_TENANT_ID;
-  // Local single-user mode: if tenant is unknown we have nothing to chain
-  // against, so skip — no fake genesis row.
-  if (!tenantId) return;
-  const subjectId = body.draftId;
-  if (!subjectId) return;
 
   const forwardedFor = req.headers.get("x-forwarded-for");
   const ip = forwardedFor ? forwardedFor.split(",")[0]?.trim() ?? null : null;
@@ -218,11 +239,11 @@ async function tryAppendExportAudit(
 
   try {
     await appendAuditEvent({
-      tenantId,
+      tenantId: auditSubject.tenantId,
       kind: "draft.exported",
       subjectType: "draft",
-      subjectId,
-      actorUserId: body.actorUserId ?? null,
+      subjectId: auditSubject.draftId,
+      actorUserId: auditSubject.actorUserId,
       payload: {
         format: "pdf",
         sha256,
@@ -237,6 +258,17 @@ async function tryAppendExportAudit(
     // Defensive degradation: log and move on.
     console.error("[audit] draft.exported append failed", err);
   }
+}
+
+async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<boolean> {
+  if (!isUuid(draftId)) return false;
+  const db = getDb();
+  const [draft] = await db
+    .select({ id: drafts.id })
+    .from(drafts)
+    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)))
+    .limit(1);
+  return Boolean(draft);
 }
 
 function parseContentLength(req: Request): number | null {
@@ -262,4 +294,8 @@ function jsonError(error: string, status: number): Response {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
