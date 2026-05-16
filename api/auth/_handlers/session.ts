@@ -7,9 +7,9 @@
  */
 
 import { eq } from "drizzle-orm";
-import { getSessionFromRequest } from "../../_utils/workos";
-import { dbEnabled, getDb } from "../../../src/db";
-import { tenantMembers, tenants, users } from "../../../src/db/schema";
+import { getSessionFromRequest } from "../../_utils/workos.js";
+import { dbEnabled, getDb } from "../../../src/db/index.js";
+import { tenantMembers, tenants, users } from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 

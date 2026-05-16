@@ -23,8 +23,8 @@ import {
 } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { rateLimit } from "./_utils/rate-limit";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request";
+import { rateLimit } from "./_utils/rate-limit.js";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
 
 /* ============================================================================
  * Inlined from server/llm-model.ts — Anthropic only.

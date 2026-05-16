@@ -10,14 +10,14 @@
  * intact without forcing a separate "first-time provisioning" round-trip.
  */
 import { and, eq } from "drizzle-orm";
-import { getDb } from "../../src/db";
-import { users, tenants, tenantMembers } from "../../src/db/schema";
-import type { Tenant, User } from "../../src/db/schema";
+import { getDb } from "../../src/db/index.js";
+import { users, tenants, tenantMembers } from "../../src/db/schema.js";
+import type { Tenant, User } from "../../src/db/schema.js";
 import {
   requireSession,
   type SessionPayload,
-} from "./workos";
-import { jsonError } from "./request";
+} from "./workos.js";
+import { jsonError } from "./request.js";
 
 export type RequireSessionAndTenantResult =
   | {

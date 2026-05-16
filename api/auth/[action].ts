@@ -10,7 +10,7 @@
  * a verb-specific function (GET / POST) the same way it did before — we
  * just call into it.
  */
-import { jsonError } from "../_utils/request";
+import { jsonError } from "../_utils/request.js";
 
 type Handler = (req: Request) => Promise<Response>;
 

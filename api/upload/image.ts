@@ -16,8 +16,8 @@
  */
 import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
-import { rateLimit } from "../_utils/rate-limit";
-import { enforceSameOrigin, jsonError } from "../_utils/request";
+import { rateLimit } from "../_utils/rate-limit.js";
+import { enforceSameOrigin, jsonError } from "../_utils/request.js";
 
 export const config = {
   runtime: "nodejs",

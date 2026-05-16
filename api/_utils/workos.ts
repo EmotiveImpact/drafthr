@@ -12,7 +12,7 @@
 
 import { WorkOS } from "@workos-inc/node";
 import { sealData, unsealData } from "iron-session";
-import { jsonError } from "./request";
+import { jsonError } from "./request.js";
 
 export const SESSION_COOKIE = "drafthr_session";
 export const STATE_COOKIE = "drafthr_oauth_state";

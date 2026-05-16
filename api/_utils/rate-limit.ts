@@ -1,4 +1,4 @@
-import { jsonError } from "./request";
+import { jsonError } from "./request.js";
 
 type RateLimitOptions = {
   name: string;

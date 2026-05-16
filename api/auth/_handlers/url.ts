@@ -9,9 +9,9 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { getWorkos, buildStateCookie } from "../../_utils/workos";
-import { jsonError } from "../../_utils/request";
-import { rateLimit } from "../../_utils/rate-limit";
+import { getWorkos, buildStateCookie } from "../../_utils/workos.js";
+import { jsonError } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
 
 export const config = { runtime: "nodejs" };
 

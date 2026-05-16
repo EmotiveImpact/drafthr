@@ -8,9 +8,9 @@
  * of all sessions" feature in the UI.
  */
 
-import { enforceSameOrigin } from "../../_utils/request";
-import { rateLimit } from "../../_utils/rate-limit";
-import { buildClearCookie, SESSION_COOKIE, STATE_COOKIE } from "../../_utils/workos";
+import { enforceSameOrigin } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
+import { buildClearCookie, SESSION_COOKIE, STATE_COOKIE } from "../../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
 

@@ -6,9 +6,9 @@
 // This is the tribunal-defensibility demo: any retroactive edit breaks the
 // chain at the edit point and every row after it.
 import { asc, eq } from "drizzle-orm";
-import { auditEvents } from "./schema";
-import { getDb } from "./index";
-import { computeRowHash, GENESIS_PREV_HASH } from "./audit";
+import { auditEvents } from "./schema.js";
+import { getDb } from "./index.js";
+import { computeRowHash, GENESIS_PREV_HASH } from "./audit.js";
 
 export type VerifyAuditChainResult =
   | { ok: true; rowCount: number }

@@ -9,7 +9,7 @@
  * (GET / POST) the same way it did when each was its own Vercel function —
  * the dispatch is a pure pass-through.
  */
-import { jsonError } from "../_utils/request";
+import { jsonError } from "../_utils/request.js";
 
 type Handler = (req: Request) => Promise<Response>;
 

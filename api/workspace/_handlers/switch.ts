@@ -3,11 +3,11 @@
  * Target tenant must be one the user already belongs to.
  */
 import { and, eq } from "drizzle-orm";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request";
-import { rateLimit } from "../../_utils/rate-limit";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant";
-import { getDb } from "../../../src/db";
-import { tenants, tenantMembers } from "../../../src/db/schema";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { getDb } from "../../../src/db/index.js";
+import { tenants, tenantMembers } from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 

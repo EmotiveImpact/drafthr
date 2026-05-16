@@ -3,12 +3,12 @@
  * delete it: an audit reviewer should be able to see what was revoked + by who.
  */
 import { and, eq } from "drizzle-orm";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request";
-import { rateLimit } from "../../../_utils/rate-limit";
-import { requireSessionAndTenant } from "../../../_utils/session-with-tenant";
-import { getDb } from "../../../../src/db";
-import { invites } from "../../../../src/db/schema";
-import { appendAuditEvent } from "../../../../src/db/audit";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request.js";
+import { rateLimit } from "../../../_utils/rate-limit.js";
+import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js";
+import { getDb } from "../../../../src/db/index.js";
+import { invites } from "../../../../src/db/schema.js";
+import { appendAuditEvent } from "../../../../src/db/audit.js";
 
 export const config = { runtime: "nodejs" };
 

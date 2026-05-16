@@ -16,10 +16,10 @@
 import { createHash } from "node:crypto";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
-import { rateLimit } from "../_utils/rate-limit";
-import { enforceSameOrigin } from "../_utils/request";
-import { appendAuditEvent } from "../../src/db/audit";
-import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport";
+import { rateLimit } from "../_utils/rate-limit.js";
+import { enforceSameOrigin } from "../_utils/request.js";
+import { appendAuditEvent } from "../../src/db/audit.js";
+import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
 
 export const config = {
   runtime: "nodejs",

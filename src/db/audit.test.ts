@@ -5,7 +5,7 @@
  * row_hash matches its inputs. Mirrors the SQL-side `verifyAuditChain`.
  */
 import { describe, expect, it } from "vitest";
-import { computeRowHash, GENESIS_PREV_HASH } from "./audit";
+import { computeRowHash, GENESIS_PREV_HASH } from "./audit.js";
 
 describe("audit chain", () => {
   it("produces a valid chain across draft.created → draft.updated → draft.deleted", () => {

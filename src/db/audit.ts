@@ -7,9 +7,9 @@
 // runs in a single transaction to keep concurrent appends serialised.
 import { createHash } from "node:crypto";
 import { desc, eq } from "drizzle-orm";
-import { auditEvents } from "./schema";
-import { getDb } from "./index";
-import { canonicalJson } from "./canonical-json";
+import { auditEvents } from "./schema.js";
+import { getDb } from "./index.js";
+import { canonicalJson } from "./canonical-json.js";
 
 export const GENESIS_PREV_HASH = "0".repeat(64);
 

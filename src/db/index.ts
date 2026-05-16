@@ -4,10 +4,10 @@
 // preview deployments before Marketplace provisioning).
 import { drizzle } from "drizzle-orm/neon-serverless";
 import { Pool } from "@neondatabase/serverless";
-import * as schema from "./schema";
+import * as schema from "./schema.js";
 
 export { schema };
-export * from "./schema";
+export * from "./schema.js";
 
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 

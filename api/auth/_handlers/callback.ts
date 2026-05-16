@@ -8,8 +8,8 @@
  * victim using a code they obtained themselves.
  */
 
-import { readJsonRequest, enforceSameOrigin, jsonError } from "../../_utils/request";
-import { rateLimit } from "../../_utils/rate-limit";
+import { readJsonRequest, enforceSameOrigin, jsonError } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
 import {
   getWorkos,
   buildSessionCookie,
@@ -17,7 +17,7 @@ import {
   readStateCookie,
   STATE_COOKIE,
   type SessionPayload,
-} from "../../_utils/workos";
+} from "../../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
 

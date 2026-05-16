@@ -7,8 +7,8 @@
 
 import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { rateLimit } from "./_utils/rate-limit";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request";
+import { rateLimit } from "./_utils/rate-limit.js";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
