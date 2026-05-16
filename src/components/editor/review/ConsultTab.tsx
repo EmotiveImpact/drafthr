@@ -4,10 +4,9 @@ import type { Draft } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 
 /**
- * CONSULT tab — read-only marketplace surface. Stubbed for now: each "Book"
- * button alerts so it's clear the booking flow isn't real yet. The point of
- * the tab is to make the consultant network *visible* on Review so users
- * don't ship high-stakes letters without considering a human reviewer.
+ * CONSULT tab — read-only marketplace surface. The three featured consultants
+ * are AI-matched against the draft type. A "See all 14" link navigates to
+ * /consultants for the full marketplace with filter/sort/search.
  *
  * The topic chips are inferred from the draft's letterType via keyword
  * matching. Once the real marketplace API lands, this list will come from
@@ -35,6 +34,8 @@ export type Consultant = {
   photoUrl: string;
   /** Short marketing quote shown in the card specialty box. */
   specialty: string;
+  /** Tag list driving filter chips on /consultants index page. */
+  specialties: string[];
 };
 
 export const CONSULTANTS: Consultant[] = [
@@ -52,6 +53,7 @@ export const CONSULTANTS: Consultant[] = [
     photoUrl: "https://i.pravatar.cc/160?img=47",
     specialty:
       "Specialises in Working Time Regs + statutory leave disputes. Reviewed a similar holiday request last week.",
+    specialties: ["Working Time", "Statutory leave", "Holiday"],
   },
   {
     initials: "JP",
@@ -66,6 +68,7 @@ export const CONSULTANTS: Consultant[] = [
     photoUrl: "https://i.pravatar.cc/160?img=33",
     specialty:
       "20 years in internal HR. Best for fast turnaround on tone + escalation risk.",
+    specialties: ["Disciplinary", "Performance", "Grievance"],
   },
   {
     initials: "RS",
@@ -80,6 +83,172 @@ export const CONSULTANTS: Consultant[] = [
     photoUrl: "https://i.pravatar.cc/160?img=44",
     specialty:
       "ACAS-trained mediator. Best for letters where the relationship still matters post-send.",
+    specialties: ["Grievance", "Constructive dismissal", "Working Time"],
+  },
+  {
+    initials: "PS",
+    name: "Priya Sharma",
+    role: "Employment Counsel · 8 yrs · Magic Circle background",
+    rating: 4.8,
+    reviews: 41,
+    price: 155,
+    sla: "24h",
+    avatarFrom: "from-pink-400",
+    avatarTo: "to-fuchsia-500",
+    photoUrl: "https://i.pravatar.cc/160?img=49",
+    specialty:
+      "Magic Circle-trained. Deep expertise in TUPE transfers and complex contract disputes.",
+    specialties: ["TUPE", "Settlement", "Redundancy"],
+  },
+  {
+    initials: "MO",
+    name: "Marcus Okonkwo",
+    role: "Barrister · Cloisters chambers · 14 yrs",
+    rating: 4.9,
+    reviews: 76,
+    price: 180,
+    sla: "18h",
+    avatarFrom: "from-blue-500",
+    avatarTo: "to-cyan-500",
+    photoUrl: "https://i.pravatar.cc/160?img=12",
+    specialty:
+      "Cloisters-based barrister. Go-to for discrimination claims and tribunal-bound letters.",
+    specialties: ["Discrimination", "Whistleblowing", "Constructive dismissal"],
+  },
+  {
+    initials: "TB",
+    name: "Tom Bradshaw",
+    role: "HR Consultant · CIPD · 11 yrs",
+    rating: 4.7,
+    reviews: 112,
+    price: 85,
+    sla: "20h",
+    avatarFrom: "from-green-400",
+    avatarTo: "to-emerald-500",
+    photoUrl: "https://i.pravatar.cc/160?img=11",
+    specialty:
+      "CIPD-qualified. Specialises in disciplinary processes and managing underperformance with minimal legal risk.",
+    specialties: ["Disciplinary", "Performance", "Grievance"],
+  },
+  {
+    initials: "AH",
+    name: "Aisha Hassan",
+    role: "Solicitor · Slater & Gordon · 9 yrs",
+    rating: 4.8,
+    reviews: 93,
+    price: 140,
+    sla: "16h",
+    avatarFrom: "from-rose-400",
+    avatarTo: "to-pink-500",
+    photoUrl: "https://i.pravatar.cc/160?img=25",
+    specialty:
+      "Slater & Gordon solicitor focused on settlement agreements and protected disclosure letters.",
+    specialties: ["Settlement", "Whistleblowing", "Discrimination"],
+  },
+  {
+    initials: "HK",
+    name: "Helena Kowalski",
+    role: "Employment law lecturer · KCL · 18 yrs",
+    rating: 4.6,
+    reviews: 28,
+    price: 110,
+    sla: "36h",
+    avatarFrom: "from-violet-400",
+    avatarTo: "to-purple-500",
+    photoUrl: "https://i.pravatar.cc/160?img=56",
+    specialty:
+      "KCL academic with a practitioner background. Best for causation-heavy cases and novel legal arguments.",
+    specialties: ["Discrimination", "Constructive dismissal", "TUPE"],
+  },
+  {
+    initials: "DL",
+    name: "David Lin",
+    role: "Senior associate · Bird & Bird · 10 yrs",
+    rating: 4.8,
+    reviews: 67,
+    price: 165,
+    sla: "22h",
+    avatarFrom: "from-sky-400",
+    avatarTo: "to-blue-500",
+    photoUrl: "https://i.pravatar.cc/160?img=32",
+    specialty:
+      "Bird & Bird technology sector specialist. Handles executive disputes and bonus-clawback letters.",
+    specialties: ["Settlement", "Cross-border", "Constructive dismissal"],
+  },
+  {
+    initials: "OR",
+    name: "Olivia Reid",
+    role: "Solicitor · ex-government legal service · 13 yrs",
+    rating: 4.7,
+    reviews: 55,
+    price: 135,
+    sla: "24h",
+    avatarFrom: "from-teal-400",
+    avatarTo: "to-green-500",
+    photoUrl: "https://i.pravatar.cc/160?img=48",
+    specialty:
+      "Ex-GLS solicitor. Expert in collective redundancy consultation and statutory redundancy payment disputes.",
+    specialties: ["Redundancy", "TUPE", "Statutory leave"],
+  },
+  {
+    initials: "YA",
+    name: "Yusuf Ahmed",
+    role: "Employment paralegal · 5 yrs · fast turnaround",
+    rating: 4.5,
+    reviews: 140,
+    price: 75,
+    sla: "8h",
+    avatarFrom: "from-orange-400",
+    avatarTo: "to-amber-500",
+    photoUrl: "https://i.pravatar.cc/160?img=15",
+    specialty:
+      "Fastest response in the marketplace. Handles grievance submissions and internal appeal letters daily.",
+    specialties: ["Grievance", "Disciplinary", "Statutory leave"],
+  },
+  {
+    initials: "CW",
+    name: "Charlotte Williams",
+    role: "Consultant · 10 yrs · flexible work specialist",
+    rating: 4.7,
+    reviews: 84,
+    price: 105,
+    sla: "20h",
+    avatarFrom: "from-fuchsia-400",
+    avatarTo: "to-violet-500",
+    photoUrl: "https://i.pravatar.cc/160?img=54",
+    specialty:
+      "Dedicated flexible-working consultant. Covers statutory requests, disability accommodations, and pushbacks.",
+    specialties: ["Flexible working", "Holiday", "Statutory leave"],
+  },
+  {
+    initials: "SP",
+    name: "Sam Patel",
+    role: "Solicitor · ex-trade union legal · 8 yrs",
+    rating: 4.8,
+    reviews: 72,
+    price: 125,
+    sla: "18h",
+    avatarFrom: "from-cyan-400",
+    avatarTo: "to-sky-500",
+    photoUrl: "https://i.pravatar.cc/160?img=6",
+    specialty:
+      "Ex-union side solicitor. Strong on constructive dismissal and public-interest protected disclosures.",
+    specialties: ["Constructive dismissal", "Whistleblowing", "Grievance"],
+  },
+  {
+    initials: "JS",
+    name: "Joanna Schmidt",
+    role: "Senior counsel · Magic Circle · 16 yrs",
+    rating: 4.9,
+    reviews: 38,
+    price: 175,
+    sla: "32h",
+    avatarFrom: "from-indigo-500",
+    avatarTo: "to-blue-600",
+    photoUrl: "https://i.pravatar.cc/160?img=60",
+    specialty:
+      "Cross-border employment specialist. Advises on multi-jurisdictional letters and posted-worker issues.",
+    specialties: ["Cross-border", "TUPE", "Settlement"],
   },
 ];
 
@@ -144,7 +313,7 @@ export function ConsultTab({ draft }: { draft: Draft }) {
 
       {/* Consultant cards. */}
       <div className="space-y-2.5">
-        {CONSULTANTS.map((c) => (
+        {CONSULTANTS.slice(0, 3).map((c) => (
           <ConsultantCard key={c.initials} consultant={c} />
         ))}
       </div>

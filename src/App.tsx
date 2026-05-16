@@ -51,6 +51,11 @@ const EvidenceStep = lazy(() =>
   import("@/routes/EvidenceStep").then((m) => ({ default: m.EvidenceStep }))
 );
 
+// Consultant marketplace — lazy-loaded to keep the main bundle lean.
+const ConsultantsIndex = lazy(() =>
+  import("@/routes/ConsultantsIndex").then((m) => ({ default: m.ConsultantsIndex }))
+);
+
 function EditorFallback() {
   return (
     <div className="flex flex-col flex-1 min-h-0 p-6 gap-3">
@@ -175,6 +180,16 @@ export function App() {
         <Route path="/signup/workspace" element={<Protected><SignupWorkspace /></Protected>} />
         <Route path="/join/:inviteCode" element={<JoinInvite />} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
+        <Route
+          path="/consultants"
+          element={
+            <Protected>
+              <Suspense fallback={<EditorFallback />}>
+                <ConsultantsIndex />
+              </Suspense>
+            </Protected>
+          }
+        />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </motion.div>

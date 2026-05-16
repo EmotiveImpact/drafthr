@@ -1,0 +1,256 @@
+import { useState, useMemo } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { ArrowLeft, Search, X } from "lucide-react";
+import { BrandMark } from "@/components/ds/BrandMark";
+import { Wordmark } from "@/components/ds/Wordmark";
+import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
+import { ConsultantCard } from "@/components/consultants/ConsultantCard";
+import { BookingDialog } from "@/components/consultants/BookingDialog";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import type { Booking } from "@/lib/bookings";
+
+// Collect all unique specialty tags across the 14 consultants
+const ALL_TAGS = Array.from(
+  new Set(CONSULTANTS.flatMap((c) => c.specialties)),
+).sort();
+
+type SortKey = "rating" | "price-asc" | "price-desc" | "sla";
+
+const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "rating", label: "Rating" },
+  { value: "price-asc", label: "Price low–high" },
+  { value: "price-desc", label: "Price high–low" },
+  { value: "sla", label: "SLA fastest first" },
+];
+
+function sortConsultants(list: Consultant[], key: SortKey): Consultant[] {
+  return [...list].sort((a, b) => {
+    switch (key) {
+      case "rating":
+        return b.rating - a.rating;
+      case "price-asc":
+        return a.price - b.price;
+      case "price-desc":
+        return b.price - a.price;
+      case "sla": {
+        // Parse hours from sla string — parseSlaHours imported inline
+        const hours = (sla: string) => {
+          const range = sla.match(/^(\d+)-\d+h$/);
+          if (range) return parseInt(range[1], 10);
+          const single = sla.match(/^(\d+)h$/);
+          return single ? parseInt(single[1], 10) : 24;
+        };
+        return hours(a.sla) - hours(b.sla);
+      }
+    }
+  });
+}
+
+export function ConsultantsIndex() {
+  const nav = useNavigate();
+  const [searchParams] = useSearchParams();
+  const draftId = searchParams.get("draft") ?? "";
+
+  const [query, setQuery] = useState("");
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<SortKey>("rating");
+  const [bookingFor, setBookingFor] = useState<Consultant | null>(null);
+
+  const filtered = useMemo(() => {
+    let list = CONSULTANTS;
+
+    // Text search over name + role
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.role.toLowerCase().includes(q),
+      );
+    }
+
+    // Tag filter — consultant must have ALL active tags
+    if (activeTags.size > 0) {
+      list = list.filter((c) =>
+        [...activeTags].every((tag) => c.specialties.includes(tag)),
+      );
+    }
+
+    return sortConsultants(list, sortKey);
+  }, [query, activeTags, sortKey]);
+
+  function toggleTag(tag: string) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setActiveTags(new Set());
+    setSortKey("rating");
+  }
+
+  function handleBooked(booking: Booking) {
+    const c = CONSULTANTS.find((x) => x.initials === booking.consultantInitials);
+    toast.success(
+      `Booking confirmed — ${c?.name ?? "specialist"} will review your letter within ${c?.sla ?? "24h"}.`,
+    );
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
+      {/* Header */}
+      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
+        <Link
+          to="/"
+          aria-label="Home"
+          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
+        >
+          <BrandMark size={36} />
+          <Wordmark size={16} className="hidden sm:inline" />
+        </Link>
+        <span className="text-[13px] font-medium text-[var(--ds-ink)]">
+          Specialists
+        </span>
+        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
+          · 14 verified
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => nav(-1)}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back
+          </button>
+        </div>
+      </header>
+
+      {/* Body */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-[980px] px-4 py-8 sm:px-6 pb-24">
+
+          {/* Hero */}
+          <div className="mb-6">
+            <h1 className="text-[22px] sm:text-[26px] font-bold text-[var(--ds-ink)] leading-tight">
+              UK Employment Law Specialists
+            </h1>
+            <p className="text-[13.5px] text-[var(--ds-muted)] mt-1.5 max-w-prose leading-relaxed">
+              Get a UK-qualified specialist on your letter. Most reviews back within 24 hours, at a fraction of what a formal legal instruction costs.
+            </p>
+          </div>
+
+          {/* Filters row */}
+          <div className="flex flex-col gap-3 mb-6">
+            {/* Search + sort */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[var(--ds-muted)]" />
+                <input
+                  type="text"
+                  placeholder="Search by name or role…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="w-full h-8 pl-8 pr-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)]"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                    aria-label="Clear search"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
+              </div>
+
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                className="h-8 px-2.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)] cursor-pointer"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tag chips */}
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  className={cn(
+                    "text-[11px] font-semibold px-2.5 py-1 rounded-full border transition",
+                    activeTags.has(tag)
+                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
+                      : "bg-[var(--ds-surface)] text-[var(--ds-muted)] border-[var(--ds-line)] hover:border-[var(--ds-ink)] hover:text-[var(--ds-ink)]",
+                  )}
+                >
+                  {tag}
+                </button>
+              ))}
+              {(activeTags.size > 0 || query) && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-dashed border-[var(--ds-line)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Results count */}
+          <p className="text-[11.5px] text-[var(--ds-muted)] mb-3">
+            {filtered.length} of {CONSULTANTS.length} specialists
+          </p>
+
+          {/* Cards grid */}
+          {filtered.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((c) => (
+                <ConsultantCard
+                  key={c.initials}
+                  consultant={c}
+                  onBook={() => setBookingFor(c)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16 text-[var(--ds-muted)] text-[13px]">
+              No specialists match your filters.{" "}
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-[var(--ds-ink)] font-semibold underline"
+              >
+                Clear filters →
+              </button>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Booking dialog */}
+      <BookingDialog
+        consultant={bookingFor}
+        draftId={draftId}
+        onClose={() => setBookingFor(null)}
+        onBooked={handleBooked}
+      />
+    </div>
+  );
+}
