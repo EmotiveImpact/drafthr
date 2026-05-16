@@ -18,6 +18,7 @@ import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin } from "../_utils/request.js";
+import { parseTsr, requestTsr } from "../_utils/tsa.js";
 import { appendAuditEvent } from "../../src/db/audit.js";
 import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
 
@@ -146,19 +147,39 @@ export async function POST(req: Request): Promise<Response> {
       preferCSSPageSize: true,
     });
 
+    // Compute hash up front — both the TSA request and the audit row need it,
+    // and the client receives it back in `X-Drafthr-PDF-SHA256` for the
+    // verify endpoint.
+    const pdfBytes = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf);
+    const sha256 = createHash("sha256").update(pdfBytes).digest("hex");
+
+    // RFC 3161 round-trip. Returns null if FreeTSA times out / errors —
+    // export still succeeds with `tsa: unavailable` in the audit payload.
+    const tsr = await requestTsr(sha256);
+    const tsrParsed = tsr ? parseTsr(tsr) : null;
+
     // Best-effort audit write. The export must not fail if Postgres is down,
     // so we swallow every error and log for backfill.
-    await tryAppendExportAudit(req, body, pdf).catch(() => {});
+    await tryAppendExportAudit(req, body, pdfBytes, sha256, tsr, tsrParsed).catch(() => {});
 
     const filename = safePdfFilename(body.filename);
-    return new Response(new Uint8Array(pdf), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    // Audit-aware clients can read these headers and persist the TSR
+    // alongside the PDF. Browsers that just download the file ignore them.
+    const headers: Record<string, string> = {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      "X-Drafthr-PDF-SHA256": sha256,
+    };
+    if (tsr) {
+      headers["X-Drafthr-TSR-Base64"] = tsr.toString("base64");
+      headers["X-Drafthr-TSA-Provider"] = "freetsa";
+      if (tsrParsed?.ok) headers["X-Drafthr-TSA-Signed-At"] = tsrParsed.signedAtUtc.toISOString();
+    } else {
+      headers["X-Drafthr-TSA-Status"] = "unavailable";
+    }
+    return new Response(new Uint8Array(pdfBytes), { headers });
   } finally {
     await browser.close();
   }
@@ -167,7 +188,10 @@ export async function POST(req: Request): Promise<Response> {
 async function tryAppendExportAudit(
   req: Request,
   body: ExportRequest,
-  pdf: Uint8Array | Buffer,
+  pdfBytes: Uint8Array,
+  sha256: string,
+  tsr: Buffer | null,
+  tsrParsed: ReturnType<typeof parseTsr> | null,
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
   const tenantId = body.tenantId ?? process.env.DRAFTHR_DEFAULT_TENANT_ID;
@@ -177,10 +201,20 @@ async function tryAppendExportAudit(
   const subjectId = body.draftId;
   if (!subjectId) return;
 
-  const pdfBytes = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf);
-  const sha256 = createHash("sha256").update(pdfBytes).digest("hex");
   const forwardedFor = req.headers.get("x-forwarded-for");
   const ip = forwardedFor ? forwardedFor.split(",")[0]?.trim() ?? null : null;
+
+  // Stamp the third-party trusted timestamp into the chain. Null when FreeTSA
+  // was unreachable — recorded explicitly so a missing TSR is auditable
+  // rather than silent.
+  const tsa = tsr
+    ? {
+        provider: "freetsa",
+        tsr_base64: tsr.toString("base64"),
+        signed_at: tsrParsed?.ok ? tsrParsed.signedAtUtc.toISOString() : null,
+        tsa_name: tsrParsed?.ok ? tsrParsed.tsaName : null,
+      }
+    : { provider: "freetsa", status: "unavailable" as const };
 
   try {
     await appendAuditEvent({
@@ -196,6 +230,7 @@ async function tryAppendExportAudit(
         ip,
         reviewedBy: body.reviewedBy ?? null,
         reviewedOn: body.reviewedOn ?? null,
+        tsa,
       },
     });
   } catch (err) {
