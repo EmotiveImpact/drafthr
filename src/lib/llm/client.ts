@@ -16,6 +16,13 @@ export type StreamOptions = {
   onDone?: () => void;
   /** Called when a retry is about to start. retryCount is 1-based. */
   onRetry?: (retryCount: number, delayMs: number, reason: string) => void;
+  /**
+   * Optional system-prompt augmentation forwarded to /api/draft. When set,
+   * the server prepends a system message with this text before invoking
+   * the model. Used by the bulk mail-merge flow to instruct the model to
+   * emit {{placeholder}} tokens for fields that vary per recipient.
+   */
+  extraSystemHint?: string;
 };
 
 class RetryableError extends Error {
@@ -143,6 +150,7 @@ async function fetchOrThrow(opts: StreamOptions): Promise<Response> {
         temperature: opts.temperature,
         maxTokens: opts.maxTokens,
         model: opts.model,
+        extraSystemHint: opts.extraSystemHint,
       }),
       signal: opts.signal,
     });

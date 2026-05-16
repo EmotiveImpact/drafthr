@@ -3,20 +3,25 @@ import { persist } from "zustand/middleware";
 import type {
   AIAction,
   AIChatMessage,
+  ApprovalEntry,
   Collaborator,
   CollaboratorRole,
   Comment,
+  CustomTemplate,
   Draft,
   DraftTimelineEvent,
+  Employee,
   EvidenceItem,
   ExportEvent,
   LetterAnswers,
   LetterTypeId,
   Matter,
   MatterColor,
+  MatterEvent,
   Mode,
   Section,
   SectionVersion,
+  Task,
 } from "./letters/types";
 import { uid } from "./utils";
 import { getLetterMeta } from "./letters/catalog";
@@ -27,7 +32,11 @@ import {
   todayDateOnly,
 } from "./date-only";
 import { sanitizeLetterHtml } from "./sanitize";
-import { isSafeImageDataUrl } from "./safe-data-url";
+import { isSafeImageRef } from "./safe-data-url";
+import {
+  hasPendingSuggestions,
+  mergeAcceptedSuggestionsHtml,
+} from "./tiptap/suggestion-merge";
 
 type Store = {
   drafts: Record<string, Draft>;
@@ -37,6 +46,37 @@ type Store = {
    * draft store — they're not per-draft state.
    */
   matters: Record<string, Matter>;
+  /**
+   * Workspace-level normalized people directory. Lifted out of Draft.employee
+   * so one person can appear across many drafts/matters without duplication.
+   * HR mode owns this; employee-mode users have at most one record (themselves).
+   */
+  employees: Record<string, Employee>;
+  /** Actionable next steps attached to a Matter. */
+  tasks: Record<string, Task>;
+  /** Meetings, hearings, deadlines on a Matter calendar. */
+  events: Record<string, MatterEvent>;
+  /** Workspace-saved reusable templates — user-defined "house phrasings". */
+  customTemplates: Record<string, CustomTemplate>;
+  createCustomTemplate: (
+    input: Omit<CustomTemplate, "id" | "createdAt" | "updatedAt">
+  ) => string;
+  updateCustomTemplate: (id: string, patch: Partial<CustomTemplate>) => void;
+  deleteCustomTemplate: (id: string) => void;
+  /** Spawn a new draft from a saved custom template. Returns the new
+   * draft id, or null when the template id doesn't exist. */
+  createDraftFromCustomTemplate: (templateId: string, mode?: Mode) => string | null;
+  createEmployee: (input: Omit<Employee, "id" | "createdAt" | "updatedAt">) => string;
+  updateEmployee: (id: string, patch: Partial<Employee>) => void;
+  /** Soft-archive — flips status to "left" and stamps endDate if absent. */
+  archiveEmployee: (id: string) => void;
+  createTask: (input: Omit<Task, "id" | "createdAt" | "updatedAt">) => string;
+  updateTask: (id: string, patch: Partial<Task>) => void;
+  completeTask: (id: string) => void;
+  deleteTask: (id: string) => void;
+  createEvent: (input: Omit<MatterEvent, "id" | "createdAt">) => string;
+  updateEvent: (id: string, patch: Partial<MatterEvent>) => void;
+  deleteEvent: (id: string) => void;
   createMatter: (input: {
     name: string;
     mode: Mode;
@@ -69,6 +109,16 @@ type Store = {
     draftIds: string[];
   }) => string;
   createDraft: (letterType: LetterTypeId, answers: LetterAnswers, mode?: Mode) => string;
+  /** Spawn a draft flagged as a template authoring surface. The returned
+   * draft has `isTemplateSource: true` set so the editor swaps Export
+   * → Save template. `templateName` / `templateDescription` are stashed
+   * on answers so the banner + first save can read them. */
+  createTemplateSourceDraft: (
+    letterType: LetterTypeId,
+    answers: LetterAnswers,
+    mode: Mode,
+    meta: { templateName: string; templateDescription?: string }
+  ) => string;
   updateAnswers: (id: string, answers: LetterAnswers) => void;
   /** Rename the draft's display title. Empty string clears the override
    * so the letter-type meta title takes over again. */
@@ -89,6 +139,21 @@ type Store = {
   /** Accept (or reject) every pending change in the draft. */
   acceptAllPending: (id: string) => void;
   rejectAllPending: (id: string) => void;
+  /** Track-changes — flip a single suggestion mark's status across all
+   * sections of the draft. Used by the Accept / Reject affordances on each
+   * inline pill. Does NOT rewrite the underlying text. */
+  setSuggestionStatus: (
+    draftId: string,
+    suggestionId: string,
+    status: "accepted" | "rejected" | "pending"
+  ) => void;
+  /** Accept every pending suggestion: walks each section, applies
+   * mergeAcceptedSuggestionsHtml to fold accepted insertions in / drop
+   * accepted deletions, versions the prior html, marks the section edited. */
+  acceptAllSuggestions: (draftId: string) => void;
+  /** Reject every pending suggestion without modifying the underlying text —
+   * marks stay so the reviewer's intent is auditable. */
+  rejectAllSuggestions: (draftId: string) => void;
   setSections: (id: string, sections: Section[]) => void;
   setWithoutPrejudice: (id: string, value: boolean) => void;
   setEvidence: (id: string, items: EvidenceItem[]) => void;
@@ -128,6 +193,15 @@ type Store = {
     id: string,
     event: Omit<DraftTimelineEvent, "id" | "createdAt"> & { createdAt?: number }
   ) => void;
+  /** Drafter action: ship the draft to a reviewer for sign-off. */
+  submitForReview: (id: string, reviewerName?: string, body?: string) => void;
+  /** Reviewer action: green-light the draft. Clears it to "ready to send". */
+  approveDraft: (id: string, reviewerName: string, body?: string) => void;
+  /** Reviewer action: push back with required changes. Returns the draft
+   * to "draft" state for the author to revise. */
+  requestChanges: (id: string, reviewerName: string, body: string) => void;
+  /** Author action: pull a submitted draft back before review starts. */
+  withdrawForReview: (id: string) => void;
   deleteDraft: (id: string) => void;
 };
 
@@ -141,6 +215,209 @@ export const useDraftStore = create<Store>()(
     (set, get) => ({
       drafts: {},
       matters: {},
+      employees: {},
+      tasks: {},
+      events: {},
+      customTemplates: {},
+
+      /* ----------------------------------------------------------------
+       * Custom templates — workspace-saved reusable letters. A user-named
+       * snapshot of a draft's per-section HTML + answers, keyed by the
+       * canonical SectionId (not the per-draft Section.id) so it can be
+       * applied to a freshly-spawned outline from the same baseLetterType.
+       * ---------------------------------------------------------------*/
+
+      createCustomTemplate: (input) => {
+        const id = uid("tpl");
+        const now = Date.now();
+        const tpl: CustomTemplate = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ customTemplates: { ...s.customTemplates, [id]: tpl } }));
+        return id;
+      },
+
+      updateCustomTemplate: (id, patch) =>
+        set((s) => {
+          const t = s.customTemplates[id];
+          if (!t) return s;
+          return {
+            customTemplates: {
+              ...s.customTemplates,
+              [id]: { ...t, ...patch, updatedAt: Date.now() },
+            },
+          };
+        }),
+
+      deleteCustomTemplate: (id) =>
+        set((s) => {
+          if (!s.customTemplates[id]) return s;
+          const { [id]: _removed, ...remaining } = s.customTemplates;
+          return { customTemplates: remaining };
+        }),
+
+      createDraftFromCustomTemplate: (templateId, modeOverride) => {
+        const tpl = get().customTemplates[templateId];
+        if (!tpl) return null;
+        // Seed answers from the template, plus jurisdiction default so
+        // wizard-derived fields downstream pick the right region.
+        const seededAnswers: LetterAnswers = {
+          ...(tpl.answers ?? {}),
+          ...(tpl.jurisdiction ? { jurisdiction: tpl.jurisdiction } : {}),
+        };
+        const newDraftId = get().createDraft(
+          tpl.baseLetterType,
+          seededAnswers,
+          modeOverride ?? tpl.mode
+        );
+        // Pre-fill section html from the template, keyed by canonical SectionId.
+        set((s) => {
+          const d = s.drafts[newDraftId];
+          if (!d) return s;
+          const sections = d.sections.map((sec) => {
+            const html = tpl.sectionHtml[sec.sectionId];
+            if (!html) return sec;
+            return {
+              ...sec,
+              html: sanitizeLetterHtml(html),
+              status: "edited" as Section["status"],
+            };
+          });
+          return {
+            drafts: { ...s.drafts, [newDraftId]: { ...d, sections, updatedAt: Date.now() } },
+          };
+        });
+        return newDraftId;
+      },
+
+      /* ----------------------------------------------------------------
+       * Employees — workspace-level normalized people directory.
+       * Additive lifecycle: create / update / archive. Drafts and Matters
+       * reference these by id (via Matter.participants[].employeeId). We
+       * intentionally don't cascade-delete: archive flips status so
+       * historical drafts keep their link, and the directory stays clean.
+       * ---------------------------------------------------------------*/
+
+      createEmployee: (input) => {
+        const id = uid("emp");
+        const now = Date.now();
+        const employee: Employee = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ employees: { ...s.employees, [id]: employee } }));
+        return id;
+      },
+
+      updateEmployee: (id, patch) =>
+        set((s) => {
+          const e = s.employees[id];
+          if (!e) return s;
+          return {
+            employees: { ...s.employees, [id]: { ...e, ...patch, updatedAt: Date.now() } },
+          };
+        }),
+
+      archiveEmployee: (id) =>
+        set((s) => {
+          const e = s.employees[id];
+          if (!e) return s;
+          const now = Date.now();
+          return {
+            employees: {
+              ...s.employees,
+              [id]: {
+                ...e,
+                status: "left",
+                endDate: e.endDate ?? todayDateOnly(),
+                updatedAt: now,
+              },
+            },
+          };
+        }),
+
+      /* ----------------------------------------------------------------
+       * Tasks — actionable next steps tied to a Matter.
+       * ---------------------------------------------------------------*/
+
+      createTask: (input) => {
+        const id = uid("task");
+        const now = Date.now();
+        const task: Task = {
+          ...input,
+          id,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({ tasks: { ...s.tasks, [id]: task } }));
+        return id;
+      },
+
+      updateTask: (id, patch) =>
+        set((s) => {
+          const t = s.tasks[id];
+          if (!t) return s;
+          return {
+            tasks: { ...s.tasks, [id]: { ...t, ...patch, updatedAt: Date.now() } },
+          };
+        }),
+
+      completeTask: (id) =>
+        set((s) => {
+          const t = s.tasks[id];
+          if (!t) return s;
+          const now = Date.now();
+          return {
+            tasks: {
+              ...s.tasks,
+              [id]: { ...t, status: "done", doneAt: now, updatedAt: now },
+            },
+          };
+        }),
+
+      deleteTask: (id) =>
+        set((s) => {
+          if (!s.tasks[id]) return s;
+          const { [id]: _removed, ...remaining } = s.tasks;
+          return { tasks: remaining };
+        }),
+
+      /* ----------------------------------------------------------------
+       * Events — meetings / hearings / deadlines on a Matter calendar.
+       * ---------------------------------------------------------------*/
+
+      createEvent: (input) => {
+        const id = uid("evt");
+        const now = Date.now();
+        const event: MatterEvent = {
+          ...input,
+          id,
+          createdAt: now,
+        };
+        set((s) => ({ events: { ...s.events, [id]: event } }));
+        return id;
+      },
+
+      updateEvent: (id, patch) =>
+        set((s) => {
+          const e = s.events[id];
+          if (!e) return s;
+          return {
+            events: { ...s.events, [id]: { ...e, ...patch } },
+          };
+        }),
+
+      deleteEvent: (id) =>
+        set((s) => {
+          if (!s.events[id]) return s;
+          const { [id]: _removed, ...remaining } = s.events;
+          return { events: remaining };
+        }),
 
       /* ----------------------------------------------------------------
        * Matters lifecycle
@@ -326,10 +603,10 @@ export const useDraftStore = create<Store>()(
             address: (a.employerAddress as string) ?? "",
             registrationNumber: a.employerRegNumber as string | undefined,
             hasLetterhead: Boolean(a.hasLetterhead),
-            letterheadDataUrl: isSafeImageDataUrl(a.letterheadDataUrl)
+            letterheadDataUrl: isSafeImageRef(a.letterheadDataUrl)
               ? a.letterheadDataUrl
               : undefined,
-            signatureDataUrl: isSafeImageDataUrl(a.signatureDataUrl)
+            signatureDataUrl: isSafeImageRef(a.signatureDataUrl)
               ? a.signatureDataUrl
               : undefined,
             signatoryName:
@@ -369,6 +646,31 @@ export const useDraftStore = create<Store>()(
           updatedAt: now,
         };
         set((s) => ({ drafts: { ...s.drafts, [id]: draft } }));
+        return id;
+      },
+
+      createTemplateSourceDraft: (letterType, answers, mode, metaInput) => {
+        const id = get().createDraft(letterType, answers, mode);
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const nextAnswers: LetterAnswers = {
+            ...d.answers,
+            _templateName: metaInput.templateName,
+            _templateDescription: metaInput.templateDescription,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: {
+                ...d,
+                isTemplateSource: true,
+                answers: nextAnswers,
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        });
         return id;
       },
 
@@ -566,6 +868,95 @@ export const useDraftStore = create<Store>()(
             sec.pendingChange ? { ...sec, pendingChange: undefined } : sec
           );
           return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+        }),
+
+      /* ------------------------------------------------------------------
+       * Track-changes (Suggestion mark) lifecycle. The mark lives inside
+       * section.html as <ins data-suggestion-id=…> / <del …>. These
+       * actions either flip a single mark's status across all sections
+       * (setSuggestionStatus) or fan-out across the whole draft (accept-
+       * all merges marks destructively, reject-all leaves marks intact
+       * but flips them visually muted).
+       * ----------------------------------------------------------------*/
+
+      setSuggestionStatus: (draftId, suggestionId, status) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          const escaped = suggestionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          // Rewrite data-status on any <ins>/<del> that owns this id. Done
+          // via regex because we only touch one attribute — DOMParser would
+          // pay reparse cost on every keystroke if the rail batches calls.
+          const re = new RegExp(
+            `(<(?:ins|del)\\b[^>]*\\bdata-suggestion-id="${escaped}"[^>]*)\\bdata-status="[^"]*"`,
+            "g"
+          );
+          let touched = false;
+          const sections = d.sections.map((sec) => {
+            if (!sec.html?.includes("data-suggestion-id")) return sec;
+            const next = sec.html.replace(re, `$1data-status="${status}"`);
+            if (next === sec.html) return sec;
+            touched = true;
+            return { ...sec, html: next };
+          });
+          if (!touched) return s;
+          return {
+            drafts: { ...s.drafts, [draftId]: { ...d, sections, updatedAt: Date.now() } },
+          };
+        }),
+
+      acceptAllSuggestions: (draftId) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          let touched = false;
+          const now = Date.now();
+          const sections = d.sections.map((sec) => {
+            if (!hasPendingSuggestions(sec.html)) return sec;
+            // Flip pending → accepted, then merge to fold accepted edits in.
+            const flipped = sec.html.replace(
+              /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
+              `$1data-status="accepted"`
+            );
+            const merged = sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(flipped));
+            const oldVersion: SectionVersion = {
+              id: `suggestion-accept-${sec.id}-${now}`,
+              createdAt: now,
+              html: sec.html,
+            };
+            touched = true;
+            return {
+              ...sec,
+              html: merged,
+              status: "edited" as Section["status"],
+              versions: [...sec.versions, oldVersion],
+            };
+          });
+          if (!touched) return s;
+          return {
+            drafts: { ...s.drafts, [draftId]: { ...d, sections, updatedAt: now } },
+          };
+        }),
+
+      rejectAllSuggestions: (draftId) =>
+        set((s) => {
+          const d = s.drafts[draftId];
+          if (!d) return s;
+          let touched = false;
+          const sections = d.sections.map((sec) => {
+            if (!hasPendingSuggestions(sec.html)) return sec;
+            const next = sec.html.replace(
+              /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
+              `$1data-status="rejected"`
+            );
+            if (next === sec.html) return sec;
+            touched = true;
+            return { ...sec, html: next };
+          });
+          if (!touched) return s;
+          return {
+            drafts: { ...s.drafts, [draftId]: { ...d, sections, updatedAt: Date.now() } },
+          };
         }),
 
       setWithoutPrejudice: (id, value) =>
@@ -946,6 +1337,135 @@ export const useDraftStore = create<Store>()(
           };
         }),
 
+      /* ----------------------------------------------------------------
+       * Approval workflow — Business-tier review queue.
+       * Status machine: draft → in_review → (approved | changes_requested → draft).
+       * Every transition logs an ApprovalEntry on draft.approvals[] AND a
+       * timeline event so existing Activity surfaces pick it up for free.
+       * ---------------------------------------------------------------*/
+
+      submitForReview: (id, reviewerName, body) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const now = Date.now();
+          const reviewer = (reviewerName ?? "").trim() || "Workspace reviewer";
+          const entry: ApprovalEntry = {
+            id: uid("apr"),
+            reviewerName: reviewer,
+            decision: "submitted",
+            body: body?.trim() || undefined,
+            createdAt: now,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "in_review",
+                  submittedForReviewAt: now,
+                  approvals: [...(d.approvals ?? []), entry],
+                },
+                timelineEvent("review_submitted", `Submitted for review to ${reviewer}`, {
+                  createdAt: now,
+                  detail: entry.body,
+                  actorName: reviewer,
+                  meta: { approvalId: entry.id },
+                })
+              ),
+            },
+          };
+        }),
+
+      approveDraft: (id, reviewerName, body) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const now = Date.now();
+          const reviewer = reviewerName.trim() || "Workspace reviewer";
+          const entry: ApprovalEntry = {
+            id: uid("apr"),
+            reviewerName: reviewer,
+            decision: "approved",
+            body: body?.trim() || undefined,
+            createdAt: now,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "approved",
+                  reviewDecidedAt: now,
+                  approvals: [...(d.approvals ?? []), entry],
+                },
+                timelineEvent("review_approved", `Approved by ${reviewer}`, {
+                  createdAt: now,
+                  detail: entry.body,
+                  actorName: reviewer,
+                  meta: { approvalId: entry.id },
+                })
+              ),
+            },
+          };
+        }),
+
+      requestChanges: (id, reviewerName, body) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          const now = Date.now();
+          const reviewer = reviewerName.trim() || "Workspace reviewer";
+          const entry: ApprovalEntry = {
+            id: uid("apr"),
+            reviewerName: reviewer,
+            decision: "changes_requested",
+            body: body.trim(),
+            createdAt: now,
+          };
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "changes_requested",
+                  reviewDecidedAt: now,
+                  approvals: [...(d.approvals ?? []), entry],
+                },
+                timelineEvent("review_changes_requested", `Changes requested by ${reviewer}`, {
+                  createdAt: now,
+                  detail: entry.body,
+                  actorName: reviewer,
+                  meta: { approvalId: entry.id },
+                })
+              ),
+            },
+          };
+        }),
+
+      withdrawForReview: (id) =>
+        set((s) => {
+          const d = s.drafts[id];
+          if (!d) return s;
+          if (d.reviewStatus !== "in_review") return s;
+          return {
+            drafts: {
+              ...s.drafts,
+              [id]: appendTimeline(
+                {
+                  ...d,
+                  reviewStatus: "draft",
+                  submittedForReviewAt: undefined,
+                },
+                timelineEvent("review_withdrawn", "Withdrew from review")
+              ),
+            },
+          };
+        }),
+
       deleteDraft: (id) =>
         set((s) => {
           const next = { ...s.drafts };
@@ -956,6 +1476,51 @@ export const useDraftStore = create<Store>()(
     { name: "scribehr-store-v1" }
   )
 );
+
+// Dual-write hook: subscribe to the store and enqueue a debounced server
+// sync per draft whenever its identity changes. No-op when the flag is off.
+// We register a snapshot getter so dual-write.ts can read drafts without
+// importing the store module (avoids a circular import).
+import {
+  enqueueSync as _dualWriteEnqueueSync,
+  setDualWriteSnapshotGetter as _setDualWriteSnapshotGetter,
+  isDualWriteEnabled as _isDualWriteEnabled,
+  syncDraft as _dualWriteSyncDraft,
+} from "./dual-write";
+
+_setDualWriteSnapshotGetter((draftId) => useDraftStore.getState().drafts[draftId] ?? null);
+
+if (_isDualWriteEnabled()) {
+  let prevDrafts = useDraftStore.getState().drafts;
+  useDraftStore.subscribe((state) => {
+    const next = state.drafts;
+    if (next === prevDrafts) return;
+    for (const [id, draft] of Object.entries(next)) {
+      if (prevDrafts[id] !== draft) {
+        _dualWriteEnqueueSync(id);
+      }
+    }
+    // Deletions — drafts present before but missing now.
+    for (const id of Object.keys(prevDrafts)) {
+      if (!(id in next)) {
+        // Fire-and-forget delete. We do NOT debounce deletions — they're rare
+        // and the user expects them to land immediately.
+        void fetch("/api/store/drafts", {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ id }),
+        }).catch(() => {
+          /* defensive — local delete already succeeded */
+        });
+      }
+    }
+    prevDrafts = next;
+  });
+}
+
+// Re-export so callers (App.tsx backfill) can avoid duplicating imports.
+export const __dualWrite = { syncDraft: _dualWriteSyncDraft };
 
 function timelineEvent(
   kind: DraftTimelineEvent["kind"],

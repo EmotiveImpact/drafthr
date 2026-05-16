@@ -102,6 +102,10 @@ const ALLOWED_TAGS = [
   // we restrict to known image MIMEs via ADD_URI_SAFE_ATTR + ALLOW_DATA_ATTR.
   "img",
   "figure", "figcaption",
+  // Track-changes / suggestion mark — see src/lib/tiptap/suggestion-mark.ts.
+  // Only allowed on the authoring path; sanitizeLetterHtmlForExport strips
+  // these because rendered exports must only contain accepted edits.
+  "ins", "del",
 ];
 
 const ALLOWED_ATTR = [
@@ -118,6 +122,10 @@ const ALLOWED_ATTR = [
   // The 'style' allowance above covers that; we also explicitly permit
   // 'data-text-align' for any future explicit-attribute uses.
   "data-text-align",
+  // Suggestion mark attributes — see src/lib/tiptap/suggestion-mark.ts.
+  "data-suggestion-id", "data-suggestion-kind", "data-author",
+  "data-author-id", "data-body", "data-created-at", "data-status",
+  "data-suggestion",
 ];
 
 export function sanitizeLetterHtml(dirty: string): string {
@@ -138,6 +146,39 @@ export function sanitizeLetterHtml(dirty: string): string {
     // image extension stores pasted screenshots (data:image/png;base64,…).
     // Plus keep DOMPurify's default-permitted schemes for href on <a>:
     // http(s), mailto, tel.
+    ALLOWED_URI_REGEXP:
+      /^(?:https?:|mailto:|tel:|\/|#|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
+  });
+  return hardenSanitizedHtml(cleaned, blankLinkHrefs);
+}
+
+/**
+ * Sanitiser variant for PDF / DOCX export. Strips suggestion marks entirely
+ * because rendered documents must contain only canonical (accepted) text —
+ * pending or rejected proposals leak reviewer state into the final file.
+ * Callers should run mergeAcceptedSuggestionsHtml first to fold accepted
+ * insertions into the prose; whatever is left over (still pending, still
+ * rejected) is dropped here.
+ */
+export function sanitizeLetterHtmlForExport(dirty: string): string {
+  if (typeof window === "undefined") return dirty;
+  // Same allowlists minus the suggestion tags + attributes. We rebuild the
+  // arrays inline so the authoring path's lists aren't mutated.
+  const exportTags = ALLOWED_TAGS.filter((t) => t !== "ins" && t !== "del");
+  const exportAttrs = ALLOWED_ATTR.filter(
+    (a) => !a.startsWith("data-suggestion") && !a.startsWith("data-author") &&
+      !a.startsWith("data-body") && !a.startsWith("data-created-at") &&
+      !a.startsWith("data-status"),
+  );
+  registerSanitizeHooks();
+  const blankLinkHrefs = collectBlankLinkHrefs(dirty);
+  const cleaned = DOMPurify.sanitize(dirty, {
+    ALLOWED_TAGS: exportTags,
+    ALLOWED_ATTR: exportAttrs,
+    ADD_ATTR: ["target"],
+    ALLOW_DATA_ATTR: false,
+    KEEP_CONTENT: true,
+    USE_PROFILES: { html: true },
     ALLOWED_URI_REGEXP:
       /^(?:https?:|mailto:|tel:|\/|#|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
   });

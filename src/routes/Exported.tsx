@@ -21,6 +21,7 @@ export function Exported() {
 
   const list = useMemo(() => {
     return Object.values(drafts)
+      .filter((d) => !d.isTemplateSource)
       .filter((d) => (role ? d.mode === role : true))
       .filter((d) => (d.exports?.length ?? 0) > 0)
       .map((d) => ({

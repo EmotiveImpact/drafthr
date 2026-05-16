@@ -13,10 +13,13 @@
  * Memory: 1024MB+ recommended (set in vercel.json).
  */
 
+import { createHash } from "node:crypto";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
 import { rateLimit } from "../_utils/rate-limit";
 import { enforceSameOrigin } from "../_utils/request";
+import { appendAuditEvent } from "../../src/db/audit";
+import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport";
 
 export const config = {
   runtime: "nodejs",
@@ -26,6 +29,13 @@ export const config = {
 type ExportRequest = {
   html: string;
   filename?: string;
+  // Audit metadata — all optional. Missing values are tolerated; the audit
+  // write is best-effort and never blocks the PDF response.
+  draftId?: string;
+  tenantId?: string;
+  actorUserId?: string;
+  reviewedBy?: string;
+  reviewedOn?: string;
 };
 
 const DEFAULT_PACK_URL =
@@ -125,13 +135,20 @@ export async function POST(req: Request): Promise<Response> {
       }
     });
 
-    const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${body.html}</body></html>`;
+    // Inline https://blob images to data: URLs before render — Puppeteer's
+    // request interceptor above blocks all non-data:/about: requests by design.
+    const inlinedHtml = await inlineImagesForExport(body.html);
+    const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${inlinedHtml}</body></html>`;
     await page.setContent(fullHtml, { waitUntil: "load", timeout: PDF_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
       preferCSSPageSize: true,
     });
+
+    // Best-effort audit write. The export must not fail if Postgres is down,
+    // so we swallow every error and log for backfill.
+    await tryAppendExportAudit(req, body, pdf).catch(() => {});
 
     const filename = safePdfFilename(body.filename);
     return new Response(new Uint8Array(pdf), {
@@ -144,6 +161,46 @@ export async function POST(req: Request): Promise<Response> {
     });
   } finally {
     await browser.close();
+  }
+}
+
+async function tryAppendExportAudit(
+  req: Request,
+  body: ExportRequest,
+  pdf: Uint8Array | Buffer,
+): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const tenantId = body.tenantId ?? process.env.DRAFTHR_DEFAULT_TENANT_ID;
+  // Local single-user mode: if tenant is unknown we have nothing to chain
+  // against, so skip — no fake genesis row.
+  if (!tenantId) return;
+  const subjectId = body.draftId;
+  if (!subjectId) return;
+
+  const pdfBytes = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf);
+  const sha256 = createHash("sha256").update(pdfBytes).digest("hex");
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0]?.trim() ?? null : null;
+
+  try {
+    await appendAuditEvent({
+      tenantId,
+      kind: "draft.exported",
+      subjectType: "draft",
+      subjectId,
+      actorUserId: body.actorUserId ?? null,
+      payload: {
+        format: "pdf",
+        sha256,
+        byteLength: pdfBytes.byteLength,
+        ip,
+        reviewedBy: body.reviewedBy ?? null,
+        reviewedOn: body.reviewedOn ?? null,
+      },
+    });
+  } catch (err) {
+    // Defensive degradation: log and move on.
+    console.error("[audit] draft.exported append failed", err);
   }
 }
 

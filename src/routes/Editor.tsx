@@ -49,6 +49,11 @@ import {
   Undo2,
   Redo2,
   Paperclip,
+  BookmarkPlus,
+  Send,
+  CheckCircle2,
+  MessageSquareWarning,
+  Undo,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -63,6 +68,11 @@ import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
 import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
+import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal";
+import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
+import { canApprove, canSubmitForReview, canEditDraft } from "@/lib/permissions";
+import { MatterEmployeeChips } from "@/components/editor/MatterEmployeeChips";
+import { TemplateSourceBanner } from "@/components/editor/TemplateSourceBanner";
 import {
   EvidenceHandoff,
   evaluateEvidenceHandoff,
@@ -145,6 +155,12 @@ export function Editor() {
   // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
+  // Approval-workflow modal — null when closed, otherwise drives the
+  // submit / approve / request-changes dialog. Same shell, three kinds.
+  const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
+  // Read-only "Review feedback" panel toggled by the changes_requested pill.
+  const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
   // Unified dock state. `pinnedDock` is the single source of truth for which
   // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
   // Lazy initialiser reads from localStorage on first mount so the correct
@@ -474,8 +490,100 @@ export function Editor() {
   // counsel-review attestation, and recording the export. The editor no
   // longer owns any export state.
 
+  // Template-source save: when isTemplateSource, the primary CTA writes
+  // the current draft's section html + answers into a CustomTemplate.
+  // First save creates the row; subsequent saves update in place via
+  // templateSourceId so we never duplicate.
+  const saveTemplateSource = () => {
+    if (!draft.isTemplateSource) return;
+    const answersRec = draft.answers as Record<string, unknown>;
+    const templateName =
+      (answersRec._templateName as string | undefined)?.trim() ||
+      draft.title?.trim() ||
+      meta?.shortTitle ||
+      "Untitled template";
+    const templateDescription = answersRec._templateDescription as string | undefined;
+    const sectionHtml: Partial<Record<import("@/lib/letters/types").SectionId, string>> = {};
+    for (const sec of draft.sections) {
+      if (sec.html.trim().length === 0) continue;
+      sectionHtml[sec.sectionId] = sec.html;
+    }
+    const store = useDraftStore.getState();
+    const myTemplatesUrl =
+      (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
+    if (draft.templateSourceId && store.customTemplates[draft.templateSourceId]) {
+      store.updateCustomTemplate(draft.templateSourceId, {
+        name: templateName,
+        description: templateDescription,
+        baseLetterType: draft.letterType,
+        mode: draft.mode,
+        jurisdiction: draft.context.jurisdiction,
+        sectionHtml,
+        answers: draft.answers,
+      });
+    } else {
+      const newId = store.createCustomTemplate({
+        name: templateName,
+        description: templateDescription,
+        baseLetterType: draft.letterType,
+        mode: draft.mode,
+        jurisdiction: draft.context.jurisdiction,
+        sectionHtml,
+        answers: draft.answers,
+      });
+      const next = { ...store.drafts[draft.id], templateSourceId: newId, updatedAt: Date.now() };
+      useDraftStore.setState({ drafts: { ...store.drafts, [draft.id]: next } });
+    }
+    toast.success("Template saved", {
+      action: { label: "Open My Templates", onClick: () => nav(myTemplatesUrl) },
+    });
+  };
+
+  const discardTemplateSource = () => {
+    if (!draft.isTemplateSource) return;
+    const ok = window.confirm(
+      "Discard this template and any saved version? This can't be undone."
+    );
+    if (!ok) return;
+    const store = useDraftStore.getState();
+    if (draft.templateSourceId) store.deleteCustomTemplate(draft.templateSourceId);
+    const targetUrl =
+      (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
+    store.deleteDraft(draft.id);
+    nav(targetUrl);
+  };
+
   const backTo = draft.mode === "employer" ? "/hr" : draft.mode === "employee" ? "/me" : "/";
   const identities = listIdentities(draft, profile);
+
+  // Approval workflow — status pill + dialog gating off the workspace role.
+  const reviewStatus = draft.reviewStatus ?? "draft";
+  const role = profile.workspaceRole;
+  const canvasEditable = canEditDraft(role, reviewStatus);
+  const latestChangesRequest = (draft.approvals ?? [])
+    .slice()
+    .reverse()
+    .find((a) => a.decision === "changes_requested");
+
+  const onReviewSubmit = (input: { reviewerName: string; body: string }) => {
+    if (!reviewDialogKind) return;
+    const store = useDraftStore.getState();
+    if (reviewDialogKind === "submit") {
+      store.submitForReview(draft.id, input.reviewerName, input.body);
+      toast.success("Submitted for approval");
+    } else if (reviewDialogKind === "approve") {
+      store.approveDraft(draft.id, input.reviewerName, input.body);
+      toast.success("Draft approved");
+    } else if (reviewDialogKind === "request_changes") {
+      store.requestChanges(draft.id, input.reviewerName, input.body);
+      toast("Changes requested");
+    }
+  };
+
+  const onWithdrawForReview = () => {
+    useDraftStore.getState().withdrawForReview(draft.id);
+    toast("Withdrawn from review");
+  };
 
   // Counsel-review status — derived from the most recent export attestation
   // OR from a manual attestation in answers._counselReview. High-risk
@@ -546,12 +654,49 @@ export function Editor() {
                   <DropdownMenuItem onClick={() => setEditDetailsOpen(true)}>
                     <Settings2 className="size-4 mr-2" /> Edit details
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => nav(`/editor/${draft.id}/review`)}
-                  >
-                    <FileDown className="size-4 mr-2" /> Export…
-                  </DropdownMenuItem>
+                  {/* Approval-workflow actions — items vary by status + role.
+                   * Hidden for template-source drafts (no review needed). */}
+                  {!draft.isTemplateSource && (
+                    <>
+                      <DropdownMenuSeparator />
+                      {reviewStatus === "draft" && canSubmitForReview(role) && (
+                        <DropdownMenuItem onClick={() => setReviewDialogKind("submit")}>
+                          <Send className="size-4 mr-2" /> Submit for approval…
+                        </DropdownMenuItem>
+                      )}
+                      {reviewStatus === "changes_requested" && canSubmitForReview(role) && (
+                        <DropdownMenuItem onClick={() => setReviewDialogKind("submit")}>
+                          <Send className="size-4 mr-2" /> Re-submit for approval…
+                        </DropdownMenuItem>
+                      )}
+                      {reviewStatus === "in_review" && (
+                        <>
+                          <DropdownMenuItem onClick={onWithdrawForReview}>
+                            <Undo className="size-4 mr-2" /> Withdraw from review
+                          </DropdownMenuItem>
+                          {canApprove(role) && (
+                            <>
+                              <DropdownMenuItem onClick={() => setReviewDialogKind("approve")}>
+                                <CheckCircle2 className="size-4 mr-2" /> Approve
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setReviewDialogKind("request_changes")}>
+                                <MessageSquareWarning className="size-4 mr-2" /> Request changes…
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => nav(`/editor/${draft.id}/review`)}
+                      >
+                        <FileDown className="size-4 mr-2" /> Export…
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setSaveAsTemplateOpen(true)}>
+                        <BookmarkPlus className="size-4 mr-2" /> Save as template…
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => nav("/settings")}>
                     <Settings2 className="size-4 mr-2" /> Settings
@@ -712,6 +857,48 @@ export function Editor() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+            {/* Approval-workflow pill — visible when the draft is in any
+             * non-draft state, OR when a reviewer is acting. Click on
+             * "changes_requested" pops the feedback panel. */}
+            {reviewStatus !== "draft" && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (reviewStatus === "changes_requested") setReviewFeedbackOpen(true);
+                }}
+                disabled={reviewStatus !== "changes_requested"}
+                className={
+                  "inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 transition " +
+                  (reviewStatus === "approved"
+                    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] border-[var(--ds-green-bg)]"
+                    : reviewStatus === "in_review"
+                      ? "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] border-[var(--ds-amber-bg)]"
+                      : "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] border-[var(--ds-red-bg)] hover:brightness-95 cursor-pointer")
+                }
+                title={
+                  reviewStatus === "approved"
+                    ? "Draft approved — ready to send"
+                    : reviewStatus === "in_review"
+                      ? "Awaiting reviewer sign-off"
+                      : "Reviewer requested changes — click to read feedback"
+                }
+              >
+                {reviewStatus === "approved" ? (
+                  <CheckCircle2 className="size-3" />
+                ) : reviewStatus === "in_review" ? (
+                  <Send className="size-3" />
+                ) : (
+                  <MessageSquareWarning className="size-3" />
+                )}
+                <span className="hidden md:inline">
+                  {reviewStatus === "approved"
+                    ? "Approved"
+                    : reviewStatus === "in_review"
+                      ? "In review"
+                      : "Changes requested"}
+                </span>
+              </button>
+            )}
             {/* Counsel-review pill — only on high-risk letters or where the
              * letter type's metadata flags counsel review as required. */}
             {(meta.legalReviewRequired || meta.riskClass === "high") && (
@@ -1091,29 +1278,46 @@ export function Editor() {
              *
              * Hybrid evidence: the dedicated Evidence step is gone; both
              * modes go Edit → Review. The handoff card below the CTA gates
-             * the transition when evidence is missing / unused. */}
-            <Button
-              size="sm"
-              disabled={globallyStreaming}
-              onClick={() => {
-                // Soft check — opens the handoff card only when the
-                // soft-rule trips. Light tier always proceeds; if the user
-                // hit "Don't ask for this draft", proceed silently too.
-                const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
-                const reason = evaluateEvidenceHandoff(draft, tier);
-                if (reason) {
-                  setHandoffReason(reason);
-                  return;
-                }
-                nav(`/editor/${draft.id}/review`);
-              }}
-              aria-label="Next: Review"
-              title="Next: Review"
-              className="px-2 sm:px-3"
-            >
-              <span className="hidden sm:inline">Review</span>
-              <ArrowRight className="size-4 sm:ml-1.5" />
-            </Button>
+             * the transition when evidence is missing / unused.
+             *
+             * Template-source drafts replace this with Save template — the
+             * editor IS the template authoring surface for these. */}
+            {draft.isTemplateSource ? (
+              <Button
+                size="sm"
+                disabled={globallyStreaming}
+                onClick={saveTemplateSource}
+                aria-label="Save template"
+                title="Save template"
+                className="px-2 sm:px-3"
+              >
+                <BookmarkPlus className="size-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Save template</span>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled={globallyStreaming}
+                onClick={() => {
+                  // Soft check — opens the handoff card only when the
+                  // soft-rule trips. Light tier always proceeds; if the user
+                  // hit "Don't ask for this draft", proceed silently too.
+                  const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
+                  const reason = evaluateEvidenceHandoff(draft, tier);
+                  if (reason) {
+                    setHandoffReason(reason);
+                    return;
+                  }
+                  nav(`/editor/${draft.id}/review`);
+                }}
+                aria-label="Next: Review"
+                title="Next: Review"
+                className="px-2 sm:px-3"
+              >
+                <span className="hidden sm:inline">Review</span>
+                <ArrowRight className="size-4 sm:ml-1.5" />
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -1280,11 +1484,39 @@ export function Editor() {
             </div>
           ) : (
             <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
+              {/* Matter breadcrumb + linked-employee chip — render above
+               * the title when the draft is linked to either. Both are
+               * subtle pill chips that link out to their respective pages. */}
+              {!draft.isTemplateSource && <MatterEmployeeChips draft={draft} />}
+              {draft.isTemplateSource && (
+                <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />
+              )}
               {/* Editable title sits at the very top of the canvas, above
                * the disclaimer + sections. Click to rename — Google
                * Docs / Notion pattern. */}
               <EditableTitleBar draft={draft} />
               <InlineDisclaimer draft={draft} />
+              {/* Read-only-during-review banner. Surfaces when the viewer is
+               * acting as a reviewer on a draft they cannot edit. Keeps the
+               * lock state discoverable rather than mysterious. */}
+              {!canvasEditable && reviewStatus === "in_review" && (
+                <div className="rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] text-[12.5px] px-3 py-2 flex items-center gap-2">
+                  <Send className="size-3.5 shrink-0" />
+                  <span className="leading-snug">
+                    Read-only during review — toggle role in{" "}
+                    <Link to="/settings" className="underline font-medium">
+                      Settings
+                    </Link>{" "}
+                    to edit.
+                  </span>
+                </div>
+              )}
+              {!canvasEditable && reviewStatus === "approved" && (
+                <div className="rounded-md border border-[var(--ds-green-fg)]/30 bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] text-[12.5px] px-3 py-2 flex items-center gap-2">
+                  <CheckCircle2 className="size-3.5 shrink-0" />
+                  <span className="leading-snug">Approved — canvas locked. Clear to export.</span>
+                </div>
+              )}
               <DeadlineBanner draft={draft} />
               <RetryBanner event={retryEvent} />
               {draft.sections.map((section) => (
@@ -1329,6 +1561,7 @@ export function Editor() {
                   onRejectPending={() =>
                     useDraftStore.getState().rejectSectionPending(draft.id, section.id)
                   }
+                  editable={canvasEditable}
                 />
               ))}
               {globallyStreaming && (
@@ -1729,6 +1962,72 @@ export function Editor() {
         onOpenChange={setEditDetailsOpen}
         draft={draft}
       />
+
+      <SaveAsTemplateModal
+        draft={draft}
+        open={saveAsTemplateOpen}
+        onOpenChange={setSaveAsTemplateOpen}
+      />
+
+      {/* Approval-workflow dialog — three kinds (submit / approve / request
+       * changes) share one modal. Closed when reviewDialogKind is null. */}
+      {reviewDialogKind && (
+        <ReviewDialog
+          open
+          onOpenChange={(next) => !next && setReviewDialogKind(null)}
+          kind={reviewDialogKind}
+          defaultReviewerName={profile.personal.preferredName || profile.personal.legalName}
+          onSubmit={onReviewSubmit}
+        />
+      )}
+
+      {/* Review-feedback panel — opens when the user clicks the
+       * changes_requested pill. Shows the most recent reviewer pushback. */}
+      <Dialog.Root open={reviewFeedbackOpen} onOpenChange={setReviewFeedbackOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
+          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-4 text-[13px]">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquareWarning className="size-4 text-[var(--ds-red-fg)]" />
+              <Dialog.Title className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
+                Review feedback
+              </Dialog.Title>
+            </div>
+            {latestChangesRequest ? (
+              <>
+                <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mb-2">
+                  From {latestChangesRequest.reviewerName} ·{" "}
+                  {new Date(latestChangesRequest.createdAt).toLocaleString()}
+                </Dialog.Description>
+                <p className="m-0 text-[13px] text-[var(--ds-ink)] whitespace-pre-wrap leading-relaxed">
+                  {latestChangesRequest.body}
+                </p>
+              </>
+            ) : (
+              <p className="m-0 text-[13px] text-[var(--ds-muted)]">No feedback recorded yet.</p>
+            )}
+            <div className="mt-4 flex items-center justify-end gap-2">
+              {reviewStatus === "changes_requested" && canSubmitForReview(role) && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setReviewFeedbackOpen(false);
+                    setReviewDialogKind("submit");
+                  }}
+                >
+                  <Send className="size-3.5 mr-1.5" />
+                  Re-submit for approval
+                </Button>
+              )}
+              <Dialog.Close asChild>
+                <Button variant="ghost" size="sm">
+                  Close
+                </Button>
+              </Dialog.Close>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       {/* Refine dialog — Preview's entry point into the per-section refine
        * flow. Edit/Split surfaces use the inline RefinePopover. */}

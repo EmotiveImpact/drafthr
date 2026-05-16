@@ -27,6 +27,7 @@ const baseProfile: Profile = {
   },
   autoFill: true,
   credits: 30,
+  workspaceRole: "owner",
 };
 
 describe("prefillsFromProfile (employee)", () => {

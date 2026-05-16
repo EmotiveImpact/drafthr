@@ -24,11 +24,17 @@ import {
   Upload,
   UserRound,
 } from "lucide-react";
-import { useProfileStore, QWEN_MODEL_OPTIONS, type QwenModelId } from "@/lib/profile";
+import {
+  useProfileStore,
+  QWEN_MODEL_OPTIONS,
+  type QwenModelId,
+  type WorkspaceRole,
+} from "@/lib/profile";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { todayDateOnly } from "@/lib/date-only";
+import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -40,6 +46,7 @@ export function Settings() {
   const patchEmployer = useProfileStore((s) => s.patchEmployer);
   const patchDefaults = useProfileStore((s) => s.patchDefaults);
   const setAutoFill = useProfileStore((s) => s.setAutoFill);
+  const setWorkspaceRole = useProfileStore((s) => s.setWorkspaceRole);
   const markSetupComplete = useProfileStore((s) => s.markSetupComplete);
   const resetProfile = useProfileStore((s) => s.reset);
   const drafts = useDraftStore((s) => s.drafts);
@@ -385,6 +392,38 @@ export function Settings() {
                   </Select.Content>
                 </Select.Root>
               )}
+            </Field>
+          </Grid>
+        </Card>
+
+        {/* Workspace — real members + invites when signed in to a tenant. */}
+        <WorkspaceMembersCard />
+
+        {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
+        <Card size="3">
+          <Box mb="3">
+            <Heading size="3" mb="1">Role (local simulation)</Heading>
+            <Text size="2" color="gray" as="p">
+              Your seat for approval-queue simulation. The real per-workspace role is set above.
+              Use this in local dev / demos to switch between drafter and reviewer behaviour
+              without a second account.
+            </Text>
+          </Box>
+          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
+            <Field label="Simulated role">
+              <Select.Root
+                value={profile.workspaceRole ?? "owner"}
+                onValueChange={(v) => setWorkspaceRole(v as WorkspaceRole)}
+              >
+                <Select.Trigger />
+                <Select.Content>
+                  <Select.Item value="owner">Owner — full access, billing, members</Select.Item>
+                  <Select.Item value="admin">Admin — full access except billing</Select.Item>
+                  <Select.Item value="drafter">Drafter — write + submit for review</Select.Item>
+                  <Select.Item value="reviewer">Reviewer — drafter + approve/request changes</Select.Item>
+                  <Select.Item value="viewer">Viewer — read-only</Select.Item>
+                </Select.Content>
+              </Select.Root>
             </Field>
           </Grid>
         </Card>

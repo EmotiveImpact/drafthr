@@ -41,7 +41,11 @@ export function Notifications() {
   const profile = useProfileStore((s) => s.profile);
 
   const list = useMemo(
-    () => deriveNotifications(Object.values(drafts), profile),
+    () =>
+      deriveNotifications(
+        Object.values(drafts).filter((d) => !d.isTemplateSource),
+        profile
+      ),
     [drafts, profile]
   );
 

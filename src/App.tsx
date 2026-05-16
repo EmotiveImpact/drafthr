@@ -1,5 +1,11 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useProfileStore } from "@/lib/profile";
+import { migrateEmployerImages } from "@/lib/storage/migrate";
+import { useDraftStore } from "@/lib/store";
+import { isDualWriteEnabled, syncAllPending } from "@/lib/dual-write";
+import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
 import { Wizard } from "@/routes/Wizard";
@@ -17,6 +23,14 @@ import { ReviewStep } from "@/routes/ReviewStep";
 import { Finalize } from "@/routes/Finalize";
 import { MattersIndex } from "@/routes/MattersIndex";
 import { MatterDetail } from "@/routes/MatterDetail";
+import { EmployeesIndex } from "@/routes/EmployeesIndex";
+import { EmployeeDetail } from "@/routes/EmployeeDetail";
+import BulkOperations from "@/routes/BulkOperations";
+import { Approvals } from "@/routes/Approvals";
+import { SignIn } from "@/routes/SignIn";
+import { AuthCallback } from "@/routes/AuthCallback";
+import { SignupWorkspace } from "@/routes/SignupWorkspace";
+import { JoinInvite } from "@/routes/JoinInvite";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +62,43 @@ function EditorFallback() {
 
 export function App() {
   const location = useLocation();
+  const { activeTenant, isLoaded } = useAuth();
+  // One-shot migration for existing base64 letterhead/signature → Blob URL.
+  // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
+  // swaps them out lazily so the dual-write rollout doesn't carry those blobs
+  // into Postgres. Idempotent: helper skips anything not already a data: URL.
+  useEffect(() => {
+    let cancelled = false;
+    const { profile, patchEmployer } = useProfileStore.getState();
+    void migrateEmployerImages(profile.employer).then((patch) => {
+      if (!cancelled && patch) patchEmployer(patch);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Dual-write backfill — when the flag is on AND the user has an active
+  // tenant, POST every locally-known draft that hasn't synced yet. Runs once
+  // per mount; idempotent for re-runs (already-synced drafts no-op).
+  useEffect(() => {
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    let cancelled = false;
+    const drafts = Object.values(useDraftStore.getState().drafts);
+    if (drafts.length === 0) return;
+    void syncAllPending(() => Object.values(useDraftStore.getState().drafts)).then((result) => {
+      if (cancelled) return;
+      if (result.ok > 0) {
+        toast.success(`${result.ok} draft${result.ok === 1 ? "" : "s"} synced to your workspace.`);
+      }
+      if (result.failed > 0) {
+        console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, activeTenant]);
   // Editor routes are exempted from the page transition. The editor has
   // its own internal animations (rails, sheet, streaming) and a fade on
   // top of that double-animates and looks busy.
@@ -102,6 +153,10 @@ export function App() {
         <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
         <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />
         <Route path="/matters/:matterId" element={<Protected><MatterDetail /></Protected>} />
+        <Route path="/employees" element={<Protected><EmployeesIndex /></Protected>} />
+        <Route path="/employees/:employeeId" element={<Protected><EmployeeDetail /></Protected>} />
+        <Route path="/bulk" element={<Protected><BulkOperations /></Protected>} />
+        <Route path="/approvals" element={<Protected><Approvals /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />
@@ -109,6 +164,10 @@ export function App() {
         <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/signup/workspace" element={<Protected><SignupWorkspace /></Protected>} />
+        <Route path="/join/:inviteCode" element={<JoinInvite />} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

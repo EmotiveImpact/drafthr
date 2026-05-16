@@ -1,8 +1,10 @@
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
-import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize";
+import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { isSafeImageRef } from "@/lib/safe-data-url";
+import { inlineImagesForExport } from "@/lib/storage/inlineImagesForExport";
 
 type InlineStyle = {
   bold?: boolean;
@@ -85,7 +87,11 @@ const BLOCK_TAGS = new Set([
  * Reused by both exportLetterToDocx (single-file flow) and the ZIP pack.
  */
 export async function renderLetterDocxBlob(draft: Draft): Promise<Blob> {
-  const bodyHtml = buildDocxBodyHtml(draft);
+  const rawBodyHtml = buildDocxBodyHtml(draft);
+  // DOCX needs image bytes (binary embed) — fetch any https:// blob URLs and
+  // inline them as data: URLs before the parser walks the tree, otherwise
+  // they'd degrade to "[Image: alt]" text fallback.
+  const bodyHtml = await inlineImagesForExport(rawBodyHtml);
   const body = parseBodyHtml(bodyHtml);
   const ctx: RenderContext = {
     images: [],
@@ -710,13 +716,13 @@ function escapeXmlAttr(s: string): string {
 
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div style="text-align:center;margin-bottom:18pt;"><img src="${url}" style="max-width:100%;max-height:120px;" /></div>`;
 }
 
 function signatureHtml(draft: Draft): string {
   const url = draft.employer.signatureDataUrl;
-  if (!isSafeImageDataUrl(url)) return "";
+  if (!isSafeImageRef(url)) return "";
   return `<div style="margin:6pt 0;"><img src="${url}" style="max-height:54px;" /></div>`;
 }
 
@@ -724,7 +730,11 @@ function injectSignatureIntoSignatureSection(
   section: { sectionId?: string; html: string },
   signature: string
 ): string {
-  const html = sanitizeLetterHtml(section.html);
+  // Same export-time discipline as PDF: collapse accepted suggestions first,
+  // strip the rest via the export sanitiser so track-changes never reaches
+  // the .docx output.
+  const merged = mergeAcceptedSuggestionsHtml(section.html);
+  const html = sanitizeLetterHtmlForExport(merged);
   if (!signature) return html;
   if (section.sectionId === "signature") return signature + html;
   return html;

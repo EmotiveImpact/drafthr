@@ -269,6 +269,38 @@
     border-bottom: 1.5px dashed var(--comment-highlight-strong);
   }
 
+  /* Suggestion mark (track-changes primitive — see suggestion-mark.ts).
+   * Insertions = green underline, deletions = red strikethrough. Rejected
+   * marks mute to opacity 0.4 without changing color so the reviewer still
+   * sees the proposal lineage. Accepted marks are stripped by the merge
+   * helpers and so should not appear in rendered HTML in practice. */
+  .tiptap ins[data-suggestion-id],
+  ins[data-suggestion-id] {
+    text-decoration: underline;
+    text-decoration-color: var(--ds-green-fg);
+    text-decoration-thickness: 2px;
+    background: color-mix(in srgb, var(--ds-green-bg) 30%, transparent);
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+  .tiptap del[data-suggestion-id],
+  del[data-suggestion-id] {
+    text-decoration: line-through;
+    text-decoration-color: var(--ds-red-fg);
+    text-decoration-thickness: 2px;
+    background: color-mix(in srgb, var(--ds-red-bg) 30%, transparent);
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+  .tiptap ins[data-status="rejected"],
+  ins[data-status="rejected"],
+  .tiptap del[data-status="rejected"],
+  del[data-status="rejected"] {
+    opacity: 0.4;
+    text-decoration: none;
+    background: transparent;
+  }
+
   /* Cards: subtle, warm shadow rather than the default Tailwind stack */
   [data-slot="card"] {
     box-shadow: var(--shadow-2xs);

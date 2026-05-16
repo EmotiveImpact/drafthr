@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,6 +6,7 @@ import {
   isSafeImageDataUrl,
   SAFE_IMAGE_ACCEPT,
 } from "@/lib/safe-data-url";
+import { uploadImage } from "@/lib/storage/uploadImage";
 
 const MAX_BYTES = 1024 * 1024; // 1 MB
 
@@ -16,13 +17,13 @@ const ASPECT: Record<"banner" | "signature" | "square", { className: string; hin
 };
 
 /**
- * Uploads a small image and stores it as a base64 data URL on whatever
- * value sink the parent provides. Used for letterhead + signature on the
- * profile (and per-draft via Edit-details).
- *
- * The data-URL approach keeps everything client-side — no upload API
- * required — and round-trips cleanly through localStorage and the export
- * pipeline (PDF and DOCX export both inline data URLs).
+ * Uploads a small image (letterhead / signature). Reads the file as a
+ * base64 data URL, then POSTs to /api/upload/image to swap it for a Vercel
+ * Blob URL before persisting. The Blob URL keeps localStorage and the
+ * (planned) Postgres dual-write rows small — base64 letterheads were the
+ * #1 quota burner. If the upload endpoint isn't configured (local dev),
+ * `uploadImage` falls back to the original data URL so behavior is
+ * unchanged.
  */
 export function ImageUploader({
   value,
@@ -36,6 +37,7 @@ export function ImageUploader({
   helpText?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
   const a = ASPECT[aspect];
 
   const onPick = (file: File) => {
@@ -48,10 +50,19 @@ export function ImageUploader({
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const url = typeof reader.result === "string" ? reader.result : undefined;
-      if (isSafeImageDataUrl(url)) onChange(url);
-      else alert("That image format is not supported.");
+      if (!isSafeImageDataUrl(url)) {
+        alert("That image format is not supported.");
+        return;
+      }
+      setBusy(true);
+      try {
+        const stored = await uploadImage({ dataUrl: url, filename: file.name });
+        onChange(stored);
+      } finally {
+        setBusy(false);
+      }
     };
     reader.onerror = () => alert("Couldn't read that file.");
     reader.readAsDataURL(file);
@@ -82,14 +93,20 @@ export function ImageUploader({
             <img src={value} className="max-h-full max-w-full object-contain" />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Button variant="outline" size="sm" onClick={() => inputRef.current?.click()}>
-              <Upload className="size-3.5" /> Replace
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => inputRef.current?.click()}
+              disabled={busy}
+            >
+              <Upload className="size-3.5" /> {busy ? "Uploading…" : "Replace"}
             </Button>
             <Button
               variant="ghost"
               size="sm"
               color="gray"
               onClick={() => onChange(undefined)}
+              disabled={busy}
             >
               <X className="size-3.5" /> Remove
             </Button>
@@ -99,13 +116,14 @@ export function ImageUploader({
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
+          disabled={busy}
           className={
-            "flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] hover:border-[var(--ds-ink)] bg-[var(--ds-surface-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] cursor-pointer transition " +
+            "flex flex-col items-center justify-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] hover:border-[var(--ds-ink)] bg-[var(--ds-surface-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] cursor-pointer transition disabled:cursor-wait disabled:opacity-60 " +
             a.className
           }
         >
           <Upload className="size-4" />
-          <span className="text-[12px] font-medium">Upload image</span>
+          <span className="text-[12px] font-medium">{busy ? "Uploading…" : "Upload image"}</span>
           {a.hint && <span className="text-[10px]">{a.hint}</span>}
         </button>
       )}

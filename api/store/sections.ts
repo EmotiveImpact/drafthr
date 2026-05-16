@@ -1,0 +1,109 @@
+/**
+ * POST /api/store/sections — bulk-upsert sections for a draft. Idempotent:
+ * we delete-then-insert under one transaction, keyed by draft_id. Used by the
+ * dual-write client when a draft mutation only touched sections (avoids
+ * resending the full draft payload).
+ *
+ * Per-section audit events are noisy — we chain a single `section.updated`
+ * event with a section_id summary instead of one per section.
+ */
+import { eq } from "drizzle-orm";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request";
+import { rateLimit } from "../_utils/rate-limit";
+import { requireSessionAndTenant } from "../_utils/session-with-tenant";
+import { getDb } from "../../src/db";
+import { drafts, sections } from "../../src/db/schema";
+import { appendAuditEvent } from "../../src/db/audit";
+
+export const config = { runtime: "nodejs" };
+
+type SectionInput = {
+  sectionId: string;
+  title: string;
+  html: string;
+  status: "empty" | "streaming" | "ready" | "edited";
+  position: number;
+};
+
+type Body = {
+  draftId?: string;
+  sections?: SectionInput[];
+};
+
+export async function POST(req: Request): Promise<Response> {
+  const sameOrigin = enforceSameOrigin(req);
+  if (sameOrigin) return sameOrigin;
+  if (process.env.DRAFTHR_DUAL_WRITE !== "true") return jsonError("Dual-write disabled", 503);
+  const limited = rateLimit(req, { name: "store-sections", max: 120, windowMs: 60_000 });
+  if (limited) return limited;
+
+  const parsed = await readJsonRequest<Body>(req, 8_000_000);
+  if (!parsed.ok) return parsed.response;
+  const draftId = typeof parsed.body.draftId === "string" ? parsed.body.draftId.trim() : "";
+  const sectionList = Array.isArray(parsed.body.sections) ? parsed.body.sections : null;
+  if (!draftId) return jsonError("draftId required", 400);
+  if (!sectionList) return jsonError("sections array required", 400);
+
+  const auth = await requireSessionAndTenant(req);
+  if (!auth.ok) return auth.response;
+  if (!auth.activeTenant) return jsonError("No active workspace", 400);
+
+  try {
+    const db = getDb();
+    const [draft] = await db
+      .select({ id: drafts.id, tenantId: drafts.tenantId })
+      .from(drafts)
+      .where(eq(drafts.id, draftId))
+      .limit(1);
+    if (!draft) return jsonError("Draft not found", 404);
+    if (draft.tenantId !== auth.activeTenant.id) {
+      return jsonError("Draft belongs to a different workspace", 403);
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.delete(sections).where(eq(sections.draftId, draftId));
+      for (const s of sectionList) {
+        await tx.insert(sections).values({
+          draftId,
+          sectionId: s.sectionId,
+          title: s.title,
+          html: s.html,
+          status: s.status,
+          position: s.position,
+        });
+      }
+    });
+
+    await safelyAppendAudit({
+      tenantId: auth.activeTenant.id,
+      kind: "section.updated",
+      subjectType: "draft",
+      subjectId: draftId,
+      actorUserId: auth.userRow.id,
+      payload: {
+        sectionCount: sectionList.length,
+        sectionSummaries: sectionList.map((s) => ({
+          sectionId: s.sectionId,
+          status: s.status,
+          length: s.html.length,
+        })),
+      },
+    });
+
+    return new Response(JSON.stringify({ ok: true, count: sectionList.length }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  } catch (err) {
+    console.error("[store/sections POST] failed", err);
+    return jsonError("Section sync failed", 500);
+  }
+}
+
+async function safelyAppendAudit(input: Parameters<typeof appendAuditEvent>[0]): Promise<void> {
+  try {
+    await appendAuditEvent(input);
+  } catch (err) {
+    console.error("[audit] append failed", input.kind, err);
+  }
+}

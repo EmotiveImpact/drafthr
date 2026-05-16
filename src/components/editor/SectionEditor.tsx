@@ -46,6 +46,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
+import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { RefinePopover } from "./RefinePopover";
@@ -83,6 +84,9 @@ type Props = {
   isStreaming: boolean;
   active: boolean;
   onFocus: () => void;
+  /** When false (e.g. draft is awaiting review and viewer is a reviewer,
+   * or status is "approved"), Tiptap blocks edits. Defaults to true. */
+  editable?: boolean;
 };
 
 export function SectionEditor({
@@ -101,6 +105,7 @@ export function SectionEditor({
   isStreaming,
   active,
   onFocus,
+  editable = true,
 }: Props) {
   const lastWrittenContent = useRef<string>(section.html);
   const linkedEvidence = linkedEvidenceForSection(draft, section.id);
@@ -123,6 +128,10 @@ export function SectionEditor({
       TableHeader,
       TableCell,
       CommentMark,
+      // Track-changes primitive — see src/lib/tiptap/suggestion-mark.ts. Marks
+      // proposed reviewer / AI / consultant edits as <ins>/<del> with status
+      // attributes; merge helpers fold accepted edits into canonical text.
+      SuggestionMark,
       // Evidence reference tokens — render the [See Fig N] / [See Attachments]
       // spans inserted by the picker / slash command as atomic inline nodes
       // instead of letting Tiptap drop them on the floor as unknown HTML
@@ -164,7 +173,7 @@ export function SectionEditor({
       }),
     ],
     content: section.html || "",
-    editable: !isStreaming,
+    editable: !isStreaming && editable,
     onUpdate: ({ editor: ed }) => {
       const html = ed.getHTML();
       if (html !== lastWrittenContent.current) {
@@ -306,11 +315,12 @@ export function SectionEditor({
     return () => clearTimeout(handle);
   }, [section.html, editor, isStreaming]);
 
-  // Toggle editability when streaming starts/stops.
+  // Toggle editability when streaming starts/stops OR when the parent
+  // flips the editable prop (e.g. draft enters review with reviewer role).
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!isStreaming);
-  }, [editor, isStreaming]);
+    editor.setEditable(!isStreaming && editable);
+  }, [editor, isStreaming, editable]);
 
   return (
     <section

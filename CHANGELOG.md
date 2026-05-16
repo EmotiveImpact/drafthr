@@ -2,6 +2,490 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.10.0 — 2026-05-16
+
+The wave that turns DraftHR from "localStorage demo" into a real
+multi-tenant B2B SaaS. Three connected landings: workspace UX (create
+/ join via invite), real invite system, and dual-write persistence so
+HR users get cloud-backed drafts with a tribunal-grade audit trail.
+
+### Schema (migration 0001 applied live to Neon)
+
+- `tenant_members` — many-to-many users↔tenants with per-tenant role
+  and `is_active_tenant` (one true row per user, marks the currently-
+  selected workspace).
+- `invites` — pending invitations: tenant_id, email, role, 32-char
+  invite_code (UNIQUE), expires_at (default +7 days), accepted_at,
+  revoked_at, created_by_user_id.
+- `users.user_type` — `'customer'` | `'consultant'`. The metadata
+  claim that makes the marketplace Option B → A migration painless
+  when the first consultant onboards. Defaults to `'customer'` on
+  user mint.
+
+### Tenant resolution
+
+- `api/_utils/session-with-tenant.ts` → `requireSessionAndTenant()`.
+  Reads WorkOS session, upserts the `users` row on first sign-in,
+  auto-mints a personal tenant + active `tenant_members` row so audit
+  chains always have a home. Returns
+  `{ session, userRow, activeTenant, hasAnyTenant, canCreateTenant }`.
+
+### Workspace UX
+
+- `/signup/workspace` — first-time and additional-workspace setup.
+  Two cards: **Create new workspace** (name + industry + team size)
+  or **Join via invite code**. Pre-fills the join form from
+  `?invite={code}` query.
+- `/join/:inviteCode` — public landing for invite links. Saves the
+  code to `sessionStorage`, redirects to sign-in. `AuthCallback`
+  picks the code back up post-auth and routes to
+  `/signup/workspace?invite=…`.
+- `Protected` routes tenant-less users to `/signup/workspace`
+  (allow-listed for `/signup/workspace` + `/join/` to avoid loops).
+- `AppSidebar` mounts `WorkspaceSwitcher` — renders only when the
+  user has >1 tenant. Click to pick + `POST /api/workspace/switch`.
+- `Settings → Workspace` gains `WorkspaceMembersCard`: name editor,
+  members list with role badges + change/remove actions, pending
+  invites with copy-link + revoke, "Invite member" modal (email +
+  role → `POST /api/workspace/invite` → returns invite code + link
+  to copy). The solo-dev role picker stays below as a backwards-
+  compat affordance.
+
+### Workspace APIs
+
+All behind `requireSessionAndTenant` + existing API hardening
+(same-origin, rate-limit, JSON content-type).
+
+- `POST /api/workspace/create` — inserts `tenants` + `tenant_members`
+  (owner, active=true). Audit `tenant.created`.
+- `POST /api/workspace/accept-invite` — validates not expired /
+  revoked / email-mismatched, inserts member, marks invite accepted.
+  Audit `tenant.member-joined`.
+- `GET /api/workspace/list` — user's tenants with role + active flag.
+- `POST /api/workspace/switch` — toggles `is_active_tenant`.
+- `POST /api/workspace/invite` — admin-only; returns invite code +
+  link for copy; sends email via Resend if `RESEND_API_KEY`
+  configured.
+- `GET /api/workspace/invites` — list pending for active tenant.
+- `POST /api/workspace/invite/revoke` — sets `revoked_at`.
+- `GET /api/workspace/members` — list active members.
+- `POST /api/workspace/member/role` — admin-only role change.
+- `POST /api/workspace/member/remove` — admin-only removal.
+
+### Dual-write infrastructure
+
+- `src/lib/dual-write.ts` — `enqueueSync(draftId)` debounced 400ms;
+  `syncDraft` posts the full draft + sections payload to
+  `/api/store/drafts` (POST on first sync, PATCH thereafter);
+  `syncAllPending` walks every draft without `_syncedAt` and syncs
+  serially for the one-shot localStorage → Postgres backfill.
+- Zustand subscribe pattern at module-import time, gated on
+  `isDualWriteEnabled()` (reads `VITE_DRAFTHR_DUAL_WRITE`).
+  Mutations changing a draft by reference trigger
+  `enqueueSync(id)`. Deletions fire-and-forget immediately (no
+  debounce — deletes should land fast).
+- Circular import avoided via `setDualWriteSnapshotGetter` instead of
+  importing the store inside `dual-write.ts`.
+- `_syncedAt?: number` added to `Draft` (additive — no version bump
+  on `scribehr-store-v1`).
+- One-shot backfill in `App.tsx` mount: if dual-write enabled AND
+  active tenant exists AND there are unsynced drafts, run
+  `syncAllPending` + show a one-time toast on completion.
+
+### Store endpoints
+
+- `POST /api/store/drafts` — create. Server stamps `tenant_id` from
+  active tenant + `author_user_id` from session. Audit
+  `draft.created`.
+- `PATCH /api/store/drafts` — update. Diff records changed keys (NOT
+  full HTML — keeps audit payload small). Audit `draft.updated`.
+- `DELETE /api/store/drafts` — hard-delete. Audit `draft.deleted`.
+- `POST /api/store/sections` — bulk upsert by `(draft_id,
+  section_id)`. Audit `section.updated` per row (payload:
+  `section_id` + `status` + `charCount`; never raw html).
+
+Every endpoint verifies `tenant_id` ownership on the target draft —
+IDOR defense.
+
+### Server gate
+
+`DRAFTHR_DUAL_WRITE=false` returns 503 on `/api/store/*` — even a
+misbehaving client can't write. Flip the server-side env to `'true'`
+AND set `VITE_DRAFTHR_DUAL_WRITE='true'` to enable end-to-end.
+
+### Audit chain coverage
+
+Extends beyond `draft.exported` (the only previous event) to:
+- `tenant.created`, `tenant.member-joined`
+- `draft.created`, `draft.updated`, `draft.deleted`
+- `section.updated`
+
+Verified live via `scripts/dual-write-verify.ts`: chains 3 events
+clean, tampers with payload, chain breaks with `row_hash_mismatch`,
+cascade cleanup works.
+
+### Action items for app.drafthr.io deploy
+
+1. WorkOS dashboard → Redirect URIs → add
+   `https://app.drafthr.io/auth/callback`.
+2. Vercel project → Settings → Environment Variables (Production
+   scope): all `WORKOS_*` vars, `WORKOS_REDIRECT_URI` +
+   `VITE_WORKOS_REDIRECT_URI` set to the production callback,
+   `WORKOS_COOKIE_PASSWORD`, `DATABASE_URL` +
+   `DATABASE_URL_UNPOOLED` (or use Vercel ↔ Neon integration),
+   `BLOB_READ_WRITE_TOKEN`, `DRAFTHR_DUAL_WRITE=false` and
+   `VITE_DRAFTHR_DUAL_WRITE=false` (flip both to `true` after
+   eyeballing the deploy).
+3. Optional: `RESEND_API_KEY` for invite emails. Without it, invites
+   show as copyable links instead.
+
+## 0.9.0 — 2026-05-16
+
+Platform wave. Three independent landings: a Tiptap track-changes primitive
+that future-proofs four downstream surfaces, a Vercel Blob image pipeline
+that gets us off base64-in-localStorage, and the auth foundation swapped
+from Clerk to WorkOS for B2B-grade SSO/SAML/SCIM from day 1.
+
+### Suggestion-mark Tiptap primitive
+
+- New `src/lib/tiptap/suggestion-mark.ts` — a Tiptap Mark named
+  `suggestion` rendering `<ins>` (insertions) and `<del>` (deletions)
+  with attributes `{ id, kind, author, authorId?, body?, createdAt,
+  status }` where status ∈ `pending | accepted | rejected`. The single
+  primitive serves four future surfaces: consultant marketplace
+  review track-changes, AI inline-diff critiques, richer threaded
+  comments, future co-edit cursors.
+- Visual: pending insertions get a green underline + tint background,
+  pending deletions get red strikethrough + tint. Rejected marks go
+  to 0.4 opacity. Accepted marks shouldn't appear in practice — the
+  merge function strips them.
+- `src/lib/tiptap/suggestion-merge.ts` — pure functions on Tiptap doc
+  JSON: `mergeAcceptedSuggestions` applies accepted marks
+  destructively (insertions merge into prose, deletions remove the
+  wrapped text); pending insertions vanish (no decision = don't
+  apply); pending deletions keep their text. `listSuggestions`
+  returns one summary per mark. `hasPendingSuggestions` short-
+  circuits.
+- Store gains `setSuggestionStatus`, `acceptAllSuggestions` (versions
+  the prior html into `section.versions` before merging),
+  `rejectAllSuggestions`.
+- Sanitiser split: `sanitizeLetterHtml` allows `<ins>` / `<del>` on
+  the authoring path; new `sanitizeLetterHtmlForExport` strips them
+  so reviewer state can't leak into the final letter. PDF + DOCX
+  export pipe through merge + export-flavoured sanitise — defence in
+  depth.
+- AIPanel adds a `SuggestionTestStrip`: Accept-all / Reject-all pair
+  lights up when pending suggestions exist; a DEV-gated "Test
+  suggestion" button injects a fake suggestion at the cursor for
+  quick manual verification.
+- 14 new unit tests covering insertion vs deletion × accepted vs
+  rejected vs pending, mark stripping, multi-fragment dedup,
+  preservation of other marks (bold) during suggestion strip.
+
+### Vercel Blob image upload
+
+- New `api/upload/image.ts` — POST endpoint accepting multipart OR
+  `{ dataUrl, filename }` JSON. Validates mime (PNG/JPEG/WEBP/GIF
+  only, matches the 0.6.0 image policy), validates size (<2 MB),
+  computes SHA-256 for content-addressed dedup storage at
+  `/letterheads/{sha256}.{ext}`, uploads via `@vercel/blob` `put()`
+  with `allowOverwrite: true`. Soft-fails when `BLOB_READ_WRITE_TOKEN`
+  is missing so local dev without Vercel Blob configured still works.
+- Client helper `src/lib/storage/uploadImage.ts` — one fetch + retry-
+  once on 5xx + fallback to the original data URL on soft-fail. Used
+  by `ImageUploader` after FileReader; shows "Uploading…" busy state.
+- `isSafeImageRef` (new in `src/lib/safe-data-url.ts`) accepts data:
+  OR https: URLs. Rolled out across `profile.ts`, store wizard-answer
+  sanitize, paged preview `sourceHtml`, PDF + DOCX export, ZIP pack.
+- PDF server-side preserves the 0.6.0 network-block security posture
+  by fetching images BEFORE `page.setContent` in
+  `inlineImagesForExport` — the request never goes through
+  Puppeteer's interceptor. Browser CSP already allowed `img-src
+  https:` so on-screen + client-side fallback need no `vercel.json`
+  change.
+- One-shot migration `src/lib/storage/migrate.ts` runs on app mount
+  to swap legacy base64 letterhead/signature for Blob URLs. Failures
+  leave the data URL untouched and retry next session.
+- 10 new unit tests across `uploadImage` (success, soft-fail,
+  retry-on-5xx, network reject, non-data passthrough) and
+  `inlineImagesForExport` (no-op, replace, dedup, fetch failure,
+  content-type guard).
+
+### Clerk → WorkOS migration ★
+
+Skipped Clerk entirely per the roadmap's long-term auth choice. WorkOS
+is what Persona C/D need from day 1 — SSO/SAML, SCIM, audit log,
+organisations all first-class. Marketplace consultants will live in a
+separate WorkOS Project when the first consultant onboards (Option
+B → A migration is the forcing function for that week).
+
+- New server helpers `api/_utils/workos.ts`: `getWorkos()` singleton,
+  `getSessionFromRequest`, `buildSessionCookie`, `buildClearCookie`,
+  `buildStateCookie` + `readStateCookie` (for CSRF on the OAuth
+  dance), `requireSession` with a discriminated-union return shape.
+- New routes: `/api/auth/url` (mints WorkOS authorize URL + sets
+  short-lived CSRF state cookie), `/api/auth/callback` (verifies
+  state, exchanges code via `workos.userManagement.
+  authenticateWithCode({ sealSession: true })`, sets encrypted
+  session cookie), `/api/auth/session` (reads cookie, returns user),
+  `/api/auth/sign-out` (clears cookie).
+- New client routes `/sign-in` (auto-redirects to WorkOS) +
+  `/auth/callback` (handles return from WorkOS, POSTs code to the
+  server callback, refreshes session, navigates to `?redirect=`).
+- `AuthProvider` rewritten as a React Context — public surface
+  preserved (`useAuth()` exposes `{ user, isLoaded, signIn, signOut,
+  refresh }`). Refresh on focus/visibility so stale cookies don't
+  linger.
+- `Protected` redirects to `/sign-in?redirect=...` while
+  unauthenticated; Skeleton while loading.
+- `UserChip` internal swap from Clerk's `<UserButton>` to Radix
+  Avatar + DropdownMenu. Public API unchanged.
+- Session cookie uses `iron-session` v8's low-level
+  `sealData`/`unsealData` (no Next.js bindings needed). HttpOnly +
+  Secure (production) + SameSite=Lax + 7-day max-age + encrypted with
+  `WORKOS_COOKIE_PASSWORD`.
+- Production fail-closed: AuthProvider renders a configuration-error
+  page when `VITE_WORKOS_CLIENT_ID` is missing AND
+  `VITE_ALLOW_PUBLIC_APP !== 'true'`. Mirrors the existing Clerk-
+  fail-closed posture.
+- CSP (`vercel.json`): `clerk.*` allowances removed; `api.workos.com`
+  added to `connect-src`; `*.authkit.app` added to `form-action`
+  (covers the WorkOS-hosted login POST). Sentry preserved.
+- Privacy page sub-processor list: Clerk Inc. → WorkOS Inc.
+- Deps: `@workos-inc/node` + `iron-session` added; `@clerk/clerk-
+  react` removed.
+
+### Action items for deploy
+
+1. WorkOS dashboard → Redirect URIs: add the production callback
+   `https://<your-domain>/auth/callback`. Local dev already wired to
+   `http://localhost:5273/auth/callback`.
+2. Vercel project env vars: `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`,
+   `VITE_WORKOS_CLIENT_ID`, `WORKOS_REDIRECT_URI`,
+   `VITE_WORKOS_REDIRECT_URI`, `WORKOS_COOKIE_PASSWORD`,
+   `BLOB_READ_WRITE_TOKEN` (Vercel dashboard → Storage → Blob).
+3. Provision Vercel Blob store (or skip — endpoint soft-fails and
+   clients keep data URLs locally).
+
+## 0.8.0 — 2026-05-15
+
+The defensibility release. Three structural moves: a Business-tier approval
+workflow with workspace roles, an editor wave that wires the Employees
+directory and Custom Templates directly into draft authoring, and the audit
+moat — a hash-chained append-only event log running live against Neon
+Postgres. The third one is the structural moat for tribunal defensibility:
+any retroactive edit to an audit row breaks the chain at that row and every
+row after it, detectable in milliseconds.
+
+### Approval queue + workspace RBAC (Business-tier)
+
+- State machine on every draft: `draft` → `in_review` → `approved` |
+  `changes_requested`. Each transition appends an `ApprovalEntry` to
+  `draft.approvals[]` plus a corresponding timeline event for the
+  Activity feed.
+- `WorkspaceRole` on profile (`owner` / `admin` / `drafter` / `reviewer`
+  / `viewer`). `src/lib/permissions.ts` centralises the role checks
+  (`canApprove`, `canSubmitForReview`, `canEditDraft`) — no inline role
+  conditions scattered through UI.
+- Editor topbar gains a colored status pill (muted / amber / green /
+  red) and a File-menu surface for the four review actions: Submit for
+  approval, Withdraw, Approve, Request changes.
+- During `in_review` AND when the current role can approve, the editor
+  canvas locks read-only with an explanatory banner. Approved drafts
+  also lock — they're shippable artefacts.
+- `changes_requested` unlocks the editor for the author and surfaces a
+  feedback panel showing the reviewer's verbatim note + a one-click
+  Re-submit CTA.
+- New `/approvals` page lists in-review drafts with mode/search/sort
+  filters; HR sidebar gets an "Approvals" nav item with a count badge.
+- Home Today panel surfaces in-review drafts to reviewer-capable roles
+  so they're seen alongside calendar work.
+- Settings → Workspace card with a role picker for the local
+  single-user case (lets you simulate the reviewer side for screencasts
+  and demos).
+
+### Editor wave (employee prefill + templates from scratch)
+
+- **`Draft.isTemplateSource` + `Draft.templateSourceId`** — additive,
+  no store-version bump.
+- HR-mode wizard gains a "Pick from your employees" affordance on the
+  employee-details step. Selecting populates legalName, jobTitle,
+  department, email, startDate, and stamps `answers.linkedEmployeeId`.
+- Editor topbar renders a **Matter breadcrumb** (with status colour
+  dot, linking to `/matters/<id>`) and an **Employee chip** with a
+  popover that links to the employee profile. Both desktop-only.
+- **"New template" button** on the My Templates tab + empty-state
+  callout. Opens `NewTemplateModal` (name, description, base letter
+  type, jurisdiction), then spawns a template-source draft and lands
+  the user in the editor.
+- Editor in template mode: swaps the Review CTA for **"Save template"**,
+  shows a "Editing template: …" banner with Discard, and hides the
+  redundant File → "Save as template…" item.
+- "Save template" creates or updates the linked `CustomTemplate` in
+  place. Re-saves stay on the same row — no duplicates on every save.
+- Template-source drafts filtered out of every regular draft surface:
+  Home, MattersIndex, MatterDetail, EmployeesIndex, EmployeeDetail,
+  AppSidebar, SearchPalette, NotificationsBell, Notifications,
+  Activity, Exported, Calendar, Approvals, ModePicker.
+
+### Persistence — Drizzle + Neon Postgres + audit hash chain ★
+
+- Full Drizzle schema landed live in Neon (eu-central-1, Frankfurt):
+  `tenants`, `users`, `employees`, `matters`, `matter_participants`,
+  `drafts`, `sections`, `section_versions`, `comments`, `evidence`,
+  `custom_templates`, `approvals`, `audit_events` — 13 tables, FKs,
+  indexes.
+- `@neondatabase/serverless` driver — best cold-start behaviour on
+  Vercel functions.
+- `audit_events` table is the moat. Each row carries `prev_hash` +
+  `row_hash` where `row_hash = sha256(prev_hash || ':' ||
+  canonical_json(payload) || ':' || kind || ':' || subject_id ||
+  ':' || created_at_epoch_ms)`. Hash chain is per-tenant; genesis
+  prev_hash is 64 zeros. UNIQUE constraint on `(tenant_id, row_hash)`,
+  INDEX on `(tenant_id, created_at DESC)`, CHECK that row_hash is 64
+  hex chars.
+- `src/db/audit.ts` — `appendAuditEvent()` runs SELECT-previous-then-
+  INSERT inside a Drizzle transaction so concurrent appends can't race.
+- `src/db/audit-verify.ts` — `verifyAuditChain(tenantId)` walks every
+  row in order, recomputes each hash, returns the first mismatch.
+  Tribunal demo: prove the chain holds, or pinpoint exactly where it
+  was tampered.
+- `scripts/db-verify.ts` — live test harness: lists tables, inserts a
+  test tenant, appends 3 events, verifies clean, tampers with a row,
+  verifies it now breaks, cleans up. Run via `npx dotenv -e .env.local
+  -- npx tsx scripts/db-verify.ts`.
+- First end-to-end caller: `api/export/pdf.ts` appends a
+  `draft.exported` audit event with the rendered PDF's SHA-256 + the
+  reviewer's attestation. Wrapped in try/catch — **PDF export does NOT
+  fail if Postgres is down**. Defensive degradation.
+- `DRAFTHR_DUAL_WRITE` feature flag (default `false`) gates future
+  table-by-table dual-write rollout. Drafts → Postgres, then matters,
+  then employees, etc. — one wave per table family, easy to roll back.
+- `drizzle.config.ts` reads `DATABASE_URL_UNPOOLED` for migrations
+  (DDL + advisory locks need the direct connection — pooler can't
+  expose them). Runtime queries from API routes use the pooled
+  `DATABASE_URL`.
+
+### Config + tooling
+
+- `.env.example` documents `DATABASE_URL` (pooled, runtime),
+  `DATABASE_URL_UNPOOLED` (direct, migrations), `DRAFTHR_DUAL_WRITE`,
+  and `DRAFTHR_DEFAULT_TENANT_ID` (single-tenant local dev tenant).
+- `tsconfig.{app,node}.json` updated to include `src/db/` and
+  `scripts/`.
+- Migrations committed under `drizzle/migrations/` for replayability.
+
+Operational note: dual-write stays off; localStorage remains the source
+of truth until you flip the flag. The PDF-export audit event is the
+only path that touches Postgres in default config — and it degrades
+gracefully if the DB is unreachable.
+
+## 0.7.0 — 2026-05-15
+
+HR/Management portfolio release. DraftHR's HR mode flips from "single-letter
+authoring app with a thin Matter wrapper" to a portfolio workbench: a real
+Employees directory, expanded Matters with type / risk band / participants /
+tasks / events, a Today + Risk + Compliance triptych dashboard, CSV-driven
+bulk operations with mail-merge economics, and workspace-saved custom
+templates. Plus Anthropic native prompt caching on the AI routes for a ~90%
+input-token discount on repeat calls.
+
+### Portfolio dashboard (HR mode)
+
+- New HR-mode Home: Today (open tasks + matter next-actions due in 7d),
+  Risk register (heatmap across active matters + £ exposure), Compliance
+  Health (rolled-up health-check scores). Replaces the prior `Home` for
+  employer mode; employee mode keeps the existing single-letter UX.
+- Recent activity feed flattens every draft's timeline across the workspace,
+  sorted by recency.
+- Employee backfill banner — when HR has drafts but the normalised employee
+  directory is empty, a banner offers one-click migration: scans every
+  draft, groups by normalised legal name, and creates one Employee record
+  per unique person. Dismissable; remembered locally.
+- Risk panel now shows the heatmap whenever there are active matters, not
+  only when exposure is tagged. Reads true out of the box.
+
+### Employees directory
+
+- `/employees` — sortable directory with search, status filter
+  (active / notice / on-leave / left), and a multi-select import flow that
+  derives Employee suggestions from existing HR-mode drafts. New
+  `src/lib/employees.ts` helpers: `deriveEmployeesFromDrafts` (normalises
+  legal name to dedupe across drafts) + `matchEmployeeForDraft`.
+- `/employees/:employeeId` — profile with Active matters / Letter history /
+  Notes tabs, EmployeeForm modal for create/edit, archive flips status to
+  "left" without breaking historical draft links.
+- New sidebar entries in HR mode: Employees, Bulk operations.
+
+### Matters — case-management expansion
+
+- `Matter` type extended (backwards-compatible — every new field optional):
+  `type` (investigation / grievance / disciplinary / performance / absence /
+  redundancy / restructure / settlement / tribunal / onboarding /
+  offboarding / other), `riskBand` (low / moderate / high / critical),
+  `participants[]` (subject / manager / accused / complainant / witness /
+  representative / other), `ownerUserId`, `nextAction`, `exposureGBP`.
+- New `Task` + `MatterEvent` types with store slices and CRUD actions —
+  meetings, hearings, deadlines, sub-tasks on a matter calendar.
+- MatterDetail surfaces: MatterRiskBadge, NextActionBanner, MatterParticipants,
+  MatterTasks (inline add form), MatterCalendar.
+- **Auto-derive risk band** (new `src/lib/matters/risk.ts`): pure derivation
+  from health-check signals across the matter's drafts. Compliance + PII
+  fails dominate; matter type nudges the floor up (tribunal/settlement
+  start at "high"). Manual `matter.riskBand` still wins — derivation is
+  the fallback. Used by the dashboard Risk panel and the MatterDetail
+  badge so the heatmap is meaningful even with zero manual tagging.
+
+### Bulk operations (Business-tier feature)
+
+- `/bulk` — 4-step CSV → batch drafts flow: pick operation → pick template
+  → upload CSV → preview rows → generate → results.
+- **Mail-merge economics**: ONE AI call drafts a template with
+  `{{placeholder}}` tokens for every CSV column, then client-side
+  substitution produces N personalised drafts per row. 50-row batch =
+  ~£0.20 instead of ~£10 (a 50× call-N-times approach).
+- New `src/lib/bulk/mailmerge.ts`: case-insensitive whitespace-tolerant
+  `{{placeholder}}` substitution, `findUnresolvedPlaceholders` to surface
+  amber-dot rows that need attention, `placeholderKeysFor` to derive
+  expected placeholders from letter type × CSV headers,
+  `buildMergeInstruction` to augment the system prompt, abort-signal
+  support for cancel.
+- 25 unit tests cover the substitution + placeholder-detection edge cases.
+
+### Custom templates (workspace-saved house phrasings)
+
+- New `CustomTemplate` type + `customTemplates` store slice with four CRUD
+  actions: `createCustomTemplate`, `updateCustomTemplate`,
+  `deleteCustomTemplate`, `createDraftFromCustomTemplate`.
+- `BrowseLetters` (`/hr/new`, `/me/new`) gains a tab strip: **DraftHR**
+  (the existing 35 built-in letter types, unchanged) and **My Templates**
+  (workspace-saved). Mode-scoped end-to-end.
+- Editor File menu → **Save as template…** captures the current draft's
+  per-section HTML (keyed by canonical `SectionId`) plus its answers.
+- Starting a draft from a custom template spawns the base letter type's
+  sections pre-filled with the saved HTML (status `"edited"`), saved
+  jurisdiction default applied.
+- Persisted via the existing Zustand `persist` middleware — no version
+  bump on `scribehr-store-v1` (field-additive).
+
+### LLM cost levers
+
+- **Anthropic native prompt caching** on `/api/draft` + `/api/agent`.
+  Stable system prefixes tagged via `providerOptions.anthropic.cacheControl
+  = { type: "ephemeral" }`. ~90% input-token discount on repeat calls
+  within the 5-minute TTL — the single biggest cost lever in the roadmap.
+  Default behaviour byte-identical when no system prompt is present.
+- `/api/draft` already accepts an optional `extraSystemHint` (used by the
+  bulk mail-merge flow to instruct the model to emit `{{placeholder}}`
+  tokens) — now also tagged for caching across a batch.
+
+### Router + navigation
+
+- New routes: `/employees`, `/employees/:employeeId`, `/bulk`,
+  `/matters`, `/matters/:matterId`.
+- `AppSidebar` HR-mode nav extended with Employees + Bulk operations
+  entries.
+
 ## 0.6.0 — 2026-05-13
 
 Security and export hardening release. This pass removes committed-secret

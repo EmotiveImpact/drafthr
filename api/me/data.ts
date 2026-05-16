@@ -1,7 +1,7 @@
 /**
  * Subject Access Request (SAR / DSAR) endpoint — STUB.
  *
- * Wired in Phase B once Clerk auth + Neon Postgres land. Until then,
+ * Wired in Phase B once WorkOS auth + Neon Postgres land. Until then,
  * this returns 503 so callers (any future "Download my data" / "Delete
  * my data" UI) get a clear message rather than a crash.
  *
