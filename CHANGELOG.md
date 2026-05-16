@@ -2,6 +2,134 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.11.0 — 2026-05-16
+
+The feature + moat wave. Four independent landings shipped in parallel,
+plus the auth-flow polish from earlier in the day. Reports surface for
+HR Directors, AI inline track-changes in the editor, RFC 3161
+cryptographic timestamps on every PDF export, and transactional email
+for workspace invites.
+
+### `/reports` page — Business-tier portfolio surface
+
+- New route at `/reports` (HR-mode only, sidebar entry with `BarChart3` icon)
+- Three rolled-up cards from existing Zustand data — no schema changes:
+  - **Compliance health**: hero ring + percent of letters clearing every
+    `runHealthChecks`; mini progress bars per dimension (Compliance /
+    Quality / Risk); top 3 most-severe failing checks deep-linked to
+    `/editor/<draftId>`.
+  - **Risk exposure heatmap**: 4-column grid by `effectiveRiskBand`
+    (low / moderate / high / critical), each tile showing matters with
+    their £ exposure or primary party, click-through to `/matters/<id>`,
+    subtitle totals £ across active cases.
+  - **Operations**: hand-rolled SVG bar chart of letters drafted by
+    month (last 6mo); time-to-resolve median + p90 from
+    `archivedAt - createdAt` on closed matters; top-5 most-used
+    templates with mini-bars normalised to leader.
+- Empty state when zero drafts + zero matters; Employee mode redirects
+  to a "Reports are an HR portfolio view" message rather than 404.
+- Filters out `Draft.isTemplateSource` everywhere (mirrors Home).
+  Uses existing tokens only — no new colours.
+
+### AI inline-diff in the editor
+
+Cashes in the Suggestion-mark Tiptap primitive from 0.9.0 with a real
+consumer surface. When the AI proposes a section rewrite (agent
+`regenerateSection` tool or AIPanel actions), the change now renders as
+INLINE `<ins>` / `<del>` marks inside the existing section HTML — not
+as a wholesale-replacement card. Users see exactly which sentences
+changed, with green underline for additions, red strikethrough for
+removals.
+
+- `src/lib/tiptap/html-diff.ts` — sentence-level Myers' diff producing
+  suggestion-marked HTML. Each suggestion gets a fresh uuid + shared
+  author/body/createdAt + default `status: "pending"`. Strips inline
+  formatting inside changed sentences to keep the diff readable;
+  preserves block structure.
+- 9 unit tests covering identical inputs (no marks), single add/remove,
+  multi-change with unique ids, empty-old (everything insertion),
+  empty-new (everything deletion), preservation of unchanged block tags.
+- New `InlineSuggestionBanner` at the top of the editor canvas when
+  pending suggestions exist — "AI proposed N changes · [Accept all]
+  [Reject all] [View as cards]". Re-uses existing store actions.
+- `SectionEditor` adds per-suggestion BubbleMenu — clicking inside a
+  `<ins>` / `<del>` mark exposes Accept / Reject pills for that single
+  suggestion, not the whole batch.
+- `src/lib/diff-view-mode.ts` — UI toggle for inline vs card-style.
+  Default inline; opt-back to card per session.
+- `proposeSectionChange` store action now computes the diff + stages it
+  as the section's display html (retains `pendingChange` for card-view
+  fallback). `acceptAllSuggestions` merges via
+  `mergeAcceptedSuggestions`; `rejectAllSuggestions` flips marks to
+  rejected (text retained, visually muted).
+- Export discipline preserved: PDF/DOCX pipe through
+  `mergeAcceptedSuggestions` + `sanitizeLetterHtmlForExport` so
+  reviewer state cannot leak into the final letter.
+
+### RFC 3161 trusted timestamps in PDF export
+
+The third leg of the tribunal-defensibility stool — alongside the
+hash-chained `audit_events` + each PDF's SHA-256, every exported PDF
+now also fetches a trusted timestamp from FreeTSA proving the file
+existed in its exact form at a specific moment, signed by an
+independent third party.
+
+- `api/_utils/tsa.ts` — `requestTsr(sha256Hex)` builds an RFC 3161
+  TimeStampReq, POSTs to `https://freetsa.org/tsr`, returns the binary
+  TSR. 10-second timeout. Returns `null` on any failure so TSA latency
+  never blocks PDF export. `parseTsr(tsr)` extracts the signed
+  timestamp + verifies the embedded hash. ASN.1 / CMS handling via
+  `pkijs` + `@peculiar/asn1-*`.
+- `api/export/pdf.ts` — after PDF render + SHA-256 compute, calls
+  `requestTsr`. The `draft.exported` audit event now carries
+  `tsa: { provider: "freetsa", tsr_base64, signed_at }` or `null` with
+  `tsa: unavailable` flag if FreeTSA was down. Response adds
+  `X-Drafthr-PDF-SHA256` + `X-Drafthr-TSR-Base64` headers; audit-aware
+  clients persist them alongside the PDF.
+- `api/audit/verify-tsr.ts` (new endpoint) — `POST { tsr_base64,
+  expected_sha256 }` returns `{ ok, signed_at, tsa }` on match.
+  Tribunal/auditor-facing — anyone can verify a stored TSR against a
+  known PDF hash.
+- 4 unit tests covering happy path, network failure (export-safe null),
+  parse-corrupted-data.
+- Full PAdES-B-T (TSR embedded as PDF signed attribute) deferred —
+  needs KMS-backed signing key wave first.
+
+### Resend transactional email — workspace invites actually email now
+
+- `api/_utils/email.ts` — `sendEmail()` helper, soft-fails when
+  `RESEND_API_KEY` missing (warned-once flag + returns `ok:false` with
+  reason `"not-configured"`). Singleton Resend client. Default From
+  `DraftHR <no-reply@drafthr.io>`. Auto-derives plain-text from HTML.
+- `api/_utils/email-templates/` — shared layout (inline styles, no
+  external CSS, 560px max-width, mobile-responsive single-column):
+  - `invite.ts` — workspace invite email, big Accept CTA, expiry date
+  - `comment-notification.ts` — built for wave-2, not yet wired
+  - `review-requested.ts` — also wave-2
+- `api/workspace/_handlers/invite.ts` — after invite row inserted,
+  calls `sendEmail`. Response includes `emailSent: boolean` so the
+  frontend can show "Email sent ✓" vs "Couldn't email — copy link
+  manually." Email failure logged but doesn't fail the request — the
+  admin still gets the link.
+- `WorkspaceMembersCard` invite modal gains a small hint line about
+  email delivery behaviour.
+- `.env.example` documents `RESEND_API_KEY` with the Resend dashboard
+  link + "without this, invites stay copy-link only" note.
+
+### Deps + cleanup
+
+- Added: `resend` (M4) · `pkijs`, `@peculiar/asn1-schema`,
+  `@peculiar/asn1-cms`, `@peculiar/asn1-x509`, `@peculiar/x509` (M3)
+- Removed: leftover `src/lib/api-client.ts` from an earlier killed
+  agent run (referenced authkit-react, which we're not using)
+- Vitest config extended to include `tests/api/**/*.test.ts`
+
+### Tests
+
+142 / 142 passing (was 113 baseline; +29 new from this wave: 9
+html-diff, 4 tsa, 7 invite-template + email, plus the Reports surface
+coverage). `npx tsc --noEmit` + `npm run lint` clean.
+
 ## 0.10.0 — 2026-05-16
 
 The wave that turns DraftHR from "localStorage demo" into a real
