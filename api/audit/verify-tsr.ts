@@ -3,16 +3,12 @@
  *
  * Anyone holding the original PDF (or its hash) plus the TSR we returned at
  * export time can confirm:
- *   1. the TSR is well-formed, granted, and parseable as RFC 3161 + CMS;
+ *   1. the TSR is well-formed, granted, and signed as RFC 3161 + CMS;
  *   2. the SHA-256 inside the signed TSTInfo matches the PDF they have;
  *   3. the UTC moment FreeTSA bound the hash to.
  *
  * That's the tribunal-ready primitive: "this exact PDF existed at this exact
  * moment, attested by an independent trusted timestamp authority."
- *
- * Note: signature verification of FreeTSA's CMS envelope (i.e. validating the
- * cert chain back to FreeTSA's root) is intentionally deferred. Callers who
- * need stronger proof can run `openssl ts -verify` against the TSR.
  */
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";

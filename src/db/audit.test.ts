@@ -4,8 +4,19 @@
  * pass each prev_hash forward, then re-walk the chain and verify each row's
  * row_hash matches its inputs. Mirrors the SQL-side `verifyAuditChain`.
  */
-import { describe, expect, it } from "vitest";
-import { computeRowHash, GENESIS_PREV_HASH } from "./audit.js";
+import { randomUUID } from "node:crypto";
+import { afterAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { appendAuditEvent, computeRowHash, GENESIS_PREV_HASH } from "./audit.js";
+import { verifyAuditChain } from "./audit-verify.js";
+import { closeDb, getDb } from "./index.js";
+import { tenants } from "./schema.js";
+
+const itIfDb = process.env.DATABASE_URL ? it : it.skip;
+
+afterAll(async () => {
+  if (process.env.DATABASE_URL) await closeDb();
+});
 
 describe("audit chain", () => {
   it("produces a valid chain across draft.created → draft.updated → draft.deleted", () => {
@@ -96,5 +107,30 @@ describe("audit chain", () => {
     expect(tamperedRehash).not.toBe(chain[0].rowHash);
     // Event 1's prevHash still points at the OLD hash — the chain is broken.
     expect(chain[1].prevHash).not.toBe(tamperedRehash);
+  });
+
+  itIfDb("serializes concurrent appends for the same tenant", async () => {
+    const db = getDb();
+    const tenantId = randomUUID();
+    await db.insert(tenants).values({ id: tenantId, name: "audit concurrency test" });
+
+    try {
+      await Promise.all(
+        Array.from({ length: 10 }, (_, i) =>
+          appendAuditEvent({
+            tenantId,
+            kind: "draft.updated",
+            subjectType: "draft",
+            subjectId: randomUUID(),
+            payload: { index: i },
+          }),
+        ),
+      );
+
+      const result = await verifyAuditChain(tenantId);
+      expect(result).toEqual({ ok: true, rowCount: 10 });
+    } finally {
+      await db.delete(tenants).where(eq(tenants.id, tenantId));
+    }
   });
 });

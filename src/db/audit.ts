@@ -6,7 +6,7 @@
 // Genesis prev_hash for a tenant is 64 zeros. The whole select-then-insert
 // runs in a single transaction to keep concurrent appends serialised.
 import { createHash } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { auditEvents } from "./schema.js";
 import { getDb } from "./index.js";
 import { canonicalJson } from "./canonical-json.js";
@@ -51,11 +51,15 @@ export async function appendAuditEvent(
 ): Promise<AppendAuditEventResult> {
   const db = getDb();
   return db.transaction(async (tx) => {
+    // Serialize each tenant's chain head. Without this lock, concurrent appends
+    // can read the same tail row and both insert events with the same prev_hash.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.tenantId}, 0))`);
+
     const [prev] = await tx
       .select({ rowHash: auditEvents.rowHash })
       .from(auditEvents)
       .where(eq(auditEvents.tenantId, input.tenantId))
-      .orderBy(desc(auditEvents.createdAt))
+      .orderBy(desc(auditEvents.createdAt), desc(auditEvents.id))
       .limit(1);
 
     const prevHash = prev?.rowHash ?? GENESIS_PREV_HASH;

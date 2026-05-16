@@ -13,9 +13,18 @@
  * be able to deliver the letter.
  */
 
+import { createHash, createVerify, X509Certificate } from "node:crypto";
+import * as asn1js from "asn1js";
 import { OctetString, AsnConvert } from "@peculiar/asn1-schema";
 import { AlgorithmIdentifier } from "@peculiar/asn1-x509";
-import { SignedData, id_signedData } from "@peculiar/asn1-cms";
+import type { Certificate } from "@peculiar/asn1-x509";
+import {
+  SignedData,
+  id_contentType,
+  id_messageDigest,
+  id_signedData,
+} from "@peculiar/asn1-cms";
+import type { Attribute } from "@peculiar/asn1-cms";
 import {
   MessageImprint,
   PKIStatus,
@@ -27,8 +36,27 @@ import {
 
 // SHA-256 — the only digest we ever submit. FreeTSA accepts SHA-256.
 const OID_SHA256 = "2.16.840.1.101.3.4.2.1";
+const OID_SHA384 = "2.16.840.1.101.3.4.2.2";
+const OID_SHA512 = "2.16.840.1.101.3.4.2.3";
+const OID_RSA_ENCRYPTION = "1.2.840.113549.1.1.1";
+const OID_RSA_SHA256 = "1.2.840.113549.1.1.11";
+const OID_RSA_SHA384 = "1.2.840.113549.1.1.12";
+const OID_RSA_SHA512 = "1.2.840.113549.1.1.13";
+const OID_ECDSA_SHA256 = "1.2.840.10045.4.3.2";
+const OID_ECDSA_SHA384 = "1.2.840.10045.4.3.3";
+const OID_ECDSA_SHA512 = "1.2.840.10045.4.3.4";
+const OID_TST_INFO = "1.2.840.113549.1.9.16.1.4";
 const FREETSA_URL = "https://freetsa.org/tsr";
 const FREETSA_TIMEOUT_MS = 10_000;
+
+// FreeTSA publishes the SHA-256 of its TSA signing key beside tsa.crt.
+// Source: https://www.freetsa.org/ (checked 2026-05-16). The legacy pin
+// keeps pre-March-2026 timestamps verifiable while still requiring the CMS
+// signature to validate with the pinned FreeTSA signing certificate.
+const FREETSA_TSA_KEY_SHA256_PINS = [
+  "a8bfb0305bb64e2571ca507552ef3245cb1c2fee8728e0ff8689225081ea13467",
+  "899ba3d9f777e2a74bdd34302bc06cb3f7a46ac1f565ee128f79fd5dab99d68b",
+];
 
 export type TsrParseOk = {
   ok: true;
@@ -39,12 +67,20 @@ export type TsrParseOk = {
 
 export type TsrParseFail = { ok: false; reason: string };
 
+export type TsrParseOptions = {
+  trustedTsaKeyPins?: readonly string[];
+  tsaName?: string;
+};
+
 /**
  * Request a trusted RFC 3161 timestamp from FreeTSA for a SHA-256 hash.
  * Returns the binary TSR (TimeStampResponse) or null on any failure —
  * caller continues without it (audit event marks tsa: unavailable).
  */
-export async function requestTsr(sha256Hex: string): Promise<Buffer | null> {
+export async function requestTsr(
+  sha256Hex: string,
+  parseOptions?: TsrParseOptions,
+): Promise<Buffer | null> {
   if (!isHex64(sha256Hex)) return null;
 
   const tsq = encodeTsq(sha256Hex);
@@ -64,7 +100,7 @@ export async function requestTsr(sha256Hex: string): Promise<Buffer | null> {
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     // Sanity-check it parses + status is granted before we hand it back.
-    const parsed = parseTsr(buf);
+    const parsed = parseTsr(buf, parseOptions);
     if (!parsed.ok) return null;
     if (parsed.sha256Hex.toLowerCase() !== sha256Hex.toLowerCase()) return null;
     return buf;
@@ -79,12 +115,12 @@ export async function requestTsr(sha256Hex: string): Promise<Buffer | null> {
  * Parse a TSR binary blob and extract the imprint hash + signed UTC time.
  * Used by the verify endpoint and by requestTsr's sanity-check path.
  *
- * Note: this does NOT verify FreeTSA's CMS signature. Signature verification
- * requires the FreeTSA root cert chain and is left to the verify endpoint
- * (or external tooling like openssl ts -verify) — extracting the signed
- * imprint + time is enough to confirm shape + that the hash matches.
+ * This validates the CMS signature over the TSTInfo before returning ok:true.
  */
-export function parseTsr(tsr: Buffer | Uint8Array): TsrParseOk | TsrParseFail {
+export function parseTsr(
+  tsr: Buffer | Uint8Array,
+  options: TsrParseOptions = {},
+): TsrParseOk | TsrParseFail {
   let resp: TimeStampResp;
   try {
     resp = AsnConvert.parse(toArrayBuffer(tsr), TimeStampResp);
@@ -114,6 +150,10 @@ export function parseTsr(tsr: Buffer | Uint8Array): TsrParseOk | TsrParseFail {
     return { ok: false, reason: `signed-data parse failed: ${errMessage(err)}` };
   }
 
+  if (signed.encapContentInfo.eContentType !== OID_TST_INFO) {
+    return { ok: false, reason: "invalid_signature" };
+  }
+
   const eContent = signed.encapContentInfo.eContent;
   // Per RFC 3161 the eContent is a TSTInfo wrapped in an OCTET STRING.
   const tstInfoBuf = eContent?.single ? toArrayBuffer(eContent.single.buffer) : eContent?.any;
@@ -135,17 +175,187 @@ export function parseTsr(tsr: Buffer | Uint8Array): TsrParseOk | TsrParseFail {
       reason: `unexpected hash algorithm ${imprint.hashAlgorithm.algorithm}`,
     };
   }
+
+  const signatureOk = verifyTstInfoSignature(signed, tstInfoBuf, options);
+  if (!signatureOk) return { ok: false, reason: "invalid_signature" };
+
   const sha256Hex = bytesToHex(new Uint8Array(toArrayBuffer(imprint.hashedMessage.buffer)));
 
-  // FreeTSA's identity isn't carried in TSTInfo unless tsa is set; default to
-  // "FreeTSA" as the provider tag. Tighter identity-binding is a future
-  // enhancement (parse signer cert subject CN).
   return {
     ok: true,
     sha256Hex,
     signedAtUtc: tst.genTime,
-    tsaName: "FreeTSA",
+    tsaName: options.tsaName ?? "FreeTSA",
   };
+}
+
+function verifyTstInfoSignature(
+  signed: SignedData,
+  tstInfoDer: ArrayBuffer,
+  options: TsrParseOptions,
+): boolean {
+  try {
+    const signer = signed.signerInfos[0];
+    if (!signer || signed.signerInfos.length !== 1) return false;
+    if (!signer.signedAttrs?.length) return false;
+
+    const trustedCert = findTrustedSigningCertificate(
+      signed,
+      options.trustedTsaKeyPins ?? FREETSA_TSA_KEY_SHA256_PINS,
+    );
+    if (!trustedCert) return false;
+
+    const contentType = readOidAttribute(signer.signedAttrs, id_contentType);
+    if (contentType !== OID_TST_INFO) return false;
+
+    const digestAlgorithm = digestNameFromOid(signer.digestAlgorithm.algorithm);
+    if (!digestAlgorithm) return false;
+
+    const signedDigest = readOctetStringAttribute(signer.signedAttrs, id_messageDigest);
+    if (!signedDigest) return false;
+
+    const expectedDigest = createHash(digestAlgorithm)
+      .update(Buffer.from(tstInfoDer))
+      .digest();
+    if (!Buffer.from(signedDigest).equals(expectedDigest)) return false;
+
+    const signedAttrsDer = encodeSignedAttributes(signer.signedAttrs);
+
+    const signatureDigest = signatureDigestName(
+      signer.signatureAlgorithm.algorithm,
+      signer.digestAlgorithm.algorithm,
+    );
+    if (!signatureDigest) return false;
+
+    const verifier = createVerify(signatureDigest);
+    verifier.update(signedAttrsDer);
+    verifier.end();
+    return verifier.verify(
+      trustedCert.publicKey,
+      Buffer.from(toArrayBuffer(signer.signature.buffer)),
+    );
+  } catch {
+    return false;
+  }
+}
+
+function findTrustedSigningCertificate(
+  signed: SignedData,
+  trustedPins: readonly string[],
+): X509Certificate | null {
+  const pinSet = new Set(trustedPins.map((pin) => pin.toLowerCase()));
+  for (const choice of signed.certificates ?? []) {
+    const certificate = choice.certificate;
+    if (!certificate) continue;
+
+    const certDer = Buffer.from(AsnConvert.serialize(certificate));
+    const pinCandidates = certificatePinCandidates(certDer, certificate);
+    if (!pinCandidates.some((pin) => pinSet.has(pin))) continue;
+    return new X509Certificate(certDer);
+  }
+  return null;
+}
+
+function certificatePinCandidates(certDer: Buffer, certificate: Certificate): string[] {
+  const pins = [
+    sha256Hex(certDer),
+    sha256Hex(
+      Buffer.from(toArrayBuffer(certificate.tbsCertificate.subjectPublicKeyInfo.subjectPublicKey)),
+    ),
+  ];
+
+  try {
+    const x509 = new X509Certificate(certDer);
+    const spkiDer = x509.publicKey.export({ format: "der", type: "spki" });
+    if (Buffer.isBuffer(spkiDer)) pins.push(sha256Hex(spkiDer));
+  } catch {
+    // If Node cannot parse the certificate, the DER/key pins above still let
+    // findTrustedSigningCertificate reject it cleanly.
+  }
+
+  return [...new Set(pins)];
+}
+
+function readOidAttribute(attrs: Attribute[], oid: string): string | null {
+  const value = readSingleAttributeValue(attrs, oid);
+  if (!value) return null;
+  const parsed = asn1js.fromBER(value);
+  if (parsed.offset === -1 || !(parsed.result instanceof asn1js.ObjectIdentifier)) return null;
+  return parsed.result.valueBlock.toString();
+}
+
+function readOctetStringAttribute(attrs: Attribute[], oid: string): ArrayBuffer | null {
+  const value = readSingleAttributeValue(attrs, oid);
+  if (!value) return null;
+  try {
+    return toArrayBuffer(AsnConvert.parse(value, OctetString).buffer);
+  } catch {
+    return null;
+  }
+}
+
+function readSingleAttributeValue(attrs: Attribute[], oid: string): ArrayBuffer | null {
+  const matching = attrs.filter((attr) => attr.attrType === oid);
+  if (matching.length !== 1) return null;
+  const attr = matching[0];
+  if (!attr || attr.attrValues.length !== 1) return null;
+  return attr.attrValues[0] ?? null;
+}
+
+function encodeSignedAttributes(attrs: Attribute[]): Buffer {
+  const encodedAttrs = attrs
+    .map((attr) => Buffer.from(AsnConvert.serialize(attr)))
+    .sort(Buffer.compare);
+  return encodeDer(0x31, Buffer.concat(encodedAttrs));
+}
+
+function encodeDer(tag: number, content: Buffer): Buffer {
+  if (content.length < 0x80) return Buffer.concat([Buffer.from([tag, content.length]), content]);
+
+  const lengthBytes: number[] = [];
+  let length = content.length;
+  while (length > 0) {
+    lengthBytes.unshift(length & 0xff);
+    length >>= 8;
+  }
+  return Buffer.concat([
+    Buffer.from([tag, 0x80 | lengthBytes.length, ...lengthBytes]),
+    content,
+  ]);
+}
+
+function digestNameFromOid(oid: string): "sha256" | "sha384" | "sha512" | null {
+  switch (oid) {
+    case OID_SHA256:
+      return "sha256";
+    case OID_SHA384:
+      return "sha384";
+    case OID_SHA512:
+      return "sha512";
+    default:
+      return null;
+  }
+}
+
+function signatureDigestName(
+  signatureOid: string,
+  digestOid: string,
+): "sha256" | "sha384" | "sha512" | null {
+  switch (signatureOid) {
+    case OID_ECDSA_SHA256:
+    case OID_RSA_SHA256:
+      return "sha256";
+    case OID_ECDSA_SHA384:
+    case OID_RSA_SHA384:
+      return "sha384";
+    case OID_ECDSA_SHA512:
+    case OID_RSA_SHA512:
+      return "sha512";
+    case OID_RSA_ENCRYPTION:
+      return digestNameFromOid(digestOid);
+    default:
+      return null;
+  }
 }
 
 function encodeTsq(sha256Hex: string): Buffer {
@@ -181,6 +391,10 @@ function bytesToHex(bytes: Uint8Array): string {
     hex += bytes[i]!.toString(16).padStart(2, "0");
   }
   return hex;
+}
+
+function sha256Hex(bytes: Buffer | Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function toArrayBuffer(src: ArrayBuffer | ArrayBufferView | Buffer): ArrayBuffer {
