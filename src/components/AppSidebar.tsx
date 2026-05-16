@@ -54,6 +54,7 @@ import {
   Users,
   Layers,
   ClipboardCheck,
+  BarChart3,
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
@@ -293,6 +294,7 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
       ? ([
           { href: "/employees", label: "Employees", Icon: Users, tooltip: "Workspace employee directory" },
           { href: "/bulk", label: "Bulk operations", Icon: Layers, tooltip: "CSV → batch drafts" },
+          { href: "/reports", label: "Reports", Icon: BarChart3, tooltip: "Compliance, risk & operations rollup" },
         ] satisfies NavItem[])
       : []),
   ];

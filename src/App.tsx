@@ -27,6 +27,7 @@ import { EmployeesIndex } from "@/routes/EmployeesIndex";
 import { EmployeeDetail } from "@/routes/EmployeeDetail";
 import BulkOperations from "@/routes/BulkOperations";
 import { Approvals } from "@/routes/Approvals";
+import { Reports } from "@/routes/Reports";
 import { SignIn } from "@/routes/SignIn";
 import { AuthCallback } from "@/routes/AuthCallback";
 import { SignupWorkspace } from "@/routes/SignupWorkspace";
@@ -161,6 +162,7 @@ export function App() {
         <Route path="/employees/:employeeId" element={<Protected><EmployeeDetail /></Protected>} />
         <Route path="/bulk" element={<Protected><BulkOperations /></Protected>} />
         <Route path="/approvals" element={<Protected><Approvals /></Protected>} />
+        <Route path="/reports" element={<Protected><Reports /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />
