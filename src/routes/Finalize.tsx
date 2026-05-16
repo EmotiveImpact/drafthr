@@ -296,7 +296,7 @@ export function Finalize() {
 
         {/* ── Canvas / Body ── */}
         <main className="min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[1000px] px-4 py-7 sm:px-6 sm:py-10">
+          <div className="mx-auto max-w-[1000px] px-4 py-7 sm:px-6 sm:py-10 pb-24 lg:pb-10">
 
             {/* Counsel attestation gate — only for high-risk letters */}
             {counselGateRequired && (
@@ -361,9 +361,79 @@ export function Finalize() {
               without a second opinion
             </div>
 
+            {/* MOBILE-ONLY ship surface — the desktop sidebar (checklist +
+             * export + Mark-as-sent) is hidden below lg, so mirror those
+             * essentials here so mobile users can actually ship. The viewport-
+             * fixed Mark-as-sent button outside the main element handles
+             * thumb-reach for the primary action. */}
+            <div className="lg:hidden mt-8 pt-6 border-t border-[var(--ds-line)] flex flex-col gap-3">
+              <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
+                Ready to ship
+              </SectionLabel>
+              <ShipChecklist
+                draft={draft}
+                counselAttested={counselAttested}
+                onFixClick={() => nav(`/editor/${draft.id}/review`)}
+              />
+
+              <SectionLabel>Export</SectionLabel>
+              <div className="grid grid-cols-2 gap-2">
+                <FormatTile
+                  compact
+                  title="PDF"
+                  desc="Print-ready"
+                  primary
+                  busy={busyFormat === "pdf"}
+                  onClick={onExportPdf}
+                  disabled={!counselAttested}
+                  icon={<FileText className="size-3.5" />}
+                />
+                <FormatTile
+                  compact
+                  title="DOCX"
+                  desc="Editable"
+                  busy={busyFormat === "docx"}
+                  onClick={onExportDocx}
+                  disabled={!counselAttested}
+                  icon={<FileText className="size-3.5" />}
+                />
+                <FormatTile
+                  compact
+                  title="TXT"
+                  desc="Plain"
+                  busy={busyFormat === "txt"}
+                  onClick={onExportTxt}
+                  disabled={!counselAttested}
+                  icon={<FileType2 className="size-3.5" />}
+                />
+                <FormatTile
+                  compact
+                  title="ZIP"
+                  desc="Pack"
+                  busy={busyFormat === "zip"}
+                  onClick={onExportZip}
+                  disabled={!counselAttested}
+                  icon={<Package className="size-3.5" />}
+                />
+              </div>
+            </div>
+
           </div>
         </main>
       </div>
+
+      {/* Mobile-only viewport-fixed Mark-as-sent CTA. The desktop equivalent
+       * lives inside the sidebar at the bottom of the left column. Below lg
+       * the sidebar is hidden, so we anchor the primary ship action to the
+       * viewport bottom — always reachable without scrolling. */}
+      <button
+        type="button"
+        onClick={onMarkAsSent}
+        disabled={shipBlocked}
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--ds-ink)] text-white text-[14px] font-bold py-3.5 flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed shadow-[0_-4px_12px_rgba(0,0,0,0.10)] transition"
+      >
+        <Send className="size-4" /> Mark as sent
+      </button>
     </div>
   );
 }
