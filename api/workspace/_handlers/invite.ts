@@ -7,12 +7,12 @@
  * is the only one that consumes them; revoke clears revokedAt.
  */
 import { randomBytes } from "node:crypto";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request";
-import { rateLimit } from "../_utils/rate-limit";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant";
-import { getDb } from "../../src/db";
-import { invites } from "../../src/db/schema";
-import { appendAuditEvent } from "../../src/db/audit";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request";
+import { rateLimit } from "../../_utils/rate-limit";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant";
+import { getDb } from "../../../src/db";
+import { invites } from "../../../src/db/schema";
+import { appendAuditEvent } from "../../../src/db/audit";
 
 export const config = { runtime: "nodejs" };
 

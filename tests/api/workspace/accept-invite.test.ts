@@ -111,7 +111,7 @@ describe("POST /api/workspace/accept-invite", () => {
     // Override select chain to handle the second query (tenant_members existing).
     vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("../../../api/workspace/accept-invite");
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(410);
     const data = (await res.json()) as { error?: string };
@@ -122,7 +122,7 @@ describe("POST /api/workspace/accept-invite", () => {
     mockInvite = { ...inviteFixture, revokedAt: new Date() };
     vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("../../../api/workspace/accept-invite");
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(410);
   });
@@ -131,7 +131,7 @@ describe("POST /api/workspace/accept-invite", () => {
     mockInvite = { ...inviteFixture, acceptedAt: new Date() };
     vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("../../../api/workspace/accept-invite");
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(410);
   });
@@ -140,7 +140,7 @@ describe("POST /api/workspace/accept-invite", () => {
     mockInvite = { ...inviteFixture, email: "someone-else@example.com" };
     vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("../../../api/workspace/accept-invite");
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(403);
   });
@@ -148,7 +148,7 @@ describe("POST /api/workspace/accept-invite", () => {
   it("returns 404 when the invite code is unknown", async () => {
     vi.doMock("../../../src/db", () => buildDbMock([], []));
 
-    const mod = await import("../../../api/workspace/accept-invite");
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "nope" }));
     expect(res.status).toBe(404);
   });
@@ -157,7 +157,7 @@ describe("POST /api/workspace/accept-invite", () => {
     mockExistingMember = false;
     vi.doMock("../../../src/db", () => buildDbMock([inviteFixture], []));
 
-    const mod = await import("../../../api/workspace/accept-invite");
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(200);
     const data = (await res.json()) as { tenantId?: string; role?: string };

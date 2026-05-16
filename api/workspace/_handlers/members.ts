@@ -4,11 +4,11 @@
  * (not gated to admin) — they need to know who's on their team.
  */
 import { eq } from "drizzle-orm";
-import { rateLimit } from "../_utils/rate-limit";
-import { jsonError } from "../_utils/request";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant";
-import { getDb } from "../../src/db";
-import { users, tenantMembers } from "../../src/db/schema";
+import { rateLimit } from "../../_utils/rate-limit";
+import { jsonError } from "../../_utils/request";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant";
+import { getDb } from "../../../src/db";
+import { users, tenantMembers } from "../../../src/db/schema";
 
 export const config = { runtime: "nodejs" };
 

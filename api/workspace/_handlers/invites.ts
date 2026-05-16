@@ -3,11 +3,11 @@
  * Admin-only (members shouldn't see who's been invited but not yet joined).
  */
 import { and, eq, isNull } from "drizzle-orm";
-import { rateLimit } from "../_utils/rate-limit";
-import { jsonError } from "../_utils/request";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant";
-import { getDb } from "../../src/db";
-import { invites } from "../../src/db/schema";
+import { rateLimit } from "../../_utils/rate-limit";
+import { jsonError } from "../../_utils/request";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant";
+import { getDb } from "../../../src/db";
+import { invites } from "../../../src/db/schema";
 
 export const config = { runtime: "nodejs" };
 
