@@ -1477,6 +1477,51 @@ export const useDraftStore = create<Store>()(
   )
 );
 
+// Dual-write hook: subscribe to the store and enqueue a debounced server
+// sync per draft whenever its identity changes. No-op when the flag is off.
+// We register a snapshot getter so dual-write.ts can read drafts without
+// importing the store module (avoids a circular import).
+import {
+  enqueueSync as _dualWriteEnqueueSync,
+  setDualWriteSnapshotGetter as _setDualWriteSnapshotGetter,
+  isDualWriteEnabled as _isDualWriteEnabled,
+  syncDraft as _dualWriteSyncDraft,
+} from "./dual-write";
+
+_setDualWriteSnapshotGetter((draftId) => useDraftStore.getState().drafts[draftId] ?? null);
+
+if (_isDualWriteEnabled()) {
+  let prevDrafts = useDraftStore.getState().drafts;
+  useDraftStore.subscribe((state) => {
+    const next = state.drafts;
+    if (next === prevDrafts) return;
+    for (const [id, draft] of Object.entries(next)) {
+      if (prevDrafts[id] !== draft) {
+        _dualWriteEnqueueSync(id);
+      }
+    }
+    // Deletions — drafts present before but missing now.
+    for (const id of Object.keys(prevDrafts)) {
+      if (!(id in next)) {
+        // Fire-and-forget delete. We do NOT debounce deletions — they're rare
+        // and the user expects them to land immediately.
+        void fetch("/api/store/drafts", {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ id }),
+        }).catch(() => {
+          /* defensive — local delete already succeeded */
+        });
+      }
+    }
+    prevDrafts = next;
+  });
+}
+
+// Re-export so callers (App.tsx backfill) can avoid duplicating imports.
+export const __dualWrite = { syncDraft: _dualWriteSyncDraft };
+
 function timelineEvent(
   kind: DraftTimelineEvent["kind"],
   title: string,

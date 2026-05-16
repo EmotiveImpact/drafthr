@@ -24,6 +24,10 @@ export const tenants = pgTable("tenants", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// users.tenantId is the "home" tenant they were minted under — keep for
+// backwards-compat, but the real per-workspace role lives in tenant_members.
+// userType: 'customer' (HR team) or 'consultant' (marketplace). Mint default
+// is 'customer'; consultants get flipped manually for the split UI.
 export const users = pgTable(
   "users",
   {
@@ -35,10 +39,68 @@ export const users = pgTable(
     email: text("email"),
     legalName: text("legal_name"),
     workspaceRole: text("workspace_role").notNull().default("drafter"),
+    userType: text("user_type").notNull().default("customer"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("users_tenant_idx").on(t.tenantId)],
+);
+
+// tenant_members — many-to-many users <-> tenants. Source of truth for the
+// per-tenant role (supersedes users.workspaceRole, which is left for compat).
+// is_active_tenant: exactly one row per user should be true; the API toggles
+// it on workspace switch.
+export const tenantMembers = pgTable(
+  "tenant_members",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("drafter"),
+    isActiveTenant: boolean("is_active_tenant").notNull().default(false),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    // primary key — drizzle expresses composite PK via uniqueIndex(true) on the
+    // table builder; emulate with a unique index + an active-tenant lookup idx.
+    uniqueIndex("tenant_members_user_tenant_pk").on(t.userId, t.tenantId),
+    index("tenant_members_user_active_idx").on(t.userId, t.isActiveTenant),
+  ],
+);
+
+// invites — pending workspace invitations. invite_code goes in the /join/{code}
+// URL; expires_at defaults to now() + 7 days. accepted_at + accepted_by are set
+// on redeem; revoked_at flags revoked invites (we keep them for audit).
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: text("role").notNull().default("drafter"),
+    inviteCode: text("invite_code").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true })
+      .default(sql`now() + interval '7 days'`)
+      .notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedByUserId: uuid("accepted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("invites_tenant_idx").on(t.tenantId),
+    uniqueIndex("invites_invite_code_uniq").on(t.inviteCode),
+  ],
 );
 
 export const employees = pgTable(
@@ -327,3 +389,7 @@ export type CustomTemplate = typeof customTemplates.$inferSelect;
 export type Approval = typeof approvals.$inferSelect;
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type NewAuditEvent = typeof auditEvents.$inferInsert;
+export type TenantMember = typeof tenantMembers.$inferSelect;
+export type NewTenantMember = typeof tenantMembers.$inferInsert;
+export type Invite = typeof invites.$inferSelect;
+export type NewInvite = typeof invites.$inferInsert;

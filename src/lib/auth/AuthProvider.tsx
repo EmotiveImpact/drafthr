@@ -33,8 +33,18 @@ export type AuthUser = {
   profilePictureUrl: string | null;
 };
 
+export type ActiveTenant = {
+  id: string;
+  name: string;
+  role: string;
+};
+
 export type AuthContextValue = {
   user: AuthUser | null;
+  /** Currently-selected workspace; null until /signup/workspace runs. */
+  activeTenant: ActiveTenant | null;
+  /** True when the user has joined at least one tenant (active or not). */
+  hasAnyTenant: boolean;
   isLoaded: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -46,6 +56,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const PASSTHROUGH_CONTEXT: AuthContextValue = {
   user: null,
+  activeTenant: null,
+  hasAnyTenant: false,
   isLoaded: true,
   signIn: async () => {},
   signOut: async () => {},
@@ -64,6 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function RealAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [activeTenant, setActiveTenant] = useState<ActiveTenant | null>(null);
+  const [hasAnyTenant, setHasAnyTenant] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   // Avoid concurrent /session fetches stomping each other on rapid focus events.
   const inflight = useRef<Promise<void> | null>(null);
@@ -78,10 +92,18 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
         });
         if (!res.ok) {
           setUser(null);
+          setActiveTenant(null);
+          setHasAnyTenant(false);
           return;
         }
-        const data = (await res.json()) as { user: AuthUser | null };
+        const data = (await res.json()) as {
+          user: AuthUser | null;
+          activeTenant?: ActiveTenant | null;
+          hasAnyTenant?: boolean;
+        };
         setUser(data.user);
+        setActiveTenant(data.activeTenant ?? null);
+        setHasAnyTenant(Boolean(data.hasAnyTenant));
       } catch {
         // Network error — keep prior state. The next focus event will retry.
       } finally {
@@ -134,14 +156,16 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
       });
     } finally {
       setUser(null);
+      setActiveTenant(null);
+      setHasAnyTenant(false);
       // Hard navigation so any in-memory route guards re-evaluate cleanly.
       window.location.assign("/");
     }
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoaded, signIn, signOut, refresh }),
-    [user, isLoaded, signIn, signOut, refresh]
+    () => ({ user, activeTenant, hasAnyTenant, isLoaded, signIn, signOut, refresh }),
+    [user, activeTenant, hasAnyTenant, isLoaded, signIn, signOut, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

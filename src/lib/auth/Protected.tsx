@@ -18,15 +18,25 @@ export function Protected({ children }: { children: ReactNode }) {
 }
 
 function ProtectedGate({ children }: { children: ReactNode }) {
-  const { user, isLoaded } = useAuth();
+  const { user, activeTenant, isLoaded } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    if (!isLoaded || user) return;
-    const redirect = encodeURIComponent(location.pathname + location.search);
-    navigate(`/sign-in?redirect=${redirect}`, { replace: true });
-  }, [isLoaded, user, navigate, location.pathname, location.search]);
+    if (!isLoaded) return;
+    if (!user) {
+      const redirect = encodeURIComponent(location.pathname + location.search);
+      navigate(`/sign-in?redirect=${redirect}`, { replace: true });
+      return;
+    }
+    // Signed in but no workspace yet — force onboarding. Allow the workspace
+    // signup route itself + the invite landing through so we don't loop.
+    const onboardingPath =
+      location.pathname.startsWith("/signup/workspace") || location.pathname.startsWith("/join/");
+    if (!activeTenant && !onboardingPath) {
+      navigate("/signup/workspace", { replace: true });
+    }
+  }, [isLoaded, user, activeTenant, navigate, location.pathname, location.search]);
 
   if (!isLoaded || !user) return <LoadingSkeleton />;
   return <>{children}</>;

@@ -34,6 +34,7 @@ import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { todayDateOnly } from "@/lib/date-only";
+import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -395,18 +396,21 @@ export function Settings() {
           </Grid>
         </Card>
 
-        {/* Workspace */}
+        {/* Workspace — real members + invites when signed in to a tenant. */}
+        <WorkspaceMembersCard />
+
+        {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
         <Card size="3">
           <Box mb="3">
-            <Heading size="3" mb="1">Workspace</Heading>
+            <Heading size="3" mb="1">Role (local simulation)</Heading>
             <Text size="2" color="gray" as="p">
-              Your seat in the workspace. Drives the approval queue: drafters submit letters for sign-off,
-              reviewers approve or push back. Switch to "Reviewer" to act on submissions yourself —
-              useful for screencasts while you're the only user.
+              Your seat for approval-queue simulation. The real per-workspace role is set above.
+              Use this in local dev / demos to switch between drafter and reviewer behaviour
+              without a second account.
             </Text>
           </Box>
           <Grid columns={{ initial: "1", sm: "2" }} gap="4">
-            <Field label="Role in this workspace">
+            <Field label="Simulated role">
               <Select.Root
                 value={profile.workspaceRole ?? "owner"}
                 onValueChange={(v) => setWorkspaceRole(v as WorkspaceRole)}

@@ -64,6 +64,7 @@ import { useThemeStore } from "@/lib/theme";
 import { deriveNotifications, topSeverity } from "@/lib/notifications";
 import { SidebarMenuBadge } from "@/components/ui/sidebar";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 
 /**
  * App sidebar.
@@ -99,6 +100,11 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <WorkspaceSwitcher />
+          </SidebarGroupContent>
+        </SidebarGroup>
         <NavigatePrimary mode={mode} />
         <NavRecentDrafts mode={mode} />
       </SidebarContent>
