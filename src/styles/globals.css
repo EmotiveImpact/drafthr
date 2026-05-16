@@ -292,6 +292,13 @@
     padding: 0 2px;
     border-radius: 2px;
   }
+  /* Pending marks invite a click — accept/reject bubble pops on press. */
+  .tiptap ins[data-status="pending"],
+  .tiptap del[data-status="pending"],
+  ins[data-status="pending"],
+  del[data-status="pending"] {
+    cursor: pointer;
+  }
   .tiptap ins[data-status="rejected"],
   ins[data-status="rejected"],
   .tiptap del[data-status="rejected"],

@@ -37,6 +37,8 @@ import {
   hasPendingSuggestions,
   mergeAcceptedSuggestionsHtml,
 } from "./tiptap/suggestion-merge";
+import { diffHtmlAsSuggestion } from "./tiptap/html-diff";
+import { getDiffViewMode } from "./diff-view-mode";
 
 type Store = {
   drafts: Record<string, Draft>;
@@ -783,21 +785,58 @@ export const useDraftStore = create<Store>()(
         }),
 
       /* ------------------------------------------------------------------
-       * Pending-change (Cursor-style diff) lifecycle.
-       * proposeSectionChange stores an AI proposal without touching the
-       * section's current html. acceptSectionPending promotes it (versions
-       * the old html into section.versions, swaps in proposedHtml, marks
-       * status "edited"). rejectSectionPending just clears the pending
-       * record. *AcceptAll / *RejectAll fan over every section.
+       * Pending-change lifecycle. Two render modes share this surface:
+       *   - "card" (legacy): section.html stays untouched; the proposal
+       *     sits in section.pendingChange and renders as a Cursor-style
+       *     before/after card above the editor. Accept swaps proposedHtml
+       *     in; reject just clears pendingChange.
+       *   - "inline" (default): proposeSectionChange computes a sentence-
+       *     level diff between section.html and proposedHtml, stages the
+       *     diffed HTML (with <ins>/<del data-suggestion-id …> marks) as
+       *     section.html, and snapshots the original into pendingChange.
+       *     prevHtml so reject can restore it cleanly. Accept folds
+       *     accepted suggestions in via mergeAcceptedSuggestionsHtml.
        * ----------------------------------------------------------------*/
 
       proposeSectionChange: (id, sectionId, change) =>
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
-          const sections = d.sections.map((sec) =>
-            sec.id === sectionId ? { ...sec, pendingChange: change } : sec
-          );
+          const target = d.sections.find((sec) => sec.id === sectionId);
+          if (!target) return s;
+          // Mode resolution: caller can force a mode via change.diffViewMode;
+          // otherwise we read the user's preference. Defaults to inline.
+          const mode = change.diffViewMode ?? getDiffViewMode();
+          const sections = d.sections.map((sec) => {
+            if (sec.id !== sectionId) return sec;
+            if (mode === "inline") {
+              // Stage the diff as section.html so the editor renders the
+              // proposal as track-changes marks the user can accept /
+              // reject one-at-a-time. prevHtml is the canonical text
+              // we'll restore on reject-all.
+              const diffed = sanitizeLetterHtml(
+                diffHtmlAsSuggestion(sec.html, change.proposedHtml, {
+                  author: "Claude AI",
+                  body: change.instruction,
+                }),
+              );
+              return {
+                ...sec,
+                html: diffed,
+                pendingChange: {
+                  ...change,
+                  diffViewMode: "inline" as const,
+                  prevHtml: sec.html,
+                },
+              };
+            }
+            // Card mode — leave section.html alone; PendingChangeCard reads
+            // pendingChange.proposedHtml for the "after" pane.
+            return {
+              ...sec,
+              pendingChange: { ...change, diffViewMode: "card" as const },
+            };
+          });
           return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
         }),
 
@@ -807,17 +846,34 @@ export const useDraftStore = create<Store>()(
           if (!d) return s;
           const target = d.sections.find((sec) => sec.id === sectionId);
           if (!target?.pendingChange) return s;
+          const pending = target.pendingChange;
+          const isInline = (pending.diffViewMode ?? "inline") === "inline";
+          // For inline mode we version the snapshot taken when the diff was
+          // staged (the canonical text); for card mode we version the live
+          // section.html (which never changed).
           const oldVersion: SectionVersion = {
-            id: target.pendingChange.id + "-prev",
+            id: pending.id + "-prev",
             createdAt: Date.now(),
-            html: target.html,
-            modelName: target.pendingChange.modelName,
+            html: isInline ? (pending.prevHtml ?? target.html) : target.html,
+            modelName: pending.modelName,
           };
+          const acceptedHtml = isInline
+            ? // Flip every pending suggestion to accepted, then merge to fold
+              // the additions in / drop the removals.
+              sanitizeLetterHtml(
+                mergeAcceptedSuggestionsHtml(
+                  target.html.replace(
+                    /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
+                    `$1data-status="accepted"`,
+                  ),
+                ),
+              )
+            : sanitizeLetterHtml(pending.proposedHtml);
           const sections = d.sections.map((sec) =>
             sec.id === sectionId
               ? {
                   ...sec,
-                  html: sanitizeLetterHtml(sec.pendingChange!.proposedHtml),
+                  html: acceptedHtml,
                   status: "edited" as Section["status"],
                   versions: [...sec.versions, oldVersion],
                   pendingChange: undefined,
@@ -831,9 +887,18 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
-          const sections = d.sections.map((sec) =>
-            sec.id === sectionId ? { ...sec, pendingChange: undefined } : sec
-          );
+          const sections = d.sections.map((sec) => {
+            if (sec.id !== sectionId || !sec.pendingChange) return sec;
+            const pending = sec.pendingChange;
+            const isInline = (pending.diffViewMode ?? "inline") === "inline";
+            return {
+              ...sec,
+              // Inline mode mutated section.html — restore the snapshot.
+              // Card mode never touched section.html.
+              html: isInline && pending.prevHtml != null ? pending.prevHtml : sec.html,
+              pendingChange: undefined,
+            };
+          });
           return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
         }),
 
@@ -841,32 +906,52 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
+          const now = Date.now();
           const sections = d.sections.map((sec) => {
             if (!sec.pendingChange) return sec;
+            const pending = sec.pendingChange;
+            const isInline = (pending.diffViewMode ?? "inline") === "inline";
             const oldVersion: SectionVersion = {
-              id: sec.pendingChange.id + "-prev",
-              createdAt: Date.now(),
-              html: sec.html,
-              modelName: sec.pendingChange.modelName,
+              id: pending.id + "-prev",
+              createdAt: now,
+              html: isInline ? (pending.prevHtml ?? sec.html) : sec.html,
+              modelName: pending.modelName,
             };
+            const acceptedHtml = isInline
+              ? sanitizeLetterHtml(
+                  mergeAcceptedSuggestionsHtml(
+                    sec.html.replace(
+                      /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
+                      `$1data-status="accepted"`,
+                    ),
+                  ),
+                )
+              : sanitizeLetterHtml(pending.proposedHtml);
             return {
               ...sec,
-              html: sanitizeLetterHtml(sec.pendingChange.proposedHtml),
+              html: acceptedHtml,
               status: "edited" as Section["status"],
               versions: [...sec.versions, oldVersion],
               pendingChange: undefined,
             };
           });
-          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
+          return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: now } } };
         }),
 
       rejectAllPending: (id) =>
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
-          const sections = d.sections.map((sec) =>
-            sec.pendingChange ? { ...sec, pendingChange: undefined } : sec
-          );
+          const sections = d.sections.map((sec) => {
+            if (!sec.pendingChange) return sec;
+            const pending = sec.pendingChange;
+            const isInline = (pending.diffViewMode ?? "inline") === "inline";
+            return {
+              ...sec,
+              html: isInline && pending.prevHtml != null ? pending.prevHtml : sec.html,
+              pendingChange: undefined,
+            };
+          });
           return { drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } } };
         }),
 

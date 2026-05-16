@@ -43,7 +43,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Draft, Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles } from "lucide-react";
+import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
@@ -56,6 +56,7 @@ import { EvidenceDrawer } from "./EvidenceDrawer";
 import { linkedEvidenceForSection } from "@/lib/evidence";
 import { Paperclip } from "lucide-react";
 import { PendingChangeCard } from "./PendingChangeCard";
+import { useDraftStore } from "@/lib/store";
 
 type Props = {
   /** Parent draft — needed for the inline CommentPopover. */
@@ -193,6 +194,32 @@ export function SectionEditor({
             return true;
           }
         }
+        // Click inside a pending <ins>/<del> → surface a small floating
+        // accept/reject bubble for THAT suggestion only. The "Accept all"
+        // affordance lives in the canvas banner; this bubble is the
+        // per-pill control. Anchored at the element's bounding rect so
+        // the bubble follows the suggestion regardless of selection state.
+        const sugEl = target?.closest?.(
+          "ins[data-suggestion-id], del[data-suggestion-id]",
+        ) as HTMLElement | null;
+        if (sugEl) {
+          const status = sugEl.getAttribute("data-status") ?? "pending";
+          if (status === "pending") {
+            const id = sugEl.getAttribute("data-suggestion-id");
+            const kindAttr = sugEl.getAttribute("data-suggestion-kind");
+            const kind: "insertion" | "deletion" =
+              kindAttr === "deletion" ? "deletion" : "insertion";
+            if (id) {
+              setPendingSuggestion({
+                id,
+                kind,
+                body: sugEl.getAttribute("data-body"),
+                rect: sugEl.getBoundingClientRect(),
+              });
+              return true;
+            }
+          }
+        }
         return false;
       },
       // Paste an image straight from the clipboard (cmd+V after a screenshot)
@@ -245,6 +272,17 @@ export function SectionEditor({
     quote?: string;
     applyMark?: (commentId: string) => void;
   }>({});
+
+  // Inline track-changes accept/reject — when the user clicks inside a
+  // pending <ins>/<del> mark, we capture which suggestion to act on +
+  // anchor the floating bubble at the click point.
+  const setSuggestionStatusAction = useDraftStore((s) => s.setSuggestionStatus);
+  const [pendingSuggestion, setPendingSuggestion] = useState<{
+    id: string;
+    kind: "insertion" | "deletion";
+    body?: string | null;
+    rect: DOMRect;
+  } | null>(null);
 
   // Evidence picker (Pattern A) + drawer (Pattern D) state for the section-
   // header paperclip. Clicking the paperclip on this section's header focuses
@@ -559,9 +597,12 @@ export function SectionEditor({
       )}
       {active && <EditorToolbar editor={editor} draft={draft} />}
 
-      {/* Pending AI change for this section. Rendered above the editor
-       * so the user always sees the proposal before any further typing. */}
-      {section.pendingChange && (
+      {/* Pending AI change for this section. Two render modes:
+       *   - "card" (legacy): Cursor-style before/after card above the editor.
+       *   - "inline" (default): the diff lives inside section.html as
+       *     <ins>/<del> marks rendered by the editor; the card is skipped
+       *     and per-suggestion accept/reject runs from the floating bubble. */}
+      {section.pendingChange && (section.pendingChange.diffViewMode ?? "inline") === "card" && (
         <div className="px-7 pt-4">
           <PendingChangeCard
             section={section}
@@ -632,6 +673,118 @@ export function SectionEditor({
         open={evidenceDrawerOpen}
         onOpenChange={setEvidenceDrawerOpen}
       />
+
+      {/* Per-suggestion accept/reject bubble — floats over the editor at the
+       * clicked <ins>/<del> mark. Single-suggestion target (vs the
+       * canvas-level "Accept all" banner). Closes on outside click via the
+       * useEffect below. */}
+      {pendingSuggestion && (
+        <SuggestionAcceptBubble
+          rect={pendingSuggestion.rect}
+          kind={pendingSuggestion.kind}
+          body={pendingSuggestion.body}
+          onAccept={() => {
+            setSuggestionStatusAction(draft.id, pendingSuggestion.id, "accepted");
+            setPendingSuggestion(null);
+          }}
+          onReject={() => {
+            setSuggestionStatusAction(draft.id, pendingSuggestion.id, "rejected");
+            setPendingSuggestion(null);
+          }}
+          onDismiss={() => setPendingSuggestion(null)}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Floating accept/reject bubble for a single inline suggestion mark.
+ * Positioned absolutely against the viewport at the clicked mark's
+ * bounding rect — anchored on top by default, flipped to bottom when
+ * we'd otherwise clip off-screen. Outside click dismisses.
+ */
+function SuggestionAcceptBubble({
+  rect,
+  kind,
+  body,
+  onAccept,
+  onReject,
+  onDismiss,
+}: {
+  rect: DOMRect;
+  kind: "insertion" | "deletion";
+  body?: string | null;
+  onAccept: () => void;
+  onReject: () => void;
+  onDismiss: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Outside-click dismissal — listens at document level so it catches
+  // clicks anywhere outside the bubble (toolbar, other sections, the
+  // canvas). Mousedown (not click) so we beat any other handler that
+  // might re-target focus.
+  useEffect(() => {
+    const onDocMouseDown = (event: MouseEvent) => {
+      const el = ref.current;
+      if (!el) return;
+      if (el.contains(event.target as Node)) return;
+      onDismiss();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onDismiss();
+    };
+    document.addEventListener("mousedown", onDocMouseDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onDismiss]);
+
+  // Place above the mark. Flip to below when the top edge would land
+  // off-screen. Centered horizontally on the mark's midpoint.
+  const top = rect.top - 44 < 8 ? rect.bottom + 6 : rect.top - 38;
+  const left = Math.max(8, rect.left + rect.width / 2 - 90);
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={`${kind === "insertion" ? "Proposed insertion" : "Proposed deletion"} — accept or reject`}
+      className="fixed z-50 inline-flex items-center gap-1 rounded-md shadow-md bg-[var(--ds-ink)] text-white px-1.5 py-1 text-[11.5px]"
+      style={{ top, left }}
+    >
+      <span
+        className={
+          "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-[0.06em] " +
+          (kind === "insertion"
+            ? "bg-[var(--ds-green-fg)]/30"
+            : "bg-[var(--ds-red-fg)]/40")
+        }
+        title={body ?? undefined}
+      >
+        {kind === "insertion" ? "Insert" : "Delete"}
+      </span>
+      <button
+        type="button"
+        onClick={onAccept}
+        className="inline-flex items-center gap-1 px-2 h-6 rounded-md bg-[var(--ds-green-fg)] text-white hover:brightness-110 font-medium"
+        title="Accept this suggestion"
+      >
+        <Check className="size-3" />
+        Accept
+      </button>
+      <button
+        type="button"
+        onClick={onReject}
+        className="inline-flex items-center gap-1 px-2 h-6 rounded-md bg-white/15 text-white hover:bg-white/25"
+        title="Reject this suggestion"
+      >
+        <X className="size-3" />
+        Reject
+      </button>
+    </div>
   );
 }

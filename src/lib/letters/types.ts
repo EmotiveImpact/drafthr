@@ -110,15 +110,22 @@ export type SectionVersion = {
 
 /**
  * A change the AI is proposing for a section, waiting for the user to
- * Accept or Reject. While set, the section is in "review" mode — the
- * old html is preserved in section.html (the truth) and the proposed
- * html sits here. Accept promotes proposedHtml to html; Reject clears
- * this field. This is the Cursor-IDE pattern applied to letter editing.
+ * Accept or Reject. Two render modes:
+ *   - "card" (legacy): section.html stays untouched; the proposal sits
+ *     here and renders as a Cursor-style before/after card above the
+ *     editor. Accept swaps proposedHtml in.
+ *   - "inline" (default since 2026-05-16): proposeSectionChange computes
+ *     a sentence-level diff between the current section.html and
+ *     proposedHtml, stashes the diffed HTML in section.html (with
+ *     <ins>/<del data-suggestion-id …> marks), and snapshots the
+ *     ORIGINAL html into prevHtml so reject can restore it cleanly.
+ *     Accept folds accepted suggestions in via mergeAcceptedSuggestionsHtml.
  */
 export type PendingChange = {
   id: string;
   createdAt: number;
-  /** New HTML the AI produced. Replaces section.html on Accept. */
+  /** New HTML the AI produced. Used as the "after" pane on card mode +
+   *  as one input to the inline diff on inline mode. */
   proposedHtml: string;
   /** Human-readable description of what the AI did. */
   instruction: string;
@@ -126,6 +133,12 @@ export type PendingChange = {
   source: "regenerate" | "addClause" | "tighten" | "manual";
   /** Optional model id that produced this. */
   modelName?: string;
+  /** Render mode — see comment above. Defaults to "inline" when unset. */
+  diffViewMode?: "inline" | "card";
+  /** When diffViewMode === "inline": snapshot of section.html taken just
+   *  before the diff was staged, so Reject can restore the canonical text
+   *  without lossy round-tripping through suggestion-merge. */
+  prevHtml?: string;
 };
 
 export type Section = {

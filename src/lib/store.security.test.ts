@@ -115,6 +115,12 @@ function draftWithPending(proposedHtml: string): Draft {
           proposedHtml,
           instruction: "test",
           source: "manual",
+          // Card mode — the security regression specifically tests that
+          // accept sanitises the AI's raw HTML before it lands in the
+          // section. Inline mode would feed an XSS payload through the
+          // diff helper first, which strips tags before they reach the
+          // store, making this assertion vacuous on inline mode.
+          diffViewMode: "card",
         },
       },
     ],

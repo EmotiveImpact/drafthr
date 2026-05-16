@@ -14,6 +14,7 @@ import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { LetterPreview } from "@/components/editor/LetterPreview";
 import type { PagedEditorActions } from "@/components/editor/paged-edit/PagedEditor";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
+import { InlineSuggestionBanner } from "@/components/editor/InlineSuggestionBanner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -1519,6 +1520,11 @@ export function Editor() {
               )}
               <DeadlineBanner draft={draft} />
               <RetryBanner event={retryEvent} />
+              {/* Inline-diff banner — shows N pending track-changes marks
+               * with Accept all / Reject all + a one-click toggle between
+               * inline diff (default) and the legacy card view. Returns
+               * null when no section has pending suggestions. */}
+              <InlineSuggestionBanner draft={draft} />
               {draft.sections.map((section) => (
                 <SectionEditor
                   key={section.id}
