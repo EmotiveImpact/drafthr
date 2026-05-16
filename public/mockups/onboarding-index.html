@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Onboarding mockups · DraftHR</title>
+<style>
+  :root {
+    --ink:#0a0b0d; --body:#2f3239; --muted:#6b6f78; --subtle:#9ca0a8;
+    --canvas:#fafafa; --surface:#fff; --line:#e9eaec; --line-2:#f3f4f5;
+    --blue-fg:#1d4ed8; --green-fg:#15803d;
+    --serif:"Playfair Display",Georgia,serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"Geist",-apple-system,system-ui,sans-serif; background:var(--canvas); color:var(--body); padding:48px 24px; }
+  .wrap { max-width:980px; margin:0 auto; }
+  h1 { font-family:var(--serif); font-weight:500; color:var(--ink); font-size:36px; letter-spacing:-0.02em; margin:0 0 12px; }
+  .lede { font-size:16px; color:var(--muted); max-width:60ch; margin:0 0 36px; }
+  .group { margin-bottom:48px; }
+  .group h2 { font-size:11px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); font-weight:600; margin:0 0 16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; display:block; color:inherit; text-decoration:none; transition:border 0.15s, transform 0.15s; }
+  .card:hover { border-color:var(--ink); transform:translateY(-2px); }
+  .card .meta { font-size:11px; text-transform:uppercase; letter-spacing:0.1em; color:var(--blue-fg); font-weight:600; margin-bottom:8px; }
+  .card h3 { margin:0 0 6px; font-size:16px; font-weight:600; color:var(--ink); line-height:1.3; }
+  .card p { margin:0; font-size:13.5px; color:var(--muted); line-height:1.5; }
+  .card .tags { display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+  .tag { font-size:10.5px; padding:2px 7px; border-radius:4px; background:var(--line-2); color:var(--muted); font-weight:500; }
+  .tag.rec { background:#dcfce7; color:var(--green-fg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="lede" style="font-size:11px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); font-weight:600; margin-bottom:8px;">DraftHR · Onboarding funnel design</p>
+  <h1>Compare the options.</h1>
+  <p class="lede">Five mockups to evaluate two design decisions. Open each in a new tab, see how it feels, then decide together. No code committed against any of these yet — pure evaluation.</p>
+
+  <section class="group">
+    <h2>Decision 1 · Marketing page approach</h2>
+    <div class="grid">
+      <a class="card" href="./marketing-1-single-card.html" target="_blank">
+        <div class="meta">Option A</div>
+        <h3>Single signup card</h3>
+        <p>One card on <code>app.drafthr.io</code> with "I'm in HR" / "I need help with my employer" buttons. Smallest surface area, ships immediately, no separate marketing site.</p>
+        <div class="tags"><span class="tag">In-app</span><span class="tag">~1 hour</span></div>
+      </a>
+      <a class="card" href="./marketing-2-welcome-pages.html" target="_blank">
+        <div class="meta">Option B</div>
+        <h3>/welcome/hr + /welcome/employee</h3>
+        <p>Richer landing pages per intent, served from the same app at <code>app.drafthr.io/welcome/*</code>. Same Vercel project. Adds value props and social proof before signup.</p>
+        <div class="tags"><span class="tag">In-app</span><span class="tag">~half-day</span></div>
+      </a>
+      <a class="card" href="./marketing-3-marketing-site.html" target="_blank">
+        <div class="meta">Option C</div>
+        <h3>Full marketing site at drafthr.io</h3>
+        <p>Proper marketing site at the apex domain. Lives in <code>/web/</code> (already exists), separate concerns from the app. Best for SEO + paid acquisition. Mock shows a Linear-quality landing.</p>
+        <div class="tags rec"><span class="tag rec">Recommended for growth</span><span class="tag">~2 days</span></div>
+      </a>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Decision 2 · Employee checkout softeners</h2>
+    <div class="grid">
+      <a class="card" href="./employee-onboarding-preview.html" target="_blank">
+        <div class="meta">Softener 1</div>
+        <h3>30-second product preview</h3>
+        <p>Before Stripe checkout, show an animated preview of the wizard + a sample exported letter. They see WHAT they're paying for before paying. Higher conversion, no free product given away.</p>
+        <div class="tags"><span class="tag">Pre-payment</span></div>
+      </a>
+      <a class="card" href="./employee-onboarding-refund.html" target="_blank">
+        <div class="meta">Softener 2</div>
+        <h3>24-hour money-back guarantee</h3>
+        <p>Stripe checkout with explicit "If your letter doesn't help, full refund within 24h" badge. Removes "what if I waste £99" anxiety. Low refund rate in practice for high-stakes work.</p>
+        <div class="tags"><span class="tag">Post-payment</span></div>
+      </a>
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>What you're deciding</h2>
+    <div style="background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px;">
+      <p style="margin:0 0 10px; font-size:14px;"><strong>Decision 1</strong> sets where the brand-building work lives (in-app vs separate marketing site) and how much SEO surface area we have. Option C is the long-term winner but needs more upfront work.</p>
+      <p style="margin:0; font-size:14px;"><strong>Decision 2</strong> affects the Employee funnel only. We've already locked "pay from the jump." These soften the upfront-pay shock without giving free product. Pick both, one, or neither.</p>
+    </div>
+  </section>
+
+  <p style="margin-top:36px; font-size:12px; color:var(--subtle);">All mockups are static HTML in <code>public/mockups/</code> · open in browser at <code>app.drafthr.io/mockups/{filename}.html</code> after next deploy, or locally with <code>npm run dev</code>.</p>
+</div>
+</body>
+</html>

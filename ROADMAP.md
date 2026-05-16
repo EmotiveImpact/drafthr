@@ -1,7 +1,40 @@
 # DRAFTHR ROADMAP
 
 **Q2 2026 → Q4 2026 (MVP) · Q1 2027 → Q4 2028 (v1, v2)**
-**Last revised:** 2026-05-15 · synthesised from two specialist boards (Marketplace + Stack)
+**Last revised:** 2026-05-16 · synthesised from two specialist boards (Marketplace + Stack); onboarding-funnel design parked pending mockup review (see Section 12)
+
+---
+
+## ⏸ Deferred decisions (parked, mockups ready)
+
+These design questions are explored visually in `public/mockups/` — open
+`public/mockups/onboarding-index.html` in a browser to walk through. We've
+deliberately deferred building them until we have time to design properly;
+in the meantime, feature work continues against the current (imperfect)
+auth + onboarding flow.
+
+| Decision | Status | Mockups to evaluate |
+|---|---|---|
+| Marketing page approach (in-app card · in-app welcome pages · separate drafthr.io marketing site) | parked | `marketing-1-single-card.html` · `marketing-2-welcome-pages.html` · `marketing-3-marketing-site.html` |
+| Employee checkout softeners (30-sec product preview vs 24h money-back vs both vs neither) | parked | `employee-onboarding-preview.html` · `employee-onboarding-refund.html` |
+| Custom WorkOS auth UI vs AuthKit hosted | leaning AuthKit + custom domain `auth.drafthr.io` | (no mockup yet) |
+| Onboarding multi-step funnel (`/onboarding/hr/{workspace,team,plan}` + `/onboarding/employee`) | designed, not built | depends on marketing page outcome |
+| Stripe checkout + paywall enforcement | not built — pay-from-jump principle locked | depends on onboarding outcome |
+
+### Locked principles (no re-discussion needed)
+
+- **Pay from the jump.** No free trials. HR captures card during plan-pick; Employees pay before drafting. Money in week 1.
+- **Role locked at signup.** Different role = different account. No flip in Settings. Stripe-consistent, audit-consistent, RBAC-consistent.
+- **Pro = 1 seat · Business = 5 seats · Enterprise = unlimited.** Matches the roadmap pricing section below.
+- **AuthKit hosted + custom domain.** Don't rebuild auth UI from scratch until first Enterprise customer complains about the redirect.
+
+### Return-to-this triggers
+
+Pick the design up again when ANY fires:
+- First real user complains about the current flow (mode picker before tenant)
+- Ready to charge (need Stripe + onboarding-with-payment)
+- About to launch marketing (need the landing page decided)
+- Codex review of auth surfaces flags this as the next priority
 
 ---
 

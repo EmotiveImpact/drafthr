@@ -10,6 +10,7 @@ Two modes, two product surfaces:
 
 → **Live design system:** [`/public/design-system.html`](public/design-system.html)
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
+→ **Onboarding funnel mockups (parked, decision pending):** [`/public/mockups/onboarding-index.html`](public/mockups/onboarding-index.html)
 
 ---
 

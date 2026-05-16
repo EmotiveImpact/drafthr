@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Option C · Full marketing site · DraftHR</title>
+<style>
+  :root {
+    --ink:#0a0b0d; --body:#2f3239; --muted:#6b6f78; --subtle:#9ca0a8;
+    --canvas:#fafafa; --surface:#fff; --line:#e9eaec; --line-2:#f3f4f5;
+    --blue-bg:#eff6ff; --blue-fg:#1d4ed8;
+    --green-bg:#f0fdf4; --green-fg:#15803d;
+    --amber-bg:#fffbeb; --amber-fg:#b45309;
+    --red-bg:#fef2f2; --red-fg:#b91c1c;
+    --serif:"Playfair Display",Georgia,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Geist",-apple-system,system-ui,sans-serif; background:var(--canvas); color:var(--body); }
+  .ribbon { position:sticky; top:0; z-index:60; background:var(--ink); color:#fff; font-size:11px; padding:6px 16px; text-align:center; letter-spacing:0.06em; }
+  .ribbon a { color:#fff; opacity:0.7; margin-left:8px; }
+
+  /* Nav */
+  nav.top { position:sticky; top:24px; z-index:50; background:rgba(250,250,250,0.85); backdrop-filter:saturate(180%) blur(14px); border-bottom:1px solid var(--line); }
+  .nav-inner { max-width:1200px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; padding:14px 24px; }
+  .brand { font-family:var(--serif); font-size:20px; color:var(--ink); font-weight:500; letter-spacing:-0.01em; }
+  .brand b { font-weight:600; }
+  .nav-links { display:flex; gap:24px; }
+  .nav-links a { font-size:13.5px; color:var(--muted); text-decoration:none; }
+  .nav-links a:hover { color:var(--ink); }
+  .nav-cta { display:flex; gap:8px; }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:8px; font-size:13.5px; font-weight:600; cursor:pointer; text-decoration:none; border:0; }
+  .btn-primary { background:var(--ink); color:#fff; }
+  .btn-ghost { background:transparent; color:var(--ink); }
+  .btn-outline { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .btn-outline:hover { border-color:var(--ink); }
+
+  /* Hero */
+  .hero { max-width:1200px; margin:0 auto; padding:96px 24px 80px; display:grid; grid-template-columns:1.1fr 0.9fr; gap:80px; align-items:center; }
+  .hero-left .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted); font-weight:600; display:inline-flex; align-items:center; gap:8px; }
+  .hero-left .eyebrow::before { content:""; width:24px; height:1px; background:var(--subtle); }
+  .hero-left h1 { font-family:var(--serif); font-weight:500; color:var(--ink); font-size:64px; letter-spacing:-0.025em; line-height:1.04; margin:16px 0 24px; }
+  .hero-left h1 em { font-style:italic; color:var(--blue-fg); }
+  .hero-left .lede { font-size:18px; color:var(--body); line-height:1.55; max-width:54ch; margin:0 0 32px; }
+  .hero-cta { display:flex; gap:12px; flex-wrap:wrap; }
+  .btn-lg { padding:14px 24px; font-size:14px; }
+  .hero-meta { margin-top:24px; display:flex; gap:18px; align-items:center; }
+  .meta-item { font-size:12px; color:var(--muted); display:inline-flex; gap:6px; align-items:center; }
+  .meta-item .dot { color:var(--green-fg); font-weight:bold; }
+
+  /* Hero right — visual card */
+  .hero-right { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:32px; box-shadow:0 30px 80px -40px rgba(0,0,0,0.12); }
+  .hero-right h3 { font-family:var(--serif); font-style:italic; color:var(--ink); font-weight:500; font-size:18px; margin:0 0 14px; }
+  .letter-line { padding:10px 14px; background:var(--surface); border:1px solid var(--line-2); border-radius:6px; font-family:"Source Serif 4", Georgia, serif; font-size:13px; line-height:1.55; margin-bottom:8px; color:var(--body); }
+  .letter-line .hl { background:var(--amber-bg); color:var(--amber-fg); padding:1px 3px; border-radius:2px; }
+  .letter-line.muted { opacity:0.5; }
+
+  /* Sections */
+  section { padding:80px 24px; }
+  .section-inner { max-width:1200px; margin:0 auto; }
+  .section-eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted); font-weight:600; }
+  h2 { font-family:var(--serif); font-weight:500; color:var(--ink); font-size:40px; letter-spacing:-0.02em; line-height:1.15; margin:12px 0 12px; }
+  .section-lede { font-size:16px; color:var(--muted); line-height:1.55; max-width:64ch; margin:0; }
+
+  /* Two-audience split */
+  .audience-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:48px; }
+  .audience { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:36px; }
+  .audience .icon { width:48px; height:48px; border-radius:10px; display:grid; place-items:center; margin-bottom:16px; }
+  .audience.hr .icon { background:var(--blue-bg); color:var(--blue-fg); }
+  .audience.employee .icon { background:var(--green-bg); color:var(--green-fg); }
+  .audience h3 { margin:0 0 6px; font-size:22px; color:var(--ink); font-weight:600; letter-spacing:-0.01em; }
+  .audience .sub { font-size:13px; color:var(--muted); margin-bottom:20px; }
+  .audience ul { list-style:none; padding:0; margin:0 0 24px; font-size:14px; color:var(--body); }
+  .audience li { padding:6px 0; display:flex; gap:10px; align-items:flex-start; }
+  .audience li::before { content:"→"; color:var(--subtle); flex-shrink:0; }
+
+  /* Letter types showcase */
+  .letters-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:8px; margin-top:32px; }
+  .letter-chip { padding:14px; background:var(--surface); border:1px solid var(--line); border-radius:8px; font-size:12.5px; font-weight:500; color:var(--body); }
+  .letter-chip .risk { font-size:10px; text-transform:uppercase; letter-spacing:0.08em; font-weight:600; }
+  .risk.low { color:var(--green-fg); }
+  .risk.med { color:var(--amber-fg); }
+  .risk.high { color:var(--red-fg); }
+
+  /* Trust */
+  .trust { background:var(--ink); color:#e6e7ea; padding:80px 24px; }
+  .trust .section-inner { color:#e6e7ea; }
+  .trust h2 { color:#fff; }
+  .trust .section-eyebrow { color:#9ca0a8; }
+  .trust-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:24px; margin-top:48px; }
+  .trust-item h4 { font-family:var(--serif); font-style:italic; color:#fff; font-weight:500; font-size:18px; margin:0 0 8px; }
+  .trust-item p { font-size:13.5px; color:#b8bbc1; line-height:1.55; margin:0; }
+
+  /* Final CTA */
+  .final { padding:96px 24px; text-align:center; }
+  .final h2 { font-size:48px; margin-bottom:16px; }
+  .final h2 em { font-style:italic; color:var(--blue-fg); }
+  .final p { font-size:17px; color:var(--muted); max-width:54ch; margin:0 auto 32px; }
+
+  footer { padding:32px 24px; border-top:1px solid var(--line); background:var(--surface); }
+  .footer-inner { max-width:1200px; margin:0 auto; display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="ribbon">OPTION C · Full marketing site at <code>drafthr.io</code> (proper standalone) <a href="./onboarding-index.html">← all mockups</a></div>
+
+<nav class="top">
+  <div class="nav-inner">
+    <div class="brand">Draft<b>HR</b></div>
+    <div class="nav-links">
+      <a href="#">For HR teams</a>
+      <a href="#">For employees</a>
+      <a href="#">Pricing</a>
+      <a href="#">Letters</a>
+      <a href="#">Trust</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="#">Sign in</a>
+      <a class="btn btn-primary" href="#">Get started →</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-left">
+    <div class="eyebrow">UK + US Employment Law · ACAS Code aware</div>
+    <h1>HR letters that <em>hold up</em> in tribunal.</h1>
+    <p class="lede">AI-assisted drafting with statutory anchors, hash-chained audit trail, and human-in-the-loop counsel review. Built for HR teams who don't want to gamble with a Word template at midnight.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="#">I'm in HR or Management →</a>
+      <a class="btn btn-outline btn-lg" href="#">I need help with my employer →</a>
+    </div>
+    <div class="hero-meta">
+      <span class="meta-item"><span class="dot">✓</span> SOC 2 readiness Q4 2026</span>
+      <span class="meta-item"><span class="dot">✓</span> Pay-from-jump, no free letters</span>
+      <span class="meta-item"><span class="dot">✓</span> Built in the UK</span>
+    </div>
+  </div>
+  <div class="hero-right">
+    <h3>Investigation Invitation · Patel · 2026</h3>
+    <div class="letter-line">Dear Mr Patel,</div>
+    <div class="letter-line">In line with the <span class="hl">ACAS Code on Disciplinary and Grievance Procedures</span>, we are writing to invite you to an investigation meeting regarding the complaint raised on 12 March 2026.</div>
+    <div class="letter-line">The purpose of the meeting is to give you the opportunity to respond to the matters raised. You have the right to be accompanied by a colleague or trade union representative under <span class="hl">s.10 Employment Relations Act 1999</span>.</div>
+    <div class="letter-line muted">The meeting will take place on…</div>
+    <div style="font-size:11px; color:var(--muted); margin-top:14px;">Drafted in 4 minutes · audit hash 3bd56c07… · counsel review pending</div>
+  </div>
+</section>
+
+<section style="background:var(--surface); border-top:1px solid var(--line); border-bottom:1px solid var(--line);">
+  <div class="section-inner">
+    <div class="section-eyebrow">Two products, one brand</div>
+    <h2>Built for both sides of the desk.</h2>
+    <p class="section-lede">Each persona deserves their own product. We don't make HR Directors fight an employee-tier UI, and we don't make employees navigate a workspace they don't need.</p>
+
+    <div class="audience-grid">
+      <div class="audience hr">
+        <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h2m2 0h2m-6 4h2m2 0h2m-6 4h2m2 0h2"/></svg></div>
+        <h3>For HR & Management</h3>
+        <p class="sub">Solo HR consultant · in-house HR · mid-market HR team · enterprise</p>
+        <ul>
+          <li>Workspace with team review + RBAC (drafter / reviewer / admin / viewer)</li>
+          <li>Bulk CSV operations — 50 redundancy letters in one AI call</li>
+          <li>Matters: investigations, grievances, restructures with audit-by-case</li>
+          <li>Approval queue for 4-eyes review before send</li>
+          <li>Custom templates: your house phrasings, your team's library</li>
+        </ul>
+        <a class="btn btn-primary" href="#">Start as HR · Pro from £79/mo →</a>
+      </div>
+      <div class="audience employee">
+        <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 014-4h8a4 4 0 014 4v2"/></svg></div>
+        <h3>For Employees</h3>
+        <p class="sub">Grievance · settlement · constructive dismissal · tribunal-bound</p>
+        <ul>
+          <li>Wizard-guided: 8-12 questions → draft letter in 15 minutes</li>
+          <li>Citation-aware: "as per s.95(1)(c) ERA 1996" baked into prose</li>
+          <li>Tribunal deadline calendar with email + SMS reminders</li>
+          <li>Optional consultant review (SRA-registered) from £85</li>
+          <li>80-94% cheaper than a solicitor for comparable output</li>
+        </ul>
+        <a class="btn btn-primary" href="#">Start as Employee · from £9.99 →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-inner">
+    <div class="section-eyebrow">35 letter types · UK + US</div>
+    <h2>Every conversation you'd rather not have.</h2>
+    <p class="section-lede">Each template includes statutory anchors, hard constraints, and gold-standard examples. Per-jurisdiction so the law-of-the-land stays current.</p>
+
+    <div class="letters-grid">
+      <div class="letter-chip"><span class="risk low">Low risk</span><br/>Offer letter</div>
+      <div class="letter-chip"><span class="risk low">Low risk</span><br/>Promotion</div>
+      <div class="letter-chip"><span class="risk low">Low risk</span><br/>Reference</div>
+      <div class="letter-chip"><span class="risk med">Medium</span><br/>Probation outcome</div>
+      <div class="letter-chip"><span class="risk med">Medium</span><br/>Performance warning</div>
+      <div class="letter-chip"><span class="risk med">Medium</span><br/>Flexible working</div>
+      <div class="letter-chip"><span class="risk med">Medium</span><br/>Resignation</div>
+      <div class="letter-chip"><span class="risk med">Medium</span><br/>Sickness appeal</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Termination</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Redundancy</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Settlement cover</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Grievance</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Whistleblowing</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Constructive dismissal</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>Discrimination grievance</div>
+      <div class="letter-chip"><span class="risk high">High</span><br/>ET1 prep</div>
+    </div>
+    <p style="margin-top:24px; font-size:13px; color:var(--muted);">+ 19 more · UK England & Wales · Scotland · Northern Ireland · US federal + 50 state variants</p>
+  </div>
+</section>
+
+<section class="trust">
+  <div class="section-inner">
+    <div class="section-eyebrow">Why HR teams trust DraftHR</div>
+    <h2>Tribunal-defensible by construction.</h2>
+    <div class="trust-grid">
+      <div class="trust-item">
+        <h4>Hash-chained audit log</h4>
+        <p>Every export, edit, and approval is SHA-256-linked to the previous event. Tampering breaks the chain. Provable in court.</p>
+      </div>
+      <div class="trust-item">
+        <h4>Statutory anchors in every template</h4>
+        <p>ACAS Code paragraphs, ERA 1996 sections, FLSA references — cited where they matter, never as window-dressing.</p>
+      </div>
+      <div class="trust-item">
+        <h4>Counsel review surface</h4>
+        <p>Drafts can be sent to in-house counsel for sign-off before export. Track-changes flow built in.</p>
+      </div>
+      <div class="trust-item">
+        <h4>Private by default</h4>
+        <p>Your drafts never train models. We use Anthropic Claude with zero data-retention. Your evidence stays yours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="section-eyebrow">Get started</div>
+  <h2>Put the difficult conversation <em>in writing</em>.</h2>
+  <p>First letter is on us if you're HR-side. Employees pay per letter, refundable within 24 hours if it doesn't help. No long contracts, no demos, no sales call needed.</p>
+  <div style="display:flex; gap:12px; justify-content:center;">
+    <a class="btn btn-primary btn-lg" href="#">I'm in HR or Management →</a>
+    <a class="btn btn-outline btn-lg" href="#">I need help with my employer →</a>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <span>© 2026 DraftHR Ltd. · Built in the UK.</span>
+    <span><a href="#" style="color:inherit;">Privacy</a> · <a href="#" style="color:inherit;">Terms</a> · <a href="#" style="color:inherit;">DPA</a> · <a href="#" style="color:inherit;">Status</a></span>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Softener 1 · 30-second product preview · DraftHR</title>
+<style>
+  :root {
+    --ink:#0a0b0d; --body:#2f3239; --muted:#6b6f78; --subtle:#9ca0a8;
+    --canvas:#fafafa; --surface:#fff; --line:#e9eaec; --line-2:#f3f4f5;
+    --blue-bg:#eff6ff; --blue-fg:#1d4ed8;
+    --green-bg:#f0fdf4; --green-fg:#15803d;
+    --amber-bg:#fffbeb; --amber-fg:#b45309;
+    --red-bg:#fef2f2; --red-fg:#b91c1c;
+    --serif:"Playfair Display",Georgia,serif;
+    --letter-serif:"Source Serif 4", Georgia, serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Geist",-apple-system,system-ui,sans-serif; background:var(--canvas); color:var(--body); }
+  .ribbon { position:sticky; top:0; z-index:60; background:var(--ink); color:#fff; font-size:11px; padding:6px 16px; text-align:center; letter-spacing:0.06em; }
+  .ribbon a { color:#fff; opacity:0.7; margin-left:8px; }
+
+  .page { max-width:1100px; margin:0 auto; padding:48px 24px; }
+  .stepper { display:flex; gap:24px; margin-bottom:32px; font-size:12px; color:var(--muted); }
+  .step { display:flex; gap:8px; align-items:center; }
+  .step .num { width:22px; height:22px; border-radius:50%; background:var(--line); display:grid; place-items:center; font-weight:600; font-size:11px; color:var(--muted); }
+  .step.active .num { background:var(--ink); color:#fff; }
+  .step.active { color:var(--ink); font-weight:600; }
+  .step.done .num { background:var(--green-fg); color:#fff; }
+
+  .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted); font-weight:600; }
+  h1 { font-family:var(--serif); font-weight:500; color:var(--ink); font-size:34px; letter-spacing:-0.02em; margin:10px 0 8px; }
+  .lede { font-size:15px; color:var(--muted); margin:0 0 32px; }
+
+  .grid { display:grid; grid-template-columns:1.1fr 0.9fr; gap:32px; }
+
+  /* Preview card */
+  .preview { background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .preview-header { padding:14px 18px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; background:#fafafa; }
+  .preview-title { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.1em; }
+  .preview-dots { display:flex; gap:5px; }
+  .preview-dots .dot { width:8px; height:8px; border-radius:50%; background:var(--line); }
+  .preview-dots .dot.r { background:#ff5f57; }
+  .preview-dots .dot.y { background:#febc2e; }
+  .preview-dots .dot.g { background:#28c840; }
+  .preview-body { padding:24px; min-height:360px; }
+
+  /* Wizard preview */
+  .wiz-step { font-size:11px; color:var(--muted); margin-bottom:8px; }
+  .wiz-q { font-family:var(--serif); font-style:italic; font-size:20px; color:var(--ink); margin:0 0 18px; }
+  .wiz-input { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:13.5px; margin-bottom:10px; }
+  .wiz-input.filled { background:var(--blue-bg); color:var(--blue-fg); font-weight:500; border-color:var(--blue-fg); }
+  .wiz-progress { display:flex; gap:4px; margin-top:24px; }
+  .pip { flex:1; height:3px; background:var(--line); border-radius:2px; }
+  .pip.done { background:var(--ink); }
+  .pip.cur { background:var(--blue-fg); }
+
+  /* Sample letter */
+  .letter-paper { background:#fff; padding:28px; font-family:var(--letter-serif); font-size:13px; line-height:1.65; color:#1a1c20; }
+  .letter-paper .header-line { font-weight:600; margin-bottom:8px; }
+  .letter-paper p { margin:0 0 10px; }
+  .letter-paper .citation { color:var(--blue-fg); font-style:italic; }
+  .stamp { position:absolute; top:14px; right:14px; padding:3px 8px; background:var(--green-bg); color:var(--green-fg); font-size:10px; font-weight:600; border-radius:4px; }
+  .preview-rel { position:relative; }
+
+  /* CTA card */
+  .checkout { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px; position:sticky; top:80px; align-self:start; }
+  .price-row { display:flex; justify-content:space-between; align-items:baseline; padding:14px 0; border-bottom:1px solid var(--line-2); }
+  .price-row.total { border-bottom:0; padding-top:16px; }
+  .price-row .label { font-size:13px; color:var(--body); }
+  .price-row .amount { font-size:15px; color:var(--ink); font-weight:600; }
+  .price-row.total .label { font-size:14px; font-weight:600; color:var(--ink); }
+  .price-row.total .amount { font-size:22px; }
+  .pay-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:14px; background:var(--ink); color:#fff; border:0; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; margin-top:18px; }
+  .pay-btn svg { width:16px; height:16px; }
+  .pay-meta { font-size:11px; color:var(--muted); text-align:center; margin-top:10px; }
+  .trust-pills { display:flex; flex-direction:column; gap:8px; margin-top:18px; padding-top:18px; border-top:1px solid var(--line-2); }
+  .pill { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--body); }
+  .pill .check { color:var(--green-fg); font-weight:bold; }
+
+  .preview-toggle { display:flex; gap:0; background:var(--line-2); border-radius:8px; padding:3px; margin-bottom:18px; }
+  .preview-toggle button { flex:1; padding:8px; border:0; background:transparent; cursor:pointer; font-family:inherit; font-size:12px; font-weight:600; color:var(--muted); border-radius:6px; }
+  .preview-toggle button.active { background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+
+  .view { display:none; }
+  .view.active { display:block; }
+</style>
+</head>
+<body>
+<div class="ribbon">SOFTENER 1 · 30-sec product preview before Stripe checkout <a href="./onboarding-index.html">← all mockups</a></div>
+
+<div class="page">
+  <!-- Stepper -->
+  <div class="stepper">
+    <div class="step done"><div class="num">✓</div><div>Sign up</div></div>
+    <div class="step done"><div class="num">✓</div><div>Letter type</div></div>
+    <div class="step active"><div class="num">3</div><div>Preview & pay</div></div>
+    <div class="step"><div class="num">4</div><div>Draft your letter</div></div>
+  </div>
+
+  <p class="eyebrow">Tribunal-bound · Discrimination grievance</p>
+  <h1>Here's what you'll get for £99.</h1>
+  <p class="lede">A 30-second preview so you know exactly what you're paying for. Wizard on the left, sample letter on the right. The real letter will be filled with YOUR facts.</p>
+
+  <div class="grid">
+    <!-- Left: Preview -->
+    <div class="preview preview-rel">
+      <div class="preview-header">
+        <span class="preview-title">Live preview</span>
+        <div class="preview-dots"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+      </div>
+      <span class="stamp">SAMPLE · YOUR FACTS GO HERE</span>
+      <div class="preview-body">
+        <div class="preview-toggle">
+          <button class="active" onclick="show('wizard')">The wizard</button>
+          <button onclick="show('letter')">The output letter</button>
+        </div>
+
+        <div class="view active" id="wizard">
+          <div class="wiz-step">Step 4 of 11</div>
+          <h3 class="wiz-q">When did the discriminatory act first occur?</h3>
+          <div class="wiz-input filled">12 March 2026</div>
+          <h3 class="wiz-q" style="font-size:14px; margin-top:18px;">What protected characteristic was implicated?</h3>
+          <div class="wiz-input filled">Race · UK Equality Act 2010, s.4</div>
+          <h3 class="wiz-q" style="font-size:14px; margin-top:18px;">Who was involved?</h3>
+          <div class="wiz-input">Type their name…</div>
+          <div class="wiz-progress">
+            <div class="pip done"></div><div class="pip done"></div><div class="pip done"></div><div class="pip cur"></div>
+            <div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div><div class="pip"></div>
+          </div>
+        </div>
+
+        <div class="view" id="letter">
+          <div class="letter-paper">
+            <p class="header-line">Without Prejudice and Subject to Contract</p>
+            <p class="header-line">12 May 2026</p>
+            <p class="header-line">Dear Ms Director,</p>
+            <p>I am writing to raise a formal grievance pursuant to <span class="citation">section 4 of the Equality Act 2010</span> concerning conduct I consider to constitute direct discrimination on the grounds of race.</p>
+            <p>On <span class="citation">12 March 2026</span>, the following incident occurred: [your facts]. This conduct, taken together with the matters set out in paragraphs 4–7 below, amounts to less favourable treatment than would have been afforded to a comparator of a different racial background.</p>
+            <p>I reserve all rights, including the right to present a claim to the Employment Tribunal under <span class="citation">s.123 Equality Act 2010</span> within the statutory time limit, which I calculate to expire on <strong>11 June 2026</strong> (subject to ACAS Early Conciliation extension).</p>
+            <p>I request a written response within 14 days outlining the steps the Company proposes to take…</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Checkout -->
+    <div class="checkout">
+      <p class="eyebrow">Your order</p>
+      <h3 style="margin:6px 0 14px; font-size:18px; color:var(--ink);">Discrimination grievance letter</h3>
+
+      <div class="price-row">
+        <span class="label">Tribunal-bound letter</span>
+        <span class="amount">£99.00</span>
+      </div>
+      <div class="price-row">
+        <span class="label">Evidence pack export</span>
+        <span class="amount">included</span>
+      </div>
+      <div class="price-row">
+        <span class="label">2 AI critique credits</span>
+        <span class="amount">included</span>
+      </div>
+      <div class="price-row">
+        <span class="label">£20 marketplace credit</span>
+        <span class="amount">included</span>
+      </div>
+      <div class="price-row total">
+        <span class="label">Total</span>
+        <span class="amount">£99.00</span>
+      </div>
+
+      <button class="pay-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg>
+        Pay £99 with Stripe
+      </button>
+      <p class="pay-meta">Secure checkout · saved card optional · GBP charged at clearing</p>
+
+      <div class="trust-pills">
+        <div class="pill"><span class="check">✓</span> Drafted by Claude Sonnet 4.6 + statutory anchors</div>
+        <div class="pill"><span class="check">✓</span> SRA-registered consultant review available (+£85)</div>
+        <div class="pill"><span class="check">✓</span> Hash-chained audit log of every edit</div>
+        <div class="pill"><span class="check">✓</span> Private — your evidence never trains models</div>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top:48px; font-size:13px; color:var(--muted); max-width:60ch;">
+    <strong style="color:var(--ink);">The principle:</strong> "pay from the jump" — but show them what they're paying for so the gate doesn't feel arbitrary.
+    Toggle between the wizard and the sample letter above to see both halves of what's behind the paywall. The full letter will be filled with YOUR facts, not the placeholder ones shown here.
+  </p>
+</div>
+
+<script>
+function show(which) {
+  document.querySelectorAll('.preview-toggle button').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(which)));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === which));
+}
+</script>
+</body>
+</html>

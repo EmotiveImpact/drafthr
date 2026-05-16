@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Softener 2 · 24h money-back guarantee · DraftHR</title>
+<style>
+  :root {
+    --ink:#0a0b0d; --body:#2f3239; --muted:#6b6f78; --subtle:#9ca0a8;
+    --canvas:#fafafa; --surface:#fff; --line:#e9eaec; --line-2:#f3f4f5;
+    --blue-bg:#eff6ff; --blue-fg:#1d4ed8;
+    --green-bg:#f0fdf4; --green-fg:#15803d;
+    --amber-bg:#fffbeb; --amber-fg:#b45309;
+    --red-bg:#fef2f2; --red-fg:#b91c1c;
+    --serif:"Playfair Display",Georgia,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Geist",-apple-system,system-ui,sans-serif; background:var(--canvas); color:var(--body); }
+  .ribbon { position:sticky; top:0; z-index:60; background:var(--ink); color:#fff; font-size:11px; padding:6px 16px; text-align:center; letter-spacing:0.06em; }
+  .ribbon a { color:#fff; opacity:0.7; margin-left:8px; }
+
+  .page { max-width:1100px; margin:0 auto; padding:48px 24px; }
+  .stepper { display:flex; gap:24px; margin-bottom:32px; font-size:12px; color:var(--muted); }
+  .step { display:flex; gap:8px; align-items:center; }
+  .step .num { width:22px; height:22px; border-radius:50%; background:var(--line); display:grid; place-items:center; font-weight:600; font-size:11px; color:var(--muted); }
+  .step.active .num { background:var(--ink); color:#fff; }
+  .step.active { color:var(--ink); font-weight:600; }
+  .step.done .num { background:var(--green-fg); color:#fff; }
+
+  .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted); font-weight:600; }
+  h1 { font-family:var(--serif); font-weight:500; color:var(--ink); font-size:34px; letter-spacing:-0.02em; margin:10px 0 8px; }
+  .lede { font-size:15px; color:var(--muted); margin:0 0 32px; max-width:60ch; }
+
+  .layout { display:grid; grid-template-columns:1.4fr 1fr; gap:32px; }
+
+  /* Guarantee callout */
+  .guarantee-callout { background:linear-gradient(135deg, #f0fdf4 0%, #fff 100%); border:2px solid var(--green-fg); border-radius:14px; padding:24px 28px; margin-bottom:24px; display:flex; gap:20px; align-items:flex-start; }
+  .guarantee-callout .badge { width:64px; height:64px; border-radius:50%; background:var(--green-fg); color:#fff; flex-shrink:0; display:grid; place-items:center; font-family:var(--serif); font-size:11px; line-height:1.1; text-align:center; padding:8px; font-weight:600; font-style:italic; }
+  .guarantee-callout h3 { margin:0 0 6px; font-size:18px; color:var(--ink); font-weight:600; letter-spacing:-0.01em; }
+  .guarantee-callout p { margin:0 0 12px; font-size:14px; color:var(--body); line-height:1.55; }
+  .guarantee-callout .footer { font-size:12px; color:var(--muted); }
+
+  .terms { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:24px; }
+  .terms h4 { margin:0 0 12px; font-size:12px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); font-weight:600; }
+  .terms ul { margin:0; padding-left:20px; font-size:13px; line-height:1.65; color:var(--body); }
+  .terms ul li { margin-bottom:6px; }
+  .terms ul li::marker { color:var(--subtle); }
+
+  /* Checkout */
+  .checkout { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:28px; position:sticky; top:80px; align-self:start; }
+  .price-row { display:flex; justify-content:space-between; align-items:baseline; padding:14px 0; border-bottom:1px solid var(--line-2); }
+  .price-row.total { border-bottom:0; padding-top:16px; }
+  .price-row .label { font-size:13px; color:var(--body); }
+  .price-row .amount { font-size:15px; color:var(--ink); font-weight:600; }
+  .price-row.total .label { font-size:14px; font-weight:600; color:var(--ink); }
+  .price-row.total .amount { font-size:22px; }
+
+  /* Pay button with guarantee chip */
+  .pay-wrap { position:relative; margin-top:18px; }
+  .pay-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:14px; background:var(--ink); color:#fff; border:0; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+  .pay-btn svg { width:16px; height:16px; }
+  .gtee-chip { display:inline-flex; gap:6px; align-items:center; margin-top:10px; padding:6px 10px; background:var(--green-bg); color:var(--green-fg); border-radius:6px; font-size:11.5px; font-weight:600; }
+
+  .pay-meta { font-size:11px; color:var(--muted); text-align:center; margin-top:10px; }
+
+  .testimonial { margin-top:20px; padding:18px; background:var(--canvas); border-radius:10px; border:1px solid var(--line-2); }
+  .testimonial p { font-family:var(--serif); font-style:italic; font-size:14px; line-height:1.5; color:var(--ink); margin:0 0 8px; }
+  .testimonial .who { font-size:11.5px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="ribbon">SOFTENER 2 · 24h money-back guarantee at checkout <a href="./onboarding-index.html">← all mockups</a></div>
+
+<div class="page">
+  <div class="stepper">
+    <div class="step done"><div class="num">✓</div><div>Sign up</div></div>
+    <div class="step done"><div class="num">✓</div><div>Letter type</div></div>
+    <div class="step active"><div class="num">3</div><div>Pay & start</div></div>
+    <div class="step"><div class="num">4</div><div>Draft your letter</div></div>
+  </div>
+
+  <p class="eyebrow">Tribunal-bound · Discrimination grievance</p>
+  <h1>£99 — refundable if it doesn't help.</h1>
+  <p class="lede">Pay-from-the-jump, but with a real safety net. If the letter doesn't help your situation, we refund you within 24 hours. No questions, no exit interview, no friction.</p>
+
+  <div class="layout">
+    <!-- Left -->
+    <div>
+      <div class="guarantee-callout">
+        <div class="badge">24-HOUR<br/>MONEY<br/>BACK</div>
+        <div>
+          <h3>If it doesn't help, you don't pay.</h3>
+          <p>You have 24 hours from purchase to request a full refund. One click in Settings → Billing. We refund to your original payment method within 3-5 business days. No questions asked, no "exit survey," no follow-up email pestering you.</p>
+          <p class="footer">In practice, refund rate on tribunal-tier letters runs &lt;2% — the people who buy these letters are usually facing real situations and need them to land.</p>
+        </div>
+      </div>
+
+      <div class="terms">
+        <h4>The fine print (genuinely fine)</h4>
+        <ul>
+          <li>Refund window starts at successful payment. You get the full 24 hours.</li>
+          <li>One refund per account per quarter — stops abuse without affecting genuine "this isn't right for me" cases.</li>
+          <li>If you've already exported the letter to PDF and used it (e.g., sent to your employer or filed with the tribunal), the refund still stands. We trust you.</li>
+          <li>Refunds via the same payment method (your card, typically). 3-5 business days for the bank to settle.</li>
+          <li>Marketplace consultant reviews are non-refundable once the consultant accepts the job (we pay them either way).</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Right: checkout -->
+    <div class="checkout">
+      <p class="eyebrow">Your order</p>
+      <h3 style="margin:6px 0 14px; font-size:18px; color:var(--ink);">Discrimination grievance letter</h3>
+
+      <div class="price-row">
+        <span class="label">Tribunal-bound letter</span>
+        <span class="amount">£99.00</span>
+      </div>
+      <div class="price-row">
+        <span class="label">Evidence pack export</span>
+        <span class="amount">included</span>
+      </div>
+      <div class="price-row">
+        <span class="label">2 AI critique credits</span>
+        <span class="amount">included</span>
+      </div>
+      <div class="price-row total">
+        <span class="label">Total</span>
+        <span class="amount">£99.00</span>
+      </div>
+
+      <div class="pay-wrap">
+        <button class="pay-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/></svg>
+          Pay £99 — refundable in 24h
+        </button>
+        <div class="gtee-chip">
+          <span>✓</span> 24h money-back guarantee · cancel anytime in Settings
+        </div>
+      </div>
+      <p class="pay-meta">Secure checkout · GBP charged at clearing</p>
+
+      <div class="testimonial">
+        <p>"Tried it, didn't end up needing the letter (we settled before sending). Refund showed up in my account within an hour. Took 10 seconds in Settings."</p>
+        <div class="who">— Sarah J., London · January 2026</div>
+      </div>
+    </div>
+  </div>
+
+  <p style="margin-top:48px; font-size:13px; color:var(--muted); max-width:62ch;">
+    <strong style="color:var(--ink);">The principle:</strong> "pay from the jump" without psychological friction.
+    Offering a real, no-questions-asked refund removes the "what if I waste £99" anxiety. Refund rates stay low because people who buy tribunal-tier letters are facing real situations.
+    Cost to us: ~2% of revenue forgone in exchange for materially higher conversion.
+  </p>
+</div>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Option B · /welcome/hr + /welcome/employee · DraftHR</title>
+<style>
+  :root {
+    --ink:#0a0b0d; --body:#2f3239; --muted:#6b6f78; --subtle:#9ca0a8;
+    --canvas:#fafafa; --surface:#fff; --line:#e9eaec; --line-2:#f3f4f5;
+    --blue-bg:#eff6ff; --blue-fg:#1d4ed8;
+    --green-bg:#f0fdf4; --green-fg:#15803d;
+    --amber-bg:#fffbeb; --amber-fg:#b45309;
+    --serif:"Playfair Display",Georgia,serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Geist",-apple-system,system-ui,sans-serif; background:var(--canvas); color:var(--body); }
+  .ribbon { position:sticky; top:0; z-index:50; background:var(--ink); color:#fff; font-size:11px; padding:6px 16px; text-align:center; letter-spacing:0.06em; }
+  .ribbon a { color:#fff; opacity:0.7; margin-left:8px; }
+  .tabs { display:flex; gap:0; max-width:1100px; margin:0 auto; padding:24px 24px 0; }
+  .tab { flex:1; padding:14px 18px; background:transparent; border:0; border-bottom:2px solid var(--line); font-family:inherit; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; }
+  .tab.active { color:var(--ink); border-color:var(--ink); }
+  .panel { display:none; }
+  .panel.active { display:block; }
+  .page { max-width:1100px; margin:0 auto; padding:48px 24px 80px; }
+  .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--muted); font-weight:600; }
+  h1 { font-family:var(--serif); font-weight:500; color:var(--ink); font-size:48px; letter-spacing:-0.02em; line-height:1.1; margin:12px 0 16px; }
+  h1 em { font-style:italic; color:var(--blue-fg); }
+  .hr h1 em { color:var(--blue-fg); }
+  .employee h1 em { color:var(--green-fg); }
+  .lede { font-size:17px; color:var(--body); line-height:1.55; max-width:60ch; margin:0 0 28px; }
+  .cta-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:48px; }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:12px 20px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; border:0; }
+  .btn-primary { background:var(--ink); color:#fff; }
+  .btn-primary:hover { background:#1a1c20; }
+  .btn-ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  .btn-ghost:hover { background:var(--surface); border-color:var(--ink); }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-bottom:48px; }
+  .feature { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:24px; }
+  .feature .icon { width:36px; height:36px; border-radius:8px; display:grid; place-items:center; margin-bottom:14px; }
+  .hr .feature .icon { background:var(--blue-bg); color:var(--blue-fg); }
+  .employee .feature .icon { background:var(--green-bg); color:var(--green-fg); }
+  .feature h3 { margin:0 0 6px; font-size:15px; font-weight:600; color:var(--ink); }
+  .feature p { margin:0; font-size:13px; color:var(--muted); line-height:1.5; }
+  .pricing { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:28px; margin-bottom:32px; }
+  .pricing h2 { margin:0 0 6px; font-size:13px; text-transform:uppercase; letter-spacing:0.12em; color:var(--muted); font-weight:600; }
+  .pricing .lede { font-size:14px; margin-bottom:18px; max-width:none; }
+  .price-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
+  .price { padding:14px 16px; border:1px solid var(--line); border-radius:10px; }
+  .price .name { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px; }
+  .price .amount { font-size:22px; color:var(--ink); font-weight:600; letter-spacing:-0.02em; }
+  .price .amount small { font-size:13px; color:var(--muted); font-weight:400; }
+  .price .desc { font-size:11.5px; color:var(--muted); margin-top:4px; }
+  .trust-row { display:flex; gap:12px; flex-wrap:wrap; margin-top:32px; }
+  .chip { padding:5px 11px; background:var(--surface); border:1px solid var(--line); border-radius:99px; font-size:11.5px; color:var(--body); display:inline-flex; gap:5px; align-items:center; }
+  .chip .dot { color:var(--green-fg); font-weight:bold; }
+</style>
+</head>
+<body>
+<div class="ribbon">OPTION B · /welcome/hr + /welcome/employee in-app routes <a href="./onboarding-index.html">← all mockups</a></div>
+<div class="tabs">
+  <button class="tab active" onclick="show('hr')">/welcome/hr</button>
+  <button class="tab" onclick="show('employee')">/welcome/employee</button>
+</div>
+
+<!-- HR PANEL -->
+<div class="panel active hr" id="hr">
+  <div class="page">
+    <p class="eyebrow">DraftHR for HR teams</p>
+    <h1>Tribunal-defensible HR letters <em>in minutes</em>, not weeks.</h1>
+    <p class="lede">Wizard-guided drafts of every letter your HR team handles — warnings, redundancy, settlement, restructure, immigration. ACAS Code aware. Audit log per draft. Reviewable by your in-house counsel before send.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#">Start free trial — first letter free →</a>
+      <a class="btn btn-ghost" href="#">Book a demo</a>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+        <h3>Legal awareness baked in</h3>
+        <p>Every template includes ACAS Code anchors, statutory citations, and reservation-of-rights clauses. Defensible by default.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg></div>
+        <h3>Workspace + team review</h3>
+        <p>Drafter submits → Reviewer approves → Letter ships. Audit trail captures every change. Built for Business-tier teams.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+        <h3>Hash-chained audit log</h3>
+        <p>Every export, edit, and approval is hash-chained in our database. Tampering breaks the chain. Tribunal-grade evidence by construction.</p>
+      </div>
+    </div>
+
+    <div class="pricing">
+      <h2>Plans</h2>
+      <p class="lede">First letter free. Card required after that.</p>
+      <div class="price-grid">
+        <div class="price"><div class="name">Pro</div><div class="amount">£79<small>/mo</small></div><div class="desc">1 seat · unlimited letters · all 35 templates</div></div>
+        <div class="price"><div class="name">Business</div><div class="amount">£199<small>/mo</small></div><div class="desc">5 seats · team review · audit dashboard · bulk ops</div></div>
+        <div class="price"><div class="name">Enterprise</div><div class="amount">£30k+<small>/yr</small></div><div class="desc">SSO/SAML · SCIM · custom SLA · audit-log API</div></div>
+      </div>
+    </div>
+
+    <div class="trust-row">
+      <span class="chip"><span class="dot">✓</span> UK ERA 1996 + ACAS Code aware</span>
+      <span class="chip"><span class="dot">✓</span> US FLSA + state-law variants</span>
+      <span class="chip"><span class="dot">✓</span> Private — drafts never train models</span>
+      <span class="chip"><span class="dot">✓</span> SOC 2 readiness Q4 2026</span>
+    </div>
+  </div>
+</div>
+
+<!-- EMPLOYEE PANEL -->
+<div class="panel employee" id="employee">
+  <div class="page">
+    <p class="eyebrow">DraftHR for employees</p>
+    <h1>Win your tribunal letter <em>at 5% of solicitor cost.</em></h1>
+    <p class="lede">Step-by-step wizards for grievance, settlement, constructive dismissal, discrimination, tribunal-bound letters. Plain English. Citations where they matter. Get a draft you'd be proud to send in under 15 minutes.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#">Start your letter — from £9.99 →</a>
+      <a class="btn btn-ghost" href="#">See sample letters</a>
+    </div>
+
+    <div class="grid-3">
+      <div class="feature">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>
+        <h3>Wizard-guided</h3>
+        <p>Answer 8-12 questions about your situation. We draft the letter. You edit, sign, send. No legal jargon, no blank-page paralysis.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></div>
+        <h3>Citations where it matters</h3>
+        <p>"As per s.95(1)(c) ERA 1996…" — we cite the law that makes your letter land. Tribunals notice.</p>
+      </div>
+      <div class="feature">
+        <div class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6.5l-4 2.5M12 8.5l4 2.5M3 14l4-2v6l4 2 4-2v-6l4 2"/></svg></div>
+        <h3>Vetted consultant review</h3>
+        <p>For the highest-stakes letters, add a £85-200 review from an SRA-registered solicitor or HR director. We vet them; you pick the right fit.</p>
+      </div>
+    </div>
+
+    <div class="pricing">
+      <h2>Pricing by stakes</h2>
+      <p class="lede">Pay per letter. Match the price to what's at stake. First letter free to draft + preview.</p>
+      <div class="price-grid">
+        <div class="price"><div class="name">Routine</div><div class="amount">£9.99</div><div class="desc">Resignation · flexible-working · holiday request</div></div>
+        <div class="price"><div class="name">Standard</div><div class="amount">£29</div><div class="desc">Grievance · sickness appeal · performance reply</div></div>
+        <div class="price"><div class="name">High-stakes</div><div class="amount">£59</div><div class="desc">Settlement counter · escalated grievance · breach</div></div>
+        <div class="price"><div class="name">Tribunal-bound</div><div class="amount">£99</div><div class="desc">ET1 · constructive dismissal · discrimination</div></div>
+      </div>
+    </div>
+
+    <div class="trust-row">
+      <span class="chip"><span class="dot">✓</span> 80-94% cheaper than a solicitor</span>
+      <span class="chip"><span class="dot">✓</span> 24h money-back guarantee</span>
+      <span class="chip"><span class="dot">✓</span> Citizens Advice partner-grade</span>
+      <span class="chip"><span class="dot">✓</span> Private — drafts never train models</span>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(which) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.textContent.includes(which)));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === which));
+}
+</script>
+</body>
+</html>
