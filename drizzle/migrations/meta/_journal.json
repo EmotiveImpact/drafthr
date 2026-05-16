@@ -15,6 +15,13 @@
       "when": 1778896367568,
       "tag": "0001_fair_miek",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778907326455,
+      "tag": "0002_third_eternals",
+      "breakpoints": true
     }
   ]
 }

@@ -24,17 +24,19 @@ export const tenants = pgTable("tenants", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// users.tenantId is the "home" tenant they were minted under — keep for
+// users.tenantId is the "home" tenant they were minted under — kept for
 // backwards-compat, but the real per-workspace role lives in tenant_members.
 // userType: 'customer' (HR team) or 'consultant' (marketplace). Mint default
 // is 'customer'; consultants get flipped manually for the split UI.
+//
+// FK: ON DELETE SET NULL (not CASCADE) — deleting a tenant must NOT delete
+// every user whose home tenant happens to point at it. tenant_members is the
+// source of truth for tenant membership; users.tenant_id is a soft pointer.
 export const users = pgTable(
   "users",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
     externalId: text("external_id").notNull().unique(),
     email: text("email"),
     legalName: text("legal_name"),
