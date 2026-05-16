@@ -1,4 +1,20 @@
 const DEFAULT_MAX_JSON_CHARS = 4_000_000;
+const DEFAULT_PRODUCTION_ALLOWED_ORIGINS = ["https://app.drafthr.io"];
+const DEFAULT_DEVELOPMENT_ALLOWED_ORIGINS = [
+  ...DEFAULT_PRODUCTION_ALLOWED_ORIGINS,
+  "http://localhost:5273",
+  "http://127.0.0.1:5273",
+  "http://[::1]:5273",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://[::1]:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+  "http://[::1]:4173",
+];
+const VERCEL_PREVIEW_HOST_RE =
+  /^drafthr-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-emotiveimpact-gmailcoms-projects\.vercel\.app$/;
+const ALLOWED_ORIGINS = loadAllowedOrigins();
 
 type JsonReadResult<T> =
   | { ok: true; body: T }
@@ -30,16 +46,16 @@ export async function readJsonRequest<T>(
 }
 
 export function enforceSameOrigin(req: Request): Response | null {
-  if (process.env.NODE_ENV !== "production") return null;
-
   const origin = req.headers.get("origin");
-  if (!origin) return jsonError("Origin required", 403);
-
-  const host = firstHeaderValue(req.headers.get("x-forwarded-host") ?? req.headers.get("host"));
-  if (!host) return jsonError("Host required", 400);
+  if (!origin) {
+    // Local scripts and curl often omit Origin. Preserve that dev-only DX; production fails closed.
+    if (process.env.NODE_ENV !== "production") return null;
+    return jsonError("Origin required", 403);
+  }
 
   try {
-    if (new URL(origin).host !== host) return jsonError("Forbidden origin", 403);
+    const parsed = new URL(origin);
+    if (!isAllowedOrigin(parsed)) return jsonError("Forbidden origin", 403);
   } catch {
     return jsonError("Invalid origin", 403);
   }
@@ -64,6 +80,39 @@ function parseContentLength(req: Request): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function firstHeaderValue(value: string | null): string | null {
-  return value?.split(",")[0]?.trim() || null;
+function loadAllowedOrigins(): Set<string> {
+  const rawEnv = process.env.ALLOWED_ORIGINS;
+  const envOrigins = parseAllowedOrigins(rawEnv);
+  const configuredOrigins =
+    rawEnv?.trim()
+      ? envOrigins
+      : process.env.NODE_ENV === "production"
+        ? DEFAULT_PRODUCTION_ALLOWED_ORIGINS
+        : DEFAULT_DEVELOPMENT_ALLOWED_ORIGINS;
+
+  return new Set(configuredOrigins);
+}
+
+function parseAllowedOrigins(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .map(toOrigin)
+    .filter((origin): origin is string => origin !== null);
+}
+
+function toOrigin(value: string): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedOrigin(origin: URL): boolean {
+  if (ALLOWED_ORIGINS.has(origin.origin)) return true;
+
+  // Vercel preview deployment URLs are generated per deploy; allow only this HTTPS hostname shape.
+  return origin.protocol === "https:" && VERCEL_PREVIEW_HOST_RE.test(origin.hostname);
 }

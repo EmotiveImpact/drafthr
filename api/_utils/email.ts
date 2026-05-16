@@ -10,6 +10,9 @@
 import { Resend } from "resend";
 
 const DEFAULT_FROM = "DraftHR <no-reply@drafthr.io>";
+const MAX_HEADER_CHARS = 500;
+const EMAIL_ADDRESS_PATTERN = "[^<>\\s@]+@[^<>\\s@]+\\.[^<>\\s@]+";
+const EMAIL_HEADER_RE = new RegExp(`^(?:${EMAIL_ADDRESS_PATTERN}|[^<>]+<${EMAIL_ADDRESS_PATTERN}>)$`);
 
 let cachedClient: Resend | null = null;
 let warnedMissingKey = false;
@@ -50,13 +53,16 @@ export async function sendEmail(opts: SendEmailOpts): Promise<SendEmailResult> {
   }
 
   try {
+    const from = sanitizeAddressHeader(opts.from, DEFAULT_FROM) ?? DEFAULT_FROM;
+    const replyTo = opts.replyTo ? sanitizeAddressHeader(opts.replyTo, null) : null;
+
     const result = await client.emails.send({
-      from: opts.from ?? DEFAULT_FROM,
+      from,
       to: opts.to,
-      subject: opts.subject,
+      subject: sanitizeHeader(opts.subject),
       html: opts.html,
       text: opts.text ?? htmlToPlainText(opts.html),
-      ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+      ...(replyTo ? { replyTo } : {}),
       ...(opts.tags ? { tags: opts.tags } : {}),
     });
     if (result.error) {
@@ -70,6 +76,16 @@ export async function sendEmail(opts: SendEmailOpts): Promise<SendEmailResult> {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
+}
+
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\x00-\x1F\x7F]/g, "").trim().slice(0, MAX_HEADER_CHARS);
+}
+
+function sanitizeAddressHeader(value: string | undefined, fallback: string | null): string | null {
+  if (!value) return fallback;
+  const sanitized = sanitizeHeader(value);
+  return EMAIL_HEADER_RE.test(sanitized) ? sanitized : fallback;
 }
 
 /**

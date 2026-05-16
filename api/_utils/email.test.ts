@@ -72,6 +72,25 @@ describe("sendEmail", () => {
     expect(call.to).toEqual(["a@example.com", "b@example.com"]);
   });
 
+  it("sanitizes header values and falls back from malformed sender addresses", async () => {
+    process.env.RESEND_API_KEY = "re_test_key";
+    sendMock.mockResolvedValueOnce({ data: { id: "email_safe" }, error: null });
+    const { sendEmail } = await importFresh();
+
+    await sendEmail({
+      to: "user@example.com",
+      subject: "Hello\r\nBcc: attacker@evil.com",
+      html: "<p>Body</p>",
+      from: "Definitely not an address",
+    });
+
+    const call = sendMock.mock.calls[0][0];
+    expect(call.subject).not.toContain("\r");
+    expect(call.subject).not.toContain("\n");
+    expect(call.subject).toBe("HelloBcc: attacker@evil.com");
+    expect(call.from).toBe("DraftHR <no-reply@drafthr.io>");
+  });
+
   it("returns ok:false with 'not-configured' when RESEND_API_KEY is missing", async () => {
     const { sendEmail } = await importFresh();
 

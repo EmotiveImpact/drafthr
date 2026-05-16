@@ -43,13 +43,13 @@ let mockExistingMember: boolean = false;
 function makeRequest(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/workspace/accept-invite", {
     method: "POST",
-    headers: { "Content-Type": "application/json", origin: "http://localhost", host: "localhost" },
+    headers: { "Content-Type": "application/json", origin: "https://app.drafthr.io" },
     body: JSON.stringify(body),
   });
 }
 
 beforeEach(() => {
-  process.env.NODE_ENV = "development"; // skip same-origin enforcement
+  process.env.NODE_ENV = "development"; // preserve local requests that omit Origin
   mockInvite = { ...inviteFixture };
   mockExistingMember = false;
 
