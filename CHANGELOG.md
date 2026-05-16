@@ -2,6 +2,119 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.11.1 — 2026-05-16
+
+Security patch + UI polish — six security findings from an adversarial
+Codex review (GPT-5.5) of the auth + persistence stack, plus three
+user-reported UI fixes (real sign-out, light-mode lock, auto-redirect
+logged-out users to WorkOS instead of an intermediate landing card).
+
+### Security fixes (from Codex adversarial review)
+
+**Finding #1 (HIGH) — PDF export skipped session+tenant check**
+`api/export/pdf.ts` previously only enforced Origin + rate limit;
+audit events were appended with body-supplied tenantId / draftId /
+actorUserId. A logged-out attacker with a guessed tenant UUID could
+consume rendering resources AND forge `draft.exported` audit rows.
+Fix: now calls `requireSessionAndTenant`; tenant_id + actor_user_id
+come from the server-side session; body.draftId verified against
+active tenant; mismatched draftId returns 404.
+
+**Finding #2 (HIGH) — audit chain append wasn't actually serialized**
+`src/db/audit.ts` read the tail row + inserted in a single transaction
+but didn't lock the per-tenant chain head. Two concurrent appends
+could read the same prevHash → fork in the chain. Live traffic could
+break a tenant's chain with no attacker action — undermining tribunal
+defensibility. Fix: `SELECT pg_advisory_xact_lock(hashtextextended
+(${tenantId}, 0))` at the start of every transaction; transaction-
+scoped lock auto-releases on commit/rollback. Tail-row ordering
+tiebreak (`ORDER BY created_at DESC, id DESC`) for determinism.
+New test fires N=10 concurrent appends + verifies the chain stays
+intact.
+
+**Finding #3 (HIGH) — verify-tsr endpoint didn't actually verify**
+`api/audit/verify-tsr.ts` was returning `ok:true` after parsing the
+embedded TSTInfo hash, but `parseTsr` explicitly DIDN'T validate the
+CMS signature. A forged blob with the right hash would be accepted
+as "proof of timestamping" by anyone. Fix: `parseTsr` now performs
+full CMS SignerInfo signature verification against FreeTSA's signing
+cert (pinned by SHA-256 fingerprint with rotation comment). 5 new
+test cases cover signature-tampering, hash-tampering, wrong-cert.
+
+**Finding #4 (HIGH) — cross-tenant FKs accepted from request body**
+`api/store/drafts.ts` POST + PATCH wrote `matterId` and
+`templateSourceId` straight from the body without verifying those
+rows belonged to the active tenant. IDOR risk through later joins
+or shared views. Fix: every body-supplied FK verified against
+`tenant_id = activeTenant.id` via quick SELECT; mismatches reject
+with 409. PATCH also adds tenantId to the UPDATE predicate
+(belt-and-braces).
+
+**Finding #5 (HIGH) — admin could mint / control owner privileges**
+Admin role could invite users as `owner`, promote others to `owner`,
+and remove existing owners. Self-change guard only blocked the
+requester from changing their own role; admin using a second
+controlled account would bypass it. Fix: new
+`canManageOwners(requesterRole)` helper in `src/lib/permissions.ts`;
+owner-only enforcement now applied to invite-as-owner, role-to/from-
+owner change, and remove-owner. Last-owner guard prevents demoting
+or removing the only owner.
+
+**Finding #6 (HIGH) — dual-write could silently lose newer edits**
+`src/lib/dual-write.ts` posted full snapshots without a revision
+token. Older in-flight POSTs could land after newer ones and
+overwrite the server. Same problem cross-device without any debounce.
+Fix: every POST/PATCH now carries `clientRevision` (Draft.updatedAt
+epoch ms). Server compares against existing row's `updated_at`; if
+stale, returns 409 + drops the write. Client cancels in-flight
+retries for that draftId; next debounce tick syncs the freshest
+snapshot. DELETE failures now `console.warn` instead of swallowing
+silently.
+
+**Finding #7 (MEDIUM) — email headers passed through without sanitization**
+`api/_utils/email.ts` forwarded `subject` / `from` / `replyTo` to
+Resend without CRLF or control-char stripping. Inviting a malicious-
+name user could in principle attack other recipients via subject-line
+CRLF injection. Fix: new `sanitizeHeader()` helper strips CR/LF/
+controls, trims, caps length. Address validation on `from` + `replyTo`
+falls back to default `DraftHR <no-reply@drafthr.io>` on malformed
+input.
+
+**Finding #8 (MEDIUM) — enforceSameOrigin compared host only**
+`api/_utils/request.ts` accepted any Origin whose host matched the
+request host — scheme ignored, edge-case forwarded-host handling
+could weaken further. Fix: new `ALLOWED_ORIGINS` env var (comma-
+separated exact origins) with default
+`["https://app.drafthr.io"]` in production + localhost in dev.
+Vercel preview URLs handled via strict regex carve-out. Exact-match
+comparison now. Dev fallback preserved when no Origin header.
+
+### UI polish (user-reported)
+
+- **Sign out actually works.** The sidebar avatar menu (NavUser) was
+  missing a Sign out item; UserChip in the topbar had one but it's
+  tiny and easy to miss. Added a red-tinted Sign out item at the
+  bottom of the sidebar avatar dropdown, gated on `auth.user`.
+- **Dark mode + system theme removed.** Per user instruction. Dark
+  mode produced contrast bugs in the editor + AI rail; not worth
+  shipping until a proper dark-token pass. `ThemeMode` narrowed to
+  `"light"` only; `applyTheme` strips `.dark` unconditionally;
+  bootstrap defends against legacy persisted `"dark"` values.
+  `ThemeToggle` component deleted; usages in AppTopbar +
+  EditorTopbar + NavUser removed.
+- **No more marketing card on `/`.** The "AI-assisted HR letters
+  for the UK and US" card I added in 0.11.0 was over-engineering —
+  app.drafthr.io is the app, not marketing. Logged-out visitors now
+  auto-redirect straight to WorkOS hosted login (signIn() fires on
+  mount, loading skeleton shows meanwhile). Marketing belongs at
+  drafthr.io when it exists.
+
+### Tests
+
+150 / 151 passing (1 skipped). Was 113 baseline; +37 new across
+audit concurrency, TSR signature tampering, RBAC owner enforcement,
+dual-write revision flow, email header injection, origin allowlist.
+
 ## 0.11.0 — 2026-05-16
 
 The feature + moat wave. Four independent landings shipped in parallel,
