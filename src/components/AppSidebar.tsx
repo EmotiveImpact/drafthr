@@ -39,9 +39,7 @@ import {
   MoreHorizontal,
   Trash2,
   ArrowUpRight,
-  Sun,
-  Moon,
-  Monitor,
+  LogOut,
   LayoutDashboard,
   Search,
   CalendarDays,
@@ -61,7 +59,7 @@ import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
 import type { Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { useThemeStore } from "@/lib/theme";
+import { useAuth } from "@/lib/auth";
 import { deriveNotifications, topSeverity } from "@/lib/notifications";
 import { SidebarMenuBadge } from "@/components/ui/sidebar";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
@@ -602,8 +600,7 @@ function NavUser({ mode }: { mode: Mode | null }) {
   const { isMobile, state } = useSidebar();
   const profile = useProfileStore((s) => s.profile);
   const setRole = useProfileStore((s) => s.setRole);
-  const themeMode = useThemeStore((s) => s.mode);
-  const setThemeMode = useThemeStore((s) => s.setMode);
+  const { signOut, user } = useAuth();
   const nav = useNavigate();
   const isCollapsed = state === "collapsed" && !isMobile;
 
@@ -679,20 +676,18 @@ function NavUser({ mode }: { mode: Mode | null }) {
           Privacy & data
         </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
-        <DropdownMenuItem onClick={() => setThemeMode("light")} className="gap-2">
-          <Sun className="size-4" /> Light
-          {themeMode === "light" && <span className="ml-auto text-xs">·</span>}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setThemeMode("dark")} className="gap-2">
-          <Moon className="size-4" /> Dark
-          {themeMode === "dark" && <span className="ml-auto text-xs">·</span>}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setThemeMode("system")} className="gap-2">
-          <Monitor className="size-4" /> System
-          {themeMode === "system" && <span className="ml-auto text-xs">·</span>}
-        </DropdownMenuItem>
+        {user ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => void signOut()}
+              className="gap-2 text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
+            >
+              <LogOut className="size-4" />
+              Sign out
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -1,7 +1,16 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type ThemeMode = "light" | "dark" | "system";
+/**
+ * Theme: locked to "light" until the product justifies a dark mode pass
+ * (which is non-trivial — the design system tokens are currently light-only
+ * and dark mode produced contrast bugs in the editor + the AI rail).
+ *
+ * The store keeps the same shape for backwards compat (the avatar menu has
+ * been pruned of dark/system options, but other surfaces may still call
+ * setMode). Any call to setMode is now a no-op that re-applies "light".
+ */
+export type ThemeMode = "light";
 
 type Store = {
   mode: ThemeMode;
@@ -11,40 +20,31 @@ type Store = {
 export const useThemeStore = create<Store>()(
   persist(
     (set) => ({
-      mode: "system",
-      setMode: (mode) => {
-        set({ mode });
-        applyTheme(mode);
+      mode: "light",
+      setMode: () => {
+        set({ mode: "light" });
+        applyTheme();
       },
     }),
     {
       name: "scribehr-theme-v1",
-      onRehydrateStorage: () => (state) => {
-        if (state) applyTheme(state.mode);
+      onRehydrateStorage: () => () => {
+        // Always apply light on rehydrate — defends against legacy persisted "dark"
+        // entries from before this lock-down.
+        applyTheme();
       },
     }
   )
 );
 
-export function applyTheme(mode: ThemeMode) {
+/** Removes any leftover `dark` class so the app paints in light tokens. */
+export function applyTheme() {
   if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  const prefersDark =
-    typeof window !== "undefined" &&
-    window.matchMedia &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const dark = mode === "dark" || (mode === "system" && prefersDark);
-  root.classList.toggle("dark", dark);
+  document.documentElement.classList.remove("dark");
 }
 
-/** Apply the saved theme synchronously on app boot, before React renders. */
+/** Apply on app boot before React renders, defending against any legacy
+ * persisted dark-mode setting. */
 export function bootstrapTheme() {
-  if (typeof document === "undefined") return;
-  try {
-    const raw = localStorage.getItem("scribehr-theme-v1");
-    const persisted = raw ? (JSON.parse(raw).state?.mode as ThemeMode | undefined) : undefined;
-    applyTheme(persisted ?? "system");
-  } catch {
-    applyTheme("system");
-  }
+  applyTheme();
 }

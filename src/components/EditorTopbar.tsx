@@ -4,7 +4,6 @@ import { Box, Button, Flex, Separator, Text } from "@radix-ui/themes";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { UserChip } from "@/lib/auth/UserChip";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities, colorFor } from "@/lib/comments/identity";
@@ -128,7 +127,6 @@ export function EditorTopbar() {
           </Flex>
         )}
         <NotificationsBell />
-        <Box className="hidden sm:block"><ThemeToggle /></Box>
         <UserChip />
       </header>
     </Flex>
