@@ -2,6 +2,143 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.10.0 — 2026-05-16
+
+The wave that turns DraftHR from "localStorage demo" into a real
+multi-tenant B2B SaaS. Three connected landings: workspace UX (create
+/ join via invite), real invite system, and dual-write persistence so
+HR users get cloud-backed drafts with a tribunal-grade audit trail.
+
+### Schema (migration 0001 applied live to Neon)
+
+- `tenant_members` — many-to-many users↔tenants with per-tenant role
+  and `is_active_tenant` (one true row per user, marks the currently-
+  selected workspace).
+- `invites` — pending invitations: tenant_id, email, role, 32-char
+  invite_code (UNIQUE), expires_at (default +7 days), accepted_at,
+  revoked_at, created_by_user_id.
+- `users.user_type` — `'customer'` | `'consultant'`. The metadata
+  claim that makes the marketplace Option B → A migration painless
+  when the first consultant onboards. Defaults to `'customer'` on
+  user mint.
+
+### Tenant resolution
+
+- `api/_utils/session-with-tenant.ts` → `requireSessionAndTenant()`.
+  Reads WorkOS session, upserts the `users` row on first sign-in,
+  auto-mints a personal tenant + active `tenant_members` row so audit
+  chains always have a home. Returns
+  `{ session, userRow, activeTenant, hasAnyTenant, canCreateTenant }`.
+
+### Workspace UX
+
+- `/signup/workspace` — first-time and additional-workspace setup.
+  Two cards: **Create new workspace** (name + industry + team size)
+  or **Join via invite code**. Pre-fills the join form from
+  `?invite={code}` query.
+- `/join/:inviteCode` — public landing for invite links. Saves the
+  code to `sessionStorage`, redirects to sign-in. `AuthCallback`
+  picks the code back up post-auth and routes to
+  `/signup/workspace?invite=…`.
+- `Protected` routes tenant-less users to `/signup/workspace`
+  (allow-listed for `/signup/workspace` + `/join/` to avoid loops).
+- `AppSidebar` mounts `WorkspaceSwitcher` — renders only when the
+  user has >1 tenant. Click to pick + `POST /api/workspace/switch`.
+- `Settings → Workspace` gains `WorkspaceMembersCard`: name editor,
+  members list with role badges + change/remove actions, pending
+  invites with copy-link + revoke, "Invite member" modal (email +
+  role → `POST /api/workspace/invite` → returns invite code + link
+  to copy). The solo-dev role picker stays below as a backwards-
+  compat affordance.
+
+### Workspace APIs
+
+All behind `requireSessionAndTenant` + existing API hardening
+(same-origin, rate-limit, JSON content-type).
+
+- `POST /api/workspace/create` — inserts `tenants` + `tenant_members`
+  (owner, active=true). Audit `tenant.created`.
+- `POST /api/workspace/accept-invite` — validates not expired /
+  revoked / email-mismatched, inserts member, marks invite accepted.
+  Audit `tenant.member-joined`.
+- `GET /api/workspace/list` — user's tenants with role + active flag.
+- `POST /api/workspace/switch` — toggles `is_active_tenant`.
+- `POST /api/workspace/invite` — admin-only; returns invite code +
+  link for copy; sends email via Resend if `RESEND_API_KEY`
+  configured.
+- `GET /api/workspace/invites` — list pending for active tenant.
+- `POST /api/workspace/invite/revoke` — sets `revoked_at`.
+- `GET /api/workspace/members` — list active members.
+- `POST /api/workspace/member/role` — admin-only role change.
+- `POST /api/workspace/member/remove` — admin-only removal.
+
+### Dual-write infrastructure
+
+- `src/lib/dual-write.ts` — `enqueueSync(draftId)` debounced 400ms;
+  `syncDraft` posts the full draft + sections payload to
+  `/api/store/drafts` (POST on first sync, PATCH thereafter);
+  `syncAllPending` walks every draft without `_syncedAt` and syncs
+  serially for the one-shot localStorage → Postgres backfill.
+- Zustand subscribe pattern at module-import time, gated on
+  `isDualWriteEnabled()` (reads `VITE_DRAFTHR_DUAL_WRITE`).
+  Mutations changing a draft by reference trigger
+  `enqueueSync(id)`. Deletions fire-and-forget immediately (no
+  debounce — deletes should land fast).
+- Circular import avoided via `setDualWriteSnapshotGetter` instead of
+  importing the store inside `dual-write.ts`.
+- `_syncedAt?: number` added to `Draft` (additive — no version bump
+  on `scribehr-store-v1`).
+- One-shot backfill in `App.tsx` mount: if dual-write enabled AND
+  active tenant exists AND there are unsynced drafts, run
+  `syncAllPending` + show a one-time toast on completion.
+
+### Store endpoints
+
+- `POST /api/store/drafts` — create. Server stamps `tenant_id` from
+  active tenant + `author_user_id` from session. Audit
+  `draft.created`.
+- `PATCH /api/store/drafts` — update. Diff records changed keys (NOT
+  full HTML — keeps audit payload small). Audit `draft.updated`.
+- `DELETE /api/store/drafts` — hard-delete. Audit `draft.deleted`.
+- `POST /api/store/sections` — bulk upsert by `(draft_id,
+  section_id)`. Audit `section.updated` per row (payload:
+  `section_id` + `status` + `charCount`; never raw html).
+
+Every endpoint verifies `tenant_id` ownership on the target draft —
+IDOR defense.
+
+### Server gate
+
+`DRAFTHR_DUAL_WRITE=false` returns 503 on `/api/store/*` — even a
+misbehaving client can't write. Flip the server-side env to `'true'`
+AND set `VITE_DRAFTHR_DUAL_WRITE='true'` to enable end-to-end.
+
+### Audit chain coverage
+
+Extends beyond `draft.exported` (the only previous event) to:
+- `tenant.created`, `tenant.member-joined`
+- `draft.created`, `draft.updated`, `draft.deleted`
+- `section.updated`
+
+Verified live via `scripts/dual-write-verify.ts`: chains 3 events
+clean, tampers with payload, chain breaks with `row_hash_mismatch`,
+cascade cleanup works.
+
+### Action items for app.drafthr.io deploy
+
+1. WorkOS dashboard → Redirect URIs → add
+   `https://app.drafthr.io/auth/callback`.
+2. Vercel project → Settings → Environment Variables (Production
+   scope): all `WORKOS_*` vars, `WORKOS_REDIRECT_URI` +
+   `VITE_WORKOS_REDIRECT_URI` set to the production callback,
+   `WORKOS_COOKIE_PASSWORD`, `DATABASE_URL` +
+   `DATABASE_URL_UNPOOLED` (or use Vercel ↔ Neon integration),
+   `BLOB_READ_WRITE_TOKEN`, `DRAFTHR_DUAL_WRITE=false` and
+   `VITE_DRAFTHR_DUAL_WRITE=false` (flip both to `true` after
+   eyeballing the deploy).
+3. Optional: `RESEND_API_KEY` for invite emails. Without it, invites
+   show as copyable links instead.
+
 ## 0.9.0 — 2026-05-16
 
 Platform wave. Three independent landings: a Tiptap track-changes primitive
