@@ -74,7 +74,11 @@ export function SignupWorkspace() {
       // Without this, <Protected> sees stale auth state, sees no active tenant,
       // and bounces us right back here. (#workspace-create-loop)
       await refresh();
-      nav("/hr", { replace: true });
+      // Land on the mode chooser, not /hr — we don't yet know whether
+      // this person is HR/Management or Employee. RootRedirect at /
+      // would also handle this, but routing explicitly avoids a beat
+      // where /hr could render and then re-route.
+      nav("/pick-role", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create workspace");
     } finally {
@@ -110,7 +114,11 @@ export function SignupWorkspace() {
       // Re-fetch session so `activeTenant` is populated BEFORE we navigate.
       // Same fix as onCreate above — see #workspace-create-loop.
       await refresh();
-      nav("/hr", { replace: true });
+      // Land on the mode chooser, not /hr — we don't yet know whether
+      // this person is HR/Management or Employee. RootRedirect at /
+      // would also handle this, but routing explicitly avoids a beat
+      // where /hr could render and then re-route.
+      nav("/pick-role", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to accept invite");
     } finally {

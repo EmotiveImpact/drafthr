@@ -13,13 +13,21 @@ import { Onboarding } from "@/components/Onboarding";
 /** Routes that render WITHOUT the authenticated app chrome (sidebar,
  * notifications, search palette). These show before the user has a session
  * OR a tenant — so rendering the full HR sidebar would leak a "logged in"
- * appearance and confuse the user mid-flow. */
+ * appearance and confuse the user mid-flow.
+ *
+ * Includes "/" because RootRedirect handles every pre-onboarded state
+ * there (public landing, tenant-less redirect, role chooser). Once the
+ * user is fully onboarded, RootRedirect redirects to /hr or /me which
+ * fall through to the chrome path below. */
+const CHROMELESS_EXACT = ["/", "/pick-role"];
 const CHROMELESS_PREFIXES = ["/sign-in", "/auth/callback", "/signup/workspace", "/join/"];
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const isEditor = loc.pathname.startsWith("/editor/");
-  const isChromeless = CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
+  const isChromeless =
+    CHROMELESS_EXACT.includes(loc.pathname) ||
+    CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
   const { open, setOpen } = useSearchPalette();
 
   // Public / onboarding routes get a minimal shell — no sidebar, no chrome.

@@ -118,7 +118,11 @@ export function App() {
           className="h-full flex flex-col flex-1 min-h-0"
         >
           <Routes location={location}>
-            <Route path="/" element={<Protected><RootRedirect /></Protected>} />
+            {/* / handles its own auth-state branching (signed-out landing,
+             * tenant-less redirect, role-less ModePicker, fully-onboarded
+             * route-to-home). Wrapping in <Protected> would trigger a
+             * useEffect race and flash content from the previous state. */}
+            <Route path="/" element={<RootRedirect />} />
         <Route path="/pick-role" element={<Protected><ModePicker /></Protected>} />
 
         <Route path="/hr" element={<Protected><Home mode="employer" /></Protected>} />
