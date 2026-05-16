@@ -1,0 +1,27 @@
+# Files excluded from Vercel deployment uploads.
+# Same syntax as .gitignore.
+
+# Test files — Vercel's @vercel/node builder treats every .ts file in
+# api/ as a serverless function. Test files import vitest and fail at
+# deploy time. Keep them in-tree for local vitest discovery, exclude
+# from the production bundle.
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+src/test/
+
+# Local scripts that aren't part of the deployed app
+scripts/
+
+# Drizzle migrations folder — applied via drizzle-kit, not Vercel
+drizzle/
+
+# Documentation that isn't user-facing
+PLAN.md
+ROADMAP.md
+EMPLOYEE-SIDE-DESIGN.md
+HR-LETTER-KNOWLEDGE-BASE.md
+PROVISIONING.md
+QWEN-API-REFERENCE.md
+RADIX-THEMES-MIGRATION.md
