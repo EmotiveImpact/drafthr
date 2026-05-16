@@ -6,6 +6,14 @@ export function canApprove(role: WorkspaceRole | undefined): boolean {
   return role === "owner" || role === "admin" || role === "reviewer";
 }
 
+/** Owner-role grants/revocations require an existing owner. */
+export function canManageOwners(
+  requesterRole: WorkspaceRole | string | undefined,
+  targetRole: WorkspaceRole | string | undefined
+): boolean {
+  return targetRole !== "owner" || requesterRole === "owner";
+}
+
 /** Everyone except read-only viewers can ship a draft into review. */
 export function canSubmitForReview(role: WorkspaceRole | undefined): boolean {
   return role !== "viewer";

@@ -1,7 +1,6 @@
 /**
  * POST /api/workspace/member/role — change a member's role in the active
- * tenant. Admin-only. Owners can demote other owners but not themselves
- * (you'd nuke admin access by accident).
+ * tenant. Admin-only, with owner-role changes reserved to owners.
  */
 import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request.js";
@@ -10,6 +9,7 @@ import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js"
 import { getDb } from "../../../../src/db/index.js";
 import { tenantMembers } from "../../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../../src/db/audit.js";
+import { canManageOwners } from "../../../../src/lib/permissions.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -34,11 +34,33 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
-  if (!ADMIN_ROLES.has(auth.activeMember?.role ?? "")) return jsonError("Admin role required", 403);
+  const requesterRole = auth.activeMember?.role ?? "";
+  if (!ADMIN_ROLES.has(requesterRole)) return jsonError("Admin role required", 403);
   if (userId === auth.userRow.id) return jsonError("Cannot change your own role", 400);
 
   try {
     const db = getDb();
+    const [member] = await db
+      .select({ role: tenantMembers.role })
+      .from(tenantMembers)
+      .where(
+        and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, auth.activeTenant.id)),
+      )
+      .limit(1);
+    if (!member) return jsonError("Member not found", 404);
+    if (!canManageOwners(requesterRole, member.role) || !canManageOwners(requesterRole, role)) {
+      return jsonError("only owners can manage owners.", 403);
+    }
+    if (member.role === "owner" && role !== "owner") {
+      const owners = await db
+        .select({ userId: tenantMembers.userId })
+        .from(tenantMembers)
+        .where(and(eq(tenantMembers.tenantId, auth.activeTenant.id), eq(tenantMembers.role, "owner")));
+      if (owners.length <= 1) {
+        return jsonError("workspace must have at least one owner", 409);
+      }
+    }
+
     const [updated] = await db
       .update(tenantMembers)
       .set({ role })

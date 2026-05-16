@@ -15,6 +15,7 @@ import { workspaceInviteEmail } from "../../_utils/email-templates/invite.js";
 import { getDb } from "../../../src/db/index.js";
 import { invites } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
+import { canManageOwners } from "../../../src/lib/permissions.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -41,6 +42,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
   const memberRole = auth.activeMember?.role ?? "drafter";
   if (!ADMIN_ROLES.has(memberRole)) return jsonError("Admin role required", 403);
+  if (!canManageOwners(memberRole, role)) return jsonError("only owners can mint owners.", 403);
 
   try {
     const db = getDb();
