@@ -53,15 +53,15 @@ beforeEach(() => {
   mockInvite = { ...inviteFixture };
   mockExistingMember = false;
 
-  vi.doMock("../_utils/workos", async () => {
-    const actual = await vi.importActual<typeof import("../_utils/workos")>("../_utils/workos");
+  vi.doMock("../../../api/_utils/workos", async () => {
+    const actual = await vi.importActual<typeof import("../../../api/_utils/workos")>("../../../api/_utils/workos");
     return {
       ...actual,
       requireSession: vi.fn().mockResolvedValue({ ok: true, session }),
     };
   });
 
-  vi.doMock("../_utils/session-with-tenant", () => ({
+  vi.doMock("../../../api/_utils/session-with-tenant", () => ({
     requireSessionAndTenant: vi.fn().mockResolvedValue({
       ok: true,
       session,
@@ -73,12 +73,12 @@ beforeEach(() => {
     }),
   }));
 
-  vi.doMock("../../src/db/audit", () => ({
+  vi.doMock("../../../src/db/audit", () => ({
     appendAuditEvent: vi.fn().mockResolvedValue({ id: "ae_1", rowHash: "x", prevHash: "0", createdAt: new Date() }),
     GENESIS_PREV_HASH: "0".repeat(64),
   }));
 
-  vi.doMock("../../src/db", () => ({
+  vi.doMock("../../../src/db", () => ({
     getDb: () => ({
       select: () => ({
         from: () => ({
@@ -109,9 +109,9 @@ describe("POST /api/workspace/accept-invite", () => {
     mockInvite = { ...inviteFixture, expiresAt: new Date(Date.now() - 1000) };
 
     // Override select chain to handle the second query (tenant_members existing).
-    vi.doMock("../../src/db", () => buildDbMock([mockInvite], []));
+    vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("./accept-invite");
+    const mod = await import("../../../api/workspace/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(410);
     const data = (await res.json()) as { error?: string };
@@ -120,44 +120,44 @@ describe("POST /api/workspace/accept-invite", () => {
 
   it("rejects a revoked invite", async () => {
     mockInvite = { ...inviteFixture, revokedAt: new Date() };
-    vi.doMock("../../src/db", () => buildDbMock([mockInvite], []));
+    vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("./accept-invite");
+    const mod = await import("../../../api/workspace/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(410);
   });
 
   it("rejects an invite already accepted", async () => {
     mockInvite = { ...inviteFixture, acceptedAt: new Date() };
-    vi.doMock("../../src/db", () => buildDbMock([mockInvite], []));
+    vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("./accept-invite");
+    const mod = await import("../../../api/workspace/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(410);
   });
 
   it("rejects when the session email doesn't match the invite email", async () => {
     mockInvite = { ...inviteFixture, email: "someone-else@example.com" };
-    vi.doMock("../../src/db", () => buildDbMock([mockInvite], []));
+    vi.doMock("../../../src/db", () => buildDbMock([mockInvite], []));
 
-    const mod = await import("./accept-invite");
+    const mod = await import("../../../api/workspace/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(403);
   });
 
   it("returns 404 when the invite code is unknown", async () => {
-    vi.doMock("../../src/db", () => buildDbMock([], []));
+    vi.doMock("../../../src/db", () => buildDbMock([], []));
 
-    const mod = await import("./accept-invite");
+    const mod = await import("../../../api/workspace/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "nope" }));
     expect(res.status).toBe(404);
   });
 
   it("accepts a valid invite", async () => {
     mockExistingMember = false;
-    vi.doMock("../../src/db", () => buildDbMock([inviteFixture], []));
+    vi.doMock("../../../src/db", () => buildDbMock([inviteFixture], []));
 
-    const mod = await import("./accept-invite");
+    const mod = await import("../../../api/workspace/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(200);
     const data = (await res.json()) as { tenantId?: string; role?: string };
