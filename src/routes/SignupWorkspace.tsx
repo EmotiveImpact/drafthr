@@ -29,7 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function SignupWorkspace() {
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const { user, isLoaded } = useAuth();
+  const { user, isLoaded, refresh } = useAuth();
 
   const [mode, setMode] = useState<"create" | "join">(() =>
     params.get("invite") ? "join" : "create",
@@ -70,6 +70,10 @@ export function SignupWorkspace() {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
+      // Re-fetch session so `activeTenant` is populated BEFORE we navigate.
+      // Without this, <Protected> sees stale auth state, sees no active tenant,
+      // and bounces us right back here. (#workspace-create-loop)
+      await refresh();
       nav("/hr", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create workspace");
@@ -103,6 +107,9 @@ export function SignupWorkspace() {
       } catch {
         /* sessionStorage unavailable — ignore */
       }
+      // Re-fetch session so `activeTenant` is populated BEFORE we navigate.
+      // Same fix as onCreate above — see #workspace-create-loop.
+      await refresh();
       nav("/hr", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to accept invite");
