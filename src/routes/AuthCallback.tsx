@@ -18,6 +18,7 @@ export function AuthCallback() {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    let cancelled = false;
 
     const code = params.get("code");
     const state = params.get("state");
@@ -39,6 +40,7 @@ export function AuthCallback() {
           throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
         }
         await refresh();
+        if (cancelled) return;
 
         // After auth: if the user arrived via /join/{code}, the JoinInvite route
         // stashed the code in sessionStorage. Pick it back up so the workspace
@@ -53,8 +55,8 @@ export function AuthCallback() {
         // Decide where to go: explicit ?redirect= wins, else pending invite
         // sends them to /signup/workspace, else server-side tenant lookup
         // resolves whether they need onboarding.
-        const redirect = params.get("redirect");
-        if (redirect && redirect.startsWith("/")) {
+        const redirect = safeInternalRedirect(params.get("redirect"));
+        if (redirect) {
           navigate(redirect, { replace: true });
         } else if (pendingInvite) {
           navigate(`/signup/workspace?invite=${encodeURIComponent(pendingInvite)}`, {
@@ -77,12 +79,17 @@ export function AuthCallback() {
           } catch {
             /* network blip — fall through to the default route */
           }
+          if (cancelled) return;
           navigate(activeTenant ? "/" : "/signup/workspace", { replace: true });
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Sign-in failed");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Sign-in failed");
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [params, navigate, refresh]);
 
   return (
@@ -109,4 +116,20 @@ export function AuthCallback() {
       </div>
     </div>
   );
+}
+
+export function safeInternalRedirect(value: string | null): string | null {
+  if (!value) return null;
+  const redirect = value.trim();
+  if (!redirect.startsWith("/") || redirect.startsWith("//") || redirect.includes("\\")) {
+    return null;
+  }
+  try {
+    const parsed = new URL(redirect, "https://app.drafthr.local");
+    if (parsed.origin !== "https://app.drafthr.local") return null;
+    if (parsed.pathname === "/auth/callback") return null;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
 }

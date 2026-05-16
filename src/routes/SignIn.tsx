@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@/lib/auth";
+import { Navigate } from "react-router-dom";
+import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -16,12 +17,19 @@ export function SignIn() {
   const started = useRef(false);
 
   useEffect(() => {
+    if (!AUTH_ENABLED) return;
     if (started.current) return;
     started.current = true;
+    let cancelled = false;
     signIn().catch((err) => {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
+      if (!cancelled) setError(err instanceof Error ? err.message : "Sign-in failed");
     });
+    return () => {
+      cancelled = true;
+    };
   }, [signIn]);
+
+  if (!AUTH_ENABLED) return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-screen grid place-items-center px-6">

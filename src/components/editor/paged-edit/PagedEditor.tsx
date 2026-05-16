@@ -46,6 +46,8 @@ import {
   PAGE_CONTENT_HEIGHT_PX,
   PAGE_CONTENT_WIDTH_PX,
   PAGE_WIDTH_PX,
+  applyResponsivePageScale,
+  observeResponsivePageScale,
   pagedPreviewStylesheet,
 } from "./printCss";
 import { buildPreviewSourceHtml, signatureImageHtml } from "./sourceHtml";
@@ -197,6 +199,12 @@ export function PagedEditor({
     });
   }, []);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return observeResponsivePageScale(container);
+  }, []);
+
   const clearPendingDebounce = useCallback(() => {
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
@@ -317,6 +325,7 @@ export function PagedEditor({
       activePreviewerRef.current = previewer;
       container.replaceChildren(...Array.from(staging.childNodes));
       staging.remove();
+      applyResponsivePageScale(container);
 
       setPageCount(flow.total ?? null);
 
@@ -1034,6 +1043,7 @@ function stampPagedRefs(html: string): string {
   const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
   const root = doc.body.firstElementChild as HTMLElement | null;
   if (!root) return html;
+  wrapLooseTopLevelContent(root);
   let i = 0;
   let currentSectionId: string | null = null;
   for (const child of Array.from(root.children)) {
@@ -1364,6 +1374,7 @@ function normalizeRenderedPagedRefs(container: HTMLElement): void {
   let currentSectionId: string | null = null;
 
   for (const root of roots) {
+    wrapLooseTopLevelContent(root);
     for (const child of Array.from(root.children) as HTMLElement[]) {
       if (child.hasAttribute("data-section-anchor")) {
         currentSectionId = child.getAttribute("data-section-id") || currentSectionId;
@@ -1387,6 +1398,115 @@ function normalizeRenderedPagedRefs(container: HTMLElement): void {
     }
   }
 }
+
+function wrapLooseTopLevelContent(root: HTMLElement): void {
+  let paragraph: HTMLParagraphElement | null = null;
+
+  const ensureParagraphBefore = (node: Node): HTMLParagraphElement => {
+    if (!paragraph) {
+      paragraph = root.ownerDocument.createElement("p");
+      root.insertBefore(paragraph, node);
+    }
+    return paragraph;
+  };
+
+  const closeParagraph = () => {
+    paragraph = null;
+  };
+
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === Node.COMMENT_NODE) {
+      node.remove();
+      continue;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      let text = node.textContent ?? "";
+      if (!compactText(text)) {
+        node.remove();
+        continue;
+      }
+      if (text.includes("\n")) {
+        text = text.replace(/\s*\n\s*/g, " ");
+        if (!paragraph) text = text.trimStart();
+        if (nextSiblingClosesLooseParagraph(node)) text = text.trimEnd();
+      }
+      if (!text) {
+        node.remove();
+        continue;
+      }
+      ensureParagraphBefore(node).appendChild(root.ownerDocument.createTextNode(text));
+      node.remove();
+      continue;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      closeParagraph();
+      continue;
+    }
+
+    const element = node as HTMLElement;
+    if (
+      element.hasAttribute("data-section-anchor") ||
+      element.hasAttribute("data-generated-letter-chrome") ||
+      isTopLevelFlowElement(element)
+    ) {
+      closeParagraph();
+      continue;
+    }
+
+    ensureParagraphBefore(element).appendChild(element);
+  }
+}
+
+function nextSiblingClosesLooseParagraph(node: Node): boolean {
+  let next = node.nextSibling;
+  while (next) {
+    if (next.nodeType === Node.COMMENT_NODE) {
+      next = next.nextSibling;
+      continue;
+    }
+    if (next.nodeType === Node.TEXT_NODE && !compactText(next.textContent ?? "")) {
+      next = next.nextSibling;
+      continue;
+    }
+    if (next.nodeType !== Node.ELEMENT_NODE) return true;
+    const element = next as HTMLElement;
+    return (
+      element.hasAttribute("data-section-anchor") ||
+      element.hasAttribute("data-generated-letter-chrome") ||
+      isTopLevelFlowElement(element)
+    );
+  }
+  return true;
+}
+
+function isTopLevelFlowElement(element: HTMLElement): boolean {
+  return TOP_LEVEL_FLOW_TAGS.has(element.tagName);
+}
+
+const TOP_LEVEL_FLOW_TAGS = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "BLOCKQUOTE",
+  "DIV",
+  "DL",
+  "FIGURE",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HR",
+  "IMG",
+  "OL",
+  "P",
+  "PRE",
+  "TABLE",
+  "UL",
+]);
 
 function stripPagedArtifacts(root: HTMLElement): void {
   const elements = [root, ...Array.from(root.querySelectorAll<HTMLElement>("*"))];

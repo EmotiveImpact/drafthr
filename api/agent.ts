@@ -25,6 +25,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
+import { enforceProductionSession } from "./_utils/production-auth.js";
 
 /* ============================================================================
  * Inlined from server/llm-model.ts — Anthropic only.
@@ -159,6 +160,8 @@ export async function POST(req: Request): Promise<Response> {
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
+  const sessionError = await enforceProductionSession(req);
+  if (sessionError) return sessionError;
 
   const parsed = await readJsonRequest<AgentRequest>(req);
   if (!parsed.ok) return parsed.response;

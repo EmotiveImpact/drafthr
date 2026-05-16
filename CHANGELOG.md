@@ -2,6 +2,82 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.11.2 — 2026-05-16
+
+Paged edit hardening + production guardrails. This release is mostly
+stability work from live debugging: the paged.js edit-on-page path now
+behaves like the preview on mobile, the auth-disabled demo path no longer
+hangs, invite acceptance lands users in the right workspace, and AI/upload
+endpoints are protected by server-side session checks in production.
+
+### Paged editor / preview
+
+- **Mobile A4 page scaling fixed.** Removed the fixed `zoom: 0.48`
+  mobile rule and replaced it with a live page-scale calculation based on
+  the actual preview/editor column width. Both read-only Preview and
+  edit-on-page now share the same responsive scale and update on resize /
+  orientation change. Verified at 390px, 430px, and desktop.
+- **Edit-on-page remains real paged.js.** The editor surface is still the
+  paged.js-rendered A4 page stack, not a one-long-page fallback. The
+  scale is applied with CSS `zoom` through `--paged-page-scale` so the
+  parent layout sees the scaled page height and does not create horizontal
+  overflow.
+- **Loose top-level inline/text content is wrapped before stamping page
+  refs.** This preserves browser-created loose text / inline nodes when
+  users type or paste through a page edit, instead of dropping those nodes
+  during section reconstruction.
+
+### Auth / routing
+
+- **Auth-disabled `/` fixed.** Public/demo mode now routes by saved role
+  or shows the role picker instead of calling a no-op `signIn()` forever.
+- **Auth-disabled `/sign-in` fixed.** Direct visits redirect back to `/`
+  instead of showing an infinite loading skeleton.
+- **OAuth callback redirects hardened.** Callback `?redirect=` now accepts
+  only app-relative paths, rejects protocol-relative / backslash / external
+  redirects, and avoids callback loops.
+- **Unmount-safe auth callbacks.** Sign-in and auth-callback async handlers
+  now avoid setting state or navigating after unmount.
+- **Workspace switcher quiet in public/demo mode.** It no longer calls
+  `/api/workspace/list` when auth is disabled or there is no active tenant,
+  removing Vite 404 console noise in local/public mode.
+
+### API security
+
+- **Production session guard added to AI endpoints.** `/api/draft` and
+  `/api/agent` now require a valid session + active workspace in
+  production, closing the gap where a server-side caller could spoof an
+  allowed Origin and burn model quota. Local public/dev mode still works.
+- **Production session guard added to image uploads.** `/api/upload/image`
+  now requires a valid session + active workspace when Blob storage is
+  configured in production. The existing `blob-not-configured` soft-fail
+  remains for local development.
+- **Image payloads now validate magic bytes.** Uploads can no longer store
+  arbitrary bytes under an allowed image MIME. PNG, JPEG, GIF, and WEBP
+  signatures are checked before the Blob write.
+- **Protocol-relative links stripped.** Sanitization now treats
+  `//evil.example/path` as unsafe instead of preserving it as if it were
+  an internal `/path` link.
+
+### Workspace invites
+
+- **Accepting an invite activates that workspace.** Because first-time
+  WorkOS users receive a bootstrap workspace, the old "only activate when
+  no active tenant exists" logic could leave invite accepters in the wrong
+  workspace. Invite acceptance now deactivates the user's other memberships
+  and activates the accepted workspace, including existing memberships.
+
+### Tests / verification
+
+- Added focused tests for responsive page scaling, auth-disabled root and
+  sign-in routing, safe callback redirects, production session guards,
+  image byte-signature validation, protocol-relative link stripping, and
+  invite activation.
+- Verified with `npm run lint`, targeted paged-editor tests,
+  `git diff --check`, `npm audit --audit-level=moderate`, and
+  `npm run build`. Full suite during the security pass was
+  167 passing / 1 skipped before the new page-scale tests were added.
+
 ## 0.11.1 — 2026-05-16
 
 Security patch + UI polish — six security findings from an adversarial

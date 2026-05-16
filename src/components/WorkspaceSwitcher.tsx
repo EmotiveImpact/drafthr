@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
-import { useAuth } from "@/lib/auth";
+import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 
 /**
  * Sidebar workspace switcher. Renders nothing when the user has <=1 workspace
@@ -33,6 +33,7 @@ export function WorkspaceSwitcher() {
   const [switching, setSwitching] = useState(false);
 
   const load = useCallback(async () => {
+    if (!AUTH_ENABLED || !activeTenant) return;
     try {
       const res = await fetch("/api/workspace/list", {
         credentials: "same-origin",
@@ -44,7 +45,7 @@ export function WorkspaceSwitcher() {
     } catch {
       /* offline / 401 — sidebar simply won't show the switcher */
     }
-  }, []);
+  }, [activeTenant]);
 
   useEffect(() => {
     void load();

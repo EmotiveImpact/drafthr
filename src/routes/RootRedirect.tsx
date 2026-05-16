@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Box, Flex } from "@radix-ui/themes";
-import { useAuth } from "@/lib/auth";
+import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { useProfileStore } from "@/lib/profile";
 import { ModePicker } from "./ModePicker";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +25,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function RootRedirect() {
   const { user, isLoaded, activeTenant } = useAuth();
   const profile = useProfileStore((s) => s.profile);
+
+  if (!AUTH_ENABLED) {
+    if (!profile.role) return <ModePicker />;
+    return <Navigate to={profile.role === "employer" ? "/hr" : "/me"} replace />;
+  }
 
   if (!isLoaded) return <CenteredLoadingScreen />;
 
@@ -59,8 +64,18 @@ function CenteredLoadingScreen() {
  * Shows the same loading skeleton meanwhile so there's no visual jolt. */
 function AutoSignIn() {
   const { signIn } = useAuth();
+  const [failed, setFailed] = useState(false);
+
   useEffect(() => {
-    void signIn();
+    let cancelled = false;
+    signIn().catch(() => {
+      if (!cancelled) setFailed(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [signIn]);
+
+  if (failed) return <Navigate to="/sign-in" replace />;
   return <CenteredLoadingScreen />;
 }

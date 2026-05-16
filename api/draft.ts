@@ -9,6 +9,7 @@ import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
+import { enforceProductionSession } from "./_utils/production-auth.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -67,6 +68,8 @@ export async function POST(req: Request): Promise<Response> {
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
+  const sessionError = await enforceProductionSession(req);
+  if (sessionError) return sessionError;
 
   const parsed = await readJsonRequest<DraftRequest>(req);
   if (!parsed.ok) return parsed.response;

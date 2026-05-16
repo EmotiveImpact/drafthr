@@ -22,6 +22,8 @@ export const MARGIN_BOTTOM_PX = Math.round(1.2 * 96); // 115
 export const MARGIN_SIDE_PX = Math.round(1.1 * 96); // 106
 export const PAGE_CONTENT_WIDTH_PX = PAGE_WIDTH_PX - MARGIN_SIDE_PX * 2; // 582
 export const PAGE_CONTENT_HEIGHT_PX = PAGE_HEIGHT_PX - MARGIN_TOP_PX - MARGIN_BOTTOM_PX; // 911
+const MIN_SCREEN_PAGE_SCALE = 0.25;
+const SCREEN_PAGE_GUTTER_PX = 8;
 
 /* ----------------------------------------------------------------------------
  * Full stylesheet handed to paged.js. paged.js inserts processed rules
@@ -49,6 +51,7 @@ export const LETTER_PRINT_CSS = `
     align-items: center;
     gap: 24px;
     padding: 0;
+    zoom: var(--paged-page-scale, 1);
   }
   .pagedjs_page {
     background: #ffffff;
@@ -58,14 +61,10 @@ export const LETTER_PRINT_CSS = `
     margin: 0 !important;
   }
 
-  /* MOBILE: A4 paper (8.27in / ~794px) doesn't fit in a 390px viewport.
-   * Use the CSS zoom property (not transform scale) so the parent
-   * container sees the scaled height and the canvas reflows naturally —
-   * no negative-margin compensation needed. */
+  /* MOBILE: page scale is calculated from the live preview/editor column
+   * width and applied through --paged-page-scale. Keep only mobile shadow
+   * changes here so the page can resize continuously across all widths. */
   @media (max-width: 640px) {
-    .pagedjs_pages {
-      zoom: 0.48;
-    }
     .pagedjs_page {
       box-shadow: 0 4px 14px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.10);
     }
@@ -207,4 +206,48 @@ export function pagedPreviewStylesheet(): Record<string, string> {
       ? `${window.location.origin}/drafthr-letter-print.css`
       : "drafthr-letter-print.css";
   return { [href]: LETTER_PRINT_CSS };
+}
+
+export function pagedPageScaleForWidth(widthPx: number): number {
+  if (!Number.isFinite(widthPx) || widthPx <= 0) return 1;
+  const available = Math.max(0, widthPx - SCREEN_PAGE_GUTTER_PX);
+  return Math.min(1, Math.max(MIN_SCREEN_PAGE_SCALE, available / PAGE_WIDTH_PX));
+}
+
+export function applyResponsivePageScale(container: HTMLElement | null): number {
+  if (!container) return 1;
+  const scale = pagedPageScaleForWidth(container.getBoundingClientRect().width);
+  container.style.setProperty("--paged-page-scale", formatPageScale(scale));
+  return scale;
+}
+
+export function observeResponsivePageScale(container: HTMLElement): () => void {
+  let frame: number | null = null;
+  const update = () => {
+    frame = null;
+    applyResponsivePageScale(container);
+  };
+  const schedule = () => {
+    if (frame !== null) window.cancelAnimationFrame(frame);
+    frame = window.requestAnimationFrame(update);
+  };
+
+  update();
+
+  const resizeObserver =
+    typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+  resizeObserver?.observe(container);
+  window.addEventListener("resize", schedule);
+  window.visualViewport?.addEventListener("resize", schedule);
+
+  return () => {
+    if (frame !== null) window.cancelAnimationFrame(frame);
+    resizeObserver?.disconnect();
+    window.removeEventListener("resize", schedule);
+    window.visualViewport?.removeEventListener("resize", schedule);
+  };
+}
+
+function formatPageScale(scale: number): string {
+  return Number(scale.toFixed(4)).toString();
 }

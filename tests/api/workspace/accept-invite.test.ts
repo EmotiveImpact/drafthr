@@ -39,6 +39,7 @@ const inviteFixture: Invite = {
 
 let mockInvite: Invite = inviteFixture;
 let mockExistingMember: boolean = false;
+type DbWrite = { kind: "insert" | "update"; values: Record<string, unknown> };
 
 function makeRequest(body: Record<string, unknown>): Request {
   return new Request("http://localhost/api/workspace/accept-invite", {
@@ -155,7 +156,8 @@ describe("POST /api/workspace/accept-invite", () => {
 
   it("accepts a valid invite", async () => {
     mockExistingMember = false;
-    vi.doMock("../../../src/db", () => buildDbMock([inviteFixture], []));
+    const writes: DbWrite[] = [];
+    vi.doMock("../../../src/db", () => buildDbMock([inviteFixture], [], writes));
 
     const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
@@ -163,10 +165,40 @@ describe("POST /api/workspace/accept-invite", () => {
     const data = (await res.json()) as { tenantId?: string; role?: string };
     expect(data.tenantId).toBe("tenant_1");
     expect(data.role).toBe("drafter");
+    expect(writes).toEqual(
+      expect.arrayContaining([
+        { kind: "update", values: { isActiveTenant: false } },
+        {
+          kind: "insert",
+          values: expect.objectContaining({ tenantId: "tenant_1", isActiveTenant: true }),
+        },
+      ]),
+    );
+  });
+
+  it("switches an existing membership active when accepting its invite", async () => {
+    const writes: DbWrite[] = [];
+    vi.doMock("../../../src/db", () =>
+      buildDbMock([inviteFixture], [{ userId: "user_db_1" }], writes),
+    );
+
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
+    const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
+    expect(res.status).toBe(200);
+    expect(writes).toEqual(
+      expect.arrayContaining([
+        { kind: "update", values: { isActiveTenant: false } },
+        { kind: "update", values: { isActiveTenant: true } },
+      ]),
+    );
   });
 });
 
-function buildDbMock(inviteRows: Invite[], existingMemberRows: { userId: string }[]) {
+function buildDbMock(
+  inviteRows: Invite[],
+  existingMemberRows: { userId: string }[],
+  writes: DbWrite[] = [],
+) {
   // Sequential `select().from().where().limit()` chains — we return invite
   // on call #1 (invite lookup) and existing-member rows on call #2.
   let call = 0;
@@ -185,8 +217,20 @@ function buildDbMock(inviteRows: Invite[], existingMemberRows: { userId: string 
       }),
       transaction: async (fn: (tx: unknown) => unknown) => {
         const tx = {
-          update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
-          insert: () => ({ values: () => Promise.resolve() }),
+          update: () => ({
+            set: (values: Record<string, unknown>) => ({
+              where: () => {
+                writes.push({ kind: "update", values });
+                return Promise.resolve();
+              },
+            }),
+          }),
+          insert: () => ({
+            values: (values: Record<string, unknown>) => {
+              writes.push({ kind: "insert", values });
+              return Promise.resolve();
+            },
+          }),
         };
         return fn(tx);
       },

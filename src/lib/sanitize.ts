@@ -43,7 +43,8 @@ function registerSanitizeHooks() {
 }
 
 function isSafeLinkHref(href: string): boolean {
-  return /^(?:https?:|mailto:|tel:|\/|#)/i.test(href.trim());
+  const value = href.trim();
+  return /^(?:https?:|mailto:|tel:|#)/i.test(value) || (value.startsWith("/") && !value.startsWith("//"));
 }
 
 function collectBlankLinkHrefs(html: string): Map<string, number> {
@@ -147,7 +148,7 @@ export function sanitizeLetterHtml(dirty: string): string {
     // Plus keep DOMPurify's default-permitted schemes for href on <a>:
     // http(s), mailto, tel.
     ALLOWED_URI_REGEXP:
-      /^(?:https?:|mailto:|tel:|\/|#|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
+      /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
   });
   return hardenSanitizedHtml(cleaned, blankLinkHrefs);
 }
@@ -180,7 +181,7 @@ export function sanitizeLetterHtmlForExport(dirty: string): string {
     KEEP_CONTENT: true,
     USE_PROFILES: { html: true },
     ALLOWED_URI_REGEXP:
-      /^(?:https?:|mailto:|tel:|\/|#|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
+      /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
   });
   return hardenSanitizedHtml(cleaned, blankLinkHrefs);
 }

@@ -25,8 +25,14 @@ describe("sanitizeLetterHtml", () => {
 
   it("preserves anchor href but strips javascript: schemes", () => {
     expect(sanitizeLetterHtml('<a href="https://example.com">ok</a>')).toContain('href="https://example.com"');
+    expect(sanitizeLetterHtml('<a href="/internal/path">ok</a>')).toContain('href="/internal/path"');
     const dangerous = sanitizeLetterHtml('<a href="javascript:alert(1)">x</a>');
     expect(dangerous).not.toContain("javascript:");
+  });
+
+  it("strips protocol-relative links", () => {
+    const out = sanitizeLetterHtml('<a href="//evil.example/path">x</a>');
+    expect(out).not.toContain("href=");
   });
 
   it("adds noopener noreferrer to links that open a new tab", () => {

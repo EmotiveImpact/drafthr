@@ -148,6 +148,25 @@ describe("PagedEditor source reconstruction", () => {
     expect(splits["sec-b"]).toBe("<p>Beta</p>");
     expect(html).not.toContain("<p data-section-id");
   });
+
+  it("preserves loose top-level text and inline nodes when saving", () => {
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <div class="pagedjs_page_content">
+        <div class="letter-body">
+          <div data-section-anchor data-section-id="sec-a"></div>
+          Loose <strong>inline</strong><br>tail
+          <p data-paged-ref="1">Next paragraph</p>
+        </div>
+      </div>
+    `;
+
+    const html = editor.reconstructSourceHtml(container);
+    const splits = editor.splitBySection(html);
+
+    expect(splits["sec-a"]).toContain("<p>Loose <strong>inline</strong><br>tail</p>");
+    expect(splits["sec-a"]).toContain("<p>Next paragraph</p>");
+  });
 });
 
 describe("PagedEditor paste cleanup", () => {

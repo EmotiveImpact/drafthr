@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError } from "../_utils/request.js";
+import { enforceProductionSession } from "../_utils/production-auth.js";
 
 export const config = {
   runtime: "nodejs",
@@ -47,6 +48,8 @@ export async function POST(req: Request): Promise<Response> {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return jsonResponse({ ok: false, error: "blob-not-configured" }, 200);
   }
+  const sessionError = await enforceProductionSession(req);
+  if (sessionError) return sessionError;
 
   const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
 
@@ -69,6 +72,9 @@ export async function POST(req: Request): Promise<Response> {
 
   if (bytes.byteLength > MAX_BYTES) {
     return jsonError("Image too large (max 2 MB)", 413);
+  }
+  if (!isValidImagePayload(bytes, mime)) {
+    return jsonError("Invalid image payload", 415);
   }
 
   const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -167,4 +173,32 @@ function jsonResponse(payload: unknown, status: number): Response {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+export function isValidImagePayload(bytes: Uint8Array, mime: string): boolean {
+  switch (mime) {
+    case "image/png":
+      return hasBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case "image/jpeg":
+      return hasBytes(bytes, [0xff, 0xd8, 0xff]);
+    case "image/gif":
+      return startsWithAscii(bytes, "GIF87a") || startsWithAscii(bytes, "GIF89a");
+    case "image/webp":
+      return startsWithAscii(bytes, "RIFF") && startsWithAscii(bytes.subarray(8), "WEBP");
+    default:
+      return false;
+  }
+}
+
+function hasBytes(bytes: Uint8Array, signature: number[]): boolean {
+  if (bytes.byteLength < signature.length) return false;
+  return signature.every((byte, index) => bytes[index] === byte);
+}
+
+function startsWithAscii(bytes: Uint8Array, value: string): boolean {
+  if (bytes.byteLength < value.length) return false;
+  for (let i = 0; i < value.length; i += 1) {
+    if (bytes[i] !== value.charCodeAt(i)) return false;
+  }
+  return true;
 }

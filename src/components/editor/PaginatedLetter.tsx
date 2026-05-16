@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { Loader2, MessageSquarePlus } from "lucide-react";
-import { pagedPreviewStylesheet } from "./paged-edit/printCss";
+import {
+  applyResponsivePageScale,
+  observeResponsivePageScale,
+  pagedPreviewStylesheet,
+} from "./paged-edit/printCss";
 import { buildPreviewSourceHtml } from "./paged-edit/sourceHtml";
 
 type PreviewerInstance = {
@@ -70,6 +74,12 @@ export function PaginatedLetter({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    return observeResponsivePageScale(container);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
     let cancelled = false;
     let previewer: PreviewerInstance | null = null;
     destroyPreviewer(previewerRef.current);
@@ -89,6 +99,7 @@ export function PaginatedLetter({
           destroyPreviewer(previewer);
           return;
         }
+        applyResponsivePageScale(container);
         previewerRef.current = previewer;
         setPageCount(flow.total ?? null);
         setBusy(false);

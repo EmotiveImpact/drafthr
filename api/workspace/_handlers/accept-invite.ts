@@ -8,9 +8,9 @@
  *      (case-insensitive). This is the security boundary — without it any
  *      authenticated user could claim any invite by URL.
  *
- * On success: insert tenant_members row, mark invite accepted, append a
- * tenant.member-joined audit event. If the user has no other active
- * tenant, mark this one active so they land somewhere usable.
+ * On success: insert/update tenant_members row, mark invite accepted, append a
+ * tenant.member-joined audit event, and switch the accepted tenant active so
+ * invite links always land users in the workspace they just joined.
  */
 import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
@@ -69,21 +69,27 @@ export async function POST(req: Request): Promise<Response> {
       .limit(1);
 
     await db.transaction(async (tx) => {
+      await tx
+        .update(tenantMembers)
+        .set({ isActiveTenant: false })
+        .where(eq(tenantMembers.userId, auth.userRow.id));
       if (!existing) {
-        // Will this become the active tenant? Yes when the user currently has none.
-        const shouldActivate = !auth.activeTenant;
-        if (shouldActivate) {
-          await tx
-            .update(tenantMembers)
-            .set({ isActiveTenant: false })
-            .where(eq(tenantMembers.userId, auth.userRow.id));
-        }
         await tx.insert(tenantMembers).values({
           userId: auth.userRow.id,
           tenantId: invite.tenantId,
           role: invite.role,
-          isActiveTenant: shouldActivate,
+          isActiveTenant: true,
         });
+      } else {
+        await tx
+          .update(tenantMembers)
+          .set({ isActiveTenant: true })
+          .where(
+            and(
+              eq(tenantMembers.userId, auth.userRow.id),
+              eq(tenantMembers.tenantId, invite.tenantId),
+            ),
+          );
       }
       await tx
         .update(invites)
