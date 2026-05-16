@@ -10,10 +10,29 @@ import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext } from "@/components/SearchPaletteContext";
 import { Onboarding } from "@/components/Onboarding";
 
+/** Routes that render WITHOUT the authenticated app chrome (sidebar,
+ * notifications, search palette). These show before the user has a session
+ * OR a tenant — so rendering the full HR sidebar would leak a "logged in"
+ * appearance and confuse the user mid-flow. */
+const CHROMELESS_PREFIXES = ["/sign-in", "/auth/callback", "/signup/workspace", "/join/"];
+
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const isEditor = loc.pathname.startsWith("/editor/");
+  const isChromeless = CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
   const { open, setOpen } = useSearchPalette();
+
+  // Public / onboarding routes get a minimal shell — no sidebar, no chrome.
+  // Stops the flash-of-logged-in-app between page load and the WorkOS redirect.
+  if (isChromeless) {
+    return (
+      <TooltipProvider delayDuration={150}>
+        <div className="min-h-screen flex flex-col bg-background">
+          <main className="flex-1 flex flex-col min-h-0">{children}</main>
+        </div>
+      </TooltipProvider>
+    );
+  }
 
   if (isEditor) {
     return (
