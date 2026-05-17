@@ -2,6 +2,62 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.11.3 — 2026-05-18
+
+Branded export footer ("Drafted with DraftHR · drafthr.io") on every
+PDF and DOCX export. Calendly-mechanism — every exported letter shown
+to a recipient is free acquisition. Visible but tasteful (8.5pt grey,
+centered, separated by a hairline at the bottom of the document).
+Inline styles only so DOCX OOXML + Puppeteer with restrictive CSP both
+honor it.
+
+### Layered toggle
+
+Single helper (`src/lib/branding/export-footer.ts`) decides on / off
+across PDF, DOCX, and the ZIP pack. First-match-wins precedence:
+
+1. **Env force-off** — `VITE_DRAFTHR_EXPORT_FOOTER=false` (or `0` / `off` /
+   `no`) kills the footer globally. Admin escape hatch for A/B tests or
+   strategy changes. Active now.
+2. **Per-tenant paid plan** — `tenantPlan !== 'free'` auto-suppresses.
+   Helper accepts the field today; wiring is **stubbed pending Stripe**.
+   When billing + `tenants.plan` column land, this becomes a real
+   upgrade reason ("pay £79/mo to remove the branding from your
+   letters").
+3. **Per-user opt-out** — `userOptOut === true` suppresses. Helper
+   accepts the field; **intentionally NOT exposed in Settings yet** —
+   would defeat the Calendly virality if free-tier users could opt out
+   silently. Plan to gate the Settings toggle to paid plans only when
+   billing lands. Wiring is ~30 min once the plan column exists.
+4. **Default** — ON.
+
+Both deferred wirings (2 + 3) share the Stripe + plan-column
+prerequisite, so a single billing wave unblocks them together. See
+`SUNDAY.md` Section C → "Revenue-generating" for the parked checkbox.
+
+### Where the footer renders
+
+- `src/lib/export/pdf.ts` — appended to `letterBodyHtml()` after the
+  disclaimer. Both the server Puppeteer path and the client
+  html2canvas + jsPDF fallback inherit it (server gets HTML built on
+  the client).
+- `src/lib/export/docx.ts` — appended to `buildDocxBodyHtml()` after
+  the disclaimer.
+- `src/lib/export/pack.ts` — ZIP pack auto-inherits via the bundled
+  PDF + DOCX. `pack-summary.html` (audit metadata, not the letter
+  itself) stays footer-free.
+- Editor on-screen preview — unaffected; only renders on actual
+  exports.
+
+### Tests
+
+12 new cases in `src/lib/branding/export-footer.test.ts`:
+default ON, all 3 layers' truth tables, layer precedence
+(env > plan > user > default), HTML shape (brand + URL + class hook +
+inlined styling).
+
+191 / 192 tests passing (1 skipped). Lint + tsc clean.
+
 ## 0.11.2 — 2026-05-16
 
 Paged edit hardening + production guardrails. This release is mostly

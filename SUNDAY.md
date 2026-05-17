@@ -89,6 +89,24 @@ honoured.
   *(Shipped 2026-05-18, commit `3438298` — 3-layer toggle (env / plan /
   user); free tenants see it by default; paid plans auto-suppress when
   billing ships; one-helper-many-surfaces pattern; 12 new tests.)*
+
+  **Layered toggle — future wiring (helper already accepts these fields):**
+  - [ ] **Per-tenant paid-plan suppression** — when Stripe + `tenants.plan`
+        column land, fetch the tenant's plan in `letterBodyHtml()` /
+        `buildDocxBodyHtml()` and pass `tenantPlan` to
+        `brandedExportFooterHtml({ tenantPlan })`. Anything other than
+        `'free'` auto-suppresses. **Blocked on:** Stripe checkout + plan
+        column. ~30 min wire-up once those exist.
+  - [ ] **Per-user Settings opt-out** — add `profile.exportFooter: boolean`
+        (default `true`) to `useProfileStore` + a toggle in `/settings` +
+        pass `userOptOut: !profile.exportFooter` to the footer helper.
+        **Intentionally NOT built for free tier** — defeats the Calendly
+        virality. **Recommended gating:** only show the toggle to users on
+        a paid plan (Pro/Business/Enterprise). **Blocked on:** plan
+        column existing. ~30 min wire-up after that.
+
+  Both wirings share the same plan-column prerequisite, so a single
+  Stripe + plan wave unblocks them together.
 - [ ] **Employee Plus subscription £99/mo** — multi-month tribunal LTV.
   Needs Stripe subscriptions.
 - [ ] **Case Packs** (Grievance £69 / Settlement £119 / Tribunal Prep £249)
