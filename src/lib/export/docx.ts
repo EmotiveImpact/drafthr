@@ -1,5 +1,9 @@
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
+import {
+  brandedExportFooterHtml,
+  resolveClientEnvFlag,
+} from "@/lib/branding/export-footer";
 import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
@@ -167,6 +171,8 @@ function buildDocxBodyHtml(draft: Draft): string {
     attachmentsBlock,
     "<hr />",
     sanitizeLetterHtml(disclaimerHtmlFor(draft)),
+    // Branded export footer — same toggle as PDF. See src/lib/branding/export-footer.ts.
+    brandedExportFooterHtml({ envEnabled: resolveClientEnvFlag() }),
   ]
     .filter(Boolean)
     .join("\n");

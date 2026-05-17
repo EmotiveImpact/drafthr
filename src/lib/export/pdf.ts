@@ -4,6 +4,10 @@ import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize"
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
+import {
+  brandedExportFooterHtml,
+  resolveClientEnvFlag,
+} from "@/lib/branding/export-footer";
 
 type Html2Canvas = (
   element: HTMLElement,
@@ -93,7 +97,11 @@ function letterBodyHtml(draft: Draft): string {
     resolved +
     attachments +
     "<hr />" +
-    sanitizeLetterHtml(disclaimerHtmlFor(draft))
+    sanitizeLetterHtml(disclaimerHtmlFor(draft)) +
+    // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands
+    // when billing ships; for now everyone's on free, so this renders for all
+    // unless VITE_DRAFTHR_EXPORT_FOOTER=false. See src/lib/branding/export-footer.ts.
+    brandedExportFooterHtml({ envEnabled: resolveClientEnvFlag() })
   );
 }
 
