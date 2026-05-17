@@ -1,0 +1,884 @@
+diff --git a/src/components/editor/paged-edit/PagedEditor.test.tsx b/src/components/editor/paged-edit/PagedEditor.test.tsx
+index 2b547f3..d6a2306 100644
+--- a/src/components/editor/paged-edit/PagedEditor.test.tsx
++++ b/src/components/editor/paged-edit/PagedEditor.test.tsx
+@@ -1,10 +1,14 @@
+-import { useState } from "react";
+-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
++import { useState, type MutableRefObject } from "react";
++import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
+ import type { Draft, Section } from "@/lib/letters/types";
+ 
+-import { PagedEditor, __pagedEditorInternals as editor } from "./PagedEditor";
++import {
++  PagedEditor,
++  type PagedEditorActions,
++  __pagedEditorInternals as editor,
++} from "./PagedEditor";
+ 
+ const storeMock = vi.hoisted(() => {
+   const mock: {
+@@ -148,6 +152,30 @@ describe("PagedEditor source reconstruction", () => {
+     expect(splits["sec-b"]).toBe("<p>Beta</p>");
+     expect(html).not.toContain("<p data-section-id");
+   });
++
++  it("reconstructs from a snapshot without mutating the selected live DOM", () => {
++    const container = document.createElement("div");
++    container.innerHTML = `
++      <div class="pagedjs_page_content">
++        <div class="letter-body">
++          <div data-section-anchor data-section-id="sec-a"></div>
++          <p>Selected text</p>
++        </div>
++      </div>
++    `;
++    document.body.appendChild(container);
++    const text = container.querySelector("p")?.firstChild;
++    expect(text).toBeInstanceOf(Text);
++    setCaret(text as Text, "Selected".length);
++    const before = container.innerHTML;
++
++    const html = editor.reconstructSourceHtml(container);
++
++    expect(html).toContain("Selected text");
++    expect(container.innerHTML).toBe(before);
++    expect(window.getSelection()?.anchorNode).toBe(text);
++    expect(window.getSelection()?.anchorOffset).toBe("Selected".length);
++  });
+ });
+ 
+ describe("PagedEditor paste cleanup", () => {
+@@ -273,7 +301,7 @@ describe("PagedEditor undo and redo", () => {
+     const draft = makeDraft([makeSection("sec-a", "body", "<p>Original text</p>")]);
+ 
+     render(<PagedEditorHarness draft={draft} />);
+-    expect(await screen.findByRole("textbox")).toBeInTheDocument();
++    expect(await screen.findByRole("textbox")).toBeTruthy();
+ 
+     const body = document.querySelector<HTMLElement>(".letter-body");
+     expect(body).not.toBeNull();
+@@ -290,7 +318,9 @@ describe("PagedEditor undo and redo", () => {
+     });
+ 
+     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text changed");
+-    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
++    expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(
++      false,
++    );
+ 
+     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+     await act(async () => {
+@@ -299,7 +329,9 @@ describe("PagedEditor undo and redo", () => {
+ 
+     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text");
+     expect(storeMock.currentDraft?.sections[0].html).not.toContain("changed");
+-    expect(screen.getByRole("button", { name: "Redo" })).toBeEnabled();
++    expect((screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement).disabled).toBe(
++      false,
++    );
+ 
+     fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+     await act(async () => {
+@@ -308,6 +340,94 @@ describe("PagedEditor undo and redo", () => {
+ 
+     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text changed");
+   });
++
++  it("lets an external undo handler see dirty DOM before React republishes actions", async () => {
++    const draft = makeDraft([makeSection("sec-a", "body", "<p>Original text</p>")]);
++    const actionsRef: MutableRefObject<PagedEditorActions | null> = { current: null };
++
++    render(<PagedEditorHarness draft={draft} actionsRef={actionsRef} />);
++    expect(await screen.findByRole("textbox")).toBeTruthy();
++    const staleUndo = actionsRef.current?.undo;
++    expect(staleUndo).toBeTypeOf("function");
++
++    const body = document.querySelector<HTMLElement>(".letter-body");
++    const paragraph = body?.querySelector("p");
++    expect(body).not.toBeNull();
++    expect(paragraph).not.toBeNull();
++    paragraph!.textContent = "Original text changed";
++    setCaret(paragraph!.firstChild as Text, "Original text changed".length);
++
++    fireEvent.input(body!, { bubbles: true });
++
++    await act(async () => {
++      staleUndo?.();
++      await flushMicrotasks();
++    });
++
++    expect(storeMock.currentDraft?.sections[0].html).toContain("Original text");
++    expect(storeMock.currentDraft?.sections[0].html).not.toContain("changed");
++    expect((screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement).disabled).toBe(
++      false,
++    );
++  });
++});
++
++describe("PagedEditor toolbar selection state", () => {
++  it("keeps toolbar formatting selected during editor toolbar focus changes", async () => {
++    const restoreQueries = mockCommandQueries({
++      states: { bold: true },
++      values: { formatBlock: "p" },
++    });
++
++    try {
++      const draft = makeDraft([makeSection("sec-a", "body", "<p>Bold text</p>")]);
++      render(<PagedEditorHarness draft={draft} />);
++      const body = await screen.findByRole("textbox");
++      const text = body.querySelector("p")?.firstChild;
++      expect(text).toBeInstanceOf(Text);
++
++      act(() => {
++        setCaret(text as Text, "Bold".length);
++        document.dispatchEvent(new Event("selectionchange"));
++      });
++
++      const boldButton = screen.getByRole("button", { name: "Bold" });
++      await waitFor(() => expect(boldButton.getAttribute("aria-pressed")).toBe("true"));
++
++      act(() => {
++        boldButton.focus();
++        window.getSelection()?.removeAllRanges();
++        document.dispatchEvent(new Event("selectionchange"));
++      });
++
++      expect(boldButton.getAttribute("aria-pressed")).toBe("true");
++    } finally {
++      restoreQueries();
++    }
++  });
++
++  it("keeps a selected range active across repeated alignment commands", async () => {
++    const restoreExecCommand = mockExecCommandCollapsingAlignment();
++
++    try {
++      const draft = makeDraft([makeSection("sec-a", "body", "<p>Selected alignment text</p>")]);
++      render(<PagedEditorHarness draft={draft} />);
++      const body = await screen.findByRole("textbox");
++      const text = body.querySelector("p")?.firstChild;
++      expect(text).toBeInstanceOf(Text);
++
++      setSelection(text as Text, 0, text as Text, "Selected alignment".length);
++      expect(currentSelectionText()).toBe("Selected alignment");
++
++      fireEvent.click(screen.getByRole("button", { name: "Align center" }));
++      expect(currentSelectionText()).toBe("Selected alignment");
++
++      fireEvent.click(screen.getByRole("button", { name: "Align right" }));
++      expect(currentSelectionText()).toBe("Selected alignment");
++    } finally {
++      restoreExecCommand();
++    }
++  });
+ });
+ 
+ function makeDraft(sections: Section[]): Draft {
+@@ -367,7 +487,13 @@ function makeSection(id: string, sectionId: Section["sectionId"], html: string):
+   };
+ }
+ 
+-function PagedEditorHarness({ draft }: { draft: Draft }) {
++function PagedEditorHarness({
++  draft,
++  actionsRef,
++}: {
++  draft: Draft;
++  actionsRef?: MutableRefObject<PagedEditorActions | null>;
++}) {
+   const [currentDraft, setCurrentDraft] = useState(draft);
+   storeMock.currentDraft = currentDraft;
+   storeMock.applyUpdate = (draftId, sectionId, html) => {
+@@ -383,7 +509,7 @@ function PagedEditorHarness({ draft }: { draft: Draft }) {
+       return next;
+     });
+   };
+-  return <PagedEditor draft={currentDraft} onDone={vi.fn()} />;
++  return <PagedEditor draft={currentDraft} onDone={vi.fn()} actionsRef={actionsRef} />;
+ }
+ 
+ function setCaret(node: Text, offset: number): void {
+@@ -395,6 +521,99 @@ function setCaret(node: Text, offset: number): void {
+   selection?.addRange(range);
+ }
+ 
++function setSelection(startNode: Text, startOffset: number, endNode: Text, endOffset: number): void {
++  const range = document.createRange();
++  range.setStart(startNode, startOffset);
++  range.setEnd(endNode, endOffset);
++  const selection = window.getSelection();
++  selection?.removeAllRanges();
++  selection?.addRange(range);
++}
++
++function collapseCurrentSelection(): void {
++  const selection = window.getSelection();
++  if (!selection || selection.rangeCount === 0) return;
++  const range = selection.getRangeAt(0).cloneRange();
++  range.collapse(false);
++  selection.removeAllRanges();
++  selection.addRange(range);
++}
++
++function currentSelectionText(): string {
++  return window.getSelection()?.toString() ?? "";
++}
++
++function mockCommandQueries({
++  states = {},
++  values = {},
++}: {
++  states?: Record<string, boolean>;
++  values?: Record<string, string>;
++}): () => void {
++  const originalQueryCommandState = document.queryCommandState;
++  const originalQueryCommandValue = document.queryCommandValue;
++  Object.defineProperty(document, "queryCommandState", {
++    configurable: true,
++    value: vi.fn((command: string) => Boolean(states[command])),
++  });
++  Object.defineProperty(document, "queryCommandValue", {
++    configurable: true,
++    value: vi.fn((command: string) => values[command] ?? ""),
++  });
++  return () => {
++    Object.defineProperty(document, "queryCommandState", {
++      configurable: true,
++      value: originalQueryCommandState,
++    });
++    Object.defineProperty(document, "queryCommandValue", {
++      configurable: true,
++      value: originalQueryCommandValue,
++    });
++  };
++}
++
++function mockExecCommandCollapsingAlignment(): () => void {
++  const originalExecCommand = document.execCommand;
++  Object.defineProperty(document, "execCommand", {
++    configurable: true,
++    value: vi.fn((command: string) => {
++      if (command.startsWith("justify")) {
++        applyMockAlignment(command);
++        collapseCurrentSelection();
++      }
++      return true;
++    }),
++  });
++  return () => {
++    Object.defineProperty(document, "execCommand", {
++      configurable: true,
++      value: originalExecCommand,
++    });
++  };
++}
++
++function applyMockAlignment(command: string): void {
++  const align =
++    command === "justifyCenter"
++      ? "center"
++      : command === "justifyRight"
++      ? "right"
++      : command === "justifyFull"
++      ? "justify"
++      : "left";
++  const selection = window.getSelection();
++  const anchorNode = selection?.anchorNode ?? null;
++  const anchorElement =
++    anchorNode?.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
++  const root = anchorElement instanceof HTMLElement
++    ? anchorElement.closest<HTMLElement>(".letter-body")
++    : null;
++  if (!root) return;
++  for (const block of Array.from(root.querySelectorAll<HTMLElement>("p,h1,h2,h3,h4,li,div"))) {
++    if (block.textContent?.trim()) block.style.textAlign = align;
++  }
++}
++
+ async function flushMicrotasks(): Promise<void> {
+   await Promise.resolve();
+   await Promise.resolve();
+diff --git a/src/components/editor/paged-edit/PagedEditor.tsx b/src/components/editor/paged-edit/PagedEditor.tsx
+index 66c3e23..6110461 100644
+--- a/src/components/editor/paged-edit/PagedEditor.tsx
++++ b/src/components/editor/paged-edit/PagedEditor.tsx
+@@ -79,6 +79,16 @@ const REPAGINATE_DELAY_MS = 600;
+ const PAGE_WIDTH_FALLBACK_PX = PAGE_WIDTH_PX;
+ const OVERSIZED_BLOCK_MAX_HEIGHT_PX = PAGE_CONTENT_HEIGHT_PX - 24;
+ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
++const SELECTION_PRESERVING_COMMANDS = new Set([
++  "bold",
++  "italic",
++  "underline",
++  "formatBlock",
++  "justifyLeft",
++  "justifyCenter",
++  "justifyRight",
++  "justifyFull",
++]);
+ 
+ type CursorState = {
+   start: CursorPoint;
+@@ -102,6 +112,23 @@ type ToolbarFormatState = {
+   align: "left" | "center" | "right" | "justify" | "";
+ };
+ 
++type EditableSelection = {
++  collapsed: boolean;
++  range: Range;
++  text: string;
++};
++
++type EditableTextSelection = {
++  start: EditableTextPoint;
++  end: EditableTextPoint;
++  text: string;
++};
++
++type EditableTextPoint = {
++  rootIndex: number;
++  offset: number;
++};
++
+ type PreviewerInstance = {
+   preview: (
+     content: string | HTMLElement,
+@@ -140,8 +167,12 @@ export function PagedEditor({
+    * top menubar (Edit → Undo / Redo / Select all / Find). */
+   actionsRef?: MutableRefObject<PagedEditorActions | null>;
+ }) {
+-  const updateSection = useDraftStore((state) => state.updateSection);
++  const updateSection = useDraftStore(
++    (state: { updateSection: (draftId: string, sectionId: string, html: string) => void }) =>
++      state.updateSection,
++  );
+ 
++  const editorRootRef = useRef<HTMLDivElement>(null);
+   const containerRef = useRef<HTMLDivElement>(null);
+   const imageInputRef = useRef<HTMLInputElement>(null);
+   /** The HTML truth — kept current via reconstructSourceHtml() on every save. */
+@@ -154,6 +185,7 @@ export function PagedEditor({
+   const composingRef = useRef(false);
+   const undoStackRef = useRef<string[]>([]);
+   const redoStackRef = useRef<string[]>([]);
++  const dirtyRef = useRef(false);
+   const savedSelectionRef = useRef<Range | null>(null);
+   // Tracks dirty state across renders so we can fire a "Saved" toast
+   // only on the dirty → clean transition (i.e. a flush actually
+@@ -162,7 +194,7 @@ export function PagedEditor({
+ 
+   const [, setBusy] = useState(true);
+   const [, setPageCount] = useState<number | null>(null);
+-  const [dirty, setDirty] = useState(false);
++  const [dirty, setDirtyState] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+   const [formatState, setFormatState] = useState<ToolbarFormatState>({
+@@ -190,11 +222,19 @@ export function PagedEditor({
+   const findHighlightRef = useRef<Highlight | null>(null);
+   const findActiveHighlightRef = useRef<Highlight | null>(null);
+ 
++  const setEditorDirty = useCallback((value: boolean) => {
++    dirtyRef.current = value;
++    setDirtyState((current) => (current === value ? current : value));
++  }, []);
++
+   const refreshHistoryState = useCallback(() => {
+-    setHistoryState({
++    const next = {
+       canUndo: undoStackRef.current.length > 0,
+       canRedo: redoStackRef.current.length > 0,
+-    });
++    };
++    setHistoryState((current) =>
++      current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next,
++    );
+   }, []);
+ 
+   const clearPendingDebounce = useCallback(() => {
+@@ -225,15 +265,28 @@ export function PagedEditor({
+   const refreshFormatState = useCallback(() => {
+     const container = containerRef.current;
+     if (!container || !selectionInsideLetterBody(container)) {
+-      setFormatState((current) => ({
+-        ...current,
+-        bold: false,
+-        italic: false,
+-        underline: false,
+-        unorderedList: false,
+-        orderedList: false,
+-        align: "",
+-      }));
++      if (
++        shouldPreserveFormatStateAfterSelectionLoss(
++          container,
++          savedSelectionRef.current,
++          editorRootRef.current,
++        )
++      ) {
++        return;
++      }
++
++      setFormatState((current) => {
++        const next = {
++          ...current,
++          bold: false,
++          italic: false,
++          underline: false,
++          unorderedList: false,
++          orderedList: false,
++          align: "" as const,
++        };
++        return toolbarFormatStateEquals(current, next) ? current : next;
++      });
+       return;
+     }
+ 
+@@ -247,7 +300,7 @@ export function PagedEditor({
+       : queryCommandState("justifyLeft")
+       ? "left"
+       : "";
+-    setFormatState({
++    const next = {
+       bold: queryCommandState("bold"),
+       italic: queryCommandState("italic"),
+       underline: queryCommandState("underline"),
+@@ -255,7 +308,8 @@ export function PagedEditor({
+       orderedList: queryCommandState("insertOrderedList"),
+       block,
+       align,
+-    });
++    };
++    setFormatState((current) => (toolbarFormatStateEquals(current, next) ? current : next));
+   }, []);
+ 
+   const commitSource = useCallback((nextSource: string, pushHistory = true) => {
+@@ -270,10 +324,10 @@ export function PagedEditor({
+     }
+     sourceHtmlRef.current = normalized;
+     saveToStore(normalized, draft, updateSection);
+-    setDirty(false);
++    setEditorDirty(false);
+     refreshHistoryState();
+     return normalized !== previous;
+-  }, [draft, refreshHistoryState, updateSection]);
++  }, [draft, refreshHistoryState, setEditorDirty, updateSection]);
+ 
+   /* ------------------------------------------------------------------------
+    * Render pipeline — paginate sourceHtmlRef into the container.
+@@ -381,6 +435,7 @@ export function PagedEditor({
+     sourceHtmlRef.current = buildMergedSourceHtml(draft);
+     undoStackRef.current = [];
+     redoStackRef.current = [];
++    setEditorDirty(false);
+     refreshHistoryState();
+     void repaginate(null);
+     return () => {
+@@ -394,7 +449,7 @@ export function PagedEditor({
+     // We want one paginate per draft.id — rebuilding on every render would
+     // wipe the user's keystrokes.
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [draft.id]);
++  }, [draft.id, setEditorDirty]);
+ 
+   useEffect(() => {
+     const onSelectionChange = () => {
+@@ -411,8 +466,7 @@ export function PagedEditor({
+   const flushPendingEdit = useCallback(() => {
+     const container = containerRef.current;
+     if (!container) return;
+-    normalizeRenderedPagedRefs(container);
+-    const cursor = captureCursor(container);
++    const cursor = captureCursorWithRefRecovery(container);
+     commitSource(reconstructSourceHtml(container));
+     void repaginate(cursor);
+   }, [commitSource, draft, repaginate]);
+@@ -426,18 +480,30 @@ export function PagedEditor({
+   }, [flushPendingEdit]);
+ 
+   const afterToolbarMutation = useCallback(() => {
+-    setDirty(true);
++    setEditorDirty(true);
+     refreshFormatState();
+     scheduleFlush();
+-  }, [refreshFormatState, scheduleFlush]);
++  }, [refreshFormatState, scheduleFlush, setEditorDirty]);
+ 
+   const runNativeCommand = useCallback((command: string, value?: string) => {
+     const container = containerRef.current;
+     if (!container) return;
+     restoreRememberedSelection();
+     if (!selectionInsideLetterBody(container)) return;
++    const selectionBeforeCommand = getCurrentLetterSelection(container);
++    const textBookmarkBeforeCommand =
++      selectionBeforeCommand?.collapsed === false ? captureEditableTextSelection(container) : null;
++    const cursorBeforeCommand =
++      selectionBeforeCommand?.collapsed === false ? captureCursorWithRefRecovery(container) : null;
+     focusSelectionLetterBody(container);
+     runEditorCommand(command, value);
++    restoreSelectionAfterCommand(
++      container,
++      command,
++      selectionBeforeCommand,
++      cursorBeforeCommand,
++      textBookmarkBeforeCommand,
++    );
+     rememberSelection();
+     afterToolbarMutation();
+   }, [afterToolbarMutation, rememberSelection, restoreRememberedSelection]);
+@@ -477,10 +543,10 @@ export function PagedEditor({
+ 
+   const onInput = useCallback((event: FormEvent<HTMLDivElement>) => {
+     rememberSelection();
+-    setDirty(true);
++    setEditorDirty(true);
+     if (composingRef.current || isComposingInput(event.nativeEvent)) return;
+     scheduleFlush();
+-  }, [rememberSelection, scheduleFlush]);
++  }, [rememberSelection, scheduleFlush, setEditorDirty]);
+ 
+   const onCompositionStart = useCallback(() => {
+     composingRef.current = true;
+@@ -490,9 +556,9 @@ export function PagedEditor({
+ 
+   const onCompositionEnd = useCallback(() => {
+     composingRef.current = false;
+-    setDirty(true);
++    setEditorDirty(true);
+     scheduleFlush();
+-  }, [scheduleFlush]);
++  }, [scheduleFlush, setEditorDirty]);
+ 
+   const onPaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
+     event.preventDefault();
+@@ -504,20 +570,20 @@ export function PagedEditor({
+ 
+     insertHtmlAtCurrentSelection(containerRef.current, safeHtml);
+     rememberSelection();
+-    setDirty(true);
++    setEditorDirty(true);
+     scheduleFlush();
+-  }, [rememberSelection, scheduleFlush]);
++  }, [rememberSelection, scheduleFlush, setEditorDirty]);
+ 
+   const handleUndo = useCallback(() => {
+     clearPendingDebounce();
++    restoreRememberedSelection();
+     const container = containerRef.current;
+     let cursor: CursorState | null = null;
+     let liveSource = sourceHtmlRef.current;
+     let hasUnsavedDom = false;
+     if (container) {
+-      normalizeRenderedPagedRefs(container);
+-      cursor = captureCursor(container);
+-      if (dirty) {
++      cursor = captureCursorWithRefRecovery(container);
++      if (dirtyRef.current) {
+         liveSource = normalizeSourceHtml(reconstructSourceHtml(container), draft, sourceHtmlRef.current);
+         hasUnsavedDom = liveSource !== sourceHtmlRef.current;
+       }
+@@ -538,13 +604,14 @@ export function PagedEditor({
+ 
+     commitSource(target, false);
+     void repaginate(cursor);
+-  }, [clearPendingDebounce, commitSource, dirty, draft, refreshHistoryState, repaginate]);
++  }, [clearPendingDebounce, commitSource, draft, refreshHistoryState, repaginate, restoreRememberedSelection]);
+ 
+   const handleRedo = useCallback(() => {
+-    if (dirty) return;
++    if (dirtyRef.current) return;
+     clearPendingDebounce();
++    restoreRememberedSelection();
+     const container = containerRef.current;
+-    const cursor = container ? captureCursor(container) : null;
++    const cursor = container ? captureCursorWithRefRecovery(container) : null;
+     const target = redoStackRef.current.pop();
+     if (!target) {
+       refreshHistoryState();
+@@ -553,7 +620,7 @@ export function PagedEditor({
+     undoStackRef.current.push(sourceHtmlRef.current);
+     commitSource(target, false);
+     void repaginate(cursor);
+-  }, [clearPendingDebounce, commitSource, dirty, refreshHistoryState, repaginate]);
++  }, [clearPendingDebounce, commitSource, refreshHistoryState, repaginate, restoreRememberedSelection]);
+ 
+   /* ----------------------------------------------------------------------
+    * Find-in-letter — runs against the live rendered DOM via the CSS
+@@ -726,11 +793,10 @@ export function PagedEditor({
+     clearPendingDebounce();
+     const container = containerRef.current;
+     if (container) {
+-      normalizeRenderedPagedRefs(container);
+       commitSource(reconstructSourceHtml(container));
+     }
+     onDone();
+-  }, [clearPendingDebounce, commitSource, draft, onDone]);
++  }, [clearPendingDebounce, commitSource, onDone]);
+ 
+   const canUndo = dirty || historyState.canUndo;
+   const canRedo = !dirty && historyState.canRedo;
+@@ -755,7 +821,7 @@ export function PagedEditor({
+   }, [error]);
+ 
+   return (
+-    <div className="paged-edit-shell">
++    <div ref={editorRootRef} className="paged-edit-shell">
+       <div className="sticky top-1 z-30 mx-auto mb-3 flex w-fit max-w-full flex-wrap items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 text-[11px] shadow-md">
+         <input
+           ref={imageInputRef}
+@@ -983,6 +1049,7 @@ function NativeToolbarButton({
+       type="button"
+       aria-label={label}
+       title={label}
++      aria-pressed={active || undefined}
+       disabled={disabled}
+       onMouseDown={(event) => event.preventDefault()}
+       onClick={onClick}
+@@ -1068,6 +1135,13 @@ function captureCursor(root: HTMLElement): CursorState | null {
+   return { start, end: end ?? start };
+ }
+ 
++function captureCursorWithRefRecovery(root: HTMLElement): CursorState | null {
++  const cursor = captureCursor(root);
++  if (cursor || !selectionInsideLetterBody(root)) return cursor;
++  normalizeRenderedPagedRefs(root);
++  return captureCursor(root);
++}
++
+ function captureCursorPoint(
+   root: HTMLElement,
+   target: Node,
+@@ -1252,6 +1326,218 @@ function isIgnoredPositionNode(node: Node): boolean {
+   );
+ }
+ 
++function getCurrentLetterSelection(container: HTMLElement): EditableSelection | null {
++  const sel = window.getSelection();
++  if (!sel || sel.rangeCount === 0 || !selectionInsideLetterBody(container)) return null;
++  const range = sel.getRangeAt(0).cloneRange();
++  return {
++    collapsed: range.collapsed,
++    range,
++    text: sel.toString(),
++  };
++}
++
++function restoreSelectionAfterCommand(
++  container: HTMLElement,
++  command: string,
++  previousSelection: EditableSelection | null,
++  previousCursor: CursorState | null,
++  previousTextSelection: EditableTextSelection | null,
++): void {
++  if (!previousSelection || previousSelection.collapsed) return;
++  if (!SELECTION_PRESERVING_COMMANDS.has(command)) return;
++
++  if (restoreSelectionRange(container, previousSelection.range, previousSelection.text)) return;
++  if (restoreCursorSelection(container, previousCursor, previousSelection.text)) return;
++  restoreEditableTextSelection(container, previousTextSelection);
++}
++
++function restoreSelectionRange(
++  container: HTMLElement,
++  range: Range,
++  expectedText: string,
++): boolean {
++  if (!container.contains(range.commonAncestorContainer)) return false;
++
++  try {
++    const sel = window.getSelection();
++    if (!sel) return false;
++    sel.removeAllRanges();
++    sel.addRange(range);
++    return (
++      selectionInsideLetterBody(container) &&
++      !sel.getRangeAt(0).collapsed &&
++      selectionTextMatches(sel.toString(), expectedText)
++    );
++  } catch {
++    return false;
++  }
++}
++
++function restoreCursorSelection(
++  container: HTMLElement,
++  cursor: CursorState | null,
++  expectedText: string,
++): boolean {
++  if (!cursor) return false;
++  restoreCursor(container, cursor);
++  const sel = window.getSelection();
++  return Boolean(
++    sel &&
++      sel.rangeCount > 0 &&
++      !sel.getRangeAt(0).collapsed &&
++      selectionInsideLetterBody(container) &&
++      selectionTextMatches(sel.toString(), expectedText),
++  );
++}
++
++function captureEditableTextSelection(container: HTMLElement): EditableTextSelection | null {
++  const sel = window.getSelection();
++  if (!sel || sel.rangeCount === 0 || !selectionInsideLetterBody(container)) return null;
++
++  const roots = findRenderedSourceRoots(container);
++  const range = sel.getRangeAt(0);
++  const startRoot = closestLetterBody(range.startContainer);
++  const endRoot = closestLetterBody(range.endContainer);
++  if (!startRoot || !endRoot) return null;
++
++  const startRootIndex = roots.indexOf(startRoot);
++  const endRootIndex = roots.indexOf(endRoot);
++  if (startRootIndex === -1 || endRootIndex === -1) return null;
++
++  return {
++    start: {
++      rootIndex: startRootIndex,
++      offset: editableTextOffsetWithin(startRoot, range.startContainer, range.startOffset),
++    },
++    end: {
++      rootIndex: endRootIndex,
++      offset: editableTextOffsetWithin(endRoot, range.endContainer, range.endOffset),
++    },
++    text: sel.toString(),
++  };
++}
++
++function restoreEditableTextSelection(
++  container: HTMLElement,
++  bookmark: EditableTextSelection | null,
++): boolean {
++  if (!bookmark) return false;
++  const roots = findRenderedSourceRoots(container);
++  const startRoot = roots[bookmark.start.rootIndex] ?? null;
++  const endRoot = roots[bookmark.end.rootIndex] ?? null;
++  if (!startRoot || !endRoot) return false;
++
++  const start = pointAtPositionOffset(startRoot, bookmark.start.offset);
++  const end = pointAtPositionOffset(endRoot, bookmark.end.offset);
++  try {
++    startRoot.focus({ preventScroll: true });
++    const range = document.createRange();
++    range.setStart(start.node, start.offset);
++    range.setEnd(end.node, end.offset);
++    const sel = window.getSelection();
++    if (!sel) return false;
++    sel.removeAllRanges();
++    sel.addRange(range);
++    return (
++      selectionInsideLetterBody(container) &&
++      !range.collapsed &&
++      selectionTextMatches(sel.toString(), bookmark.text)
++    );
++  } catch {
++    return false;
++  }
++}
++
++function editableTextOffsetWithin(root: HTMLElement, target: Node, targetOffset: number): number {
++  let total = 0;
++  let found = false;
++
++  const visit = (node: Node): void => {
++    if (found || isIgnoredPositionNode(node)) return;
++    if (node === target) {
++      if (node.nodeType === Node.TEXT_NODE) {
++        total += Math.max(0, Math.min(targetOffset, node.textContent?.length ?? 0));
++      } else {
++        const children = Array.from(node.childNodes).slice(0, targetOffset);
++        total += children.reduce((sum, childNode) => sum + positionLength(childNode), 0);
++      }
++      found = true;
++      return;
++    }
++
++    if (node.nodeType === Node.TEXT_NODE || isAtomicPositionNode(node)) {
++      total += positionLength(node);
++      return;
++    }
++
++    for (const childNode of Array.from(node.childNodes)) visit(childNode);
++  };
++
++  visit(root);
++  return total;
++}
++
++function closestLetterBody(node: Node): HTMLElement | null {
++  const element =
++    node.nodeType === Node.TEXT_NODE
++      ? node.parentElement
++      : node instanceof HTMLElement
++      ? node
++      : null;
++  return element?.closest<HTMLElement>(".letter-body") ?? null;
++}
++
++function selectionTextMatches(actual: string, expected: string): boolean {
++  return normalizeSelectionText(actual) === normalizeSelectionText(expected);
++}
++
++function normalizeSelectionText(text: string): string {
++  return text.replace(/\s+/g, " ").trim();
++}
++
++function shouldPreserveFormatStateAfterSelectionLoss(
++  container: HTMLElement | null,
++  rememberedSelection: Range | null,
++  editorRoot: HTMLElement | null,
++): boolean {
++  if (
++    !container ||
++    !rememberedSelection ||
++    !container.contains(rememberedSelection.commonAncestorContainer)
++  ) {
++    return false;
++  }
++
++  const activeElement = document.activeElement;
++  if (!activeElement || activeElement === document.body) return true;
++  if (editorRoot && activeElement instanceof Node && editorRoot.contains(activeElement)) return true;
++  return !isTextEntryElement(activeElement);
++}
++
++function isTextEntryElement(element: Element): boolean {
++  if (
++    element instanceof HTMLInputElement ||
++    element instanceof HTMLTextAreaElement ||
++    element instanceof HTMLSelectElement
++  ) {
++    return true;
++  }
++  return element instanceof HTMLElement && element.isContentEditable;
++}
++
++function toolbarFormatStateEquals(a: ToolbarFormatState, b: ToolbarFormatState): boolean {
++  return (
++    a.bold === b.bold &&
++    a.italic === b.italic &&
++    a.underline === b.underline &&
++    a.unorderedList === b.unorderedList &&
++    a.orderedList === b.orderedList &&
++    a.block === b.block &&
++    a.align === b.align
++  );
++}
++
+ /* ============================================================================
+  * Source reconstruction — fold the rendered page-contents back into the
+  * source HTML that paginate() consumes. Handles paged.js's mid-block splits
+@@ -1264,8 +1550,9 @@ type RebuildItem =
+   | { kind: "block"; ref: string; first: HTMLElement; innerParts: string[] };
+ 
+ function reconstructSourceHtml(container: HTMLElement): string {
+-  normalizeRenderedPagedRefs(container);
+-  const roots = findRenderedSourceRoots(container);
++  const snapshot = container.cloneNode(true) as HTMLElement;
++  normalizeRenderedPagedRefs(snapshot);
++  const roots = findRenderedSourceRoots(snapshot);
+   const items: RebuildItem[] = [];
+   const blockIndex = new Map<string, number>();
+   const seenAnchors = new Set<string>();
