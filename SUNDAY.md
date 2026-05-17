@@ -84,8 +84,11 @@ honoured.
   bookings. Needs 2-week Adyen comparison FIRST per roadmap.
 - [ ] **AI critique credits** in-app purchase — 97% gross margin per
   roadmap. Needs Stripe wired.
-- [ ] **Branded export footer** ("Drafted with DraftHR · drafthr.io").
+- [x] **Branded export footer** ("Drafted with DraftHR · drafthr.io").
   ~1 hour build. Independent of payment. Calendly-mechanism.
+  *(Shipped 2026-05-18, commit `3438298` — 3-layer toggle (env / plan /
+  user); free tenants see it by default; paid plans auto-suppress when
+  billing ships; one-helper-many-surfaces pattern; 12 new tests.)*
 - [ ] **Employee Plus subscription £99/mo** — multi-month tribunal LTV.
   Needs Stripe subscriptions.
 - [ ] **Case Packs** (Grievance £69 / Settlement £119 / Tribunal Prep £249)
@@ -183,7 +186,8 @@ Tick what we ship today.
 
 ### Aiming to ship today (pick from C, small/one-session column)
 
-- [ ] _(your pick — replace this line)_
+- [x] **Branded export footer** shipped (commit `3438298`) — virality
+  channel turned on; toggle-aware so paid plans auto-suppress later.
 
 ---
 
