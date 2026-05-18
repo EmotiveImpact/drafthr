@@ -951,6 +951,7 @@ function Hero({
       <div className="flex items-center gap-2.5 flex-wrap relative z-[1]">
         <Link
           to={`${prefix}/new`}
+          data-tour="new-letter-cta"
           className="inline-flex items-center gap-2 px-[18px] py-[11px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[14px] shadow-sm hover:-translate-y-px hover:shadow-md transition"
         >
           <PlusCircle className="size-4" />

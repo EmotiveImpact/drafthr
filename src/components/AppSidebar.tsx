@@ -99,7 +99,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
+        <SidebarGroup data-tour="workspace-switcher">
           <SidebarGroupContent>
             <WorkspaceSwitcher />
           </SidebarGroupContent>
@@ -317,8 +317,16 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
   const renderItem = (it: NavItem) => {
     const showNotifBadge = it.label === "Notifications" && actionable > 0 && top;
     const showApprovalsBadge = it.label === "Approvals" && inReviewCount > 0;
+    // Tour anchor keys — stable selectors for the OnboardingTour. Keep in
+    // sync with HR_STEPS in OnboardingTour.tsx.
+    const tourKey =
+      it.label === "Employees"
+        ? "nav-employees"
+        : it.label === "Reports"
+          ? "nav-reports"
+          : undefined;
     return (
-      <SidebarMenuItem key={it.label}>
+      <SidebarMenuItem key={it.label} data-tour={tourKey}>
         {it.href && !it.disabled ? (
           <SidebarMenuButton asChild tooltip={it.tooltip} isActive={loc.pathname === it.href}>
             <Link to={it.href}>
@@ -423,7 +431,7 @@ function NavMatters({ mode }: { mode: Mode }) {
     : null;
 
   return (
-    <SidebarGroup>
+    <SidebarGroup data-tour="nav-matters">
       <SidebarGroupLabel className="flex items-center gap-1">
         <Link
           to="/matters"

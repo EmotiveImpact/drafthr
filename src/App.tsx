@@ -35,6 +35,8 @@ import { JoinInvite } from "@/routes/JoinInvite";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
+import { hasSeenTour } from "@/lib/onboarding";
 
 // Editor pulls in Tiptap + extensions + draft orchestrator (~600 KB gzipped).
 // Lazy-load so the home/landing/wizard routes stay snappy.
@@ -68,7 +70,7 @@ function EditorFallback() {
 
 export function App() {
   const location = useLocation();
-  const { activeTenant, isLoaded } = useAuth();
+  const { activeTenant, isLoaded, user } = useAuth();
   // One-shot migration for existing base64 letterhead/signature → Blob URL.
   // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
   // swaps them out lazily so the dual-write rollout doesn't carry those blobs
@@ -109,8 +111,20 @@ export function App() {
   // its own internal animations (rails, sheet, streaming) and a fade on
   // top of that double-animates and looks busy.
   const skipTransition = location.pathname.startsWith("/editor/");
+  // Onboarding tour gate — only on the first signed-in landing inside the
+  // app (/hr or /me). Skip until the user has a workspace AND a role so the
+  // sidebar anchors actually exist.
+  const onTourSurface =
+    location.pathname.startsWith("/hr") || location.pathname.startsWith("/me");
+  const showTour =
+    isLoaded &&
+    !!user &&
+    !!activeTenant &&
+    onTourSurface &&
+    !hasSeenTour();
   return (
     <Layout>
+      {showTour && <OnboardingTour />}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={skipTransition ? "editor" : location.pathname}
