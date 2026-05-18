@@ -32,6 +32,10 @@ import { Reports } from "@/routes/Reports";
 import { MatterDrillDown } from "@/components/reports/MatterDrillDown";
 import { FailingCheckDrillDown } from "@/components/reports/FailingCheckDrillDown";
 import { SignIn } from "@/routes/SignIn";
+import { SignUp } from "@/routes/SignUp";
+import { ForgotPassword } from "@/routes/ForgotPassword";
+import { ResetPassword } from "@/routes/ResetPassword";
+import { VerifyEmail } from "@/routes/VerifyEmail";
 import { AuthCallback } from "@/routes/AuthCallback";
 import { SignupWorkspace } from "@/routes/SignupWorkspace";
 import { JoinInvite } from "@/routes/JoinInvite";
@@ -203,6 +207,10 @@ export function App() {
         <Route path="/settings/directory-sync" element={<Protected><SettingsDirectorySync /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/sign-in/signup" element={<SignUp />} />
+        <Route path="/sign-in/forgot-password" element={<ForgotPassword />} />
+        <Route path="/sign-in/reset-password" element={<ResetPassword />} />
+        <Route path="/sign-in/verify-email" element={<VerifyEmail />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/signup/workspace" element={<Protected><SignupWorkspace /></Protected>} />
         <Route path="/join/:inviteCode" element={<JoinInvite />} />

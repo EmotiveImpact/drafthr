@@ -35,6 +35,21 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/sign-out.js");
     case "password":
       return import("./_handlers/password.js");
+    case "sign-up":
+      return import("./_handlers/sign-up.js");
+    case "resend-verification":
+      return import("./_handlers/resend-verification.js");
+    case "verify-email":
+      return import("./_handlers/verify-email.js");
+    // Reset is split into two endpoints so the rate-limit buckets and
+    // user-enumeration story can differ — request must be 200-always, but
+    // confirm carries a single-use token and can return real errors.
+    // The dispatcher matches one path segment per case (see segments[2]),
+    // so the paths are flat ("password-reset-request"), not nested.
+    case "password-reset-request":
+      return import("./_handlers/password-reset-request.js");
+    case "password-reset-confirm":
+      return import("./_handlers/password-reset-confirm.js");
     default:
       return null;
   }

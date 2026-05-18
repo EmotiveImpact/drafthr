@@ -225,7 +225,7 @@ export function SignIn() {
                     Password
                   </label>
                   <Link
-                    to="/sign-in/forgot"
+                    to="/sign-in/forgot-password"
                     className="text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
                   >
                     Forgot password?
