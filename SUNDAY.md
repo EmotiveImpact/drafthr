@@ -149,10 +149,22 @@ honoured.
 - [ ] **Fractional DPO retainer** — ~£1.5-3k/mo. Required at UK GDPR scale.
 - [ ] **KMS-backed Ed25519 signing of `manifest.sig`** — full PAdES-B-T
   (TSR embedded in PDF as signed attribute, not side-channeled in headers).
-- [ ] **WorkOS Audit Logs integration** — complementary to our hash chain;
+- [x] **WorkOS Audit Logs integration** — complementary to our hash chain;
   Enterprise asks for both.
-- [ ] **WorkOS Directory Sync / SCIM** — Persona D requirement
+  *(Shipped 2026-05-18 in commit `7816ca1` — fire-and-forget sink
+  after the local transaction commits, env-flagged off
+  (`WORKOS_AUDIT_LOGS_ENABLED`), per-tenant gated via
+  `tenants.workos_org_id`, idempotent via `audit_events.id`. Settings
+  card + test endpoint + backfill CLI. Local hash chain stays source
+  of truth.)*
+- [x] **WorkOS Directory Sync / SCIM** — Persona D requirement
   (Okta / Entra ID auto-provision).
+  *(Shipped 2026-05-18 in commit `7816ca1` — webhook handler with
+  signature verification, idempotent upserts, soft-delete on
+  deprovisioning to preserve audit trail. Admin-only
+  `/settings/directory-sync` surface. Migration adds
+  `users.workos_directory_user_id` + `tenant_members.status`. Needs
+  `WORKOS_WEBHOOK_SECRET` in Vercel env post-merge.)*
 - [ ] **Custom WorkOS domain `auth.drafthr.io`** — 5-min config; cheap
   brand polish; locked-in per Section B.
 
@@ -240,6 +252,22 @@ Tick what we ship today.
 
   225 tests passing on merged tree. One new dep (`react-joyride`).
   Each wave committed atomically against current main.
+- [x] **Wave 2 pair — WorkOS compliance** shipped as 0.13.0
+  (commit `7816ca1`):
+  - WorkOS Directory Sync / SCIM (webhook + admin UI + soft-delete
+    on deprovision)
+  - WorkOS Audit Logs parallel sink (fire-and-forget after local
+    commit, env-gated, per-tenant gated, idempotent)
+
+  293 tests passing on merged tree (+68). Both feature-flagged off
+  by default. Shared `tenants.workos_org_id` column added by the
+  Audit Logs migration; Directory Sync reads it. Landed together
+  because they share the `/api/workos/*` dispatcher and the org-id
+  join key.
+
+  Wave 2C (KMS-backed Ed25519 + PAdES-B-T signing) was dispatched
+  in parallel but is still in flight at the time of the 0.13.0 cut;
+  it will land separately as 0.13.1 or 0.14.0.
 
 ---
 

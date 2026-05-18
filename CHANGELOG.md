@@ -2,6 +2,145 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.13.0 — 2026-05-18
+
+WorkOS compliance pair — Directory Sync (SCIM / Okta / Entra / Google
+Workspace auto-provisioning) and Audit Logs (parallel sink to the local
+hash-chained `audit_events`). Both Enterprise-table-stakes per
+SUNDAY.md Section C. Both feature-flagged off by default; landed
+together because they share `tenants.workos_org_id` and the
+`/api/workos/*` dispatcher.
+
+Net: +3,626 LOC across 27 files (10 handlers, 4 routes/components,
+2 migrations, 2 docs, 9 test files). 225 → 293 tests passing (+68).
+A third Wave 2 agent (KMS-backed Ed25519 + PAdES-B-T signing) is
+still in flight at the time of this release; it lands separately.
+
+### Directory Sync (SCIM)
+
+Auto-provisions DraftHR seats from any WorkOS-connected directory.
+IT registers a webhook in the WorkOS dashboard
+(`POST https://app.drafthr.io/api/workos/directory-webhook`) and
+saves the revealed secret as `WORKOS_WEBHOOK_SECRET`. Every dsync
+event is signature-verified, resolved to a DraftHR tenant via
+`tenants.workos_org_id`, and upserted into `users` + `tenant_members`
+idempotently. Deprovisioning is soft-delete (`status` = `deprovisioned`
++ `deprovisioned_at` timestamp); audit history is never destroyed.
+
+- **Dispatcher**: `api/workos/[action].ts` — single Vercel function
+  for the `/api/workos/*` prefix. Hobby tier 12-function cap-friendly.
+  Routes: `directory-webhook`, `portal-link`, `directory-info`,
+  `audit-logs-test`, `audit-logs-status`.
+- **Webhook handler**: `api/workos/_handlers/directory-webhook.ts`
+  — `workos.webhooks.constructEvent` for signature verification (no
+  hand-rolled HMAC). Handles `dsync.user.created/updated/deleted`,
+  `dsync.group.user_added/removed`; acks `dsync.group.created/updated`
+  for future role mapping; writes `directory.user.*` audit events.
+  Tenant-scoped: writes only to rows for the resolved tenant.
+- **Portal link**: `api/workos/_handlers/portal-link.ts` — admin-gated
+  POST that returns `workos.adminPortal.generateLink({ intent: "dsync",
+  organization })`. Settings UI opens the URL in a new tab.
+- **Directory info**: `api/workos/_handlers/directory-info.ts` —
+  admin-gated GET combining `workos.directorySync.listDirectories` with
+  the tenant's provisioned users from Postgres.
+- **Admin UI**: `src/routes/settings/DirectorySync.tsx` —
+  `/settings/directory-sync`, admin-only. Connection status,
+  directories list, synced-users table (email · name · status · last
+  seen · mapped role), Admin Portal button.
+- **Schema**: `drizzle/migrations/0004_directory_sync.sql` adds
+  `users.workos_directory_user_id` (unique index),
+  `users.workos_directory_id` (index), `tenant_members.status`
+  (default `'active'`), `tenant_members.deprovisioned_at`.
+- **Docs**: `docs/directory-sync.md` — operator guide covering
+  setup, events, role mapping, soft-delete semantics, tenant scoping,
+  and the WorkOS dashboard config required.
+- **26 new tests**: 13 mapper (`api/_utils/directory-sync.test.ts`),
+  9 webhook (`directory-webhook.test.ts`), 4 UI
+  (`DirectorySync.test.tsx`).
+
+### Audit Logs (parallel sink)
+
+Every `audit_events` insert is mirrored fire-and-forget to WorkOS
+Audit Logs after the transaction commits. The local hash chain stays
+the source of truth (proves nothing was deleted); WorkOS is a
+downstream sink so the tenant's SOC team can subscribe a SIEM.
+
+- **Sink**: `src/lib/audit/workos-sink.ts` — `sendToWorkOSAuditLogs`,
+  `mapKindToWorkOSAction`, `shapeMetadata` (50 keys / 40-char keys /
+  500-char values clamp). Off by default
+  (`WORKOS_AUDIT_LOGS_ENABLED=false`); per-tenant gate via
+  `workos_org_id`. Idempotent: `Idempotency-Key` = `audit_events.id`
+  (24h WorkOS dedupe window). Never throws to the caller.
+- **Writer wire-up**: `src/db/audit.ts` — `appendAuditEvent` fires
+  the mirror *after* the local transaction commits, so rolled-back
+  rows never reach WorkOS. Local chain order unchanged.
+- **Test endpoint**: `api/workos/_handlers/audit-logs-test.ts` —
+  admin-only POST that emits `audit.test_event` through
+  `appendAuditEvent` so admins can verify the SIEM pipeline.
+- **Status endpoint**: `api/workos/_handlers/audit-logs-status.ts` —
+  admin-only GET returning `{ enabled, configured, workosOrgId,
+  lastSentAt }`.
+- **Settings card**: `src/components/AuditLogsCard.tsx` — status
+  pill, last-mirror timestamp, Admin Portal link
+  (`intent: "audit_logs"`), "Send test event" button.
+- **Backfill CLI**: `scripts/backfill-workos-audit-logs.ts` — streams
+  historical rows per-tenant, Ctrl-C safe, idempotent on re-run.
+  Usage: `tsx scripts/backfill-workos-audit-logs.ts --since 2026-01-01`.
+- **Schema**: `drizzle/migrations/0003_workos_audit_logs.sql` adds
+  `tenants.workos_org_id` (unique index) +
+  `tenants.workos_audit_logs_last_sent_at`. The `workos_org_id`
+  column is also the join key Directory Sync uses to resolve org →
+  tenant.
+- **Docs**: README "Audit Logs" section with the dual-chain model,
+  field mapping table, toggling instructions, and backfill recipe.
+- **25 new tests**: 16 sink unit (`workos-sink.test.ts`), 4 audit-writer
+  integration (`src/db/audit.test.ts` — DB-conditional), 5 endpoint
+  (`audit-logs-test.test.ts`).
+
+### Coordination — both waves ran as parallel agents
+
+The two agents respected each other's columns: Audit Logs added
+`tenants.workos_org_id` first (migration 0003); Directory Sync read
+that schema and did not duplicate the column (migration 0004). Both
+contributed to the dispatcher and `.env.example` cleanly. The
+`tenants` table now has one join key serving two compliance
+products.
+
+### Commits
+
+- `7816ca1` WorkOS compliance: Directory Sync + Audit Logs (Wave 2 pair)
+
+### Verification
+
+- `npm run lint` — green for all 2A/2B files (one unrelated pre-existing
+  error in the in-flight Wave 2C signing work, scoped to that wave)
+- `npm test -- --run` — 43 files / 293 passed + 5 skipped (DB-conditional)
+
+### Post-merge config required
+
+- **Vercel env**: `WORKOS_WEBHOOK_SECRET` (from WorkOS dashboard,
+  shown once on webhook creation) + `WORKOS_AUDIT_LOGS_ENABLED=true`
+  (when ready to start mirroring)
+- **WorkOS dashboard**: register `https://app.drafthr.io/api/workos/directory-webhook`
+  and subscribe to `dsync.user.created/updated/deleted` +
+  `dsync.group.user_added/removed`
+- **Per enterprise tenant**: `UPDATE tenants SET workos_org_id =
+  'org_xxx' WHERE id = '...'` (no first-class admin UI yet —
+  manual SQL for the first cohort)
+
+### Deferred (caught here so it doesn't get lost)
+
+- WorkOS schema validation for audit logs is intentionally left off
+  in the dashboard for first deployment; register a schema per
+  action via a one-off script after kinds stabilise.
+- `dsync.deleted` (directory-level) is not yet handled — the docs
+  warn this is the one event that doesn't cascade. Future work:
+  cascade-deprovision all members for the deleted directory.
+- `dsync.group.created/updated` are ack'd but not persisted —
+  surface area for future group-based role mapping.
+- No admin UI to set `tenants.workos_org_id`; manual SQL for the
+  first enterprise cohort.
+
 ## 0.12.0 — 2026-05-18
 
 Wave 1 trio — three Persona-D visible wins shipped in parallel.
