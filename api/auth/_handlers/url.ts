@@ -2,9 +2,10 @@
  * Builds the WorkOS authorization URL the SPA redirects to for sign-in.
  *
  * Default provider is "authkit" — the hosted login page. The in-app
- * /sign-in form also calls this endpoint with ?provider=GoogleOAuth or
- * ?provider=MicrosoftOAuth so the "Continue with Google / Microsoft"
- * buttons jump straight to the IdP, skipping the WorkOS-hosted picker.
+ * /sign-in form also calls this endpoint with ?provider=GoogleOAuth,
+ * ?provider=MicrosoftOAuth, or ?provider=LinkedInOAuth so the
+ * "Continue with Google / Microsoft / LinkedIn" buttons jump straight
+ * to the IdP, skipping the WorkOS-hosted picker.
  *
  * We mint the URL server-side so we can also set a short-lived encrypted
  * state cookie — the callback route then verifies the returned state
@@ -23,7 +24,12 @@ export const config = { runtime: "nodejs" };
 // Allowlist of provider strings accepted from the client. Keeps the URL
 // builder from being weaponised into a redirect to an attacker-chosen IdP.
 // Mirrors the WorkOS provider enum we actually wire from the in-app form.
-const ALLOWED_PROVIDERS = new Set(["authkit", "GoogleOAuth", "MicrosoftOAuth"]);
+const ALLOWED_PROVIDERS = new Set([
+  "authkit",
+  "GoogleOAuth",
+  "MicrosoftOAuth",
+  "LinkedInOAuth",
+]);
 
 export async function GET(req: Request): Promise<Response> {
   const limited = rateLimit(req, { name: "auth-url", max: 30, windowMs: 60_000 });
@@ -37,7 +43,11 @@ export async function GET(req: Request): Promise<Response> {
     return jsonError("Unsupported provider", 400);
   }
   // Cast is safe — narrowed by the allowlist above.
-  const provider = requestedProvider as "authkit" | "GoogleOAuth" | "MicrosoftOAuth";
+  const provider = requestedProvider as
+    | "authkit"
+    | "GoogleOAuth"
+    | "MicrosoftOAuth"
+    | "LinkedInOAuth";
 
   try {
     const state = randomBytes(24).toString("base64url");

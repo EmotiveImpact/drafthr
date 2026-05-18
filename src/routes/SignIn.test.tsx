@@ -188,6 +188,29 @@ describe("SignIn", () => {
       expect(assignSpy).toHaveBeenCalledWith("https://api.workos.com/auth?go=google"),
     );
   });
+
+  it("fetches the authorization URL and redirects for LinkedIn sign-in", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ url: "https://api.workos.com/auth?go=linkedin" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/sign-in"]}>
+        <SignIn />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /continue with linkedin/i }));
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
+    expect(fetchSpy.mock.calls[0]![0]).toBe("/api/auth/url?provider=LinkedInOAuth");
+    await waitFor(() =>
+      expect(assignSpy).toHaveBeenCalledWith("https://api.workos.com/auth?go=linkedin"),
+    );
+  });
 });
 
 function LocationProbe() {

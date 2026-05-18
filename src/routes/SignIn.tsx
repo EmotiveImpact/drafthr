@@ -39,7 +39,9 @@ export function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [submitting, setSubmitting] = useState<null | "password" | "google" | "microsoft">(null);
+  const [submitting, setSubmitting] = useState<
+    null | "password" | "google" | "microsoft" | "linkedin"
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
@@ -90,10 +92,18 @@ export function SignIn() {
     }
   };
 
-  const onSocial = async (provider: "GoogleOAuth" | "MicrosoftOAuth") => {
+  const onSocial = async (
+    provider: "GoogleOAuth" | "MicrosoftOAuth" | "LinkedInOAuth",
+  ) => {
     if (submitting) return;
     setError(null);
-    setSubmitting(provider === "GoogleOAuth" ? "google" : "microsoft");
+    setSubmitting(
+      provider === "GoogleOAuth"
+        ? "google"
+        : provider === "MicrosoftOAuth"
+        ? "microsoft"
+        : "linkedin",
+    );
     try {
       const res = await fetch(`/api/auth/url?provider=${provider}`, {
         credentials: "same-origin",
@@ -181,6 +191,12 @@ export function SignIn() {
                 provider="microsoft"
                 onClick={() => void onSocial("MicrosoftOAuth")}
                 busy={submitting === "microsoft"}
+                disabled={isBusy}
+              />
+              <SocialButton
+                provider="linkedin"
+                onClick={() => void onSocial("LinkedInOAuth")}
+                busy={submitting === "linkedin"}
                 disabled={isBusy}
               />
             </div>
@@ -354,12 +370,19 @@ function SocialButton({
   busy,
   disabled,
 }: {
-  provider: "google" | "microsoft";
+  provider: "google" | "microsoft" | "linkedin";
   onClick: () => void;
   busy: boolean;
   disabled: boolean;
 }) {
-  const label = provider === "google" ? "Continue with Google" : "Continue with Microsoft";
+  const label =
+    provider === "google"
+      ? "Continue with Google"
+      : provider === "microsoft"
+      ? "Continue with Microsoft"
+      : "Continue with LinkedIn";
+  const Glyph =
+    provider === "google" ? GoogleGlyph : provider === "microsoft" ? MicrosoftGlyph : LinkedInGlyph;
   return (
     <button
       type="button"
@@ -368,13 +391,7 @@ function SocialButton({
       aria-label={label}
       className="w-full inline-flex items-center justify-center gap-2.5 h-[42px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[13px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
     >
-      {busy ? (
-        <Loader2 className="size-4 animate-spin" aria-hidden />
-      ) : provider === "google" ? (
-        <GoogleGlyph />
-      ) : (
-        <MicrosoftGlyph />
-      )}
+      {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       {label}
     </button>
   );
@@ -414,6 +431,19 @@ function MicrosoftGlyph() {
       <rect x="8.5" y="0" width="7.5" height="7.5" fill="#7FBA00" />
       <rect x="0" y="8.5" width="7.5" height="7.5" fill="#00A4EF" />
       <rect x="8.5" y="8.5" width="7.5" height="7.5" fill="#FFB900" />
+    </svg>
+  );
+}
+
+function LinkedInGlyph() {
+  // LinkedIn "in" mark on the brand blue. Inline, 16px, zero bundle hit.
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden focusable="false">
+      <rect width="24" height="24" rx="3" fill="#0A66C2" />
+      <path
+        fill="#fff"
+        d="M7.06 9.5h2.84v9H7.06v-9Zm1.42-4.04a1.65 1.65 0 1 1 0 3.3 1.65 1.65 0 0 1 0-3.3ZM11.6 9.5h2.72v1.23h.04c.38-.72 1.31-1.48 2.7-1.48 2.88 0 3.41 1.9 3.41 4.36V18.5h-2.84v-4.4c0-1.05-.02-2.4-1.46-2.4-1.47 0-1.7 1.15-1.7 2.33V18.5H11.6v-9Z"
+      />
     </svg>
   );
 }
