@@ -54,6 +54,7 @@ import {
   Send,
   CheckCircle2,
   MessageSquareWarning,
+  Smartphone,
   Undo,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
@@ -73,6 +74,7 @@ import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal"
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
 import { canApprove, canSubmitForReview, canEditDraft } from "@/lib/permissions";
 import { MatterEmployeeChips } from "@/components/editor/MatterEmployeeChips";
+import { MobileShareDialog } from "@/components/editor/MobileShareDialog";
 import { TemplateSourceBanner } from "@/components/editor/TemplateSourceBanner";
 import {
   EvidenceHandoff,
@@ -157,6 +159,9 @@ export function Editor() {
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
+  // "Open on mobile" share dialog — shows the `/m/:draftId` link with
+  // copy / open affordances. Surfaced from the File menu.
+  const [mobileShareOpen, setMobileShareOpen] = useState(false);
   // Approval-workflow modal — null when closed, otherwise drives the
   // submit / approve / request-changes dialog. Same shell, three kinds.
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
@@ -698,6 +703,13 @@ export function Editor() {
                       </DropdownMenuItem>
                     </>
                   )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setMobileShareOpen(true)}
+                    data-testid="open-on-mobile-menu-item"
+                  >
+                    <Smartphone className="size-4 mr-2" /> Open on mobile…
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => nav("/settings")}>
                     <Settings2 className="size-4 mr-2" /> Settings
@@ -1973,6 +1985,14 @@ export function Editor() {
         draft={draft}
         open={saveAsTemplateOpen}
         onOpenChange={setSaveAsTemplateOpen}
+      />
+
+      {/* "Open on mobile" — surfaces the /m/:draftId link so the HR
+       * director can pick up reading on a phone. Pure link UX (no QR). */}
+      <MobileShareDialog
+        open={mobileShareOpen}
+        onOpenChange={setMobileShareOpen}
+        draftId={draft.id}
       />
 
       {/* Approval-workflow dialog — three kinds (submit / approve / request

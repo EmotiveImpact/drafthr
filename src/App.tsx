@@ -58,6 +58,13 @@ const ConsultantsIndex = lazy(() =>
   import("@/routes/ConsultantsIndex").then((m) => ({ default: m.ConsultantsIndex }))
 );
 
+// Mobile read-only view — `/m/:draftId`. Chromeless, scrollable, no editing.
+// Lazy-loaded so phone users don't pay for the editor bundle when they just
+// want to read.
+const MobileReadView = lazy(() =>
+  import("@/routes/MobileReadView").then((m) => ({ default: m.MobileReadView }))
+);
+
 function EditorFallback() {
   return (
     <div className="flex flex-col flex-1 min-h-0 p-6 gap-3">
@@ -200,6 +207,20 @@ export function App() {
             <Protected>
               <Suspense fallback={<EditorFallback />}>
                 <ConsultantsIndex />
+              </Suspense>
+            </Protected>
+          }
+        />
+        {/* Mobile read-only view. Stays inside the auth tree — Protected
+         * gates it the same way /editor/:draftId is gated. The Layout
+         * detects "/m/" as chromeless so the sidebar / topbar don't
+         * render. */}
+        <Route
+          path="/m/:draftId"
+          element={
+            <Protected>
+              <Suspense fallback={<EditorFallback />}>
+                <MobileReadView />
               </Suspense>
             </Protected>
           }

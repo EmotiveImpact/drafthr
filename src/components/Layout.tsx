@@ -20,7 +20,15 @@ import { Onboarding } from "@/components/Onboarding";
  * user is fully onboarded, RootRedirect redirects to /hr or /me which
  * fall through to the chrome path below. */
 const CHROMELESS_EXACT = ["/", "/pick-role"];
-const CHROMELESS_PREFIXES = ["/sign-in", "/auth/callback", "/signup/workspace", "/join/"];
+const CHROMELESS_PREFIXES = [
+  "/sign-in",
+  "/auth/callback",
+  "/signup/workspace",
+  "/join/",
+  // Mobile read-only view: full-bleed letter, no sidebar / topbar / chrome.
+  // Auth gate still applies (see Protected wrapper in App.tsx).
+  "/m/",
+];
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();

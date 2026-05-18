@@ -80,7 +80,17 @@ export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
   return await clientSidePdfBlob(body, filename);
 }
 
-function letterBodyHtml(draft: Draft): string {
+/**
+ * Render the letter body as a single HTML string. Used by:
+ *  - PDF export (server + client fallback)
+ *  - DOCX export
+ *  - The mobile read-only view (`/m/:draftId`)
+ *
+ * Output is sanitised (sanitizeLetterHtmlForExport per section + sanitizeLetterHtml
+ * for the disclaimer) and stitched into one HTML blob; consumers wrap it
+ * in their own layout (A4 page for PDF, scrolling column for mobile).
+ */
+export function letterBodyHtml(draft: Draft): string {
   const letterhead = letterheadHtml(draft);
   const signature = signatureHtml(draft);
   const evidence = draft.evidence ?? [];
