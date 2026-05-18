@@ -14,6 +14,7 @@
  */
 import { toast } from "sonner";
 import type { Draft } from "./letters/types";
+import { serverUuidOrNull, toServerUuid } from "./remote-ids";
 
 const DEBOUNCE_MS = 400;
 const ENABLED = readFlag();
@@ -158,7 +159,7 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
       method: "DELETE",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ id: draftId }),
+      body: JSON.stringify({ id: toServerUuid(draftId) }),
     });
     if (res.ok) {
       consecutiveDeleteFailures = 0;
@@ -180,16 +181,16 @@ function readFlag(): boolean {
 
 function toServerPayload(draft: Draft) {
   return {
-    id: draft.id,
+    id: toServerUuid(draft.id),
     clientRevision: draft.updatedAt,
     letterType: draft.letterType,
     mode: draft.mode,
     title: draft.title ?? null,
     jurisdiction: draft.context?.jurisdiction ?? null,
-    matterId: draft.matterId ?? null,
+    matterId: serverUuidOrNull(draft.matterId),
     reviewStatus: draft.reviewStatus ?? "draft",
     isTemplateSource: Boolean(draft.isTemplateSource),
-    templateSourceId: draft.templateSourceId ?? null,
+    templateSourceId: serverUuidOrNull(draft.templateSourceId),
     context: draft.context as Record<string, unknown>,
     employer: draft.employer as unknown as Record<string, unknown>,
     employee: draft.employee as unknown as Record<string, unknown>,

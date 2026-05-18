@@ -93,9 +93,29 @@ describe("dual-write enqueueSync", () => {
     expect(url).toBe("/api/store/drafts");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
-    expect(body.id).toBe("draft_1");
+    expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(body.id).not.toBe("draft_1");
     expect(body.clientRevision).toBe(draft.updatedAt);
     expect(body.sections).toHaveLength(1);
+  });
+
+  it("does not send local-only matter or template ids to uuid-backed references", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    const draft = {
+      ...makeDraft("draft_with_refs"),
+      matterId: "matter_local_1",
+      templateSourceId: "tpl_local_1",
+    };
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    await mod.syncDraft("draft_with_refs");
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.matterId).toBeNull();
+    expect(body.templateSourceId).toBeNull();
   });
 
   it("is a no-op when the flag is off", async () => {
@@ -162,6 +182,9 @@ describe("dual-write enqueueSync", () => {
     await mod.deleteDraftRemotely("delete_5");
 
     expect(warn).toHaveBeenCalledTimes(5);
+    const deleteBody = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(deleteBody.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(deleteBody.id).not.toBe("delete_1");
     expect(toast.error).toHaveBeenCalledTimes(1);
   });
 });
