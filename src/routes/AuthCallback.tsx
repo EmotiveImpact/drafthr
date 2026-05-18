@@ -52,10 +52,23 @@ export function AuthCallback() {
           /* private mode etc */
         }
 
-        // Decide where to go: explicit ?redirect= wins, else pending invite
-        // sends them to /signup/workspace, else server-side tenant lookup
-        // resolves whether they need onboarding.
-        const redirect = safeInternalRedirect(params.get("redirect"));
+        // The custom /sign-in page stashes the post-auth target for the
+        // social-OAuth path (Google / Microsoft) because that path
+        // round-trips through the IdP and loses the URL query string.
+        // Consume + clear so a later sign-in doesn't reuse a stale value.
+        let stashedRedirect: string | null = null;
+        try {
+          stashedRedirect = sessionStorage.getItem("drafthr_post_signin_redirect");
+          if (stashedRedirect) sessionStorage.removeItem("drafthr_post_signin_redirect");
+        } catch {
+          /* private mode etc */
+        }
+
+        // Decide where to go: explicit ?redirect= wins, then the stashed
+        // post-sign-in redirect, then pending invite, else server-side
+        // tenant lookup resolves whether they need onboarding.
+        const redirect =
+          safeInternalRedirect(params.get("redirect")) ?? safeInternalRedirect(stashedRedirect);
         if (redirect) {
           navigate(redirect, { replace: true });
         } else if (pendingInvite) {

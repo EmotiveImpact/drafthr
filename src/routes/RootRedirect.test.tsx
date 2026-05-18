@@ -51,9 +51,7 @@ describe("RootRedirect", () => {
     };
   });
 
-  it("falls through to the sign-in route when automatic sign-in cannot start", async () => {
-    authMock.value.signIn = vi.fn().mockRejectedValue(new Error("No auth endpoint"));
-
+  it("redirects signed-out users straight to /sign-in", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <Routes>
@@ -63,8 +61,13 @@ describe("RootRedirect", () => {
       </MemoryRouter>,
     );
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/sign-in"));
-    expect(authMock.value.signIn).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/sign-in"),
+    );
+    // The previous implementation kicked signIn() in a useEffect; the
+    // new contract is a router-level <Navigate> so the form page can
+    // mount instantly without a fetch.
+    expect(authMock.value.signIn).not.toHaveBeenCalled();
   });
 
   it("routes by profile role when auth is disabled", async () => {

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Box, Flex } from "@radix-ui/themes";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
@@ -11,9 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
  *
  * State machine:
  *   loading                    → centered skeleton
- *   signed out                 → auto-redirect to WorkOS sign-in (no
- *                                marketing card — app.drafthr.io is the
- *                                APP, marketing lives at drafthr.io)
+ *   signed out                 → redirect to the in-app /sign-in page
+ *                                (DraftHR-branded form; no marketing
+ *                                card — app.drafthr.io is the APP,
+ *                                marketing lives at drafthr.io)
  *   signed in, no tenant       → /signup/workspace (create / join)
  *   signed in, no role         → ModePicker (one-time role choice)
  *   signed in, fully onboarded → /hr or /me based on stored role
@@ -33,10 +33,12 @@ export function RootRedirect() {
 
   if (!isLoaded) return <CenteredLoadingScreen />;
 
-  // 1. Not signed in → bounce to WorkOS hosted login. No marketing card —
-  //    we're an app, not a landing page. drafthr.io is where marketing
-  //    lives (when it exists); app.drafthr.io is the app.
-  if (!user) return <AutoSignIn />;
+  // 1. Not signed in → bounce to the in-app /sign-in page. The page
+  //    owns the branded form + "Continue with Google / Microsoft"
+  //    affordances; this just routes the user there. We deliberately
+  //    use <Navigate> (router-level) rather than calling signIn() in an
+  //    effect, so there's no flash of the prior state's UI.
+  if (!user) return <Navigate to="/sign-in" replace />;
 
   // 2. Signed in but no tenant → workspace setup
   if (!activeTenant) return <Navigate to="/signup/workspace" replace />;
@@ -58,24 +60,4 @@ function CenteredLoadingScreen() {
       </Flex>
     </Box>
   );
-}
-
-/** Fires signIn() once on mount — kicks the WorkOS-hosted-login redirect.
- * Shows the same loading skeleton meanwhile so there's no visual jolt. */
-function AutoSignIn() {
-  const { signIn } = useAuth();
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    signIn().catch(() => {
-      if (!cancelled) setFailed(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [signIn]);
-
-  if (failed) return <Navigate to="/sign-in" replace />;
-  return <CenteredLoadingScreen />;
 }

@@ -46,6 +46,11 @@ export type AuthContextValue = {
   /** True when the user has joined at least one tenant (active or not). */
   hasAnyTenant: boolean;
   isLoaded: boolean;
+  /**
+   * Navigates the browser to the in-app /sign-in page. The page itself
+   * owns the branded form + the "Continue with Google / Microsoft"
+   * affordances; this just kicks the user there. See src/routes/SignIn.tsx.
+   */
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
   /** Re-fetches /api/auth/session. Useful after the callback completes. */
@@ -138,13 +143,16 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const signIn = useCallback(async () => {
-    const res = await fetch("/api/auth/url", {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error("Failed to start sign-in");
-    const { url } = (await res.json()) as { url: string };
-    window.location.assign(url);
+    // Tier-2 sign-in: keep the user on our origin and let /sign-in own
+    // the form + branding. The legacy hosted-page path (POST-fetching
+    // /api/auth/url) still works and is reachable from /sign-in for
+    // operators who want to fall back to the WorkOS-hosted experience.
+    //
+    // We deliberately use window.location.assign instead of useNavigate
+    // so callers in non-router contexts (e.g. RootRedirect's effect, or
+    // a signOut→signIn chain) still work without depending on the
+    // router being in scope.
+    window.location.assign("/sign-in");
   }, []);
 
   const signOut = useCallback(async () => {

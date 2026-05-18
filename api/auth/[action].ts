@@ -33,6 +33,8 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/session.js");
     case "sign-out":
       return import("./_handlers/sign-out.js");
+    case "password":
+      return import("./_handlers/password.js");
     default:
       return null;
   }
