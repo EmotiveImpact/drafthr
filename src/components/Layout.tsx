@@ -28,6 +28,12 @@ const CHROMELESS_PREFIXES = [
   // Mobile read-only view: full-bleed letter, no sidebar / topbar / chrome.
   // Auth gate still applies (see Protected wrapper in App.tsx).
   "/m/",
+  // Public legal pages — accessible without sign-in, must not show the
+  // signed-in app shell. The pages themselves provide their own minimal
+  // wordmark + back-to-sign-in chrome.
+  "/privacy",
+  "/terms",
+  "/legal",
 ];
 
 export function Layout({ children }: { children: ReactNode }) {

@@ -1,4 +1,5 @@
 import { Box, Card, Heading, Text } from "@radix-ui/themes";
+import { Link } from "react-router-dom";
 import { todayDateOnly } from "@/lib/date-only";
 
 /**
@@ -6,11 +7,36 @@ import { todayDateOnly } from "@/lib/date-only";
  * below is a starting template — the operator must fill in the data-controller
  * details, retention specifics, and sub-processor list, and have it reviewed
  * by counsel before going live.
+ *
+ * Rendered chromeless (see CHROMELESS_PREFIXES in Layout.tsx) so the signed-in
+ * app shell doesn't leak around a publicly-linkable legal page. This component
+ * therefore provides its own minimal header + footer so the page isn't bare.
  */
 export function Privacy() {
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <Heading size="7" mb="2">Privacy Policy</Heading>
+    <div className="min-h-screen flex flex-col bg-[var(--ds-canvas)]">
+      <header className="border-b border-[var(--ds-line)] bg-[var(--ds-surface)]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <Link
+            to="/"
+            className="flex items-center gap-2 text-[var(--ds-ink)] hover:opacity-80 transition-opacity"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded bg-[var(--ds-ink)] text-[var(--ds-surface)] text-sm font-bold">
+              D
+            </span>
+            <span className="text-sm font-semibold tracking-tight">DraftHR</span>
+          </Link>
+          <Link
+            to="/sign-in"
+            className="text-xs font-medium text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition-colors"
+          >
+            Sign in →
+          </Link>
+        </div>
+      </header>
+
+      <Box className="max-w-5xl w-full mx-auto px-4 py-6 sm:px-6 sm:py-8 flex-1">
+        <Heading size="7" mb="2">Privacy Policy</Heading>
       <Text size="2" color="gray" mb="6" as="p">
         Effective date: <Text weight="medium" highContrast>{todayDateOnly()}</Text>. This policy
         explains how the DRAFTHR platform collects, processes, and stores
@@ -112,6 +138,16 @@ export function Privacy() {
           </p>
         </Box>
       </Card>
-    </Box>
+      </Box>
+
+      <footer className="border-t border-[var(--ds-line)] bg-[var(--ds-surface)] mt-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between text-xs text-[var(--ds-muted)]">
+          <span>© DraftHR</span>
+          <Link to="/sign-in" className="hover:text-[var(--ds-ink)] transition-colors">
+            Back to sign in
+          </Link>
+        </div>
+      </footer>
+    </div>
   );
 }
