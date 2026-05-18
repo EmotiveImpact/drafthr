@@ -17,5 +17,10 @@
     },
     "types": ["node"]
   },
-  "include": ["**/*.ts", "../src/db/**/*.ts", "../src/lib/safe-data-url.ts"]
+  "include": [
+    "**/*.ts",
+    "../src/db/**/*.ts",
+    "../src/lib/safe-data-url.ts",
+    "../src/lib/sign/**/*.ts"
+  ]
 }

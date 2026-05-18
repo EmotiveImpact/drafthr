@@ -107,6 +107,9 @@
     "vite": "^6.1.1",
     "vitest": "^4.1.5"
   },
+  "optionalDependencies": {
+    "@aws-sdk/client-kms": "^3.700.0"
+  },
   "overrides": {
     "@esbuild-kit/core-utils": {
       "esbuild": "^0.25.12"

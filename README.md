@@ -33,6 +33,7 @@ Two modes, two product surfaces:
 - **Letterhead + signature image uploads** — Vercel Blob-backed when configured, with data-URL fallback for local development. Uploads are same-origin/rate-limited, production-session guarded, and restricted to PNG/JPEG/WEBP/GIF byte signatures.
 - **Export** — PDF (hardened server Puppeteer with client `html2canvas` + `jspdf` fallback), DOCX (in-repo OOXML writer), and a ZIP export pack bundling the letter, evidence, manifest, audit JSON, timeline, and review checklist. High-risk letter types gate behind a counsel-review attestation dialog.
 - **Security posture** — production fails closed without WorkOS auth unless `VITE_ALLOW_PUBLIC_APP=true` is explicitly set; API routes enforce JSON/size/origin/rate-limit/session guards; rendered HTML is sanitized; embedded images are restricted to PNG/JPEG/WEBP/GIF.
+- **Cryptographic signing** — export-pack manifests are signed Ed25519 (AWS KMS-backed in production via `SIGNING_KMS_KEY_ID`, in-process Node fallback in dev) and RFC 3161 timestamped (FreeTSA) into a PAdES-B-T-style CMS that ships as `manifest.sig` inside the export ZIP. Verifier supports the new scheme + the legacy header-side TSR for back-compat. Full details + KMS provisioning steps in [`docs/signing.md`](docs/signing.md).
 - **Cmd+K search** — indexes drafts, letter catalog, section content (with snippets), comments, and route shortcuts.
 
 ## Tech

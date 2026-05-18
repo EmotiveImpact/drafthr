@@ -25,6 +25,7 @@
     "server/**/*.ts",
     "api/**/*.ts",
     "src/db/**/*.ts",
+    "src/lib/sign/**/*.ts",
     "scripts/**/*.ts"
   ]
 }

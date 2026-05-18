@@ -23,5 +23,5 @@
     }
   },
   "include": ["src"],
-  "exclude": ["src/db"]
+  "exclude": ["src/db", "src/lib/sign"]
 }
