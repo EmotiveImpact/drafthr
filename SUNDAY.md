@@ -275,6 +275,29 @@ Tick what we ship today.
   Audit Logs migration; Directory Sync reads it. Landed together
   because they share the `/api/workos/*` dispatcher and the org-id
   join key.
+- [x] **Wave 3 — Auth UX pair (bug fix + custom sign-in)** shipped as
+  0.15.0 (commits `e3b5903` + `5513551`):
+  - Self-heal session handler — returning users locked out by
+    `is_active_tenant=false` on every row are unbounced on next page
+    load. Deterministic election + transaction-persisted flip.
+    Diagnostic script `scripts/diagnose-session.ts` for ops triage.
+  - Custom DraftHR-branded `/sign-in` page (headless, in-app).
+    Replaces the `*.authkit.app` redirect. WorkOS still owns
+    sessions / passwords / MFA / SSO / audit; we own the visual
+    layer. New `/api/auth/password` endpoint mints same iron-session
+    cookie as OAuth callback. Social buttons go via existing OAuth
+    callback with `provider=GoogleOAuth|MicrosoftOAuth`.
+
+  303 tests passing. No new deps (`@workos-inc/node` already had
+  `authenticateWithPassword`). Architecture went headless (Tier 3)
+  rather than via `@workos-inc/authkit-react` — that SDK's
+  `useAuth().signIn()` redirects to the hosted page, defeating the
+  whole point. Headless gives 100% brand control on our origin.
+
+  **Known unfinished**: `/sign-in/forgot-password` + `/sign-in/signup`
+  links exist in the UI but the destination pages don't yet exist
+  (fall through React Router catch-all → `/sign-in`). Next wave
+  needs to build native forgot-password + sign-up with Resend email.
 - [x] **Wave 2C — KMS-backed Ed25519 + PAdES-B-T-style signing** shipped
   as 0.14.0 (commit `0d1531e`):
   - AWS KMS signer (no env-var private keys in production), local

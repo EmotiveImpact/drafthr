@@ -2,6 +2,156 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.15.0 — 2026-05-18
+
+Auth UX wave — fixes the "returning user gets bounced to onboarding"
+bug and replaces the `*.authkit.app` redirect with a custom
+DraftHR-branded sign-in page at `/sign-in`.
+
+### Onboarding-loop bug (auto-heal)
+
+Returning users were sometimes hitting `/signup/workspace` despite
+already being onboarded. Root cause in `api/auth/_handlers/session.ts`:
+the handler only returned `activeTenant` when at least one
+`tenant_members` row had `is_active_tenant=true`. That flag can
+legitimately land false on every row of a user through:
+
+- Directory Sync `dsync.user.deactivated` flipping the flag (the
+  matching reprovision path only restores `status='active'` +
+  `deprovisioned_at=null`, never flips the flag back)
+- A partially-committed `workspace/switch` (transaction first sets
+  all rows false, then one true — a crash between leaves all false)
+- Operational SQL that toggled the flag off and was never restored
+
+**Fix**: when memberships exist but no row is flagged active,
+deterministically elect one (most-recent `joinedAt`, ties broken by
+`tenant_id`), persist the flip in a transaction so the
+"exactly one active row per user" invariant holds, and return it.
+Rows with `status='deprovisioned'` are excluded from both the
+auto-election and `hasAnyTenant` — soft-deleted seats never
+resurrect. Persist is fire-and-forget; a Postgres write hiccup never
+breaks the session read.
+
+**Safety**: only existing memberships are ever elected. The fix never
+grants access to a tenant the user isn't already in.
+
+**Self-healing**: returning users locked out by this bug are unbounced
+on their next page load. No manual SQL required.
+
+Includes:
+- `tests/api/auth/session.test.ts` — 6 tests covering happy path,
+  regression #onboarding-bounce, deprovisioned exclusion,
+  zero-memberships, no-session, deterministic tenant_id tiebreaker
+- `scripts/diagnose-session.ts` — read-only diagnostic. Dumps
+  users / tenant_members / tenants rows for a given email or id,
+  prints the verdict + restore SQL.
+
+Commit: `e3b5903`.
+
+### Custom branded `/sign-in` page (headless, in-app)
+
+Replaces the redirect to `*.authkit.app` with a DraftHR-branded
+sign-in page hosted at `/sign-in` inside our own app. WorkOS still
+owns sessions, password hashing, MFA, SSO, and audit — we own only
+the visual layer.
+
+Architecture chosen: **headless** (not `@workos-inc/authkit-react`).
+That SDK ships only `<AuthKitProvider>` + `useAuth()`;
+`useAuth().signIn()` redirects to the WorkOS-hosted page — the
+exact behavior we're trying to replace. Adopting it would have
+changed nothing user-facing.
+
+The headless approach:
+- Custom React form on our origin (email/password + Google +
+  Microsoft buttons, show/hide password, server-error surface,
+  redirect-param handling, light theme, design tokens, mobile
+  responsive)
+- New server handler `/api/auth/password` calls
+  `workos.userManagement.authenticateWithPassword` and mints the
+  same iron-session cookie shape the existing `/api/auth/callback`
+  produces. Rate-limited 10/min/IP; auth errors collapse to a
+  single user-safe message (no user-enumeration leaks)
+- Social path: extended `/api/auth/url` to accept
+  `?provider=GoogleOAuth|MicrosoftOAuth` (allowlisted). Post-IdP
+  round-trip lands on the existing `/auth/callback` unchanged
+- iron-session cookie identical across both paths — backend is one
+  source of truth
+
+Files:
+- New: `api/auth/_handlers/password.ts` — password authentication
+  endpoint
+- New: `src/lib/auth/AuthProvider.test.tsx` — locks in the new
+  `signIn()` contract
+- `src/routes/SignIn.tsx` — replaced redirect-only placeholder with
+  the full branded form
+- `src/lib/auth/AuthProvider.tsx` — `signIn()` now navigates to
+  `/sign-in` instead of fetching `/api/auth/url`
+- `src/routes/RootRedirect.tsx` — signed-out users
+  `<Navigate to="/sign-in" replace />` (router-level) instead of an
+  effect that called `signIn()`; removed obsolete `AutoSignIn`
+- `src/routes/AuthCallback.tsx` — consumes
+  `sessionStorage["drafthr_post_signin_redirect"]` (set by the
+  social-OAuth path) so the post-IdP bounce honors the original
+  redirect
+- `api/auth/_handlers/url.ts` — accepts `?provider=` allowlist so
+  in-app buttons can skip the WorkOS-hosted picker; defaults to the
+  `authkit` provider
+- `api/auth/[action].ts` — dispatches `/api/auth/password` to the
+  new handler
+
+Legacy paths preserved:
+- `/api/auth/url` (no provider, or `provider=authkit`) still returns
+  the WorkOS-hosted login URL — useful as fallback / incident escape
+- `/api/auth/callback` unchanged; handles both password-grant cookie
+  (new path) and OAuth-code grant (social path + legacy hosted)
+- Existing WorkOS magic-link / password-reset emails keep working
+- `AUTH_ENABLED=false` dev mode preserved
+- `AUTH_MISCONFIGURED` production fallback unchanged
+
+No new deps — `@workos-inc/node` (^9.3.0) already had
+`authenticateWithPassword`.
+
+Commit: `5513551`.
+
+### Post-merge WorkOS dashboard config
+
+1. Confirm **Google + Microsoft social connections are enabled** for
+   the DraftHR environment. Without them, in-app social buttons
+   return `connection_not_configured`. Canonical docs:
+   https://workos.com/docs/sso/social-login
+2. Existing `WORKOS_REDIRECT_URI` / `VITE_WORKOS_REDIRECT_URI`
+   registration stays correct as-is — the new flow still bounces
+   through `/auth/callback` for the social path; the password path
+   doesn't redirect at all
+
+### Known unfinished
+
+- `/sign-in/forgot-password` + `/sign-in/signup` links exist in the
+  UI but the destination pages don't yet. They fall through React
+  Router catch-all → `/sign-in` (non-broken but dead-end UX). Next
+  wave: native forgot-password + sign-up pages with their own
+  server handlers + Resend email delivery
+- The Directory Sync reprovision path at
+  `api/workos/_handlers/directory-webhook.ts` should also restore
+  `is_active_tenant` when the user has no other active row
+  (follow-up flagged in commit `e3b5903`; the session auto-heal
+  papers over it for now)
+- `.env.local.backup-*` files are NOT covered by `.gitignore`
+  (only `.env.local` and `.env.*.local` are). Recommend adding
+  `.env.local.backup*` + `.env.backup*` to `.gitignore`
+
+### Verification
+
+- `npm run lint` — pass
+- `npx tsc --noEmit` — pass
+- `npm test -- --run` — 45 files / 303 passed / 5 skipped
+- `npm run build` — Vite production build succeeds
+
+### Commits
+
+- `e3b5903` Auth: self-heal session when no tenant_members row is flagged active
+- `5513551` Auth: custom branded /sign-in page (in-app, headless)
+
 ## 0.14.0 — 2026-05-18
 
 KMS-backed Ed25519 signing + PAdES-B-T-**style** CMS for export-pack
