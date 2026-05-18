@@ -38,6 +38,11 @@ import { effectiveRiskBand } from "@/lib/matters/risk";
 import { draftsInMatter } from "@/lib/matters";
 import { briefTitleFor } from "@/lib/letters/display";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import {
+  HEALTH_CHECKS,
+  failingCountForCheck,
+  type HealthCheck as ReportsHealthCheck,
+} from "@/lib/reports/check-predicates";
 
 /* ============================================================================
  * /reports — HR Director's signal panel.
@@ -290,6 +295,8 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
         </div>
       </div>
 
+      <FailingChecksList drafts={drafts} />
+
       {topFailing.length > 0 && (
         <div className="mt-5 pt-5 border-t border-[var(--ds-line-2)]">
           <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5 mb-2.5">
@@ -423,6 +430,83 @@ function sevRank(c: HealthCheck): number {
   if (c.severity === "fail") return 1;
   if (c.severity === "warn" && c.dimension === "compliance") return 2;
   return 3;
+}
+
+/* ─── Failing-check roll-up ───────────────────────────────────────────── */
+
+/**
+ * Workspace-level roll-up of HEALTH_CHECKS — one row per check, with the
+ * count of letters failing it. Each row is a `<button>` that drills into
+ * the failing-check route. Shared HEALTH_CHECKS list keeps the count here
+ * and the drill-down list in lockstep.
+ *
+ * Only renders rows with ≥1 failing letter — a tidy workspace shouldn't
+ * surface noise.
+ */
+function FailingChecksList({ drafts }: { drafts: Draft[] }) {
+  const nav = useNavigate();
+  const rows = useMemo(() => {
+    return HEALTH_CHECKS
+      .map((c) => ({ check: c, count: failingCountForCheck(drafts, c.id) }))
+      .filter((r) => r.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [drafts]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mt-5 pt-5 border-t border-[var(--ds-line-2)]">
+      <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5 mb-2.5">
+        <AlertTriangle className="size-3.5" />
+        Failing checks
+      </h4>
+      <ul className="m-0 p-0 list-none">
+        {rows.map(({ check, count }) => (
+          <FailingCheckRow
+            key={check.id}
+            check={check}
+            count={count}
+            onClick={() => nav(`/reports/checks/${check.id}`)}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function FailingCheckRow({
+  check,
+  count,
+  onClick,
+}: {
+  check: ReportsHealthCheck;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        aria-label={`${count} letter${count === 1 ? "" : "s"} failing ${check.label} — open drill-down`}
+        onClick={onClick}
+        className="w-full text-left flex items-start gap-3 py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-line-2)]/40 -mx-2 px-2 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
+      >
+        <span
+          aria-hidden
+          className="mt-1 size-1.5 rounded-full shrink-0 bg-[var(--ds-red-fg)]"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-[13px] font-semibold text-[var(--ds-ink)] leading-snug truncate">
+            {count} letter{count === 1 ? "" : "s"} · {check.label}
+          </div>
+          <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
+            {check.description}
+          </div>
+        </div>
+        <ArrowRight className="size-3 text-[var(--ds-muted)] shrink-0 mt-1" />
+      </button>
+    </li>
+  );
 }
 
 /* ─── Mini ring ───────────────────────────────────────────────────────── */
@@ -565,8 +649,9 @@ function RiskExposureCard({
                     <button
                       key={m.id}
                       type="button"
-                      onClick={() => nav(`/matters/${m.id}`)}
-                      className="text-left rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-1.5 hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-line-2)]/40 transition"
+                      aria-label={`Open ${m.name} drill-down`}
+                      onClick={() => nav(`/reports/matters/${m.id}`)}
+                      className="text-left rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-1.5 hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-line-2)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
                     >
                       <div className="text-[12px] font-semibold text-[var(--ds-ink)] truncate leading-snug">
                         {m.name}

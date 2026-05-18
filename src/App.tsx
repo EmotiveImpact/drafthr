@@ -28,6 +28,8 @@ import { EmployeeDetail } from "@/routes/EmployeeDetail";
 import BulkOperations from "@/routes/BulkOperations";
 import { Approvals } from "@/routes/Approvals";
 import { Reports } from "@/routes/Reports";
+import { MatterDrillDown } from "@/components/reports/MatterDrillDown";
+import { FailingCheckDrillDown } from "@/components/reports/FailingCheckDrillDown";
 import { SignIn } from "@/routes/SignIn";
 import { AuthCallback } from "@/routes/AuthCallback";
 import { SignupWorkspace } from "@/routes/SignupWorkspace";
@@ -189,6 +191,8 @@ export function App() {
         <Route path="/bulk" element={<Protected><BulkOperations /></Protected>} />
         <Route path="/approvals" element={<Protected><Approvals /></Protected>} />
         <Route path="/reports" element={<Protected><Reports /></Protected>} />
+        <Route path="/reports/matters/:matterId" element={<Protected><MatterDrillDown /></Protected>} />
+        <Route path="/reports/checks/:checkId" element={<Protected><FailingCheckDrillDown /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />
