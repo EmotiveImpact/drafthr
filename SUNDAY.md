@@ -147,8 +147,19 @@ honoured.
 - [ ] **Drata SOC 2 monitoring** — ~£5-10k/yr. First Enterprise prospect
   will ask.
 - [ ] **Fractional DPO retainer** — ~£1.5-3k/mo. Required at UK GDPR scale.
-- [ ] **KMS-backed Ed25519 signing of `manifest.sig`** — full PAdES-B-T
-  (TSR embedded in PDF as signed attribute, not side-channeled in headers).
+- [x] **KMS-backed Ed25519 signing of `manifest.sig`** — PAdES-B-T-**style**
+  (TSR embedded in CMS as unsigned attribute, not side-channeled in
+  headers). Sidecar `manifest.sig` in the export ZIP, not in-PDF
+  `/Contents` — the latter is a mechanical pdf-lib post-process upgrade
+  documented in `docs/signing.md`.
+  *(Shipped 2026-05-18 in commit `0d1531e` as 0.14.0 — AWS KMS
+  `ECC_NIST_EDWARDS25519` keyspec, `ED25519_SHA_512` SigningAlgorithm,
+  no silent fallback in production. Local Node fallback for dev/CI.
+  Verifier supports new + legacy paths. `pack.ts` integration is
+  one-liner away, deliberately deferred until KMS key is provisioned
+  in AWS + Vercel env is set. PAdES-B-T-style claim, not verbatim —
+  signing-certificate-v2 attr skipped because the KMS key is bare
+  Ed25519, not X.509-wrapped. Upgrade path documented.)*
 - [x] **WorkOS Audit Logs integration** — complementary to our hash chain;
   Enterprise asks for both.
   *(Shipped 2026-05-18 in commit `7816ca1` — fire-and-forget sink
@@ -264,10 +275,25 @@ Tick what we ship today.
   Audit Logs migration; Directory Sync reads it. Landed together
   because they share the `/api/workos/*` dispatcher and the org-id
   join key.
-
-  Wave 2C (KMS-backed Ed25519 + PAdES-B-T signing) was dispatched
-  in parallel but is still in flight at the time of the 0.13.0 cut;
-  it will land separately as 0.13.1 or 0.14.0.
+- [x] **Wave 2C — KMS-backed Ed25519 + PAdES-B-T-style signing** shipped
+  as 0.14.0 (commit `0d1531e`):
+  - AWS KMS signer (no env-var private keys in production), local
+    Node fallback for dev/CI
+  - RFC 3161 TSR embedded in CMS as
+    `id-aa-signatureTimeStampToken` unsigned attribute (not in
+    HTTP headers anymore)
+  - `manifest.sig` sidecar in the export ZIP (in-PDF embedding
+    deferred as a mechanical pdf-lib post-process upgrade)
+  - Verifier supports new + legacy paths — no historical export
+    breaks
+  - 21 new tests (build → parse → Ed25519-verify round-trip with
+    deterministic TSR fixture; no FreeTSA hit in tests)
+  - Honest "PAdES-B-T-**style**" label, not verbatim — upgrade
+    path to verbatim (cert via AWS PCA + `signing-certificate-v2`
+    attr) documented in `docs/signing.md`
+  - **Not yet wired**: `src/lib/export/pack.ts` doesn't call
+    `/api/sign/manifest` yet. One-liner addition after KMS key is
+    provisioned in AWS + `SIGNING_KMS_KEY_ID` set in Vercel env.
 
 ---
 

@@ -2,6 +2,138 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.14.0 — 2026-05-18
+
+KMS-backed Ed25519 signing + PAdES-B-T-**style** CMS for export-pack
+manifests. Closes the third Wave 2 compliance item from SUNDAY.md
+Section C (alongside Directory Sync + Audit Logs in 0.13.0).
+
+### What changed cryptographically
+
+Before: Ed25519 signed in-process from `DRAFTHR_SIGNING_KEY_HEX`; RFC
+3161 TSR from FreeTSA delivered as an `X-Drafthr-TSR-Base64` response
+header (side-channel, not embedded in the document).
+
+After:
+- Production signs via **AWS KMS** (`ECC_NIST_EDWARDS25519` keyspec,
+  `ED25519_SHA_512` SigningAlgorithm, `MessageType: RAW`). The
+  private key never appears in env vars in production. Local-fallback
+  signer with the same `KmsSigner` interface remains for dev/CI.
+- TSR is embedded inside the CMS SignedData as an unsigned attribute
+  `id-aa-signatureTimeStampToken` (OID `1.2.840.113549.1.9.16.2.14`),
+  carrying the inner `TimeStampToken` ContentInfo per RFC 3161 §5.1 /
+  PAdES §5.3.
+- The full CMS ships as a sidecar `manifest.sig` inside the export
+  ZIP.
+
+### Honest scope: PAdES-B-T-**style**, not verbatim
+
+The label is intentionally "PAdES-B-T-style" rather than verbatim
+PAdES-B-T. Two deliberate skips, both documented in
+[`docs/signing.md`](docs/signing.md):
+
+1. **No `signing-certificate-v2`** (RFC 5035). The KMS key is bare
+   Ed25519, not wrapped in an X.509 cert. Upgrade requires issuing a
+   cert via AWS PCA (or a private CA). The CMS structure is
+   wire-compatible; only the attr needs adding.
+2. **No in-PDF `/Contents` embedding**. The PDF is rendered via
+   Puppeteer (no reserved `/Contents` slot). CMS ships as a sidecar
+   in the export ZIP. Switching carriers is a mechanical
+   post-process via `pdf-lib`.
+
+Roadmap to verbatim PAdES-B-T, then PAdES-B-LT (cert chain + CRL /
+OCSP), then PAdES-B-LTA (archive timestamps) is sketched in
+`docs/signing.md`. Each step is additive — current CMS bytes are
+forward-compatible.
+
+### Files
+
+- `src/lib/sign/types.ts` — `KmsSigner` interface + `getActiveSigner()`
+  factory. Returns KMS signer when `SIGNING_KMS_KEY_ID` is set,
+  local fallback otherwise. **No silent fallback in production** —
+  KMS errors fail the export.
+- `src/lib/sign/local-signer.ts` — Node-builtin Ed25519 signer for
+  dev/CI.
+- `src/lib/sign/kms-signer.ts` — AWS KMS signer. Dynamic SDK import
+  (vite-ignored) so dev builds without `@aws-sdk/client-kms` still
+  start. `GetPublicKey` called once + cached; raw 32-byte public key
+  extracted from the DER/SPKI wrapper.
+- `src/lib/sign/pades.ts` — RFC 5652 SignedData builder + parser.
+  Signed attrs: content-type / message-digest / signing-time.
+  Unsigned attr: `id-aa-signatureTimeStampToken`. Signature is over
+  the DER-encoded signed-attributes SET per RFC 5652 §5.4.
+- `src/lib/sign/verify.ts` — `verifyPadesCms()` for the new path +
+  `verifyLegacy()` for the side-channel TSR header (back-compat).
+  Structured failure-reason union: `signature_mismatch` /
+  `tsa_invalid` / `byte_range_tampered` / `cms_malformed` / etc.
+- `src/lib/sign/__fixtures__/test-tsr.ts` — synthetic deterministic
+  TSR for tests; FreeTSA is never hit during `vitest`.
+- `api/sign/manifest.ts` — `POST /api/sign/manifest`. Auth-gated,
+  rate-limited, audit-logged (`draft.signed_with_kms` or
+  `draft.signed_local`). Returns `{ cmsBase64, tsa: "freetsa" }`.
+- `docs/signing.md` — operator guide: dual-mode signer, KMS key
+  provisioning CLI, PAdES-B-T-style claim + roadmap to verbatim,
+  verifier behavior, FreeTSA dependency + paid-TSA migration path.
+- 21 new tests across `kms-signer.test.ts` (7), `pades.test.ts`
+  (6, full build → parse → Ed25519-verify round-trip), `verify.test.ts`
+  (8, all failure modes + legacy back-compat).
+
+### Build / packaging changes
+
+- `package.json` — `@aws-sdk/client-kms@^3.700.0` added to
+  `optionalDependencies`. Dev installs that skip optionals still
+  work; CI clean install picks it up.
+- `tsconfig.app.json` — `src/lib/sign` excluded (Node-only types,
+  e.g. `Buffer`).
+- `tsconfig.node.json` + `api/tsconfig.json` — `src/lib/sign/**/*.ts`
+  included so the server build sees them.
+
+### What's NOT wired yet
+
+`src/lib/export/pack.ts` is **not** yet calling `/api/sign/manifest`.
+The endpoint exists and is tested; the pack builder needs the
+one-line addition to `await fetch("/api/sign/manifest", ...)` and
+`zip.file("manifest.sig", cmsBytes)`. Deliberately left out of this
+wave to keep the cryptographic core focused. Wire after the KMS key
+is provisioned and `SIGNING_KMS_KEY_ID` is set in Vercel.
+
+### Backward compatibility
+
+The codebase had no prior Ed25519-signed PDFs in production — only
+the side-channel TSR header. `verifyLegacy({ tsr, expectedSha256Hex })`
+accepts that exact shape and returns `{ ok: true, legacy: true, ... }`,
+so the existing `POST /api/audit/verify-tsr` continues to validate
+every historical export. PDF export response shape is unchanged —
+the header TSR still ships — so current consumers keep working.
+Detection: exports without an accompanying `manifest.sig` → legacy
+path; with → new path.
+
+### Commits
+
+- `0d1531e` Signing: KMS-backed Ed25519 + PAdES-B-T-style CMS (Wave 2C)
+
+### Verification
+
+- `npm run lint` — exit 0
+- `npx tsc --noEmit` — exit 0
+- `npm test -- --run` — 43 files / 293 passed + 5 skipped
+  (DB-conditional, same 5 as 0.13.0)
+
+### Post-merge operator TODOs
+
+1. `npm install` to pick up `@aws-sdk/client-kms`
+2. Provision KMS key:
+   `aws kms create-key --key-spec ECC_NIST_EDWARDS25519 --key-usage SIGN_VERIFY --region eu-west-2`
+3. Alias it: `aws kms create-alias --alias-name alias/drafthr-signing --target-key-id <key-id>`
+4. Grant `kms:Sign` + `kms:GetPublicKey` to the Vercel runtime
+   principal
+5. Set Vercel env: `SIGNING_KMS_KEY_ID=alias/drafthr-signing`,
+   `AWS_REGION=eu-west-2`, plus AWS credentials (or OIDC federation)
+6. Wire `pack.ts` → `/api/sign/manifest` (the one-liner above)
+7. Smoke-test on staging — CloudTrail should show exactly one
+   `kms.Sign` per export
+8. After 2-4 week soak, drop `DRAFTHR_SIGNING_KEY_HEX` from prod env
+
 ## 0.13.0 — 2026-05-18
 
 WorkOS compliance pair — Directory Sync (SCIM / Okta / Entra / Google
