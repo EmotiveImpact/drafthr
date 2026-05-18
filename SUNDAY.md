@@ -275,6 +275,26 @@ Tick what we ship today.
   Audit Logs migration; Directory Sync reads it. Landed together
   because they share the `/api/workos/*` dispatcher and the org-id
   join key.
+- [x] **Wave 4 — Auth UX completion (sign-up + reset + LinkedIn + privacy chrome)**
+  shipped as 0.16.0 (commits `0fa310d` + `3114db8` + `30601f3`):
+  - Native `/sign-in/signup` + `/sign-in/forgot-password` +
+    `/sign-in/reset-password` + `/sign-in/verify-email` pages.
+    Closes the dead-link UX from 0.15.0.
+  - 5 new server endpoints under `api/auth/_handlers/` with
+    rate limits (3-10/min/IP) + anti-user-enumeration guards.
+  - WorkOS sends every email itself (Resend not needed for auth).
+  - LinkedIn added as a third social provider on both sign-in
+    and sign-up (Google + Microsoft + LinkedIn).
+  - Shared `AuthShell` + `SocialAuthButtons` components keep the
+    `/sign-in/*` family visually locked together.
+  - `/privacy` (and reserved `/terms` + `/legal`) now render
+    chromeless with a minimal public header/footer — no more
+    signed-in app shell leaking around a publicly-linkable
+    legal page.
+
+  341 tests passing (+37). No new deps. Post-merge WorkOS dashboard
+  config required (verification + reset URLs + LinkedIn social
+  connection — full list in CHANGELOG 0.16.0).
 - [x] **Wave 3 — Auth UX pair (bug fix + custom sign-in)** shipped as
   0.15.0 (commits `e3b5903` + `5513551`):
   - Self-heal session handler — returning users locked out by

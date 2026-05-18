@@ -2,6 +2,150 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.16.0 — 2026-05-18
+
+Auth UX completion wave — closes the dead-link UX from 0.15.0, adds
+LinkedIn as a third social provider, and renders the public privacy
+page chromeless.
+
+Net: 4 new pages, 5 new server endpoints, 1 new social provider,
++37 new tests (304 → 341 passing). No new deps; WorkOS handles all
+email delivery.
+
+### Native sign-up + password-reset + email-verification
+
+The "Forgot password?" and "Sign up" links on `/sign-in` now go to
+real pages instead of falling through React Router's catch-all back
+to sign-in.
+
+**New pages** (all under `/sign-in/*`, chromeless, matching
+`SignIn.tsx`'s visual register):
+
+- `/sign-in/signup` — form (email + first/last name + password +
+  confirm + terms checkbox) → "Check your email" two-stage UI with
+  resend button. Social buttons at the top (Google / Microsoft /
+  LinkedIn) — going through an IdP skips email verification because
+  the address is already verified by the provider.
+- `/sign-in/forgot-password` — email-only form, generic
+  "If that account exists" confirmation regardless of whether the
+  email is registered.
+- `/sign-in/reset-password?token=...` — landing page from the email
+  link. New password + confirm. Mints iron-session on success.
+- `/sign-in/verify-email?code=...` — auto-verifies on mount;
+  redirects to `/` so RootRedirect routes the user onward.
+
+**New shared shell:**
+
+- `src/routes/sign-in/AuthShell.tsx` — chrome (canvas, card, header
+  wordmark, footer) + form primitives (`TextField`, `ErrorAlert`,
+  `PrimaryButton`) so all four new pages match `SignIn.tsx` without
+  duplicating ~60 lines of markup.
+- `src/routes/sign-in/SocialAuthButtons.tsx` — drop-in Google /
+  Microsoft / LinkedIn buttons + OAuth-shim handler. Reusable across
+  every page in the `/sign-in/*` family. `SignIn.tsx` keeps its
+  inline copy for now (deferred to keep this wave focused).
+
+**New server endpoints** (all under `api/auth/_handlers/`):
+
+| Endpoint | Rate limit | Notes |
+| --- | --- | --- |
+| `POST /api/auth/sign-up` | 3/min/IP | Creates user + fires verification email. Does NOT mint session. Silent re-send on duplicate unverified emails. |
+| `POST /api/auth/resend-verification` | 3/min/IP | Accepts `{ email }` or `{ userId }`. |
+| `POST /api/auth/verify-email` | 10/min/IP | Supports `{ code, userId }` (post-sign-up) and `{ code, pendingAuthenticationToken }` (sign-in-while-unverified). |
+| `POST /api/auth/password-reset-request` | 5/min/IP | Always returns 200 with generic message (anti-enumeration). |
+| `POST /api/auth/password-reset-confirm` | 10/min/IP | Body `{ token, password }`. Mints iron-session on success. |
+
+**WorkOS SDK methods used** (all from `@workos-inc/node ^9.3.0` —
+no new deps): `createUser`, `sendVerificationEmail`, `verifyEmail`,
+`authenticateWithEmailVerification`, `createPasswordReset` (replaces
+deprecated `sendPasswordResetEmail`), `resetPassword`, `listUsers`.
+
+**Email delivery — WorkOS, not Resend.** Every email is sent by
+WorkOS via its own SMTP using templates configured in the dashboard.
+The existing Resend wiring stays untouched for workspace invites +
+comment notifications.
+
+**Security invariants locked by tests:**
+
+- No user enumeration on sign-up (same response shape regardless)
+- No user enumeration on forgot-password (always 200 even when
+  WorkOS throws `NotFoundException`)
+- No session before email verification (sign-up handler test
+  asserts `Set-Cookie` is absent on success)
+- Silent re-send on duplicate sign-up for unverified accounts —
+  the rightful owner still gets a usable verification link
+- Rate limits on every new endpoint
+
+Commit: `30601f3`.
+
+### LinkedIn as a third social provider
+
+Added `LinkedInOAuth` to the allowlist in `api/auth/_handlers/url.ts`
+and a third `<SocialButton provider="linkedin" />` to `SignIn.tsx`
+(matched on `SignUp.tsx` via the shared `SocialAuthButtons`
+component). Inline LinkedIn glyph (24×24, brand blue, "in" mark)
+matches the inline Google + Microsoft approach — zero bundle hit.
+
+Commit: `3114db8`.
+
+### Privacy page chromeless
+
+`/privacy` was rendering inside the signed-in app shell (sidebar,
+topbar, search palette), which leaked a "logged in" appearance
+around a publicly-linkable legal page. Two changes:
+
+- `src/components/Layout.tsx` — `/privacy`, `/terms`, `/legal` added
+  to `CHROMELESS_PREFIXES` so the app shell doesn't wrap them
+- `src/routes/Privacy.tsx` — minimal public header (DraftHR wordmark
+  + "Sign in →" link) and footer (© + "Back to sign in") so the
+  chromeless page isn't bare
+
+Commit: `0fa310d`.
+
+### Post-merge WorkOS dashboard config required
+
+WorkOS dashboard → **Authentication → Emails**:
+
+1. **Email verification URL** →
+   `https://app.drafthr.io/sign-in/verify-email`
+   (WorkOS appends `?code=... &user_id=...`)
+2. **Password reset URL** →
+   `https://app.drafthr.io/sign-in/reset-password`
+   (WorkOS appends `?token=...`)
+
+Also for any preview/staging environments.
+
+WorkOS dashboard → **Authentication → Social Auth**:
+
+3. **Enable LinkedIn** as a social connection (alongside the
+   existing Google + Microsoft). Requires registering an app at
+   https://www.linkedin.com/developers/ first for Client ID + Secret.
+   Without this, the LinkedIn button returns `connection_not_configured`.
+
+No new env vars introduced.
+
+### Commits
+
+- `0fa310d` Privacy: render chromeless with minimal public header/footer
+- `3114db8` Auth: add LinkedIn social sign-in button
+- `30601f3` Auth: native sign-up + password-reset + email-verification (Wave 4A)
+
+### Verification
+
+- `npm run lint` — clean
+- `npx tsc --noEmit` — clean
+- `npm test -- --run` — 54 files / 341 passed / 5 skipped
+- `npm run build` — succeeds, no new warnings
+
+### Known follow-ups
+
+- `/terms` page does not exist yet — SignUp's terms checkbox links
+  to `/privacy` as a stand-in (TODO in component)
+- Shared `SocialAuthButtons` could replace the inline copy in
+  `SignIn.tsx` for true DRY — deferred
+- Directory Sync reprovision path still needs to restore
+  `is_active_tenant` (carried over from 0.15.0)
+
 ## 0.15.0 — 2026-05-18
 
 Auth UX wave — fixes the "returning user gets bounced to onboarding"
