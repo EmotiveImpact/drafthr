@@ -81,6 +81,16 @@ const REPAGINATE_DELAY_MS = 600;
 const PAGE_WIDTH_FALLBACK_PX = PAGE_WIDTH_PX;
 const OVERSIZED_BLOCK_MAX_HEIGHT_PX = PAGE_CONTENT_HEIGHT_PX - 24;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
+const SELECTION_PRESERVING_COMMANDS = new Set([
+  "bold",
+  "italic",
+  "underline",
+  "formatBlock",
+  "justifyLeft",
+  "justifyCenter",
+  "justifyRight",
+  "justifyFull",
+]);
 
 type CursorState = {
   start: CursorPoint;
@@ -102,6 +112,23 @@ type ToolbarFormatState = {
   orderedList: boolean;
   block: string;
   align: "left" | "center" | "right" | "justify" | "";
+};
+
+type EditableSelection = {
+  collapsed: boolean;
+  range: Range;
+  text: string;
+};
+
+type EditableTextSelection = {
+  start: EditableTextPoint;
+  end: EditableTextPoint;
+  text: string;
+};
+
+type EditableTextPoint = {
+  rootIndex: number;
+  offset: number;
 };
 
 type PreviewerInstance = {
@@ -142,8 +169,12 @@ export function PagedEditor({
    * top menubar (Edit → Undo / Redo / Select all / Find). */
   actionsRef?: MutableRefObject<PagedEditorActions | null>;
 }) {
-  const updateSection = useDraftStore((state) => state.updateSection);
+  const updateSection = useDraftStore(
+    (state: { updateSection: (draftId: string, sectionId: string, html: string) => void }) =>
+      state.updateSection,
+  );
 
+  const editorRootRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   /** The HTML truth — kept current via reconstructSourceHtml() on every save. */
@@ -156,6 +187,7 @@ export function PagedEditor({
   const composingRef = useRef(false);
   const undoStackRef = useRef<string[]>([]);
   const redoStackRef = useRef<string[]>([]);
+  const dirtyRef = useRef(false);
   const savedSelectionRef = useRef<Range | null>(null);
   // Tracks dirty state across renders so we can fire a "Saved" toast
   // only on the dirty → clean transition (i.e. a flush actually
@@ -164,7 +196,7 @@ export function PagedEditor({
 
   const [, setBusy] = useState(true);
   const [, setPageCount] = useState<number | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirtyState] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
   const [formatState, setFormatState] = useState<ToolbarFormatState>({
@@ -192,11 +224,19 @@ export function PagedEditor({
   const findHighlightRef = useRef<Highlight | null>(null);
   const findActiveHighlightRef = useRef<Highlight | null>(null);
 
+  const setEditorDirty = useCallback((value: boolean) => {
+    dirtyRef.current = value;
+    setDirtyState((current) => (current === value ? current : value));
+  }, []);
+
   const refreshHistoryState = useCallback(() => {
-    setHistoryState({
+    const next = {
       canUndo: undoStackRef.current.length > 0,
       canRedo: redoStackRef.current.length > 0,
-    });
+    };
+    setHistoryState((current) =>
+      current.canUndo === next.canUndo && current.canRedo === next.canRedo ? current : next,
+    );
   }, []);
 
   useEffect(() => {
@@ -233,15 +273,28 @@ export function PagedEditor({
   const refreshFormatState = useCallback(() => {
     const container = containerRef.current;
     if (!container || !selectionInsideLetterBody(container)) {
-      setFormatState((current) => ({
-        ...current,
-        bold: false,
-        italic: false,
-        underline: false,
-        unorderedList: false,
-        orderedList: false,
-        align: "",
-      }));
+      if (
+        shouldPreserveFormatStateAfterSelectionLoss(
+          container,
+          savedSelectionRef.current,
+          editorRootRef.current,
+        )
+      ) {
+        return;
+      }
+
+      setFormatState((current) => {
+        const next = {
+          ...current,
+          bold: false,
+          italic: false,
+          underline: false,
+          unorderedList: false,
+          orderedList: false,
+          align: "" as const,
+        };
+        return toolbarFormatStateEquals(current, next) ? current : next;
+      });
       return;
     }
 
@@ -255,7 +308,7 @@ export function PagedEditor({
       : queryCommandState("justifyLeft")
       ? "left"
       : "";
-    setFormatState({
+    const next = {
       bold: queryCommandState("bold"),
       italic: queryCommandState("italic"),
       underline: queryCommandState("underline"),
@@ -263,7 +316,8 @@ export function PagedEditor({
       orderedList: queryCommandState("insertOrderedList"),
       block,
       align,
-    });
+    };
+    setFormatState((current) => (toolbarFormatStateEquals(current, next) ? current : next));
   }, []);
 
   const commitSource = useCallback((nextSource: string, pushHistory = true) => {
@@ -278,10 +332,10 @@ export function PagedEditor({
     }
     sourceHtmlRef.current = normalized;
     saveToStore(normalized, draft, updateSection);
-    setDirty(false);
+    setEditorDirty(false);
     refreshHistoryState();
     return normalized !== previous;
-  }, [draft, refreshHistoryState, updateSection]);
+  }, [draft, refreshHistoryState, setEditorDirty, updateSection]);
 
   /* ------------------------------------------------------------------------
    * Render pipeline — paginate sourceHtmlRef into the container.
@@ -390,6 +444,7 @@ export function PagedEditor({
     sourceHtmlRef.current = buildMergedSourceHtml(draft);
     undoStackRef.current = [];
     redoStackRef.current = [];
+    setEditorDirty(false);
     refreshHistoryState();
     void repaginate(null);
     return () => {
@@ -403,7 +458,7 @@ export function PagedEditor({
     // We want one paginate per draft.id — rebuilding on every render would
     // wipe the user's keystrokes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft.id]);
+  }, [draft.id, setEditorDirty]);
 
   useEffect(() => {
     const onSelectionChange = () => {
@@ -420,8 +475,7 @@ export function PagedEditor({
   const flushPendingEdit = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    normalizeRenderedPagedRefs(container);
-    const cursor = captureCursor(container);
+    const cursor = captureCursorWithRefRecovery(container);
     commitSource(reconstructSourceHtml(container));
     void repaginate(cursor);
   }, [commitSource, draft, repaginate]);
@@ -435,18 +489,30 @@ export function PagedEditor({
   }, [flushPendingEdit]);
 
   const afterToolbarMutation = useCallback(() => {
-    setDirty(true);
+    setEditorDirty(true);
     refreshFormatState();
     scheduleFlush();
-  }, [refreshFormatState, scheduleFlush]);
+  }, [refreshFormatState, scheduleFlush, setEditorDirty]);
 
   const runNativeCommand = useCallback((command: string, value?: string) => {
     const container = containerRef.current;
     if (!container) return;
     restoreRememberedSelection();
     if (!selectionInsideLetterBody(container)) return;
+    const selectionBeforeCommand = getCurrentLetterSelection(container);
+    const textBookmarkBeforeCommand =
+      selectionBeforeCommand?.collapsed === false ? captureEditableTextSelection(container) : null;
+    const cursorBeforeCommand =
+      selectionBeforeCommand?.collapsed === false ? captureCursorWithRefRecovery(container) : null;
     focusSelectionLetterBody(container);
     runEditorCommand(command, value);
+    restoreSelectionAfterCommand(
+      container,
+      command,
+      selectionBeforeCommand,
+      cursorBeforeCommand,
+      textBookmarkBeforeCommand,
+    );
     rememberSelection();
     afterToolbarMutation();
   }, [afterToolbarMutation, rememberSelection, restoreRememberedSelection]);
@@ -486,10 +552,10 @@ export function PagedEditor({
 
   const onInput = useCallback((event: FormEvent<HTMLDivElement>) => {
     rememberSelection();
-    setDirty(true);
+    setEditorDirty(true);
     if (composingRef.current || isComposingInput(event.nativeEvent)) return;
     scheduleFlush();
-  }, [rememberSelection, scheduleFlush]);
+  }, [rememberSelection, scheduleFlush, setEditorDirty]);
 
   const onCompositionStart = useCallback(() => {
     composingRef.current = true;
@@ -499,9 +565,9 @@ export function PagedEditor({
 
   const onCompositionEnd = useCallback(() => {
     composingRef.current = false;
-    setDirty(true);
+    setEditorDirty(true);
     scheduleFlush();
-  }, [scheduleFlush]);
+  }, [scheduleFlush, setEditorDirty]);
 
   const onPaste = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -513,20 +579,20 @@ export function PagedEditor({
 
     insertHtmlAtCurrentSelection(containerRef.current, safeHtml);
     rememberSelection();
-    setDirty(true);
+    setEditorDirty(true);
     scheduleFlush();
-  }, [rememberSelection, scheduleFlush]);
+  }, [rememberSelection, scheduleFlush, setEditorDirty]);
 
   const handleUndo = useCallback(() => {
     clearPendingDebounce();
+    restoreRememberedSelection();
     const container = containerRef.current;
     let cursor: CursorState | null = null;
     let liveSource = sourceHtmlRef.current;
     let hasUnsavedDom = false;
     if (container) {
-      normalizeRenderedPagedRefs(container);
-      cursor = captureCursor(container);
-      if (dirty) {
+      cursor = captureCursorWithRefRecovery(container);
+      if (dirtyRef.current) {
         liveSource = normalizeSourceHtml(reconstructSourceHtml(container), draft, sourceHtmlRef.current);
         hasUnsavedDom = liveSource !== sourceHtmlRef.current;
       }
@@ -547,13 +613,14 @@ export function PagedEditor({
 
     commitSource(target, false);
     void repaginate(cursor);
-  }, [clearPendingDebounce, commitSource, dirty, draft, refreshHistoryState, repaginate]);
+  }, [clearPendingDebounce, commitSource, draft, refreshHistoryState, repaginate, restoreRememberedSelection]);
 
   const handleRedo = useCallback(() => {
-    if (dirty) return;
+    if (dirtyRef.current) return;
     clearPendingDebounce();
+    restoreRememberedSelection();
     const container = containerRef.current;
-    const cursor = container ? captureCursor(container) : null;
+    const cursor = container ? captureCursorWithRefRecovery(container) : null;
     const target = redoStackRef.current.pop();
     if (!target) {
       refreshHistoryState();
@@ -562,7 +629,7 @@ export function PagedEditor({
     undoStackRef.current.push(sourceHtmlRef.current);
     commitSource(target, false);
     void repaginate(cursor);
-  }, [clearPendingDebounce, commitSource, dirty, refreshHistoryState, repaginate]);
+  }, [clearPendingDebounce, commitSource, refreshHistoryState, repaginate, restoreRememberedSelection]);
 
   /* ----------------------------------------------------------------------
    * Find-in-letter — runs against the live rendered DOM via the CSS
@@ -735,11 +802,10 @@ export function PagedEditor({
     clearPendingDebounce();
     const container = containerRef.current;
     if (container) {
-      normalizeRenderedPagedRefs(container);
       commitSource(reconstructSourceHtml(container));
     }
     onDone();
-  }, [clearPendingDebounce, commitSource, draft, onDone]);
+  }, [clearPendingDebounce, commitSource, onDone]);
 
   const canUndo = dirty || historyState.canUndo;
   const canRedo = !dirty && historyState.canRedo;
@@ -764,7 +830,7 @@ export function PagedEditor({
   }, [error]);
 
   return (
-    <div className="paged-edit-shell">
+    <div ref={editorRootRef} className="paged-edit-shell">
       <div className="sticky top-1 z-30 mx-auto mb-3 flex w-fit max-w-full flex-wrap items-center gap-1 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1.5 text-[11px] shadow-md">
         <input
           ref={imageInputRef}
@@ -992,6 +1058,7 @@ function NativeToolbarButton({
       type="button"
       aria-label={label}
       title={label}
+      aria-pressed={active || undefined}
       disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
@@ -1076,6 +1143,13 @@ function captureCursor(root: HTMLElement): CursorState | null {
     ? start
     : captureCursorPoint(root, range.endContainer, range.endOffset);
   return { start, end: end ?? start };
+}
+
+function captureCursorWithRefRecovery(root: HTMLElement): CursorState | null {
+  const cursor = captureCursor(root);
+  if (cursor || !selectionInsideLetterBody(root)) return cursor;
+  normalizeRenderedPagedRefs(root);
+  return captureCursor(root);
 }
 
 function captureCursorPoint(
@@ -1262,6 +1336,218 @@ function isIgnoredPositionNode(node: Node): boolean {
   );
 }
 
+function getCurrentLetterSelection(container: HTMLElement): EditableSelection | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !selectionInsideLetterBody(container)) return null;
+  const range = sel.getRangeAt(0).cloneRange();
+  return {
+    collapsed: range.collapsed,
+    range,
+    text: sel.toString(),
+  };
+}
+
+function restoreSelectionAfterCommand(
+  container: HTMLElement,
+  command: string,
+  previousSelection: EditableSelection | null,
+  previousCursor: CursorState | null,
+  previousTextSelection: EditableTextSelection | null,
+): void {
+  if (!previousSelection || previousSelection.collapsed) return;
+  if (!SELECTION_PRESERVING_COMMANDS.has(command)) return;
+
+  if (restoreSelectionRange(container, previousSelection.range, previousSelection.text)) return;
+  if (restoreCursorSelection(container, previousCursor, previousSelection.text)) return;
+  restoreEditableTextSelection(container, previousTextSelection);
+}
+
+function restoreSelectionRange(
+  container: HTMLElement,
+  range: Range,
+  expectedText: string,
+): boolean {
+  if (!container.contains(range.commonAncestorContainer)) return false;
+
+  try {
+    const sel = window.getSelection();
+    if (!sel) return false;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return (
+      selectionInsideLetterBody(container) &&
+      !sel.getRangeAt(0).collapsed &&
+      selectionTextMatches(sel.toString(), expectedText)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function restoreCursorSelection(
+  container: HTMLElement,
+  cursor: CursorState | null,
+  expectedText: string,
+): boolean {
+  if (!cursor) return false;
+  restoreCursor(container, cursor);
+  const sel = window.getSelection();
+  return Boolean(
+    sel &&
+      sel.rangeCount > 0 &&
+      !sel.getRangeAt(0).collapsed &&
+      selectionInsideLetterBody(container) &&
+      selectionTextMatches(sel.toString(), expectedText),
+  );
+}
+
+function captureEditableTextSelection(container: HTMLElement): EditableTextSelection | null {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !selectionInsideLetterBody(container)) return null;
+
+  const roots = findRenderedSourceRoots(container);
+  const range = sel.getRangeAt(0);
+  const startRoot = closestLetterBody(range.startContainer);
+  const endRoot = closestLetterBody(range.endContainer);
+  if (!startRoot || !endRoot) return null;
+
+  const startRootIndex = roots.indexOf(startRoot);
+  const endRootIndex = roots.indexOf(endRoot);
+  if (startRootIndex === -1 || endRootIndex === -1) return null;
+
+  return {
+    start: {
+      rootIndex: startRootIndex,
+      offset: editableTextOffsetWithin(startRoot, range.startContainer, range.startOffset),
+    },
+    end: {
+      rootIndex: endRootIndex,
+      offset: editableTextOffsetWithin(endRoot, range.endContainer, range.endOffset),
+    },
+    text: sel.toString(),
+  };
+}
+
+function restoreEditableTextSelection(
+  container: HTMLElement,
+  bookmark: EditableTextSelection | null,
+): boolean {
+  if (!bookmark) return false;
+  const roots = findRenderedSourceRoots(container);
+  const startRoot = roots[bookmark.start.rootIndex] ?? null;
+  const endRoot = roots[bookmark.end.rootIndex] ?? null;
+  if (!startRoot || !endRoot) return false;
+
+  const start = pointAtPositionOffset(startRoot, bookmark.start.offset);
+  const end = pointAtPositionOffset(endRoot, bookmark.end.offset);
+  try {
+    startRoot.focus({ preventScroll: true });
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    const sel = window.getSelection();
+    if (!sel) return false;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return (
+      selectionInsideLetterBody(container) &&
+      !range.collapsed &&
+      selectionTextMatches(sel.toString(), bookmark.text)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function editableTextOffsetWithin(root: HTMLElement, target: Node, targetOffset: number): number {
+  let total = 0;
+  let found = false;
+
+  const visit = (node: Node): void => {
+    if (found || isIgnoredPositionNode(node)) return;
+    if (node === target) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        total += Math.max(0, Math.min(targetOffset, node.textContent?.length ?? 0));
+      } else {
+        const children = Array.from(node.childNodes).slice(0, targetOffset);
+        total += children.reduce((sum, childNode) => sum + positionLength(childNode), 0);
+      }
+      found = true;
+      return;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE || isAtomicPositionNode(node)) {
+      total += positionLength(node);
+      return;
+    }
+
+    for (const childNode of Array.from(node.childNodes)) visit(childNode);
+  };
+
+  visit(root);
+  return total;
+}
+
+function closestLetterBody(node: Node): HTMLElement | null {
+  const element =
+    node.nodeType === Node.TEXT_NODE
+      ? node.parentElement
+      : node instanceof HTMLElement
+      ? node
+      : null;
+  return element?.closest<HTMLElement>(".letter-body") ?? null;
+}
+
+function selectionTextMatches(actual: string, expected: string): boolean {
+  return normalizeSelectionText(actual) === normalizeSelectionText(expected);
+}
+
+function normalizeSelectionText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function shouldPreserveFormatStateAfterSelectionLoss(
+  container: HTMLElement | null,
+  rememberedSelection: Range | null,
+  editorRoot: HTMLElement | null,
+): boolean {
+  if (
+    !container ||
+    !rememberedSelection ||
+    !container.contains(rememberedSelection.commonAncestorContainer)
+  ) {
+    return false;
+  }
+
+  const activeElement = document.activeElement;
+  if (!activeElement || activeElement === document.body) return true;
+  if (editorRoot && activeElement instanceof Node && editorRoot.contains(activeElement)) return true;
+  return !isTextEntryElement(activeElement);
+}
+
+function isTextEntryElement(element: Element): boolean {
+  if (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement
+  ) {
+    return true;
+  }
+  return element instanceof HTMLElement && element.isContentEditable;
+}
+
+function toolbarFormatStateEquals(a: ToolbarFormatState, b: ToolbarFormatState): boolean {
+  return (
+    a.bold === b.bold &&
+    a.italic === b.italic &&
+    a.underline === b.underline &&
+    a.unorderedList === b.unorderedList &&
+    a.orderedList === b.orderedList &&
+    a.block === b.block &&
+    a.align === b.align
+  );
+}
+
 /* ============================================================================
  * Source reconstruction — fold the rendered page-contents back into the
  * source HTML that paginate() consumes. Handles paged.js's mid-block splits
@@ -1274,8 +1560,9 @@ type RebuildItem =
   | { kind: "block"; ref: string; first: HTMLElement; innerParts: string[] };
 
 function reconstructSourceHtml(container: HTMLElement): string {
-  normalizeRenderedPagedRefs(container);
-  const roots = findRenderedSourceRoots(container);
+  const snapshot = container.cloneNode(true) as HTMLElement;
+  normalizeRenderedPagedRefs(snapshot);
+  const roots = findRenderedSourceRoots(snapshot);
   const items: RebuildItem[] = [];
   const blockIndex = new Map<string, number>();
   const seenAnchors = new Set<string>();

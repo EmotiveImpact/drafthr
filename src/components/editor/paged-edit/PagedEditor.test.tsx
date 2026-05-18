@@ -1,10 +1,14 @@
-import { useState } from "react";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState, type MutableRefObject } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Draft, Section } from "@/lib/letters/types";
 
-import { PagedEditor, __pagedEditorInternals as editor } from "./PagedEditor";
+import {
+  PagedEditor,
+  type PagedEditorActions,
+  __pagedEditorInternals as editor,
+} from "./PagedEditor";
 
 const storeMock = vi.hoisted(() => {
   const mock: {
@@ -167,6 +171,30 @@ describe("PagedEditor source reconstruction", () => {
     expect(splits["sec-a"]).toContain("<p>Loose <strong>inline</strong><br>tail</p>");
     expect(splits["sec-a"]).toContain("<p>Next paragraph</p>");
   });
+
+  it("reconstructs from a snapshot without mutating the selected live DOM", () => {
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <div class="pagedjs_page_content">
+        <div class="letter-body">
+          <div data-section-anchor data-section-id="sec-a"></div>
+          <p>Selected text</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(container);
+    const text = container.querySelector("p")?.firstChild;
+    expect(text).toBeInstanceOf(Text);
+    setCaret(text as Text, "Selected".length);
+    const before = container.innerHTML;
+
+    const html = editor.reconstructSourceHtml(container);
+
+    expect(html).toContain("Selected text");
+    expect(container.innerHTML).toBe(before);
+    expect(window.getSelection()?.anchorNode).toBe(text);
+    expect(window.getSelection()?.anchorOffset).toBe("Selected".length);
+  });
 });
 
 describe("PagedEditor paste cleanup", () => {
@@ -292,7 +320,7 @@ describe("PagedEditor undo and redo", () => {
     const draft = makeDraft([makeSection("sec-a", "body", "<p>Original text</p>")]);
 
     render(<PagedEditorHarness draft={draft} />);
-    expect(await screen.findByRole("textbox")).toBeInTheDocument();
+    expect(await screen.findByRole("textbox")).toBeTruthy();
 
     const body = document.querySelector<HTMLElement>(".letter-body");
     expect(body).not.toBeNull();
@@ -309,7 +337,9 @@ describe("PagedEditor undo and redo", () => {
     });
 
     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text changed");
-    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await act(async () => {
@@ -318,7 +348,9 @@ describe("PagedEditor undo and redo", () => {
 
     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text");
     expect(storeMock.currentDraft?.sections[0].html).not.toContain("changed");
-    expect(screen.getByRole("button", { name: "Redo" })).toBeEnabled();
+    expect((screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Redo" }));
     await act(async () => {
@@ -326,6 +358,94 @@ describe("PagedEditor undo and redo", () => {
     });
 
     expect(storeMock.currentDraft?.sections[0].html).toContain("Original text changed");
+  });
+
+  it("lets an external undo handler see dirty DOM before React republishes actions", async () => {
+    const draft = makeDraft([makeSection("sec-a", "body", "<p>Original text</p>")]);
+    const actionsRef: MutableRefObject<PagedEditorActions | null> = { current: null };
+
+    render(<PagedEditorHarness draft={draft} actionsRef={actionsRef} />);
+    expect(await screen.findByRole("textbox")).toBeTruthy();
+    const staleUndo = actionsRef.current?.undo;
+    expect(staleUndo).toBeTypeOf("function");
+
+    const body = document.querySelector<HTMLElement>(".letter-body");
+    const paragraph = body?.querySelector("p");
+    expect(body).not.toBeNull();
+    expect(paragraph).not.toBeNull();
+    paragraph!.textContent = "Original text changed";
+    setCaret(paragraph!.firstChild as Text, "Original text changed".length);
+
+    fireEvent.input(body!, { bubbles: true });
+
+    await act(async () => {
+      staleUndo?.();
+      await flushMicrotasks();
+    });
+
+    expect(storeMock.currentDraft?.sections[0].html).toContain("Original text");
+    expect(storeMock.currentDraft?.sections[0].html).not.toContain("changed");
+    expect((screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+});
+
+describe("PagedEditor toolbar selection state", () => {
+  it("keeps toolbar formatting selected during editor toolbar focus changes", async () => {
+    const restoreQueries = mockCommandQueries({
+      states: { bold: true },
+      values: { formatBlock: "p" },
+    });
+
+    try {
+      const draft = makeDraft([makeSection("sec-a", "body", "<p>Bold text</p>")]);
+      render(<PagedEditorHarness draft={draft} />);
+      const body = await screen.findByRole("textbox");
+      const text = body.querySelector("p")?.firstChild;
+      expect(text).toBeInstanceOf(Text);
+
+      act(() => {
+        setCaret(text as Text, "Bold".length);
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+
+      const boldButton = screen.getByRole("button", { name: "Bold" });
+      await waitFor(() => expect(boldButton.getAttribute("aria-pressed")).toBe("true"));
+
+      act(() => {
+        boldButton.focus();
+        window.getSelection()?.removeAllRanges();
+        document.dispatchEvent(new Event("selectionchange"));
+      });
+
+      expect(boldButton.getAttribute("aria-pressed")).toBe("true");
+    } finally {
+      restoreQueries();
+    }
+  });
+
+  it("keeps a selected range active across repeated alignment commands", async () => {
+    const restoreExecCommand = mockExecCommandCollapsingAlignment();
+
+    try {
+      const draft = makeDraft([makeSection("sec-a", "body", "<p>Selected alignment text</p>")]);
+      render(<PagedEditorHarness draft={draft} />);
+      const body = await screen.findByRole("textbox");
+      const text = body.querySelector("p")?.firstChild;
+      expect(text).toBeInstanceOf(Text);
+
+      setSelection(text as Text, 0, text as Text, "Selected alignment".length);
+      expect(currentSelectionText()).toBe("Selected alignment");
+
+      fireEvent.click(screen.getByRole("button", { name: "Align center" }));
+      expect(currentSelectionText()).toBe("Selected alignment");
+
+      fireEvent.click(screen.getByRole("button", { name: "Align right" }));
+      expect(currentSelectionText()).toBe("Selected alignment");
+    } finally {
+      restoreExecCommand();
+    }
   });
 });
 
@@ -386,7 +506,13 @@ function makeSection(id: string, sectionId: Section["sectionId"], html: string):
   };
 }
 
-function PagedEditorHarness({ draft }: { draft: Draft }) {
+function PagedEditorHarness({
+  draft,
+  actionsRef,
+}: {
+  draft: Draft;
+  actionsRef?: MutableRefObject<PagedEditorActions | null>;
+}) {
   const [currentDraft, setCurrentDraft] = useState(draft);
   storeMock.currentDraft = currentDraft;
   storeMock.applyUpdate = (draftId, sectionId, html) => {
@@ -402,7 +528,7 @@ function PagedEditorHarness({ draft }: { draft: Draft }) {
       return next;
     });
   };
-  return <PagedEditor draft={currentDraft} onDone={vi.fn()} />;
+  return <PagedEditor draft={currentDraft} onDone={vi.fn()} actionsRef={actionsRef} />;
 }
 
 function setCaret(node: Text, offset: number): void {
@@ -412,6 +538,99 @@ function setCaret(node: Text, offset: number): void {
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function setSelection(startNode: Text, startOffset: number, endNode: Text, endOffset: number): void {
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function collapseCurrentSelection(): void {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+  const range = selection.getRangeAt(0).cloneRange();
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function currentSelectionText(): string {
+  return window.getSelection()?.toString() ?? "";
+}
+
+function mockCommandQueries({
+  states = {},
+  values = {},
+}: {
+  states?: Record<string, boolean>;
+  values?: Record<string, string>;
+}): () => void {
+  const originalQueryCommandState = document.queryCommandState;
+  const originalQueryCommandValue = document.queryCommandValue;
+  Object.defineProperty(document, "queryCommandState", {
+    configurable: true,
+    value: vi.fn((command: string) => Boolean(states[command])),
+  });
+  Object.defineProperty(document, "queryCommandValue", {
+    configurable: true,
+    value: vi.fn((command: string) => values[command] ?? ""),
+  });
+  return () => {
+    Object.defineProperty(document, "queryCommandState", {
+      configurable: true,
+      value: originalQueryCommandState,
+    });
+    Object.defineProperty(document, "queryCommandValue", {
+      configurable: true,
+      value: originalQueryCommandValue,
+    });
+  };
+}
+
+function mockExecCommandCollapsingAlignment(): () => void {
+  const originalExecCommand = document.execCommand;
+  Object.defineProperty(document, "execCommand", {
+    configurable: true,
+    value: vi.fn((command: string) => {
+      if (command.startsWith("justify")) {
+        applyMockAlignment(command);
+        collapseCurrentSelection();
+      }
+      return true;
+    }),
+  });
+  return () => {
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: originalExecCommand,
+    });
+  };
+}
+
+function applyMockAlignment(command: string): void {
+  const align =
+    command === "justifyCenter"
+      ? "center"
+      : command === "justifyRight"
+      ? "right"
+      : command === "justifyFull"
+      ? "justify"
+      : "left";
+  const selection = window.getSelection();
+  const anchorNode = selection?.anchorNode ?? null;
+  const anchorElement =
+    anchorNode?.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
+  const root = anchorElement instanceof HTMLElement
+    ? anchorElement.closest<HTMLElement>(".letter-body")
+    : null;
+  if (!root) return;
+  for (const block of Array.from(root.querySelectorAll<HTMLElement>("p,h1,h2,h3,h4,li,div"))) {
+    if (block.textContent?.trim()) block.style.textAlign = align;
+  }
 }
 
 async function flushMicrotasks(): Promise<void> {
