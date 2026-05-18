@@ -35,6 +35,7 @@ import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
 import { todayDateOnly } from "@/lib/date-only";
 import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
+import { AuditLogsCard } from "@/components/AuditLogsCard";
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -398,6 +399,9 @@ export function Settings() {
 
         {/* Workspace — real members + invites when signed in to a tenant. */}
         <WorkspaceMembersCard />
+
+        {/* WorkOS Audit Logs mirror status (admin-only) — null for non-admins. */}
+        <AuditLogsCard />
 
         {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
         <Card size="3">

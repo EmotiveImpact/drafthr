@@ -12,6 +12,7 @@ import { Wizard } from "@/routes/Wizard";
 import { RootRedirect } from "@/routes/RootRedirect";
 import { ModePicker } from "@/routes/ModePicker";
 import { Settings } from "@/routes/Settings";
+import { DirectorySync as SettingsDirectorySync } from "@/routes/settings/DirectorySync";
 import { Privacy } from "@/routes/Privacy";
 import { Mockups } from "@/routes/Mockups";
 import { BrowseLetters } from "@/routes/BrowseLetters";
@@ -199,6 +200,7 @@ export function App() {
         <Route path="/activity" element={<Protected><Activity /></Protected>} />
         <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
+        <Route path="/settings/directory-sync" element={<Protected><SettingsDirectorySync /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/auth/callback" element={<AuthCallback />} />

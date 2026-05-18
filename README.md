@@ -164,6 +164,59 @@ public/
 - **Model selection is centralised.** `server/llm-model.ts` owns the allow-list, env default, and `createAnthropic` construction. Browser settings still send a preferred model, but the server validates it against the allow-list. `ANTHROPIC_API_KEY` is required server-side and missing keys fail closed.
 - **Persistence is local-first.** Drafts, comments, collaborators, AI chat history all live in `localStorage` via Zustand `persist`; server dual-write can sync drafts into Postgres when enabled. Production route access is WorkOS-gated by default, but true multi-device collaborative editing is still future work.
 - **Rendering boundaries are defensive.** Paged preview/edit, PDF export, DOCX export, Markdown rendering, and pending AI proposals all pass through sanitization or safe data-URL checks before content becomes visible or canonical.
+- **Dual audit chains.** Every mutation appends a row to `audit_events` (hash-chained, per-tenant, tamper-evident — see `src/db/audit.ts`). When a tenant has `workos_org_id` set and `WORKOS_AUDIT_LOGS_ENABLED=true`, the same row is mirrored fire-and-forget to WorkOS Audit Logs so the tenant's SOC team can subscribe a SIEM. The local chain is the source of truth; the WorkOS mirror is a downstream sink. See `docs/audit-logs.md`.
+
+## Audit Logs
+
+DraftHR keeps **two** audit trails for every state change:
+
+1. **Local hash-chained `audit_events`** (`src/db/audit.ts`). Per-tenant chain, per-row SHA-256 over `prev_hash || canonicalJson(payload) || kind || subject_id || created_at_epoch_ms`. Any retroactive edit breaks the chain at the edit point and every row after it — see `src/db/audit-verify.ts` for the walker.
+
+2. **WorkOS Audit Logs mirror** (`src/lib/audit/workos-sink.ts`). Fired fire-and-forget after the local row commits. Off by default; flip on per environment with `WORKOS_AUDIT_LOGS_ENABLED=true`. Per-tenant gate: only tenants with `workos_org_id` set are mirrored. Cross-tenant safety: the writer resolves the org from the audit row's tenant id — clients never pass an org id.
+
+### Field mapping
+
+| DraftHR `audit_events` | WorkOS Audit Logs |
+| --- | --- |
+| `kind` (e.g. `draft.exported`) | `event.action` (e.g. `letters.draft.exported`) — see `mapKindToWorkOSAction` |
+| `actor_user_id` + joined `users.email` / `legal_name` | `event.actor` (`type: "user"`, `id`, `name`, `metadata.email`); falls back to a `system` actor when null |
+| `subject_type` / `subject_id` | `event.targets[0]` (`type`, `id`) |
+| `created_at` | `event.occurred_at` |
+| `payload_json` | `event.metadata` (clamped: 50 keys, 40-char keys, 500-char values) |
+| `id` | `Idempotency-Key` header (24h dedupe window) |
+
+Request IP / UA are passed through when the caller has them; absent IPs default to `0.0.0.0` because the WorkOS schema requires `context.location`.
+
+### Toggling the mirror
+
+```bash
+# Per-deployment (all tenants):
+vercel env add WORKOS_AUDIT_LOGS_ENABLED  # set to "true"
+# Per-tenant (only mirror enterprise tenants):
+update tenants set workos_org_id = 'org_xxx' where id = '...';
+```
+
+When both gates are off, the local chain still writes; nothing is sent to WorkOS.
+
+### Backfilling historical events
+
+After enabling the mirror, replay older rows with the CLI:
+
+```bash
+tsx scripts/backfill-workos-audit-logs.ts --since 2026-01-01
+```
+
+Safe to re-run — the `Idempotency-Key` is the local row id, so retries within 24h dedupe server-side. The script streams per-tenant for every tenant with `workos_org_id` set and logs progress every 25 rows.
+
+### Verification
+
+Settings → Audit Logs (admin-only) renders a status pill, the last successful mirror timestamp, an "Open WorkOS Admin Portal" link (`intent: audit_logs`), and a "Send test event" button that emits `audit.test_event` through `appendAuditEvent` end-to-end.
+
+## Directory Sync (SCIM / Google Workspace)
+
+Enterprise tenants can auto-provision DraftHR seats from Okta, Entra ID, Google Workspace, or any SCIM 2.0 directory. Webhook events from WorkOS land at `POST /api/workos/directory-webhook` (signature-verified via `WORKOS_WEBHOOK_SECRET`); each event upserts `users` + `tenant_members` and writes a `directory.user.*` row to the hash-chained audit log. Soft-delete on deprovisioning preserves audit history.
+
+Admins see status + a one-shot "Open WorkOS Admin Portal" link at Settings → Directory Sync. Full operations guide in [`docs/directory-sync.md`](docs/directory-sync.md).
 
 ## Disclaimer
 

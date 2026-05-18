@@ -3,14 +3,22 @@
  * test reproduces the chain algorithm in-process (no DB) — append events,
  * pass each prev_hash forward, then re-walk the chain and verify each row's
  * row_hash matches its inputs. Mirrors the SQL-side `verifyAuditChain`.
+ *
+ * Also asserts the WorkOS Audit Logs sink is fire-and-forget AFTER the
+ * transaction commits — the local chain insert must succeed (and the row
+ * must be queryable from a fresh tx) before the WorkOS mirror runs.
  */
 import { randomUUID } from "node:crypto";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { appendAuditEvent, computeRowHash, GENESIS_PREV_HASH } from "./audit.js";
 import { verifyAuditChain } from "./audit-verify.js";
 import { closeDb, getDb } from "./index.js";
-import { tenants } from "./schema.js";
+import { auditEvents, tenants } from "./schema.js";
+import {
+  setWorkosAuditLogsClient,
+  type WorkosAuditLogsClient,
+} from "../lib/audit/workos-sink.js";
 
 const itIfDb = process.env.DATABASE_URL ? it : it.skip;
 
@@ -133,4 +141,166 @@ describe("audit chain", () => {
       await db.delete(tenants).where(eq(tenants.id, tenantId));
     }
   });
+});
+
+describe("WorkOS mirror integration", () => {
+  const ORIGINAL_FLAG = process.env.WORKOS_AUDIT_LOGS_ENABLED;
+  afterEach(() => {
+    if (ORIGINAL_FLAG === undefined) delete process.env.WORKOS_AUDIT_LOGS_ENABLED;
+    else process.env.WORKOS_AUDIT_LOGS_ENABLED = ORIGINAL_FLAG;
+    setWorkosAuditLogsClient(null);
+  });
+
+  itIfDb(
+    "fires the WorkOS sink AFTER the chain row is persisted, with the row id as idempotency key",
+    async () => {
+      process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
+      const db = getDb();
+      const tenantId = randomUUID();
+      const workosOrgId = `org_test_${randomUUID().slice(0, 8)}`;
+      await db.insert(tenants).values({
+        id: tenantId,
+        name: "workos mirror test",
+        workosOrgId,
+      });
+
+      const createEvent = vi.fn(async (organization: string, _event: unknown, _options?: unknown) => {
+        // Critical assertion: the local row must already exist when the
+        // mirror runs. If the mirror were called inside the transaction,
+        // this query (running in the test's connection, not the writer's
+        // tx) would see zero rows.
+        const rows = await db
+          .select()
+          .from(auditEvents)
+          .where(eq(auditEvents.tenantId, tenantId));
+        expect(rows.length).toBe(1);
+        expect(organization).toBe(workosOrgId);
+      });
+      const fakeClient = { createEvent } as unknown as WorkosAuditLogsClient;
+      setWorkosAuditLogsClient(fakeClient);
+
+      try {
+        const result = await appendAuditEvent({
+          tenantId,
+          kind: "draft.exported",
+          subjectType: "draft",
+          subjectId: randomUUID(),
+          payload: { format: "pdf" },
+        });
+
+        // appendAuditEvent doesn't await the mirror; wait for the microtask
+        // queue to drain so the fire-and-forget completes before assertions.
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(createEvent).toHaveBeenCalledTimes(1);
+        const [, event, options] = createEvent.mock.calls[0] as [
+          string,
+          { action: string },
+          { idempotencyKey?: string },
+        ];
+        expect(options).toEqual({ idempotencyKey: result.id });
+        expect(event.action).toBe("letters.draft.exported");
+      } finally {
+        await db.delete(tenants).where(eq(tenants.id, tenantId));
+      }
+    },
+  );
+
+  itIfDb("does NOT call the WorkOS sink when the tenant has no workos_org_id", async () => {
+    process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
+    const db = getDb();
+    const tenantId = randomUUID();
+    await db.insert(tenants).values({ id: tenantId, name: "no-org tenant" });
+
+    const createEvent = vi.fn(async () => undefined);
+    setWorkosAuditLogsClient({ createEvent });
+
+    try {
+      await appendAuditEvent({
+        tenantId,
+        kind: "draft.created",
+        subjectType: "draft",
+        subjectId: randomUUID(),
+        payload: {},
+      });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(createEvent).not.toHaveBeenCalled();
+    } finally {
+      await db.delete(tenants).where(eq(tenants.id, tenantId));
+    }
+  });
+
+  itIfDb(
+    "does NOT call the WorkOS sink when the env flag is off, even with workos_org_id set",
+    async () => {
+      delete process.env.WORKOS_AUDIT_LOGS_ENABLED;
+      const db = getDb();
+      const tenantId = randomUUID();
+      const workosOrgId = `org_off_${randomUUID().slice(0, 8)}`;
+      await db.insert(tenants).values({
+        id: tenantId,
+        name: "flag off tenant",
+        workosOrgId,
+      });
+
+      const createEvent = vi.fn(async () => undefined);
+      setWorkosAuditLogsClient({ createEvent });
+
+      try {
+        await appendAuditEvent({
+          tenantId,
+          kind: "draft.created",
+          subjectType: "draft",
+          subjectId: randomUUID(),
+          payload: {},
+        });
+        await new Promise((r) => setTimeout(r, 50));
+        expect(createEvent).not.toHaveBeenCalled();
+      } finally {
+        await db.delete(tenants).where(eq(tenants.id, tenantId));
+      }
+    },
+  );
+
+  itIfDb(
+    "does NOT throw when the WorkOS sink errors — the local row is still persisted",
+    async () => {
+      process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
+      const db = getDb();
+      const tenantId = randomUUID();
+      const workosOrgId = `org_err_${randomUUID().slice(0, 8)}`;
+      await db.insert(tenants).values({
+        id: tenantId,
+        name: "sink errors tenant",
+        workosOrgId,
+      });
+
+      setWorkosAuditLogsClient({
+        createEvent: vi.fn(async () => {
+          throw new Error("simulated workos outage");
+        }),
+      });
+
+      try {
+        const result = await appendAuditEvent({
+          tenantId,
+          kind: "draft.created",
+          subjectType: "draft",
+          subjectId: randomUUID(),
+          payload: { title: "still works" },
+        });
+        await new Promise((r) => setTimeout(r, 50));
+
+        expect(result.id).toBeTruthy();
+        const rows = await db
+          .select()
+          .from(auditEvents)
+          .where(eq(auditEvents.tenantId, tenantId));
+        expect(rows.length).toBe(1);
+        expect(rows[0].id).toBe(result.id);
+      } finally {
+        await db.delete(tenants).where(eq(tenants.id, tenantId));
+      }
+    },
+  );
 });

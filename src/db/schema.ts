@@ -17,12 +17,25 @@ import { sql } from "drizzle-orm";
 
 // --- workspace ---------------------------------------------------------------
 
-export const tenants = pgTable("tenants", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+// workos_org_id — when populated, audit_events for this tenant are mirrored
+// to WorkOS Audit Logs (subject to WORKOS_AUDIT_LOGS_ENABLED). The local
+// hash-chain stays the source of truth; WorkOS is a downstream sink so
+// enterprise tenants can subscribe their SIEM. workos_audit_logs_last_sent_at
+// is updated on each successful mirror — surfaced in the Settings card.
+export const tenants = pgTable(
+  "tenants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    workosOrgId: text("workos_org_id").unique(),
+    workosAuditLogsLastSentAt: timestamp("workos_audit_logs_last_sent_at", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("tenants_workos_org_id_idx").on(t.workosOrgId)],
+);
 
 // users.tenantId is the "home" tenant they were minted under — kept for
 // backwards-compat, but the real per-workspace role lives in tenant_members.
@@ -32,6 +45,12 @@ export const tenants = pgTable("tenants", {
 // FK: ON DELETE SET NULL (not CASCADE) — deleting a tenant must NOT delete
 // every user whose home tenant happens to point at it. tenant_members is the
 // source of truth for tenant membership; users.tenant_id is a soft pointer.
+// workos_directory_user_id — set when the row is provisioned via Directory
+// Sync (SCIM / Google Workspace). Unique because every directory user maps
+// to a single DraftHR user row. workos_directory_id records which directory
+// the row came from, in case a tenant has more than one (rare but possible
+// for multi-region orgs). Both nullable — users who signed up directly via
+// AuthKit never get these populated.
 export const users = pgTable(
   "users",
   {
@@ -42,10 +61,16 @@ export const users = pgTable(
     legalName: text("legal_name"),
     workspaceRole: text("workspace_role").notNull().default("drafter"),
     userType: text("user_type").notNull().default("customer"),
+    workosDirectoryUserId: text("workos_directory_user_id"),
+    workosDirectoryId: text("workos_directory_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("users_tenant_idx").on(t.tenantId)],
+  (t) => [
+    index("users_tenant_idx").on(t.tenantId),
+    uniqueIndex("users_workos_directory_user_id_uniq").on(t.workosDirectoryUserId),
+    index("users_workos_directory_id_idx").on(t.workosDirectoryId),
+  ],
 );
 
 // tenant_members — many-to-many users <-> tenants. Source of truth for the
@@ -63,6 +88,13 @@ export const tenantMembers = pgTable(
       .references(() => tenants.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("drafter"),
     isActiveTenant: boolean("is_active_tenant").notNull().default(false),
+    // status — 'active' for normal membership. Directory Sync flips this to
+    // 'deprovisioned' on dsync.user.deleted / dsync.group.user_removed so we
+    // soft-delete the seat instead of dropping the row. Audit chain references
+    // tenant_members.user_id; hard-deleting would corrupt the chain. The
+    // deprovisioned_at timestamp lets the Settings UI show "removed by IdP on X".
+    status: text("status").notNull().default("active"),
+    deprovisionedAt: timestamp("deprovisioned_at", { withTimezone: true }),
     joinedAt: timestamp("joined_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
