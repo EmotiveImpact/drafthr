@@ -117,15 +117,28 @@ honoured.
 - [ ] **Suggestion-mark consumer surfaces #2-#4** — consultant track-changes
   view, richer threaded comments, future co-edit cursors. Primitive shipped
   in 0.9.0; only the AI inline-diff surface (#1) cashes it in so far.
-- [ ] **Mobile read-only view** (`/m/<draftId>`) — Persona D requirement.
+- [x] **Mobile read-only view** (`/m/<draftId>`) — Persona D requirement.
+  *(Shipped 2026-05-18, commit `bc14b25` — chromeless reader, 720px
+  centered, 16px serif, tenant-scoped, reuses `letterBodyHtml()`
+  pipeline. "Open on mobile…" share dialog in the editor File menu.)*
 - [ ] **HRIS integrations** — BambooHR first, then Workday / Personio.
   Persona D table-stakes.
 - [ ] **Tribunal calendar with email/SMS reminders** — Employee
   differentiator.
 - [ ] **Real-time presence / cursors** — Y2, Liveblocks/Yjs.
-- [ ] **Onboarding tour** — Joyride-style first-run. Activation lift.
-- [ ] **/reports v2** — drill-down + per-employee analytics. Current v1 is
+- [x] **Onboarding tour** — Joyride-style first-run. Activation lift.
+  *(Shipped 2026-05-18, commit `e233906` — 5-step role-aware tour,
+  HR sidebar walkthrough + Employee wizard→export pipeline. Skip +
+  close persist seen flag in localStorage. Dev replay handle behind
+  `import.meta.env.DEV`.)*
+- [x] **/reports v2** — drill-down + per-employee analytics. Current v1 is
   workspace-level only.
+  *(Shipped 2026-05-18, commit `5ab1c03` — `/reports/matters/:id`
+  + `/reports/checks/:id` sub-routes. Risk heatmap cells +
+  failing-check rows become keyboard-focusable buttons. Single
+  source of truth predicate list in `src/lib/reports/check-predicates.ts`
+  so aggregate + drill-down can't diverge. Per-employee analytics
+  still parked — this wave was matter + health-check drill-down only.)*
 
 ### Compliance / legal moat
 
@@ -217,6 +230,16 @@ Tick what we ship today.
   Postgres wants UUIDs. New `toServerUuid()` deterministically hashes
   legacy ids to stable UUIDs so dual-write actually works for users
   with legacy data, not just newly-created drafts.
+- [x] **Wave 1 trio — three Persona-D visible wins in parallel** shipped
+  as 0.12.0 (commits `e233906` / `bc14b25` / `5ab1c03`):
+  - Onboarding tour (5-step role-aware Joyride, first-run only)
+  - Mobile read-only view at `/m/<draftId>` (chromeless reader,
+    "Open on mobile…" share dialog in the editor)
+  - `/reports` v2 drill-down (matter + failing-check sub-routes,
+    deep-linkable triage URLs)
+
+  225 tests passing on merged tree. One new dep (`react-joyride`).
+  Each wave committed atomically against current main.
 
 ---
 

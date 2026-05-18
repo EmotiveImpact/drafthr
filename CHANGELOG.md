@@ -2,6 +2,115 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.12.0 — 2026-05-18
+
+Wave 1 trio — three Persona-D visible wins shipped in parallel.
+Onboarding tour, mobile read-only view, and `/reports` drill-down.
++2,746 LOC across 22 files; 225 tests passing on merged tree.
+
+### Onboarding tour — first-run Joyride walkthrough
+
+5-step, role-aware tour mounted on first signed-in landing at `/hr`
+or `/me`. HR users get a sidebar-anchored walkthrough (Employees →
+Matters → Reports → New letter → workspace switcher). Employee users
+get the New letter anchor plus four centered cards explaining the
+wizard → editor right-rail → evidence → export pipeline.
+
+- `src/lib/onboarding.ts` — `hasSeenTour` / `markTourSeen` /
+  `resetTour` backed by localStorage key `drafthr.onboarding.tour.v1`.
+  Try/catch around localStorage so private-mode fails closed.
+- `src/components/onboarding/OnboardingTour.tsx` — `react-joyride@^3.1.0`,
+  pulse instead of harsh spotlight cut-out, themed with `--ds-ink` /
+  `--ds-surface` / `--ds-line`. Skip + close both persist the seen
+  flag.
+- `data-tour` anchors on `AppSidebar.tsx` (`nav-employees`,
+  `nav-matters`, `nav-reports`, `workspace-switcher`) and
+  `routes/Home.tsx` (`new-letter-cta`).
+- Dev-only `window.__drafthr.startTour()` replay handle behind
+  `import.meta.env.DEV`.
+- 7 new tests.
+
+Activation lift for new HR + Employee signups.
+
+### Mobile read-only view — `/m/:draftId`
+
+Chromeless full-screen reader for the "HR Director triages on the
+bus" persona. No toolbar, no rails, no menubar. Just the letter, a
+sticky title + status pill, and a floating Done button.
+
+- `src/routes/MobileReadView.tsx` — reads `:draftId` from
+  `useParams`, pulls from `useDraftStore`, renders the letter via the
+  same `letterBodyHtml()` pipeline as PDF export. 720px centered
+  column, 16px serif tuned for mobile. Tenant-scoped (no cross-tenant
+  leakage). Done button calls `navigate(-1)` with `/` fallback.
+- `src/lib/export/pdf.ts` — `letterBodyHtml()` now exported (single
+  source of truth: mobile + PDF + DOCX share the same sanitised HTML).
+- `src/components/Layout.tsx` — `/m/` added to `CHROMELESS_PREFIXES`
+  so the sidebar/topbar/onboarding don't render on the mobile route.
+- `src/components/editor/MobileShareDialog.tsx` — "Open on mobile…"
+  share menu item in the editor's File menu. URL + Copy link + Open
+  in new tab. QR code intentionally deferred (no new dep).
+- `src/App.tsx` — `/m/:draftId` registered inside `<Protected>`
+  (same auth gate as the desktop editor).
+- 4 new tests, including a cross-tenant leakage proxy.
+
+### `/reports` v2 — drill-down for matters + failing checks
+
+Workspace-level Reports stays untouched. Drill-down sub-routes layer
+on top so HR Directors can click into the numbers instead of just
+reading them.
+
+- `src/lib/reports/check-predicates.ts` — `HEALTH_CHECKS` list with
+  per-check `predicate(d) => null | reason` helper, plus
+  `failingDraftsForCheck` / `failingCountForCheck` / `getHealthCheck`.
+  Single source of truth: Reports aggregate + drill-down list cannot
+  diverge.
+- `src/components/reports/MatterDrillDown.tsx` —
+  `/reports/matters/:matterId`. Header (name · drafts · people ·
+  risk band), drafts table (title · status · severity · last-edited
+  · owner). Row click + keyboard activation → `/editor/:id`.
+- `src/components/reports/FailingCheckDrillDown.tsx` —
+  `/reports/checks/:checkId`. Header (label · failing count · why),
+  list of failing letters with the specific reason each one is
+  failing.
+- `src/routes/Reports.tsx` — Risk heatmap cells become `<button>`
+  elements that navigate to `/reports/matters/:id`; new failing-checks
+  list inside `ComplianceHealthCard` navigates to
+  `/reports/checks/:id`.
+- `src/App.tsx` — two new route registrations inside `<Protected>`.
+- 23 new tests across both drill-down components.
+
+Sub-routes chosen over a drawer for deep-linkable triage URLs +
+browser back button support.
+
+### Commits
+
+- `e233906` Onboarding: first-run Joyride tour (5 steps, role-aware)
+- `bc14b25` Mobile: read-only view at /m/<draftId> (Persona D)
+- `5ab1c03` Reports v2: drill-down for matters + failing health checks
+
+### Deps added
+
+- `react-joyride@^3.1.0` (+ 10 transitive). Clean install, no peer
+  conflicts on React 19.
+
+### Verification
+
+- `npm run lint` — clean
+- `npx tsc --noEmit` — clean
+- `npm test -- --run` — 35 files / 225 passed + 1 skipped
+
+### Open follow-ups (deferred, not blocking)
+
+- Mobile read-only across devices: `useDraftStore` is per-device
+  localStorage. Picking up a draft on the phone requires dual-write
+  sync to have already hydrated it. Becomes a non-issue once
+  read-from-Postgres lands.
+- "Owner" column in the drill-downs falls back through
+  `collaborators[role=owner].name → email → employer.legalName → —`.
+  Wire `Draft.createdByUserId` here once that field lands (likely
+  with WorkOS).
+
 ## 0.11.4 — 2026-05-18
 
 Paged-editor bugfixes (4 HIGH, live in production until now) + a small
