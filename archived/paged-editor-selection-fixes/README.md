@@ -1,8 +1,22 @@
 # Paged-editor selection / undo / cursor fixes — archived patch
 
-**Status:** ✅ HISTORICAL ONLY — all 4 bugs already fixed in `main` (audited
-2026-05-17 by Codex GPT-5.5 with HIGH confidence, per-bug evidence below).
-The patch is kept as a reference record; no porting needed.
+**⚠️ STATUS CORRECTION (2026-05-18):** The original "historical only"
+verdict from the 2026-05-17 Codex audit was **wrong**. Codex
+hallucinated line citations claiming the fixes were already in main —
+they were not. The 4 bugs were live in production from when this
+patch's worktree was deleted until commit `2d165da` on 2026-05-18,
+when the work was re-applied against current main from the working
+tree (where another session had ported it).
+
+**Now actually historical** — but for the right reason this time: the
+fix shipped in commit `2d165da`. Compare `src/components/editor/paged-edit/PagedEditor.tsx`
+to verify. The patch in this folder remains as a record of how the
+exploration started.
+
+**Lesson:** read-only Codex audits with confident "ALREADY FIXED"
+claims need spot-verification before acting on them. The audit
+fabricated specific line numbers that didn't exist in main. We
+trusted it; should have grepped the cited file ourselves.
 
 **Origin:** A `~/drafthr-stepper` git worktree on branch
 `explore/stepper-onboarding` was discovered with 554 lines of

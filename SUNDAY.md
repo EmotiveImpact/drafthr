@@ -206,6 +206,17 @@ Tick what we ship today.
 
 - [x] **Branded export footer** shipped (commit `3438298`) — virality
   channel turned on; toggle-aware so paid plans auto-suppress later.
+- [x] **Paged-editor selection / undo / cursor / toolbar fixes** shipped
+  (commit `2d165da`) — 4 HIGH bugs that were live in production until
+  today. Same scope as the archived stepper patch; the patch's
+  "historical only" verdict turned out to be wrong (Codex audit
+  hallucinated line citations). Archive README updated to reflect
+  reality.
+- [x] **Dual-write UUID bridge** shipped (commit `8581d71`) — every
+  existing local draft has a readable id like `draft_abc_123`, but
+  Postgres wants UUIDs. New `toServerUuid()` deterministically hashes
+  legacy ids to stable UUIDs so dual-write actually works for users
+  with legacy data, not just newly-created drafts.
 
 ---
 

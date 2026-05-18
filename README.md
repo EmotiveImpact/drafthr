@@ -6,7 +6,7 @@ Two modes, two product surfaces:
 - **Employee mode** — single-letter wizard for an individual handling their own grievance / resignation / flexible-working / tribunal claim.
 - **HR/Management mode** — portfolio workbench: Employees directory, Matters with risk register, bulk CSV operations, workspace-saved Custom Templates, today/risk/compliance dashboard.
 
-**Current version:** `0.11.3`
+**Current version:** `0.11.4`
 
 → **Live design system:** [`/public/design-system.html`](public/design-system.html)
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)

@@ -2,6 +2,75 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.11.4 — 2026-05-18
+
+Paged-editor bugfixes (4 HIGH, live in production until now) + a small
+but important dual-write reliability fix for legacy local draft IDs.
+Also: corrects an earlier wrong "historical only" verdict on an
+archived patch.
+
+### Paged editor — 4 HIGH bugs fixed
+
+Re-applies the exploration that was once parked on a deleted worktree
+(branch `explore/stepper-onboarding`, base `fa56d94`) against current
+main. Worktree's patch was archived in commit `ebd6535` as "historical
+only" based on a Codex audit verdict — that verdict turned out to be
+wrong (Codex hallucinated line citations). The 4 bugs were live until
+today.
+
+- **Bug #1 — Toolbar steals selection.** Highlight a word, click Bold,
+  highlight disappears. Fix: `SELECTION_PRESERVING_COMMANDS` set +
+  before/after capture/restore around `document.execCommand`.
+- **Bug #2 — Stale undo handler.** Menubar Cmd+Z could miss the last
+  few keystrokes. Fix: `dirtyRef` (sync, separate from React state)
+  + `handleUndo`/`handleRedo` reconstruct dirty DOM before acting.
+- **Bug #3 — Cursor jumps on repagination.** Typing on page 3, paged.js
+  rebuilds page breaks, cursor jumps to page 1. Fix:
+  `reconstructSourceHtml` operates on a clone, never mutates the live
+  DOM. Cursor + selection stay intact.
+- **Bug #4 — Toolbar buttons flicker un-pressed.** Cosmetic — Bold-is-
+  pressed state visually deactivates on toolbar click. Fix:
+  `shouldPreserveFormatStateAfterSelectionLoss` heuristic suppresses
+  the format-state reset when focus moved to the toolbar.
+
+4 new test cases (235 LOC) — byte-for-byte the same names as the
+archived stepper patch.
+
+### Dual-write — UUID bridge for legacy local IDs
+
+Local Zustand draft IDs are readable strings (`draft_abc_123` via
+`uid()`); Postgres dual-write target expects UUIDs. Without a bridge,
+every draft created before dual-write rollout silently 500'd on first
+sync.
+
+New `src/lib/remote-ids.ts`:
+- `toServerUuid(id)` — UUID? lowercase + return. Otherwise deterministic
+  namespace-prefixed hash (`drafthr:<id>`) → stable UUID v5-shape output.
+  Same input → same UUID forever, so updates / deletes line up across
+  sessions and devices.
+- `serverUuidOrNull(id)` — strict variant. Used for FKs (matterId,
+  templateSourceId) where dropping the reference is safer than
+  inventing one.
+
+`src/lib/dual-write.ts` `toServerPayload` + `deleteDraftRemotely` now
+route the draft id and FK fields through the bridge. Dual-write
+actually works for users with legacy data.
+
+### Archive correction
+
+`archived/paged-editor-selection-fixes/README.md` updated with a status
+correction explaining the 2026-05-17 Codex audit was wrong + the patch
+is now genuinely historical for the right reason (fix shipped in
+`2d165da`).
+
+**Lesson recorded:** confident Codex "ALREADY FIXED" verdicts with
+fabricated line citations are a real failure mode. Spot-verify by
+grepping the cited file before acting on the verdict.
+
+### Tests
+
+191/192 passing (1 skipped). Lint + tsc clean.
+
 ## 0.11.3 — 2026-05-18
 
 Branded export footer ("Drafted with DraftHR · drafthr.io") on every
