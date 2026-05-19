@@ -128,117 +128,121 @@ export function SignupWorkspace() {
 
   if (!isLoaded || !user) {
     return (
-      <Box className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-        <Skeleton className="h-8 w-48 mb-4" />
-        <Skeleton className="h-32 w-full" />
+      <Box className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
+        <div className="flex flex-col justify-center min-h-[calc(100dvh-5rem)] sm:min-h-[calc(100dvh-6rem)]">
+          <Skeleton className="h-8 w-48 mb-4" />
+          <Skeleton className="h-32 w-full" />
+        </div>
       </Box>
     );
   }
 
   return (
-    <Box className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-      <PageHeader
-        crumbs={[{ label: "Welcome" }]}
-        title={`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
-        lede="A workspace is your team's shared HR letter library. Drafts, evidence, and audit log are scoped to one workspace. You can belong to several — switch between them in the sidebar."
-      />
+    <Box className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
+      <div className="flex flex-col justify-center min-h-[calc(100dvh-5rem)] sm:min-h-[calc(100dvh-6rem)]">
+        <PageHeader
+          crumbs={[{ label: "Welcome" }]}
+          title={`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
+          lede="A workspace is your team's shared HR letter library. Drafts, evidence, and audit log are scoped to one workspace. You can belong to several — switch between them in the sidebar."
+        />
 
-      <Flex direction="column" gap="4">
-        <Flex gap="2">
-          <Button
-            variant={mode === "create" ? "solid" : "soft"}
-            color="gray"
-            onClick={() => setMode("create")}
-          >
-            <Building2 className="size-4" />
-            Create new workspace
-          </Button>
-          <Button
-            variant={mode === "join" ? "solid" : "soft"}
-            color="gray"
-            onClick={() => setMode("join")}
-          >
-            <Mail className="size-4" />
-            Join via invite link
-          </Button>
+        <Flex direction="column" gap="4">
+          <Flex gap="2">
+            <Button
+              variant={mode === "create" ? "solid" : "soft"}
+              color="gray"
+              onClick={() => setMode("create")}
+            >
+              <Building2 className="size-4" />
+              Create new workspace
+            </Button>
+            <Button
+              variant={mode === "join" ? "solid" : "soft"}
+              color="gray"
+              onClick={() => setMode("join")}
+            >
+              <Mail className="size-4" />
+              Join via invite link
+            </Button>
+          </Flex>
+
+          {mode === "create" ? (
+            <Card size="3">
+              <Box mb="3">
+                <Heading size="3" mb="1">Create new workspace</Heading>
+                <Text size="2" color="gray" as="p">
+                  You'll be the owner. Invite teammates afterwards in Settings.
+                </Text>
+              </Box>
+              <Grid columns={{ initial: "1", sm: "2" }} gap="3">
+                <Field label="Workspace name" required>
+                  <TextField.Root
+                    size="3"
+                    placeholder="Acme HR Team"
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    disabled={busy}
+                  />
+                </Field>
+                <Field label="Industry">
+                  <TextField.Root
+                    size="3"
+                    placeholder="e.g. Technology, Healthcare"
+                    value={industry}
+                    onChange={(e) => setIndustry(e.target.value)}
+                    disabled={busy}
+                  />
+                </Field>
+                <Field label="Team size">
+                  <Select.Root value={teamSize} onValueChange={setTeamSize} disabled={busy}>
+                    <Select.Trigger placeholder="Select…" />
+                    <Select.Content>
+                      <Select.Item value="solo">Just me</Select.Item>
+                      <Select.Item value="2-10">2–10</Select.Item>
+                      <Select.Item value="11-50">11–50</Select.Item>
+                      <Select.Item value="51-200">51–200</Select.Item>
+                      <Select.Item value="200+">200+</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Field>
+              </Grid>
+              <Separator size="4" my="4" />
+              <Flex justify="end" gap="2" align="center">
+                {error && <Badge color="red">{error}</Badge>}
+                <Button size="3" onClick={onCreate} disabled={busy}>
+                  {busy ? "Creating…" : "Create workspace"}
+                </Button>
+              </Flex>
+            </Card>
+          ) : (
+            <Card size="3">
+              <Box mb="3">
+                <Heading size="3" mb="1">Join via invite</Heading>
+                <Text size="2" color="gray" as="p">
+                  Paste the invite link your admin shared, or just the invite code.
+                </Text>
+              </Box>
+              <Field label="Invite link or code">
+                <TextField.Root
+                  size="3"
+                  placeholder="https://app.drafthr.io/join/abc… or abc…"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  disabled={busy}
+                  autoFocus
+                />
+              </Field>
+              <Separator size="4" my="4" />
+              <Flex justify="end" gap="2" align="center">
+                {error && <Badge color="red">{error}</Badge>}
+                <Button size="3" onClick={onJoin} disabled={busy}>
+                  {busy ? "Joining…" : "Join workspace"}
+                </Button>
+              </Flex>
+            </Card>
+          )}
         </Flex>
-
-        {mode === "create" ? (
-          <Card size="3">
-            <Box mb="3">
-              <Heading size="3" mb="1">Create new workspace</Heading>
-              <Text size="2" color="gray" as="p">
-                You'll be the owner. Invite teammates afterwards in Settings.
-              </Text>
-            </Box>
-            <Grid columns={{ initial: "1", sm: "2" }} gap="3">
-              <Field label="Workspace name" required>
-                <TextField.Root
-                  size="3"
-                  placeholder="Acme HR Team"
-                  value={workspaceName}
-                  onChange={(e) => setWorkspaceName(e.target.value)}
-                  disabled={busy}
-                />
-              </Field>
-              <Field label="Industry">
-                <TextField.Root
-                  size="3"
-                  placeholder="e.g. Technology, Healthcare"
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  disabled={busy}
-                />
-              </Field>
-              <Field label="Team size">
-                <Select.Root value={teamSize} onValueChange={setTeamSize} disabled={busy}>
-                  <Select.Trigger placeholder="Select…" />
-                  <Select.Content>
-                    <Select.Item value="solo">Just me</Select.Item>
-                    <Select.Item value="2-10">2–10</Select.Item>
-                    <Select.Item value="11-50">11–50</Select.Item>
-                    <Select.Item value="51-200">51–200</Select.Item>
-                    <Select.Item value="200+">200+</Select.Item>
-                  </Select.Content>
-                </Select.Root>
-              </Field>
-            </Grid>
-            <Separator size="4" my="4" />
-            <Flex justify="end" gap="2" align="center">
-              {error && <Badge color="red">{error}</Badge>}
-              <Button size="3" onClick={onCreate} disabled={busy}>
-                {busy ? "Creating…" : "Create workspace"}
-              </Button>
-            </Flex>
-          </Card>
-        ) : (
-          <Card size="3">
-            <Box mb="3">
-              <Heading size="3" mb="1">Join via invite</Heading>
-              <Text size="2" color="gray" as="p">
-                Paste the invite link your admin shared, or just the invite code.
-              </Text>
-            </Box>
-            <Field label="Invite link or code">
-              <TextField.Root
-                size="3"
-                placeholder="https://app.drafthr.io/join/abc… or abc…"
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-                disabled={busy}
-                autoFocus
-              />
-            </Field>
-            <Separator size="4" my="4" />
-            <Flex justify="end" gap="2" align="center">
-              {error && <Badge color="red">{error}</Badge>}
-              <Button size="3" onClick={onJoin} disabled={busy}>
-                {busy ? "Joining…" : "Join workspace"}
-              </Button>
-            </Flex>
-          </Card>
-        )}
-      </Flex>
+      </div>
     </Box>
   );
 }
