@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { Wordmark } from "@/components/ds/Wordmark";
+import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
 import { AuthFooter } from "@/routes/sign-in/AuthShell";
 
@@ -145,8 +145,9 @@ export function SignIn() {
           "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
       }}
     >
-      <header className="px-6 pt-6 sm:px-10 sm:pt-8">
+      <header className="flex justify-center px-6 pt-6 sm:px-10 sm:pt-8">
         <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2">
+          <BrandMark size={34} />
           <Wordmark size={22} />
         </Link>
       </header>
@@ -180,8 +181,10 @@ export function SignIn() {
           <div className="px-7 sm:px-9 pb-7 sm:pb-8">
             {/* Social providers — same OAuth shim as the legacy hosted
              * page, just with the provider preselected so the user
-             * skips the WorkOS picker. */}
-            <div className="grid grid-cols-1 gap-2">
+             * skips the WorkOS picker. 3-up grid keeps them compact;
+             * full "Continue with X" label lives in aria-label / title
+             * for screen readers + hover tooltips. */}
+            <div className="grid grid-cols-3 gap-2">
               <SocialButton
                 provider="google"
                 onClick={() => void onSocial("GoogleOAuth")}
@@ -367,12 +370,17 @@ function SocialButton({
   busy: boolean;
   disabled: boolean;
 }) {
-  const label =
+  // Visible short label keeps brand recognisable in the 3-column layout;
+  // aria-label + title retain the full "Continue with X" intent for screen
+  // readers and hover tooltips.
+  const ariaLabel =
     provider === "google"
       ? "Continue with Google"
       : provider === "microsoft"
       ? "Continue with Microsoft"
       : "Continue with LinkedIn";
+  const shortLabel =
+    provider === "google" ? "Google" : provider === "microsoft" ? "Microsoft" : "LinkedIn";
   const Glyph =
     provider === "google" ? GoogleGlyph : provider === "microsoft" ? MicrosoftGlyph : LinkedInGlyph;
   return (
@@ -380,11 +388,12 @@ function SocialButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={label}
-      className="w-full inline-flex items-center justify-center gap-2.5 h-[42px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[13px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
-      {label}
+      <span className="truncate">{shortLabel}</span>
     </button>
   );
 }

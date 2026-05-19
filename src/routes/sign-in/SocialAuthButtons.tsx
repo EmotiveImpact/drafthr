@@ -78,7 +78,7 @@ export function SocialAuthButtons({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-2">
+    <div className="grid grid-cols-3 gap-2">
       <SocialButton
         provider="google"
         onClick={() => void start("GoogleOAuth")}
@@ -114,12 +114,16 @@ function SocialButton({
   busy: boolean;
   disabled: boolean;
 }) {
-  const label =
+  // Visible short label keeps brand recognisable in the 3-column layout;
+  // aria-label keeps the full "Continue with X" intent for screen readers.
+  const ariaLabel =
     provider === "google"
       ? "Continue with Google"
       : provider === "microsoft"
       ? "Continue with Microsoft"
       : "Continue with LinkedIn";
+  const shortLabel =
+    provider === "google" ? "Google" : provider === "microsoft" ? "Microsoft" : "LinkedIn";
   const Glyph =
     provider === "google" ? GoogleGlyph : provider === "microsoft" ? MicrosoftGlyph : LinkedInGlyph;
   return (
@@ -127,11 +131,12 @@ function SocialButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={label}
-      className="w-full inline-flex items-center justify-center gap-2.5 h-[42px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[13px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
-      {label}
+      <span className="truncate">{shortLabel}</span>
     </button>
   );
 }
