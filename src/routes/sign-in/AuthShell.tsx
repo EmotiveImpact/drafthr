@@ -43,7 +43,7 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
         </Link>
       </header>
 
-      <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
+      <div className="flex-1 grid items-center justify-items-center px-4 pt-6 pb-14 sm:pt-8 sm:pb-20 lg:pt-10 lg:pb-24">
         <section
           aria-labelledby="auth-heading"
           className="w-full max-w-[440px] rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_1px_2px_rgba(10,11,13,0.04),0_24px_60px_-30px_rgba(10,11,13,0.18)]"
@@ -58,7 +58,7 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
               style={{
                 fontSize: "clamp(22px, 3vw, 26px)",
                 lineHeight: 1.15,
-                letterSpacing: "-0.018em",
+                letterSpacing: 0,
               }}
             >
               {heading}
@@ -74,17 +74,27 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
         </section>
       </div>
 
-      <footer className="px-6 sm:px-10 pb-6 sm:pb-8 text-[11.5px] text-[var(--ds-muted)] flex flex-wrap items-center gap-x-4 gap-y-1.5">
+      <AuthFooter />
+    </main>
+  );
+}
+
+export function AuthFooter() {
+  return (
+    <footer className="px-6 pb-6 sm:px-10 sm:pb-8">
+      <div className="mx-auto flex max-w-[760px] flex-col items-center justify-center gap-1.5 text-center text-[11.5px] text-[var(--ds-muted)] sm:flex-row sm:flex-wrap sm:gap-x-3">
         <span className="inline-flex items-center gap-1.5">
           <ShieldCheck className="size-3.5" aria-hidden />
           Authentication by WorkOS — SSO, MFA, and SAML ready
         </span>
-        <span className="opacity-60">·</span>
+        <span className="hidden opacity-60 sm:inline">·</span>
         <Link to="/privacy" className="hover:text-[var(--ds-ink)] transition">
           Privacy
         </Link>
-      </footer>
-    </main>
+        <span className="hidden opacity-60 sm:inline">·</span>
+        <span>&copy; {new Date().getFullYear()} DraftHR. All rights reserved.</span>
+      </div>
+    </footer>
   );
 }
 
