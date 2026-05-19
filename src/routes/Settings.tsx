@@ -36,6 +36,7 @@ import { useDraftStore } from "@/lib/store";
 import { todayDateOnly } from "@/lib/date-only";
 import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 import { AuditLogsCard } from "@/components/AuditLogsCard";
+import { SecurityCard } from "@/components/SecurityCard";
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -396,6 +397,11 @@ export function Settings() {
             </Field>
           </Grid>
         </Card>
+
+        {/* Security — in-app password reset (signed-in users only). The
+         * /sign-in/forgot-password page is signed-out only, so without this
+         * surface signed-in users have no path to rotate their password. */}
+        <SecurityCard />
 
         {/* Workspace — real members + invites when signed in to a tenant. */}
         <WorkspaceMembersCard />
