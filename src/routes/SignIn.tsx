@@ -81,6 +81,19 @@ export function SignIn() {
         },
         body: JSON.stringify({ email: email.trim(), password }),
       });
+      // Detect "wrong dev server" first — plain `npm run dev` only mounts
+      // /api/draft + /api/agent via the qwen-proxy plugin, so /api/auth/*
+      // falls through to the SPA's HTML 404. JSON.parse on HTML would
+      // throw a cryptic "Unexpected token" message; this guard makes the
+      // failure actionable.
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.toLowerCase().includes("application/json")) {
+        throw new Error(
+          "Sign-in API didn't respond with JSON. If you're running `npm run dev` " +
+            "locally, switch to `vercel dev` so /api/auth/* is served. " +
+            "If you're on production, please report this — it shouldn't happen.",
+        );
+      }
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);

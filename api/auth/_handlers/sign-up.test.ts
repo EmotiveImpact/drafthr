@@ -68,7 +68,7 @@ describe("POST /api/auth/sign-up", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({ ok: true, requiresVerification: true });
+    expect(body).toEqual({ ok: true, requiresVerification: true, userId: "user_01" });
 
     expect(createUser).toHaveBeenCalledWith({
       email: "new@example.com",
@@ -108,7 +108,11 @@ describe("POST /api/auth/sign-up", () => {
 
     // Same response as the happy path — attacker can't distinguish.
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, requiresVerification: true });
+    expect(await res.json()).toEqual({
+      ok: true,
+      requiresVerification: true,
+      userId: "user_existing",
+    });
     // No cookie minted in this branch either.
     expect(res.headers.get("set-cookie")).toBeNull();
     // Background: we DID silently resend so the rightful owner still gets

@@ -101,8 +101,13 @@ export async function POST(req: Request): Promise<Response> {
     // still gets a usable email (it'll be a fresh verification link),
     // then return the generic success shape.
     if (isWorkosConflict(err)) {
-      await silentlyResendVerificationByEmail(email);
-      return ok();
+      const existingUserId = await silentlyResendVerificationByEmail(email);
+      // Returning the userId only when we actually re-sent (i.e. account is
+      // unverified) is fine for anti-enumeration: verified-vs-unverified is
+      // not information an attacker who already knows the email gains real
+      // leverage from. Crucially we still always return ok() shape; the
+      // userId field is just absent in the verified-already branch.
+      return ok(existingUserId);
     }
 
     // Surface password / validation errors verbatim — these are user-fixable
@@ -127,12 +132,12 @@ export async function POST(req: Request): Promise<Response> {
     console.warn("[auth/sign-up] sendVerificationEmail failed", err);
   }
 
-  return ok();
+  return ok(createdUserId);
 }
 
-function ok(): Response {
+function ok(userId: string | null): Response {
   return new Response(
-    JSON.stringify({ ok: true, requiresVerification: true }),
+    JSON.stringify({ ok: true, requiresVerification: true, userId }),
     {
       status: 200,
       headers: {
@@ -150,19 +155,21 @@ function ok(): Response {
  * owner still gets a usable link. Failures are swallowed (we already
  * committed to the generic-success contract for anti-enumeration).
  */
-async function silentlyResendVerificationByEmail(email: string): Promise<void> {
+async function silentlyResendVerificationByEmail(email: string): Promise<string | null> {
   try {
     const workos = getWorkos();
     const list = await workos.userManagement.listUsers({ email, limit: 1 });
     const user = list.data?.[0];
-    if (!user) return;
+    if (!user) return null;
     // Only resend if the email is still unverified — confirmed accounts
     // shouldn't receive unsolicited verification emails (would look like
     // phishing to a security-aware user).
-    if (user.emailVerified) return;
+    if (user.emailVerified) return null;
     await workos.userManagement.sendVerificationEmail({ userId: user.id });
+    return user.id;
   } catch (err) {
     console.warn("[auth/sign-up] silent resend failed", err);
+    return null;
   }
 }
 

@@ -65,6 +65,16 @@ npm run dev
 
 Open <http://localhost:5273>.
 
+> **Heads-up — `npm run dev` does NOT serve `/api/auth/*`.** The Vite dev
+> plugin only mounts `/api/draft` and `/api/agent` (see
+> `dev/qwen-proxy-plugin.ts`). Every other `/api/*` route — auth,
+> workspace, sign-up, password reset, verify-email — only runs under the
+> real Vercel runtime. If you need to test those locally, install the
+> Vercel CLI and run `vercel dev` instead. Symptom of using the wrong
+> dev server: the SPA's sign-in form throws "Sign-in API didn't respond
+> with JSON" because the auth endpoint fell through to the SPA's 404
+> HTML.
+
 ### Environment
 
 ```env

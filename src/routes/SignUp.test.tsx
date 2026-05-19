@@ -78,10 +78,13 @@ describe("SignUp", () => {
 
   it("switches to the check-your-email view on successful sign-up", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, requiresVerification: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({ ok: true, requiresVerification: true, userId: "user_01" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
 
     render(
@@ -107,12 +110,13 @@ describe("SignUp", () => {
       password: "longenough123",
     });
 
-    expect(
-      await screen.findByText(/one more step — verify your email/i),
-    ).toBeInTheDocument();
-    // Crucially: no session was minted — the user is NOT routed into
-    // the app, and the only cookie-mutating call would be on a fetch
-    // we never made (we only POST'd to /api/auth/sign-up).
+    // The CheckYourEmail view shows the "Verify your email." heading
+    // plus a 6-digit code input (the OTP form added in 0.16.x).
+    expect(await screen.findByText(/^verify your email\.?$/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument();
+    // Crucially: no session was minted on sign-up — the user is NOT routed
+    // into the app yet. The only cookie-mutating call happens on
+    // /api/auth/verify-email after they enter the code.
     expect(document.cookie).toBe("");
   });
 
@@ -142,10 +146,13 @@ describe("SignUp", () => {
 
   it("calls /api/auth/resend-verification on the confirmation screen", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, requiresVerification: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({ ok: true, requiresVerification: true, userId: "user_01" }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
 
     render(
@@ -158,7 +165,7 @@ describe("SignUp", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /create account/i }));
     });
-    await screen.findByText(/one more step — verify your email/i);
+    await screen.findByText(/^verify your email\.?$/i);
 
     // Switch the mock for the resend call so we can verify the second
     // POST hits the right endpoint.
@@ -169,8 +176,10 @@ describe("SignUp", () => {
       }),
     );
 
+    // Button label changed from "Resend verification email" to
+    // "Didn't get a code? Resend" when the OTP form was added.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /resend verification email/i }));
+      fireEvent.click(screen.getByRole("button", { name: /didn't get a code/i }));
     });
 
     await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
@@ -178,6 +187,62 @@ describe("SignUp", () => {
     expect(resendCall[0]).toBe("/api/auth/resend-verification");
     const body = JSON.parse(((resendCall[1] as RequestInit).body as string) ?? "{}");
     expect(body).toMatchObject({ email: "user@example.com" });
+  });
+
+  it("POSTs to /api/auth/verify-email when the user enters a 6-digit code", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    // First fetch: the sign-up POST itself.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ok: true, requiresVerification: true, userId: "user_01" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    // Second fetch: the verify-email POST.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ok: true, user: { id: "user_01", email: "user@example.com" } }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Set-Cookie": "drafthr_session=fake; HttpOnly; Path=/; SameSite=Lax",
+          },
+        },
+      ),
+    );
+    // Third fetch: AuthProvider's refresh() → /api/auth/session call.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ user: null, activeTenant: null, hasAnyTenant: false }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/sign-in/signup"]}>
+        <SignUp />
+      </MemoryRouter>,
+    );
+
+    fillForm({ password: "longenough123", confirm: "longenough123", agree: true });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+    });
+    await screen.findByLabelText(/verification code/i);
+
+    fireEvent.change(screen.getByLabelText(/verification code/i), {
+      target: { value: "477205" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /verify and sign in/i }));
+    });
+
+    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
+    const verifyCall = fetchSpy.mock.calls[1]!;
+    expect(verifyCall[0]).toBe("/api/auth/verify-email");
+    const body = JSON.parse(((verifyCall[1] as RequestInit).body as string) ?? "{}");
+    expect(body).toEqual({ code: "477205", userId: "user_01" });
   });
 });
 
