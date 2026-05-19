@@ -128,7 +128,7 @@ export function SignupWorkspace() {
 
   if (!isLoaded || !user) {
     return (
-      <Box className="max-w-3xl px-4 py-8 sm:px-6">
+      <Box className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
         <Skeleton className="h-8 w-48 mb-4" />
         <Skeleton className="h-32 w-full" />
       </Box>
@@ -136,7 +136,7 @@ export function SignupWorkspace() {
   }
 
   return (
-    <Box className="max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+    <Box className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         crumbs={[{ label: "Welcome" }]}
         title={`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
