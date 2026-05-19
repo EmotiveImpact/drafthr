@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Badge,
   Box,
@@ -14,8 +14,8 @@ import {
   TextField,
 } from "@radix-ui/themes";
 import { Building2, Mail } from "lucide-react";
-import { PageHeader } from "@/components/ds";
-import { useAuth } from "@/lib/auth";
+import { PageHeader, Wordmark } from "@/components/ds";
+import { useAuth, UserChip, type AuthUser } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -128,20 +128,19 @@ export function SignupWorkspace() {
 
   if (!isLoaded || !user) {
     return (
-      <Box className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
-        <div className="flex flex-col justify-center min-h-[calc(100dvh-5rem)] sm:min-h-[calc(100dvh-6rem)]">
+      <WorkspaceShell>
+        <Box className="mx-auto w-full max-w-3xl px-4 pt-12 pb-10 sm:px-6 sm:pt-16 lg:pt-20">
           <Skeleton className="h-8 w-48 mb-4" />
           <Skeleton className="h-32 w-full" />
-        </div>
-      </Box>
+        </Box>
+      </WorkspaceShell>
     );
   }
 
   return (
-    <Box className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
-      <div className="flex flex-col justify-center min-h-[calc(100dvh-5rem)] sm:min-h-[calc(100dvh-6rem)]">
+    <WorkspaceShell user={user}>
+      <Box className="mx-auto w-full max-w-3xl px-4 pt-12 pb-10 sm:px-6 sm:pt-16 lg:pt-20">
         <PageHeader
-          crumbs={[{ label: "Welcome" }]}
           title={`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
           lede="A workspace is your team's shared HR letter library. Drafts, evidence, and audit log are scoped to one workspace. You can belong to several — switch between them in the sidebar."
         />
@@ -242,8 +241,64 @@ export function SignupWorkspace() {
             </Card>
           )}
         </Flex>
+      </Box>
+    </WorkspaceShell>
+  );
+}
+
+function WorkspaceShell({
+  user,
+  children,
+}: {
+  user?: AuthUser;
+  children: React.ReactNode;
+}) {
+  return (
+    <main className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]">
+      <WorkspaceTopbar user={user} />
+      <div className="flex-1">{children}</div>
+      <WorkspaceFooter />
+    </main>
+  );
+}
+
+function WorkspaceTopbar({ user }: { user?: AuthUser }) {
+  const displayName =
+    user && ([user.firstName, user.lastName].filter(Boolean).join(" ") || user.email);
+
+  return (
+    <header className="h-16 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)]/90 px-4 backdrop-blur sm:px-6 lg:px-10">
+      <div className="mx-auto flex h-full max-w-5xl items-center gap-4">
+        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center">
+          <Wordmark size={22} />
+        </Link>
+        <div className="ml-auto flex min-w-0 items-center gap-3">
+          <div className="hidden min-w-0 text-right sm:block">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
+              Workspace setup
+            </p>
+            {displayName && (
+              <p className="truncate text-[12px] text-[var(--ds-body)]">{displayName}</p>
+            )}
+          </div>
+          {user && <UserChip />}
+        </div>
       </div>
-    </Box>
+    </header>
+  );
+}
+
+function WorkspaceFooter() {
+  return (
+    <footer className="shrink-0 px-4 pb-6 sm:px-6 lg:px-10">
+      <div className="mx-auto flex max-w-5xl flex-col items-center justify-center gap-1.5 border-t border-[var(--ds-line)] pt-4 text-center text-[11.5px] text-[var(--ds-muted)] sm:flex-row sm:flex-wrap sm:gap-x-3">
+        <Link to="/privacy" className="hover:text-[var(--ds-ink)] transition">
+          Privacy
+        </Link>
+        <span className="hidden opacity-60 sm:inline">·</span>
+        <span>&copy; {new Date().getFullYear()} DraftHR. All rights reserved.</span>
+      </div>
+    </footer>
   );
 }
 
