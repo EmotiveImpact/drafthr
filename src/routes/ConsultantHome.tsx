@@ -1,8 +1,25 @@
 import { useNavigate } from "react-router-dom";
-import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, UserCog } from "lucide-react";
+import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, TrendingUp, UserCog } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
-import { useBookingsStore } from "@/lib/bookings";
+import { useBookingsStore, parseSlaHours } from "@/lib/bookings";
 import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
+
+/**
+ * Naïve earnings calculation — rate × estimated hours per completed
+ * booking, using SLA as a proxy for hours. Real implementation will read
+ * actual hours logged + Stripe transfer amounts once payouts land.
+ */
+function computeEarnings(
+  bookings: Array<{ status: string }>,
+  ratePerHour: number,
+  slaString: string,
+): { completed: number; pending: number; lifetime: number } {
+  const hoursPerBooking = parseSlaHours(slaString);
+  const completed = bookings.filter((b) => b.status === "completed").length;
+  const pending = bookings.filter((b) => ["accepted", "delivered"].includes(b.status)).length;
+  const lifetime = completed * ratePerHour * hoursPerBooking;
+  return { completed, pending, lifetime };
+}
 
 /**
  * /c — Consultant home dashboard.
@@ -30,6 +47,9 @@ export function ConsultantHome() {
   const seedSampleBooking = useSeedSampleBooking();
   const pendingCount = allBookings.filter((b) => b.status === "requested").length;
   const activeCount = allBookings.filter((b) => b.status === "accepted").length;
+  const earnings = profile
+    ? computeEarnings(allBookings, profile.price, profile.sla)
+    : { completed: 0, pending: 0, lifetime: 0 };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
@@ -157,6 +177,58 @@ export function ConsultantHome() {
           </dl>
         </section>
       </div>
+
+      {/* ─── Earnings card ──────────────────────────────────────── */}
+      <section className="mt-4 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-[14px] font-semibold text-[var(--ds-ink)]">
+            <TrendingUp className="size-4 text-[var(--ds-muted)]" aria-hidden />
+            Earnings
+          </h2>
+          <span className="text-[11px] italic text-[var(--ds-muted)]">
+            Estimated · live payouts when Stripe Connect lands
+          </span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Stat
+            label="Completed reviews"
+            value={String(earnings.completed)}
+            sub={earnings.pending > 0 ? `${earnings.pending} in flight` : "No work in flight"}
+          />
+          <Stat
+            label="Lifetime earnings"
+            value={
+              profile
+                ? `${profile.currency}${earnings.lifetime.toLocaleString()}`
+                : "—"
+            }
+            sub={
+              profile
+                ? `at ${profile.currency}${profile.price}/hr × est. hours`
+                : "Set a rate to see earnings"
+            }
+          />
+          <Stat
+            label="Platform fee"
+            value="12%"
+            sub="Deducted on each completed booking"
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
+        {label}
+      </p>
+      <p className="mt-1 font-display text-[28px] font-semibold text-[var(--ds-ink)]" style={{ fontFamily: 'var(--font-display)' }}>
+        {value}
+      </p>
+      {sub && <p className="mt-0.5 text-[11.5px] text-[var(--ds-muted)]">{sub}</p>}
     </div>
   );
 }

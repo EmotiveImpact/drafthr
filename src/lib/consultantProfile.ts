@@ -12,6 +12,19 @@ import { persist } from "zustand/middleware";
  * same shape — only the persistence target changes.
  */
 
+/** How quickly a consultant can take on new work. Drives the
+ *  "Available now" / "Booked" badge in the marketplace card. */
+export type Availability = "this_week" | "one_two_weeks" | "three_four_weeks" | "booked";
+
+/** Optional Stripe Connect payout details. Stored as the account id
+ *  returned by Stripe; the API resolves balance + payout schedule. */
+export type PayoutAccount = {
+  /** Stripe Connect account id (acct_…). null until Connect onboarding. */
+  stripeAccountId: string | null;
+  /** True once the account is fully verified and can receive payouts. */
+  payoutsEnabled: boolean;
+};
+
 export type ConsultantProfile = {
   /** Stable id, generated on first save. Used as the marketplace card key. */
   id: string;
@@ -39,6 +52,10 @@ export type ConsultantProfile = {
   avatarTo: string;
   /** Optional uploaded photo URL (data:image/* base64 for now). */
   photoUrl: string;
+  /** Current availability window. Defaults to 'this_week' for new sign-ups. */
+  availability: Availability;
+  /** Stripe Connect payout details, if onboarded. */
+  payout: PayoutAccount;
   /** When the profile was last saved — used to surface "complete your profile"
    *  empty states on first sign-in. */
   updatedAt: number | null;
@@ -90,6 +107,8 @@ export const useConsultantStore = create<ConsultantStore>()(
           avatarFrom: existing?.avatarFrom ?? "#f3dca5",
           avatarTo: existing?.avatarTo ?? "#e9b75c",
           photoUrl: existing?.photoUrl ?? "",
+          availability: existing?.availability ?? "this_week",
+          payout: existing?.payout ?? { stripeAccountId: null, payoutsEnabled: false },
           ...patch,
           updatedAt: Date.now(),
         };

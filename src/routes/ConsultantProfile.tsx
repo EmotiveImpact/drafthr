@@ -1,7 +1,18 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, CheckCircle2, Plus, X } from "lucide-react";
-import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
+import { ArrowLeft, Banknote, Camera, CheckCircle2, Plus, X } from "lucide-react";
+import {
+  useConsultantStore,
+  isProfileComplete,
+  type Availability,
+} from "@/lib/consultantProfile";
+
+const AVAILABILITY_LABEL: Record<Availability, string> = {
+  this_week: "Available this week",
+  one_two_weeks: "Available in 1–2 weeks",
+  three_four_weeks: "Available in 3–4 weeks",
+  booked: "Booked — not taking new work",
+};
 
 /**
  * /c/profile — consultant profile setup / edit form.
@@ -50,6 +61,7 @@ export function ConsultantProfile() {
   const [currency, setCurrency] = useState<"£" | "$" | "€">(profile?.currency ?? "£");
   const [sla, setSla] = useState(profile?.sla ?? "24-48h");
   const [photoUrl, setPhotoUrl] = useState<string>(profile?.photoUrl ?? "");
+  const [availability, setAvailability] = useState<Availability>(profile?.availability ?? "this_week");
   const [customSpecialty, setCustomSpecialty] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -109,6 +121,7 @@ export function ConsultantProfile() {
       currency,
       sla: sla.trim(),
       photoUrl,
+      availability,
     });
     setSubmitted(true);
     // Brief affordance, then bounce back to /c — feels less abrupt than
@@ -373,6 +386,53 @@ export function ConsultantProfile() {
               hint="What HR teams should expect from booking to delivery."
             />
           </Row>
+        </Fieldset>
+
+        <Fieldset legend="Availability & payouts">
+          <div>
+            <label className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5">
+              Current availability
+            </label>
+            <select
+              value={availability}
+              onChange={(e) => setAvailability(e.target.value as Availability)}
+              className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-[14px] text-[var(--ds-ink)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
+            >
+              {(Object.keys(AVAILABILITY_LABEL) as Availability[]).map((a) => (
+                <option key={a} value={a}>
+                  {AVAILABILITY_LABEL[a]}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11.5px] text-[var(--ds-muted)]">
+              Drives the badge on your marketplace card. HR teams filter on
+              this when they need urgent work.
+            </p>
+          </div>
+          <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-4">
+            <div className="flex items-start gap-3">
+              <Banknote className="size-5 text-[var(--ds-muted)] shrink-0 mt-0.5" aria-hidden />
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-[var(--ds-ink)]">
+                  Payouts via Stripe Connect
+                </p>
+                <p className="mt-1 text-[12px] leading-relaxed text-[var(--ds-body)]">
+                  {profile?.payout?.payoutsEnabled
+                    ? "Your bank account is connected — payouts run weekly."
+                    : "Connect a Stripe account to receive payouts. We charge a 12% platform fee on each completed booking; the rest hits your bank within 7 days."}
+                </p>
+                <button
+                  type="button"
+                  disabled
+                  title="Stripe Connect integration arrives in the next release"
+                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white opacity-60 cursor-not-allowed"
+                >
+                  Connect Stripe
+                  <span aria-hidden>→</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </Fieldset>
 
         <div className="flex items-center justify-between gap-3 border-t border-[var(--ds-line)] pt-6">
