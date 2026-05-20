@@ -4,6 +4,7 @@ import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
+import { BookingThread } from "@/components/consultants/BookingThread";
 
 /**
  * /bookings — HR-side bookings list.
@@ -270,6 +271,8 @@ function BookingRow({
           Open draft
         </a>
       )}
+
+      <BookingThread booking={booking} perspective="requester" />
     </article>
   );
 }

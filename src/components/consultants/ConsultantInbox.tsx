@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { Check, Clock, FileText, MessageSquareReply, X } from "lucide-react";
+import { BookingThread } from "@/components/consultants/BookingThread";
 
 /**
  * Consultant-side bookings inbox. Reads everything addressed to the
@@ -257,6 +258,8 @@ function BookingRow({ booking }: { booking: Booking }) {
           {booking.deliveryNote}
         </p>
       )}
+
+      <BookingThread booking={booking} perspective="consultant" />
     </article>
   );
 }

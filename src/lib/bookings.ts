@@ -22,6 +22,14 @@ export type BookingStatus =
   | "delivered"
   | "completed";
 
+export type BookingMessage = {
+  id: string;
+  /** 'requester' = HR booker, 'consultant' = the reviewing specialist. */
+  from: "requester" | "consultant";
+  text: string;
+  ts: number;
+};
+
 export type Booking = {
   id: string;
   consultantInitials: string;
@@ -44,6 +52,9 @@ export type Booking = {
   completedAt?: number;
   expectedDeliveryAt: number;
   status: BookingStatus;
+  /** Per-booking chat thread — added 2026-05-20. Older records normalise
+   *  to an empty array on read. */
+  messages?: BookingMessage[];
 };
 
 type RecordBookingInput = Omit<
@@ -61,6 +72,8 @@ type Store = {
   declineBooking: (id: string, responseNote?: string) => void;
   deliverBooking: (id: string, deliveryNote?: string) => void;
   completeBooking: (id: string, rating?: number) => void;
+  /** Append a chat message to a booking. */
+  appendMessage: (id: string, from: BookingMessage["from"], text: string) => void;
 };
 
 /** Migrate persisted bookings from older lifecycle vocab to the new one. */
@@ -128,6 +141,21 @@ export const useBookingsStore = create<Store>()(
               : b,
           ),
         })),
+      appendMessage: (id, from, text) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const msg: BookingMessage = {
+          id: crypto.randomUUID(),
+          from,
+          text: trimmed.slice(0, 4000),
+          ts: Date.now(),
+        };
+        set((state) => ({
+          bookings: state.bookings.map((b) =>
+            b.id === id ? { ...b, messages: [...(b.messages ?? []), msg] } : b,
+          ),
+        }));
+      },
     }),
     { name: "drafthr.bookings.v1" },
   ),
