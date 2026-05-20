@@ -17,6 +17,7 @@ import { forwardRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/ds";
+import { AuthSplitShell } from "./AuthSplitShell";
 
 type AuthShellProps = {
   /** Tiny uppercase eyebrow above the heading ("Sign up", "Reset password"). */
@@ -25,18 +26,26 @@ type AuthShellProps = {
   heading: string;
   /** One-paragraph supporting copy. */
   subheading?: string;
+  /**
+   * Wrap the page in the two-column AuthSplitShell on lg: and up (with the
+   * brand slideshow in the left column). Off by default — only `/sign-in`
+   * and `/sign-in/signup` use it. Transactional auth pages
+   * (forgot-password, reset-password, verify-email) stay on the single-
+   * column centered layout.
+   */
+  withSlideshow?: boolean;
   children: ReactNode;
 };
 
-export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellProps) {
-  return (
-    <main
-      className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
-      style={{
-        background:
-          "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
-      }}
-    >
+export function AuthShell({
+  eyebrow,
+  heading,
+  subheading,
+  withSlideshow = false,
+  children,
+}: AuthShellProps) {
+  const inner = (
+    <>
       {/* Logo + card grouped vertically, centered on the page. The logo
        * sits directly above the card so the brand is visually attached
        * to the form rather than floating up at the top of the viewport. */}
@@ -78,6 +87,21 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
       </div>
 
       <AuthFooter />
+    </>
+  );
+
+  if (withSlideshow) {
+    return <AuthSplitShell>{inner}</AuthSplitShell>;
+  }
+  return (
+    <main
+      className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
+      style={{
+        background:
+          "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
+      }}
+    >
+      {inner}
     </main>
   );
 }

@@ -5,6 +5,7 @@ import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
 import { AuthFooter } from "@/routes/sign-in/AuthShell";
+import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
 
 /**
  * /sign-in — the in-app, DraftHR-branded sign-in page.
@@ -148,21 +149,12 @@ export function SignIn() {
   const isBusy = submitting !== null;
 
   return (
-    <main
-      className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
-      style={{
-        // Subtle off-white wash + a very faint radial highlight in the
-        // top-right — keeps the page feeling alive without competing
-        // with the card. DraftHR is serious-tone; no gradient drama.
-        background:
-          "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
-      }}
-    >
-      {/* Logo + card stacked together, centered on the page. Matches the
-       * AuthShell layout used by /sign-in/signup, /sign-in/forgot-password,
-       * /sign-in/reset-password, /sign-in/verify-email so the brand
-       * placement and sizing stay consistent across the entire auth
-       * surface. */}
+    <AuthSplitShell>
+      {/* Logo + card stacked together, centered on the page. On lg: and up
+       * AuthSplitShell renders the slideshow in the left column; the logo
+       * still appears above the card on the right side for brand continuity
+       * with the transactional pages. Below lg: the page reverts to the
+       * single-column centered layout that's been in place since launch. */}
       <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
         <div className="flex w-full max-w-[440px] flex-col items-center gap-6 sm:gap-7">
           <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
@@ -320,7 +312,7 @@ export function SignIn() {
       </div>
 
       <AuthFooter />
-    </main>
+    </AuthSplitShell>
   );
 }
 

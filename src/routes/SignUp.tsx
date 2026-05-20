@@ -121,6 +121,7 @@ export function SignUp() {
       eyebrow="Sign up"
       heading="Create your DraftHR account."
       subheading="Start drafting tribunal-grade letters in minutes. Free while you’re evaluating."
+      withSlideshow
     >
       {/* Social sign-up — same OAuth shim as /sign-in. Going through Google,
        * Microsoft, or LinkedIn skips the email-verification step entirely
