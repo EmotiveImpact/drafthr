@@ -404,6 +404,119 @@ export const auditEvents = pgTable(
   ],
 );
 
+// --- consultant marketplace -------------------------------------------------
+
+/**
+ * consultant_profiles — one row per user who has enrolled as a consultant.
+ *
+ * The data here drives the public marketplace card on /consultants. status
+ * gates visibility: 'pending_review' rows are stored but NOT listed publicly
+ * (the admin vetting step), 'published' rows are searchable, 'paused' lets a
+ * consultant temporarily disappear from the marketplace without deleting
+ * their profile, and 'rejected' / 'suspended' are admin actions.
+ *
+ * Mirrors the localStorage shape in lib/consultantProfile.ts so the
+ * client-side store can be the cache layer once the backend is live.
+ */
+export const consultantProfiles = pgTable(
+  "consultant_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    initials: text("initials").notNull(),
+    fullName: text("full_name").notNull(),
+    /** Single line title e.g. "Solicitor · 12 yrs · ex-DLA Piper". */
+    role: text("role").notNull(),
+    bio: text("bio").notNull(),
+    /** Quote shown in the specialty box of the marketplace card. */
+    specialty: text("specialty").notNull().default(""),
+    /** Filter-chip tags driving /consultants search. JSON string array. */
+    specialties: jsonb("specialties").notNull().default(sql`'[]'::jsonb`),
+    price: integer("price").notNull().default(150),
+    currency: text("currency", { enum: ["GBP", "USD", "EUR"] })
+      .notNull()
+      .default("GBP"),
+    sla: text("sla").notNull().default("24-48h"),
+    rating: integer("rating_x10").notNull().default(50), // stored x10 to avoid floats
+    reviews: integer("reviews").notNull().default(0),
+    photoUrl: text("photo_url"),
+    /** Vetting / visibility state. */
+    status: text("status", {
+      enum: ["pending_review", "published", "paused", "rejected", "suspended"],
+    })
+      .notNull()
+      .default("pending_review"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("consultant_profiles_status_idx").on(t.status),
+    uniqueIndex("consultant_profiles_user_uniq").on(t.userId),
+  ],
+);
+
+/**
+ * consultant_bookings — lifecycle records for review requests.
+ *
+ * Lifecycle (forward-only, declined/completed are terminal):
+ *   requested → accepted → delivered → completed
+ *                      ↘ declined
+ *
+ * draftId is nullable so HR users can book a generic consultation (no
+ * specific letter attached yet). tenantId is denormalised onto the row
+ * for tenant-scoped reads (most queries filter by it).
+ */
+export const consultantBookings = pgTable(
+  "consultant_bookings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    /** HR user who placed the booking. */
+    requesterUserId: uuid("requester_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "set null" }),
+    consultantUserId: uuid("consultant_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "set null" }),
+    consultantProfileId: uuid("consultant_profile_id")
+      .notNull()
+      .references(() => consultantProfiles.id, { onDelete: "cascade" }),
+    draftId: uuid("draft_id").references(() => drafts.id, { onDelete: "set null" }),
+    matterTitle: text("matter_title"),
+    message: text("message"),
+    status: text("status", {
+      enum: ["requested", "accepted", "declined", "delivered", "completed"],
+    })
+      .notNull()
+      .default("requested"),
+    responseNote: text("response_note"),
+    deliveryNote: text("delivery_note"),
+    rating: integer("rating"),
+    bookedAt: timestamp("booked_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    expectedDeliveryAt: timestamp("expected_delivery_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("consultant_bookings_consultant_idx").on(t.consultantUserId, t.status),
+    index("consultant_bookings_requester_idx").on(t.requesterUserId, t.status),
+    index("consultant_bookings_tenant_idx").on(t.tenantId),
+    index("consultant_bookings_draft_idx").on(t.draftId),
+  ],
+);
+
 // --- inferred types ----------------------------------------------------------
 
 export type Tenant = typeof tenants.$inferSelect;
@@ -427,3 +540,7 @@ export type TenantMember = typeof tenantMembers.$inferSelect;
 export type NewTenantMember = typeof tenantMembers.$inferInsert;
 export type Invite = typeof invites.$inferSelect;
 export type NewInvite = typeof invites.$inferInsert;
+export type ConsultantProfile = typeof consultantProfiles.$inferSelect;
+export type NewConsultantProfile = typeof consultantProfiles.$inferInsert;
+export type ConsultantBooking = typeof consultantBookings.$inferSelect;
+export type NewConsultantBooking = typeof consultantBookings.$inferInsert;
