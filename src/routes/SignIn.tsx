@@ -155,7 +155,10 @@ export function SignIn() {
        * still appears above the card on the right side for brand continuity
        * with the transactional pages. Below lg: the page reverts to the
        * single-column centered layout that's been in place since launch. */}
-      <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
+      {/* Center the card on mobile/tablet (matches the transactional auth
+       * pages), bias it upward on lg: so the slideshow + form share a
+       * common visual baseline instead of the form floating dead-center. */}
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-10 sm:py-14 lg:justify-start lg:pt-[12vh]">
         <div className="flex w-full max-w-[440px] flex-col items-center gap-6 sm:gap-7">
           {/* Right-column logo. Hidden on lg: because the slideshow on
            * the left already carries the brand — having it twice on the
