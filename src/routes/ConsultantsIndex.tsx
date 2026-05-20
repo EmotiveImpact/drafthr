@@ -254,10 +254,21 @@ export function ConsultantsIndex() {
             </div>
           </div>
 
-          {/* Results count */}
-          <p className="text-[11.5px] text-[var(--ds-muted)] mb-3">
-            {filtered.length} of {ALL_CONSULTANTS.length} specialists
-          </p>
+          {/* Results count + transparency note about the seed cards. We
+           * don't pretend the 14 hardcoded specialists are live. The
+           * single "real" card (when the signed-in consultant has saved
+           * a complete profile) appears above the seed set. */}
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+            <p className="text-[11.5px] text-[var(--ds-muted)]">
+              {filtered.length} of {ALL_CONSULTANTS.length} specialists
+              {myCard && <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>}
+            </p>
+            {/* Seed disclaimer — visible enough to be honest, quiet
+             * enough to not undermine the page. */}
+            <p className="text-[11px] italic text-[var(--ds-muted)]">
+              Example specialists shown during early access. Live consultant cards mark themselves with a "Live" badge.
+            </p>
+          </div>
 
           {/* Cards grid */}
           {filtered.length > 0 ? (

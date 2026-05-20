@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Plus, X } from "lucide-react";
+import { ArrowLeft, Camera, CheckCircle2, Plus, X } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 
 /**
@@ -49,8 +49,38 @@ export function ConsultantProfile() {
   const [price, setPrice] = useState<string>(String(profile?.price ?? 150));
   const [currency, setCurrency] = useState<"£" | "$" | "€">(profile?.currency ?? "£");
   const [sla, setSla] = useState(profile?.sla ?? "24-48h");
+  const [photoUrl, setPhotoUrl] = useState<string>(profile?.photoUrl ?? "");
   const [customSpecialty, setCustomSpecialty] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Photo upload — base64-into-localStorage for now. Vercel Blob is the
+   * production swap (set BLOB_READ_WRITE_TOKEN, POST to /api/upload/image
+   * which exists for letterheads already) but base64 is fine while the
+   * marketplace is local-cache-first; the consultant API server-side
+   * validates the URL.
+   */
+  const onPickPhoto = () => fileRef.current?.click();
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      setPhotoError("Pick an image file (PNG / JPG).");
+      return;
+    }
+    if (f.size > 1.2 * 1024 * 1024) {
+      setPhotoError("Photo must be under 1.2 MB. Try a smaller crop.");
+      return;
+    }
+    setPhotoError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setPhotoUrl(reader.result);
+    };
+    reader.readAsDataURL(f);
+  };
 
   const toggleSpecialty = (s: string) => {
     setSpecialties((prev) =>
@@ -78,6 +108,7 @@ export function ConsultantProfile() {
       price: Math.max(0, parseInt(price, 10) || 0),
       currency,
       sla: sla.trim(),
+      photoUrl,
     });
     setSubmitted(true);
     // Brief affordance, then bounce back to /c — feels less abrupt than
@@ -127,6 +158,61 @@ export function ConsultantProfile() {
 
       <form onSubmit={onSubmit} className="space-y-6">
         <Fieldset legend="Who you are">
+          {/* Photo — first thing buyers see on the card. Optional but
+           * we strongly nudge with the "Add a photo" CTA. */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt=""
+                  className="size-16 rounded-full object-cover border border-[var(--ds-line)]"
+                />
+              ) : (
+                <div className="grid size-16 place-items-center rounded-full bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[18px] font-semibold text-[var(--ds-muted)]">
+                  {fullName
+                    .trim()
+                    .split(/\s+/)
+                    .map((p) => p[0]?.toUpperCase() ?? "")
+                    .join("")
+                    .slice(0, 2) || "??"}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={onPickPhoto}
+                aria-label="Upload photo"
+                className="absolute -right-1 -bottom-1 grid size-7 place-items-center rounded-full bg-[var(--ds-ink)] text-white shadow ring-2 ring-[var(--ds-surface)] hover:-translate-y-px transition"
+              >
+                <Camera className="size-3.5" aria-hidden />
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                onChange={onFile}
+                className="hidden"
+              />
+            </div>
+            <div>
+              <p className="text-[12.5px] font-semibold text-[var(--ds-ink)]">Profile photo</p>
+              <p className="mt-0.5 text-[11.5px] text-[var(--ds-muted)]">
+                Square crop, under 1.2 MB. Optional — initials are used if blank.
+              </p>
+              {photoError && (
+                <p className="mt-1 text-[11.5px] text-[var(--ds-red-fg)]">{photoError}</p>
+              )}
+              {photoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoUrl("")}
+                  className="mt-1 text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-red-fg)] transition"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
           <Row>
             <Field
               label="Full name"

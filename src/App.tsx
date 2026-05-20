@@ -43,6 +43,7 @@ import { JoinInvite } from "@/routes/JoinInvite";
 import { ConsultantHome } from "@/routes/ConsultantHome";
 import { ConsultantProfile } from "@/routes/ConsultantProfile";
 import { MyBookings } from "@/routes/MyBookings";
+import { ConsultantAdminReview } from "@/routes/ConsultantAdminReview";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -225,6 +226,9 @@ export function App() {
         <Route path="/c/profile" element={<Protected><ConsultantProfile /></Protected>} />
         {/* HR-side bookings list. Separate from /c (which is consultant-side). */}
         <Route path="/bookings" element={<Protected><MyBookings /></Protected>} />
+        {/* Admin vetting surface — replace with proper role gate once the
+         * admin role lands in tenant_members. */}
+        <Route path="/admin/consultants" element={<Protected><ConsultantAdminReview /></Protected>} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
         {/* /consultants is intentionally PUBLIC — HR teams should be able
          * to browse the marketplace before signing up. Booking still
