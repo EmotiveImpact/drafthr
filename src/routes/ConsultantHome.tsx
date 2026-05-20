@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Briefcase, CheckCircle2, ExternalLink, Inbox, UserCog } from "lucide-react";
+import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, UserCog } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
+import { useBookingsStore } from "@/lib/bookings";
+import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
 
 /**
  * /c — Consultant home dashboard.
@@ -22,11 +24,12 @@ export function ConsultantHome() {
   const profile = useConsultantStore((s) => s.profile);
   const enrolled = useConsultantStore((s) => s.enrolled);
   const complete = isProfileComplete(profile);
-
-  // Until the bookings backend is wired, this is always an empty inbox —
-  // but the shell shows what a populated state would look like so the
-  // consultant can see the shape.
-  const bookings: never[] = [];
+  const allBookings = useBookingsStore((s) =>
+    profile ? s.bookingsForConsultant(profile.initials) : [],
+  );
+  const seedSampleBooking = useSeedSampleBooking();
+  const pendingCount = allBookings.filter((b) => b.status === "requested").length;
+  const activeCount = allBookings.filter((b) => b.status === "accepted").length;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
@@ -107,23 +110,27 @@ export function ConsultantHome() {
               <Inbox className="size-4 text-[var(--ds-muted)]" aria-hidden />
               Inbox
             </h2>
-            <span className="text-[11.5px] text-[var(--ds-muted)]">
-              {bookings.length === 0 ? "No requests yet" : `${bookings.length} pending`}
-            </span>
-          </div>
-          {bookings.length === 0 ? (
-            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-10 text-center">
-              <p className="text-[13.5px] text-[var(--ds-body)]">
-                Your inbox is empty. As soon as an HR team books a review with you,
-                it'll land here with the full letter, evidence pack, and timer.
-              </p>
-              <p className="mt-2 text-[11.5px] text-[var(--ds-muted)]">
-                {complete
-                  ? "Your card is live now — discovery is automatic."
-                  : "Complete your profile to start showing up in search."}
-              </p>
+            <div className="flex items-center gap-3 text-[11.5px] text-[var(--ds-muted)]">
+              {allBookings.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={seedSampleBooking}
+                  disabled={!complete}
+                  title={complete ? undefined : "Complete your profile first"}
+                  className="inline-flex items-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] px-2 py-1 text-[11px] font-semibold text-[var(--ds-muted)] transition hover:border-[var(--ds-subtle)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="size-3" aria-hidden />
+                  Add a demo request
+                </button>
+              ) : (
+                <>
+                  {pendingCount > 0 && <span>{pendingCount} new</span>}
+                  {activeCount > 0 && <span>{activeCount} in progress</span>}
+                </>
+              )}
             </div>
-          ) : null}
+          </div>
+          <ConsultantInbox />
         </section>
 
         <section className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
@@ -152,6 +159,29 @@ export function ConsultantHome() {
       </div>
     </div>
   );
+}
+
+/**
+ * Quality-of-life affordance — drops a sample 'requested' booking into
+ * the consultant's inbox so they can exercise the accept / decline /
+ * deliver flow before any real HR team has booked them. Only available
+ * when the consultant's profile is complete (so the booking carries
+ * matching initials).
+ */
+function useSeedSampleBooking() {
+  const profile = useConsultantStore((s) => s.profile);
+  const record = useBookingsStore((s) => s.recordBooking);
+  return () => {
+    if (!profile) return;
+    record({
+      consultantInitials: profile.initials,
+      draftId: "demo-" + Math.random().toString(36).slice(2, 8),
+      matterTitle: "Settlement letter — senior engineer, voluntary exit",
+      message:
+        "Could you review the settlement clauses? Specifically the without-prejudice wording and the s.111A position. Aiming to send Friday.",
+      expectedDeliveryAt: Date.now() + 24 * 60 * 60 * 1000,
+    });
+  };
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

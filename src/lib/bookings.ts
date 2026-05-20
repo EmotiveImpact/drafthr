@@ -1,20 +1,79 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+/**
+ * Booking lifecycle states. Forward-only — once a booking lands in a
+ * terminal state (`declined`, `delivered`, `completed`), it stays there.
+ *
+ *   requested  → consultant has not yet seen / responded
+ *   accepted   → consultant accepted; work in progress
+ *   declined   → consultant declined; HR can rebook
+ *   delivered  → consultant has delivered the review / notes
+ *   completed  → HR has acknowledged delivery (and ideally rated)
+ *
+ * The legacy "pending"/"in_review"/"completed" states map onto
+ * requested/accepted/completed respectively — old bookings persisted
+ * under those names migrate transparently in normaliseBooking().
+ */
+export type BookingStatus =
+  | "requested"
+  | "accepted"
+  | "declined"
+  | "delivered"
+  | "completed";
+
 export type Booking = {
   id: string;
   consultantInitials: string;
+  /** Optional — set when an HR user books from inside a draft. */
   draftId: string;
+  /** Optional human-friendly title — used by the consultant inbox card. */
+  matterTitle?: string;
+  /** Free-text request from HR — what they want reviewed and why. */
+  message?: string;
+  /** Consultant's response when accepting/declining — surfaced to HR. */
+  responseNote?: string;
+  /** Deliverable when consultant marks delivered — the review/notes. */
+  deliveryNote?: string;
+  /** 0-5 rating from HR after delivery. */
+  rating?: number;
   bookedAt: number;
+  /** When the consultant accepted (and SLA timer starts). */
+  acceptedAt?: number;
+  deliveredAt?: number;
+  completedAt?: number;
   expectedDeliveryAt: number;
-  status: "pending" | "in_review" | "completed";
+  status: BookingStatus;
 };
+
+type RecordBookingInput = Omit<
+  Booking,
+  "id" | "bookedAt" | "status" | "acceptedAt" | "deliveredAt" | "completedAt" | "responseNote" | "deliveryNote" | "rating"
+>;
 
 type Store = {
   bookings: Booking[];
-  recordBooking: (input: Omit<Booking, "id" | "bookedAt" | "status">) => Booking;
+  recordBooking: (input: RecordBookingInput) => Booking;
   bookingsForDraft: (draftId: string) => Booking[];
+  /** Inbox view for a consultant — all bookings addressed to them. */
+  bookingsForConsultant: (initials: string) => Booking[];
+  acceptBooking: (id: string, responseNote?: string) => void;
+  declineBooking: (id: string, responseNote?: string) => void;
+  deliverBooking: (id: string, deliveryNote?: string) => void;
+  completeBooking: (id: string, rating?: number) => void;
 };
+
+/** Migrate persisted bookings from older lifecycle vocab to the new one. */
+function normaliseBooking(b: Booking): Booking {
+  const legacyMap: Record<string, BookingStatus> = {
+    pending: "requested",
+    in_review: "accepted",
+  };
+  if (b.status in legacyMap) {
+    return { ...b, status: legacyMap[b.status as string] };
+  }
+  return b;
+}
 
 export const useBookingsStore = create<Store>()(
   persist(
@@ -24,14 +83,51 @@ export const useBookingsStore = create<Store>()(
         const booking: Booking = {
           id: crypto.randomUUID(),
           bookedAt: Date.now(),
-          status: "pending",
+          status: "requested",
           ...input,
         };
         set((state) => ({ bookings: [...state.bookings, booking] }));
         return booking;
       },
       bookingsForDraft: (draftId) =>
-        get().bookings.filter((b) => b.draftId === draftId),
+        get().bookings.map(normaliseBooking).filter((b) => b.draftId === draftId),
+      bookingsForConsultant: (initials) =>
+        get()
+          .bookings.map(normaliseBooking)
+          .filter((b) => b.consultantInitials === initials)
+          .sort((a, b) => b.bookedAt - a.bookedAt),
+      acceptBooking: (id, responseNote) =>
+        set((state) => ({
+          bookings: state.bookings.map((b) =>
+            b.id === id
+              ? { ...b, status: "accepted", acceptedAt: Date.now(), responseNote: responseNote ?? b.responseNote }
+              : b,
+          ),
+        })),
+      declineBooking: (id, responseNote) =>
+        set((state) => ({
+          bookings: state.bookings.map((b) =>
+            b.id === id
+              ? { ...b, status: "declined", responseNote: responseNote ?? b.responseNote }
+              : b,
+          ),
+        })),
+      deliverBooking: (id, deliveryNote) =>
+        set((state) => ({
+          bookings: state.bookings.map((b) =>
+            b.id === id
+              ? { ...b, status: "delivered", deliveredAt: Date.now(), deliveryNote: deliveryNote ?? b.deliveryNote }
+              : b,
+          ),
+        })),
+      completeBooking: (id, rating) =>
+        set((state) => ({
+          bookings: state.bookings.map((b) =>
+            b.id === id
+              ? { ...b, status: "completed", completedAt: Date.now(), rating: rating ?? b.rating }
+              : b,
+          ),
+        })),
     }),
     { name: "drafthr.bookings.v1" },
   ),

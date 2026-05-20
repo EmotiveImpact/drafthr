@@ -39,6 +39,9 @@ export function BookingDialog({
     const booking = recordBooking({
       consultantInitials: consultant.initials,
       draftId,
+      // Pass the optional note through to the booking record so the
+      // consultant inbox can show "HR: ..." context on the request card.
+      message: note.trim() || undefined,
       expectedDeliveryAt: Date.now() + slaMs(consultant.sla),
     });
     onClose();
