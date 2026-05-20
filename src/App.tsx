@@ -44,6 +44,7 @@ import { ConsultantHome } from "@/routes/ConsultantHome";
 import { ConsultantProfile } from "@/routes/ConsultantProfile";
 import { MyBookings } from "@/routes/MyBookings";
 import { ConsultantAdminReview } from "@/routes/ConsultantAdminReview";
+import { SharedDraftReview } from "@/routes/SharedDraftReview";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -229,6 +230,10 @@ export function App() {
         {/* Admin vetting surface — replace with proper role gate once the
          * admin role lands in tenant_members. */}
         <Route path="/admin/consultants" element={<Protected><ConsultantAdminReview /></Protected>} />
+        {/* Matter-scoped consultant review surface — a consultant who has
+         * accepted a booking with a draftId can open the draft read-only
+         * here. localStorage today; tied to a server-issued token later. */}
+        <Route path="/c/review/:bookingId" element={<Protected><SharedDraftReview /></Protected>} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
         {/* /consultants is intentionally PUBLIC — HR teams should be able
          * to browse the marketplace before signing up. Booking still

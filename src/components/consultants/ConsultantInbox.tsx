@@ -208,15 +208,15 @@ function BookingRow({ booking }: { booking: Booking }) {
             <MessageSquareReply className="size-3.5" aria-hidden />
             Mark delivered
           </button>
-          {booking.draftId && (
-            <a
-              href={`/editor/${booking.draftId}`}
-              className="ml-auto inline-flex h-8 items-center gap-1.5 text-[12px] font-semibold text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
-            >
-              <FileText className="size-3.5" aria-hidden />
-              Open draft
-            </a>
-          )}
+          {/* Open the read-only review surface — scoped to this booking,
+           * not the raw /editor/:id (which is HR-private). */}
+          <a
+            href={`/c/review/${booking.id}`}
+            className="ml-auto inline-flex h-8 items-center gap-1.5 text-[12px] font-semibold text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
+          >
+            <FileText className="size-3.5" aria-hidden />
+            Open draft
+          </a>
         </div>
       )}
 
