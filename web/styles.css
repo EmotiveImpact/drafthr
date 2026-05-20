@@ -21,8 +21,15 @@
   --accent:    #6b1a1a;
   --accent-bg: #fef7f2;
 
-  --font-sans:    "Geist", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --font-display: "Playfair Display", "Source Serif 4", Georgia, "Times New Roman", serif;
+  /* Same three families as the app (loaded from Google Fonts here
+   * rather than @fontsource so the marketing page stays build-step-free).
+   *   --font-sans    body text + nav
+   *   --font-serif   long-form serif body (testimonials, FAQ answers etc.)
+   *   --font-display marquee headlines (Playfair, hero, section titles)
+   */
+  --font-sans:    "Geist", -apple-system, BlinkMacSystemFont, "Geist Variable", system-ui, sans-serif;
+  --font-serif:   "Source Serif 4", "Source Serif Pro", Charter, Georgia, serif;
+  --font-display: "Playfair Display", "Iowan Old Style", "Apple Garamond", Georgia, "Times New Roman", serif;
 
   --container: 1180px;
   --container-tight: 920px;
@@ -185,13 +192,21 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); }
 .brand-chip { display: block; flex-shrink: 0; }
+/* Identical to the app's <Wordmark/>: Playfair 600, 0.06em base
+ * tracking, tighter 0.07em across the "HR" pair, slight optical lift
+ * so the wordmark sits on the same baseline as the BrandMark chip. */
 .brand-word {
+  display: inline-block;
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--ink);
+  line-height: 1;
+  transform: translateY(-0.02em);
+  white-space: nowrap;
 }
+.brand-hr { letter-spacing: 0.07em; }
 .nav-links {
   display: none;
   gap: 26px;
