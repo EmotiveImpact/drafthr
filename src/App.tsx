@@ -14,6 +14,7 @@ import { ModePicker } from "@/routes/ModePicker";
 import { Settings } from "@/routes/Settings";
 import { DirectorySync as SettingsDirectorySync } from "@/routes/settings/DirectorySync";
 import { Privacy } from "@/routes/Privacy";
+import { Terms } from "@/routes/Terms";
 import { Mockups } from "@/routes/Mockups";
 import { BrowseLetters } from "@/routes/BrowseLetters";
 import { Calendar } from "@/routes/Calendar";
@@ -206,6 +207,7 @@ export function App() {
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/settings/directory-sync" element={<Protected><SettingsDirectorySync /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/sign-in/signup" element={<SignUp />} />
         <Route path="/sign-in/forgot-password" element={<ForgotPassword />} />

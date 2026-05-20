@@ -196,9 +196,7 @@ export function SignUp() {
           />
           <span>
             I agree to the{" "}
-            {/* TODO: /terms page does not exist yet — link to /privacy as a
-                stand-in until the Terms page lands. */}
-            <Link to="/privacy" className="font-semibold text-[var(--ds-ink)] hover:underline">
+            <Link to="/terms" className="font-semibold text-[var(--ds-ink)] hover:underline">
               Terms
             </Link>{" "}
             and{" "}
