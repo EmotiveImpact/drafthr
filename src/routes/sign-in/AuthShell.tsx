@@ -51,7 +51,15 @@ export function AuthShell({
        * to the form rather than floating up at the top of the viewport. */}
       <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
         <div className="flex w-full max-w-[440px] flex-col items-center gap-6 sm:gap-7">
-          <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+          {/* Right-column logo. When the page renders inside AuthSplitShell
+           * (withSlideshow), the slideshow already carries the brand on the
+           * left at lg:+ — so we hide this lockup there to avoid duplicating
+           * it. Mobile/tablet (slideshow off) still gets it above the card. */}
+          <Link
+            to="/"
+            aria-label="DraftHR home"
+            className={`inline-flex items-center gap-2.5 ${withSlideshow ? "lg:hidden" : ""}`}
+          >
             <BrandMark size={48} />
             <Wordmark size={28} />
           </Link>

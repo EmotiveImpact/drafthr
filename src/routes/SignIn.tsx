@@ -157,7 +157,11 @@ export function SignIn() {
        * single-column centered layout that's been in place since launch. */}
       <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
         <div className="flex w-full max-w-[440px] flex-col items-center gap-6 sm:gap-7">
-          <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+          {/* Right-column logo. Hidden on lg: because the slideshow on
+           * the left already carries the brand — having it twice on the
+           * same screen is visual noise. Mobile/tablet (slideshow off)
+           * still shows it above the card. */}
+          <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5 lg:hidden">
             <BrandMark size={48} />
             <Wordmark size={28} />
           </Link>

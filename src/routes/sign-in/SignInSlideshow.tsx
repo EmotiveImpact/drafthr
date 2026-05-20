@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 
 /**
  * Three-image crossfade slideshow that lives in the left column of the
@@ -147,7 +147,7 @@ export function SignInSlideshow() {
         aria-label="DraftHR home"
         className="absolute left-9 top-9 z-20 inline-flex items-center gap-2.5 text-white hover:opacity-90 transition-opacity"
       >
-        <BrandMark size={36} />
+        <InverseBrandMark size={36} />
         <Wordmark size={22} tone="inherit" className="text-white" />
       </Link>
 
@@ -167,6 +167,32 @@ export function SignInSlideshow() {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Dark-bg version of the DraftHR chip — white rounded square with the
+ * ink D mark. The default BrandMark is a black chip designed for light
+ * surfaces; on the slideshow's dark gradient it blends in and reads as
+ * a vague blob. This inline SVG inverts the chip without needing a new
+ * asset. Path data is the same D as favicon.svg.
+ */
+function InverseBrandMark({ size = 36 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      role="img"
+      aria-label="DRAFTHR"
+      className="shrink-0"
+    >
+      <rect width="64" height="64" rx="14" fill="#ffffff" />
+      <path
+        fill="#09090b"
+        d="M18 14h16.5c8.9 0 15.5 6.8 15.5 18s-6.6 18-15.5 18H18V14Zm8.2 7.3v21.4h7.7c4.8 0 7.9-4.1 7.9-10.7s-3.1-10.7-7.9-10.7h-7.7Z"
+      />
+    </svg>
   );
 }
 
