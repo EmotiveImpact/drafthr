@@ -107,8 +107,6 @@ export function SignInSlideshow() {
             src={slide.src}
             alt=""
             loading={i === 0 ? "eager" : "lazy"}
-            // @ts-expect-error — fetchPriority lands in React's typing
-            // in 18.3+; cast through to silence until we bump.
             fetchPriority={i === 0 ? "high" : undefined}
             className="absolute inset-0 h-full w-full object-cover"
           />
