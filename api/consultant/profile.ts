@@ -14,7 +14,7 @@
  * publishes profiles immediately on first save so the marketplace isn't
  * empty during early development. Flip it off before launch.
  */
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
@@ -76,15 +76,17 @@ export async function PATCH(req: Request): Promise<Response> {
 }
 
 async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Response> {
-  if (!enforceSameOrigin(req)) return jsonError(403, "Same-origin only");
-  const limit = await rateLimit(req, { scope: "consultant-profile", max: 30, windowSec: 60 });
-  if (!limit.ok) return limit.response;
+  const originRes = enforceSameOrigin(req);
+  if (originRes) return originRes;
+  const limited = rateLimit(req, { name: "consultant-profile", max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
 
-  const body = await readJsonRequest<ProfileInput>(req);
-  if (!body) return jsonError(400, "Invalid JSON body");
+  const parsed = await readJsonRequest<ProfileInput>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
 
   const db = getDb();
   const [existing] = await db
@@ -98,10 +100,10 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   const bio = (body.bio ?? existing?.bio ?? "").trim();
 
   if (method === "POST") {
-    if (!fullName) return jsonError(400, "fullName is required");
-    if (!role) return jsonError(400, "role (title) is required");
+    if (!fullName) return jsonError("fullName is required", 400);
+    if (!role) return jsonError("role (title) is required", 400);
     if (bio.length < 20)
-      return jsonError(400, "bio must be at least 20 characters");
+      return jsonError("bio must be at least 20 characters", 400);
   }
 
   const initials = fullName ? initialsOf(fullName) : existing?.initials ?? "??";
@@ -154,7 +156,8 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
 }
 
 export async function DELETE(req: Request): Promise<Response> {
-  if (!enforceSameOrigin(req)) return jsonError(403, "Same-origin only");
+  const originRes = enforceSameOrigin(req);
+  if (originRes) return originRes;
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
 

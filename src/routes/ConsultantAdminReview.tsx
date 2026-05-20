@@ -66,11 +66,6 @@ export function ConsultantAdminReview() {
     );
   }
 
-  // The localStorage model doesn't carry the published/pending status —
-  // we infer from the profile completeness today. Real implementation
-  // will read profile.status from the server.
-  const pending = !profile;
-
   const onApprove = () => {
     // Until the API switch, "approve" is a no-op — the profile is already
     // discoverable to anyone visiting /consultants because we list any

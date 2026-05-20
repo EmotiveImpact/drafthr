@@ -15,7 +15,6 @@
  */
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { requireSession } from "../_utils/workos.js";
-import { jsonError } from "../_utils/request.js";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { getDb } from "../../src/db/index.js";
 import { consultantProfiles } from "../../src/db/schema.js";
@@ -26,8 +25,8 @@ export async function GET(req: Request): Promise<Response> {
   const session = await requireSession(req);
   if (!session.ok) return session.response;
 
-  const limit = await rateLimit(req, { scope: "consultant-marketplace", max: 120, windowSec: 60 });
-  if (!limit.ok) return limit.response;
+  const limited = rateLimit(req, { name: "consultant-marketplace", max: 120, windowMs: 60_000 });
+  if (limited) return limited;
 
   const url = new URL(req.url);
   const q = url.searchParams.get("q")?.trim() ?? "";

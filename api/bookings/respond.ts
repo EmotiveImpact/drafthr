@@ -37,16 +37,19 @@ type RespondInput = {
 };
 
 export async function POST(req: Request): Promise<Response> {
-  if (!enforceSameOrigin(req)) return jsonError(403, "Same-origin only");
-  const limit = await rateLimit(req, { scope: "booking-respond", max: 60, windowSec: 60 });
-  if (!limit.ok) return limit.response;
+  const originRes = enforceSameOrigin(req);
+  if (originRes) return originRes;
+  const limited = rateLimit(req, { name: "booking-respond", max: 60, windowMs: 60_000 });
+  if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
 
-  const body = await readJsonRequest<RespondInput>(req);
-  if (!body || typeof body.bookingId !== "string" || typeof body.action !== "string") {
-    return jsonError(400, "bookingId and action required");
+  const parsed = await readJsonRequest<RespondInput>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
+  if (typeof body.bookingId !== "string" || typeof body.action !== "string") {
+    return jsonError("bookingId and action required", 400);
   }
 
   const db = getDb();
@@ -56,44 +59,44 @@ export async function POST(req: Request): Promise<Response> {
     .where(eq(consultantBookings.id, body.bookingId))
     .limit(1);
 
-  if (!booking) return jsonError(404, "Booking not found");
+  if (!booking) return jsonError("Booking not found", 404);
 
   // ACL — only the two parties can act on a booking.
   const isConsultant = booking.consultantUserId === auth.userRow.id;
   const isRequester = booking.requesterUserId === auth.userRow.id;
-  if (!isConsultant && !isRequester) return jsonError(403, "Not your booking");
+  if (!isConsultant && !isRequester) return jsonError("Not your booking", 403);
 
   const update: Partial<typeof consultantBookings.$inferInsert> = {};
   const now = new Date();
 
   switch (body.action) {
     case "accept":
-      if (!isConsultant) return jsonError(403, "Only the consultant can accept");
+      if (!isConsultant) return jsonError("Only the consultant can accept", 403);
       if (booking.status !== "requested")
-        return jsonError(409, `Cannot accept from status '${booking.status}'`);
+        return jsonError(`Cannot accept from status '${booking.status}'`, 409);
       update.status = "accepted";
       update.acceptedAt = now;
       if (body.note) update.responseNote = body.note.slice(0, 2000);
       break;
     case "decline":
-      if (!isConsultant) return jsonError(403, "Only the consultant can decline");
+      if (!isConsultant) return jsonError("Only the consultant can decline", 403);
       if (booking.status !== "requested")
-        return jsonError(409, `Cannot decline from status '${booking.status}'`);
+        return jsonError(`Cannot decline from status '${booking.status}'`, 409);
       update.status = "declined";
       if (body.note) update.responseNote = body.note.slice(0, 2000);
       break;
     case "deliver":
-      if (!isConsultant) return jsonError(403, "Only the consultant can deliver");
+      if (!isConsultant) return jsonError("Only the consultant can deliver", 403);
       if (booking.status !== "accepted")
-        return jsonError(409, `Cannot deliver from status '${booking.status}'`);
+        return jsonError(`Cannot deliver from status '${booking.status}'`, 409);
       update.status = "delivered";
       update.deliveredAt = now;
       if (body.note) update.deliveryNote = body.note.slice(0, 8000);
       break;
     case "complete":
-      if (!isRequester) return jsonError(403, "Only the requester can complete");
+      if (!isRequester) return jsonError("Only the requester can complete", 403);
       if (booking.status !== "delivered")
-        return jsonError(409, `Cannot complete from status '${booking.status}'`);
+        return jsonError(`Cannot complete from status '${booking.status}'`, 409);
       update.status = "completed";
       update.completedAt = now;
       if (typeof body.rating === "number" && body.rating >= 0 && body.rating <= 5) {
@@ -101,7 +104,7 @@ export async function POST(req: Request): Promise<Response> {
       }
       break;
     default:
-      return jsonError(400, `Unknown action '${body.action}'`);
+      return jsonError(`Unknown action '${body.action}'`, 400);
   }
 
   const [next] = await db

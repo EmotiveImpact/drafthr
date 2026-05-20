@@ -32,7 +32,7 @@ export async function GET(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant)
-    return jsonError(412, "No active tenant — bookings are tenant-scoped");
+    return jsonError("No active tenant — bookings are tenant-scoped", 412);
 
   const url = new URL(req.url);
   const filterConsultantProfileId = url.searchParams.get("consultant");
@@ -59,18 +59,21 @@ export async function GET(req: Request): Promise<Response> {
 }
 
 export async function POST(req: Request): Promise<Response> {
-  if (!enforceSameOrigin(req)) return jsonError(403, "Same-origin only");
-  const limit = await rateLimit(req, { scope: "booking-create", max: 30, windowSec: 60 });
-  if (!limit.ok) return limit.response;
+  const originRes = enforceSameOrigin(req);
+  if (originRes) return originRes;
+  const limited = rateLimit(req, { name: "booking-create", max: 30, windowMs: 60_000 });
+  if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant)
-    return jsonError(412, "No active tenant — bookings are tenant-scoped");
+    return jsonError("No active tenant — bookings are tenant-scoped", 412);
 
-  const body = await readJsonRequest<CreateBookingInput>(req);
-  if (!body || typeof body.consultantProfileId !== "string") {
-    return jsonError(400, "consultantProfileId required");
+  const parsed = await readJsonRequest<CreateBookingInput>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
+  if (typeof body.consultantProfileId !== "string") {
+    return jsonError("consultantProfileId required", 400);
   }
 
   const db = getDb();
@@ -80,9 +83,9 @@ export async function POST(req: Request): Promise<Response> {
     .where(eq(consultantProfiles.id, body.consultantProfileId))
     .limit(1);
 
-  if (!profile) return jsonError(404, "Consultant profile not found");
+  if (!profile) return jsonError("Consultant profile not found", 404);
   if (profile.status !== "published")
-    return jsonError(412, "Consultant is not currently accepting bookings");
+    return jsonError("Consultant is not currently accepting bookings", 412);
 
   const expected = body.expectedDeliveryAt
     ? new Date(body.expectedDeliveryAt)

@@ -30,7 +30,7 @@ export async function GET(req: Request): Promise<Response> {
     .where(eq(consultantProfiles.userId, auth.userRow.id))
     .limit(1);
   if (!profile)
-    return jsonError(412, "You don't have a consultant profile yet");
+    return jsonError("You don't have a consultant profile yet", 412);
 
   const rows = await db
     .select({
