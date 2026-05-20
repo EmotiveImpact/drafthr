@@ -683,6 +683,10 @@ function NavUser({ mode }: { mode: Mode | null }) {
           <ShieldCheck className="size-4" />
           Privacy & data
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => nav("/terms")} className="gap-2">
+          <FileText className="size-4" />
+          Terms of service
+        </DropdownMenuItem>
 
         {user ? (
           <>
