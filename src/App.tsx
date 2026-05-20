@@ -42,6 +42,7 @@ import { SignupWorkspace } from "@/routes/SignupWorkspace";
 import { JoinInvite } from "@/routes/JoinInvite";
 import { ConsultantHome } from "@/routes/ConsultantHome";
 import { ConsultantProfile } from "@/routes/ConsultantProfile";
+import { MyBookings } from "@/routes/MyBookings";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -222,15 +223,18 @@ export function App() {
          * server-side bookings inbox will plug into ConsultantHome later. */}
         <Route path="/c" element={<Protected><ConsultantHome /></Protected>} />
         <Route path="/c/profile" element={<Protected><ConsultantProfile /></Protected>} />
+        {/* HR-side bookings list. Separate from /c (which is consultant-side). */}
+        <Route path="/bookings" element={<Protected><MyBookings /></Protected>} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
+        {/* /consultants is intentionally PUBLIC — HR teams should be able
+         * to browse the marketplace before signing up. Booking still
+         * requires auth (gated inside the component). */}
         <Route
           path="/consultants"
           element={
-            <Protected>
-              <Suspense fallback={<EditorFallback />}>
-                <ConsultantsIndex />
-              </Suspense>
-            </Protected>
+            <Suspense fallback={<EditorFallback />}>
+              <ConsultantsIndex />
+            </Suspense>
           }
         />
         {/* Mobile read-only view. Stays inside the auth tree — Protected

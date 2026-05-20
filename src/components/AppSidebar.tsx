@@ -432,6 +432,8 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const archive: NavItem[] = [
     { href: "/activity", label: "Activity", Icon: ActivityIcon, tooltip: "Audit trail of your drafts" },
     { href: "/exported", label: "Exported", Icon: FileDown, tooltip: "Letters you've finalised" },
+    { href: "/consultants", label: "Marketplace", Icon: Store, tooltip: "Browse specialists for review" },
+    { href: "/bookings", label: "My bookings", Icon: Inbox, tooltip: "Review requests you've placed" },
   ];
 
   const renderItem = (it: NavItem) => {
