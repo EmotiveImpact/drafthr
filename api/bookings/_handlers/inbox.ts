@@ -6,14 +6,14 @@
  * identity so the consultant knows who they're working with.
  */
 import { desc, eq } from "drizzle-orm";
-import { jsonError } from "../_utils/request.js";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
-import { getDb } from "../../src/db/index.js";
+import { jsonError } from "../../_utils/request.js";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { getDb } from "../../../src/db/index.js";
 import {
   consultantBookings,
   consultantProfiles,
   users,
-} from "../../src/db/schema.js";
+} from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 

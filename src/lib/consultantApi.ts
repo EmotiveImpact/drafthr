@@ -121,7 +121,7 @@ export type BookingDTO = {
 };
 
 export function listMyBookings() {
-  return call<{ bookings: BookingDTO[] }>("/api/bookings");
+  return call<{ bookings: BookingDTO[] }>("/api/bookings/list");
 }
 
 export function getInbox() {
@@ -135,7 +135,7 @@ export function createBooking(input: {
   message?: string;
   expectedDeliveryAt?: string;
 }) {
-  return call<{ booking: BookingDTO }>("/api/bookings", {
+  return call<{ booking: BookingDTO }>("/api/bookings/create", {
     method: "POST",
     body: JSON.stringify(input),
   });

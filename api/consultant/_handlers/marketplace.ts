@@ -14,10 +14,10 @@
  *   offset — pagination offset
  */
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { requireSession } from "../_utils/workos.js";
-import { rateLimit } from "../_utils/rate-limit.js";
-import { getDb } from "../../src/db/index.js";
-import { consultantProfiles } from "../../src/db/schema.js";
+import { requireSession } from "../../_utils/workos.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
+import { getDb } from "../../../src/db/index.js";
+import { consultantProfiles } from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 

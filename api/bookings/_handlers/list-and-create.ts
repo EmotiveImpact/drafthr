@@ -7,15 +7,15 @@
  *        matterTitle?, message?, expectedDeliveryAt? }.
  */
 import { and, desc, eq } from "drizzle-orm";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
-import { rateLimit } from "../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
-import { getDb } from "../../src/db/index.js";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { getDb } from "../../../src/db/index.js";
 import {
   consultantBookings,
   consultantProfiles,
-} from "../../src/db/schema.js";
-import { sendBookingRequestEmail } from "../_utils/consultant-emails.js";
+} from "../../../src/db/schema.js";
+import { sendBookingRequestEmail } from "../../_utils/consultant-emails.js";
 
 export const config = { runtime: "nodejs" };
 
