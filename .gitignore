@@ -28,3 +28,6 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .vercel
+
+# brainstorming visual companion sandbox
+.superpowers/
