@@ -142,13 +142,17 @@ export function SignInSlideshow() {
 
       {/* Persistent brand lockup — sits over the slide stack, never fades.
        * Wordmark is forced to white to read against the imagery. */}
+      {/* Brand lockup sits on a soft white badge so the standard
+       * /logo.png chip (which is designed for light surfaces) reads
+       * consistently across all three slides — including the lighter
+       * ceiling on slide 3 and the darker office on slide 1. */}
       <Link
         to="/"
         aria-label="DraftHR home"
-        className="absolute left-9 top-9 z-20 inline-flex items-center gap-2.5 text-white hover:opacity-90 transition-opacity"
+        className="absolute left-9 top-9 z-20 inline-flex items-center gap-2.5 rounded-[12px] bg-white/95 pl-1.5 pr-3.5 py-1.5 shadow-[0_2px_10px_rgba(10,11,13,0.18)] hover:bg-white transition"
       >
-        <BrandMark size={36} />
-        <Wordmark size={22} tone="inherit" className="text-white" />
+        <BrandMark size={32} />
+        <Wordmark size={20} />
       </Link>
 
       {/* Pagination dots — bottom-left, in line with the tagline column. */}
