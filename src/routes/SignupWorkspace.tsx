@@ -14,7 +14,7 @@ import {
   TextField,
 } from "@radix-ui/themes";
 import { Building2, Mail } from "lucide-react";
-import { PageHeader, Wordmark } from "@/components/ds";
+import { BrandMark, PageHeader, Wordmark } from "@/components/ds";
 import { useAuth, UserChip, type AuthUser } from "@/lib/auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -269,8 +269,9 @@ function WorkspaceTopbar({ user }: { user?: AuthUser }) {
   return (
     <header className="h-16 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)]/90 px-4 backdrop-blur sm:px-6 lg:px-10">
       <div className="mx-auto flex h-full max-w-5xl items-center gap-4">
-        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center">
-          <Wordmark size={22} />
+        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+          <BrandMark size={40} />
+          <Wordmark size={26} />
         </Link>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           <div className="hidden min-w-0 text-right sm:block">

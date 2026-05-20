@@ -16,7 +16,7 @@
 import { forwardRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
-import { Wordmark } from "@/components/ds/Wordmark";
+import { BrandMark, Wordmark } from "@/components/ds";
 
 type AuthShellProps = {
   /** Tiny uppercase eyebrow above the heading ("Sign up", "Reset password"). */
@@ -37,9 +37,10 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
           "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
       }}
     >
-      <header className="px-6 pt-6 sm:px-10 sm:pt-8">
-        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2">
-          <Wordmark size={22} />
+      <header className="flex justify-center px-6 pt-6 sm:px-10 sm:pt-8">
+        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+          <BrandMark size={56} />
+          <Wordmark size={34} />
         </Link>
       </header>
 
