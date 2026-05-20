@@ -165,8 +165,9 @@ export function SignInSlideshow() {
         <Wordmark size={22} tone="inherit" className="text-white" />
       </Link>
 
-      {/* Pagination dots — bottom-left, in line with the tagline column. */}
-      <div className="absolute bottom-7 left-9 z-20 flex gap-2">
+      {/* Pagination dots — bottom-left, vertically aligned with the
+       * copyright line in the right column's footer. */}
+      <div className="absolute bottom-10 left-9 z-20 flex gap-2">
         {SLIDES.map((_, i) => (
           <button
             key={i}

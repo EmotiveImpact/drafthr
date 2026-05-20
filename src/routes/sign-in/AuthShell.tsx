@@ -138,6 +138,7 @@ export function AuthFooter() {
   return (
     <footer className="px-6 pb-6 sm:px-10 sm:pb-8">
       <div className="mx-auto flex max-w-[760px] flex-col items-center justify-center gap-1.5 text-center text-[11.5px] text-[var(--ds-muted)] sm:flex-row sm:items-center sm:justify-between sm:text-left sm:max-w-none">
+        <span>&copy; {new Date().getFullYear()} DraftHR. All rights reserved.</span>
         <div className="inline-flex items-center gap-x-3">
           <Link to="/privacy" className="hover:text-[var(--ds-ink)] transition">
             Privacy
@@ -147,7 +148,6 @@ export function AuthFooter() {
             Terms
           </Link>
         </div>
-        <span>&copy; {new Date().getFullYear()} DraftHR. All rights reserved.</span>
       </div>
     </footer>
   );
