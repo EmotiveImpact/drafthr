@@ -53,12 +53,17 @@ import {
   Layers,
   ClipboardCheck,
   BarChart3,
+  GraduationCap,
+  Inbox,
+  Store,
+  UserCog,
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
 import type { Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
+import { useConsultantStore } from "@/lib/consultantProfile";
 import { useAuth } from "@/lib/auth";
 import { deriveNotifications, topSeverity } from "@/lib/notifications";
 import { SidebarMenuBadge } from "@/components/ui/sidebar";
@@ -82,14 +87,35 @@ import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
  *   Body  — primary nav · recent drafts · platform group.
  *   Footer — user card with role / account / theme dropdown.
  */
+/**
+ * Sidebar-local mode type — extends the letter-writing Mode with a
+ * "consultant" branch for marketplace specialists who don't write
+ * letters at all. We don't push "consultant" into the global Mode type
+ * because that would cascade through every letter type, draft, and
+ * wizard call site — and a consultant doesn't draft.
+ */
+export type SidebarMode = Mode | "consultant";
+
 export function AppSidebar() {
   const loc = useLocation();
   const profileRole = useProfileStore((s) => s.profile.role);
+  const consultantEnrolled = useConsultantStore((s) => s.enrolled);
 
-  const mode: Mode | null = loc.pathname.startsWith("/hr")
+  // Consultant routes win over everything — once you're inside /c the
+  // sidebar should reflect the consultant context regardless of any
+  // legacy employer/employee role.
+  const mode: SidebarMode | null = loc.pathname.startsWith("/c/")
+    || loc.pathname === "/c"
+    ? "consultant"
+    : loc.pathname.startsWith("/hr")
     ? "employer"
     : loc.pathname.startsWith("/me")
     ? "employee"
+    // Fall back to consultant if the user has enrolled but is on a
+    // shared route like /consultants or /settings — keeps the consultant
+    // nav stable across the surfaces they actually use.
+    : consultantEnrolled
+    ? "consultant"
     : profileRole;
 
   return (
@@ -228,10 +254,11 @@ function BrandHeader() {
 /*  Body — primary navigation                                          */
 /* ------------------------------------------------------------------ */
 
-function NavigatePrimary({ mode }: { mode: Mode | null }) {
+function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const loc = useLocation();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
+  const consultantProfile = useConsultantStore((s) => s.profile);
   const realDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
   const notifs = deriveNotifications(realDrafts, profile);
   const actionable = notifs.filter((n) => n.severity !== "info").length;
@@ -241,6 +268,91 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
   ).length;
   const prefix = mode === "employer" ? "/hr" : mode === "employee" ? "/me" : null;
   const search = useSearchPaletteToggle();
+
+  /* ─── Consultant sidebar ────────────────────────────────────────────
+   * Consultants don't write letters — they review them. Their nav is
+   * entirely different from HR/Employee: an inbox of inbound booking
+   * requests, the marketplace, their profile, and the matters they're
+   * actively reviewing. This whole block returns early so none of the
+   * HR-mode drafts / employees / approvals UI bleeds in.
+   */
+  if (mode === "consultant") {
+    const consultantNav: NavItem[] = [
+      { href: "/c", label: "Home", Icon: LayoutDashboard, tooltip: "Dashboard" },
+      { href: "/c/profile", label: "My profile", Icon: UserCog, tooltip: "Edit your marketplace card" },
+      { href: "/consultants", label: "Marketplace", Icon: Store, tooltip: "Browse all specialists" },
+    ];
+    return (
+      <>
+        <SidebarGroup>
+          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {consultantNav.map((it) => (
+                <SidebarMenuItem key={it.label}>
+                  <SidebarMenuButton
+                    asChild
+                    tooltip={it.tooltip}
+                    isActive={loc.pathname === it.href}
+                  >
+                    <Link to={it.href!}>
+                      <it.Icon />
+                      <span>{it.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="Booking inbox"
+                  isActive={loc.pathname === "/c"}
+                >
+                  <Link to="/c">
+                    <Inbox />
+                    <span>Inbox</span>
+                  </Link>
+                </SidebarMenuButton>
+                {/* Empty-state badge until the bookings backend lands. The
+                 * shell stays so the badge slot is reserved for later. */}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>At a glance</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Notifications" className="cursor-default">
+                  <Bell />
+                  <span>Notifications</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Activity">
+                  <Link to="/activity">
+                    <ActivityIcon />
+                    <span>Activity</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {!consultantProfile && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <div className="mx-2 mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-900 group-data-[collapsible=icon]:hidden">
+                <span className="font-semibold">Profile incomplete.</span>{" "}
+                <Link to="/c/profile" className="underline">Finish your card</Link> to be discoverable.
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </>
+    );
+  }
 
   if (!prefix) {
     return (
@@ -261,6 +373,14 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
                 <Link to="/me">
                   <UserRound />
                   <span>Employee</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild tooltip="Consultant">
+                <Link to="/c">
+                  <GraduationCap />
+                  <span>Consultant</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -408,7 +528,7 @@ function NavigatePrimary({ mode }: { mode: Mode | null }) {
       {/* MATTERS — named cases. Parent label is clickable → /matters
        *   sub-items are each matter; the active matter's letters expand
        *   inline below it. */}
-      <NavMatters mode={mode!} />
+      <NavMatters mode={mode as Mode} />
     </>
   );
 }
@@ -527,7 +647,7 @@ type NavItem = {
   disabled?: boolean;
 };
 
-function NavRecentDrafts({ mode }: { mode: Mode | null }) {
+function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
   const { isMobile } = useSidebar();
   const loc = useLocation();
   const nav = useNavigate();
@@ -604,7 +724,7 @@ function NavRecentDrafts({ mode }: { mode: Mode | null }) {
 /*  Footer — user card                                                 */
 /* ------------------------------------------------------------------ */
 
-function NavUser({ mode }: { mode: Mode | null }) {
+function NavUser({ mode }: { mode: SidebarMode | null }) {
   const { isMobile, state } = useSidebar();
   const profile = useProfileStore((s) => s.profile);
   const setRole = useProfileStore((s) => s.setRole);
