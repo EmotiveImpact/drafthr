@@ -63,14 +63,14 @@ export type ConsultantProfileDTO = {
 };
 
 export function getConsultantProfile() {
-  return call<{ profile: ConsultantProfileDTO | null }>("/api/consultant/profile");
+  return call<{ profile: ConsultantProfileDTO | null }>("/api/marketplace/consultant/profile");
 }
 
 export function saveConsultantProfile(
   input: Partial<Omit<ConsultantProfileDTO, "id" | "rating" | "reviews" | "status" | "updatedAt">>,
 ) {
   return call<{ profile: ConsultantProfileDTO; created: boolean }>(
-    "/api/consultant/profile",
+    "/api/marketplace/consultant/profile",
     { method: "POST", body: JSON.stringify(input) },
   );
 }
@@ -94,7 +94,7 @@ export function listMarketplace(params?: {
   if (params?.offset != null) sp.set("offset", String(params.offset));
   const qs = sp.toString();
   return call<{ consultants: MarketplaceConsultantDTO[]; count: number }>(
-    `/api/consultant/marketplace${qs ? `?${qs}` : ""}`,
+    `/api/marketplace/consultant/marketplace${qs ? `?${qs}` : ""}`,
   );
 }
 
@@ -121,11 +121,11 @@ export type BookingDTO = {
 };
 
 export function listMyBookings() {
-  return call<{ bookings: BookingDTO[] }>("/api/bookings/list");
+  return call<{ bookings: BookingDTO[] }>("/api/marketplace/bookings/list");
 }
 
 export function getInbox() {
-  return call<{ bookings: BookingDTO[]; profileStatus: string }>("/api/bookings/inbox");
+  return call<{ bookings: BookingDTO[]; profileStatus: string }>("/api/marketplace/bookings/inbox");
 }
 
 export function createBooking(input: {
@@ -135,7 +135,7 @@ export function createBooking(input: {
   message?: string;
   expectedDeliveryAt?: string;
 }) {
-  return call<{ booking: BookingDTO }>("/api/bookings/create", {
+  return call<{ booking: BookingDTO }>("/api/marketplace/bookings/create", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -146,7 +146,7 @@ export function respondToBooking(
   action: "accept" | "decline" | "deliver" | "complete",
   opts?: { note?: string; rating?: number },
 ) {
-  return call<{ booking: BookingDTO }>("/api/bookings/respond", {
+  return call<{ booking: BookingDTO }>("/api/marketplace/bookings/respond", {
     method: "POST",
     body: JSON.stringify({ bookingId, action, note: opts?.note, rating: opts?.rating }),
   });
