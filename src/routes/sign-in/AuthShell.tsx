@@ -49,10 +49,7 @@ export function AuthShell({
       {/* Logo + card grouped vertically, centered on the page. The logo
        * sits directly above the card so the brand is visually attached
        * to the form rather than floating up at the top of the viewport. */}
-      {/* Center the card on mobile/tablet, bias it upward on lg: so the
-       * slideshow + form share a common visual baseline rather than the
-       * form floating dead-center in its column. */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4 py-10 sm:py-14 lg:justify-start lg:pt-[12vh]">
+      <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
         <div className="flex w-full max-w-[440px] flex-col items-center gap-6 sm:gap-7">
           {/* Right-column logo. When the page renders inside AuthSplitShell
            * (withSlideshow), the slideshow already carries the brand on the
