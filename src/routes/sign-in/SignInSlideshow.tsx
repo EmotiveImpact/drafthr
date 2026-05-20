@@ -146,9 +146,6 @@ export function SignInSlideshow() {
         to="/"
         aria-label="DraftHR home"
         className="absolute left-9 top-9 z-20 inline-flex items-center gap-2.5 text-white hover:opacity-90 transition-opacity"
-        // Soft white glow lifts the standard dark-chip BrandMark off the
-        // photo without altering the brand asset itself.
-        style={{ filter: "drop-shadow(0 0 12px rgba(255,255,255,0.25))" }}
       >
         <BrandMark size={36} />
         <Wordmark size={22} tone="inherit" className="text-white" />
