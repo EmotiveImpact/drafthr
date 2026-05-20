@@ -1,13 +1,16 @@
 import { useNavigate } from "react-router-dom";
 import { Box, Button, Card, Flex, Grid, Heading, Inset, Text } from "@radix-ui/themes";
-import { ArrowUpRight, Briefcase, UserRound } from "lucide-react";
+import { ArrowUpRight, Briefcase, GraduationCap, UserRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
+import { useConsultantStore } from "@/lib/consultantProfile";
 
 export function ModePicker() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const setRole = useProfileStore((s) => s.setRole);
+  const enrolConsultant = useConsultantStore((s) => s.enrol);
+  const consultantProfile = useConsultantStore((s) => s.profile);
   const draftList = Object.values(drafts)
     .filter((d) => !d.isTemplateSource)
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -16,6 +19,13 @@ export function ModePicker() {
   const choose = (role: "employer" | "employee") => {
     setRole(role);
     nav(role === "employer" ? "/hr" : "/me");
+  };
+
+  const chooseConsultant = () => {
+    enrolConsultant();
+    // First-time consultants land on the profile-setup form; returning
+    // consultants go straight to their dashboard.
+    nav(consultantProfile ? "/c" : "/c/profile");
   };
 
   return (
@@ -42,7 +52,7 @@ export function ModePicker() {
         </Text>
       </Box>
 
-      <Grid columns={{ initial: "1", md: "2" }} gap="4" mb="6">
+      <Grid columns={{ initial: "1", md: "3" }} gap="4" mb="6">
         <RoleCard
           icon={<Briefcase className="size-5" />}
           title="I'm in HR or management"
@@ -56,6 +66,13 @@ export function ModePicker() {
           description="Drafting letters TO HR or your employer — grievances, resignations, flexible-working requests, SARs, appeals, whistleblowing, accommodation requests. The platform helps you preserve your rights and not prejudice future claims."
           meta="21 letter types · UK + US · Tribunal-deadline tracking · Register-safety check"
           onClick={() => choose("employee")}
+        />
+        <RoleCard
+          icon={<GraduationCap className="size-5" />}
+          title="I'm a consultant"
+          description="Reviewing letters FOR HR teams — settlement, TUPE, complex disciplinary or grievance flows. Get matched via the marketplace; receive bookings with the full evidence pack, cite-checked clauses, and a clean diff."
+          meta="Marketplace listing · Inbound bookings · Named opinions · Flat-fee or hourly"
+          onClick={chooseConsultant}
         />
       </Grid>
 

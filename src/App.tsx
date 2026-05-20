@@ -40,6 +40,8 @@ import { VerifyEmail } from "@/routes/VerifyEmail";
 import { AuthCallback } from "@/routes/AuthCallback";
 import { SignupWorkspace } from "@/routes/SignupWorkspace";
 import { JoinInvite } from "@/routes/JoinInvite";
+import { ConsultantHome } from "@/routes/ConsultantHome";
+import { ConsultantProfile } from "@/routes/ConsultantProfile";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -216,6 +218,10 @@ export function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/signup/workspace" element={<Protected><SignupWorkspace /></Protected>} />
         <Route path="/join/:inviteCode" element={<JoinInvite />} />
+        {/* Consultant onboarding + dashboard. localStorage-backed for now;
+         * server-side bookings inbox will plug into ConsultantHome later. */}
+        <Route path="/c" element={<Protected><ConsultantHome /></Protected>} />
+        <Route path="/c/profile" element={<Protected><ConsultantProfile /></Protected>} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
         <Route
           path="/consultants"

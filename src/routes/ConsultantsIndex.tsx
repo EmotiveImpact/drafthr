@@ -6,9 +6,37 @@ import { Wordmark } from "@/components/ds/Wordmark";
 import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
 import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import { BookingDialog } from "@/components/consultants/BookingDialog";
+import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking } from "@/lib/bookings";
+
+/**
+ * Map the localStorage consultant profile to the marketplace's Consultant
+ * shape. Only returns a value when the profile is complete enough to show
+ * in search — otherwise users would see their own half-finished card
+ * appearing in the public list.
+ */
+function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["profile"]): Consultant | null {
+  if (!p || !isProfileComplete(p)) return null;
+  return {
+    initials: p.initials,
+    name: p.fullName,
+    role: p.role,
+    rating: p.rating,
+    reviews: p.reviews,
+    price: p.price,
+    sla: p.sla,
+    avatarFrom: "from-amber-200",
+    avatarTo: "to-amber-300",
+    photoUrl: p.photoUrl ||
+      // Neutral placeholder so the card renders even before the consultant
+      // uploads a photo. Same Unsplash sizing as the hardcoded set.
+      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
+    specialty: p.specialty || `${p.specialties.slice(0, 2).join(" & ")} reviews`,
+    specialties: p.specialties,
+  };
+}
 
 // Collect all unique specialty tags across the 14 consultants
 const ALL_TAGS = Array.from(
@@ -51,14 +79,27 @@ export function ConsultantsIndex() {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get("draft") ?? "";
+  const myProfile = useConsultantStore((s) => s.profile);
 
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("rating");
   const [bookingFor, setBookingFor] = useState<Consultant | null>(null);
 
+  /** The signed-in consultant's own card, included so they can see how
+   *  they appear in the marketplace. Null until profile is complete. */
+  const myCard = useMemo(() => profileToConsultant(myProfile), [myProfile]);
+
+  /** Hardcoded specialists + the live consultant (if complete). The live
+   *  one is sorted to the front so the signed-in user sees themselves
+   *  first — gives instant feedback that publishing worked. */
+  const ALL_CONSULTANTS = useMemo(
+    () => (myCard ? [myCard, ...CONSULTANTS] : CONSULTANTS),
+    [myCard],
+  );
+
   const filtered = useMemo(() => {
-    let list = CONSULTANTS;
+    let list = ALL_CONSULTANTS;
 
     // Text search over name + role
     if (query.trim()) {
@@ -96,7 +137,7 @@ export function ConsultantsIndex() {
   }
 
   function handleBooked(booking: Booking) {
-    const c = CONSULTANTS.find((x) => x.initials === booking.consultantInitials);
+    const c = ALL_CONSULTANTS.find((x) => x.initials === booking.consultantInitials);
     toast.success(
       `Booking confirmed — ${c?.name ?? "specialist"} will review your letter within ${c?.sla ?? "24h"}.`,
     );
@@ -215,7 +256,7 @@ export function ConsultantsIndex() {
 
           {/* Results count */}
           <p className="text-[11.5px] text-[var(--ds-muted)] mb-3">
-            {filtered.length} of {CONSULTANTS.length} specialists
+            {filtered.length} of {ALL_CONSULTANTS.length} specialists
           </p>
 
           {/* Cards grid */}
