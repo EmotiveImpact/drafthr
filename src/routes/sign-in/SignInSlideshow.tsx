@@ -151,13 +151,16 @@ export function SignInSlideshow() {
          * copied to public/auth/) — at 36px it's roughly a 3x downscale
          * instead of the 14x from the full 512px /logo.png, so it renders
          * crisply on a 1x display. */}
+        {/* ?v= bumped whenever Assets/logo-Smaller.png is replaced so
+         * browsers fetch the fresh PNG instead of holding a stale cached
+         * copy. Increment when the asset is updated. */}
         <img
-          src="/auth/logo-mark.png"
+          src="/auth/logo-mark.png?v=2"
           alt="DRAFTHR"
           width={36}
           height={36}
           draggable={false}
-          className="block shrink-0 select-none"
+          className="block shrink-0 select-none object-contain"
         />
         <Wordmark size={22} tone="inherit" className="text-white" />
       </Link>
