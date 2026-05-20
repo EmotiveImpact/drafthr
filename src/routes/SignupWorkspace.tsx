@@ -139,7 +139,17 @@ export function SignupWorkspace() {
 
   return (
     <WorkspaceShell user={user}>
-      <Box className="mx-auto w-full max-w-3xl px-4 pt-12 pb-10 sm:px-6 sm:pt-16 lg:pt-20">
+      <Box className="mx-auto w-full max-w-3xl px-4 pt-10 pb-10 sm:px-6 sm:pt-14 lg:pt-16">
+        {/* Logo sits directly above the page header so it's visually
+         * grouped with the workspace-setup card. Same size as the
+         * AuthShell pages so the brand feels consistent across the
+         * entire pre-app surface. */}
+        <Flex direction="column" align="center" gap="5" mb="7">
+          <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+            <BrandMark size={48} />
+            <Wordmark size={28} />
+          </Link>
+        </Flex>
         <PageHeader
           title={`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
           lede="A workspace is your team's shared HR letter library. Drafts, evidence, and audit log are scoped to one workspace. You can belong to several — switch between them in the sidebar."
@@ -266,13 +276,13 @@ function WorkspaceTopbar({ user }: { user?: AuthUser }) {
   const displayName =
     user && ([user.firstName, user.lastName].filter(Boolean).join(" ") || user.email);
 
+  // The logo moved out of the topbar and now sits above the page
+  // content (same vertical group as the form card, matching the
+  // AuthShell layout). The topbar shrinks to just the user-state
+  // affordance on the right.
   return (
-    <header className="h-16 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)]/90 px-4 backdrop-blur sm:px-6 lg:px-10">
+    <header className="h-14 shrink-0 px-4 sm:px-6 lg:px-10">
       <div className="mx-auto flex h-full max-w-5xl items-center gap-4">
-        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
-          <BrandMark size={40} />
-          <Wordmark size={26} />
-        </Link>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           <div className="hidden min-w-0 text-right sm:block">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">

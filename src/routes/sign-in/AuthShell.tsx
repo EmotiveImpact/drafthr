@@ -37,18 +37,19 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
           "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
       }}
     >
-      <header className="flex justify-center px-6 pt-6 sm:px-10 sm:pt-8">
-        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
-          <BrandMark size={56} />
-          <Wordmark size={34} />
-        </Link>
-      </header>
-
-      <div className="flex-1 grid items-center justify-items-center px-4 pt-6 pb-14 sm:pt-8 sm:pb-20 lg:pt-10 lg:pb-24">
-        <section
-          aria-labelledby="auth-heading"
-          className="w-full max-w-[440px] rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_1px_2px_rgba(10,11,13,0.04),0_24px_60px_-30px_rgba(10,11,13,0.18)]"
-        >
+      {/* Logo + card grouped vertically, centered on the page. The logo
+       * sits directly above the card so the brand is visually attached
+       * to the form rather than floating up at the top of the viewport. */}
+      <div className="flex-1 grid place-items-center px-4 py-10 sm:py-14">
+        <div className="flex w-full max-w-[440px] flex-col items-center gap-6 sm:gap-7">
+          <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+            <BrandMark size={48} />
+            <Wordmark size={28} />
+          </Link>
+          <section
+            aria-labelledby="auth-heading"
+            className="w-full rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_1px_2px_rgba(10,11,13,0.04),0_24px_60px_-30px_rgba(10,11,13,0.18)]"
+          >
           <div className="px-7 pt-8 pb-6 sm:px-9">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
               {eyebrow}
@@ -73,6 +74,7 @@ export function AuthShell({ eyebrow, heading, subheading, children }: AuthShellP
 
           <div className="px-7 sm:px-9 pb-7 sm:pb-8">{children}</div>
         </section>
+        </div>
       </div>
 
       <AuthFooter />
