@@ -91,6 +91,7 @@ export function AuthShell({
 
           <div className="px-7 sm:px-9 pb-7 sm:pb-8">{children}</div>
         </section>
+          <AuthSecurityNote />
         </div>
       </div>
 
@@ -114,23 +115,38 @@ export function AuthShell({
   );
 }
 
+/**
+ * Tiny "Authentication by WorkOS — SSO, MFA, and SAML ready" line that
+ * sits directly below the form card. Used by SignIn / SignUp / the
+ * transactional auth pages to reassure users about identity-provider
+ * security right next to where they're typing credentials.
+ */
+export function AuthSecurityNote() {
+  return (
+    <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-[var(--ds-muted)]">
+      <ShieldCheck className="size-3.5" aria-hidden />
+      Authentication by WorkOS — SSO, MFA, and SAML ready
+    </p>
+  );
+}
+
+/**
+ * Page-bottom footer for the auth surface: legal links on the left,
+ * copyright on the right. Stacks vertically on narrow screens.
+ */
 export function AuthFooter() {
   return (
     <footer className="px-6 pb-6 sm:px-10 sm:pb-8">
-      <div className="mx-auto flex max-w-[760px] flex-col items-center justify-center gap-1.5 text-center text-[11.5px] text-[var(--ds-muted)] sm:flex-row sm:flex-wrap sm:gap-x-3">
-        <span className="inline-flex items-center gap-1.5">
-          <ShieldCheck className="size-3.5" aria-hidden />
-          Authentication by WorkOS — SSO, MFA, and SAML ready
-        </span>
-        <span className="hidden opacity-60 sm:inline">·</span>
-        <Link to="/privacy" className="hover:text-[var(--ds-ink)] transition">
-          Privacy
-        </Link>
-        <span className="hidden opacity-60 sm:inline">·</span>
-        <Link to="/terms" className="hover:text-[var(--ds-ink)] transition">
-          Terms
-        </Link>
-        <span className="hidden opacity-60 sm:inline">·</span>
+      <div className="mx-auto flex max-w-[760px] flex-col items-center justify-center gap-1.5 text-center text-[11.5px] text-[var(--ds-muted)] sm:flex-row sm:items-center sm:justify-between sm:text-left sm:max-w-none">
+        <div className="inline-flex items-center gap-x-3">
+          <Link to="/privacy" className="hover:text-[var(--ds-ink)] transition">
+            Privacy
+          </Link>
+          <span aria-hidden className="opacity-60">·</span>
+          <Link to="/terms" className="hover:text-[var(--ds-ink)] transition">
+            Terms
+          </Link>
+        </div>
         <span>&copy; {new Date().getFullYear()} DraftHR. All rights reserved.</span>
       </div>
     </footer>

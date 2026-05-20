@@ -4,7 +4,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
-import { AuthFooter } from "@/routes/sign-in/AuthShell";
+import { AuthFooter, AuthSecurityNote } from "@/routes/sign-in/AuthShell";
 import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
 
 /**
@@ -312,6 +312,7 @@ export function SignIn() {
             </p>
           </div>
         </section>
+          <AuthSecurityNote />
         </div>
       </div>
 
