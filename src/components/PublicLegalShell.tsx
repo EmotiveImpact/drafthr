@@ -38,11 +38,16 @@ export function PublicLegalShell({
             <BrandMark size={36} />
             <Wordmark size={22} />
           </Link>
+          {/* Proper button (outlined, padded) rather than a text link.
+           * Sign-in is the secondary action on this page (visitors came
+           * to read the policy, not to authenticate) so we keep the
+           * outlined variant rather than the heavy black primary CTA. */}
           <Link
             to="/sign-in"
-            className="text-[12.5px] font-medium text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-[8px] border border-[var(--ds-line)] bg-white text-[12.5px] font-semibold text-[var(--ds-ink)] shadow-[0_1px_2px_rgba(10,11,13,0.04)] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition"
           >
-            Sign in →
+            Sign in
+            <span aria-hidden className="text-[var(--ds-muted)]">→</span>
           </Link>
         </div>
       </header>
