@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { BrandMark, Wordmark } from "@/components/ds";
+import { Wordmark } from "@/components/ds";
 
 /**
  * Three-image crossfade slideshow that lives in the left column of the
@@ -147,7 +147,18 @@ export function SignInSlideshow() {
         aria-label="DraftHR home"
         className="absolute left-9 top-9 z-20 inline-flex items-center gap-2.5 hover:opacity-90 transition-opacity"
       >
-        <BrandMark size={36} />
+        {/* Use the natively-small 100px logo asset (Assets/logo-Smaller.png
+         * copied to public/auth/) — at 36px it's roughly a 3x downscale
+         * instead of the 14x from the full 512px /logo.png, so it renders
+         * crisply on a 1x display. */}
+        <img
+          src="/auth/logo-mark.png"
+          alt="DRAFTHR"
+          width={36}
+          height={36}
+          draggable={false}
+          className="block shrink-0 select-none"
+        />
         <Wordmark size={22} tone="inherit" className="text-white" />
       </Link>
 
