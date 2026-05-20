@@ -21,11 +21,12 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { CheckCircle2, Loader2, MailCheck } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { AuthShell, ErrorAlert, PrimaryButton, TextField } from "@/routes/sign-in/AuthShell";
 import { AuthDivider, SocialAuthButtons } from "@/routes/sign-in/SocialAuthButtons";
+import { useConsultantStore } from "@/lib/consultantProfile";
 
 type SignUpStage = "form" | "verify";
 
@@ -306,6 +307,12 @@ function CheckYourEmail({
 }) {
   const navigate = useNavigate();
   const { refresh } = useAuth();
+  const [params] = useSearchParams();
+  const enrolConsultant = useConsultantStore((s) => s.enrol);
+  // ?as=consultant carried over from the marketing site's "Join the
+  // marketplace" CTA — pre-enrols the user and routes them to consultant
+  // onboarding instead of the HR/Employee picker after verification.
+  const asConsultant = params.get("as") === "consultant";
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -356,6 +363,14 @@ function CheckYourEmail({
       // then bounce to / — RootRedirect handles whether to show
       // /signup/workspace (no tenant yet) or /hr or /me.
       await refresh();
+      if (asConsultant) {
+        // Skip the HR/Employee picker entirely — the user explicitly
+        // came in via the "Join the marketplace" door, so drop them
+        // on the consultant profile form.
+        enrolConsultant();
+        navigate("/c/profile", { replace: true });
+        return;
+      }
       navigate("/", { replace: true });
     } catch (err) {
       setVerifyError(err instanceof Error ? err.message : "Verification failed.");
