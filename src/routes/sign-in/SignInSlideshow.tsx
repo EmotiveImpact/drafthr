@@ -126,10 +126,14 @@ export function SignInSlideshow() {
            * with the image — keeps the headline tied to the photo it
            * was authored for, no cross-pairing during transitions. */}
           <div className="absolute bottom-[88px] left-9 right-9 z-10 text-white">
-            <h2 className="text-[30px] font-semibold leading-[1.1] tracking-[-0.02em] max-w-[420px]">
+            {/* Single-line headline at lg:, allowed to wrap on extreme
+             * narrow column widths. 26px keeps the longest tagline
+             * ("Tribunal-grade. Audit-defensible.") on one row at the
+             * 50/50 split. */}
+            <h2 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.02em] whitespace-nowrap">
               {slide.headline}
             </h2>
-            <p className="mt-2.5 text-[14px] leading-[1.5] text-white/80 max-w-[420px]">
+            <p className="mt-2.5 text-[14px] leading-[1.5] text-white/80 max-w-[460px]">
               {slide.subline}
             </p>
           </div>
