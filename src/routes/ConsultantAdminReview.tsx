@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, ShieldAlert, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, ShieldAlert, XCircle } from "lucide-react";
 import { useConsultantStore } from "@/lib/consultantProfile";
 
 /**
@@ -66,6 +66,11 @@ export function ConsultantAdminReview() {
     );
   }
 
+  // Reject is a destructive action, so we use an inline confirmation
+  // (in-page panel) rather than the browser-native confirm() popup
+  // which doesn't match the DraftHR shell.
+  const [confirmReject, setConfirmReject] = useState(false);
+
   const onApprove = () => {
     // Until the API switch, "approve" is a no-op — the profile is already
     // discoverable to anyone visiting /consultants because we list any
@@ -75,8 +80,8 @@ export function ConsultantAdminReview() {
     nav("/admin/consultants");
   };
   const onReject = () => {
-    if (!confirm("Reject this consultant profile? They'll be unable to publish until they revise it.")) return;
     // Equivalent server call: PATCH /api/admin/consultant/{id} { status: "rejected" }
+    setConfirmReject(false);
     nav("/admin/consultants");
   };
 
@@ -143,27 +148,63 @@ export function ConsultantAdminReview() {
           </div>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-[var(--ds-line)] pt-5">
-          <button
-            type="button"
-            onClick={onApprove}
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-          >
-            <CheckCircle2 className="size-4" aria-hidden />
-            Approve &amp; publish
-          </button>
-          <button
-            type="button"
-            onClick={onReject}
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--ds-line)] bg-white px-4 text-[13px] font-semibold text-[var(--ds-red-fg)] transition hover:border-[var(--ds-red-fg)] hover:bg-[var(--ds-red-bg)]"
-          >
-            <XCircle className="size-4" aria-hidden />
-            Reject
-          </button>
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
-            <ShieldAlert className="size-3.5" aria-hidden />
-            Decisions audit-logged
-          </span>
+        <div className="mt-6 border-t border-[var(--ds-line)] pt-5">
+          {confirmReject ? (
+            <div className="rounded-[10px] border border-[var(--ds-red-fg)]/30 bg-[var(--ds-red-bg)] p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--ds-red-fg)]" aria-hidden />
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-[var(--ds-ink)]">
+                    Reject this consultant profile?
+                  </p>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--ds-body)]">
+                    They'll be unable to publish until they revise the card.
+                    Action is audit-logged.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={onReject}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[var(--ds-red-fg)] px-3.5 text-[12.5px] font-semibold text-white"
+                >
+                  <XCircle className="size-3.5" aria-hidden />
+                  Confirm reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmReject(false)}
+                  className="inline-flex h-9 items-center rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={onApprove}
+                className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
+              >
+                <CheckCircle2 className="size-4" aria-hidden />
+                Approve &amp; publish
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmReject(true)}
+                className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--ds-line)] bg-white px-4 text-[13px] font-semibold text-[var(--ds-red-fg)] transition hover:border-[var(--ds-red-fg)] hover:bg-[var(--ds-red-bg)]"
+              >
+                <XCircle className="size-4" aria-hidden />
+                Reject
+              </button>
+              <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
+                <ShieldAlert className="size-3.5" aria-hidden />
+                Decisions audit-logged
+              </span>
+            </div>
+          )}
         </div>
       </article>
 

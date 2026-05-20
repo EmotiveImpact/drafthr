@@ -6,6 +6,13 @@ import {
   isProfileComplete,
   type Availability,
 } from "@/lib/consultantProfile";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const AVAILABILITY_LABEL: Record<Availability, string> = {
   this_week: "Available this week",
@@ -359,15 +366,19 @@ export function ConsultantProfile() {
                 Hourly rate
               </label>
               <div className="flex gap-2">
-                <select
+                <Select
                   value={currency}
-                  onChange={(e) => setCurrency(e.target.value as "£" | "$" | "€")}
-                  className="h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-2.5 text-[14px] font-semibold text-[var(--ds-ink)] focus:border-[var(--ds-ink)] focus:outline-none"
+                  onValueChange={(v) => setCurrency(v as "£" | "$" | "€")}
                 >
-                  <option value="£">£ GBP</option>
-                  <option value="$">$ USD</option>
-                  <option value="€">€ EUR</option>
-                </select>
+                  <SelectTrigger className="h-[40px] w-[112px] rounded-[8px] border-[var(--ds-line)] bg-white text-[14px] font-semibold text-[var(--ds-ink)]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="£">£ GBP</SelectItem>
+                    <SelectItem value="$">$ USD</SelectItem>
+                    <SelectItem value="€">€ EUR</SelectItem>
+                  </SelectContent>
+                </Select>
                 <input
                   type="number"
                   min={0}
@@ -393,17 +404,21 @@ export function ConsultantProfile() {
             <label className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5">
               Current availability
             </label>
-            <select
+            <Select
               value={availability}
-              onChange={(e) => setAvailability(e.target.value as Availability)}
-              className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-[14px] text-[var(--ds-ink)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
+              onValueChange={(v) => setAvailability(v as Availability)}
             >
-              {(Object.keys(AVAILABILITY_LABEL) as Availability[]).map((a) => (
-                <option key={a} value={a}>
-                  {AVAILABILITY_LABEL[a]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="h-[40px] w-full rounded-[8px] border-[var(--ds-line)] bg-white text-[14px] text-[var(--ds-ink)]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(AVAILABILITY_LABEL) as Availability[]).map((a) => (
+                  <SelectItem key={a} value={a}>
+                    {AVAILABILITY_LABEL[a]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="mt-1 text-[11.5px] text-[var(--ds-muted)]">
               Drives the badge on your marketplace card. HR teams filter on
               this when they need urgent work.

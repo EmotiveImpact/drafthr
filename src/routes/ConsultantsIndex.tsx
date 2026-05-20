@@ -10,6 +10,13 @@ import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking } from "@/lib/bookings";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /**
  * Map the localStorage consultant profile to the marketplace's Consultant
@@ -212,17 +219,21 @@ export function ConsultantsIndex() {
                 )}
               </div>
 
-              <select
+              <Select
                 value={sortKey}
-                onChange={(e) => setSortKey(e.target.value as SortKey)}
-                className="h-8 px-2.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)] focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)] cursor-pointer"
+                onValueChange={(v) => setSortKey(v as SortKey)}
               >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-8 w-[160px] rounded-md border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Tag chips */}
