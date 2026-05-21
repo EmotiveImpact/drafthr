@@ -167,16 +167,36 @@ export async function pullMyBookings(): Promise<void> {
   mergeBookings(list);
 }
 
-/** Mirror a fresh booking to the server. Called from BookingDialog after
- *  recordBooking has put the row in localStorage. */
-export async function pushBookingCreate(input: {
-  consultantProfileId: string;
-  draftId?: string | null;
-  matterTitle?: string;
-  message?: string;
-  expectedDeliveryAt?: string;
-}): Promise<void> {
-  await createBooking(input); // soft-fail; local copy already exists
+/** Mirror a fresh booking to the server, then swap the local placeholder
+ *  row out for the server's canonical record. Without this swap, the UI
+ *  would show two bookings — one with the local placeholder id, one
+ *  with the server UUID after the next pullMyBookings hydrate.
+ *
+ *  Pass `localPlaceholderId` so we can remove the optimistic local row
+ *  on success. Soft-fails: on network error the local copy is kept (the
+ *  user's booking isn't lost, just not yet replicated).
+ */
+export async function pushBookingCreate(
+  input: {
+    consultantProfileId: string;
+    draftId?: string | null;
+    matterTitle?: string;
+    message?: string;
+    expectedDeliveryAt?: string;
+  },
+  localPlaceholderId: string,
+  consultantInitials: string,
+): Promise<void> {
+  const res = await createBooking(input);
+  if (!res.ok) return; // keep local placeholder
+  const state = useBookingsStore.getState();
+  const serverBooking = dtoToBooking(res.data.booking, consultantInitials);
+  useBookingsStore.setState({
+    bookings: [
+      ...state.bookings.filter((b) => b.id !== localPlaceholderId),
+      serverBooking,
+    ],
+  });
 }
 
 /** Mirror a booking state transition to the server. When the server

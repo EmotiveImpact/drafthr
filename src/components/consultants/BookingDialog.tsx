@@ -52,12 +52,19 @@ export function BookingDialog({
     // would 404 — we skip the call and keep the booking local-only for
     // them, which is the only honest thing to do.
     if (consultant.profileId) {
-      void pushBookingCreate({
-        consultantProfileId: consultant.profileId,
-        draftId,
-        message,
-        expectedDeliveryAt: new Date(Date.now() + slaMs(consultant.sla)).toISOString(),
-      });
+      void pushBookingCreate(
+        {
+          consultantProfileId: consultant.profileId,
+          draftId,
+          message,
+          expectedDeliveryAt: new Date(Date.now() + slaMs(consultant.sla)).toISOString(),
+        },
+        // Pass the optimistic local id so the sync layer can swap it
+        // out for the server's UUID once the API responds. Prevents the
+        // "same booking shows up twice" duplicate on next hydrate.
+        booking.id,
+        consultant.initials,
+      );
     }
     onClose();
     onBooked?.(booking);

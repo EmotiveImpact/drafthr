@@ -1,10 +1,12 @@
 /**
- * /api/consultant/marketplace — public-ish listing of published consultants.
+ * /api/marketplace/consultant/marketplace — PUBLIC listing of published
+ * consultants. Anonymous visitors can hit it so the marketing-side
+ * /consultants browse works before sign-up.
  *
- * Requires a signed-in session (so we can apply rate limits and stop
- * scrapers), but the result set is the same for every authenticated user
- * within a tenant — it's not tenant-scoped because consultants are a
- * cross-tenant marketplace.
+ * Cross-tenant (consultants are a single marketplace, not workspace-scoped).
+ * Only status='published' profiles are returned. No PII beyond what the
+ * consultant chose to publicise (name, role, bio, rate, photo). IP-keyed
+ * rate-limit stops scrapers.
  *
  * Query params:
  *   q    — text search over name + role (case-insensitive)
@@ -14,7 +16,6 @@
  *   offset — pagination offset
  */
 import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
-import { requireSession } from "../../_utils/workos.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantProfiles } from "../../../src/db/schema.js";
@@ -22,9 +23,8 @@ import { consultantProfiles } from "../../../src/db/schema.js";
 export const config = { runtime: "nodejs" };
 
 export async function GET(req: Request): Promise<Response> {
-  const session = await requireSession(req);
-  if (!session.ok) return session.response;
-
+  // No session required — public marketplace. Tight IP-keyed rate
+  // limit is the only gate.
   const limited = rateLimit(req, { name: "consultant-marketplace", max: 120, windowMs: 60_000 });
   if (limited) return limited;
 
