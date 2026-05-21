@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { pushProfile } from "@/lib/marketplaceSync";
 
 const AVAILABILITY_LABEL: Record<Availability, string> = {
   this_week: "Available this week",
@@ -131,6 +132,11 @@ export function ConsultantProfile() {
       availability,
     });
     setSubmitted(true);
+    // Dual-write: mirror the freshly-saved local profile to the API so it
+    // shows up in the cross-tenant marketplace. Fire-and-forget; the local
+    // store is already updated, so a network failure doesn't reverse the
+    // user's save.
+    void pushProfile();
     // Brief affordance, then bounce back to /c — feels less abrupt than
     // an immediate redirect and lets the user see their save landed.
     setTimeout(() => nav("/c"), 800);

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { ArrowLeft, Search, X } from "lucide-react";
 import { BrandMark } from "@/components/ds/BrandMark";
@@ -10,6 +10,7 @@ import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking } from "@/lib/bookings";
+import { listMarketplace, type MarketplaceConsultantDTO } from "@/lib/consultantApi";
 import {
   Select,
   SelectContent,
@@ -24,9 +25,35 @@ import {
  * in search — otherwise users would see their own half-finished card
  * appearing in the public list.
  */
+/**
+ * Map a marketplace API DTO into the local Consultant shape used by
+ * ConsultantCard. The server only ships data fields — avatar gradient
+ * + a photo placeholder are filled locally.
+ */
+function dtoToConsultant(dto: MarketplaceConsultantDTO): Consultant {
+  return {
+    profileId: dto.id,
+    initials: dto.initials,
+    name: dto.fullName,
+    role: dto.role,
+    rating: dto.rating,
+    reviews: dto.reviews,
+    price: dto.price,
+    sla: dto.sla,
+    avatarFrom: "from-amber-200",
+    avatarTo: "to-amber-300",
+    photoUrl:
+      dto.photoUrl ??
+      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
+    specialty: dto.specialty || `${dto.specialties.slice(0, 2).join(" & ")} reviews`,
+    specialties: dto.specialties,
+  };
+}
+
 function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["profile"]): Consultant | null {
   if (!p || !isProfileComplete(p)) return null;
   return {
+    profileId: p.id,
     initials: p.initials,
     name: p.fullName,
     role: p.role,
@@ -92,18 +119,40 @@ export function ConsultantsIndex() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("rating");
   const [bookingFor, setBookingFor] = useState<Consultant | null>(null);
+  /** Real consultants from the server (status='published'). Empty until
+   *  the API responds. */
+  const [serverConsultants, setServerConsultants] = useState<Consultant[]>([]);
 
   /** The signed-in consultant's own card, included so they can see how
    *  they appear in the marketplace. Null until profile is complete. */
   const myCard = useMemo(() => profileToConsultant(myProfile), [myProfile]);
 
-  /** Hardcoded specialists + the live consultant (if complete). The live
-   *  one is sorted to the front so the signed-in user sees themselves
-   *  first — gives instant feedback that publishing worked. */
-  const ALL_CONSULTANTS = useMemo(
-    () => (myCard ? [myCard, ...CONSULTANTS] : CONSULTANTS),
-    [myCard],
-  );
+  // Pull the cross-tenant marketplace from the server on mount so HR
+  // teams see consultants who signed up on other devices. The hardcoded
+  // seed set still renders behind these as "Example specialists".
+  useEffect(() => {
+    let cancelled = false;
+    void listMarketplace().then((res) => {
+      if (cancelled || !res.ok) return;
+      setServerConsultants(res.data.consultants.map(dtoToConsultant));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Server-live consultants first, then myCard (if not already in the
+   *  server list), then hardcoded seed. De-dupe by profileId so a
+   *  signed-in consultant doesn't see themselves twice. */
+  const ALL_CONSULTANTS = useMemo(() => {
+    const liveById = new Map<string, Consultant>();
+    serverConsultants.forEach((c) => c.profileId && liveById.set(c.profileId, c));
+    if (myCard?.profileId && !liveById.has(myCard.profileId)) {
+      liveById.set(myCard.profileId, myCard);
+    }
+    const live = Array.from(liveById.values());
+    return [...live, ...CONSULTANTS];
+  }, [serverConsultants, myCard]);
 
   const filtered = useMemo(() => {
     let list = ALL_CONSULTANTS;

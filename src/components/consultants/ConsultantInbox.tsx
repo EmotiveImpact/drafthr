@@ -3,6 +3,7 @@ import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { Check, Clock, FileText, MessageSquareReply, X } from "lucide-react";
 import { BookingThread } from "@/components/consultants/BookingThread";
+import { pushBookingRespond } from "@/lib/marketplaceSync";
 
 /**
  * Consultant-side bookings inbox. Reads everything addressed to the
@@ -141,7 +142,10 @@ function BookingRow({ booking }: { booking: Booking }) {
         <div className="mt-3 flex gap-2">
           <button
             type="button"
-            onClick={() => accept(booking.id)}
+            onClick={() => {
+              accept(booking.id);
+              void pushBookingRespond(booking.id, "accept");
+            }}
             className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:-translate-y-px hover:shadow-md"
           >
             <Check className="size-3.5" aria-hidden />
@@ -180,7 +184,9 @@ function BookingRow({ booking }: { booking: Booking }) {
             <button
               type="button"
               onClick={() => {
-                decline(booking.id, declineNote.trim() || undefined);
+                const note = declineNote.trim() || undefined;
+                decline(booking.id, note);
+                void pushBookingRespond(booking.id, "decline", { note });
                 setShowDecline(false);
               }}
               className="inline-flex h-7 items-center rounded-[6px] bg-[var(--ds-red-fg)] px-2.5 text-[11.5px] font-semibold text-white"
@@ -233,7 +239,9 @@ function BookingRow({ booking }: { booking: Booking }) {
             <button
               type="button"
               onClick={() => {
-                deliver(booking.id, deliveryNote.trim() || undefined);
+                const note = deliveryNote.trim() || undefined;
+                deliver(booking.id, note);
+                void pushBookingRespond(booking.id, "deliver", { note });
                 setShowDeliver(false);
               }}
               disabled={deliveryNote.trim().length < 10}

@@ -65,8 +65,20 @@ type ConsultantStore = {
   profile: ConsultantProfile | null;
   /** Has the user signed up as a consultant (even before completing profile)? */
   enrolled: boolean;
+  /** Last server sync result — used to surface a quiet status on the UI
+   *  (e.g. small "Saved" / "Saved locally only" indicator). */
+  lastSync: {
+    at: number | null;
+    /** 'ok' = synced, 'local' = saved locally but server didn't accept,
+     *  'pending' = mid-flight. */
+    state: "idle" | "pending" | "ok" | "local";
+    error: string | null;
+  };
   enrol: () => void;
   saveProfile: (patch: Partial<Omit<ConsultantProfile, "id" | "updatedAt">>) => void;
+  /** Replace the local profile with the server's canonical version. */
+  hydrateFromServer: (server: ConsultantProfile) => void;
+  setSync: (state: ConsultantStore["lastSync"]["state"], error?: string | null) => void;
   reset: () => void;
 };
 
@@ -85,8 +97,21 @@ export const useConsultantStore = create<ConsultantStore>()(
     (set, get) => ({
       profile: null,
       enrolled: false,
+      lastSync: { at: null, state: "idle", error: null },
 
       enrol: () => set({ enrolled: true }),
+
+      hydrateFromServer: (server) =>
+        set({
+          profile: server,
+          enrolled: true,
+          lastSync: { at: Date.now(), state: "ok", error: null },
+        }),
+
+      setSync: (state, error = null) =>
+        set({
+          lastSync: { at: state === "ok" ? Date.now() : get().lastSync.at, state, error },
+        }),
 
       saveProfile: (patch) => {
         const existing = get().profile;

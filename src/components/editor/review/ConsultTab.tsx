@@ -19,6 +19,10 @@ type Topic = {
 };
 
 export type Consultant = {
+  /** Server-side profile id (UUID), present only when the card came
+   *  from the live marketplace API. When absent the consultant is a
+   *  hardcoded seed and bookings are local-only. */
+  profileId?: string;
   initials: string;
   name: string;
   role: string;

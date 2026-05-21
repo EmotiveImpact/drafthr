@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, TrendingUp, UserCog } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { useBookingsStore, parseSlaHours } from "@/lib/bookings";
 import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
+import { pullInbox, pullProfile } from "@/lib/marketplaceSync";
 
 /**
  * Naïve earnings calculation — rate × estimated hours per completed
@@ -41,6 +43,21 @@ export function ConsultantHome() {
   const profile = useConsultantStore((s) => s.profile);
   const enrolled = useConsultantStore((s) => s.enrolled);
   const complete = isProfileComplete(profile);
+
+  // Hydrate from the server on mount so a consultant who signed up on
+  // device A sees their profile + inbox on device B. Profile pull first
+  // (so the inbox lookup has the correct user); inbox after.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await pullProfile();
+      if (cancelled) return;
+      await pullInbox();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const allBookings = useBookingsStore((s) =>
     profile ? s.bookingsForConsultant(profile.initials) : [],
   );

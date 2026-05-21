@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import type { Consultant } from "@/components/editor/review/ConsultTab";
 import { useBookingsStore, slaMs, type Booking } from "@/lib/bookings";
+import { pushBookingCreate } from "@/lib/marketplaceSync";
 import { cn } from "@/lib/utils";
 
 interface BookingDialogProps {
@@ -36,14 +37,28 @@ export function BookingDialog({
 
   function handleConfirm() {
     if (!consultant) return;
+    const message = note.trim() || undefined;
     const booking = recordBooking({
       consultantInitials: consultant.initials,
       draftId,
       // Pass the optional note through to the booking record so the
       // consultant inbox can show "HR: ..." context on the request card.
-      message: note.trim() || undefined,
+      message,
       expectedDeliveryAt: Date.now() + slaMs(consultant.sla),
     });
+    // Dual-write: mirror the booking to the server, but only when the
+    // consultant is a real server-side record (has profileId). The 14
+    // hardcoded seed consultants don't exist server-side, so a POST
+    // would 404 — we skip the call and keep the booking local-only for
+    // them, which is the only honest thing to do.
+    if (consultant.profileId) {
+      void pushBookingCreate({
+        consultantProfileId: consultant.profileId,
+        draftId,
+        message,
+        expectedDeliveryAt: new Date(Date.now() + slaMs(consultant.sla)).toISOString(),
+      });
+    }
     onClose();
     onBooked?.(booking);
   }

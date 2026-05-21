@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { BookingThread } from "@/components/consultants/BookingThread";
+import { pullMyBookings, pushBookingRespond } from "@/lib/marketplaceSync";
 
 /**
  * /bookings — HR-side bookings list.
@@ -38,6 +39,12 @@ const STATUS_ORDER: Booking["status"][] = [
 export function MyBookings() {
   const nav = useNavigate();
   const bookings = useBookingsStore((s) => s.bookings);
+
+  // Hydrate the HR-side bookings list from the server on mount so a
+  // booking placed on device A shows up on device B.
+  useEffect(() => {
+    void pullMyBookings();
+  }, []);
   const myProfile = useConsultantStore((s) => s.profile);
   const myCard =
     myProfile && isProfileComplete(myProfile)
@@ -159,6 +166,8 @@ function BookingRow({
   const submit = () => {
     if (rating === 0) return;
     complete(booking.id, rating);
+    // Dual-write: mirror the complete + rating to the server.
+    void pushBookingRespond(booking.id, "complete", { rating });
     setSubmitted(true);
   };
 
