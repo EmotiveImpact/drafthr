@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { MessageSquare, Send } from "lucide-react";
 import { useBookingsStore, type Booking, type BookingMessage } from "@/lib/bookings";
+import { pushBookingMessage } from "@/lib/marketplaceSync";
 
 /**
  * Per-booking chat thread. Same component used by:
@@ -25,8 +26,14 @@ export function BookingThread({
   // The other party gets the "From them" treatment.
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!draft.trim()) return;
-    appendMessage(booking.id, perspective, draft);
+    const text = draft.trim();
+    if (!text) return;
+    // Optimistic: append locally for instant feedback.
+    appendMessage(booking.id, perspective, text);
+    // Dual-write: mirror to the server. On success, the server returns
+    // the canonical thread which replaces our local copy (picking up
+    // anything the other party sent in the meantime).
+    void pushBookingMessage(booking.id, perspective, text);
     setDraft("");
   };
 

@@ -166,6 +166,7 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     deliveryNote: row.deliveryNote,
     rating: row.rating,
     shareToken: row.shareToken,
+    messages: row.messages,
     shareTokenExpiresAt: row.shareTokenExpiresAt?.getTime() ?? null,
     bookedAt: row.bookedAt.getTime(),
     expectedDeliveryAt: row.expectedDeliveryAt?.getTime() ?? null,

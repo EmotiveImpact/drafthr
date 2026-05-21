@@ -100,6 +100,13 @@ export function listMarketplace(params?: {
 
 // ─── Bookings ──────────────────────────────────────────────────────────
 
+export type BookingMessageDTO = {
+  id: string;
+  from: "requester" | "consultant";
+  text: string;
+  ts: number;
+};
+
 export type BookingDTO = {
   id: string;
   consultantProfileId: string;
@@ -110,6 +117,9 @@ export type BookingDTO = {
   responseNote: string | null;
   deliveryNote: string | null;
   rating: number | null;
+  shareToken: string | null;
+  shareTokenExpiresAt: number | null;
+  messages: BookingMessageDTO[];
   bookedAt: number;
   expectedDeliveryAt: number | null;
   acceptedAt: number | null;
@@ -180,4 +190,17 @@ export type SharedDraftDTO = {
  *  and that the token hasn't expired. */
 export function getSharedDraft(token: string) {
   return call<SharedDraftDTO>(`/api/marketplace/shared/${encodeURIComponent(token)}`);
+}
+
+/** Append a chat message to a booking thread. Server derives the 'from'
+ *  field from the caller's role on the booking — never trusted from the
+ *  body — so the consultant can't impersonate HR or vice versa. */
+export function sendBookingMessage(bookingId: string, text: string) {
+  return call<{ messages: BookingMessageDTO[]; message: BookingMessageDTO }>(
+    "/api/marketplace/bookings/message",
+    {
+      method: "POST",
+      body: JSON.stringify({ bookingId, text }),
+    },
+  );
 }

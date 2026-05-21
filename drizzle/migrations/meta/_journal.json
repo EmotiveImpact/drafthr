@@ -50,6 +50,13 @@
       "when": 1779357600000,
       "tag": "0006_consultant_share_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779444000000,
+      "tag": "0007_booking_messages",
+      "breakpoints": true
     }
   ]
 }

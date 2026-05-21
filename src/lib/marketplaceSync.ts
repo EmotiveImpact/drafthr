@@ -19,6 +19,7 @@ import {
   getInbox,
   listMyBookings,
   respondToBooking,
+  sendBookingMessage,
   type ConsultantProfileDTO,
   type BookingDTO,
 } from "@/lib/consultantApi";
@@ -133,6 +134,7 @@ function dtoToBooking(
     status: dto.status as BookingStatus,
     shareToken: dto.shareToken ?? undefined,
     shareTokenExpiresAt: dto.shareTokenExpiresAt ?? undefined,
+    messages: dto.messages ?? [],
   };
 }
 
@@ -197,6 +199,30 @@ export async function pushBookingCreate(
       serverBooking,
     ],
   });
+}
+
+/** Append a message to a booking's thread on the server. The server
+ *  derives 'from' from the caller's role on the booking, so the role
+ *  hint we pass is ignored; we only use it for the optimistic local
+ *  update before the server response arrives. */
+export async function pushBookingMessage(
+  bookingId: string,
+  from: "requester" | "consultant",
+  text: string,
+): Promise<void> {
+  const res = await sendBookingMessage(bookingId, text);
+  if (!res.ok) return;
+  // Server returns the full messages array — replace local with that
+  // so any messages from the other party that were missing also land.
+  const state = useBookingsStore.getState();
+  useBookingsStore.setState({
+    bookings: state.bookings.map((b) =>
+      b.id === bookingId ? { ...b, messages: res.data.messages } : b,
+    ),
+  });
+  // Tip 'from' is unused at this point — the server-truth wins — but
+  // we accept the param so callers don't need to know.
+  void from;
 }
 
 /** Mirror a booking state transition to the server. When the server

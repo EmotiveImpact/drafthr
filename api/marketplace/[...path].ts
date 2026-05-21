@@ -57,6 +57,8 @@ async function loadHandler(
         return method === "GET" ? import("./_handlers/inbox.js") : null;
       case "respond":
         return method === "POST" ? import("./_handlers/respond.js") : null;
+      case "message":
+        return method === "POST" ? import("./_handlers/message.js") : null;
       default:
         return null;
     }

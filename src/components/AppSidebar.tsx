@@ -101,9 +101,12 @@ export function AppSidebar() {
   const profileRole = useProfileStore((s) => s.profile.role);
   const consultantEnrolled = useConsultantStore((s) => s.enrolled);
 
-  // Consultant routes win over everything — once you're inside /c the
-  // sidebar should reflect the consultant context regardless of any
-  // legacy employer/employee role.
+  // Consultant routes win when the user is actually inside /c — they're
+  // unambiguously in the consultant context. Otherwise the per-user
+  // profileRole is the source of truth so an HR user who has tested the
+  // consultant flow doesn't see consultant nav on shared routes like
+  // /consultants, /settings, or /matters. consultantEnrolled is only the
+  // last-resort fallback when the user has no profile role yet.
   const mode: SidebarMode | null = loc.pathname.startsWith("/c/")
     || loc.pathname === "/c"
     ? "consultant"
@@ -111,12 +114,8 @@ export function AppSidebar() {
     ? "employer"
     : loc.pathname.startsWith("/me")
     ? "employee"
-    // Fall back to consultant if the user has enrolled but is on a
-    // shared route like /consultants or /settings — keeps the consultant
-    // nav stable across the surfaces they actually use.
-    : consultantEnrolled
-    ? "consultant"
-    : profileRole;
+    : profileRole
+    ?? (consultantEnrolled ? "consultant" : null);
 
   return (
     <SidebarShell>

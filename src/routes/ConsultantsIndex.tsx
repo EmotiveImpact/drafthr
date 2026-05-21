@@ -1,8 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { ArrowLeft, Search, X } from "lucide-react";
-import { BrandMark } from "@/components/ds/BrandMark";
-import { Wordmark } from "@/components/ds/Wordmark";
+import { useSearchParams } from "react-router-dom";
+import { Search, X } from "lucide-react";
 import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
 import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import { BookingDialog } from "@/components/consultants/BookingDialog";
@@ -110,7 +108,6 @@ function sortConsultants(list: Consultant[], key: SortKey): Consultant[] {
 }
 
 export function ConsultantsIndex() {
-  const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get("draft") ?? "";
   const myProfile = useConsultantStore((s) => s.profile);
@@ -201,35 +198,9 @@ export function ConsultantsIndex() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      {/* Header */}
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
-        <Link
-          to="/"
-          aria-label="Home"
-          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
-        >
-          <BrandMark size={36} />
-          <Wordmark size={16} className="hidden sm:inline" />
-        </Link>
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">
-          Specialists
-        </span>
-        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
-          · 14 verified
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => nav(-1)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
-          >
-            <ArrowLeft className="size-3.5" />
-            Back
-          </button>
-        </div>
-      </header>
-
-      {/* Body */}
+      {/* Body. The page no longer renders its own header — the Layout
+       * sidebar provides the brand + nav for signed-in users, and the
+       * page-internal heading below carries the title. */}
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[980px] px-4 py-8 sm:px-6 pb-24">
 

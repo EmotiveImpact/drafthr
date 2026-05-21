@@ -514,6 +514,11 @@ export const consultantBookings = pgTable(
      *  needing membership in the HR tenant. */
     shareToken: text("share_token"),
     shareTokenExpiresAt: timestamp("share_token_expires_at", { withTimezone: true }),
+    /** Append-only thread between the consultant and requester. Each entry
+     *  is { id, from: 'requester' | 'consultant', text, ts }. Jsonb so we
+     *  don't need a separate messages table for what's typically <10
+     *  messages per booking. */
+    messages: jsonb("messages").notNull().default(sql`'[]'::jsonb`),
   },
   (t) => [
     index("consultant_bookings_consultant_idx").on(t.consultantUserId, t.status),
