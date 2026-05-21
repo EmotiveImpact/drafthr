@@ -29,10 +29,19 @@ function ProtectedGate({ children }: { children: ReactNode }) {
       navigate(`/sign-in?redirect=${redirect}`, { replace: true });
       return;
     }
-    // Signed in but no workspace yet — force onboarding. Allow the workspace
-    // signup route itself + the invite landing through so we don't loop.
+    // Signed in but no workspace yet — force onboarding. Allow:
+    //   - /signup/workspace (the onboarding form itself)
+    //   - /join/ (invite landing)
+    //   - /c (consultant home + profile setup — consultants don't need
+    //     to create an HR workspace; the bootstrap tenant is minted
+    //     server-side on their first /api/marketplace/* call).
+    // Skipping these prevents the loop where Protected redirects a
+    // consultant signup to /signup/workspace (wrong flow for them).
     const onboardingPath =
-      location.pathname.startsWith("/signup/workspace") || location.pathname.startsWith("/join/");
+      location.pathname.startsWith("/signup/workspace") ||
+      location.pathname.startsWith("/join/") ||
+      location.pathname === "/c" ||
+      location.pathname.startsWith("/c/");
     if (!activeTenant && !onboardingPath) {
       navigate("/signup/workspace", { replace: true });
     }
