@@ -151,3 +151,33 @@ export function respondToBooking(
     body: JSON.stringify({ bookingId, action, note: opts?.note, rating: opts?.rating }),
   });
 }
+
+// ─── Shared-draft (matter-scoped) ──────────────────────────────────────
+
+export type SharedDraftDTO = {
+  booking: {
+    id: string;
+    matterTitle: string | null;
+    message: string | null;
+    status: BookingDTO["status"];
+    acceptedAt: number | null;
+    deliveredAt: number | null;
+    expectedDeliveryAt: number | null;
+  };
+  draft: {
+    id: string;
+    letterType: string;
+    mode: string;
+    jurisdiction: string | null;
+    title: string | null;
+    sections: { id: string; title: string; html: string; position: number }[];
+  };
+  consultantProfile: { id: string; fullName: string; initials: string } | null;
+};
+
+/** Resolve a share token into the underlying draft. Server enforces
+ *  that the caller's session matches the booking's assigned consultant
+ *  and that the token hasn't expired. */
+export function getSharedDraft(token: string) {
+  return call<SharedDraftDTO>(`/api/marketplace/shared/${encodeURIComponent(token)}`);
+}

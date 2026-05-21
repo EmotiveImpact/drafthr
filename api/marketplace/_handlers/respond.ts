@@ -77,6 +77,13 @@ export async function POST(req: Request): Promise<Response> {
       update.status = "accepted";
       update.acceptedAt = now;
       if (body.note) update.responseNote = body.note.slice(0, 2000);
+      // Mint a matter-scoped share token if a draft is attached. The
+      // consultant uses it on /shared/:token to fetch the specific draft
+      // without joining the HR tenant. Expires 30 days after acceptance.
+      if (booking.draftId) {
+        update.shareToken = generateShareToken();
+        update.shareTokenExpiresAt = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+      }
       break;
     case "decline":
       if (!isConsultant) return jsonError("Only the consultant can decline", 403);
@@ -138,6 +145,15 @@ async function notifyTransition(action: Action, bookingId: string) {
   }
 }
 
+/**
+ * Generates a 32-char URL-safe share token. Uses crypto.randomUUID()
+ * with the dashes stripped — gives 128 bits of entropy and renders as a
+ * clean URL path segment without needing base64url normalisation.
+ */
+function generateShareToken(): string {
+  return "sht_" + crypto.randomUUID().replace(/-/g, "");
+}
+
 function toClient(row: typeof consultantBookings.$inferSelect) {
   return {
     id: row.id,
@@ -149,6 +165,8 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     responseNote: row.responseNote,
     deliveryNote: row.deliveryNote,
     rating: row.rating,
+    shareToken: row.shareToken,
+    shareTokenExpiresAt: row.shareTokenExpiresAt?.getTime() ?? null,
     bookedAt: row.bookedAt.getTime(),
     expectedDeliveryAt: row.expectedDeliveryAt?.getTime() ?? null,
     acceptedAt: row.acceptedAt?.getTime() ?? null,

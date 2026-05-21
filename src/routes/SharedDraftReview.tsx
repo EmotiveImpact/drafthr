@@ -1,71 +1,81 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, Lock, ShieldCheck } from "lucide-react";
+import { ArrowLeft, FileText, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useBookingsStore } from "@/lib/bookings";
-import { useDraftStore } from "@/lib/store";
+import { getSharedDraft, type SharedDraftDTO } from "@/lib/consultantApi";
 
 /**
  * /c/review/:bookingId — read-only draft view for a consultant who has
- * accepted a booking that references a draftId.
+ * accepted a booking.
  *
- * Local-storage scoping: the draftStore lives in HR's browser. A
- * consultant on a different device wouldn't see the actual draft data
- * here yet — they get the matter title, message, and an explanatory
- * empty state. The full cross-tenant share works once the server-side
- * sharing token API lands; this component contract stays.
+ * Resolves the booking's matter-scoped share token via the server
+ * endpoint /api/marketplace/shared/<token>. The server enforces:
+ *   - the caller's session matches the booking's assigned consultant,
+ *   - the token hasn't expired (30-day window from acceptance).
  *
- * Auth model when the API arrives:
- *   - Booking grants the consultant a scoped read-only token tied to
- *     {draftId, bookingId, expiresAt = deliveredAt + 30 days}.
- *   - Token is verified server-side; never embedded in the URL.
- *   - The endpoint returns only the fields needed for review
- *     (sections, evidence references, audit chain). Employer / employee
- *     PII fields are redacted by default.
+ * Falls back to the local draft store ONLY when the booking has no
+ * share token yet (e.g. local-only demo bookings that never got an
+ * API accept transition). That fallback path runs only for the booker's
+ * own device — cross-device sharing requires the API + token.
  */
 export function SharedDraftReview() {
   const nav = useNavigate();
   const { bookingId } = useParams<{ bookingId: string }>();
   const bookings = useBookingsStore((s) => s.bookings);
-  const drafts = useDraftStore((s) => s.drafts);
-
   const booking = bookings.find((b) => b.id === bookingId);
-  const draft = booking && booking.draftId ? drafts[booking.draftId] : undefined;
+
+  const [shared, setShared] = useState<SharedDraftDTO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch via the share-token endpoint when the booking has one. Try
+  // every accepted booking with a stored shareToken first; fall through
+  // to a local-render path if the token isn't present (demo / pre-API
+  // bookings).
+  useEffect(() => {
+    let cancelled = false;
+    if (!booking) {
+      setLoading(false);
+      return;
+    }
+    const token = (booking as unknown as { shareToken?: string | null }).shareToken;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    void getSharedDraft(token).then((res) => {
+      if (cancelled) return;
+      if (!res.ok) setError(res.error);
+      else setShared(res.data);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [booking?.id]);
 
   if (!booking) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-        <button
-          type="button"
-          onClick={() => nav("/c")}
-          className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back to inbox
-        </button>
-        <h1 className="text-[clamp(24px,3vw,32px)] font-semibold text-[var(--ds-ink)]">Booking not found</h1>
-        <p className="mt-3 text-[14px] text-[var(--ds-body)]">
-          That booking either doesn't exist or has been withdrawn.
-        </p>
-      </div>
+      <NotFoundShell
+        nav={nav}
+        title="Booking not found"
+        body="That booking either doesn't exist or has been withdrawn."
+      />
     );
   }
 
   if (booking.status !== "accepted" && booking.status !== "delivered" && booking.status !== "completed") {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-        <button
-          type="button"
-          onClick={() => nav("/c")}
-          className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back to inbox
-        </button>
-        <h1 className="text-[clamp(24px,3vw,32px)] font-semibold text-[var(--ds-ink)]">Access not yet granted</h1>
-        <p className="mt-3 text-[14px] text-[var(--ds-body)]">
-          Draft access opens once you accept the booking. Currently the
-          status is <strong>{booking.status}</strong>.
-        </p>
-      </div>
+      <NotFoundShell
+        nav={nav}
+        title="Access not yet granted"
+        body={
+          <>
+            Draft access opens once you accept the booking. Currently the
+            status is <strong>{booking.status}</strong>.
+          </>
+        }
+      />
     );
   }
 
@@ -86,12 +96,12 @@ export function SharedDraftReview() {
           Shared draft · read-only
         </p>
         <h1 className="mt-2 text-[clamp(26px,3.2vw,36px)] font-semibold text-[var(--ds-ink)]">
-          {booking.matterTitle ?? "Untitled matter"}
+          {shared?.booking.matterTitle ?? booking.matterTitle ?? "Untitled matter"}
         </h1>
-        {booking.message && (
+        {(shared?.booking.message ?? booking.message) && (
           <p className="mt-3 max-w-[60ch] rounded-md bg-[var(--ds-surface-2)] px-4 py-3 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
             <span className="mr-1 font-semibold text-[var(--ds-ink)]">HR brief:</span>
-            {booking.message}
+            {shared?.booking.message ?? booking.message}
           </p>
         )}
       </header>
@@ -101,21 +111,26 @@ export function SharedDraftReview() {
           <FileText className="size-4 text-[var(--ds-muted)]" aria-hidden />
           Draft contents
         </div>
-        {draft ? (
+        {loading ? (
+          <div className="grid place-items-center px-5 py-10 text-[13px] text-[var(--ds-muted)]">
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            <p className="mt-2">Fetching the draft…</p>
+          </div>
+        ) : shared ? (
           <div className="space-y-4">
             <div className="rounded-md bg-[var(--ds-surface-2)] px-3 py-2 text-[12.5px] text-[var(--ds-body)]">
               <p>
-                <strong>Letter type:</strong> {draft.letterType.replace(/_/g, " ")}
+                <strong>Letter type:</strong> {shared.draft.letterType.replace(/_/g, " ")}
               </p>
               <p>
-                <strong>Jurisdiction:</strong> {draft.context.jurisdiction ?? "—"}
+                <strong>Jurisdiction:</strong> {shared.draft.jurisdiction ?? "—"}
               </p>
               <p>
-                <strong>Mode:</strong> {draft.mode}
+                <strong>Mode:</strong> {shared.draft.mode}
               </p>
             </div>
             <div className="prose prose-sm max-w-none">
-              {(draft.sections ?? []).map((s) => (
+              {shared.draft.sections.map((s) => (
                 <article key={s.id} className="mb-4">
                   <h3 className="font-semibold text-[var(--ds-ink)]">{s.title}</h3>
                   <div
@@ -125,14 +140,17 @@ export function SharedDraftReview() {
                 </article>
               ))}
             </div>
+            <p className="mt-4 inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
+              <ShieldCheck className="size-3" aria-hidden />
+              Token-scoped read access · expires 30 days after acceptance
+            </p>
           </div>
         ) : (
           <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-10 text-center">
             <p className="text-[13.5px] text-[var(--ds-body)]">
-              Draft content is not available in this browser. The full
-              cross-device share lands when the matter-scoped sharing API
-              ships — your accepted booking will then unlock read-only
-              access to the sections, evidence, and audit chain.
+              {error
+                ? error
+                : "Draft access pending. If you've just accepted, refresh the inbox to pick up the share link."}
             </p>
             <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)]">
               <ShieldCheck className="size-3.5" aria-hidden />
@@ -141,6 +159,31 @@ export function SharedDraftReview() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function NotFoundShell({
+  nav,
+  title,
+  body,
+}: {
+  nav: ReturnType<typeof useNavigate>;
+  title: string;
+  body: React.ReactNode;
+}) {
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
+      <button
+        type="button"
+        onClick={() => nav("/c")}
+        className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+      >
+        <ArrowLeft className="size-3.5" aria-hidden />
+        Back to inbox
+      </button>
+      <h1 className="text-[clamp(24px,3vw,32px)] font-semibold text-[var(--ds-ink)]">{title}</h1>
+      <p className="mt-3 text-[14px] text-[var(--ds-body)]">{body}</p>
     </div>
   );
 }

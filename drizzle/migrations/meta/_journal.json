@@ -43,6 +43,13 @@
       "when": 1779271200000,
       "tag": "0005_consultant_marketplace",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779357600000,
+      "tag": "0006_consultant_share_tokens",
+      "breakpoints": true
     }
   ]
 }

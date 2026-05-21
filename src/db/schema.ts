@@ -508,12 +508,19 @@ export const consultantBookings = pgTable(
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /** Random bearer token generated when the booking is accepted. Tied
+     *  to {bookingId, draftId}; expires shareTokenExpiresAt. Used by the
+     *  consultant to fetch the specific draft they're reviewing without
+     *  needing membership in the HR tenant. */
+    shareToken: text("share_token"),
+    shareTokenExpiresAt: timestamp("share_token_expires_at", { withTimezone: true }),
   },
   (t) => [
     index("consultant_bookings_consultant_idx").on(t.consultantUserId, t.status),
     index("consultant_bookings_requester_idx").on(t.requesterUserId, t.status),
     index("consultant_bookings_tenant_idx").on(t.tenantId),
     index("consultant_bookings_draft_idx").on(t.draftId),
+    uniqueIndex("consultant_bookings_share_token_uniq").on(t.shareToken),
   ],
 );
 

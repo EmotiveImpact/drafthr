@@ -61,6 +61,12 @@ async function loadHandler(
         return null;
     }
   }
+  // Share-token resolver — the URL is /api/marketplace/shared/<token>
+  // so the dispatcher sees group='shared' and action=<token>.
+  // Token validation happens inside the handler.
+  if (group === "shared") {
+    return method === "GET" ? import("./_handlers/shared.js") : null;
+  }
   return null;
 }
 

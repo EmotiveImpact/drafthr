@@ -55,6 +55,12 @@ export type Booking = {
   /** Per-booking chat thread — added 2026-05-20. Older records normalise
    *  to an empty array on read. */
   messages?: BookingMessage[];
+  /** Matter-scoped share token issued by the server on accept. Used by
+   *  the consultant to open the specific draft they were booked to
+   *  review without needing membership in the HR tenant. */
+  shareToken?: string;
+  /** Token expiry in ms. */
+  shareTokenExpiresAt?: number;
 };
 
 type RecordBookingInput = Omit<

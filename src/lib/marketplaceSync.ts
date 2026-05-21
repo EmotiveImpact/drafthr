@@ -112,7 +112,10 @@ export async function pushProfile(): Promise<void> {
  *  user id in the inbox response), so we use the dto id as the booking id
  *  and the consultantProfileId stub as initials when there's no profile
  *  data attached. */
-function dtoToBooking(dto: BookingDTO, consultantInitials: string): Booking {
+function dtoToBooking(
+  dto: BookingDTO & { shareToken?: string | null; shareTokenExpiresAt?: number | null },
+  consultantInitials: string,
+): Booking {
   return {
     id: dto.id,
     consultantInitials,
@@ -128,6 +131,8 @@ function dtoToBooking(dto: BookingDTO, consultantInitials: string): Booking {
     completedAt: dto.completedAt ?? undefined,
     expectedDeliveryAt: dto.expectedDeliveryAt ?? Date.now() + 24 * 60 * 60 * 1000,
     status: dto.status as BookingStatus,
+    shareToken: dto.shareToken ?? undefined,
+    shareTokenExpiresAt: dto.shareTokenExpiresAt ?? undefined,
   };
 }
 
@@ -174,11 +179,24 @@ export async function pushBookingCreate(input: {
   await createBooking(input); // soft-fail; local copy already exists
 }
 
-/** Mirror a booking state transition to the server. */
+/** Mirror a booking state transition to the server. When the server
+ *  returns an updated booking (e.g. with a freshly-minted share token
+ *  on accept), merge those fields back into the local store so the UI
+ *  can use the token immediately. */
 export async function pushBookingRespond(
   bookingId: string,
   action: "accept" | "decline" | "deliver" | "complete",
   opts?: { note?: string; rating?: number },
 ): Promise<void> {
-  await respondToBooking(bookingId, action, opts); // soft-fail
+  const res = await respondToBooking(bookingId, action, opts);
+  if (!res.ok) return; // soft-fail
+  const state = useBookingsStore.getState();
+  const local = state.bookings.find((b) => b.id === bookingId);
+  const merged = dtoToBooking(
+    res.data.booking,
+    local?.consultantInitials ?? res.data.booking.consultantProfileId.slice(0, 2).toUpperCase(),
+  );
+  useBookingsStore.setState({
+    bookings: state.bookings.map((b) => (b.id === bookingId ? merged : b)),
+  });
 }
