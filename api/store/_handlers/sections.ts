@@ -8,12 +8,12 @@
  * event with a section_id summary instead of one per section.
  */
 import { eq } from "drizzle-orm";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
-import { rateLimit } from "../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
-import { getDb } from "../../src/db/index.js";
-import { drafts, sections } from "../../src/db/schema.js";
-import { appendAuditEvent } from "../../src/db/audit.js";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { getDb } from "../../../src/db/index.js";
+import { drafts, sections } from "../../../src/db/schema.js";
+import { appendAuditEvent } from "../../../src/db/audit.js";
 
 export const config = { runtime: "nodejs" };
 

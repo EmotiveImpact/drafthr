@@ -8,7 +8,6 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext } from "@/components/SearchPaletteContext";
-import { useAuth } from "@/lib/auth";
 import { Onboarding } from "@/components/Onboarding";
 
 /** Routes that render WITHOUT the authenticated app chrome (sidebar,
@@ -20,11 +19,6 @@ import { Onboarding } from "@/components/Onboarding";
  * there (public landing, tenant-less redirect, role chooser). Once the
  * user is fully onboarded, RootRedirect redirects to /hr or /me which
  * fall through to the chrome path below. */
-/** When a path is in CHROMELESS_EXACT_FOR_ANON it skips the sidebar for
- *  unauthenticated visitors but keeps the full shell once signed in.
- *  /consultants is public; we want anon visitors to see a clean
- *  marketing-feeling page, signed-in users see the normal app shell. */
-const CHROMELESS_EXACT_FOR_ANON = ["/consultants"];
 const CHROMELESS_EXACT = ["/", "/pick-role"];
 const CHROMELESS_PREFIXES = [
   "/sign-in",
@@ -44,14 +38,10 @@ const CHROMELESS_PREFIXES = [
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
-  const { user, isLoaded } = useAuth();
   const isEditor = loc.pathname.startsWith("/editor/");
-  const isChromelessForAnon =
-    CHROMELESS_EXACT_FOR_ANON.includes(loc.pathname) && isLoaded && !user;
   const isChromeless =
     CHROMELESS_EXACT.includes(loc.pathname) ||
-    CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p)) ||
-    isChromelessForAnon;
+    CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
   const { open, setOpen } = useSearchPalette();
 
   // Public / onboarding routes get a minimal shell — no sidebar, no chrome.

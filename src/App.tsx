@@ -235,15 +235,18 @@ export function App() {
          * here. localStorage today; tied to a server-issued token later. */}
         <Route path="/c/review/:bookingId" element={<Protected><SharedDraftReview /></Protected>} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
-        {/* /consultants is intentionally PUBLIC — HR teams should be able
-         * to browse the marketplace before signing up. Booking still
-         * requires auth (gated inside the component). */}
+        {/* /consultants is auth-gated like the rest of the app. (It was
+         * briefly public for "browse before signup"; reverted — a public
+         * route that still shows the logged-in shell read as insecure and
+         * wasn't worth the confusion.) */}
         <Route
           path="/consultants"
           element={
-            <Suspense fallback={<EditorFallback />}>
-              <ConsultantsIndex />
-            </Suspense>
+            <Protected>
+              <Suspense fallback={<EditorFallback />}>
+                <ConsultantsIndex />
+              </Suspense>
+            </Protected>
           }
         />
         {/* Mobile read-only view. Stays inside the auth tree — Protected

@@ -13,12 +13,12 @@
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
 import { and, eq, lte } from "drizzle-orm";
-import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
-import { rateLimit } from "../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
-import { getDb } from "../../src/db/index.js";
-import { customTemplates, drafts, matters, sections } from "../../src/db/schema.js";
-import { appendAuditEvent } from "../../src/db/audit.js";
+import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
+import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { getDb } from "../../../src/db/index.js";
+import { customTemplates, drafts, matters, sections } from "../../../src/db/schema.js";
+import { appendAuditEvent } from "../../../src/db/audit.js";
 
 export const config = { runtime: "nodejs" };
 
