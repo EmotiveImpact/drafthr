@@ -40,6 +40,10 @@ export function BookingDialog({
     const message = note.trim() || undefined;
     const booking = recordBooking({
       consultantInitials: consultant.initials,
+      // Carry the stable profile id so the HR-side bookings list can match
+      // this booking back to the consultant card (name, photo) reliably —
+      // initials aren't unique. Undefined for seed consultants.
+      consultantProfileId: consultant.profileId,
       draftId,
       // Pass the optional note through to the booking record so the
       // consultant inbox can show "HR: ..." context on the request card.

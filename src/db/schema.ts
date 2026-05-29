@@ -440,6 +440,14 @@ export const consultantProfiles = pgTable(
       .notNull()
       .default("GBP"),
     sla: text("sla").notNull().default("24-48h"),
+    /** Availability window — drives the marketplace card badge and lets HR
+     *  filter for consultants who can take urgent work. Persisted so the
+     *  badge is correct cross-device (it isn't just a local UI preference). */
+    availability: text("availability", {
+      enum: ["this_week", "one_two_weeks", "three_four_weeks", "booked"],
+    })
+      .notNull()
+      .default("this_week"),
     rating: integer("rating_x10").notNull().default(50), // stored x10 to avoid floats
     reviews: integer("reviews").notNull().default(0),
     photoUrl: text("photo_url"),

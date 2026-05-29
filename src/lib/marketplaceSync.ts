@@ -57,8 +57,15 @@ function dtoToProfile(dto: ConsultantProfileDTO) {
     avatarFrom: "#f3dca5",
     avatarTo: "#e9b75c",
     photoUrl: dto.photoUrl ?? "",
-    availability: "this_week" as Availability, // server has no field yet
-    payout: { stripeAccountId: null, payoutsEnabled: false },
+    availability: (dto.availability ?? "this_week") as Availability,
+    // Payout isn't server-backed yet (Stripe Connect not wired). Preserve
+    // whatever the local store already holds so a profile pull doesn't wipe
+    // a payout state set elsewhere; default to the disconnected state.
+    payout:
+      useConsultantStore.getState().profile?.payout ?? {
+        stripeAccountId: null,
+        payoutsEnabled: false,
+      },
     updatedAt: dto.updatedAt ?? Date.now(),
   };
 }
@@ -97,6 +104,7 @@ export async function pushProfile(): Promise<void> {
     price: p.price,
     currency: codeByCurrency[p.currency],
     sla: p.sla,
+    availability: p.availability,
     photoUrl: p.photoUrl || null,
   });
   if (!res.ok) {
@@ -120,6 +128,7 @@ function dtoToBooking(
   return {
     id: dto.id,
     consultantInitials,
+    consultantProfileId: dto.consultantProfileId,
     draftId: dto.draftId ?? "",
     matterTitle: dto.matterTitle ?? undefined,
     message: dto.message ?? undefined,

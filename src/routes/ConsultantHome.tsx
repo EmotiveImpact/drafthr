@@ -59,7 +59,7 @@ export function ConsultantHome() {
     };
   }, []);
   const allBookings = useBookingsStore((s) =>
-    profile ? s.bookingsForConsultant(profile.initials) : [],
+    profile ? s.bookingsForConsultant(profile.initials, profile.id) : [],
   );
   const seedSampleBooking = useSeedSampleBooking();
   const pendingCount = allBookings.filter((b) => b.status === "requested").length;
@@ -264,6 +264,7 @@ function useSeedSampleBooking() {
     if (!profile) return;
     record({
       consultantInitials: profile.initials,
+      consultantProfileId: profile.id,
       draftId: "demo-" + Math.random().toString(36).slice(2, 8),
       matterTitle: "Settlement letter — senior engineer, voluntary exit",
       message:

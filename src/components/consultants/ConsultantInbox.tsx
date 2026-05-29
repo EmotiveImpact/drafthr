@@ -34,7 +34,7 @@ const STATUS_ORDER: Booking["status"][] = [
 export function ConsultantInbox() {
   const profile = useConsultantStore((s) => s.profile);
   const bookings = useBookingsStore((s) =>
-    profile ? s.bookingsForConsultant(profile.initials) : [],
+    profile ? s.bookingsForConsultant(profile.initials, profile.id) : [],
   );
 
   const grouped = useMemo(() => {

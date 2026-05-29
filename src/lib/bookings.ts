@@ -33,6 +33,11 @@ export type BookingMessage = {
 export type Booking = {
   id: string;
   consultantInitials: string;
+  /** Server-side consultant profile id (UUID). The stable key for
+   *  matching a booking to a marketplace consultant card — initials are
+   *  neither unique nor stable, so display/lookup uses this when present.
+   *  Absent only for local-only demo bookings against seed consultants. */
+  consultantProfileId?: string;
   /** Optional — set when an HR user books from inside a draft. */
   draftId: string;
   /** Optional human-friendly title — used by the consultant inbox card. */
@@ -72,8 +77,10 @@ type Store = {
   bookings: Booking[];
   recordBooking: (input: RecordBookingInput) => Booking;
   bookingsForDraft: (draftId: string) => Booking[];
-  /** Inbox view for a consultant — all bookings addressed to them. */
-  bookingsForConsultant: (initials: string) => Booking[];
+  /** Inbox view for a consultant — all bookings addressed to them.
+   *  Matches on profileId (stable) when available, falling back to
+   *  initials for local-only demo bookings that have no profileId. */
+  bookingsForConsultant: (initials: string, profileId?: string) => Booking[];
   acceptBooking: (id: string, responseNote?: string) => void;
   declineBooking: (id: string, responseNote?: string) => void;
   deliverBooking: (id: string, deliveryNote?: string) => void;
@@ -110,10 +117,17 @@ export const useBookingsStore = create<Store>()(
       },
       bookingsForDraft: (draftId) =>
         get().bookings.map(normaliseBooking).filter((b) => b.draftId === draftId),
-      bookingsForConsultant: (initials) =>
+      bookingsForConsultant: (initials, profileId) =>
         get()
           .bookings.map(normaliseBooking)
-          .filter((b) => b.consultantInitials === initials)
+          .filter((b) =>
+            // Prefer the stable profileId match. Fall back to initials for
+            // demo / pre-profileId bookings. A booking that has its own
+            // profileId set only matches when it equals the caller's.
+            profileId && b.consultantProfileId
+              ? b.consultantProfileId === profileId
+              : b.consultantInitials === initials,
+          )
           .sort((a, b) => b.bookedAt - a.bookedAt),
       acceptBooking: (id, responseNote) =>
         set((state) => ({

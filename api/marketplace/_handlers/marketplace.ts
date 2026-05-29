@@ -52,10 +52,15 @@ export async function GET(req: Request): Promise<Response> {
     );
   }
   if (tags.length > 0) {
-    // jsonb ?| array — Postgres "any of these tags". Cast tags through
-    // sql.raw so the array literal is interpolated safely.
+    // jsonb ?| text[] — match any of these tags. Each tag is a bound
+    // parameter via sql.join (no string interpolation), so this is
+    // injection-safe regardless of tag contents.
+    const tagParams = sql.join(
+      tags.map((t) => sql`${t}`),
+      sql`, `,
+    );
     filters.push(
-      sql`${consultantProfiles.specialties}::jsonb ?| ${sql.raw(`array[${tags.map((t) => `'${t.replace(/'/g, "''")}'`).join(",")}]`)}`,
+      sql`${consultantProfiles.specialties}::jsonb ?| array[${tagParams}]::text[]`,
     );
   }
 
@@ -110,6 +115,7 @@ function toClient(row: typeof consultantProfiles.$inferSelect) {
     price: row.price,
     currency: row.currency,
     sla: row.sla,
+    availability: row.availability,
     rating: row.rating / 10,
     reviews: row.reviews,
     photoUrl: row.photoUrl,

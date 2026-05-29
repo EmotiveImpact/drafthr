@@ -44,6 +44,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> 
 
 // ─── Consultant profile ────────────────────────────────────────────────
 
+export type AvailabilityCode =
+  | "this_week"
+  | "one_two_weeks"
+  | "three_four_weeks"
+  | "booked";
+
 export type ConsultantProfileDTO = {
   id: string;
   initials: string;
@@ -55,6 +61,7 @@ export type ConsultantProfileDTO = {
   price: number;
   currency: "GBP" | "USD" | "EUR";
   sla: string;
+  availability: AvailabilityCode;
   rating: number;
   reviews: number;
   photoUrl: string | null;
@@ -69,6 +76,7 @@ export function getConsultantProfile() {
 export function saveConsultantProfile(
   input: Partial<Omit<ConsultantProfileDTO, "id" | "rating" | "reviews" | "status" | "updatedAt">>,
 ) {
+  // input may carry availability now — the server validates the enum.
   return call<{ profile: ConsultantProfileDTO; created: boolean }>(
     "/api/marketplace/consultant/profile",
     { method: "POST", body: JSON.stringify(input) },

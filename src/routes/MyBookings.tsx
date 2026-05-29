@@ -140,7 +140,13 @@ export function MyBookings() {
                   <BookingRow
                     key={b.id}
                     booking={b}
-                    consultant={allConsultants.find((c) => c.initials === b.consultantInitials)}
+                    consultant={allConsultants.find((c) =>
+                      // Match by stable profile id first (server bookings),
+                      // fall back to initials for local-only seed bookings.
+                      b.consultantProfileId && c.profileId
+                        ? c.profileId === b.consultantProfileId
+                        : c.initials === b.consultantInitials,
+                    )}
                   />
                 ))}
               </div>

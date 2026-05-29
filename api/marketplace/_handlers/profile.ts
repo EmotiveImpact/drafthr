@@ -25,6 +25,14 @@ export const config = { runtime: "nodejs" };
 
 const AUTO_PUBLISH = process.env.VETTING_AUTO_PUBLISH === "1";
 
+type Availability = "this_week" | "one_two_weeks" | "three_four_weeks" | "booked";
+const AVAILABILITY_VALUES: Availability[] = [
+  "this_week",
+  "one_two_weeks",
+  "three_four_weeks",
+  "booked",
+];
+
 type ProfileInput = {
   fullName?: string;
   role?: string;
@@ -35,6 +43,7 @@ type ProfileInput = {
   currency?: "GBP" | "USD" | "EUR";
   sla?: string;
   photoUrl?: string | null;
+  availability?: Availability;
 };
 
 function initialsOf(name: string): string {
@@ -122,6 +131,10 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     price: clampInt(body.price ?? existing?.price ?? 150, 0, 5000),
     currency: (body.currency ?? existing?.currency ?? "GBP") as "GBP" | "USD" | "EUR",
     sla: (body.sla ?? existing?.sla ?? "24-48h").slice(0, 32),
+    availability:
+      body.availability && AVAILABILITY_VALUES.includes(body.availability)
+        ? body.availability
+        : (existing?.availability ?? "this_week"),
     photoUrl: body.photoUrl === null ? null : body.photoUrl ?? existing?.photoUrl ?? null,
     // First save publishes immediately when VETTING_AUTO_PUBLISH=1, otherwise
     // pending_review. Subsequent updates preserve whatever the admin set.
@@ -188,6 +201,7 @@ function toClient(row: typeof consultantProfiles.$inferSelect) {
     price: row.price,
     currency: row.currency,
     sla: row.sla,
+    availability: row.availability,
     rating: row.rating / 10,
     reviews: row.reviews,
     photoUrl: row.photoUrl,
