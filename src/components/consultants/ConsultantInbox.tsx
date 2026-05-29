@@ -4,6 +4,7 @@ import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { Check, Clock, FileText, MessageSquareReply, X } from "lucide-react";
 import { BookingThread } from "@/components/consultants/BookingThread";
+import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { pushBookingRespond } from "@/lib/marketplaceSync";
 
 /** Stable empty-array reference. bookingsForConsultant builds a fresh
@@ -279,24 +280,6 @@ function BookingRow({ booking }: { booking: Booking }) {
 
       <BookingThread booking={booking} perspective="consultant" />
     </article>
-  );
-}
-
-function StatusBadge({ status }: { status: Booking["status"] }) {
-  const styles: Record<Booking["status"], { bg: string; fg: string; label: string }> = {
-    requested: { bg: "bg-[var(--ds-amber-bg)]", fg: "text-[var(--ds-amber-fg)]", label: "New" },
-    accepted: { bg: "bg-[var(--ds-blue-bg)]", fg: "text-[var(--ds-blue-fg)]", label: "Accepted" },
-    delivered: { bg: "bg-[var(--ds-green-bg)]", fg: "text-[var(--ds-green-fg)]", label: "Delivered" },
-    completed: { bg: "bg-[var(--ds-surface-2)]", fg: "text-[var(--ds-muted)]", label: "Completed" },
-    declined: { bg: "bg-[var(--ds-red-bg)]", fg: "text-[var(--ds-red-fg)]", label: "Declined" },
-  };
-  const s = styles[status];
-  return (
-    <span
-      className={`inline-flex flex-shrink-0 items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] ${s.bg} ${s.fg}`}
-    >
-      {s.label}
-    </span>
   );
 }
 

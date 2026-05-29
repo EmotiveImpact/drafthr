@@ -38,6 +38,7 @@ function dtoToConsultant(dto: MarketplaceConsultantDTO): Consultant {
     rating: dto.rating,
     reviews: dto.reviews,
     price: dto.price,
+    currency: ({ GBP: "£", USD: "$", EUR: "€" } as const)[dto.currency] ?? "£",
     sla: dto.sla,
     avatarFrom: "from-amber-200",
     avatarTo: "to-amber-300",
@@ -59,6 +60,7 @@ function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["
     rating: p.rating,
     reviews: p.reviews,
     price: p.price,
+    currency: p.currency,
     sla: p.sla,
     avatarFrom: "from-amber-200",
     avatarTo: "to-amber-300",
@@ -222,37 +224,46 @@ export function ConsultantsIndex() {
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[980px] px-4 py-8 sm:px-6 pb-24">
 
-          {/* Hero */}
+          {/* Hero — matches the page-title pattern used across the
+           * consultant surface (eyebrow + clamp heading + lede). */}
           <div className="mb-6">
-            <h1 className="text-[22px] sm:text-[26px] font-bold text-[var(--ds-ink)] leading-tight">
-              UK Employment Law Specialists
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
+              Marketplace
+            </p>
+            <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)] leading-[1.1]">
+              Employment-law specialists
             </h1>
-            <p className="text-[13.5px] text-[var(--ds-muted)] mt-1.5 max-w-prose leading-relaxed">
-              Get a UK-qualified specialist on your letter. Most reviews back within 24 hours, at a fraction of what a formal legal instruction costs.
+            <p className="text-[14px] text-[var(--ds-body)] mt-2 max-w-prose leading-relaxed">
+              Get a qualified specialist on your letter. Most reviews come back
+              within 24 hours, at a fraction of what a formal legal instruction
+              costs.
             </p>
           </div>
 
           {/* Filters row */}
           <div className="flex flex-col gap-3 mb-6">
-            {/* Search + sort */}
+            {/* Search + sort — canonical input recipe (h-40, rounded-8,
+             * ring-2 focus) so the toolbar matches every other DraftHR
+             * control instead of the bespoke compact h-8 style. */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-[var(--ds-muted)]" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)]" />
                 <input
                   type="text"
                   placeholder="Search by name or role…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  className="w-full h-8 pl-8 pr-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)]"
+                  aria-label="Search specialists by name or role"
+                  className="w-full h-[40px] pl-9 pr-9 rounded-[8px] border border-[var(--ds-line)] bg-white text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
                 />
                 {query && (
                   <button
                     type="button"
                     onClick={() => setQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
                     aria-label="Clear search"
                   >
-                    <X className="size-3" />
+                    <X className="size-3.5" />
                   </button>
                 )}
               </div>
@@ -261,7 +272,7 @@ export function ConsultantsIndex() {
                 value={sortKey}
                 onValueChange={(v) => setSortKey(v as SortKey)}
               >
-                <SelectTrigger className="h-8 w-[160px] rounded-md border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)]">
+                <SelectTrigger className="h-[40px] w-[170px] rounded-[8px] border-[var(--ds-line)] bg-white text-[14px] text-[var(--ds-ink)]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -331,12 +342,14 @@ export function ConsultantsIndex() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-16 text-[var(--ds-muted)] text-[13px]">
-              No specialists match your filters.{" "}
+            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-12 text-center">
+              <p className="text-[13.5px] text-[var(--ds-body)]">
+                No specialists match your filters.
+              </p>
               <button
                 type="button"
                 onClick={clearFilters}
-                className="text-[var(--ds-ink)] font-semibold underline"
+                className="mt-2 text-[12.5px] font-semibold text-[var(--ds-ink)] underline"
               >
                 Clear filters →
               </button>

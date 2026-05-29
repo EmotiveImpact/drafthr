@@ -29,6 +29,8 @@ export type Consultant = {
   rating: number;
   reviews: number;
   price: number;
+  /** Display currency symbol. Defaults to "£" when absent (seed set). */
+  currency?: "£" | "$" | "€";
   sla: string;
   top?: boolean;
   /** Tailwind gradient classes for the avatar (matches Design D). */

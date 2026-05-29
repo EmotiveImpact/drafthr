@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -103,7 +104,7 @@ export function BookingDialog({
                   className="size-12 rounded-full object-cover border-2 border-white shadow"
                 />
                 <div>
-                  <DialogTitle className="text-[15px] font-bold leading-tight text-[var(--ds-ink)]">
+                  <DialogTitle className="text-[15px] font-semibold leading-tight text-[var(--ds-ink)]">
                     {consultant.name}
                   </DialogTitle>
                   <p className="text-[11px] text-[var(--ds-muted)] mt-0.5">
@@ -111,9 +112,13 @@ export function BookingDialog({
                   </p>
                 </div>
               </div>
+              <DialogDescription className="sr-only">
+                Confirm your booking with {consultant.name} and add optional
+                focus notes for the review.
+              </DialogDescription>
               {/* Rating row */}
               <div className="flex items-center gap-1.5 text-[11px] mb-2">
-                <Star className="size-3 text-[var(--ds-amber-fg,#d97706)]" fill="currentColor" strokeWidth={0} />
+                <Star className="size-3 text-[var(--ds-amber-fg)]" fill="currentColor" strokeWidth={0} />
                 <span className="font-semibold text-[var(--ds-ink)]">{consultant.rating.toFixed(1)}</span>
                 <span className="text-[var(--ds-muted)]">({consultant.reviews} reviews)</span>
               </div>
@@ -123,17 +128,17 @@ export function BookingDialog({
               {/* Specialty quote */}
               <div
                 className={cn(
-                  "text-[11.5px] text-[var(--ds-body,var(--ds-ink))] px-3 py-2.5 bg-[var(--ds-canvas)] rounded-md leading-snug",
-                  consultant.top && "border-l-2 border-[var(--ds-violet-fg,#7c3aed)]",
+                  "text-[11.5px] text-[var(--ds-body)] px-3 py-2.5 bg-[var(--ds-canvas)] rounded-[8px] leading-snug",
+                  consultant.top && "border-l-2 border-[var(--ds-ink)]",
                 )}
               >
                 "{consultant.specialty}"
               </div>
 
               {/* Cost summary */}
-              <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--ds-line-2)] text-[12px]">
-                <span className="font-bold text-[var(--ds-ink)] text-[16px]">
-                  £{consultant.price}
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-[8px] bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[12px]">
+                <span className="font-semibold text-[var(--ds-ink)] text-[16px]">
+                  {(consultant.currency ?? "£")}{consultant.price}
                 </span>
                 <span className="text-[var(--ds-muted)]">·</span>
                 <span className="text-[var(--ds-muted)]">
@@ -148,7 +153,7 @@ export function BookingDialog({
               <div className="flex flex-col gap-1.5">
                 <label
                   htmlFor="booking-note"
-                  className="text-[11px] font-semibold text-[var(--ds-muted)] uppercase tracking-wide"
+                  className="text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)]"
                 >
                   Focus notes (optional)
                 </label>
@@ -158,7 +163,7 @@ export function BookingDialog({
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="What should they focus on? e.g. 'Check the redundancy selection criteria'"
                   rows={3}
-                  className="w-full rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-2 text-[12px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] resize-none focus:outline-none focus:ring-1 focus:ring-[var(--ds-ink)]"
+                  className="w-full rounded-[8px] border border-[var(--ds-line)] bg-white px-3 py-2 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] resize-none focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
                 />
               </div>
             </div>
@@ -167,15 +172,15 @@ export function BookingDialog({
               <Button
                 variant="outline"
                 onClick={onClose}
-                className="flex-1 sm:flex-none text-[12.5px]"
+                className="flex-1 sm:flex-none text-[13px]"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleConfirm}
-                className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:opacity-90 text-[12.5px] font-bold"
+                className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:-translate-y-px hover:shadow-md text-[13px] font-semibold"
               >
-                Confirm booking · £{consultant.price}
+                Confirm booking · {(consultant.currency ?? "£")}{consultant.price}
               </Button>
             </DialogFooter>
           </>

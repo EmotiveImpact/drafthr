@@ -342,7 +342,7 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
         {!consultantProfile && (
           <SidebarGroup>
             <SidebarGroupContent>
-              <div className="mx-2 mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] leading-snug text-amber-900 group-data-[collapsible=icon]:hidden">
+              <div className="mx-2 mt-2 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] px-3 py-2 text-[11.5px] leading-snug text-[var(--ds-amber-fg)] group-data-[collapsible=icon]:hidden">
                 <span className="font-semibold">Profile incomplete.</span>{" "}
                 <Link to="/c/profile" className="underline">Finish your card</Link> to be discoverable.
               </div>

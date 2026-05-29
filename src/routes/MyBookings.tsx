@@ -5,6 +5,7 @@ import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { BookingThread } from "@/components/consultants/BookingThread";
+import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { pullMyBookings, pushBookingRespond } from "@/lib/marketplaceSync";
 
 /**
@@ -305,20 +306,3 @@ function BookingRow({
   );
 }
 
-function StatusBadge({ status }: { status: Booking["status"] }) {
-  const styles: Record<Booking["status"], { bg: string; fg: string; label: string }> = {
-    requested: { bg: "bg-[var(--ds-amber-bg)]", fg: "text-[var(--ds-amber-fg)]", label: "Pending" },
-    accepted: { bg: "bg-[var(--ds-blue-bg)]", fg: "text-[var(--ds-blue-fg)]", label: "Accepted" },
-    delivered: { bg: "bg-[var(--ds-green-bg)]", fg: "text-[var(--ds-green-fg)]", label: "Delivered" },
-    completed: { bg: "bg-[var(--ds-surface-2)]", fg: "text-[var(--ds-muted)]", label: "Completed" },
-    declined: { bg: "bg-[var(--ds-red-bg)]", fg: "text-[var(--ds-red-fg)]", label: "Declined" },
-  };
-  const s = styles[status];
-  return (
-    <span
-      className={`inline-flex flex-shrink-0 items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] ${s.bg} ${s.fg}`}
-    >
-      {s.label}
-    </span>
-  );
-}
