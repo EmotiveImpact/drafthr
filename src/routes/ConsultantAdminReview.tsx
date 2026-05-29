@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ShieldAlert, XCircle } from "lucide-react";
 import { useConsultantStore } from "@/lib/consultantProfile";
+import { useAuth } from "@/lib/auth";
 
 /**
  * /admin/consultants — admin vetting review.
@@ -27,6 +28,7 @@ const ADMIN_EMAILS = (
 
 export function ConsultantAdminReview() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const profile = useConsultantStore((s) => s.profile);
   const saveProfile = useConsultantStore((s) => s.saveProfile);
 
@@ -34,14 +36,25 @@ export function ConsultantAdminReview() {
   // a server-side role check + redirect once tenant_members has an
   // 'admin' enum value.
   const [authedAdmin, setAuthedAdmin] = useState<boolean | null>(null);
+  // Reject confirmation state. MUST be declared before any early return —
+  // hooks can't run conditionally, and `profile` flipping null→set (via a
+  // background pullProfile/saveProfile) would otherwise change the hook
+  // count between renders → "rendered more hooks than previous render".
+  const [confirmReject, setConfirmReject] = useState(false);
   useEffect(() => {
-    // For now, anyone with the URL can access. Wire to a real check by
-    // replacing the line below with a fetch to /api/me that returns the
-    // role, and gate accordingly.
-    setAuthedAdmin(ADMIN_EMAILS.length === 0 || true);
-  }, []);
+    // Gate on the admin email allowlist (VITE_ADMIN_EMAILS). The caller's
+    // email must be on the list. Empty list = not configured = deny.
+    // (This is a client-side gate; the real server-side role check lands
+    // with the admin API. It is NOT a security boundary on its own, but
+    // it no longer hard-codes `|| true` letting anyone in.)
+    const email = user?.email?.toLowerCase() ?? "";
+    setAuthedAdmin(ADMIN_EMAILS.length > 0 && ADMIN_EMAILS.includes(email));
+  }, [user?.email]);
 
   if (authedAdmin === null) return null;
+  // Not an allowlisted admin → bounce to the home redirect. No flash of
+  // admin content.
+  if (authedAdmin === false) return <Navigate to="/" replace />;
 
   if (!profile) {
     return (
@@ -65,11 +78,6 @@ export function ConsultantAdminReview() {
       </div>
     );
   }
-
-  // Reject is a destructive action, so we use an inline confirmation
-  // (in-page panel) rather than the browser-native confirm() popup
-  // which doesn't match the DraftHR shell.
-  const [confirmReject, setConfirmReject] = useState(false);
 
   const onApprove = () => {
     // Until the API switch, "approve" is a no-op — the profile is already

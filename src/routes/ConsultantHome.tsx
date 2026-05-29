@@ -1,10 +1,14 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useShallow } from "zustand/react/shallow";
 import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, TrendingUp, UserCog } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
-import { useBookingsStore, parseSlaHours } from "@/lib/bookings";
+import { useBookingsStore, parseSlaHours, type Booking } from "@/lib/bookings";
 import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
 import { pullInbox, pullProfile } from "@/lib/marketplaceSync";
+
+/** Stable empty ref — see ConsultantInbox for the zustand-v5 rationale. */
+const EMPTY_BOOKINGS: Booking[] = [];
 
 /**
  * Naïve earnings calculation — rate × estimated hours per completed
@@ -58,8 +62,10 @@ export function ConsultantHome() {
       cancelled = true;
     };
   }, []);
-  const allBookings = useBookingsStore((s) =>
-    profile ? s.bookingsForConsultant(profile.initials, profile.id) : [],
+  const allBookings = useBookingsStore(
+    useShallow((s) =>
+      profile ? s.bookingsForConsultant(profile.initials, profile.id) : EMPTY_BOOKINGS,
+    ),
   );
   const seedSampleBooking = useSeedSampleBooking();
   const pendingCount = allBookings.filter((b) => b.status === "requested").length;

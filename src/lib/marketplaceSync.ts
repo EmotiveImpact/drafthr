@@ -174,7 +174,9 @@ export async function pullMyBookings(): Promise<void> {
   // We don't know the consultant's initials from this response, so use
   // a placeholder. The marketplace listing fills the real initials when
   // the consultant card is rendered alongside.
-  const list = res.data.bookings.map((dto) => dtoToBooking(dto, dto.consultantProfileId.slice(0, 2).toUpperCase()));
+  const list = res.data.bookings.map((dto) =>
+    dtoToBooking(dto, (dto.consultantProfileId ?? "").slice(0, 2).toUpperCase()),
+  );
   mergeBookings(list);
 }
 
@@ -249,7 +251,8 @@ export async function pushBookingRespond(
   const local = state.bookings.find((b) => b.id === bookingId);
   const merged = dtoToBooking(
     res.data.booking,
-    local?.consultantInitials ?? res.data.booking.consultantProfileId.slice(0, 2).toUpperCase(),
+    local?.consultantInitials ??
+      (res.data.booking.consultantProfileId ?? "").slice(0, 2).toUpperCase(),
   );
   useBookingsStore.setState({
     bookings: state.bookings.map((b) => (b.id === bookingId ? merged : b)),

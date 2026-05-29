@@ -177,7 +177,26 @@ export const useBookingsStore = create<Store>()(
         }));
       },
     }),
-    { name: "drafthr.bookings.v1" },
+    {
+      name: "drafthr.bookings.v1",
+      // v1 (first versioned): the Booking shape changed repeatedly without a
+      // version (status vocab pending/in_review → requested/accepted, then
+      // messages / shareToken / consultantProfileId added). An un-normalised
+      // legacy row reaches MyBookings' grouped[b.status].push() with a status
+      // key that doesn't exist → throw → white screen. Normalise + backfill
+      // on rehydrate so every persisted booking matches the current shape.
+      version: 1,
+      migrate: (persisted) => {
+        const state = persisted as { bookings?: Booking[] } | undefined;
+        if (state?.bookings) {
+          state.bookings = state.bookings.map((b) => ({
+            ...normaliseBooking(b),
+            messages: b.messages ?? [],
+          }));
+        }
+        return state as unknown as Store;
+      },
+    },
   ),
 );
 

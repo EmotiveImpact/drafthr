@@ -109,7 +109,13 @@ export function MyBookings() {
   bookings
     .slice()
     .sort((a, b) => b.bookedAt - a.bookedAt)
-    .forEach((b) => grouped[b.status].push(b));
+    .forEach((b) => {
+      // Defensive: a persisted booking with an unknown/legacy status would
+      // make grouped[b.status] undefined → .push throws → white screen.
+      // The store's migrate normalises these, but guard here too so a
+      // stray status can never take the page down.
+      (grouped[b.status] ?? grouped.requested).push(b);
+    });
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">

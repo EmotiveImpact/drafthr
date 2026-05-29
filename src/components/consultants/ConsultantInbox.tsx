@@ -1,9 +1,17 @@
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { Check, Clock, FileText, MessageSquareReply, X } from "lucide-react";
 import { BookingThread } from "@/components/consultants/BookingThread";
 import { pushBookingRespond } from "@/lib/marketplaceSync";
+
+/** Stable empty-array reference. bookingsForConsultant builds a fresh
+ *  array every call; returning a new `[]` literal from the selector's
+ *  false branch would also churn. useShallow compares contents so the
+ *  fresh-array case no longer triggers a re-render storm, and this
+ *  constant keeps the empty case referentially stable. */
+const EMPTY_BOOKINGS: Booking[] = [];
 
 /**
  * Consultant-side bookings inbox. Reads everything addressed to the
@@ -33,8 +41,10 @@ const STATUS_ORDER: Booking["status"][] = [
 
 export function ConsultantInbox() {
   const profile = useConsultantStore((s) => s.profile);
-  const bookings = useBookingsStore((s) =>
-    profile ? s.bookingsForConsultant(profile.initials, profile.id) : [],
+  const bookings = useBookingsStore(
+    useShallow((s) =>
+      profile ? s.bookingsForConsultant(profile.initials, profile.id) : EMPTY_BOOKINGS,
+    ),
   );
 
   const grouped = useMemo(() => {

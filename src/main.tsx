@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { Theme } from "@radix-ui/themes";
 import { Toaster } from "sonner";
 import { App } from "./App";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { initSentry } from "@/lib/observability/sentry";
 import { bootstrapTheme } from "@/lib/theme";
@@ -27,6 +28,7 @@ if (import.meta.env.DEV && typeof window !== "undefined") {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
+      <ErrorBoundary>
       <AuthProvider>
         <Theme
           accentColor="gray"
@@ -53,6 +55,7 @@ createRoot(document.getElementById("root")!).render(
           />
         </Theme>
       </AuthProvider>
+      </ErrorBoundary>
     </BrowserRouter>
   </StrictMode>
 );

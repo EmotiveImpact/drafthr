@@ -147,7 +147,31 @@ export const useConsultantStore = create<ConsultantStore>()(
     }),
     {
       name: "drafthr.consultant",
-      version: 1,
+      // v2: the persisted profile shape gained `specialties`, `availability`,
+      // and `payout` after v1 shipped. A v1 blob hydrates those as undefined,
+      // and the first read of `profile.specialties.length` (isProfileComplete,
+      // ConsultantHome, MyBookings) throws → white screen. Backfill on migrate.
+      version: 2,
+      migrate: (persisted, fromVersion) => {
+        const state = persisted as Partial<ConsultantStore> | undefined;
+        if (!state) return state as unknown as ConsultantStore;
+        if (fromVersion < 2 && state.profile) {
+          const p = state.profile as Partial<ConsultantProfile>;
+          state.profile = {
+            specialties: [],
+            availability: "this_week",
+            payout: { stripeAccountId: null, payoutsEnabled: false },
+            specialty: "",
+            avatarFrom: "#f3dca5",
+            avatarTo: "#e9b75c",
+            photoUrl: "",
+            rating: 5.0,
+            reviews: 0,
+            ...p,
+          } as ConsultantProfile;
+        }
+        return state as unknown as ConsultantStore;
+      },
     },
   ),
 );
