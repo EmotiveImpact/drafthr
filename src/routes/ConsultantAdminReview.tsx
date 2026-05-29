@@ -167,7 +167,6 @@ export function ConsultantAdminReview() {
                   </p>
                   <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--ds-body)]">
                     They'll be unable to publish until they revise the card.
-                    Action is audit-logged.
                   </p>
                 </div>
               </div>
@@ -209,7 +208,7 @@ export function ConsultantAdminReview() {
               </button>
               <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
                 <ShieldAlert className="size-3.5" aria-hidden />
-                Decisions audit-logged
+                Preview — full audit-logged queue coming
               </span>
             </div>
           )}

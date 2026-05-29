@@ -209,7 +209,7 @@ export function ConsultantHome() {
             Earnings
           </h2>
           <span className="text-[11px] italic text-[var(--ds-muted)]">
-            Estimated · live payouts when Stripe Connect lands
+            Indicative · real payouts arrive with Stripe Connect
           </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
@@ -219,22 +219,22 @@ export function ConsultantHome() {
             sub={earnings.pending > 0 ? `${earnings.pending} in flight` : "No work in flight"}
           />
           <Stat
-            label="Lifetime earnings"
+            label="Potential value"
             value={
-              profile
-                ? `${profile.currency}${earnings.lifetime.toLocaleString()}`
+              profile && earnings.completed > 0
+                ? `~${profile.currency}${earnings.lifetime.toLocaleString()}`
                 : "—"
             }
             sub={
-              profile
-                ? `at ${profile.currency}${profile.price}/hr × est. hours`
-                : "Set a rate to see earnings"
+              profile && earnings.completed > 0
+                ? `indicative: ${profile.currency}${profile.price}/hr × est. hours`
+                : "Tracked once payouts go live"
             }
           />
           <Stat
             label="Platform fee"
             value="12%"
-            sub="Deducted on each completed booking"
+            sub="Planned — applies once payouts launch"
           />
         </div>
       </section>

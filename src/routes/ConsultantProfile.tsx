@@ -440,7 +440,7 @@ export function ConsultantProfile() {
                 <p className="mt-1 text-[12px] leading-relaxed text-[var(--ds-body)]">
                   {profile?.payout?.payoutsEnabled
                     ? "Your bank account is connected — payouts run weekly."
-                    : "Connect a Stripe account to receive payouts. We charge a 12% platform fee on each completed booking; the rest hits your bank within 7 days."}
+                    : "Payouts launch soon. When they do, you'll connect a Stripe account here and we'll take a planned 12% platform fee on each completed booking — the rest goes to your bank. Nothing is charged today."}
                 </p>
                 <button
                   type="button"

@@ -16,6 +16,7 @@ import {
   consultantProfiles,
 } from "../../../src/db/schema.js";
 import { sendBookingRequestEmail } from "../../_utils/consultant-emails.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -123,7 +124,11 @@ export async function POST(req: Request): Promise<Response> {
       requesterUserId: auth.userRow.id,
       consultantUserId: profile.userId,
       consultantProfileId: profile.id,
-      draftId: body.draftId ?? null,
+      // draft_id is a uuid column. Accept only a valid UUID; coerce
+      // anything else (e.g. a raw local "draft_x7k2…" id that slipped
+      // through) to null so a malformed id degrades to a draftless
+      // booking instead of a 500 that silently loses the booking.
+      draftId: serverUuidOrNull(body.draftId ?? null),
       matterTitle: body.matterTitle?.slice(0, 280) ?? null,
       message: body.message?.slice(0, 4000) ?? null,
       status: "requested",

@@ -13,12 +13,12 @@
  *
  * Request body: { bookingId, action, note?, rating? }
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { consultantBookings } from "../../../src/db/schema.js";
+import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
 import {
   sendBookingAcceptedEmail,
   sendBookingDeclinedEmail,
@@ -119,6 +119,38 @@ export async function POST(req: Request): Promise<Response> {
     .set(update)
     .where(eq(consultantBookings.id, booking.id))
     .returning();
+
+  // When a booking completes with a rating, recompute the consultant's
+  // aggregate rating + review count from all their rated completions.
+  // Without this, consultant_profiles.rating_x10 stays at the seed 50
+  // (5.0) forever and the marketplace's core trust signal is dead.
+  if (body.action === "complete" && typeof update.rating === "number") {
+    try {
+      const rated = await db
+        .select({ rating: consultantBookings.rating })
+        .from(consultantBookings)
+        .where(
+          and(
+            eq(consultantBookings.consultantProfileId, booking.consultantProfileId),
+            eq(consultantBookings.status, "completed"),
+            isNotNull(consultantBookings.rating),
+          ),
+        );
+      const values = rated
+        .map((r) => r.rating)
+        .filter((r): r is number => typeof r === "number");
+      if (values.length > 0) {
+        const avg = values.reduce((s, r) => s + r, 0) / values.length;
+        await db
+          .update(consultantProfiles)
+          .set({ rating: Math.round(avg * 10), reviews: values.length })
+          .where(eq(consultantProfiles.id, booking.consultantProfileId));
+      }
+    } catch (err) {
+      // Aggregation failure must not fail the completion response.
+      console.error("[bookings] rating aggregation failed", err);
+    }
+  }
 
   // Email side-effects, fire-and-forget — never block the API response on
   // mail delivery. Logged on failure.

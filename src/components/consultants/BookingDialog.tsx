@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import type { Consultant } from "@/components/editor/review/ConsultTab";
 import { useBookingsStore, slaMs, type Booking } from "@/lib/bookings";
 import { pushBookingCreate } from "@/lib/marketplaceSync";
+import { toServerUuid } from "@/lib/remote-ids";
 import { cn } from "@/lib/utils";
 
 interface BookingDialogProps {
@@ -59,7 +60,13 @@ export function BookingDialog({
       void pushBookingCreate(
         {
           consultantProfileId: consultant.profileId,
-          draftId,
+          // The draft_id column is a Postgres uuid. Local draft ids are
+          // readable strings ("draft_x7k2…"), so map through the same
+          // deterministic bridge the dual-write layer uses to write the
+          // draft row — otherwise the INSERT 500s (the flagship "book a
+          // specialist on this letter" flow silently dead-ended), and the
+          // consultant's share-token review couldn't find the draft.
+          draftId: draftId ? toServerUuid(draftId) : null,
           message,
           expectedDeliveryAt: new Date(Date.now() + slaMs(consultant.sla)).toISOString(),
         },
