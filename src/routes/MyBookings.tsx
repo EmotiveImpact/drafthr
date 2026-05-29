@@ -183,23 +183,30 @@ function BookingRow({
     setSubmitted(true);
   };
 
+  // Prefer the server-joined display fields (reliable cross-device), then
+  // the matched local card, then a graceful fallback.
+  const displayName =
+    booking.consultantName ?? consultant?.name ?? `Specialist · ${booking.consultantInitials}`;
+  const displayRole = booking.consultantRole ?? consultant?.role ?? "Consultant";
+  const displayPhoto = booking.consultantPhotoUrl ?? consultant?.photoUrl;
+
   return (
     <article className="rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
       <header className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          {consultant?.photoUrl && (
+          {displayPhoto && (
             <img
-              src={consultant.photoUrl}
+              src={displayPhoto}
               alt=""
               className="size-10 rounded-full object-cover border border-[var(--ds-line)] flex-shrink-0"
             />
           )}
           <div className="min-w-0">
             <h3 className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-              {consultant?.name ?? `Specialist · ${booking.consultantInitials}`}
+              {displayName}
             </h3>
             <p className="mt-0.5 truncate text-[11.5px] text-[var(--ds-muted)]">
-              {consultant?.role ?? "Consultant"}
+              {displayRole}
             </p>
             {booking.matterTitle && (
               <p className="mt-1 text-[12.5px] text-[var(--ds-body)]">

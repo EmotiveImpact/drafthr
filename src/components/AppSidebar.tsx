@@ -431,8 +431,15 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const archive: NavItem[] = [
     { href: "/activity", label: "Activity", Icon: ActivityIcon, tooltip: "Audit trail of your drafts" },
     { href: "/exported", label: "Exported", Icon: FileDown, tooltip: "Letters you've finalised" },
-    { href: "/consultants", label: "Marketplace", Icon: Store, tooltip: "Browse specialists for review" },
-    { href: "/bookings", label: "My bookings", Icon: Inbox, tooltip: "Review requests you've placed" },
+    // Marketplace + bookings are an HR-side concept (book a specialist to
+    // review a letter you're sending). The marketplace copy is entirely
+    // HR-facing, so it doesn't belong in the employee sidebar.
+    ...(mode === "employer"
+      ? ([
+          { href: "/consultants", label: "Marketplace", Icon: Store, tooltip: "Browse specialists for review" },
+          { href: "/bookings", label: "My bookings", Icon: Inbox, tooltip: "Review requests you've placed" },
+        ] satisfies NavItem[])
+      : []),
   ];
 
   const renderItem = (it: NavItem) => {

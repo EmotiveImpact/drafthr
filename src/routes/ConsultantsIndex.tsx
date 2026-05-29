@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
 import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import { BookingDialog } from "@/components/consultants/BookingDialog";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { Booking } from "@/lib/bookings";
@@ -108,9 +109,23 @@ function sortConsultants(list: Consultant[], key: SortKey): Consultant[] {
 }
 
 export function ConsultantsIndex() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const draftId = searchParams.get("draft") ?? "";
   const myProfile = useConsultantStore((s) => s.profile);
+
+  // Booking requires a signed-in account. The marketplace browse is
+  // public, but the moment someone tries to book we route them to
+  // sign-in with a redirect back here, so a logged-out visitor can never
+  // produce a phantom "booking confirmed" toast that goes nowhere.
+  const requestBooking = (c: Consultant) => {
+    if (!user) {
+      navigate(`/sign-in?redirect=${encodeURIComponent("/consultants")}`);
+      return;
+    }
+    setBookingFor(c);
+  };
 
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
@@ -172,7 +187,10 @@ export function ConsultantsIndex() {
     }
 
     return sortConsultants(list, sortKey);
-  }, [query, activeTags, sortKey]);
+    // ALL_CONSULTANTS must be a dep — it changes when the async
+    // listMarketplace() fetch resolves; without it, server consultants
+    // never appear until the user happens to type or toggle a filter.
+  }, [query, activeTags, sortKey, ALL_CONSULTANTS]);
 
   function toggleTag(tag: string) {
     setActiveTags((prev) => {
@@ -306,9 +324,9 @@ export function ConsultantsIndex() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((c) => (
                 <ConsultantCard
-                  key={c.initials}
+                  key={c.profileId ?? `seed-${c.initials}`}
                   consultant={c}
-                  onBook={() => setBookingFor(c)}
+                  onBook={() => requestBooking(c)}
                 />
               ))}
             </div>

@@ -136,6 +136,15 @@ export type BookingDTO = {
   /** Only present on /api/bookings/inbox responses. */
   requesterEmail?: string | null;
   requesterName?: string | null;
+  /** Consultant display fields — present on /api/bookings/list responses
+   *  (joined server-side) so the HR list renders name/photo without a
+   *  client-side card lookup that fails cross-device. */
+  consultantName?: string | null;
+  consultantInitials?: string | null;
+  consultantRole?: string | null;
+  consultantPhotoUrl?: string | null;
+  consultantCurrency?: "GBP" | "USD" | "EUR" | null;
+  consultantPrice?: number | null;
 };
 
 export function listMyBookings() {

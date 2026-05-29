@@ -144,6 +144,13 @@ function dtoToBooking(
     shareToken: dto.shareToken ?? undefined,
     shareTokenExpiresAt: dto.shareTokenExpiresAt ?? undefined,
     messages: dto.messages ?? [],
+    consultantName: dto.consultantName ?? undefined,
+    consultantRole: dto.consultantRole ?? undefined,
+    consultantPhotoUrl: dto.consultantPhotoUrl ?? undefined,
+    consultantCurrency: dto.consultantCurrency
+      ? ({ GBP: "£", USD: "$", EUR: "€" } as const)[dto.consultantCurrency]
+      : undefined,
+    consultantPrice: dto.consultantPrice ?? undefined,
   };
 }
 
@@ -175,7 +182,12 @@ export async function pullMyBookings(): Promise<void> {
   // a placeholder. The marketplace listing fills the real initials when
   // the consultant card is rendered alongside.
   const list = res.data.bookings.map((dto) =>
-    dtoToBooking(dto, (dto.consultantProfileId ?? "").slice(0, 2).toUpperCase()),
+    // Prefer the real initials from the server join; fall back to a
+    // UUID-slice only if the join returned nothing.
+    dtoToBooking(
+      dto,
+      dto.consultantInitials ?? (dto.consultantProfileId ?? "").slice(0, 2).toUpperCase(),
+    ),
   );
   mergeBookings(list);
 }

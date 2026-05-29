@@ -66,6 +66,14 @@ export type Booking = {
   shareToken?: string;
   /** Token expiry in ms. */
   shareTokenExpiresAt?: number;
+  /** Consultant display fields, populated from the server join on the
+   *  HR-side list so the booking row can render the consultant's name /
+   *  photo without matching a UUID back to a locally-cached card. */
+  consultantName?: string;
+  consultantRole?: string;
+  consultantPhotoUrl?: string;
+  consultantCurrency?: "£" | "$" | "€";
+  consultantPrice?: number;
 };
 
 type RecordBookingInput = Omit<

@@ -46,13 +46,38 @@ export async function GET(req: Request): Promise<Response> {
     filters.push(eq(consultantBookings.consultantProfileId, filterConsultantProfileId));
   }
 
+  // Join the consultant profile so the HR-side list can render the
+  // consultant's name / initials / photo directly, instead of trying to
+  // match a UUID back to a locally-cached card (which fails cross-device).
   const rows = await db
-    .select()
+    .select({
+      booking: consultantBookings,
+      consultantName: consultantProfiles.fullName,
+      consultantInitials: consultantProfiles.initials,
+      consultantRole: consultantProfiles.role,
+      consultantPhotoUrl: consultantProfiles.photoUrl,
+      consultantCurrency: consultantProfiles.currency,
+      consultantPrice: consultantProfiles.price,
+    })
     .from(consultantBookings)
+    .leftJoin(
+      consultantProfiles,
+      eq(consultantProfiles.id, consultantBookings.consultantProfileId),
+    )
     .where(and(...filters))
     .orderBy(desc(consultantBookings.bookedAt));
 
-  return new Response(JSON.stringify({ bookings: rows.map(toClient) }), {
+  const bookings = rows.map((r) => ({
+    ...toClient(r.booking),
+    consultantName: r.consultantName,
+    consultantInitials: r.consultantInitials,
+    consultantRole: r.consultantRole,
+    consultantPhotoUrl: r.consultantPhotoUrl,
+    consultantCurrency: r.consultantCurrency,
+    consultantPrice: r.consultantPrice,
+  }));
+
+  return new Response(JSON.stringify({ bookings }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
