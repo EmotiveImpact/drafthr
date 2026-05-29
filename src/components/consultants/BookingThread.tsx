@@ -72,6 +72,7 @@ export function BookingThread({
                 ? "Reply to HR..."
                 : "Reply to the consultant..."
             }
+            aria-label="Message"
             maxLength={4000}
             className="flex-1 h-9 rounded-[6px] border border-[var(--ds-line)] bg-white px-3 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
           />

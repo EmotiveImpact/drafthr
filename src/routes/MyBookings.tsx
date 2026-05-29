@@ -174,6 +174,9 @@ function BookingRow({
 }) {
   const complete = useBookingsStore((s) => s.completeBooking);
   const [rating, setRating] = useState(booking.rating ?? 0);
+  // Hover preview is separate from the committed rating, so mousing over
+  // stars doesn't silently change the value the user actually picked.
+  const [hoverRating, setHoverRating] = useState(0);
   const [submitted, setSubmitted] = useState(booking.status === "completed");
 
   const submit = () => {
@@ -241,27 +244,35 @@ function BookingRow({
           <span className="text-[12px] font-semibold text-[var(--ds-ink)]">
             Rate this review:
           </span>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setRating(n)}
-                onMouseEnter={() => setRating(n)}
-                className={`grid size-7 place-items-center rounded-full transition ${
-                  n <= rating
-                    ? "text-[var(--ds-amber-fg)]"
-                    : "text-[var(--ds-subtle)] hover:text-[var(--ds-amber-fg)]"
-                }`}
-                aria-label={`${n} star${n === 1 ? "" : "s"}`}
-              >
-                <Star
-                  className="size-4"
-                  fill={n <= rating ? "currentColor" : "none"}
-                  strokeWidth={1.5}
-                />
-              </button>
-            ))}
+          <div
+            role="radiogroup"
+            aria-label="Rate this review out of 5"
+            className="flex gap-1"
+            onMouseLeave={() => setHoverRating(0)}
+          >
+            {[1, 2, 3, 4, 5].map((n) => {
+              const filled = n <= (hoverRating || rating);
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={rating === n}
+                  onClick={() => setRating(n)}
+                  onMouseEnter={() => setHoverRating(n)}
+                  className={`grid size-7 place-items-center rounded-full transition ${
+                    filled ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
+                  }`}
+                  aria-label={`${n} star${n === 1 ? "" : "s"}`}
+                >
+                  <Star
+                    className="size-4"
+                    fill={filled ? "currentColor" : "none"}
+                    strokeWidth={1.5}
+                  />
+                </button>
+              );
+            })}
           </div>
           <button
             type="button"

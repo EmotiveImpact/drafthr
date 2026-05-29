@@ -188,6 +188,7 @@ function BookingRow({ booking }: { booking: Booking }) {
             value={declineNote}
             onChange={(e) => setDeclineNote(e.target.value)}
             placeholder="Brief reason (optional) — HR can rebook with a different specialist."
+            aria-label="Reason for declining"
             rows={2}
             className="w-full rounded-[6px] border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
           />
@@ -243,6 +244,7 @@ function BookingRow({ booking }: { booking: Booking }) {
             value={deliveryNote}
             onChange={(e) => setDeliveryNote(e.target.value)}
             placeholder="Summary of your review — clauses changed, risks flagged, follow-up needed."
+            aria-label="Delivery summary"
             rows={3}
             className="w-full rounded-[6px] border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
           />
