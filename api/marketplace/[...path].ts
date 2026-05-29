@@ -1,31 +1,30 @@
 /**
  * Single Vercel function dispatching all marketplace API requests.
  *
- * Routes:
- *   GET    /api/marketplace/consultant/profile
- *   POST   /api/marketplace/consultant/profile
- *   PATCH  /api/marketplace/consultant/profile
- *   DELETE /api/marketplace/consultant/profile
- *   GET    /api/marketplace/consultant/marketplace
- *   GET    /api/marketplace/bookings/list
- *   POST   /api/marketplace/bookings/create
- *   GET    /api/marketplace/bookings/inbox
- *   POST   /api/marketplace/bookings/respond
+ * IMPORTANT — single-segment paths only. Vercel's catch-all routing for
+ * this (Vite / "Other") framework compiles `[...path].ts` to a
+ * single-segment matcher (`^/api/marketplace/([^/]+)$`), NOT a true
+ * multi-segment `(.+)`. Two-segment paths like
+ * `/api/marketplace/consultant/profile` therefore 404 (the function is
+ * never reached). So every action is ONE segment:
  *
- * Why one function: Vercel Hobby tier caps total deployments at 12
- * serverless functions. Splitting marketplace into 2 dispatchers
- * (consultant + bookings) pushed past the cap, so we collapse everything
- * marketplace-related into a single catch-all here.
- *
- * The client API in src/lib/consultantApi.ts uses these URLs; older
- * /api/consultant/* and /api/bookings/* paths are unreachable now.
+ *   GET    /api/marketplace/profile
+ *   POST   /api/marketplace/profile
+ *   PATCH  /api/marketplace/profile
+ *   DELETE /api/marketplace/profile
+ *   GET    /api/marketplace/listing            (public consultant listing)
+ *   GET    /api/marketplace/bookings-list      (HR: my bookings)
+ *   POST   /api/marketplace/bookings-create
+ *   GET    /api/marketplace/bookings-inbox     (consultant inbox)
+ *   POST   /api/marketplace/bookings-respond
+ *   POST   /api/marketplace/bookings-message
+ *   GET    /api/marketplace/shared?token=…     (matter-scoped draft)
  */
 import { jsonError } from "../_utils/request.js";
 
 export const config = { runtime: "nodejs" };
 
 type Handler = (req: Request) => Promise<Response>;
-
 type HandlerModule = {
   GET?: Handler;
   POST?: Handler;
@@ -33,43 +32,26 @@ type HandlerModule = {
   DELETE?: Handler;
 };
 
-async function loadHandler(
-  group: string,
-  action: string,
-  method: "GET" | "POST" | "PATCH" | "DELETE",
-): Promise<HandlerModule | null> {
-  if (group === "consultant") {
-    switch (action) {
-      case "profile":
-        return import("./_handlers/profile.js");
-      case "marketplace":
-        return import("./_handlers/marketplace.js");
-      default:
-        return null;
-    }
+async function loadHandler(action: string): Promise<HandlerModule | null> {
+  switch (action) {
+    case "profile":
+      return import("./_handlers/profile.js");
+    case "listing":
+      return import("./_handlers/marketplace.js");
+    case "bookings-list":
+    case "bookings-create":
+      return import("./_handlers/list-and-create.js");
+    case "bookings-inbox":
+      return import("./_handlers/inbox.js");
+    case "bookings-respond":
+      return import("./_handlers/respond.js");
+    case "bookings-message":
+      return import("./_handlers/message.js");
+    case "shared":
+      return import("./_handlers/shared.js");
+    default:
+      return null;
   }
-  if (group === "bookings") {
-    switch (action) {
-      case "list":
-      case "create":
-        return import("./_handlers/list-and-create.js");
-      case "inbox":
-        return method === "GET" ? import("./_handlers/inbox.js") : null;
-      case "respond":
-        return method === "POST" ? import("./_handlers/respond.js") : null;
-      case "message":
-        return method === "POST" ? import("./_handlers/message.js") : null;
-      default:
-        return null;
-    }
-  }
-  // Share-token resolver — the URL is /api/marketplace/shared/<token>
-  // so the dispatcher sees group='shared' and action=<token>.
-  // Token validation happens inside the handler.
-  if (group === "shared") {
-    return method === "GET" ? import("./_handlers/shared.js") : null;
-  }
-  return null;
 }
 
 async function dispatch(
@@ -77,13 +59,15 @@ async function dispatch(
   method: "GET" | "POST" | "PATCH" | "DELETE",
 ): Promise<Response> {
   const url = new URL(req.url);
-  const segments = url.pathname.split("/").filter(Boolean);
-  // ['api', 'marketplace', '<group>', '<action>']
-  const group = segments[2] ?? "";
-  const action = segments[3] ?? "";
-  const mod = await loadHandler(group, action, method);
-  if (!mod)
-    return jsonError(`Unknown marketplace path: ${group}/${action}`, 404);
+  // The rewrite sets `?...path=<segment>`; fall back to parsing the
+  // pathname so the function works regardless of how Vercel presents
+  // the URL to it.
+  const fromQuery = url.searchParams.get("...path");
+  const segs = url.pathname.split("/").filter(Boolean);
+  const action = (fromQuery || segs[2] || "").trim();
+
+  const mod = await loadHandler(action);
+  if (!mod) return jsonError(`Unknown marketplace path: ${action}`, 404);
   const handler = mod[method];
   if (!handler) return jsonError("Method Not Allowed", 405);
   return handler(req);

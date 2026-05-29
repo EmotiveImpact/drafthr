@@ -70,7 +70,7 @@ export type ConsultantProfileDTO = {
 };
 
 export function getConsultantProfile() {
-  return call<{ profile: ConsultantProfileDTO | null }>("/api/marketplace/consultant/profile");
+  return call<{ profile: ConsultantProfileDTO | null }>("/api/marketplace/profile");
 }
 
 export function saveConsultantProfile(
@@ -78,7 +78,7 @@ export function saveConsultantProfile(
 ) {
   // input may carry availability now — the server validates the enum.
   return call<{ profile: ConsultantProfileDTO; created: boolean }>(
-    "/api/marketplace/consultant/profile",
+    "/api/marketplace/profile",
     { method: "POST", body: JSON.stringify(input) },
   );
 }
@@ -102,7 +102,7 @@ export function listMarketplace(params?: {
   if (params?.offset != null) sp.set("offset", String(params.offset));
   const qs = sp.toString();
   return call<{ consultants: MarketplaceConsultantDTO[]; count: number }>(
-    `/api/marketplace/consultant/marketplace${qs ? `?${qs}` : ""}`,
+    `/api/marketplace/listing${qs ? `?${qs}` : ""}`,
   );
 }
 
@@ -148,11 +148,11 @@ export type BookingDTO = {
 };
 
 export function listMyBookings() {
-  return call<{ bookings: BookingDTO[] }>("/api/marketplace/bookings/list");
+  return call<{ bookings: BookingDTO[] }>("/api/marketplace/bookings-list");
 }
 
 export function getInbox() {
-  return call<{ bookings: BookingDTO[]; profileStatus: string }>("/api/marketplace/bookings/inbox");
+  return call<{ bookings: BookingDTO[]; profileStatus: string }>("/api/marketplace/bookings-inbox");
 }
 
 export function createBooking(input: {
@@ -162,7 +162,7 @@ export function createBooking(input: {
   message?: string;
   expectedDeliveryAt?: string;
 }) {
-  return call<{ booking: BookingDTO }>("/api/marketplace/bookings/create", {
+  return call<{ booking: BookingDTO }>("/api/marketplace/bookings-create", {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -173,7 +173,7 @@ export function respondToBooking(
   action: "accept" | "decline" | "deliver" | "complete",
   opts?: { note?: string; rating?: number },
 ) {
-  return call<{ booking: BookingDTO }>("/api/marketplace/bookings/respond", {
+  return call<{ booking: BookingDTO }>("/api/marketplace/bookings-respond", {
     method: "POST",
     body: JSON.stringify({ bookingId, action, note: opts?.note, rating: opts?.rating }),
   });
@@ -206,7 +206,10 @@ export type SharedDraftDTO = {
  *  that the caller's session matches the booking's assigned consultant
  *  and that the token hasn't expired. */
 export function getSharedDraft(token: string) {
-  return call<SharedDraftDTO>(`/api/marketplace/shared/${encodeURIComponent(token)}`);
+  // Token in the query (not the path): the marketplace function only
+  // matches single-segment paths, so /api/marketplace/shared/<token>
+  // (two segments) would 404.
+  return call<SharedDraftDTO>(`/api/marketplace/shared?token=${encodeURIComponent(token)}`);
 }
 
 /** Append a chat message to a booking thread. Server derives the 'from'
@@ -214,7 +217,7 @@ export function getSharedDraft(token: string) {
  *  body — so the consultant can't impersonate HR or vice versa. */
 export function sendBookingMessage(bookingId: string, text: string) {
   return call<{ messages: BookingMessageDTO[]; message: BookingMessageDTO }>(
-    "/api/marketplace/bookings/message",
+    "/api/marketplace/bookings-message",
     {
       method: "POST",
       body: JSON.stringify({ bookingId, text }),

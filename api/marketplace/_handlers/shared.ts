@@ -28,12 +28,11 @@ export async function GET(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
 
-  // Extract the token from the URL — path looks like
-  // /api/marketplace/shared/<token>. The dispatcher routes via the
-  // segments array, so the token is the LAST segment.
+  // Token comes from the query string: /api/marketplace/shared?token=…
+  // (single-segment path, because the marketplace function only matches
+  // one path segment).
   const url = new URL(req.url);
-  const segments = url.pathname.split("/").filter(Boolean);
-  const token = segments[segments.length - 1] ?? "";
+  const token = (url.searchParams.get("token") ?? "").trim();
   if (!token.startsWith("sht_"))
     return jsonError("Invalid share token", 400);
 
