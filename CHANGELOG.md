@@ -2,6 +2,68 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.17.0 — 2026-05-29
+
+Consultant marketplace GA + a board-of-agents stability/UX hardening
+pass. The marketplace (HR books a vetted specialist to review a letter)
+is now end-to-end cross-device: profiles, bookings, the full lifecycle
+(request → accept → deliver → complete), share-token draft review, and
+messaging all persist to Neon and survive a device switch. A six-agent
+audit (code / design / functions / a11y / journey / marketplace) then
+drove five fix waves.
+
+### Marketplace — made real & cross-device
+
+- Dual-write everywhere: consultant profile, bookings, transitions, and
+  messages mirror to `/api/marketplace/*` (Neon) alongside the local
+  zustand cache; pages hydrate from the server on mount.
+- Migrations 0005–0008: `consultant_profiles` + `consultant_bookings`,
+  share tokens, booking message threads, and a persisted `availability`
+  column.
+- Flagship fix: booking a consultant from inside a draft no longer 500s
+  — the readable local draft id is mapped to its server UUID (the same
+  bridge dual-write uses), so the share-token review can resolve it.
+- Ratings now aggregate into the consultant's profile on completion
+  (was frozen at the seed 5.0 forever).
+- Public marketplace browse (no auth); booking requires sign-in.
+
+### Stability — white-screen killers (board Wave A)
+
+- New app-level `ErrorBoundary`: a render throw now degrades to a
+  recoverable card instead of a blank page.
+- zustand persist stores versioned + migrated (consultant profile v2,
+  bookings v1) so older localStorage blobs can't crash on hydrate.
+- Fixed a zustand-v5 unstable-selector re-render storm on the two
+  busiest consultant screens (`useShallow` + stable empty refs).
+- Fixed a Rules-of-Hooks crash on the admin review page; removed an
+  `|| true` admin auth bypass.
+
+### Journey & routing (board Wave B)
+
+- `RootRedirect` is consultant-aware — a returning consultant lands on
+  `/c` instead of being dumped into the role picker or stranded on
+  workspace setup.
+- Marketplace / bookings nav scoped to HR (was leaking into the
+  employee sidebar); cross-device consultant identity on the HR
+  bookings list (no more "Specialist · 3F").
+
+### Design & a11y (board Waves D–E)
+
+- The three oldest marketplace surfaces brought onto the DS: the
+  filter/sort dropdown + search now use the canonical input recipe, the
+  consultant card matches the card/button/tag recipes, removed an
+  undefined `--ds-violet` token (raw purple), currency renders from the
+  model, fake "online now" presence replaced with a real "Live" badge,
+  one shared `StatusBadge`.
+- a11y: labelled the marketplace/inbox/thread inputs, made the star
+  rating a proper radiogroup with separate hover state, added the
+  dialog description.
+
+### Honesty
+
+- Stripe payouts + earnings copy reworded to future tense ("nothing is
+  charged today"); admin "audit-logged" claims removed until real.
+
 ## 0.16.0 — 2026-05-18
 
 Auth UX completion wave — closes the dead-link UX from 0.15.0, adds
