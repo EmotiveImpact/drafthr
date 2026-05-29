@@ -31,3 +31,9 @@ yarn-error.log*
 
 # brainstorming visual companion sandbox
 .superpowers/
+.env.local.backup-*
+.playwright-mcp/
+web2/
+Assets/
+public/mockups/assets/
+public/mockups/moneda-clone.html
