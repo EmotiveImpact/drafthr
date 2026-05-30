@@ -165,13 +165,13 @@ export function App() {
             <Route path="/" element={<RootRedirect />} />
         <Route path="/pick-role" element={<Protected><ModePicker /></Protected>} />
 
-        <Route path="/hr" element={<Protected><Home mode="employer" /></Protected>} />
-        <Route path="/hr/new" element={<Protected><BrowseLetters mode="employer" /></Protected>} />
-        <Route path="/hr/new/:letterType" element={<Protected><Wizard mode="employer" /></Protected>} />
+        <Route path="/hr" element={<Protected roles={["employer"]}><Home mode="employer" /></Protected>} />
+        <Route path="/hr/new" element={<Protected roles={["employer"]}><BrowseLetters mode="employer" /></Protected>} />
+        <Route path="/hr/new/:letterType" element={<Protected roles={["employer"]}><Wizard mode="employer" /></Protected>} />
 
-        <Route path="/me" element={<Protected><Home mode="employee" /></Protected>} />
-        <Route path="/me/new" element={<Protected><BrowseLetters mode="employee" /></Protected>} />
-        <Route path="/me/new/:letterType" element={<Protected><Wizard mode="employee" /></Protected>} />
+        <Route path="/me" element={<Protected roles={["employee"]}><Home mode="employee" /></Protected>} />
+        <Route path="/me/new" element={<Protected roles={["employee"]}><BrowseLetters mode="employee" /></Protected>} />
+        <Route path="/me/new/:letterType" element={<Protected roles={["employee"]}><Wizard mode="employee" /></Protected>} />
 
         <Route
           path="/editor/:draftId"
@@ -195,15 +195,19 @@ export function App() {
         />
         <Route path="/editor/:draftId/review" element={<Protected><ReviewStep /></Protected>} />
         <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
-        <Route path="/matters" element={<Protected><MattersIndex /></Protected>} />
-        <Route path="/matters/:matterId" element={<Protected><MatterDetail /></Protected>} />
-        <Route path="/employees" element={<Protected><EmployeesIndex /></Protected>} />
-        <Route path="/employees/:employeeId" element={<Protected><EmployeeDetail /></Protected>} />
-        <Route path="/bulk" element={<Protected><BulkOperations /></Protected>} />
-        <Route path="/approvals" element={<Protected><Approvals /></Protected>} />
-        <Route path="/reports" element={<Protected><Reports /></Protected>} />
-        <Route path="/reports/matters/:matterId" element={<Protected><MatterDrillDown /></Protected>} />
-        <Route path="/reports/checks/:checkId" element={<Protected><FailingCheckDrillDown /></Protected>} />
+        {/* HR portfolio surfaces — employer role only. Previously these
+         * were auth-gated but not role-gated, so an employee/consultant
+         * could render them by typing the URL (data was API-scoped, but
+         * the surface shouldn't show). */}
+        <Route path="/matters" element={<Protected roles={["employer"]}><MattersIndex /></Protected>} />
+        <Route path="/matters/:matterId" element={<Protected roles={["employer"]}><MatterDetail /></Protected>} />
+        <Route path="/employees" element={<Protected roles={["employer"]}><EmployeesIndex /></Protected>} />
+        <Route path="/employees/:employeeId" element={<Protected roles={["employer"]}><EmployeeDetail /></Protected>} />
+        <Route path="/bulk" element={<Protected roles={["employer"]}><BulkOperations /></Protected>} />
+        <Route path="/approvals" element={<Protected roles={["employer"]}><Approvals /></Protected>} />
+        <Route path="/reports" element={<Protected roles={["employer"]}><Reports /></Protected>} />
+        <Route path="/reports/matters/:matterId" element={<Protected roles={["employer"]}><MatterDrillDown /></Protected>} />
+        <Route path="/reports/checks/:checkId" element={<Protected roles={["employer"]}><FailingCheckDrillDown /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />
@@ -223,26 +227,29 @@ export function App() {
         <Route path="/join/:inviteCode" element={<JoinInvite />} />
         {/* Consultant onboarding + dashboard. localStorage-backed for now;
          * server-side bookings inbox will plug into ConsultantHome later. */}
-        <Route path="/c" element={<Protected><ConsultantHome /></Protected>} />
-        <Route path="/c/profile" element={<Protected><ConsultantProfile /></Protected>} />
-        {/* HR-side bookings list. Separate from /c (which is consultant-side). */}
-        <Route path="/bookings" element={<Protected><MyBookings /></Protected>} />
-        {/* Admin vetting surface — replace with proper role gate once the
-         * admin role lands in tenant_members. */}
+        <Route path="/c" element={<Protected roles={["consultant"]}><ConsultantHome /></Protected>} />
+        <Route path="/c/profile" element={<Protected roles={["consultant"]}><ConsultantProfile /></Protected>} />
+        {/* HR-side bookings list — employer only (it's the "reviews I
+         * commissioned" surface). */}
+        <Route path="/bookings" element={<Protected roles={["employer"]}><MyBookings /></Protected>} />
+        {/* Admin vetting surface. Client allowlist (VITE_ADMIN_EMAILS) is
+         * cosmetic; the real gate must be a server-side admin role check
+         * when the admin API lands. No server admin endpoint exists yet,
+         * so nothing server-side is exposed today. */}
         <Route path="/admin/consultants" element={<Protected><ConsultantAdminReview /></Protected>} />
-        {/* Matter-scoped consultant review surface — a consultant who has
-         * accepted a booking with a draftId can open the draft read-only
-         * here. localStorage today; tied to a server-issued token later. */}
-        <Route path="/c/review/:bookingId" element={<Protected><SharedDraftReview /></Protected>} />
+        {/* Matter-scoped consultant review surface — consultant only. */}
+        <Route path="/c/review/:bookingId" element={<Protected roles={["consultant"]}><SharedDraftReview /></Protected>} />
         <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
         {/* /consultants is auth-gated like the rest of the app. (It was
          * briefly public for "browse before signup"; reverted — a public
          * route that still shows the logged-in shell read as insecure and
          * wasn't worth the confusion.) */}
+        {/* Marketplace — employer (books reviewers) and consultant (views
+         * how they're listed). Not the employee surface. */}
         <Route
           path="/consultants"
           element={
-            <Protected>
+            <Protected roles={["employer", "consultant"]}>
               <Suspense fallback={<EditorFallback />}>
                 <ConsultantsIndex />
               </Suspense>
