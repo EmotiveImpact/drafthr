@@ -74,10 +74,18 @@ nav — direct URL navigation to another role's surface redirects to `/`.
   flattened so the function is actually reached.
 
 ## Residual risks / TODO (defence-in-depth)
-1. **Tenant isolation is per-handler, not a DB invariant.** No Postgres RLS;
-   each handler must remember its `tenant_id` filter. One omission = a
-   cross-tenant leak. → Add a tenant-scoped query wrapper or enable Neon RLS
-   with a per-request `app.current_tenant`. (No missing filter found today.)
+1. **Tenant isolation is per-handler, not a DB invariant** — BUT now
+   build-enforced. There's no Postgres RLS (the Neon `-pooler` runs in
+   transaction mode, where session-level RLS context doesn't hold, and the
+   default Neon role bypasses RLS — so naïve RLS here is unsafe). Instead a
+   static guard test (`api/_utils/tenant-isolation.guard.test.ts`) fails the
+   build if any handler reads a tenant-scoped table without a tenant /
+   user / parent-row scope signal. Verified: catches an injected unscoped
+   `from(drafts)`. This converts "every handler must remember its filter"
+   from convention into CI enforcement. Full DB-level RLS (via a non-pooled
+   connection + `SET LOCAL app.current_tenant` per request, or Neon's RLS
+   role) remains the gold-standard next step for true defence-in-depth, but
+   is a larger, branch-tested migration. (No missing filter found today.)
 2. **`/admin/consultants` gate is client-side** (`VITE_ADMIN_EMAILS`). Fine
    while there's no server admin API. → Add a server-side admin-role check
    before any admin endpoint ships.
