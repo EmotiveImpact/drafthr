@@ -101,6 +101,10 @@ const VERIFIED_EXCEPTIONS: Record<string, Record<string, string>> = {
     "list-and-create.ts": "users joined onto requester/tenant-scoped bookings",
     // session-with-tenant resolves + upserts the caller's own user row.
     "session-with-tenant.ts": "resolves the caller's own user row",
+    // Internal email helper (not a request handler): resolves the two
+    // parties' emails by users.id = booking.consultant/requesterUserId,
+    // after the booking was authorized by its caller.
+    "consultant-emails.ts": "resolves booking parties' emails by id",
   },
 };
 
