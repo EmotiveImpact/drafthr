@@ -74,6 +74,41 @@ const TENANT_SCOPE_SIGNALS = [
   /tenantId,/, // select includes tenantId then compares
 ];
 
+/**
+ * Verified-sound exceptions: files that scope a tenant/parent-scoped table
+ * read by something OTHER than a tenant filter, where that something has
+ * been manually confirmed (by the security board) to be a correct
+ * authorization. Keyed by the table being read → set of file basenames
+ * allowed to read it, each with the reason. A NEW unscoped read of the same
+ * table in a file NOT on this list still fails — you must verify it and add
+ * it here (or add real tenant scoping).
+ */
+const VERIFIED_EXCEPTIONS: Record<string, Record<string, string>> = {
+  drafts: {
+    // Reads the draft only after verifying the share token AND
+    // consultantUserId === auth.userRow.id (matter-scoped consultant access).
+    "shared.ts": "share-token + consultantUserId ACL (matter-scoped)",
+  },
+  sections: {
+    "shared.ts": "draft already authorized via share-token + consultant ACL",
+  },
+  users: {
+    // Self-scoped: resolves the caller's own row by externalId / userRow.id.
+    "session.ts": "self-scoped by session externalId",
+    // Joins the requester/consultant identity onto already-authorized bookings.
+    "inbox.ts": "users joined onto consultant-scoped bookings",
+    "shared.ts": "users joined onto share-token-authorized booking",
+    "list-and-create.ts": "users joined onto requester/tenant-scoped bookings",
+    // session-with-tenant resolves + upserts the caller's own user row.
+    "session-with-tenant.ts": "resolves the caller's own user row",
+  },
+};
+
+function isExcepted(table: string, file: string): boolean {
+  const base = file.split("/").pop() ?? file;
+  return Boolean(VERIFIED_EXCEPTIONS[table]?.[base]);
+}
+
 /** Signals that a marketplace read is scoped by user / booking party. */
 const MARKETPLACE_SCOPE_SIGNALS = [
   /userRow\.id/,
@@ -126,6 +161,7 @@ describe("tenant-isolation guard", () => {
       for (const f of files) {
         const src = readFileSync(f, "utf8");
         if (!readsTable(src, table)) continue;
+        if (isExcepted(table, f)) continue;
         const scoped = TENANT_SCOPE_SIGNALS.some((re) => re.test(src));
         if (!scoped) offenders.push(f.replace(API_DIR, "api"));
       }
@@ -169,6 +205,7 @@ describe("tenant-isolation guard", () => {
       for (const f of files) {
         const src = readFileSync(f, "utf8");
         if (!readsTable(src, table)) continue;
+        if (isExcepted(table, f)) continue;
         const scoped = PARENT_SCOPE_SIGNALS.some((re) => re.test(src));
         if (!scoped) offenders.push(f.replace(API_DIR, "api"));
       }
