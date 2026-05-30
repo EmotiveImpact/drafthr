@@ -224,3 +224,40 @@ export function sendBookingMessage(bookingId: string, text: string) {
     },
   );
 }
+
+// ─── Admin (server-gated by DRAFTHR_ADMIN_EMAILS) ──────────────────────
+
+export type AdminProfileDTO = {
+  id: string;
+  initials: string;
+  fullName: string;
+  role: string;
+  bio: string;
+  specialty: string;
+  specialties: string[];
+  price: number;
+  currency: "GBP" | "USD" | "EUR";
+  sla: string;
+  photoUrl: string | null;
+  status: "pending_review" | "published" | "paused" | "rejected" | "suspended";
+  email: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** Cross-tenant vetting queue. 403 unless the caller is a server-side
+ *  admin (DRAFTHR_ADMIN_EMAILS). `all` returns every profile, not just
+ *  pending_review. */
+export function getAdminQueue(all = false) {
+  return call<{ profiles: AdminProfileDTO[]; count: number }>(
+    `/api/marketplace/admin-queue${all ? "?status=all" : ""}`,
+  );
+}
+
+/** Approve (publish) or reject a consultant profile. Admin-only. */
+export function adminReviewProfile(profileId: string, action: "approve" | "reject") {
+  return call<{ ok: true; id: string; status: string }>(
+    "/api/marketplace/admin-review",
+    { method: "POST", body: JSON.stringify({ profileId, action }) },
+  );
+}

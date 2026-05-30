@@ -232,10 +232,12 @@ export function App() {
         {/* HR-side bookings list — employer only (it's the "reviews I
          * commissioned" surface). */}
         <Route path="/bookings" element={<Protected roles={["employer"]}><MyBookings /></Protected>} />
-        {/* Admin vetting surface. Client allowlist (VITE_ADMIN_EMAILS) is
-         * cosmetic; the real gate must be a server-side admin role check
-         * when the admin API lands. No server admin endpoint exists yet,
-         * so nothing server-side is exposed today. */}
+        {/* Admin vetting surface. The real gate is SERVER-SIDE: the
+         * admin-queue / admin-review endpoints check the caller's email
+         * against the server-only DRAFTHR_ADMIN_EMAILS allowlist
+         * (api/_utils/admin.ts) and fail closed. <Protected> only ensures
+         * a session; a non-admin who loads this route gets a 403 from the
+         * API and ConsultantAdminReview redirects them home. */}
         <Route path="/admin/consultants" element={<Protected><ConsultantAdminReview /></Protected>} />
         {/* Matter-scoped consultant review surface — consultant only. */}
         <Route path="/c/review/:bookingId" element={<Protected roles={["consultant"]}><SharedDraftReview /></Protected>} />

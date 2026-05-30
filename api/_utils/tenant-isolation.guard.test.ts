@@ -105,6 +105,16 @@ const VERIFIED_EXCEPTIONS: Record<string, Record<string, string>> = {
     // parties' emails by users.id = booking.consultant/requesterUserId,
     // after the booking was authorized by its caller.
     "consultant-emails.ts": "resolves booking parties' emails by id",
+    // Admin vetting queue — gated by requireAdmin (server-side
+    // DRAFTHR_ADMIN_EMAILS allowlist), intentionally cross-tenant; joins
+    // users to show the consultant's email to the admin.
+    "admin-queue.ts": "admin-gated (requireAdmin), intentionally cross-tenant",
+  },
+  // consultant_profiles is normally user-scoped; the admin endpoints read
+  // it cross-tenant ON PURPOSE, gated by requireAdmin instead of by user.
+  consultantProfiles: {
+    "admin-queue.ts": "admin-gated (requireAdmin), cross-tenant vetting list",
+    "admin-review.ts": "admin-gated (requireAdmin), updates any profile's status",
   },
 };
 
@@ -188,6 +198,7 @@ describe("tenant-isolation guard", () => {
         // The email helper resolves rows by id from an already-authorized
         // booking; allow it explicitly.
         if (f.endsWith("consultant-emails.ts")) continue;
+        if (isExcepted(table, f)) continue;
         const scoped =
           MARKETPLACE_SCOPE_SIGNALS.some((re) => re.test(src)) ||
           TENANT_SCOPE_SIGNALS.some((re) => re.test(src));

@@ -1,97 +1,70 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ShieldAlert, XCircle } from "lucide-react";
-import { useConsultantStore } from "@/lib/consultantProfile";
-import { useAuth } from "@/lib/auth";
+import { ArrowLeft, CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react";
+import { getAdminQueue, adminReviewProfile, type AdminProfileDTO } from "@/lib/consultantApi";
 
 /**
- * /admin/consultants — admin vetting review.
+ * /admin/consultants — consultant vetting queue.
  *
- * MVP: surfaces the signed-in user's own profile (since the localStorage
- * model only knows about one profile per browser) so a privileged admin
- * can simulate the approve/reject decision. When the API is wired in,
- * this becomes a pageable list of every status='pending_review' profile
- * across all tenants.
+ * REAL server-backed admin surface. Lists every pending_review consultant
+ * profile across all tenants (GET /api/marketplace/admin-queue) and lets
+ * an admin approve (publish) or reject each.
  *
- * Access control: temporarily relies on a hardcoded admin email list
- * (DRAFTHR_ADMIN_EMAILS, surfaced via VITE_ADMIN_EMAILS at build time).
- * Replace with a proper role check once the server-side admin role
- * lands in tenant_members.
+ * Access control is enforced SERVER-SIDE: every admin endpoint checks the
+ * caller's email against the server-only DRAFTHR_ADMIN_EMAILS allowlist.
+ * The client simply renders whatever the server returns and treats a 403
+ * as "not an admin" → redirect home. There is no client-side secret here;
+ * a non-admin who loads this route just gets a 403 from the API and is
+ * bounced.
  */
-
-const ADMIN_EMAILS = (
-  (import.meta.env.VITE_ADMIN_EMAILS as string | undefined) ?? ""
-)
-  .split(",")
-  .map((s) => s.trim().toLowerCase())
-  .filter(Boolean);
-
 export function ConsultantAdminReview() {
   const nav = useNavigate();
-  const { user } = useAuth();
-  const profile = useConsultantStore((s) => s.profile);
-  const saveProfile = useConsultantStore((s) => s.saveProfile);
+  const [profiles, setProfiles] = useState<AdminProfileDTO[] | null>(null);
+  const [forbidden, setForbidden] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
-  // Until we have a proper admin role, gate on email. Replace this with
-  // a server-side role check + redirect once tenant_members has an
-  // 'admin' enum value.
-  const [authedAdmin, setAuthedAdmin] = useState<boolean | null>(null);
-  // Reject confirmation state. MUST be declared before any early return —
-  // hooks can't run conditionally, and `profile` flipping null→set (via a
-  // background pullProfile/saveProfile) would otherwise change the hook
-  // count between renders → "rendered more hooks than previous render".
-  const [confirmReject, setConfirmReject] = useState(false);
+  const load = useCallback(async (all: boolean) => {
+    setProfiles(null);
+    setError(null);
+    const res = await getAdminQueue(all);
+    if (!res.ok) {
+      if (res.status === 403 || res.status === 401) {
+        setForbidden(true);
+      } else {
+        setError(res.error);
+        setProfiles([]);
+      }
+      return;
+    }
+    setProfiles(res.data.profiles);
+  }, []);
+
   useEffect(() => {
-    // Gate on the admin email allowlist (VITE_ADMIN_EMAILS). The caller's
-    // email must be on the list. Empty list = not configured = deny.
-    // (This is a client-side gate; the real server-side role check lands
-    // with the admin API. It is NOT a security boundary on its own, but
-    // it no longer hard-codes `|| true` letting anyone in.)
-    const email = user?.email?.toLowerCase() ?? "";
-    setAuthedAdmin(ADMIN_EMAILS.length > 0 && ADMIN_EMAILS.includes(email));
-  }, [user?.email]);
+    void load(showAll);
+  }, [load, showAll]);
 
-  if (authedAdmin === null) return null;
-  // Not an allowlisted admin → bounce to the home redirect. No flash of
-  // admin content.
-  if (authedAdmin === false) return <Navigate to="/" replace />;
-
-  if (!profile) {
-    return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-        <button
-          type="button"
-          onClick={() => nav(-1)}
-          className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back
-        </button>
-        <h1 className="text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          Consultant review queue
-        </h1>
-        <p className="mt-3 max-w-[60ch] text-[14.5px] leading-relaxed text-[var(--ds-body)]">
-          No profiles awaiting review right now. When a consultant submits
-          their card, it lands here for approve / reject. The full
-          server-side queue lights up once the API switch is in.
-        </p>
-      </div>
+  const review = async (id: string, action: "approve" | "reject") => {
+    setActing(id);
+    const res = await adminReviewProfile(id, action);
+    setActing(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    // Optimistic: drop the row from the pending view (or update its status
+    // in the all view) without a full refetch.
+    setProfiles((prev) =>
+      prev
+        ? showAll
+          ? prev.map((p) => (p.id === id ? { ...p, status: res.data.status as AdminProfileDTO["status"] } : p))
+          : prev.filter((p) => p.id !== id)
+        : prev,
     );
-  }
+  };
 
-  const onApprove = () => {
-    // Until the API switch, "approve" is a no-op — the profile is already
-    // discoverable to anyone visiting /consultants because we list any
-    // complete localStorage profile. Once on the API, this becomes
-    // PATCH /api/admin/consultant/{id} { status: "published" }.
-    saveProfile({ /* no-op */ });
-    nav("/admin/consultants");
-  };
-  const onReject = () => {
-    // Equivalent server call: PATCH /api/admin/consultant/{id} { status: "rejected" }
-    setConfirmReject(false);
-    nav("/admin/consultants");
-  };
+  if (forbidden) return <Navigate to="/" replace />;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
@@ -105,120 +78,149 @@ export function ConsultantAdminReview() {
           Back
         </button>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          Admin · Consultant review
+          Admin · Consultant vetting
         </p>
-        <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          Review the next profile.
-        </h1>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <h1 className="text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
+            {showAll ? "All consultant profiles" : "Review queue"}
+          </h1>
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="inline-flex h-9 items-center rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] transition hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)]"
+          >
+            {showAll ? "Show pending only" : "Show all profiles"}
+          </button>
+        </div>
         <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-[var(--ds-body)]">
-          Approve to publish to the public marketplace; reject to send back
-          for revision (no notice to other tenants).
+          Approve to publish to the public marketplace; reject to hide until
+          the consultant revises. Actions take effect immediately and apply
+          cross-tenant.
         </p>
       </header>
 
-      <article className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-6">
-        <header className="flex items-start gap-4">
-          {profile.photoUrl ? (
-            <img
-              src={profile.photoUrl}
-              alt=""
-              className="size-16 rounded-full object-cover border border-[var(--ds-line)]"
-            />
-          ) : (
-            <div className="grid size-16 place-items-center rounded-full bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[18px] font-semibold text-[var(--ds-muted)]">
-              {profile.initials}
-            </div>
-          )}
-          <div>
-            <h2 className="text-[18px] font-semibold text-[var(--ds-ink)]">{profile.fullName}</h2>
-            <p className="text-[12.5px] text-[var(--ds-muted)]">{profile.role}</p>
-            <p className="mt-1 text-[12px] text-[var(--ds-muted)]">
-              {profile.currency}{profile.price}/hr · SLA {profile.sla}
-            </p>
-          </div>
-        </header>
-
-        <div className="mt-4 border-t border-[var(--ds-line)] pt-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)] mb-1.5">Specialty</h3>
-          <p className="text-[13.5px] text-[var(--ds-body)]">{profile.specialty || "—"}</p>
-          <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)] mb-1.5">Bio</h3>
-          <p className="text-[13.5px] leading-relaxed text-[var(--ds-body)] whitespace-pre-wrap">{profile.bio}</p>
-          <h3 className="mt-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)] mb-1.5">Filter tags</h3>
-          <div className="flex flex-wrap gap-1.5">
-            {profile.specialties.map((s) => (
-              <span
-                key={s}
-                className="rounded-full border border-[var(--ds-line)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--ds-body)]"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 rounded-[8px] border border-[var(--ds-red-fg)]/30 bg-[var(--ds-red-bg)] px-4 py-3 text-[13px] text-[var(--ds-red-fg)]"
+        >
+          {error}
         </div>
+      )}
 
-        <div className="mt-6 border-t border-[var(--ds-line)] pt-5">
-          {confirmReject ? (
-            <div className="rounded-[10px] border border-[var(--ds-red-fg)]/30 bg-[var(--ds-red-bg)] p-4">
-              <div className="flex items-start gap-3">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--ds-red-fg)]" aria-hidden />
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-[var(--ds-ink)]">
-                    Reject this consultant profile?
+      {profiles === null ? (
+        <div className="grid place-items-center rounded-[14px] border border-[var(--ds-line)] py-16 text-[var(--ds-muted)]">
+          <Loader2 className="size-5 animate-spin" aria-hidden />
+          <p className="mt-2 text-[13px]">Loading queue…</p>
+        </div>
+      ) : profiles.length === 0 ? (
+        <div className="rounded-[14px] border border-dashed border-[var(--ds-line)] p-10 text-center">
+          <ShieldAlert className="mx-auto size-6 text-[var(--ds-muted)]" aria-hidden />
+          <p className="mt-2 text-[14px] text-[var(--ds-body)]">
+            {showAll ? "No consultant profiles yet." : "No profiles awaiting review."}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {profiles.map((p) => (
+            <article
+              key={p.id}
+              className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5"
+            >
+              <div className="flex items-start gap-4">
+                {p.photoUrl ? (
+                  <img
+                    src={p.photoUrl}
+                    alt=""
+                    className="size-14 shrink-0 rounded-full object-cover border border-[var(--ds-line)]"
+                  />
+                ) : (
+                  <div className="grid size-14 shrink-0 place-items-center rounded-full bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[16px] font-semibold text-[var(--ds-muted)]">
+                    {p.initials}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-[16px] font-semibold text-[var(--ds-ink)]">{p.fullName}</h2>
+                    <StatusPill status={p.status} />
+                  </div>
+                  <p className="text-[12.5px] text-[var(--ds-muted)]">{p.role}</p>
+                  {p.email && (
+                    <p className="mt-0.5 text-[11.5px] text-[var(--ds-muted)]">{p.email}</p>
+                  )}
+                  <p className="mt-1 text-[12px] text-[var(--ds-muted)]">
+                    {p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}
+                    {p.price}/hr · SLA {p.sla}
                   </p>
-                  <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--ds-body)]">
-                    They'll be unable to publish until they revise the card.
+                  {p.specialty && (
+                    <p className="mt-2 text-[13px] italic text-[var(--ds-body)]">"{p.specialty}"</p>
+                  )}
+                  <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--ds-body)]">
+                    {p.bio}
                   </p>
+                  {p.specialties.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {p.specialties.map((s) => (
+                        <span
+                          key={s}
+                          className="rounded-full border border-[var(--ds-line)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--ds-body)]"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={onReject}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[var(--ds-red-fg)] px-3.5 text-[12.5px] font-semibold text-white"
-                >
-                  <XCircle className="size-3.5" aria-hidden />
-                  Confirm reject
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmReject(false)}
-                  className="inline-flex h-9 items-center rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={onApprove}
-                className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-              >
-                <CheckCircle2 className="size-4" aria-hidden />
-                Approve &amp; publish
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmReject(true)}
-                className="inline-flex h-10 items-center gap-2 rounded-[8px] border border-[var(--ds-line)] bg-white px-4 text-[13px] font-semibold text-[var(--ds-red-fg)] transition hover:border-[var(--ds-red-fg)] hover:bg-[var(--ds-red-bg)]"
-              >
-                <XCircle className="size-4" aria-hidden />
-                Reject
-              </button>
-              <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
-                <ShieldAlert className="size-3.5" aria-hidden />
-                Preview — full audit-logged queue coming
-              </span>
-            </div>
-          )}
-        </div>
-      </article>
 
-      <p className="mt-6 text-[11.5px] italic text-[var(--ds-muted)]">
-        Note: This MVP surfaces only the signed-in consultant's profile. The
-        full cross-tenant queue lights up once /api/admin/consultant lands.
-      </p>
+              {p.status !== "published" || showAll ? (
+                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--ds-line)] pt-4">
+                  <button
+                    type="button"
+                    disabled={acting === p.id || p.status === "published"}
+                    onClick={() => review(p.id, "approve")}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-[8px] bg-[var(--ds-ink)] px-3.5 text-[12.5px] font-semibold text-white transition hover:-translate-y-px hover:shadow-md disabled:opacity-50 disabled:hover:translate-y-0"
+                  >
+                    {acting === p.id ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <CheckCircle2 className="size-3.5" aria-hidden />
+                    )}
+                    {p.status === "published" ? "Published" : "Approve & publish"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={acting === p.id || p.status === "rejected"}
+                    onClick={() => review(p.id, "reject")}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-[var(--ds-line)] bg-white px-3.5 text-[12.5px] font-semibold text-[var(--ds-red-fg)] transition hover:border-[var(--ds-red-fg)] hover:bg-[var(--ds-red-bg)] disabled:opacity-50"
+                  >
+                    <XCircle className="size-3.5" aria-hidden />
+                    {p.status === "rejected" ? "Rejected" : "Reject"}
+                  </button>
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: AdminProfileDTO["status"] }) {
+  const map: Record<AdminProfileDTO["status"], { bg: string; fg: string; label: string }> = {
+    pending_review: { bg: "bg-[var(--ds-amber-bg)]", fg: "text-[var(--ds-amber-fg)]", label: "Pending" },
+    published: { bg: "bg-[var(--ds-green-bg)]", fg: "text-[var(--ds-green-fg)]", label: "Published" },
+    rejected: { bg: "bg-[var(--ds-red-bg)]", fg: "text-[var(--ds-red-fg)]", label: "Rejected" },
+    paused: { bg: "bg-[var(--ds-surface-2)]", fg: "text-[var(--ds-muted)]", label: "Paused" },
+    suspended: { bg: "bg-[var(--ds-red-bg)]", fg: "text-[var(--ds-red-fg)]", label: "Suspended" },
+  };
+  const s = map[status] ?? map.pending_review;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] ${s.bg} ${s.fg}`}
+    >
+      {s.label}
+    </span>
   );
 }

@@ -49,6 +49,10 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/message.js");
     case "shared":
       return import("./_handlers/shared.js");
+    case "admin-queue":
+      return import("./_handlers/admin-queue.js");
+    case "admin-review":
+      return import("./_handlers/admin-review.js");
     default:
       return null;
   }
