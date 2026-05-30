@@ -2,11 +2,12 @@
 
 AI-assisted HR letter drafting for the UK and US. Wizard-driven, legally aware, with a full-height right-rail AI agent that proposes section-level edits and inline floating comment threads anchored to the document text. Built on Vite + React 19 + TypeScript, AI SDK v6, and Anthropic Claude (`claude-sonnet-4-6` by default).
 
-Two modes, two product surfaces:
-- **Employee mode** — single-letter wizard for an individual handling their own grievance / resignation / flexible-working / tribunal claim.
-- **HR/Management mode** — portfolio workbench: Employees directory, Matters with risk register, bulk CSV operations, workspace-saved Custom Templates, today/risk/compliance dashboard.
+Three product surfaces, three user types:
+- **Employee mode** (`/me`) — single-letter wizard for an individual handling their own grievance / resignation / flexible-working / tribunal claim.
+- **HR/Management mode** (`/hr`) — portfolio workbench: Employees directory, Matters with risk register, bulk CSV operations, workspace-saved Custom Templates, today/risk/compliance dashboard.
+- **Consultant mode** (`/c`) — marketplace specialists who review letters for HR teams: profile/listing, booking inbox, matter-scoped share-token draft review, per-booking messaging, ratings.
 
-**Current version:** `0.16.0`
+**Current version:** `0.18.0` — security-hardening wave (per-route role guards, fail-closed auth on AI/upload endpoints, build-enforced tenant isolation; see [`SECURITY.md`](SECURITY.md)) on top of the 0.17 consultant-marketplace GA. Open backlog in [`ROADMAP.md`](ROADMAP.md).
 
 → **Live design system:** [`/public/design-system.html`](public/design-system.html)
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
@@ -29,6 +30,7 @@ Two modes, two product surfaces:
 - **Right-rail AI agent** — full-rail-height, no tabs. Typed AI SDK v6 tool-calling: the agent can propose section rewrites, add named clauses, tighten a section to a word-count target, or produce a counsel-grade summary. Mutating calls stay human-in-the-loop: the user reviews each proposal with an Apply button before it commits, and successful applies push the outcome back to the agent. Empty state surfaces a starter grid (one card per typed tool) and a recent-prompts row backed by localStorage.
 - **Evidence & Attachments step** — after drafting, add typed notes or uploaded files, link each item to the letter sections it supports, then reference, quote, or list those items in the letter before review/export.
 - **Workspace collaborators + invites** — invite people by email + role, redeem invite links through WorkOS sign-in, and land directly in the accepted workspace. Workspace member management supports owner/admin/drafter/reviewer/viewer roles with owner-only controls for owner privileges.
+- **Consultant marketplace** — HR books a vetted specialist to review a letter. Consultants enrol (`/c`), publish a marketplace card (specialties, rate, SLA, availability), and receive bookings in an inbox. Full lifecycle: request → accept → deliver → complete, with a matter-scoped **share token** that grants the consultant read-only access to the specific draft (and nothing else) until it expires, per-booking messaging (server-derived author, no spoofing), and ratings that aggregate onto the profile. Persisted to Neon (cross-device) via a single dispatched function (`/api/marketplace/*`). Payments (Stripe Connect payouts) not yet wired — see [`ROADMAP.md`](ROADMAP.md).
 - **Compliance + template quality inspector** — live per-clause pattern matches plus section-by-section template requirements, including hard "MUST" checks and guardrails. Tied to the counsel-review status pill in the topbar.
 - **Letterhead + signature image uploads** — Vercel Blob-backed when configured, with data-URL fallback for local development. Uploads are same-origin/rate-limited, production-session guarded, and restricted to PNG/JPEG/WEBP/GIF byte signatures.
 - **Export** — PDF (hardened server Puppeteer with client `html2canvas` + `jspdf` fallback), DOCX (in-repo OOXML writer), and a ZIP export pack bundling the letter, evidence, manifest, audit JSON, timeline, and review checklist. High-risk letter types gate behind a counsel-review attestation dialog.
