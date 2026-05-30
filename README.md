@@ -13,6 +13,16 @@ Three product surfaces, three user types:
 → **Regenerate UX options:** [`/public/regenerate-options.html`](public/regenerate-options.html)
 → **Onboarding funnel mockups (parked, decision pending):** [`/public/mockups/onboarding-index.html`](public/mockups/onboarding-index.html)
 
+### Doc map
+| Doc | Status | What |
+|---|---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | **live** | Release history, newest first |
+| [`ROADMAP.md`](ROADMAP.md) | **live** | Open backlog — build / protect / upgrade |
+| [`SECURITY.md`](SECURITY.md) | **live** | Auth model, access-control matrix, residual risks |
+| `PROVISIONING.md` | reference | Vercel/Neon/WorkOS env provisioning |
+| `HR-LETTER-KNOWLEDGE-BASE.md` | reference | Legal scaffolding behind the letter templates |
+| `PLAN.md`, `SUNDAY.md`, `EMPLOYEE-SIDE-DESIGN.md`, `RADIX-THEMES-MIGRATION.md`, `QWEN-API-REFERENCE.md` | historical | Original specs / dated inventories / superseded migration notes — kept for provenance, not current truth |
+
 ---
 
 ## What it does
