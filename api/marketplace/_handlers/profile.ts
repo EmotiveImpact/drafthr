@@ -181,7 +181,9 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
       body.availability && AVAILABILITY_VALUES.includes(body.availability)
         ? body.availability
         : (existing?.availability ?? "this_week"),
-    photoUrl: body.photoUrl === null ? null : body.photoUrl ?? existing?.photoUrl ?? null,
+    // Use the VALIDATED value (validatePhotoUrl above), not the raw body —
+    // otherwise the sanitisation is discarded on the accept path.
+    photoUrl,
     // First save publishes immediately when VETTING_AUTO_PUBLISH=1, otherwise
     // pending_review. Subsequent updates preserve whatever the admin set.
     status:
