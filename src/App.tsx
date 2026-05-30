@@ -239,7 +239,11 @@ export function App() {
         <Route path="/admin/consultants" element={<Protected><ConsultantAdminReview /></Protected>} />
         {/* Matter-scoped consultant review surface — consultant only. */}
         <Route path="/c/review/:bookingId" element={<Protected roles={["consultant"]}><SharedDraftReview /></Protected>} />
-        <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
+        {/* Internal component gallery — dev builds only. Shipping it to
+         * prod exposed an internal surface to every signed-in user. */}
+        {import.meta.env.DEV && (
+          <Route path="/mockups" element={<Protected><Mockups /></Protected>} />
+        )}
         {/* /consultants is auth-gated like the rest of the app. (It was
          * briefly public for "browse before signup"; reverted — a public
          * route that still shows the logged-in shell read as insecure and

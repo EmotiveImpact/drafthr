@@ -53,6 +53,39 @@ function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// Self-contained base64 image data URLs (the current upload path) — no
+// external fetch, safe to render on the public listing.
+const SAFE_DATA_IMAGE_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i;
+
+/**
+ * Validate a consultant photoUrl before it lands on the public marketplace
+ * card. Returns { ok, value } — value is the sanitised URL or null.
+ *
+ * The card is rendered to anonymous visitors, so an unvalidated photoUrl is
+ * a beacon / script-injection surface. Allowed:
+ *   - null / "" (no photo — clears it)
+ *   - data:image/{png,jpg,webp,gif};base64,…  (self-contained, no fetch)
+ *   - https://…                                (standard remote image)
+ * Rejected: http://, javascript:, data:text/html, and any other scheme —
+ * which kills the XSS and mixed-content vectors. (A pure https-beacon to an
+ * arbitrary host is lower-severity and tracked in ROADMAP P3; over-
+ * restricting to one host would break existing base64 + placeholder usage.)
+ */
+export function validatePhotoUrl(input: unknown): { ok: true; value: string | null } | { ok: false } {
+  if (input === null || input === undefined || input === "") return { ok: true, value: null };
+  if (typeof input !== "string") return { ok: false };
+  const v = input.trim();
+  if (v.length > 2_000_000) return { ok: false }; // ~1.5 MB base64 ceiling
+  if (SAFE_DATA_IMAGE_RE.test(v)) return { ok: true, value: v };
+  try {
+    const u = new URL(v);
+    if (u.protocol === "https:") return { ok: true, value: v };
+  } catch {
+    /* not a parseable URL */
+  }
+  return { ok: false };
+}
+
 export async function GET(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
@@ -119,6 +152,19 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   const specialties = Array.isArray(body.specialties)
     ? body.specialties.filter((s): s is string => typeof s === "string" && s.length > 0)
     : (existing?.specialties as string[] | undefined) ?? [];
+
+  // Validate photoUrl unless the field was omitted entirely (keep existing).
+  let photoUrl: string | null = existing?.photoUrl ?? null;
+  if ("photoUrl" in body) {
+    const checked = validatePhotoUrl(body.photoUrl);
+    if (!checked.ok) {
+      return jsonError(
+        "photoUrl must be an https URL or a base64 image data URL",
+        400,
+      );
+    }
+    photoUrl = checked.value;
+  }
 
   const values = {
     userId: auth.userRow.id,
