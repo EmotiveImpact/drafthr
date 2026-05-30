@@ -161,7 +161,7 @@ function MemberRow({
     if (role === member.role) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/workspace/member/role", {
+      const res = await fetch("/api/workspace/member-role", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
@@ -183,7 +183,7 @@ function MemberRow({
     if (!confirm(`Remove ${member.email ?? member.legalName ?? "this member"}?`)) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/workspace/member/remove", {
+      const res = await fetch("/api/workspace/member-remove", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
@@ -252,7 +252,7 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
     if (!confirm(`Revoke invite for ${invite.email}?`)) return;
     setBusy(true);
     try {
-      const res = await fetch("/api/workspace/invite/revoke", {
+      const res = await fetch("/api/workspace/invite-revoke", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },

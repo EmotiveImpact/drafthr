@@ -36,6 +36,19 @@ async function loadHandler(path: string): Promise<HandlerModule | null> {
       return import("./_handlers/accept-invite.js");
     case "members":
       return import("./_handlers/members.js");
+    // Single-segment aliases. Vercel's catch-all compiles to a
+    // single-segment matcher (^/api/workspace/([^/]+)$), so the original
+    // two-segment paths (member/role, member/remove, invite/revoke) 404 —
+    // they were unreachable in production, breaking member offboarding +
+    // invite revocation. These flat names are what the client now calls.
+    case "member-role":
+      return import("./_handlers/member/role.js");
+    case "member-remove":
+      return import("./_handlers/member/remove.js");
+    case "invite-revoke":
+      return import("./_handlers/invite/revoke.js");
+    // Legacy two-segment paths kept for any in-flight clients (unreachable
+    // via the platform matcher, but harmless to leave mapped).
     case "invite/revoke":
       return import("./_handlers/invite/revoke.js");
     case "member/role":
