@@ -2,6 +2,46 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.18.0 — 2026-05-30
+
+Security-hardening wave. Ran a multi-disciplinary security board
+(security engineer + system architect + PM-journeys + red-teamer) with a
+runtime-verification mandate — every fix proven against the live
+deployment, not just the source. Net: two real exposures closed, the
+access-control model tightened from "hidden in nav" to "enforced per
+route", and tenant isolation made a build-enforced invariant.
+
+### Closed exposures
+- **Fail-open auth on AI + upload endpoints.** `enforceProductionSession`
+  bypassed auth whenever `NODE_ENV !== "production"` — i.e. on every
+  public Vercel *preview* URL, leaving `/api/draft`, `/api/agent`,
+  `/api/upload/image` open to anonymous callers (uncapped LLM spend +
+  open Blob uploader). Now fails closed; bypass only via an explicit
+  `DRAFTHR_DEV_NO_AUTH=1` local-dev flag.
+- **Workspace admin routes unreachable in prod.** `member-role`,
+  `member-remove`, `invite-revoke` were two-segment paths that 404'd
+  under Vercel's single-segment catch-all matcher — admins literally
+  could not change a role, remove a member, or revoke an invite
+  (offboarding failure). Flattened to single-segment actions.
+
+### Access control
+- **Per-route role guards.** `<Protected roles={[…]}>` — HR / employee /
+  consultant surfaces no longer render for the wrong role on direct URL
+  navigation (previously gated only by nav visibility). `/consultants`
+  re-gated behind auth.
+- **Build-enforced tenant isolation.** New static guard test
+  (`api/_utils/tenant-isolation.guard.test.ts`) fails the build if any
+  handler reads a tenant-scoped table without a tenant / user / parent
+  scope. A forgotten `where tenant_id` is now a CI failure, not a leak.
+  No DB-level RLS yet (the Neon pooler runs transaction-mode pooling
+  where session RLS context doesn't hold) — that's the gold-standard
+  follow-up.
+
+### Docs
+- New `SECURITY.md`: auth model, access-control matrix, runtime-verified
+  enforcement, confirmed-sound handlers, residual risks.
+- New reusable `security-board` skill (`~/.claude/skills/security-board`).
+
 ## 0.17.0 — 2026-05-29
 
 Consultant marketplace GA + a board-of-agents stability/UX hardening
