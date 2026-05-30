@@ -46,6 +46,24 @@ the nav — direct URL navigation to another role's surface redirects to `/`.
 - `directory-webhook`: svix signature verified before the payload is trusted.
 - Marketplace tag filter uses bound params (`sql.join`), not `sql.raw`.
 
+## Fixed in the security-board pass (2026-05)
+- **Per-route role guards.** `<Protected roles={[…]}>` — HR/employee/consultant
+  surfaces no longer render for the wrong role on direct navigation.
+- **Fail-CLOSED auth on `/api/draft`, `/api/agent`, `/api/upload/image`.**
+  `enforceProductionSession` used to bypass auth whenever
+  `NODE_ENV !== "production"` — i.e. on every public Vercel **preview** URL
+  (anon LLM spend + open uploader). Now bypasses only with an explicit
+  `DRAFTHR_DEV_NO_AUTH=1` (local `.env.local` only).
+- **Workspace admin routes reachable again.** `member-role`, `member-remove`,
+  `invite-revoke` were two-segment paths that 404'd under the single-segment
+  catch-all matcher → admins couldn't change roles, remove members, or revoke
+  invites (offboarding failure). Flattened to single-segment actions.
+- **`/consultants` re-gated** behind `<Protected>` (was briefly public).
+
+Runtime-verified against production: every protected endpoint returns
+401/403 to anon; only `/api/marketplace/listing` returns 200 (public cards,
+no PII).
+
 ## Residual risks / TODO (defence-in-depth)
 1. **Tenant isolation is per-handler, not a DB invariant.** No Postgres RLS;
    each handler must remember its `tenant_id` filter. One omission = a
