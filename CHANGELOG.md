@@ -2,6 +2,29 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.18.1 — 2026-05-30
+
+Real consultant vetting + a deploy-blocker fix.
+
+**Marketplace vetting (B3 / P2).** Replaced the cosmetic client-only admin
+check with a real server boundary. `requireAdmin` (`api/_utils/admin.ts`)
+authorises only a signed-in user whose email is on the server-only
+`DRAFTHR_ADMIN_EMAILS` allowlist, and fails closed (no allowlist → no
+admins). New `GET /api/marketplace/admin-queue` (cross-tenant review
+queue) and `POST /api/marketplace/admin-review` (approve→published /
+reject→rejected) sit behind it; `/admin/consultants` now drives them and
+bounces non-admins on a 403. `admin.test.ts` proves the gate fails closed.
+
+**Build fix.** `profile.ts` computed a validated `photoUrl` then discarded
+it — `values.photoUrl` persisted the raw body instead, and the unused
+local tripped `noUnusedLocals`, failing every production build since
+0.18.0 (prod was stuck ~3h on pre-0.18 code). Now stores the validated
+value. Verified with the build's own strictness (`tsc -p` per project +
+`npm run build`), not just `tsc --noEmit`.
+
+**Production config.** `DRAFTHR_ADMIN_EMAILS` set; `VETTING_AUTO_PUBLISH`
+set to `0` so new profiles require admin approval before listing.
+
 ## 0.18.0 — 2026-05-30
 
 Security-hardening wave. Ran a multi-disciplinary security board
