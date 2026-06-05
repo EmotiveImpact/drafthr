@@ -15,13 +15,11 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-From the Editor/AI-authoring audit (2026-05-30). All real, all deferred because they need careful design (concurrency / undo-snapshot semantics) rather than a one-line fix — none is a live data-loss-on-normal-use risk:
+From the Editor/AI-authoring audit (2026-05-30). E2/E3 fixed below; E1/E4 remain:
 
 | # | Severity | Area | Summary | Why deferred |
 |---|----------|------|---------|--------------|
 | E1 | med/high | `src/routes/Editor.tsx` auto-generate effect (~314) | No unmount abort of `abortRef`, and the auto-generate gate uses local `globallyStreaming` (resets on mount). Navigating A→B→A while A's first generation is in flight can start a second `generateAllSections` loop → interleaved `appendToSection` corrupts section HTML. | Needs an unmount `abort()` cleanup + gating on store-derived streaming state. Touches the streaming lifecycle — wants its own iteration + careful manual verification. |
-| E2 | medium | `src/routes/Editor.tsx:~1054` `onAcceptAll` undo | In inline diff mode the undo snapshot grabs `s.html` AFTER the diff marks were staged, so undo restores marked-up html and re-diffs it → garbled nested `<ins>/<del>`. Per-section undo is fine. | Fix is to snapshot `pending.prevHtml ?? s.html`; needs verification across inline vs card modes. |
-| E3 | medium | `src/routes/Editor.tsx:~1970` `onRestore` | Restoring an old section version doesn't `pushSectionVersion` the current html first; if current text was never versioned (hand-edits), restore drops it with no undo. | Small, but wants a test around the version stack. |
 | E4 | low/med | `src/lib/store.ts:~625` answers→draft map | `signatoryName/Title` fall back to `recipientName/Title`; in employee mode that could inherit the employer (recipient) as the letter's signatory. Low confidence — depends on whether the question set always populates signatory. | Needs confirmation of the per-mode question set before changing the fallback. |
 
 ### Known infra note (not a bug)
@@ -30,6 +28,14 @@ From the Editor/AI-authoring audit (2026-05-30). All real, all deferred because 
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### Editor undo/restore — E2 + E3 fixed
+Cleared the two self-contained editor queue items from the AI-authoring audit.
+
+- **E3 (MEDIUM) — version restore dropped current content.** `onRestore` (`Editor.tsx`) swapped in an old section version via `updateSection` without versioning the current html first. If the current text was never versioned (hand-edits only go through `updateSection`), restore permanently dropped it. Fix: read the LIVE current section from the store and `pushSectionVersion` it before overwriting (guarded on `current.html && current.html !== html`).
+- **E2 (MEDIUM) — accept-all undo garbled inline diffs.** `onAcceptAll` snapshotted `s.html` for undo, but in inline mode that html already carries the staged `<ins>/<del>` marks — undo restored marked-up html and re-diffed it → nested/garbled marks. Fix: snapshot `pendingChange.prevHtml ?? s.html` (the clean pre-diff text), matching the store's own canonical restore (`rejectSectionPending` uses the same `isInline && prevHtml ?? sec.html`).
+
+Build (`tsc -b`) + 403 tests green. E1 (streaming concurrency) + E4 (signatory fallback) remain queued.
 
 ### Editor/AI-authoring audit — 2 fixes (#9–#10), 4 queued (E1–E4)
 First audit of the Editor + AI-authoring flow (~4,100 LOC + the llm/ streaming orchestration). The AI client (retry/backoff/abort/SSE), Wizard, health checks, and the per-section accept/reject paths all verified sound. Two fixed now; four (E1–E4) queued above (need concurrency/undo design, not one-liners).

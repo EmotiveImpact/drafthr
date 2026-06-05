@@ -1052,10 +1052,18 @@ export function Editor() {
                 };
 
                 const onAcceptAll = () => {
-                  // Snapshot current html so undo can restore.
+                  // Snapshot the CANONICAL pre-diff html so undo can restore.
+                  // In inline diff mode s.html already carries the staged
+                  // <ins>/<del> marks — restoring that and re-diffing it would
+                  // garble the marks. pendingChange.prevHtml is the clean text
+                  // captured before the diff was staged; prefer it.
                   const snap = draft.sections
                     .filter((s) => s.pendingChange)
-                    .map((s) => ({ sectionId: s.id, html: s.html, pending: s.pendingChange! }));
+                    .map((s) => ({
+                      sectionId: s.id,
+                      html: s.pendingChange!.prevHtml ?? s.html,
+                      pending: s.pendingChange!,
+                    }));
                   useDraftStore.getState().acceptAllPending(draft.id);
                   toast.success(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} accepted`, {
                     action: {
@@ -1969,6 +1977,20 @@ export function Editor() {
         section={historySection}
         onRestore={(html) => {
           if (historySection) {
+            // Version the CURRENT html before overwriting it — otherwise a
+            // restore silently drops the current content if it was never
+            // versioned (e.g. hand-edits, which only go through updateSection).
+            // Read the live section from the store, not the dialog snapshot.
+            const current = useDraftStore
+              .getState()
+              .drafts[draft.id]?.sections.find((s) => s.id === historySection.id);
+            if (current && current.html && current.html !== html) {
+              pushSectionVersion(draft.id, historySection.id, {
+                id: `ver_${Date.now()}`,
+                createdAt: Date.now(),
+                html: current.html,
+              });
+            }
             updateSection(draft.id, historySection.id, html);
             setHistorySection(null);
           }
