@@ -20,6 +20,8 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/drafts.js");
     case "sections":
       return import("./_handlers/sections.js");
+    case "matters":
+      return import("./_handlers/matters.js");
     default:
       return null;
   }

@@ -122,6 +122,69 @@ describe("dual-write enqueueSync", () => {
     expect(body.templateSourceId).toBeNull();
   });
 
+  it("mirrors a draft's matter BEFORE the draft, then links the matter UUID", async () => {
+    const matterUuid = "11111111-1111-4111-8111-111111111111";
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      void _init;
+      if (url === "/api/store/matters") {
+        return new Response(JSON.stringify({ ok: true, id: matterUuid, created: true }), { status: 201 });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    const draft = { ...makeDraft("draft_m"), matterId: "matter_local_1" };
+    const matter = {
+      id: "matter_local_1",
+      name: "Acme grievance",
+      mode: "employer",
+      status: "active",
+      color: "red",
+      counselReviewed: false,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    mod.setDualWriteSnapshotGetter(() => draft);
+    mod.setDualWriteMatterGetter(() => matter as never);
+
+    await mod.syncDraft("draft_m");
+
+    // Matter pushed first, draft second.
+    const matterCall = fetchMock.mock.calls[0]!;
+    const draftCall = fetchMock.mock.calls[1]!;
+    expect(matterCall[0]).toBe("/api/store/matters");
+    expect(draftCall[0]).toBe("/api/store/drafts");
+    const matterBody = JSON.parse(matterCall[1]!.body as string);
+    expect(matterBody.id).toBe("matter_local_1");
+    expect(matterBody.name).toBe("Acme grievance");
+    // The draft links the server matter UUID, not null.
+    const draftBody = JSON.parse(draftCall[1]!.body as string);
+    expect(draftBody.matterId).toBe(matterUuid);
+  });
+
+  it("falls back to matterId:null when the matter sync fails (no 409 regression)", async () => {
+    const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
+      void _init;
+      if (url === "/api/store/matters") return new Response("", { status: 500 });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const mod = await import("./dual-write");
+    const draft = { ...makeDraft("draft_mf"), matterId: "matter_local_1" };
+    const matter = { id: "matter_local_1", name: "X", mode: "employer", status: "active", counselReviewed: false, createdAt: 1, updatedAt: 2 };
+    mod.setDualWriteSnapshotGetter(() => draft);
+    mod.setDualWriteMatterGetter(() => matter as never);
+
+    await mod.syncDraft("draft_mf");
+
+    // Draft still synced, but unfiled — never sends a bad matterId.
+    const draftBody = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
+    expect(draftBody.matterId).toBeNull();
+  });
+
   it("is a no-op when the flag is off", async () => {
     vi.stubEnv("VITE_DRAFTHR_DUAL_WRITE", "false");
     vi.resetModules();

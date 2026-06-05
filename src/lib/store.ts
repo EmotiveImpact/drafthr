@@ -1589,32 +1589,51 @@ export const useDraftStore = create<Store>()(
 import {
   enqueueSync as _dualWriteEnqueueSync,
   deleteDraftRemotely as _dualWriteDeleteDraftRemotely,
+  deleteMatterRemotely as _dualWriteDeleteMatterRemotely,
   setDualWriteSnapshotGetter as _setDualWriteSnapshotGetter,
+  setDualWriteMatterGetter as _setDualWriteMatterGetter,
   isDualWriteEnabled as _isDualWriteEnabled,
   syncDraft as _dualWriteSyncDraft,
 } from "./dual-write";
 
 _setDualWriteSnapshotGetter((draftId) => useDraftStore.getState().drafts[draftId] ?? null);
+_setDualWriteMatterGetter((matterId) => useDraftStore.getState().matters[matterId] ?? null);
 
 if (_isDualWriteEnabled()) {
   let prevDrafts = useDraftStore.getState().drafts;
+  let prevMatters = useDraftStore.getState().matters;
   useDraftStore.subscribe((state) => {
     const next = state.drafts;
-    if (next === prevDrafts) return;
-    for (const [id, draft] of Object.entries(next)) {
-      if (prevDrafts[id] !== draft) {
-        _dualWriteEnqueueSync(id);
+    if (next !== prevDrafts) {
+      for (const [id, draft] of Object.entries(next)) {
+        if (prevDrafts[id] !== draft) {
+          _dualWriteEnqueueSync(id);
+        }
       }
-    }
-    // Deletions — drafts present before but missing now.
-    for (const id of Object.keys(prevDrafts)) {
-      if (!(id in next)) {
-        // Fire-and-forget delete. We do NOT debounce deletions — they're rare
-        // and the user expects them to land immediately.
-        void _dualWriteDeleteDraftRemotely(id);
+      // Deletions — drafts present before but missing now.
+      for (const id of Object.keys(prevDrafts)) {
+        if (!(id in next)) {
+          // Fire-and-forget delete. We do NOT debounce deletions — they're rare
+          // and the user expects them to land immediately.
+          void _dualWriteDeleteDraftRemotely(id);
+        }
       }
+      prevDrafts = next;
     }
-    prevDrafts = next;
+
+    // Matter deletions — mirror so a removed matter is cleared server-side.
+    // Matter *creates/updates* don't need their own push: the draft sync
+    // mirrors a draft's matter before linking it (pushMatter in syncDraft),
+    // which is the only point where the server actually needs the matter row.
+    const nextMatters = state.matters;
+    if (nextMatters !== prevMatters) {
+      for (const id of Object.keys(prevMatters)) {
+        if (!(id in nextMatters)) {
+          void _dualWriteDeleteMatterRemotely(id);
+        }
+      }
+      prevMatters = nextMatters;
+    }
   });
 }
 

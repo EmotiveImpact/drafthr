@@ -13,7 +13,7 @@
  * server is the authoritative gate.
  */
 import { toast } from "sonner";
-import type { Draft } from "./letters/types";
+import type { Draft, Matter } from "./letters/types";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
 
 const DEBOUNCE_MS = 400;
@@ -37,6 +37,75 @@ let snapshotGetter: ((draftId: string) => Draft | null) | null = null;
 
 export function setDualWriteSnapshotGetter(getter: (draftId: string) => Draft | null): void {
   snapshotGetter = getter;
+}
+
+/** Snapshot a matter from the live Zustand state. Injected like the draft
+ * getter so the draft sync can mirror a draft's matter before linking it. */
+let matterSnapshotGetter: ((matterId: string) => Matter | null) | null = null;
+
+export function setDualWriteMatterGetter(getter: (matterId: string) => Matter | null): void {
+  matterSnapshotGetter = getter;
+}
+
+/**
+ * Mirror one matter to the server. Resolves to the server-side UUID on
+ * success, or null on any failure (so the draft sync falls back to writing
+ * matterId:null — exactly today's safe behaviour, never a 409 regression).
+ * Soft-fails: a missing matter or network error just yields null.
+ */
+export async function pushMatter(matterId: string): Promise<string | null> {
+  if (!ENABLED) return null;
+  const matter = matterSnapshotGetter?.(matterId);
+  if (!matter) return null;
+  try {
+    const res = await fetch("/api/store/matters", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        id: matter.id,
+        name: matter.name,
+        mode: matter.mode,
+        type: matter.type ?? null,
+        status: matter.status,
+        color: matter.color ?? null,
+        riskBand: matter.riskBand ?? null,
+        description: matter.description ?? null,
+        primaryName: matter.parties?.primaryName ?? null,
+        primaryContext: matter.parties?.primaryContext ?? null,
+        deadlineISO: matter.deadlineISO ?? null,
+        deadlineLabel: matter.deadlineLabel ?? null,
+        counselReviewed: Boolean(matter.counselReviewed),
+        nextAction: matter.nextAction ?? null,
+        exposureGBP: matter.exposureGBP ?? null,
+        archivedAt: matter.archivedAt ?? null,
+      }),
+    });
+    if (res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { id?: string };
+      return data.id ?? toServerUuid(matter.id);
+    }
+    console.warn("[dual-write] matter sync failed", matterId, res.status);
+    return null;
+  } catch (err) {
+    console.warn("[dual-write] matter sync threw", matterId, err);
+    return null;
+  }
+}
+
+/** Fire-and-forget remote matter delete. The caller owns local removal. */
+export async function deleteMatterRemotely(matterId: string): Promise<void> {
+  if (!ENABLED || !matterId) return;
+  try {
+    await fetch("/api/store/matters", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id: toServerUuid(matterId) }),
+    });
+  } catch (err) {
+    console.warn("[dual-write] matter delete threw", matterId, err);
+  }
 }
 
 /** Schedule a debounced sync for one draft. Multiple calls in a short window
@@ -67,7 +136,11 @@ export async function syncDraft(draftId: string): Promise<void> {
   const draft = snapshotGetter?.(draftId);
   if (!draft) return;
   if (isStaleSnapshot(draft)) return;
-  const payload = toServerPayload(draft);
+  // Mirror the draft's matter FIRST so the FK resolves. On any failure
+  // resolvedMatterId stays null — the draft still syncs, just unfiled
+  // server-side (today's behaviour, never a 409 regression).
+  const resolvedMatterId = draft.matterId ? await pushMatter(draft.matterId) : null;
+  const payload = toServerPayload(draft, resolvedMatterId);
   try {
     const res = await fetch("/api/store/drafts", {
       method: "POST",
@@ -110,7 +183,8 @@ export async function syncAllPending(
     }
     try {
       if (isStaleSnapshot(d)) continue;
-      const payload = toServerPayload(d);
+      const resolvedMatterId = d.matterId ? await pushMatter(d.matterId) : null;
+      const payload = toServerPayload(d, resolvedMatterId);
       const res = await fetch("/api/store/drafts", {
         method: "POST",
         credentials: "same-origin",
@@ -187,7 +261,7 @@ function readFlag(): boolean {
   }
 }
 
-function toServerPayload(draft: Draft) {
+function toServerPayload(draft: Draft, resolvedMatterId: string | null = null) {
   return {
     id: toServerUuid(draft.id),
     clientRevision: draft.updatedAt,
@@ -195,7 +269,9 @@ function toServerPayload(draft: Draft) {
     mode: draft.mode,
     title: draft.title ?? null,
     jurisdiction: draft.context?.jurisdiction ?? null,
-    matterId: serverUuidOrNull(draft.matterId),
+    // Prefer the matter UUID resolved by a successful matter sync; fall back
+    // to serverUuidOrNull (null for a local matter_… id that wasn't mirrored).
+    matterId: resolvedMatterId ?? serverUuidOrNull(draft.matterId),
     reviewStatus: draft.reviewStatus ?? "draft",
     isTemplateSource: Boolean(draft.isTemplateSource),
     templateSourceId: serverUuidOrNull(draft.templateSourceId),

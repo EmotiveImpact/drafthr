@@ -15,9 +15,7 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-| # | Severity | Area | Summary | Why not yet fixed |
-|---|----------|------|---------|-------------------|
-| O2 | medium | `src/lib/dual-write.ts:190` | `matterId` is silently dropped on every server sync — local matter ids (`matter_…`) aren't UUIDs, so `serverUuidOrNull` writes `null`. There's no matters dual-write endpoint, so a draft filed under a matter appears unfiled in the Postgres mirror. | Needs a matters dual-write endpoint (so the UUID row exists) + id mapping — a feature, not a one-line fix. Data still safe locally. |
+_(none — O2 fixed 2026-05-30, see below)_
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -25,6 +23,13 @@ from a handler JSON 401/403 (enforced).
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### O2 (fixed) — matters now mirror to Postgres (draft→matter membership) — MEDIUM (feature)
+- **Where:** new `api/store/_handlers/matters.ts` + `api/store/[action].ts` dispatcher case; `src/lib/dual-write.ts`; `src/lib/store.ts` subscription.
+- **What:** drafts carried a `matterId`, but there was no endpoint to mirror the matter row — so the draft dual-write wrote `matterId: null` (the local `matter_…` id isn't a UUID and `drafts.ts` rejects a matterId whose row doesn't exist in the tenant). A draft filed under a matter appeared unfiled in the Postgres mirror.
+- **Fix:** `POST/DELETE /api/store/matters` (same guard chain as drafts: same-origin + dual-write flag + rate-limit + session/tenant + IDOR ownership + audit), mapping the local id → deterministic UUID via the existing `toServerUuid` bridge. The draft sync now mirrors a draft's matter FIRST (`pushMatter` in `syncDraft`/`syncAllPending`), then links the returned UUID — **race-free**: on ANY matter-sync failure it falls back to `matterId:null` (today's safe behaviour, never a 409 regression). Matter deletes mirror too.
+- **Cap-safe:** handler lives under `_handlers/` and is dispatched by the existing `api/store/[action].ts`, so the Vercel Hobby 12-function cap is untouched (still 11). `matters` table + all written columns already exist in prod (migration 0000) — no DB change.
+- **Proven:** `dual-write.test.ts` (now 9) — matter pushed before draft + draft links the UUID; matter-sync failure → `matterId:null` fallback; existing "no local ids to uuid refs" guard still green. Build (`tsc -b`) + 399 tests green.
 
 ### O3 (fixed) — localStorage quota → silent total persist failure — LOW/MED (data-loss)
 - **Where:** `src/lib/store.ts` persist config (was bare `{ name }`); new `src/lib/storage/quota-safe-storage.ts`; `src/lib/finalize/healthChecks.ts`.
