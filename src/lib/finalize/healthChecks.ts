@@ -297,8 +297,13 @@ function checkWordCount(draft: Draft): HealthCheck {
 
 function checkSignature(draft: Draft): HealthCheck {
   const answers = draft.answers as Record<string, unknown>;
+  // Prefer employer.signatureDataUrl — the durable render source of truth.
+  // The raw answers copy is stripped from persistence (quota mitigation), so
+  // after a reload only the employer copy is reliable.
   const hasSignature =
-    Boolean(answers.signatureDataUrl) || Boolean(answers.signatoryName);
+    Boolean(draft.employer?.signatureDataUrl) ||
+    Boolean(answers.signatureDataUrl) ||
+    Boolean(answers.signatoryName);
   if (hasSignature) {
     return {
       id: "signature",
@@ -363,7 +368,11 @@ function checkLetterhead(draft: Draft): HealthCheck {
       severity: "pass",
     };
   }
-  if (answers.hasLetterhead || answers.letterheadDataUrl) {
+  if (
+    answers.hasLetterhead ||
+    draft.employer?.letterheadDataUrl ||
+    answers.letterheadDataUrl
+  ) {
     return {
       id: "letterhead",
       dimension: "quality",

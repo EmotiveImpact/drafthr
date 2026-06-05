@@ -18,7 +18,6 @@ from a handler JSON 401/403 (enforced).
 | # | Severity | Area | Summary | Why not yet fixed |
 |---|----------|------|---------|-------------------|
 | O2 | medium | `src/lib/dual-write.ts:190` | `matterId` is silently dropped on every server sync — local matter ids (`matter_…`) aren't UUIDs, so `serverUuidOrNull` writes `null`. There's no matters dual-write endpoint, so a draft filed under a matter appears unfiled in the Postgres mirror. | Needs a matters dual-write endpoint (so the UUID row exists) + id mapping — a feature, not a one-line fix. Data still safe locally. |
-| O3 | low/med | `src/lib/store.ts` persist config | localStorage `persist` has no `partialize`/quota guard. Large base64 letterhead/signature stored inline in the raw `answers` blob can exceed the 5–10 MB quota; zustand's `setItem` then throws silently → whole store stops persisting (drafts lost on refresh). | Needs a careful `partialize` (drop raw `answers` image data URLs — the validated `employer.*DataUrl` already dedupes them) + an `onRehydrateStorage`/quota toast. Touches the persist-migration helper — own iteration. |
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -26,6 +25,12 @@ from a handler JSON 401/403 (enforced).
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### O3 (fixed) — localStorage quota → silent total persist failure — LOW/MED (data-loss)
+- **Where:** `src/lib/store.ts` persist config (was bare `{ name }`); new `src/lib/storage/quota-safe-storage.ts`; `src/lib/finalize/healthChecks.ts`.
+- **What:** letterhead/signature images were stored TWICE per draft — raw base64 in `answers` (wizard echo) AND validated on `employer` (the render source of truth; every export/preview reads `draft.employer.*DataUrl`, never `answers.*`). The `answers` copy is dead weight and a couple of large images push the store past the 5–10 MB quota. zustand's persist swallows the resulting `setItem` throw, so the store **silently stops persisting** — drafts lost on the next refresh, no warning.
+- **Fix:** a `StateStorage` wrapper (`createQuotaSafeStorage`) that (a) strips `answers.{letterhead,signature}DataUrl` data: URLs from the persisted JSON before writing — in-memory state and the employer render copy untouched — and (b) surfaces ONE toast on a genuine `QuotaExceededError` instead of failing silently. Health-check presence readers (`checkSignature`/`checkLetterhead`) now prefer `employer.*DataUrl` so post-reload checks stay correct.
+- **Proven:** `quota-safe-storage.test.ts` (7 tests) — strips `answers` images / keeps employer copy / keeps non-data URLs / fail-safe on bad JSON / quota toast fires once / rethrows non-quota errors. Build + 397 tests green. Content-safe: no other code reads the persist key directly; only render source (`employer.*`) drives exports.
 
 ### #4 (fixed) — dual-write server-ahead 409 diverged silently — MEDIUM
 - **Where:** `src/lib/dual-write.ts` `syncDraft` / `syncAllPending` (409 branch).

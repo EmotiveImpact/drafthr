@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { toast } from "sonner";
+import { createQuotaSafeStorage } from "./storage/quota-safe-storage";
 import type {
   AIAction,
   AIChatMessage,
@@ -1558,7 +1560,25 @@ export const useDraftStore = create<Store>()(
           return { drafts: next };
         }),
     }),
-    { name: "scribehr-store-v1" }
+    {
+      name: "scribehr-store-v1",
+      // Quota-safe storage: strips the redundant raw image data URLs from
+      // each draft's `answers` blob before writing (the validated
+      // `employer.*DataUrl` is the render source of truth), and surfaces a
+      // toast instead of silently failing if a write still overflows quota.
+      storage: createJSONStorage(() =>
+        createQuotaSafeStorage(
+          typeof window !== "undefined"
+            ? window.localStorage
+            : { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+          () =>
+            toast.error("Your browser storage is full", {
+              description:
+                "Recent changes may not be saved on this device. Remove a large letterhead/signature image or export and delete old letters to free space.",
+            }),
+        ),
+      ),
+    }
   )
 );
 
