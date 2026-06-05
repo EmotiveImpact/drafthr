@@ -50,7 +50,7 @@ function dtoToProfile(dto: ConsultantProfileDTO) {
     specialty: dto.specialty,
     specialties: dto.specialties,
     price: dto.price,
-    currency: symbolByCode[dto.currency],
+    currency: symbolByCode[dto.currency] ?? "£",
     sla: dto.sla,
     rating: dto.rating,
     reviews: dto.reviews,
@@ -124,6 +124,7 @@ export async function pushProfile(): Promise<void> {
 function dtoToBooking(
   dto: BookingDTO & { shareToken?: string | null; shareTokenExpiresAt?: number | null },
   consultantInitials: string,
+  prior?: Booking,
 ): Booking {
   return {
     id: dto.id,
@@ -144,13 +145,19 @@ function dtoToBooking(
     shareToken: dto.shareToken ?? undefined,
     shareTokenExpiresAt: dto.shareTokenExpiresAt ?? undefined,
     messages: dto.messages ?? [],
-    consultantName: dto.consultantName ?? undefined,
-    consultantRole: dto.consultantRole ?? undefined,
-    consultantPhotoUrl: dto.consultantPhotoUrl ?? undefined,
+    // The consultant display fields are produced ONLY by the list-join
+    // (list-and-create.ts) — the respond/create/message DTOs don't carry
+    // them. When they're absent, fall back to whatever the prior local row
+    // held so a state transition (accept/deliver/complete/rate) doesn't wipe
+    // the consultant's name/photo/price from the card. (Bug: completing a
+    // booking dropped the avatar + showed "Specialist · INITIALS".)
+    consultantName: dto.consultantName ?? prior?.consultantName,
+    consultantRole: dto.consultantRole ?? prior?.consultantRole,
+    consultantPhotoUrl: dto.consultantPhotoUrl ?? prior?.consultantPhotoUrl,
     consultantCurrency: dto.consultantCurrency
       ? ({ GBP: "£", USD: "$", EUR: "€" } as const)[dto.consultantCurrency]
-      : undefined,
-    consultantPrice: dto.consultantPrice ?? undefined,
+      : prior?.consultantCurrency,
+    consultantPrice: dto.consultantPrice ?? prior?.consultantPrice,
   };
 }
 
@@ -265,6 +272,7 @@ export async function pushBookingRespond(
     res.data.booking,
     local?.consultantInitials ??
       (res.data.booking.consultantProfileId ?? "").slice(0, 2).toUpperCase(),
+    local,
   );
   useBookingsStore.setState({
     bookings: state.bookings.map((b) => (b.id === bookingId ? merged : b)),
