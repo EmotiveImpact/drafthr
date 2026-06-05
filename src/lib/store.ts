@@ -622,6 +622,12 @@ export const useDraftStore = create<Store>()(
             signatureDataUrl: isSafeImageRef(a.signatureDataUrl)
               ? a.signatureDataUrl
               : undefined,
+            // `signatoryName/Title` is mode-overloaded: in EMPLOYER mode it's
+            // the letter's signatory; in EMPLOYEE mode it's the employer person
+            // ADDRESSED (system.ts reads it as "Person addressed"). Employee
+            // templates collect `recipientName/Title`, not `signatoryName`, so
+            // the fallback is correct — NOT a bug. (Audited: no export path uses
+            // this as the employee-sender's signature.)
             signatoryName:
               (a.signatoryName as string) ??
               (a.recipientName as string) ??

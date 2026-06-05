@@ -305,6 +305,20 @@ export function Editor() {
   };
   const abortRef = useRef<AbortController | null>(null);
 
+  // Abort any in-flight AI stream when the editor unmounts (e.g. the user
+  // navigates to another draft or leaves the editor). Without this, an
+  // orphaned stream keeps calling appendToSection against the store after the
+  // component is gone, and — because the auto-generate gate uses local
+  // `globallyStreaming` which resets on remount — a remount could start a
+  // SECOND generation loop that interleaves with the orphan and corrupts
+  // section HTML. (Partial fix for E1: the remaining half is to gate
+  // auto-generate on store-derived streaming state — tracked in BUGS_AND_FIXES.)
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const meta = useMemo(
     () => (draft ? getLetterMeta(draft.letterType) : null),
     [draft]

@@ -15,12 +15,11 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-From the Editor/AI-authoring audit (2026-05-30). E2/E3 fixed below; E1/E4 remain:
+From the Editor/AI-authoring audit (2026-05-30). E2/E3 fixed; E1 half-fixed; E4 resolved as a false positive (see below). One half of E1 remains:
 
-| # | Severity | Area | Summary | Why deferred |
-|---|----------|------|---------|--------------|
-| E1 | med/high | `src/routes/Editor.tsx` auto-generate effect (~314) | No unmount abort of `abortRef`, and the auto-generate gate uses local `globallyStreaming` (resets on mount). Navigating A→B→A while A's first generation is in flight can start a second `generateAllSections` loop → interleaved `appendToSection` corrupts section HTML. | Needs an unmount `abort()` cleanup + gating on store-derived streaming state. Touches the streaming lifecycle — wants its own iteration + careful manual verification. |
-| E4 | low/med | `src/lib/store.ts:~625` answers→draft map | `signatoryName/Title` fall back to `recipientName/Title`; in employee mode that could inherit the employer (recipient) as the letter's signatory. Low confidence — depends on whether the question set always populates signatory. | Needs confirmation of the per-mode question set before changing the fallback. |
+| # | Severity | Area | Summary | Status |
+|---|----------|------|---------|--------|
+| E1b | med | `src/routes/Editor.tsx` auto-generate effect (~314) | The auto-generate gate uses local `globallyStreaming` (resets on mount), so a remount during an in-flight first generation can still re-enter `runGenerateAll`. The unmount-abort (E1a, done) kills the orphan stream, which removes the *corruption* mechanism; this remaining half is belt-and-braces (gate on store-derived `sections.some(status==="streaming")` so re-entry can't even start). | Deferred — wants manual verification of the generation flow; low residual risk now that orphan streams are aborted on unmount. |
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -28,6 +27,11 @@ From the Editor/AI-authoring audit (2026-05-30). E2/E3 fixed below; E1/E4 remain
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### E1 (partial) + E4 (resolved) — editor streaming lifecycle + signatory fallback
+
+- **E1a (MEDIUM) — orphaned AI stream after navigation, FIXED.** `Editor.tsx` had no unmount cleanup for `abortRef`, so leaving a draft mid-generation left the stream calling `appendToSection` against the store after the component was gone — and because the auto-generate gate uses local `globallyStreaming` (resets on remount), a remount could start a SECOND generation loop that interleaved with the orphan and corrupted section HTML. Fix: an unmount-only `useEffect(() => () => abortRef.current?.abort(), [])`. This removes the corruption *mechanism* (no orphan writer). The remaining half (E1b, gate auto-generate on store-derived streaming state) is now belt-and-braces and stays queued.
+- **E4 (RESOLVED — false positive).** The `signatoryName ?? recipientName` fallback (`store.ts:~625`) is **intentional**, not a bug. The `employer.signatoryName` field is mode-overloaded: in employer mode it's the letter's signatory; in employee mode `system.ts:63` reads it as **"Person addressed"** — and the employer person addressed IS the recipient, so `recipientName` is the correct source. Verified: all 20 employee templates collect `recipientName` (none collect `signatoryName`), and NO export/render path uses `employer.signatoryName` as the employee-sender's signature (the employee signature block comes from the template scaffold). No code change; left a clarifying note.
 
 ### Editor undo/restore — E2 + E3 fixed
 Cleared the two self-contained editor queue items from the AI-authoring audit.
