@@ -520,10 +520,24 @@ function renderImageRun(img: HTMLImageElement, ctx: RenderContext): string {
   const parsed = parseDataImage(src);
   if (!parsed) {
     const alt = img.getAttribute("alt")?.trim();
-    return alt ? textRun(`[Image: ${alt}]`, { italic: true, color: "64748B" }) : "";
+    if (alt) return textRun(`[Image: ${alt}]`, { italic: true, color: "64748B" });
+    // A data: image in a format Word can't embed (e.g. webp) with no alt
+    // must NOT silently vanish — emit a visible placeholder so the user
+    // notices the letterhead/signature didn't render rather than losing it
+    // without a trace. (https images already got inlined upstream; a
+    // remaining data: URL we can't parse is an unsupported format.)
+    const unsupported = /^data:(image\/[a-z0-9.+-]+)/i.exec(src);
+    if (unsupported) {
+      return textRun(`[Image omitted — ${unsupported[1]} not supported in Word export]`, {
+        italic: true,
+        color: "64748B",
+      });
+    }
+    return "";
   }
 
-  const size = imageSizeFromElement(img);
+  const intrinsic = intrinsicImageSize(parsed.bytes);
+  const size = imageSizeFromElement(img, intrinsic);
   const image: DocxImage = {
     relId: `rId${ctx.nextRelId++}`,
     docPrId: ctx.nextDocPrId++,
@@ -566,7 +580,68 @@ function base64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
-function imageSizeFromElement(img: HTMLImageElement): { widthPx: number; heightPx: number } {
+/**
+ * Decode the intrinsic pixel dimensions from raw image bytes — PNG (IHDR),
+ * JPEG (first SOF marker), and GIF (logical screen descriptor). Returns null
+ * for formats we can't cheaply parse. Used to preserve aspect ratio when the
+ * markup only specifies one CSS dimension (the common letterhead/signature
+ * case), instead of fabricating the other with a fixed multiplier.
+ */
+export function intrinsicImageSize(bytes: Uint8Array): { w: number; h: number } | null {
+  // PNG: 8-byte signature, then IHDR (width/height as big-endian uint32 at 16/20).
+  if (
+    bytes.length >= 24 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+  ) {
+    const w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    const h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    if (w > 0 && h > 0) return { w, h };
+    return null;
+  }
+  // GIF: width/height little-endian uint16 at offset 6/8.
+  if (
+    bytes.length >= 10 &&
+    bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46
+  ) {
+    const w = bytes[6] | (bytes[7] << 8);
+    const h = bytes[8] | (bytes[9] << 8);
+    if (w > 0 && h > 0) return { w, h };
+    return null;
+  }
+  // JPEG: scan markers for the first SOF (0xC0–0xCF except C4/C8/CC).
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < bytes.length) {
+      if (bytes[i] !== 0xff) { i += 1; continue; }
+      const marker = bytes[i + 1];
+      if (marker === 0xc4 || marker === 0xc8 || marker === 0xcc) {
+        // Not a frame header — skip by segment length.
+        const len = (bytes[i + 2] << 8) | bytes[i + 3];
+        i += 2 + len;
+        continue;
+      }
+      if (marker >= 0xc0 && marker <= 0xcf) {
+        const h = (bytes[i + 5] << 8) | bytes[i + 6];
+        const w = (bytes[i + 7] << 8) | bytes[i + 8];
+        if (w > 0 && h > 0) return { w, h };
+        return null;
+      }
+      if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7)) {
+        i += 2; // standalone markers, no length
+        continue;
+      }
+      const len = (bytes[i + 2] << 8) | bytes[i + 3];
+      if (len < 2) return null;
+      i += 2 + len;
+    }
+  }
+  return null;
+}
+
+function imageSizeFromElement(
+  img: HTMLImageElement,
+  intrinsic?: { w: number; h: number } | null,
+): { widthPx: number; heightPx: number } {
   const inline = parseStyleAttribute(img.getAttribute("style"));
   const attrWidth = cssLengthToPx(img.getAttribute("width"));
   const attrHeight = cssLengthToPx(img.getAttribute("height"));
@@ -577,13 +652,25 @@ function imageSizeFromElement(img: HTMLImageElement): { widthPx: number; heightP
   let widthPx = attrWidth ?? styleWidth;
   let heightPx = attrHeight ?? styleHeight;
 
+  // Preserve the TRUE aspect ratio from the image bytes when we know it and
+  // only one dimension is specified. Falls back to the old heuristics only
+  // when the intrinsic size is unavailable (unparseable format).
+  const ratio = intrinsic && intrinsic.w > 0 && intrinsic.h > 0 ? intrinsic.w / intrinsic.h : null;
+
   if (!widthPx && !heightPx) {
-    widthPx = 3.2 * 96;
-    heightPx = 1.1 * 96;
+    if (ratio) {
+      // Default the height to ~1.1in and derive width from the real ratio,
+      // clamped to the page width.
+      heightPx = 1.1 * 96;
+      widthPx = Math.min(heightPx * ratio, maxWidthPx);
+    } else {
+      widthPx = 3.2 * 96;
+      heightPx = 1.1 * 96;
+    }
   } else if (!widthPx && heightPx) {
-    widthPx = Math.min(heightPx * 4, maxWidthPx);
+    widthPx = ratio ? Math.min(heightPx * ratio, maxWidthPx) : Math.min(heightPx * 4, maxWidthPx);
   } else if (widthPx && !heightPx) {
-    heightPx = Math.max(widthPx * 0.25, 0.45 * 96);
+    heightPx = ratio ? widthPx / ratio : Math.max(widthPx * 0.25, 0.45 * 96);
   }
 
   widthPx = Math.min(widthPx ?? maxWidthPx, maxWidthPx);
