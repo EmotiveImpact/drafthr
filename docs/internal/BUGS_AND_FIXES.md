@@ -18,7 +18,8 @@ from a handler JSON 401/403 (enforced).
 | # | Severity | Area | Summary | Status |
 |---|----------|------|---------|--------|
 | **X1** | **CRITICAL (feature gap)** | `src/lib/export/pack.ts` | **The "tribunal-grade" evidence pack is NOT signed and carries NO per-file hashes.** The crypto infra is fully built and sound (`src/lib/sign/pades.ts` PAdES-B-T signer, `api/sign/manifest.ts`, canonical-JSON + audit hash-chain — all verified clean) but has ZERO callers in the pack path. `buildManifest` records no SHA-256 for the PDF/DOCX/evidence files, and `exportLetterPack` never calls `/api/sign/manifest` or writes `manifest.sig`. A recipient can swap any file and nothing detects it — the core differentiator is unbacked today. **Also X3**: `manifest.json` uses pretty-printed/insertion-order JSON + a volatile `generatedAt`, so it's non-reproducible — must switch to `canonicalJson` before/when signing is wired. | **Needs the user.** This changes the export artifact's structure and is the product's headline claim — wants a deliberate design pass + the user's awareness, not an autonomous-loop change. Scoped & ready to build on green-light. |
-| E1b | med | `src/routes/Editor.tsx` auto-generate effect (~314) | The auto-generate gate uses local `globallyStreaming` (resets on mount), so a remount during an in-flight first generation can still re-enter `runGenerateAll`. The unmount-abort (E1a, done) kills the orphan stream, which removes the *corruption* mechanism; this remaining half is belt-and-braces. | Deferred — low residual risk now that orphan streams are aborted on unmount. |
+
+_The autonomous safe queue is now empty — only X1 (needs the user) remains. Everything else has been fixed or verified-sound across 15 iterations._
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -26,6 +27,9 @@ from a handler JSON 401/403 (enforced).
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### E1b (fixed) — streaming re-entry guard now store-derived
+Completed the deferred half of E1. `runGenerateAll`'s re-entry guard and the auto-generate effect both checked only the LOCAL `globallyStreaming` flag, which resets to `false` on every mount — so navigating A→B→A while A's first generation was still in flight could re-enter and start a second `generateAllSections` loop, interleaving `appendToSection` writes. Fix: both gates now ALSO check store-derived streaming state (`draft.sections.some(s => s.status === "streaming")`), which survives remounts. Strictly additive — a genuinely fresh draft has no streaming section, so first-generation is never blocked. With E1a (unmount-abort) this closes both the corruption mechanism (orphan writer) and the re-entry trigger. Build (`tsc -b`) + 412 tests green.
 
 ### Directory-sync webhook second-pass — VERIFIED SOUND (no change)
 Audited `api/workos/_handlers/directory-webhook.ts` (provision/deprovision/HMAC/idempotency). **Sound — no fix needed.** HMAC verified via the SDK's `constructEvent`; all verification failures collapse to a uniform 400 (no wrong-secret-vs-bad-timestamp oracle); processing errors return 500 so WorkOS retries (no silent provisioning gaps); upserts are single-statement `onConflictDoUpdate` (race-safe); deprovision soft-deletes (`status='deprovisioned'`, keeps the row for audit-chain integrity); `state==="inactive"` on an update is correctly treated as deprovision; events are org→tenant scoped via `workos_org_id`.

@@ -328,7 +328,15 @@ export function Editor() {
   useEffect(() => {
     if (!draft) return;
     const allEmpty = draft.sections.every((s) => s.status === "empty" && !s.html);
-    if (allEmpty && !globallyStreaming) {
+    // Re-entry guard (E1b): also gate on STORE-derived streaming state, not
+    // just the local `globallyStreaming` flag. Local state resets to false on
+    // every mount, so navigating A→B→A while A's first generation is still in
+    // flight would otherwise re-enter runGenerateAll and start a second loop.
+    // The store survives remounts, so a section already "streaming" blocks the
+    // re-entry. (Strictly additive — a genuinely fresh draft has no streaming
+    // section, so first-generation is never blocked.)
+    const alreadyStreaming = draft.sections.some((s) => s.status === "streaming");
+    if (allEmpty && !globallyStreaming && !alreadyStreaming) {
       void runGenerateAll();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -453,6 +461,10 @@ export function Editor() {
 
   const runGenerateAll = async () => {
     if (globallyStreaming) return;
+    // Store-derived re-entry guard (E1b): a section left "streaming" by an
+    // in-flight generation (e.g. from another mount of this draft) blocks a
+    // duplicate run that would interleave appendToSection writes.
+    if (draft.sections.some((s) => s.status === "streaming")) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     setGloballyStreaming(true);
