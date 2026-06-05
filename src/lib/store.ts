@@ -501,7 +501,16 @@ export const useDraftStore = create<Store>()(
           for (const [draftId, d] of Object.entries(s.drafts)) {
             drafts[draftId] = d.matterId === id ? { ...d, matterId: undefined } : d;
           }
-          return { matters: remaining, drafts };
+          // Also drop tasks/events scoped to this matter — otherwise they
+          // leak in the store forever (invisible, and would re-surface if a
+          // new matter ever reused the id). Mirrors the draft cleanup above.
+          const tasks = Object.fromEntries(
+            Object.entries(s.tasks).filter(([, t]) => t.matterId !== id),
+          );
+          const events = Object.fromEntries(
+            Object.entries(s.events).filter(([, e]) => e.matterId !== id),
+          );
+          return { matters: remaining, drafts, tasks, events };
         }),
 
       assignDraftToMatter: (draftId, matterId) =>

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, Circle, Plus, Trash2, ListChecks } from "lucide-react";
 import type { Task } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { formatDateOnly, todayDateOnly } from "@/lib/date-only";
+import { formatDateOnly, todayDateOnly, toDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -196,7 +196,7 @@ function TaskRow({
         {completed
           ? task.doneAt
             ? `completed ${formatDateOnly(
-                new Date(task.doneAt).toISOString().slice(0, 10),
+                toDateOnly(new Date(task.doneAt)),
                 { dateStyle: "medium" }
               )}`
             : "completed"

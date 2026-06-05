@@ -15,7 +15,7 @@ import { useDraftStore } from "@/lib/store";
 import { matchEmployeeForDraft } from "@/lib/employees";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
-import { formatDateOnly } from "@/lib/date-only";
+import { formatDateOnly, toDateOnly } from "@/lib/date-only";
 import { Avatar } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +46,19 @@ import {
  * context: matters they participate in, the letters that mention them,
  * and a stubbed AI-suggestions strip (real ML lands in a future wave).
  */
+/**
+ * Route wrapper: keys the inner component on employeeId so React remounts it
+ * (resetting all local state — notes, editOpen, dismissedSuggestions) when the
+ * user navigates between two employee profiles via history. Without this, the
+ * single reused instance kept employee A's `notes` while the save guard
+ * compared against B — clicking Save wrote A's notes into B's record.
+ */
 export function EmployeeDetail() {
+  const { employeeId } = useParams<{ employeeId: string }>();
+  return <EmployeeDetailBody key={employeeId ?? "none"} />;
+}
+
+function EmployeeDetailBody() {
   const { employeeId } = useParams<{ employeeId: string }>();
   const nav = useNavigate();
   const employee = useDraftStore((s) =>
@@ -331,7 +343,7 @@ function ActiveMattersPanel({
                 <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
                   {m.deadlineISO
                     ? `${m.deadlineLabel ?? "Deadline"}: ${formatDateOnly(m.deadlineISO, { dateStyle: "medium" })}`
-                    : `Started ${formatDateOnly(new Date(m.createdAt).toISOString().slice(0, 10), { dateStyle: "medium" })}`}
+                    : `Started ${formatDateOnly(toDateOnly(new Date(m.createdAt)), { dateStyle: "medium" })}`}
                 </div>
               </div>
               {m.riskBand && <RiskBadge band={m.riskBand} />}
@@ -376,7 +388,7 @@ function LetterHistoryPanel({
           return (
             <li key={d.id} className="m-0">
               <Link
-                to={`/draft/${d.id}/edit`}
+                to={`/editor/${d.id}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--ds-surface-2)] transition"
               >
                 <div className="flex-1 min-w-0">

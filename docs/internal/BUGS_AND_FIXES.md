@@ -24,6 +24,16 @@ _(none — O2 fixed 2026-05-30, see below)_
 
 ## 2026-05-30 — 0.18.1 maintenance loop
 
+### HR portfolio audit — 4 fixes (#5–#8)
+First audit of the HR portfolio surface (matters/employees/reports/bulk). Mostly clean (Reports stat math, BulkOps CSV pipeline, matters/employees selectors all verified sound); four real bugs fixed:
+
+- **#5 (HIGH) — stale-notes cross-employee corruption.** `EmployeeDetail`'s `notes` was `useState(employee?.notes ?? "")`, initialised once. Navigating between two profiles via history reused the component instance, so the textarea kept employee A's notes while the Save guard compared against B → Save wrote A's notes into B's record. Fix: split into a `key={employeeId}` inner component so React remounts (resets ALL local state) per employee. *(src/routes/EmployeeDetail.tsx)*
+- **#6 (HIGH) — Letter History dead link.** Rows linked to `/draft/:id/edit`, a route that doesn't exist (the editor is `/editor/:draftId`). Every letter in an employee's history tab 404'd. Fix: `to={`/editor/${d.id}`}`. *(src/routes/EmployeeDetail.tsx)*
+- **#7 (MEDIUM) — deleteMatter orphans tasks/events.** `deleteMatter` unfiled drafts but left `tasks`/`events` with the dangling `matterId` — leaked forever, would re-surface if an id were reused. Fix: also filter `tasks`/`events` by `matterId !== id`. TDD: `store.matters.test.ts`. *(src/lib/store.ts)*
+- **#8 (LOW) — UTC date drift.** Two spots used `new Date(epoch).toISOString().slice(0,10)` (UTC) to format a local timestamp → off-by-one day in some timezones. Fix: `toDateOnly(new Date(epoch))` (local calendar). *(EmployeeDetail.tsx "Started", MatterTasks.tsx "completed")*
+
+Build (`tsc -b`) + 400 tests green.
+
 ### O2 (fixed) — matters now mirror to Postgres (draft→matter membership) — MEDIUM (feature)
 - **Where:** new `api/store/_handlers/matters.ts` + `api/store/[action].ts` dispatcher case; `src/lib/dual-write.ts`; `src/lib/store.ts` subscription.
 - **What:** drafts carried a `matterId`, but there was no endpoint to mirror the matter row — so the draft dual-write wrote `matterId: null` (the local `matter_…` id isn't a UUID and `drafts.ts` rejects a matterId whose row doesn't exist in the tenant). A draft filed under a matter appeared unfiled in the Postgres mirror.
