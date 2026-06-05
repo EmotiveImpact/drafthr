@@ -119,26 +119,37 @@ export async function regenerateSectionAsPending(
   const userPrompt = buildSectionPrompt(draft, section, priorTitles, refineInstruction);
   let acc = "";
 
-  await streamDraft({
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.5,
-    maxTokens: 1100,
-    model: activeModel(),
-    signal,
-    onToken: (delta) => {
-      acc += delta;
-      // Note: NOT appending to section.html — the live text the user
-      // sees stays untouched. We accumulate locally and materialize as
-      // a pendingChange when the stream completes.
-    },
-    onRetry: callbacks.onRetry,
-  });
+  // Reset the status the section was in before we flipped it to "streaming",
+  // so a failed (or aborted) AI call never strands it in the spinner state
+  // with no recovery affordance. The callers (AI rail) only surface the error
+  // to the model via addToolResult — they don't touch section status.
+  const restingStatus = section.html ? ("edited" as const) : ("empty" as const);
+
+  try {
+    await streamDraft({
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.5,
+      maxTokens: 1100,
+      model: activeModel(),
+      signal,
+      onToken: (delta) => {
+        acc += delta;
+        // Note: NOT appending to section.html — the live text the user
+        // sees stays untouched. We accumulate locally and materialize as
+        // a pendingChange when the stream completes.
+      },
+      onRetry: callbacks.onRetry,
+    });
+  } catch (err) {
+    store.setSectionStatus(draft.id, section.id, restingStatus);
+    throw err;
+  }
 
   const html = sanitiseHtml(acc);
-  store.setSectionStatus(draft.id, section.id, section.html ? "edited" : "empty");
+  store.setSectionStatus(draft.id, section.id, restingStatus);
   store.proposeSectionChange(draft.id, section.id, {
     id: uid("change"),
     createdAt: Date.now(),

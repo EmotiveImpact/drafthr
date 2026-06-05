@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FileText, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useBookingsStore } from "@/lib/bookings";
 import { getSharedDraft, type SharedDraftDTO } from "@/lib/consultantApi";
+import { sanitizeLetterHtml } from "@/lib/sanitize";
 
 /**
  * /c/review/:bookingId — read-only draft view for a consultant who has
@@ -135,7 +136,12 @@ export function SharedDraftReview() {
                   <h3 className="font-semibold text-[var(--ds-ink)]">{s.title}</h3>
                   <div
                     className="leading-relaxed text-[var(--ds-body)]"
-                    dangerouslySetInnerHTML={{ __html: s.html }}
+                    // Defence-in-depth: this is a raw-HTML sink rendered to a
+                    // consultant via a share token. Section html is normally
+                    // sanitised on write, but an aborted/partial AI stream can
+                    // leave raw model deltas at rest — sanitise here so they
+                    // can never reach the DOM unescaped.
+                    dangerouslySetInnerHTML={{ __html: sanitizeLetterHtml(s.html) }}
                   />
                 </article>
               ))}

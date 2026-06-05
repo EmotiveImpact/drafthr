@@ -15,7 +15,14 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-_(none — O2 fixed 2026-05-30, see below)_
+From the Editor/AI-authoring audit (2026-05-30). All real, all deferred because they need careful design (concurrency / undo-snapshot semantics) rather than a one-line fix — none is a live data-loss-on-normal-use risk:
+
+| # | Severity | Area | Summary | Why deferred |
+|---|----------|------|---------|--------------|
+| E1 | med/high | `src/routes/Editor.tsx` auto-generate effect (~314) | No unmount abort of `abortRef`, and the auto-generate gate uses local `globallyStreaming` (resets on mount). Navigating A→B→A while A's first generation is in flight can start a second `generateAllSections` loop → interleaved `appendToSection` corrupts section HTML. | Needs an unmount `abort()` cleanup + gating on store-derived streaming state. Touches the streaming lifecycle — wants its own iteration + careful manual verification. |
+| E2 | medium | `src/routes/Editor.tsx:~1054` `onAcceptAll` undo | In inline diff mode the undo snapshot grabs `s.html` AFTER the diff marks were staged, so undo restores marked-up html and re-diffs it → garbled nested `<ins>/<del>`. Per-section undo is fine. | Fix is to snapshot `pending.prevHtml ?? s.html`; needs verification across inline vs card modes. |
+| E3 | medium | `src/routes/Editor.tsx:~1970` `onRestore` | Restoring an old section version doesn't `pushSectionVersion` the current html first; if current text was never versioned (hand-edits), restore drops it with no undo. | Small, but wants a test around the version stack. |
+| E4 | low/med | `src/lib/store.ts:~625` answers→draft map | `signatoryName/Title` fall back to `recipientName/Title`; in employee mode that could inherit the employer (recipient) as the letter's signatory. Low confidence — depends on whether the question set always populates signatory. | Needs confirmation of the per-mode question set before changing the fallback. |
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -23,6 +30,14 @@ _(none — O2 fixed 2026-05-30, see below)_
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### Editor/AI-authoring audit — 2 fixes (#9–#10), 4 queued (E1–E4)
+First audit of the Editor + AI-authoring flow (~4,100 LOC + the llm/ streaming orchestration). The AI client (retry/backoff/abort/SSE), Wizard, health checks, and the per-section accept/reject paths all verified sound. Two fixed now; four (E1–E4) queued above (need concurrency/undo design, not one-liners).
+
+- **#9 (HIGH) — section stranded in "streaming" forever on AI failure.** `regenerateSectionAsPending` (`src/lib/llm/draft.ts`) set status→`"streaming"` then `await streamDraft` with NO try/catch; on throw the status reset never ran, and the three AI-rail callers (`AIPanel` applyRegenerate/applyTighten/applyAddClause) only report the error to the model — they don't reset status. So a failed rewrite/tighten/add-clause left the section locked in a spinner with no recovery (that path doesn't set `globallyStreaming`, so the Stop button isn't even shown). Fix: try/catch resets status to the resting value (`edited` if it had content, else `empty`) on failure before rethrowing. TDD: `src/lib/llm/draft.test.ts` (3) — throw→reset, empty→empty, success→propose.
+- **#10 (MEDIUM, security) — unsanitised AI HTML at a raw-HTML sink.** `SharedDraftReview` rendered `s.html` via `dangerouslySetInnerHTML` with NO sanitisation (MobileReadView already sanitises via `letterBodyHtml`). Section html is normally sanitised on write, but an aborted/partial AI stream leaves raw model deltas at rest — which a consultant viewing the share could receive unescaped. Fix: wrap the sink in `sanitizeLetterHtml(s.html)` (sanitise-at-render = robust defence-in-depth). *(src/routes/SharedDraftReview.tsx)*
+
+Build (`tsc -b`) + 403 tests green.
 
 ### HR portfolio audit — 4 fixes (#5–#8)
 First audit of the HR portfolio surface (matters/employees/reports/bulk). Mostly clean (Reports stat math, BulkOps CSV pipeline, matters/employees selectors all verified sound); four real bugs fixed:
