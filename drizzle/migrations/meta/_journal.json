@@ -64,6 +64,13 @@
       "when": 1779530400000,
       "tag": "0008_consultant_availability",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780619829119,
+      "tag": "0009_crazy_thanos",
+      "breakpoints": true
     }
   ]
 }

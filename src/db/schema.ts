@@ -488,13 +488,16 @@ export const consultantBookings = pgTable(
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
-    /** HR user who placed the booking. */
+    /** HR user who placed the booking. NOT NULL, so the FK must cascade —
+     *  "set null" on a NOT NULL column would raise a constraint violation
+     *  and abort any user delete. Matches the convention for every other
+     *  .notNull() user FK in this schema (drafts, comments, etc.). */
     requesterUserId: uuid("requester_user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "set null" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     consultantUserId: uuid("consultant_user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "set null" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     consultantProfileId: uuid("consultant_profile_id")
       .notNull()
       .references(() => consultantProfiles.id, { onDelete: "cascade" }),

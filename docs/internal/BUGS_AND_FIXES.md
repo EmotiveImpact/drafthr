@@ -15,13 +15,20 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-| # | Severity | Area | Summary | Why not yet fixed |
-|---|----------|------|---------|-------------------|
-| O1 | medium | `src/db/schema.ts:491-497` | `consultant_bookings.requesterUserId` / `consultantUserId` are `.notNull()` **and** `onDelete:"set null"` — contradictory. Deleting a user who has bookings will raise a NOT NULL violation and abort the delete (future GDPR-erase / user-deletion path 500s). | Latent (no user-deletion path exists yet). Needs a Drizzle migration changing the FK action to `restrict` (or `cascade`) + careful prod apply — own iteration. |
+_(none — O1 fixed 2026-05-30, see below)_
+
+### Known infra note (not a bug)
+- **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
 
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### O1 (fixed) — consultant_bookings user FKs: NOT NULL + SET NULL → CASCADE — MEDIUM
+- **Where:** `src/db/schema.ts` `consultant_bookings` (`requesterUserId`, `consultantUserId`); migration `drizzle/migrations/0009_crazy_thanos.sql`.
+- **What:** both columns are `.notNull()` but migration 0005 created them (inline `REFERENCES`) with `ON DELETE SET NULL` — contradictory. Deleting a referenced user raises a NOT NULL violation and aborts the delete (future user-deletion / GDPR-erase path 500s). Confirmed on live prod: `confdeltype='n'`, constraints auto-named `..._fkey`.
+- **Fix:** schema → `onDelete:"cascade"` (matches every other `.notNull()` user FK). **Drizzle's auto-generated migration was unsafe** (snapshot drift → bogus `CREATE TABLE`s; would have added duplicate `..._fk` constraints alongside the broken `..._fkey` ones). Hand-authored a name-agnostic `DO $$` block that drops whichever FK constrains each column, then re-adds it as CASCADE. Idempotent.
+- **Proven:** `npm run db:migrate` applied; re-queried prod → both FKs `confdeltype='c'` (CASCADE) with canonical drizzle names, old `_fkey` gone. Build + 389 tests green.
 
 ### #3 (fixed) — `dtoToProfile` could render `undefined` currency symbol — LOW
 - **Where:** `src/lib/marketplaceSync.ts` `dtoToProfile` — `symbolByCode[dto.currency]` had no fallback (the sibling `dtoToConsultant` guards with `?? "£"`).
