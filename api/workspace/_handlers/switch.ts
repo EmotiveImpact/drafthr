@@ -34,7 +34,13 @@ export async function POST(req: Request): Promise<Response> {
       .select({ role: tenantMembers.role })
       .from(tenantMembers)
       .where(
-        and(eq(tenantMembers.userId, auth.userRow.id), eq(tenantMembers.tenantId, tenantId)),
+        and(
+          eq(tenantMembers.userId, auth.userRow.id),
+          eq(tenantMembers.tenantId, tenantId),
+          // Don't let a deprovisioned (IdP-removed) seat be switched back into
+          // — that would re-activate access an offboard explicitly revoked.
+          eq(tenantMembers.status, "active"),
+        ),
       )
       .limit(1);
     if (!member) return jsonError("Not a member of that workspace", 403);

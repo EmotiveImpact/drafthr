@@ -92,7 +92,18 @@ export async function requireSessionAndTenant(
         tenantId: tenantMembers.tenantId,
       })
       .from(tenantMembers)
-      .where(and(eq(tenantMembers.userId, userRow.id), eq(tenantMembers.isActiveTenant, true)))
+      .where(
+        and(
+          eq(tenantMembers.userId, userRow.id),
+          eq(tenantMembers.isActiveTenant, true),
+          // A seat soft-deleted by Directory Sync (status='deprovisioned',
+          // the IdP removed the user) must NOT grant API access — otherwise a
+          // still-signed-in offboarded user keeps their old role until the
+          // 7-day cookie expires. session.ts already hides these from the
+          // client; this is the enforcement counterpart.
+          eq(tenantMembers.status, "active"),
+        ),
+      )
       .limit(1);
 
     let activeTenant: Tenant | null = null;

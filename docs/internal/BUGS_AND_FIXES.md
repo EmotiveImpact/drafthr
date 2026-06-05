@@ -27,6 +27,14 @@ from a handler JSON 401/403 (enforced).
 
 ## 2026-05-30 — 0.18.1 maintenance loop
 
+### Membership/invite second-pass — deprovisioned-seat privilege retention (S3) + paired reactivation (S4)
+Audited the invite/join/membership/tenant-switch/auth-handler flow. **Verified SOUND** across the board — invites are email-bound to the verified session (not body-supplied), single-use + expiring + revocable, unguessable (190-bit), role taken from the inviter; role-change/member-remove are admin-gated with last-owner protection and server-side tenant-scoped target lookups; tenant-switch requires membership; sign-up can't attach to a tenant; account-enumeration defenses uniform; OAuth state CSRF + webhook HMAC present. **One real vuln found + fixed:**
+
+- **S3 (HIGH→CRITICAL) — deprovisioned member retains API access + old role.** When an IdP removes a user, the directory webhook soft-deletes the seat (`tenant_members.status='deprovisioned'`, `isActiveTenant=false`) but keeps the row (audit integrity). `session.ts` (client view) correctly excludes `status='deprovisioned'`, but the ENFORCEMENT points didn't: `requireSessionAndTenant` (`session-with-tenant.ts:95`) selected the active member with NO status filter, and `switch.ts` checked only that a `(userId,tenantId)` row *exists*. So a still-signed-in offboarded user (cookie valid ≤7d) could `POST /api/workspace/switch {tenantId}` to re-activate their seat and regain their **old admin/owner role** — reading members, minting invites, changing roles — after the IdP explicitly removed them. Fix: add `eq(tenantMembers.status,"active")` to both gates (only `active`/`deprovisioned` are ever written, so this is exact). *(api/_utils/session-with-tenant.ts, api/workspace/_handlers/switch.ts)*
+- **S4 (paired correctness) — re-invite must reactivate.** `accept-invite`'s existing-seat branch set only `isActiveTenant:true`, leaving `status='deprovisioned'` — which (post-S3) would lock out a user who accepted a valid admin re-invite. Fix: also set `status:"active", deprovisionedAt:null, role:invite.role` (a re-invite grants the inviter's chosen role, not the stale prior one). Test updated to assert the full reactivation. *(api/workspace/_handlers/accept-invite.ts)*
+
+Build (`tsc -b`) + 412 tests green.
+
 ### Auth boundary second-pass — 2 hardening fixes (S1, S2)
 Re-audited the auth/session boundary now that all marketplace + store endpoints exist. **Verified SOUND for the critical classes** — no cross-tenant access, privilege escalation, or auth bypass. Cookie hardening (HttpOnly/SameSite=Lax/Secure, 7-day TTL, ≥32-char secret), OAuth state CSRF, IDOR ownership checks on every store mutation, no body-supplied-identity trust, and `enforceSameOrigin` coverage on every state-mutating handler all confirmed. Two hardening gaps fixed:
 

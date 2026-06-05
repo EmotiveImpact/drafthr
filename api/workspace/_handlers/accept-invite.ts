@@ -81,9 +81,20 @@ export async function POST(req: Request): Promise<Response> {
           isActiveTenant: true,
         });
       } else {
+        // Re-activate an existing (possibly deprovisioned) seat. Reset status
+        // to active and clear the deprovision marker — otherwise the active-
+        // status gate (session-with-tenant / switch) would lock out a user
+        // who just accepted a valid admin re-invite. Apply the invite's role
+        // too: a re-invite grants the role the inviter chose now, not a stale
+        // prior one.
         await tx
           .update(tenantMembers)
-          .set({ isActiveTenant: true })
+          .set({
+            isActiveTenant: true,
+            status: "active",
+            deprovisionedAt: null,
+            role: invite.role,
+          })
           .where(
             and(
               eq(tenantMembers.userId, auth.userRow.id),

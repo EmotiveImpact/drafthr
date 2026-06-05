@@ -185,10 +185,22 @@ describe("POST /api/workspace/accept-invite", () => {
     const mod = await import("../../../api/workspace/_handlers/accept-invite");
     const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
     expect(res.status).toBe(200);
+    // The existing-seat update must FULLY re-activate: isActiveTenant true,
+    // status reset to "active", deprovision marker cleared, and the invite's
+    // role applied — so accepting a re-invite restores access that the
+    // active-status gate (session-with-tenant / switch) would otherwise deny.
     expect(writes).toEqual(
       expect.arrayContaining([
         { kind: "update", values: { isActiveTenant: false } },
-        { kind: "update", values: { isActiveTenant: true } },
+        {
+          kind: "update",
+          values: {
+            isActiveTenant: true,
+            status: "active",
+            deprovisionedAt: null,
+            role: inviteFixture.role,
+          },
+        },
       ]),
     );
   });
