@@ -15,11 +15,12 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-From the Editor/AI-authoring audit (2026-05-30). E2/E3 fixed; E1 half-fixed; E4 resolved as a false positive (see below). One half of E1 remains:
-
 | # | Severity | Area | Summary | Status |
 |---|----------|------|---------|--------|
-| E1b | med | `src/routes/Editor.tsx` auto-generate effect (~314) | The auto-generate gate uses local `globallyStreaming` (resets on mount), so a remount during an in-flight first generation can still re-enter `runGenerateAll`. The unmount-abort (E1a, done) kills the orphan stream, which removes the *corruption* mechanism; this remaining half is belt-and-braces (gate on store-derived `sections.some(status==="streaming")` so re-entry can't even start). | Deferred — wants manual verification of the generation flow; low residual risk now that orphan streams are aborted on unmount. |
+| **X1** | **CRITICAL (feature gap)** | `src/lib/export/pack.ts` | **The "tribunal-grade" evidence pack is NOT signed and carries NO per-file hashes.** The crypto infra is fully built and sound (`src/lib/sign/pades.ts` PAdES-B-T signer, `api/sign/manifest.ts`, canonical-JSON + audit hash-chain — all verified clean) but has ZERO callers in the pack path. `buildManifest` records no SHA-256 for the PDF/DOCX/evidence files, and `exportLetterPack` never calls `/api/sign/manifest` or writes `manifest.sig`. A recipient can swap any file and nothing detects it — the core differentiator is unbacked today. **Also X3**: `manifest.json` uses pretty-printed/insertion-order JSON + a volatile `generatedAt`, so it's non-reproducible — must switch to `canonicalJson` before/when signing is wired. | **Needs the user.** This changes the export artifact's structure and is the product's headline claim — wants a deliberate design pass + the user's awareness, not an autonomous-loop change. Scoped & ready to build on green-light. |
+| X4 | medium | `src/lib/export/docx.ts:~569` `imageSizeFromElement` | Images sized in one dimension (letterhead `max-height:120px` no width, signature `max-height:54px`) get a fabricated width via `height*4` heuristic → wrong aspect ratio (warped logo/signature in the .docx). `%`/absent → hard-coded 3.2"×1.1". | Fix: decode intrinsic w/h from image bytes (PNG IHDR / JPEG SOF) and preserve ratio. Own iteration (needs an image-header parser + tests). |
+| X5 | medium | `src/lib/export/docx.ts:~549` `parseDataImage` | DOCX only accepts png/jpeg/jpg/gif, but `inlineImagesForExport` inlines **webp** (it's in `ALLOWED_MIME`). A webp letterhead becomes a `data:image/webp` URL the DOCX parser can't read → silently dropped (empty alt → vanishes). | Fix: drop webp from the DOCX inlining allowlist (so it falls back to a visible placeholder) or transcode to png. Small; pair with X4. |
+| E1b | med | `src/routes/Editor.tsx` auto-generate effect (~314) | The auto-generate gate uses local `globallyStreaming` (resets on mount), so a remount during an in-flight first generation can still re-enter `runGenerateAll`. The unmount-abort (E1a, done) kills the orphan stream, which removes the *corruption* mechanism; this remaining half is belt-and-braces. | Deferred — low residual risk now that orphan streams are aborted on unmount. |
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -27,6 +28,13 @@ From the Editor/AI-authoring audit (2026-05-30). E2/E3 fixed; E1 half-fixed; E4 
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### Export-pipeline audit — X2 fixed; X1/X3/X4/X5 queued
+First audit of the export pipeline (PDF/DOCX/evidence-pack, ~1,900 LOC). **Headline: the cryptographic foundations are genuinely sound** — the audit hash-chain (`src/db/audit*.ts`, canonical-JSON, advisory-lock-serialised, genesis 64-zeros, retroactive-edit-breaks-chain) and the PAdES-B-T/CMS signer (`src/lib/sign/*` — SHA-256 message-digest, Ed25519 over DER SET-OF signed-attrs, RFC-3161 timestamp required, byte-compatible verifier) both verified clean with their own passing tests. The server PDF endpoint correctly inlines images before render. **The gap is wiring, not crypto**: the signer isn't connected to the export pack (X1/X3, queued above — needs the user). Image-handling edge cases X4/X5 queued. One fixed now:
+
+- **X2 (HIGH) — counsel attestation dropped from exports.** `exportLetterPack(draft)` was called with NO attestation arg even when the counsel gate (`guardCounsel`) had just passed, so the pack's manifest/README/cover-sheet rendered "not attested" / "Required" for a letter the user *did* attest — understating the legal review in the tribunal artifact. The PDF/DOCX/marked-sent `recordExport` calls likewise recorded no `reviewedBy/On` (both fields already existed, optional, on `ExportEvent`). Fix: an `exportAttestation()` helper (`{reviewedBy: draftedBy, reviewedOn: toDateOnly(now)}` when the gate was satisfied by explicit confirmation, else undefined) threaded into the pack export + all four `recordExport` calls. *(src/routes/Finalize.tsx)*
+
+Build (`tsc -b`) + 403 tests green.
 
 ### E1 (partial) + E4 (resolved) — editor streaming lifecycle + signatory fallback
 

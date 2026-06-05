@@ -19,6 +19,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
+import { toDateOnly } from "@/lib/date-only";
 import type { Draft } from "@/lib/letters/types";
 import { recipientNameFor } from "@/lib/letters/display";
 import { Button } from "@/components/ui/button";
@@ -113,6 +114,17 @@ export function Finalize() {
     return true;
   };
 
+  // The attestation to stamp into the export artifact + the export record.
+  // Only when this letter actually required counsel review AND the user
+  // confirmed it — otherwise undefined (no review claimed). reviewedOn is a
+  // local-calendar date (legal records read in the user's locale).
+  const exportAttestation = ():
+    | { reviewedBy: string; reviewedOn: string }
+    | undefined => {
+    if (!counselGateRequired || !counselConfirmed) return undefined;
+    return { reviewedBy: draftedBy, reviewedOn: toDateOnly(new Date()) };
+  };
+
   const onExportPdf = async () => {
     if (!guardCounsel()) return;
     setBusyFormat("pdf");
@@ -120,7 +132,8 @@ export function Finalize() {
       const { renderLetterPdfBlob, filenameFor } = await import("@/lib/export/pdf");
       const blob = await renderLetterPdfBlob(draft);
       downloadBlob(blob, filenameFor(draft));
-      recordExport(draft.id, { format: "pdf" });
+      const att = exportAttestation();
+      recordExport(draft.id, { format: "pdf", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
     } catch (err) {
       alert(`PDF export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -135,7 +148,8 @@ export function Finalize() {
       const { renderLetterDocxBlob, docxFilenameFor } = await import("@/lib/export/docx");
       const blob = await renderLetterDocxBlob(draft);
       downloadBlob(blob, docxFilenameFor(draft));
-      recordExport(draft.id, { format: "docx" });
+      const att = exportAttestation();
+      recordExport(draft.id, { format: "docx", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
     } catch (err) {
       alert(`DOCX export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -169,8 +183,13 @@ export function Finalize() {
     setBusyFormat("zip");
     try {
       const { exportLetterPack } = await import("@/lib/export/pack");
-      await exportLetterPack(draft);
-      recordExport(draft.id, { format: "pack" });
+      const attestation = exportAttestation();
+      await exportLetterPack(draft, attestation);
+      recordExport(draft.id, {
+        format: "pack",
+        reviewedBy: attestation?.reviewedBy,
+        reviewedOn: attestation?.reviewedOn,
+      });
     } catch (err) {
       alert(`ZIP export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -184,7 +203,8 @@ export function Finalize() {
     if (!guardCounsel()) return;
     if (scoreData.failCount > 0) return;
     setShowConfetti(true);
-    recordExport(draft.id, { format: "marked-sent" });
+    const att = exportAttestation();
+    recordExport(draft.id, { format: "marked-sent", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
     setTimeout(() => nav("/activity"), 1600);
   };
 
