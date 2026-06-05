@@ -24,6 +24,8 @@ const syncedAt = new Map<string, number>();
 const staleRevisionByDraftId = new Map<string, number>();
 let consecutiveDeleteFailures = 0;
 let deleteFailureToastShown = false;
+let consecutiveStaleConflicts = 0;
+let staleConflictToastShown = false;
 
 export function isDualWriteEnabled(): boolean {
   return ENABLED;
@@ -76,9 +78,11 @@ export async function syncDraft(draftId: string): Promise<void> {
     if (res.ok) {
       staleRevisionByDraftId.delete(draftId);
       syncedAt.set(draftId, Date.now());
+      consecutiveStaleConflicts = 0;
     } else if (res.status === 409) {
       markSnapshotStale(draftId, payload.clientRevision);
       console.warn("[dual-write] stale snapshot skipped", draftId, res.status);
+      recordStaleConflict();
     } else if (res.status === 503) {
       // Server flag off — silently stop until the next refresh.
       return;
@@ -116,10 +120,12 @@ export async function syncAllPending(
       if (res.ok) {
         staleRevisionByDraftId.delete(d.id);
         syncedAt.set(d.id, Date.now());
+        consecutiveStaleConflicts = 0;
         ok += 1;
       } else if (res.status === 409) {
         markSnapshotStale(d.id, payload.clientRevision);
         console.warn("[dual-write] stale backfill skipped", d.id, res.status);
+        recordStaleConflict();
       } else {
         failed += 1;
       }
@@ -138,6 +144,8 @@ export function resetDualWriteTimers(): void {
   staleRevisionByDraftId.clear();
   consecutiveDeleteFailures = 0;
   deleteFailureToastShown = false;
+  consecutiveStaleConflicts = 0;
+  staleConflictToastShown = false;
 }
 
 /** Visible for tests only. */
@@ -221,6 +229,26 @@ function markSnapshotStale(draftId: string, clientRevision: number): void {
   if (timer) clearTimeout(timer);
   timers.delete(draftId);
   pendingDraftIds.delete(draftId);
+}
+
+/**
+ * A 409 means the server copy is NEWER than this client's revision — another
+ * tab or device wrote a higher revision. Dual-write is write-only (no pull /
+ * merge path yet), so this client's edits will keep failing the server's
+ * revision guard and silently never land. We can't merge here, but we must
+ * not let the user believe they're saved: surface ONE toast after repeated
+ * conflicts. Mirrors recordDeleteFailure. (Full multi-device reconcile is a
+ * separate feature — tracked in the bug log.)
+ */
+function recordStaleConflict(): void {
+  consecutiveStaleConflicts += 1;
+  if (consecutiveStaleConflicts > 3 && !staleConflictToastShown) {
+    staleConflictToastShown = true;
+    toast.error("Your changes aren't syncing to your workspace", {
+      description:
+        "A newer copy of this letter was saved elsewhere (another tab or device). Your edits are kept on this device — reload to pull the latest.",
+    });
+  }
 }
 
 function recordDeleteFailure(draftId: string, reason: unknown): void {

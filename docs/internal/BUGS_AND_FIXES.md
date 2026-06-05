@@ -15,7 +15,10 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
-_(none — O1 fixed 2026-05-30, see below)_
+| # | Severity | Area | Summary | Why not yet fixed |
+|---|----------|------|---------|-------------------|
+| O2 | medium | `src/lib/dual-write.ts:190` | `matterId` is silently dropped on every server sync — local matter ids (`matter_…`) aren't UUIDs, so `serverUuidOrNull` writes `null`. There's no matters dual-write endpoint, so a draft filed under a matter appears unfiled in the Postgres mirror. | Needs a matters dual-write endpoint (so the UUID row exists) + id mapping — a feature, not a one-line fix. Data still safe locally. |
+| O3 | low/med | `src/lib/store.ts` persist config | localStorage `persist` has no `partialize`/quota guard. Large base64 letterhead/signature stored inline in the raw `answers` blob can exceed the 5–10 MB quota; zustand's `setItem` then throws silently → whole store stops persisting (drafts lost on refresh). | Needs a careful `partialize` (drop raw `answers` image data URLs — the validated `employer.*DataUrl` already dedupes them) + an `onRehydrateStorage`/quota toast. Touches the persist-migration helper — own iteration. |
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
@@ -23,6 +26,13 @@ _(none — O1 fixed 2026-05-30, see below)_
 ---
 
 ## 2026-05-30 — 0.18.1 maintenance loop
+
+### #4 (fixed) — dual-write server-ahead 409 diverged silently — MEDIUM
+- **Where:** `src/lib/dual-write.ts` `syncDraft` / `syncAllPending` (409 branch).
+- **What:** a 409 means the server copy is NEWER than this client's revision (the server guards on `clientRevision < server.updatedAt`, `drafts.ts:91/138`) — i.e. another tab/device wrote a higher revision. Dual-write is write-only (no pull/merge path), so the client's edits keep failing the revision guard and never land. The only signal was a `console.warn`; the user believed they were saved because localStorage persisted. (Contrast the delete-failure path, which already toasts.)
+- **Fix:** added a consecutive-409 counter (`recordStaleConflict`) that surfaces ONE toast after >3 conflicts — mirrors `recordDeleteFailure`. Honest about the limitation ("reload to pull the latest"); does not pretend to merge. Counter resets on any successful sync.
+- **Proven:** `dual-write.test.ts` — new test drives 4 server-ahead 409s (each a strictly-newer revision) and asserts exactly one toast. Also fixed pre-existing test pollution (shared `toast.error` mock not cleared between tests → added `vi.clearAllMocks()` in `beforeEach`). 390 passed.
+- **Note:** full multi-device reconcile (a GET/pull/merge path) remains unbuilt — the toast is the interim honest signal, not the cure.
 
 ### O1 (fixed) — consultant_bookings user FKs: NOT NULL + SET NULL → CASCADE — MEDIUM
 - **Where:** `src/db/schema.ts` `consultant_bookings` (`requesterUserId`, `consultantUserId`); migration `drizzle/migrations/0009_crazy_thanos.sql`.

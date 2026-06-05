@@ -15,6 +15,10 @@ beforeEach(() => {
   vi.stubEnv("VITE_DRAFTHR_DUAL_WRITE", "true");
   vi.useFakeTimers();
   vi.resetModules();
+  // The sonner mock's toast.error is a module-level vi.fn shared across
+  // tests; clear its call history so per-test toast assertions don't see
+  // calls leaked from earlier tests.
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
@@ -165,6 +169,34 @@ describe("dual-write enqueueSync", () => {
     mod.enqueueSync("stale_1");
     await vi.advanceTimersByTimeAsync(450);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows one toast after repeated server-ahead 409 conflicts", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: "stale revision" }), { status: 409 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { toast } = await import("sonner");
+    const mod = await import("./dual-write");
+
+    // Each conflict needs a strictly-newer revision so isStaleSnapshot
+    // doesn't short-circuit the next sync (mirrors real sequential edits
+    // racing a server copy that's always one ahead).
+    let draft = makeDraft("conflict_1", 100);
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    for (let i = 1; i <= 4; i++) {
+      draft = makeDraft("conflict_1", 100 + i);
+      await mod.syncDraft("conflict_1");
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalled();
+    // 3 conflicts tolerated silently; the 4th trips exactly one toast.
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/aren't syncing/i);
   });
 
   it("logs failed deletes and shows one toast after consecutive failures", async () => {
