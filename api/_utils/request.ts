@@ -48,8 +48,12 @@ export async function readJsonRequest<T>(
 export function enforceSameOrigin(req: Request): Response | null {
   const origin = req.headers.get("origin");
   if (!origin) {
-    // Local scripts and curl often omit Origin. Preserve that dev-only DX; production fails closed.
-    if (process.env.NODE_ENV !== "production") return null;
+    // Local scripts and curl often omit Origin. Preserve that DX ONLY behind an
+    // explicit local-dev flag — NOT via NODE_ENV, because Vercel *preview*
+    // deployments are publicly reachable yet don't set NODE_ENV=production, so
+    // keying on it would silently disable this CSRF layer on every preview URL.
+    // (Same lesson as production-auth.ts's DRAFTHR_DEV_NO_AUTH switch.)
+    if (process.env.DRAFTHR_DEV_NO_AUTH === "1") return null;
     return jsonError("Origin required", 403);
   }
 

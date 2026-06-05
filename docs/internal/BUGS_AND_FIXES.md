@@ -27,6 +27,14 @@ from a handler JSON 401/403 (enforced).
 
 ## 2026-05-30 — 0.18.1 maintenance loop
 
+### Auth boundary second-pass — 2 hardening fixes (S1, S2)
+Re-audited the auth/session boundary now that all marketplace + store endpoints exist. **Verified SOUND for the critical classes** — no cross-tenant access, privilege escalation, or auth bypass. Cookie hardening (HttpOnly/SameSite=Lax/Secure, 7-day TTL, ≥32-char secret), OAuth state CSRF, IDOR ownership checks on every store mutation, no body-supplied-identity trust, and `enforceSameOrigin` coverage on every state-mutating handler all confirmed. Two hardening gaps fixed:
+
+- **S1 (HIGH) — rate limit defeated by a spoofed `X-Forwarded-For`.** `clientIp` keyed on `x-forwarded-for.split(",")[0]` — the LEFTMOST, client-controlled value. An attacker rotates `X-Forwarded-For: <random>` per request → a fresh bucket every time → brute-force/mailbomb limits (auth-password 10/min, sign-up 3/min, password-reset) fully bypassed. Fix: prefer `x-real-ip`, else take the LAST XFF hop (the real client IP the platform proxy appends). TDD: `rate-limit.test.ts` (3) — spoofed leftmost still limited by constant rightmost; x-real-ip preferred; distinct IPs isolated. *(Note: still per-instance in-memory — a shared store, KV/Upstash, is the full fix and stays a known limitation; the keying fix removes the trivial bypass.)*
+- **S2 (MEDIUM) — `enforceSameOrigin` missing-Origin allowance keyed on `NODE_ENV`.** A request with no `Origin` header was allowed whenever `NODE_ENV !== "production"` — but public Vercel *preview* deployments don't set `NODE_ENV=production`, so this silently disabled the CSRF layer on every preview URL. Fix: gate the allowance on the explicit `DRAFTHR_DEV_NO_AUTH=1` dev flag (already set in `.env.local`, never on Vercel) — matching `production-auth.ts`'s identical lesson. Previews/prod now fail closed; local dev unchanged. TDD: `request.test.ts` — allowed only behind the flag; fails closed (403) without it even in `development`.
+
+Build (`tsc -b`) + 412 tests green.
+
 ### DOCX image fixes — X4 + X5
 Cleared the two self-contained DOCX-image queue items.
 

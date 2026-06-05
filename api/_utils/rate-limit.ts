@@ -35,9 +35,20 @@ export function rateLimit(req: Request, options: RateLimitOptions): Response | n
 }
 
 function clientIp(req: Request): string {
+  // Use the LAST hop of x-forwarded-for, not the first. The platform proxy
+  // (Vercel) appends the real client IP as the rightmost entry; the leftmost
+  // entries are client-supplied and trivially spoofable — keying on [0] lets
+  // an attacker rotate `X-Forwarded-For: <random>` to land in a fresh bucket
+  // every request and defeat the limit. x-real-ip (single value, proxy-set)
+  // is preferred when present.
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
   const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
+  if (forwarded) {
+    const hops = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+    return hops[hops.length - 1] || "unknown";
+  }
+  return "unknown";
 }
 
 function pruneBuckets(now: number) {
