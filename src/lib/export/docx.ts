@@ -638,6 +638,40 @@ export function intrinsicImageSize(bytes: Uint8Array): { w: number; h: number } 
   return null;
 }
 
+/**
+ * Final size caps for an exported image. When the intrinsic aspect ratio is
+ * known, both axes must be scaled together so clamping one doesn't squash the
+ * image — the earlier bug clamped width and height independently, distorting
+ * any image larger than the page-width or max-height cap. With no known ratio
+ * we keep the old independent clamps (best effort for unparseable formats).
+ *
+ * Exported for unit testing.
+ */
+export function clampImageSizePx(
+  widthPx: number | undefined,
+  heightPx: number | undefined,
+  ratio: number | null,
+  opts?: { maxWidthPx?: number; maxHeightPx?: number; minPx?: number },
+): { widthPx: number; heightPx: number } {
+  const maxWidthPx = opts?.maxWidthPx ?? 6.0 * 96;
+  const maxHeightPx = opts?.maxHeightPx ?? 2.5 * 96;
+  const minPx = opts?.minPx ?? 24;
+
+  let w = widthPx ?? maxWidthPx;
+  let h = heightPx ?? 96;
+
+  if (ratio && ratio > 0) {
+    // Shrink uniformly to fit BOTH caps, preserving the aspect ratio.
+    const scale = Math.min(1, maxWidthPx / w, maxHeightPx / h);
+    w *= scale;
+    h *= scale;
+  } else {
+    w = Math.min(w, maxWidthPx);
+    h = Math.min(h, maxHeightPx);
+  }
+  return { widthPx: Math.max(w, minPx), heightPx: Math.max(h, minPx) };
+}
+
 function imageSizeFromElement(
   img: HTMLImageElement,
   intrinsic?: { w: number; h: number } | null,
@@ -673,9 +707,7 @@ function imageSizeFromElement(
     heightPx = ratio ? widthPx / ratio : Math.max(widthPx * 0.25, 0.45 * 96);
   }
 
-  widthPx = Math.min(widthPx ?? maxWidthPx, maxWidthPx);
-  heightPx = Math.min(heightPx ?? 96, 2.5 * 96);
-  return { widthPx: Math.max(widthPx, 24), heightPx: Math.max(heightPx, 24) };
+  return clampImageSizePx(widthPx, heightPx, ratio, { maxWidthPx });
 }
 
 function cssLengthToPx(value: string | null | undefined): number | undefined {

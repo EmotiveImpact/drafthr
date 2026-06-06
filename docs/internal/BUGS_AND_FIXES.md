@@ -26,6 +26,94 @@ _The autonomous safe queue is now empty — only X1 (needs the user) remains. Ev
 
 ---
 
+## 2026-06-06 — automated bug-fix sweep (0.18.1)
+
+Multi-agent sweep over `src/`, `server/`, `api/`. Baseline was fully green
+(tsc clean · 412 tests · build OK), so this was a latent-logic-bug hunt, not a
+gate-failure cleanup. Six genuine bugs found; all fixed with tests where the
+seam allowed. Final: `tsc -b` clean · **428 tests** (+16) · `vite build` OK.
+
+### B1 (MEDIUM) — figure references validated against the wrong count
+`checkEvidenceRefs` (`src/lib/finalize/healthChecks.ts`) and
+`predicateBrokenEvidenceRefs` (`src/lib/reports/check-predicates.ts`) validated
+`[See Fig N]` body tokens against `draft.evidence.length` (TOTAL evidence), but
+figures are numbered only among figure-mode items (`figureLabelFor`). With more
+attachments than figures, a ref pointing past the last real figure (e.g.
+`[See Fig 4]` with 2 figures + 2 attachments) passed as "resolving" — a dangling
+reference shipped in the letter. Fix: new shared `validFigureNumbers()` in
+`src/lib/evidence.ts` derives the valid numbers straight from `figureLabelFor`
+(so it also honours custom `figureLabel` overrides like "Fig 7"); both checks now
+use it. TDD: `evidence.test.ts` (5) — figure-vs-evidence count, default
+display-mode, custom-label override, no-figures, consistency with `figureLabelFor`.
+
+### B2 (LOW) — consultant initials stranded when the name is cleared
+`useConsultantStore.saveProfile` (`src/lib/consultantProfile.ts`) recomputed
+initials under `if (patch.fullName)`, so clearing the name to `""` skipped the
+recompute and left stale initials on the marketplace card — contradicting the
+code's own "always stay in sync" comment. Fix: recompute whenever `fullName` is
+part of the patch (`!== undefined`); `computeInitials("")` already yields `"??"`.
+TDD: `consultantProfile.test.ts` (3) — set, clear-to-empty, unrelated-patch.
+
+### B3 (LOW) — DOCX image squashed past the size caps (completes X4)
+The X4 fix (2026-05-30) derived the missing dimension from the true ratio, but
+`imageSizeFromElement`'s FINAL caps still clamped width and height
+*independently* — so any image exceeding the 6in width or 2.5in height cap was
+re-distorted (e.g. 800×400 ratio-2 letterhead → 576×400, ratio 1.44). Fix:
+extracted an exported pure `clampImageSizePx()` that, when the ratio is known,
+scales BOTH axes by a single factor to fit both caps (ratio preserved); falls
+back to independent clamps only when the ratio is unknown. TDD: `docx.test.ts`
+(6) — within-bounds, width-cap, height-cap, the regression case, no-ratio
+fallback, min-floor.
+
+### B4 (LOW) — booking chat message lost under concurrent posts
+`api/marketplace/_handlers/message.ts` appended via read-modify-write
+(`select` → write `[...existing, msg]`), so two participants posting at once
+clobbered each other — last writer wins, one message lost. Fix: append
+atomically inside the single UPDATE with a jsonb concat
+(`coalesce(messages,'[]'::jsonb) || $1::jsonb`) and `RETURNING` the
+authoritative post-append array. (No unit test — needs a live Postgres; verified
+by typecheck + standard-pattern construction.)
+
+### B5 (MEDIUM) — directory webhook could create a 2nd active tenant
+DISTINCT from the 2026-05-30 audit (which correctly cleared the *conflict-update*
+path for not touching `isActiveTenant`). This is the **insert** path: `provisionUser`
+(`api/workos/_handlers/directory-webhook.ts`) inserted every new membership with
+`isActiveTenant:true`. When a user matched **by email** already had an active
+membership in another tenant, the new row made TWO memberships active at once —
+violating the "exactly one active tenant per user" invariant and silently
+switching their workspace. Fix: query for an existing active membership first
+and insert active only when none exists (first membership → active; additional
+→ inactive). The conflict `set` still leaves `isActiveTenant` untouched, so
+re-syncs never flip the active workspace. TDD: `directory-webhook.test.ts` (+2,
+with fake-DB mock extended for the active-membership query) — email-matched user
+already-active-elsewhere joins inactive; first-membership user joins active.
+*Residual: a true concurrent provision into two different tenants could still
+both observe "no active" and both insert active — a rarer race; the deterministic
+common case is fixed. A DB partial-unique index on `(user_id) WHERE is_active_tenant`
+would close it fully.*
+
+### B6 (MEDIUM) — dead TSA certificate pin (security; removed, flagged)
+`FREETSA_TSA_KEY_SHA256_PINS[0]` in `api/_utils/tsa.ts` was a **65-char** hex
+string (one stray digit). `certificatePinCandidates()` only ever produces
+64-char SHA-256 hashes, so the pin could NEVER match — the legacy
+(pre-March-2026) FreeTSA key verification path was silently broken. The correct
+64-char value was unrecoverable (no cert in-repo to re-derive; the original hash
+was lost), and guessing a security pin is unacceptable — so the dead pin was
+**removed** (removal changes no behaviour: a dead pin never matched anything) and
+a module-load guard now throws on any non-64-char-hex pin to stop a wrong-length
+pin being reintroduced. **Action for the team:** if pre-rotation FreeTSA
+timestamps must stay verifiable, re-add the authoritative 64-char SHA-256 of the
+legacy FreeTSA signing certificate.
+
+### Verified clean (no change)
+The React frontend agent did a comprehensive pass (wizard/forms, transforms,
+stores, effects/timers, routing/auth) and found no genuine high/medium-confidence
+runtime bug — the stores are heavily hardened (versioned migrate/backfill,
+StrictMode/unmount guards, undefined-key guards). Backend auth/IDOR/CSRF/rate-limit
+surfaces re-confirmed sound (consistent with the 2026-05-30 audits).
+
+---
+
 ## 2026-05-30 — 0.18.1 maintenance loop
 
 ### E1b (fixed) — streaming re-entry guard now store-derived

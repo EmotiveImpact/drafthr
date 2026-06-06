@@ -50,13 +50,31 @@ const FREETSA_URL = "https://freetsa.org/tsr";
 const FREETSA_TIMEOUT_MS = 10_000;
 
 // FreeTSA publishes the SHA-256 of its TSA signing key beside tsa.crt.
-// Source: https://www.freetsa.org/ (checked 2026-05-16). The legacy pin
-// keeps pre-March-2026 timestamps verifiable while still requiring the CMS
-// signature to validate with the pinned FreeTSA signing certificate.
+// Source: https://www.freetsa.org/ (checked 2026-05-16). Each pin must be a
+// 64-char (lowercase) SHA-256 hex string — certificatePinCandidates() only
+// ever produces 64-char hashes, so any other length can never match.
+//
+// NOTE: a previous "legacy" pin for pre-March-2026 timestamps was stored as a
+// 65-char string (one stray hex digit), so it was dead — it could never match
+// and silently failed verification for timestamps signed by the rotated-out
+// key. The corrupted value was unrecoverable (the original 64-char hash was
+// lost), so it has been removed rather than guessed. Removing it changes no
+// behaviour: a dead pin never matched anything. If pre-rotation FreeTSA
+// timestamps must be verifiable, re-add the authoritative 64-char SHA-256 of
+// the legacy FreeTSA signing certificate here.
 const FREETSA_TSA_KEY_SHA256_PINS = [
-  "a8bfb0305bb64e2571ca507552ef3245cb1c2fee8728e0ff8689225081ea13467",
   "899ba3d9f777e2a74bdd34302bc06cb3f7a46ac1f565ee128f79fd5dab99d68b",
 ];
+
+// Guard against re-introducing a wrong-length pin: a non-64-char hex string is
+// always dead, so fail loudly in dev/test rather than degrade silently.
+if (
+  FREETSA_TSA_KEY_SHA256_PINS.some((p) => !/^[0-9a-f]{64}$/.test(p))
+) {
+  throw new Error(
+    "FREETSA_TSA_KEY_SHA256_PINS contains a non-64-char-hex pin — it can never match a SHA-256.",
+  );
+}
 
 export type TsrParseOk = {
   ok: true;

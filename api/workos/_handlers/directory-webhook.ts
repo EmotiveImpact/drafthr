@@ -261,15 +261,36 @@ async function provisionUser(tenantId: string, user: DirectoryUserLike): Promise
     isNew = true;
   }
 
+  // Only make this the user's active tenant if they don't already have one.
+  // A user matched by email can already belong (and be active) in another
+  // tenant; inserting this membership with isActiveTenant:true would leave
+  // them with TWO active memberships and silently switch their workspace.
+  // The invariant is "exactly one active membership per user", so a new
+  // directory-provisioned membership joins as inactive when an active one
+  // exists elsewhere, and active only when it's the user's first.
+  const [activeElsewhere] = await db
+    .select({ tenantId: tenantMembers.tenantId })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.userId, userId),
+        eq(tenantMembers.isActiveTenant, true),
+      ),
+    )
+    .limit(1);
+  const isActiveTenant = !activeElsewhere;
+
   // Upsert membership. Drizzle's onConflictDoUpdate keeps the write
-  // single-statement so concurrent webhook deliveries don't race.
+  // single-statement so concurrent webhook deliveries don't race. Note the
+  // conflict `set` deliberately does NOT touch isActiveTenant, so re-syncing
+  // an existing membership never flips the user's active workspace.
   await db
     .insert(tenantMembers)
     .values({
       userId,
       tenantId,
       role,
-      isActiveTenant: true,
+      isActiveTenant,
       status: "active",
       deprovisionedAt: null,
     })

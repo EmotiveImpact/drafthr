@@ -92,7 +92,11 @@ vi.mock("../../../src/db/index.js", () => {
   function makeSelectBuilder(table: string) {
     return {
       from: (_t: unknown) => ({
-        where: (predicate: { __col: string; __val: unknown }) => ({
+        where: (predicate: {
+          __col: string;
+          __val: unknown;
+          __preds?: Record<string, unknown>;
+        }) => ({
           limit: (_n: number) => {
             if (table === "tenants" && predicate.__col === "workos_org_id") {
               const found = state.tenants.find((t) => t.workosOrgId === predicate.__val);
@@ -109,6 +113,16 @@ vi.mock("../../../src/db/index.js", () => {
                 );
                 return Promise.resolve(found ? [found] : []);
               }
+            }
+            // "does this user already have an active membership anywhere?"
+            //   select().from(tenant_members).where(and(userId=?, isActiveTenant=true))
+            if (table === "tenant_members" && predicate.__col === "__and__") {
+              const userId = (predicate.__val as { userId?: string }).userId;
+              const wantActive = predicate.__preds?.["is_active_tenant"] === true;
+              const found = state.members.find(
+                (m) => m.userId === userId && (!wantActive || m.isActiveTenant),
+              );
+              return Promise.resolve(found ? [found] : []);
             }
             return Promise.resolve([]);
           },
@@ -248,12 +262,15 @@ vi.mock("../../../src/db/schema.js", () => {
 vi.mock("drizzle-orm", () => ({
   eq: (col: { __col: string }, val: unknown) => ({ __col: col.__col, __val: val }),
   and: (...preds: Array<{ __col: string; __val: unknown }>) => {
-    // Collapse two eqs into a single predicate the update-builder can read.
+    // Collapse the eqs into a single predicate the fake builders can read.
     const userIdEq = preds.find((p) => p.__col === "user_id");
     const tenantIdEq = preds.find((p) => p.__col === "tenant_id");
+    const byCol: Record<string, unknown> = {};
+    for (const p of preds) byCol[p.__col] = p.__val;
     return {
       __col: "__and__",
       __val: { userId: userIdEq?.__val, tenantId: tenantIdEq?.__val },
+      __preds: byCol,
     };
   },
 }));
@@ -411,6 +428,82 @@ describe("POST /api/workos/directory-webhook", () => {
     expect(secondCallArgs[0]).toMatchObject({
       kind: "directory.user.role_changed",
     });
+  });
+
+  it("joins as INACTIVE when an email-matched user is already active in another tenant", async () => {
+    // Existing user (matched by email, no directory id yet) active in tenant_1.
+    state.tenants.push({ id: "tenant_1", name: "Acme", workosOrgId: "org_acme" });
+    state.tenants.push({ id: "tenant_2", name: "Globex", workosOrgId: "org_globex" });
+    state.users.push({
+      id: "user_existing",
+      email: "jane@acme.com",
+      legalName: "Jane Patel",
+      workosDirectoryUserId: null,
+      workosDirectoryId: null,
+      externalId: "authkit:jane",
+      tenantId: "tenant_1",
+    });
+    state.members.push({
+      userId: "user_existing",
+      tenantId: "tenant_1",
+      role: "admin",
+      status: "active",
+      deprovisionedAt: null,
+      isActiveTenant: true,
+    });
+
+    // A directory webhook provisions the same person (by email) into tenant_2.
+    constructEventMock.mockResolvedValueOnce({
+      id: "evt_x",
+      event: "dsync.user.created",
+      data: {
+        id: "dir_user_z",
+        directoryId: "directory_2",
+        organizationId: "org_globex",
+        email: "jane@acme.com",
+        firstName: "Jane",
+        lastName: "Patel",
+        state: "active",
+        role: { slug: "drafter" },
+      },
+    });
+
+    const { POST } = await loadHandler();
+    const res = await POST(makeRequest({}));
+    expect(res.status).toBe(200);
+
+    // The new tenant_2 membership must NOT be active — that would leave the
+    // user with two active memberships and silently switch their workspace.
+    const newMember = state.members.find((m) => m.tenantId === "tenant_2");
+    expect(newMember?.isActiveTenant).toBe(false);
+    // The user's original active tenant is left untouched.
+    expect(
+      state.members.find((m) => m.tenantId === "tenant_1")?.isActiveTenant,
+    ).toBe(true);
+  });
+
+  it("joins as ACTIVE when the user has no existing active membership", async () => {
+    state.tenants.push({ id: "tenant_1", name: "Acme", workosOrgId: "org_123" });
+    constructEventMock.mockResolvedValueOnce({
+      id: "evt_y",
+      event: "dsync.user.created",
+      data: {
+        id: "dir_user_1",
+        directoryId: "directory_1",
+        organizationId: "org_123",
+        email: "newhire@acme.com",
+        firstName: "New",
+        lastName: "Hire",
+        state: "active",
+        role: { slug: "drafter" },
+      },
+    });
+
+    const { POST } = await loadHandler();
+    await POST(makeRequest({}));
+
+    const member = state.members.find((m) => m.tenantId === "tenant_1");
+    expect(member?.isActiveTenant).toBe(true);
   });
 
   it("soft-deletes the membership on dsync.user.deleted", async () => {

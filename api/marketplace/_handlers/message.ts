@@ -11,7 +11,7 @@
  * Returns: the updated messages array so the client can sync without
  *          a second round-trip.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -70,14 +70,26 @@ export async function POST(req: Request): Promise<Response> {
     text,
     ts: Date.now(),
   };
-  const next = [...existing, msg];
 
-  await db
+  // Append atomically at the database level. A read-modify-write of the JSON
+  // array (select then overwrite with [...existing, msg]) loses a message when
+  // two participants post concurrently — the second writer overwrites the
+  // first's append. `messages || $1::jsonb` concatenates against the CURRENT
+  // stored value inside the single UPDATE, and RETURNING gives us the
+  // authoritative post-append array (including any concurrent message).
+  const [updated] = await db
     .update(consultantBookings)
-    .set({ messages: next })
-    .where(eq(consultantBookings.id, booking.id));
+    .set({
+      messages: sql`coalesce(${consultantBookings.messages}, '[]'::jsonb) || ${JSON.stringify([msg])}::jsonb`,
+    })
+    .where(eq(consultantBookings.id, booking.id))
+    .returning({ messages: consultantBookings.messages });
 
-  return new Response(JSON.stringify({ messages: next, message: msg }), {
+  const messages = Array.isArray(updated?.messages)
+    ? (updated.messages as BookingMessage[])
+    : [...existing, msg];
+
+  return new Response(JSON.stringify({ messages, message: msg }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
