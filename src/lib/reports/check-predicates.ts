@@ -22,6 +22,7 @@
  * ==========================================================================*/
 
 import type { Draft } from "@/lib/letters/types";
+import { validFigureNumbers } from "@/lib/evidence";
 import { differenceInCalendarDays, format } from "date-fns";
 
 export type HealthCheck = {
@@ -134,8 +135,8 @@ function predicateBrokenEvidenceRefs(draft: Draft): null | string {
     Number(m[1])
   );
   if (refs.length === 0) return null;
-  const evidenceCount = draft.evidence?.length ?? 0;
-  const broken = refs.filter((n) => n > evidenceCount || n < 1);
+  const validFigures = validFigureNumbers(draft.evidence ?? []);
+  const broken = refs.filter((n) => !validFigures.has(n));
   if (broken.length === 0) return null;
   return `[See Fig ${broken.join(", ")}] — no matching attachment in evidence`;
 }

@@ -1,4 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
+import { validFigureNumbers } from "@/lib/evidence";
 
 /**
  * Letter health — deterministic static checks that run against a Draft to
@@ -336,8 +337,8 @@ function checkEvidenceRefs(draft: Draft): HealthCheck {
       severity: "pass",
     };
   }
-  const evidenceCount = draft.evidence?.length ?? 0;
-  const broken = refs.filter((n) => n > evidenceCount || n < 1);
+  const validFigures = validFigureNumbers(draft.evidence ?? []);
+  const broken = refs.filter((n) => !validFigures.has(n));
   if (broken.length === 0) {
     return {
       id: "evidence",

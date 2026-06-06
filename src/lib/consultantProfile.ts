@@ -139,7 +139,10 @@ export const useConsultantStore = create<ConsultantStore>()(
         };
         // Always derive initials from the saved fullName so the two stay in
         // sync — prevents the marketplace card from showing stale initials.
-        if (patch.fullName) merged.initials = computeInitials(patch.fullName);
+        // Use `!== undefined` (not truthiness) so clearing the name to "" also
+        // resets the initials instead of leaving the old ones stranded.
+        if (patch.fullName !== undefined)
+          merged.initials = computeInitials(merged.fullName);
         set({ profile: merged, enrolled: true });
       },
 

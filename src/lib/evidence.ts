@@ -68,6 +68,24 @@ export function figureLabelFor(item: EvidenceItem, allEvidence: EvidenceItem[]):
   return idx >= 0 ? `Fig ${idx + 1}` : "Fig";
 }
 
+/**
+ * The set of numeric figure references (`[See Fig N]`) that actually resolve
+ * to a figure in this evidence list. Figures are numbered among figure-mode
+ * items ONLY (not all evidence), and a custom `figureLabel` can override the
+ * number — so the valid numbers are derived straight from figureLabelFor()
+ * rather than assuming `1..evidence.length`. Health checks use this to flag
+ * dangling references; counting total evidence would miss refs that point
+ * past the last real figure.
+ */
+export function validFigureNumbers(allEvidence: EvidenceItem[]): Set<number> {
+  const nums = new Set<number>();
+  for (const item of allEvidence) {
+    const match = figureLabelFor(item, allEvidence).match(/(\d+)/);
+    if (match) nums.add(Number(match[1]));
+  }
+  return nums;
+}
+
 export function evidencePromptBlock(draft: Draft, sectionId?: string): string {
   const items = evidenceForSection(draft, sectionId);
   if (items.length === 0) return "(no evidence supplied)";
