@@ -12,6 +12,7 @@
  * regardless. A small `lastSync` flag on the store lets the UI show a
  * "saved locally — will retry when online" affordance if needed.
  */
+import { toast } from "sonner";
 import {
   getConsultantProfile,
   saveConsultantProfile,
@@ -279,7 +280,20 @@ export async function pushBookingRespond(
   opts?: { note?: string; rating?: number },
 ): Promise<void> {
   const res = await respondToBooking(bookingId, action, opts);
-  if (!res.ok) return; // soft-fail
+  if (!res.ok) {
+    // Don't silently leave the optimistic local row ahead of the server
+    // (B9). Tell the user and re-pull so the local state reconciles to the
+    // server's authoritative status. A 409 means someone else already moved
+    // this booking; other codes are a transient failure.
+    toast.error(
+      res.status === 409
+        ? "This booking already changed — refreshing."
+        : "Couldn't update the booking. Refreshing its status.",
+    );
+    void pullInbox();
+    void pullMyBookings();
+    return;
+  }
   const state = useBookingsStore.getState();
   const local = state.bookings.find((b) => b.id === bookingId);
   const merged = dtoToBooking(

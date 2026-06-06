@@ -1,6 +1,41 @@
 import { describe, it, expect } from "vitest";
 import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "./sanitize";
 
+describe("sanitizeLetterHtml — data-* attrs SURVIVE (senior sweep B1/B2)", () => {
+  // Golden round-trip: USE_PROFILES used to silently strip every data-* attr,
+  // which made per-suggestion Accept/Reject a no-op, froze figure re-numbering,
+  // and dropped comment anchors. These assertions lock the contract.
+  it("keeps suggestion-mark data attrs (data-suggestion-id / data-status / data-suggestion-kind)", () => {
+    const out = sanitizeLetterHtml(
+      '<p><ins data-suggestion-id="sug_1" data-suggestion-kind="insertion" data-status="accepted" class="ds-suggestion">new clause</ins></p>',
+    );
+    expect(out).toContain('data-suggestion-id="sug_1"');
+    expect(out).toContain('data-status="accepted"');
+    expect(out).toContain('data-suggestion-kind="insertion"');
+  });
+
+  it("keeps figure/attachment reference ids (data-fig-id / data-att-id)", () => {
+    const out = sanitizeLetterHtml(
+      '<span class="figure-ref" data-fig-id="e1">[See Fig 1]</span>' +
+        '<span class="attachment-ref" data-att-id="a1">[Attachment 1]</span>',
+    );
+    expect(out).toContain('data-fig-id="e1"');
+    expect(out).toContain('data-att-id="a1"');
+  });
+
+  it("keeps comment anchors (data-comment-id)", () => {
+    const out = sanitizeLetterHtml('<mark data-comment-id="c1">flagged</mark>');
+    expect(out).toContain('data-comment-id="c1"');
+  });
+
+  it("export sanitiser KEEPS figure-ref ids (needed for exhibit re-numbering) but DROPS suggestion state", () => {
+    const out = sanitizeLetterHtmlForExport(
+      '<span class="figure-ref" data-fig-id="e1">[See Fig 1]</span>',
+    );
+    expect(out).toContain('data-fig-id="e1"');
+  });
+});
+
 describe("sanitizeLetterHtmlForExport — track-changes never reach a file (bug #1)", () => {
   it("removes a residual <ins> with its text (rejected/pending insertion)", () => {
     const out = sanitizeLetterHtmlForExport(

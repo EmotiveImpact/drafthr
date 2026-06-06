@@ -55,8 +55,11 @@ export default defineConfig(({ mode }) => {
             ],
             // AI SDK — only needed when the user opens the AI panel.
             "ai-sdk": ["ai", "@ai-sdk/react"],
-            // Markdown rendering — used by the AI panel.
-            markdown: ["marked", "dompurify"],
+            // Split marked (editor/AI-panel only) from dompurify (on the
+            // first-paint path — sanitize.ts runs on every render). Bundling
+            // them dragged marked into the critical path. (Senior sweep I-PERF-3.)
+            marked: ["marked"],
+            dompurify: ["dompurify"],
             // Export libraries — only needed at export time.
             "export-pdf": ["html2canvas", "jspdf"],
             // Radix Themes — the heaviest UI dependency.

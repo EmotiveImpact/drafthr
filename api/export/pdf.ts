@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
-import { rateLimit } from "../_utils/rate-limit.js";
+import { rateLimit, clientIp } from "../_utils/rate-limit.js";
 import { enforceSameOrigin } from "../_utils/request.js";
 import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
 import { parseTsr, requestTsr } from "../_utils/tsa.js";
@@ -222,8 +222,11 @@ async function tryAppendExportAudit(
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
 
-  const forwardedFor = req.headers.get("x-forwarded-for");
-  const ip = forwardedFor ? forwardedFor.split(",")[0]?.trim() ?? null : null;
+  // Use the spoof-resistant resolver (proxy-set IP), not the attacker-
+  // controllable leftmost XFF — the audit record must hold a trustworthy IP.
+  // (Senior sweep B14; matches the S1 rate-limiter fix.)
+  const resolvedIp = clientIp(req);
+  const ip = resolvedIp === "unknown" ? null : resolvedIp;
 
   // Stamp the third-party trusted timestamp into the chain. Null when FreeTSA
   // was unreachable — recorded explicitly so a missing TSR is auditable

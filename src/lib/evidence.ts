@@ -128,8 +128,12 @@ export function linkedEvidenceForSection(draft: Draft, sectionId: string): Evide
  * Runs purely via regex — no DOM. Cheap enough to do once per export.
  */
 export function resolveFigureRefsInHtml(html: string, allEvidence: EvidenceItem[]): string {
+  // Match any <span ...> that carries a data-fig-id, regardless of attribute
+  // ORDER — DOMPurify can reorder attributes during sanitisation, so requiring
+  // class="figure-ref" immediately before data-fig-id would miss real refs and
+  // leave stale "[See Fig N]" in the export. (Senior sweep B2.)
   return html.replace(
-    /<span\s+class="figure-ref"\s+data-fig-id="([^"]+)"\s*>[^<]*<\/span>/gi,
+    /<span\b[^>]*\bdata-fig-id="([^"]+)"[^>]*>[^<]*<\/span>/gi,
     (match, idAttr: string) => {
       const item = allEvidence.find((e) => e.id === idAttr);
       if (!item) return match;

@@ -3,7 +3,7 @@
  * Drives the Settings members card. Anyone in the tenant can list members
  * (not gated to admin) — they need to know who's on their team.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { jsonError } from "../../_utils/request.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -33,7 +33,15 @@ export async function GET(req: Request): Promise<Response> {
       })
       .from(tenantMembers)
       .innerJoin(users, eq(users.id, tenantMembers.userId))
-      .where(eq(tenantMembers.tenantId, auth.activeTenant.id));
+      // Only ACTIVE members — a deprovisioned (IdP-removed) seat must not show
+      // in the team list with its old role. Mirrors session.ts/list.ts.
+      // (Senior sweep B13.)
+      .where(
+        and(
+          eq(tenantMembers.tenantId, auth.activeTenant.id),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
 
     return new Response(JSON.stringify({ members: rows }), {
       status: 200,

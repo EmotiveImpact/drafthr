@@ -17,6 +17,41 @@
 
 const IMG_TAG_RE = /<img\s+[^>]*src="(https:\/\/[^"]+)"[^>]*>/gi;
 const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+// ~10 MB ceiling on a single inlined image (defends the SSRF timing/size oracle
+// and keeps the export payload sane).
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * SSRF guard for the server-side export inliner. `inlineImagesForExport` runs
+ * inside a Vercel function (api/export/pdf.ts) and fetches user-controlled
+ * image URLs — without a guard, any authenticated user could make the function
+ * fetch cloud-metadata / internal hosts (blind SSRF). Only allow https on a
+ * known image host: Vercel Blob (*.public.blob.vercel-storage.com) plus any
+ * hosts in IMAGE_INLINE_ALLOWED_HOSTS. Reject IP-literal hosts outright (kills
+ * the obvious 169.254.169.254 / 127.0.0.1 / 10.x vectors and forces everything
+ * through the host allowlist). (Senior sweep B3.)
+ */
+export function isAllowedImageHost(rawUrl: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:") return false;
+  const host = u.hostname.toLowerCase();
+  // Reject IP-literal hosts (v4 or bracketed v6) — never a legit CDN here, and
+  // the cheapest way to block metadata/loopback/private-range targets.
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || u.hostname.startsWith("[")) {
+    return false;
+  }
+  if (host.endsWith(".public.blob.vercel-storage.com")) return true;
+  const extra = (process.env.IMAGE_INLINE_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return extra.includes(host);
+}
 
 export async function inlineImagesForExport(
   html: string,
@@ -51,12 +86,18 @@ async function tryFetchAsDataUrl(
   url: string,
   fetcher: typeof fetch,
 ): Promise<string | null> {
+  // SSRF guard: refuse anything not on the image-host allowlist BEFORE any
+  // network call. (Senior sweep B3.)
+  if (!isAllowedImageHost(url)) return null;
   try {
-    const res = await fetcher(url);
+    // redirect:"manual" so an allowlisted host can't 30x us onto an internal
+    // target — a redirect yields an opaqueredirect/non-2xx we simply skip.
+    const res = await fetcher(url, { redirect: "manual" } as RequestInit);
     if (!res.ok) return null;
     const mime = (res.headers.get("content-type") ?? "").toLowerCase().split(";")[0].trim();
     if (!ALLOWED_MIME.has(mime)) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
+    if (buf.byteLength > MAX_IMAGE_BYTES) return null;
     return `data:${mime};base64,${bytesToBase64(buf)}`;
   } catch {
     return null;

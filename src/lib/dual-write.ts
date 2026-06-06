@@ -28,6 +28,11 @@ const staleRevisionByDraftId = new Map<string, number>();
 // (bug #6). We check this set both before sending and after the response so a
 // raced POST is dropped / re-deleted instead of recreating the row.
 const deletedDraftIds = new Set<string>();
+// Same tombstone idea for matters: a matter delete that races an in-flight
+// pushMatter (fired by enqueueMatterSync OR by any syncDraft for a filed draft)
+// would otherwise re-INSERT a ghost matter + spurious matter.created audit.
+// (Senior sweep B7 — the unfixed matters analog of bug #6.)
+const deletedMatterIds = new Set<string>();
 let consecutiveDeleteFailures = 0;
 let deleteFailureToastShown = false;
 let consecutiveStaleConflicts = 0;
@@ -61,6 +66,8 @@ export function setDualWriteMatterGetter(getter: (matterId: string) => Matter | 
  */
 export async function pushMatter(matterId: string): Promise<string | null> {
   if (!ENABLED) return null;
+  // Don't resurrect a matter deleted locally while this push was queued (B7).
+  if (deletedMatterIds.has(matterId)) return null;
   const matter = matterSnapshotGetter?.(matterId);
   if (!matter) return null;
   try {
@@ -88,6 +95,12 @@ export async function pushMatter(matterId: string): Promise<string | null> {
       }),
     });
     if (res.ok) {
+      // The matter was deleted WHILE this push was in flight — the POST just
+      // (re)created the row, so re-issue the DELETE to converge (B7).
+      if (deletedMatterIds.has(matterId)) {
+        void deleteMatterRemotely(matterId);
+        return null;
+      }
       const data = (await res.json().catch(() => ({}))) as { id?: string };
       return data.id ?? toServerUuid(matter.id);
     }
@@ -102,6 +115,14 @@ export async function pushMatter(matterId: string): Promise<string | null> {
 /** Fire-and-forget remote matter delete. The caller owns local removal. */
 export async function deleteMatterRemotely(matterId: string): Promise<void> {
   if (!ENABLED || !matterId) return;
+  // Tombstone + cancel any pending debounced pushMatter so it can't recreate
+  // the row after we delete it (B7).
+  deletedMatterIds.add(matterId);
+  const pendingTimer = matterTimers.get(matterId);
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    matterTimers.delete(matterId);
+  }
   try {
     await fetch("/api/store/matters", {
       method: "DELETE",
@@ -251,6 +272,7 @@ export function resetDualWriteTimers(): void {
   timers.clear();
   for (const t of matterTimers.values()) clearTimeout(t);
   matterTimers.clear();
+  deletedMatterIds.clear();
   pendingDraftIds.clear();
   staleRevisionByDraftId.clear();
   deletedDraftIds.clear();

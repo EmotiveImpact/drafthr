@@ -15,21 +15,26 @@ import { Settings } from "@/routes/Settings";
 import { DirectorySync as SettingsDirectorySync } from "@/routes/settings/DirectorySync";
 import { Privacy } from "@/routes/Privacy";
 import { Terms } from "@/routes/Terms";
-import { Mockups } from "@/routes/Mockups";
 import { BrowseLetters } from "@/routes/BrowseLetters";
-import { Calendar } from "@/routes/Calendar";
-import { Exported } from "@/routes/Exported";
-import { Activity } from "@/routes/Activity";
-import { Notifications } from "@/routes/Notifications";
 import { ReviewStep } from "@/routes/ReviewStep";
-import { Finalize } from "@/routes/Finalize";
 import { MattersIndex } from "@/routes/MattersIndex";
-import { MatterDetail } from "@/routes/MatterDetail";
 import { EmployeesIndex } from "@/routes/EmployeesIndex";
-import { EmployeeDetail } from "@/routes/EmployeeDetail";
-import BulkOperations from "@/routes/BulkOperations";
 import { Approvals } from "@/routes/Approvals";
-import { Reports } from "@/routes/Reports";
+// Heavy / non-first-paint routes are lazy-loaded — they pulled ~hundreds of KB
+// into the main chunk (Reports charts, BulkOps CSV+merge, Finalize export
+// pipeline, MatterDetail/EmployeeDetail). (Senior sweep I-PERF-1.) See the
+// lazy() block below for the rest (Editor, EvidenceStep, ConsultantsIndex,
+// MobileReadView).
+const Mockups = lazy(() => import("@/routes/Mockups").then((m) => ({ default: m.Mockups })));
+const Calendar = lazy(() => import("@/routes/Calendar").then((m) => ({ default: m.Calendar })));
+const Exported = lazy(() => import("@/routes/Exported").then((m) => ({ default: m.Exported })));
+const Activity = lazy(() => import("@/routes/Activity").then((m) => ({ default: m.Activity })));
+const Notifications = lazy(() => import("@/routes/Notifications").then((m) => ({ default: m.Notifications })));
+const Finalize = lazy(() => import("@/routes/Finalize").then((m) => ({ default: m.Finalize })));
+const MatterDetail = lazy(() => import("@/routes/MatterDetail").then((m) => ({ default: m.MatterDetail })));
+const EmployeeDetail = lazy(() => import("@/routes/EmployeeDetail").then((m) => ({ default: m.EmployeeDetail })));
+const BulkOperations = lazy(() => import("@/routes/BulkOperations"));
+const Reports = lazy(() => import("@/routes/Reports").then((m) => ({ default: m.Reports })));
 import { MatterDrillDown } from "@/components/reports/MatterDrillDown";
 import { FailingCheckDrillDown } from "@/components/reports/FailingCheckDrillDown";
 import { SignIn } from "@/routes/SignIn";
@@ -48,7 +53,11 @@ import { SharedDraftReview } from "@/routes/SharedDraftReview";
 import { Layout } from "@/components/Layout";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
-import { OnboardingTour } from "@/components/onboarding/OnboardingTour";
+// Lazy — react-joyride is a one-time first-run tour; keep it out of the main
+// chunk so it loads only when the tour actually shows. (Senior sweep I-PERF-2.)
+const OnboardingTour = lazy(() =>
+  import("@/components/onboarding/OnboardingTour").then((m) => ({ default: m.OnboardingTour })),
+);
 import { hasSeenTour } from "@/lib/onboarding";
 
 // Editor pulls in Tiptap + extensions + draft orchestrator (~600 KB gzipped).
@@ -159,7 +168,11 @@ export function App() {
     !hasSeenTour();
   return (
     <Layout>
-      {showTour && <OnboardingTour />}
+      {showTour && (
+        <Suspense fallback={null}>
+          <OnboardingTour />
+        </Suspense>
+      )}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={skipTransition ? "editor" : location.pathname}
@@ -172,6 +185,9 @@ export function App() {
           }}
           className="h-full flex flex-col flex-1 min-h-0"
         >
+          {/* One Suspense boundary for all lazy routes (I-PERF-1). Inner
+           * per-route boundaries (editor/evidence/etc.) still apply too. */}
+          <Suspense fallback={<EditorFallback />}>
           <Routes location={location}>
             {/* / handles its own auth-state branching (signed-out landing,
              * tenant-less redirect, role-less ModePicker, fully-onboarded
@@ -293,6 +309,7 @@ export function App() {
         />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </motion.div>
       </AnimatePresence>
     </Layout>

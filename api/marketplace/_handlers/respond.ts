@@ -68,6 +68,13 @@ export async function POST(req: Request): Promise<Response> {
 
   const update: Partial<typeof consultantBookings.$inferInsert> = {};
   const now = new Date();
+  // The status the booking must STILL be in for this transition to apply. Each
+  // case below already validated booking.status equals exactly one value, so
+  // booking.status IS the expected-from after the switch. We add it to the
+  // UPDATE WHERE so two concurrent requests can't both pass the read-check and
+  // both write (TOCTOU → duplicate share tokens / emails / double rating); a
+  // zero-row result is the lost race. (Senior sweep B12.)
+  const expectedFrom = booking.status;
 
   switch (body.action) {
     case "accept":
@@ -117,8 +124,18 @@ export async function POST(req: Request): Promise<Response> {
   const [next] = await db
     .update(consultantBookings)
     .set(update)
-    .where(eq(consultantBookings.id, booking.id))
+    .where(
+      and(
+        eq(consultantBookings.id, booking.id),
+        // Compare-and-set: the booking must still be in the status the
+        // transition validated against (TOCTOU guard, B12).
+        eq(consultantBookings.status, expectedFrom),
+      ),
+    )
     .returning();
+  if (!next) {
+    return jsonError("Booking already transitioned — please refresh.", 409);
+  }
 
   // When a booking completes with a rating, recompute the consultant's
   // aggregate rating + review count from all their rated completions.

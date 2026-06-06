@@ -34,7 +34,11 @@ export function rateLimit(req: Request, options: RateLimitOptions): Response | n
   return response;
 }
 
-function clientIp(req: Request): string {
+/** Resolve the trustworthy client IP (proxy-set x-real-ip, else the last,
+ *  proxy-appended x-forwarded-for hop). Exported so other handlers (e.g. the
+ *  export audit IP) use the SAME spoof-resistant value as the rate limiter.
+ *  (Senior sweep B14.) */
+export function clientIp(req: Request): string {
   // Use the LAST hop of x-forwarded-for, not the first. The platform proxy
   // (Vercel) appends the real client IP as the rightmost entry; the leftmost
   // entries are client-supplied and trivially spoofable — keying on [0] lets

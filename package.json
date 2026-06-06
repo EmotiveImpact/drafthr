@@ -7,8 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc -b --noEmit",
+    "typecheck": "tsc -b",
+    "lint": "tsc -b",
     "test": "vitest",
+    "verify": "tsc -b && vite build && vitest run",
     "db:generate": "dotenv -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio"

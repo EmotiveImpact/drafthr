@@ -53,7 +53,15 @@ export async function POST(req: Request): Promise<Response> {
       const owners = await db
         .select({ userId: tenantMembers.userId })
         .from(tenantMembers)
-        .where(and(eq(tenantMembers.tenantId, auth.activeTenant.id), eq(tenantMembers.role, "owner")));
+        // Count only LIVE owners (deprovisioned rows must not inflate the
+        // last-owner guard). (Senior sweep B13.)
+        .where(
+          and(
+            eq(tenantMembers.tenantId, auth.activeTenant.id),
+            eq(tenantMembers.role, "owner"),
+            eq(tenantMembers.status, "active"),
+          ),
+        );
       if (owners.length <= 1) {
         return jsonError("workspace must have at least one owner", 409);
       }

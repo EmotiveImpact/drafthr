@@ -204,12 +204,27 @@ describe("POST /api/workspace/accept-invite", () => {
       ]),
     );
   });
+
+  it("#B10: returns 410 and writes NO membership when the invite consume loses the race", async () => {
+    const writes: DbWrite[] = [];
+    vi.doMock("../../../src/db", () =>
+      buildDbMock([inviteFixture], [], writes, /* consumeSucceeds */ false),
+    );
+
+    const mod = await import("../../../api/workspace/_handlers/accept-invite");
+    const res = await mod.POST(makeRequest({ inviteCode: "abc123" }));
+    expect(res.status).toBe(410);
+    // Only the (failed) conditional consume ran — no membership insert/update.
+    expect(writes.some((w) => w.kind === "insert")).toBe(false);
+    expect(writes.filter((w) => w.kind === "update" && "isActiveTenant" in w.values)).toHaveLength(0);
+  });
 });
 
 function buildDbMock(
   inviteRows: Invite[],
   existingMemberRows: { userId: string }[],
   writes: DbWrite[] = [],
+  consumeSucceeds = true,
 ) {
   // Sequential `select().from().where().limit()` chains — we return invite
   // on call #1 (invite lookup) and existing-member rows on call #2.
@@ -230,12 +245,23 @@ function buildDbMock(
       transaction: async (fn: (tx: unknown) => unknown) => {
         const tx = {
           update: () => ({
-            set: (values: Record<string, unknown>) => ({
-              where: () => {
-                writes.push({ kind: "update", values });
-                return Promise.resolve();
-              },
-            }),
+            set: (values: Record<string, unknown>) => {
+              writes.push({ kind: "update", values });
+              // where() is awaitable AND chainable to .returning() — the
+              // conditional invite-consume calls .where(...).returning().
+              const result: Promise<unknown> & { returning?: () => Promise<unknown[]> } =
+                Promise.resolve() as never;
+              const where = () => {
+                const ret: Promise<unknown> & { returning: () => Promise<unknown[]> } =
+                  Object.assign(Promise.resolve(), {
+                    // Non-empty → consume "succeeds"; empty → lost the race (B10).
+                    returning: () =>
+                      Promise.resolve(consumeSucceeds ? [{ id: "invite_1" }] : []),
+                  });
+                return ret;
+              };
+              return { where, ...result };
+            },
           }),
           insert: () => ({
             values: (values: Record<string, unknown>) => {

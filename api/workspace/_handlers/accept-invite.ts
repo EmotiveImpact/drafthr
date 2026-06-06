@@ -12,7 +12,7 @@
  * tenant.member-joined audit event, and switch the accepted tenant active so
  * invite links always land users in the workspace they just joined.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -68,7 +68,29 @@ export async function POST(req: Request): Promise<Response> {
       )
       .limit(1);
 
+    let lostRace = false;
     await db.transaction(async (tx) => {
+      // Consume the invite ATOMICALLY first: the conditional UPDATE only
+      // succeeds if it's still unaccepted/unrevoked/unexpired. The pre-txn
+      // checks above are a fast path; this closes the TOCTOU where two
+      // concurrent redeems both pass those checks. Zero rows → we lost the
+      // race; abort the txn and 410. (Senior sweep B10.)
+      const consumed = await tx
+        .update(invites)
+        .set({ acceptedAt: new Date(), acceptedByUserId: auth.userRow.id })
+        .where(
+          and(
+            eq(invites.id, invite.id),
+            isNull(invites.acceptedAt),
+            isNull(invites.revokedAt),
+            gt(invites.expiresAt, new Date()),
+          ),
+        )
+        .returning({ id: invites.id });
+      if (consumed.length === 0) {
+        lostRace = true;
+        return; // commit the no-op txn; membership writes skipped
+      }
       await tx
         .update(tenantMembers)
         .set({ isActiveTenant: false })
@@ -102,11 +124,9 @@ export async function POST(req: Request): Promise<Response> {
             ),
           );
       }
-      await tx
-        .update(invites)
-        .set({ acceptedAt: new Date(), acceptedByUserId: auth.userRow.id })
-        .where(eq(invites.id, invite.id));
     });
+
+    if (lostRace) return jsonError("Invite already accepted", 410);
 
     await safelyAppendAudit({
       tenantId: invite.tenantId,

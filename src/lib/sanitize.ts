@@ -107,23 +107,34 @@ const ALLOWED_TAGS = [
   // Only allowed on the authoring path; sanitizeLetterHtmlForExport strips
   // these because rendered exports must only contain accepted edits.
   "ins", "del",
+  // Inline comment anchor — see src/lib/tiptap/comment-mark.ts
+  // (<mark data-comment-id="…">). Authoring-only; export strips comment state.
+  "mark",
 ];
 
+// Non-data attributes. The data-* attrs live in DATA_ATTRS below and are fed
+// via ADD_ATTR, because ALLOW_DATA_ATTR:false (which we keep, to block
+// arbitrary data-*) otherwise strips EVERY data-* — including the ones listed
+// here. DOMPurify honours ADD_ATTR even when ALLOW_DATA_ATTR is false, so the
+// split is what lets our specific data-* survive. (Senior sweep B1.)
 const ALLOWED_ATTR = [
   "href", "target", "rel",
   "colspan", "rowspan",
   // <img> attributes — alt, src (allowed via data:image/* below), width,
   // height, class + inline style for max-width:100% so screenshots resize.
   "src", "alt", "title", "width", "height", "class", "style",
-  // Custom data-* attributes used by the evidence picker for figure /
-  // attachment references inside the letter body. The exporter resolves
-  // these to fully numbered exhibit labels.
+];
+
+// The ONLY data-* attributes permitted (fed via ADD_ATTR — see above).
+const DATA_ATTRS = [
+  // Evidence picker figure / attachment references; the exporter resolves
+  // these to numbered exhibit labels — MUST survive export.
   "data-fig-id", "data-att-id",
-  // TipTap's TextAlign extension emits style="text-align: …" on <p>/<h*>.
-  // The 'style' allowance above covers that; we also explicitly permit
-  // 'data-text-align' for any future explicit-attribute uses.
+  // TipTap TextAlign (explicit-attribute uses).
   "data-text-align",
-  // Suggestion mark attributes — see src/lib/tiptap/suggestion-mark.ts.
+  // Inline comment anchor id.
+  "data-comment-id",
+  // Suggestion-mark attributes — see src/lib/tiptap/suggestion-mark.ts.
   "data-suggestion-id", "data-suggestion-kind", "data-author",
   "data-author-id", "data-body", "data-created-at", "data-status",
   "data-suggestion",
@@ -139,16 +150,19 @@ export function sanitizeLetterHtml(dirty: string): string {
   const cleaned = DOMPurify.sanitize(dirty, {
     ALLOWED_TAGS,
     ALLOWED_ATTR,
-    ADD_ATTR: ["target"],
+    // Feed the specific data-* via ADD_ATTR — honoured even with
+    // ALLOW_DATA_ATTR:false, which still blocks every OTHER data-*.
+    ADD_ATTR: ["target", ...DATA_ATTRS],
     ALLOW_DATA_ATTR: false,
     KEEP_CONTENT: true,
-    USE_PROFILES: { html: true },
-    // Allow data: URLs but only for non-SVG image MIMEs — that's how the inline
-    // image extension stores pasted screenshots (data:image/png;base64,…).
-    // Plus keep DOMPurify's default-permitted schemes for href on <a>:
-    // http(s), mailto, tel.
-    ALLOWED_URI_REGEXP:
-      /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
+    // NO USE_PROFILES (it ignores our allowlists and strips data-*), and NO
+    // ALLOWED_URI_REGEXP. That regexp is DOMPurify's URI-attribute gate but it
+    // is applied to EVERY attribute value — so non-URI data-* values like
+    // data-status="accepted" failed the URI test and were stripped. That broke
+    // per-suggestion Accept/Reject (no-op), figure-ref re-numbering, and
+    // comment anchors. URI safety is instead enforced precisely in the
+    // uponSanitizeAttribute hook (img.src → base64-image only; a.href → safe
+    // schemes only), which is STRICTER than the old regexp. (Senior sweep B1/B2.)
   });
   return hardenSanitizedHtml(cleaned, blankLinkHrefs);
 }
@@ -173,27 +187,31 @@ export function sanitizeLetterHtmlForExport(dirty: string): string {
   // WITH its text; a <del> is unwrapped (original text kept, markup dropped).
   // This guarantees reviewer track-changes can never reach an exported file.
   const preScrubbed = stripSuggestionMarks(dirty);
-  // Same allowlists minus the suggestion tags + attributes. We rebuild the
-  // arrays inline so the authoring path's lists aren't mutated.
-  const exportTags = ALLOWED_TAGS.filter((t) => t !== "ins" && t !== "del");
-  const exportAttrs = ALLOWED_ATTR.filter(
-    (a) => !a.startsWith("data-suggestion") && !a.startsWith("data-author") &&
-      !a.startsWith("data-body") && !a.startsWith("data-created-at") &&
-      !a.startsWith("data-status"),
+  // Export tags: drop the track-changes + comment wrappers (exports carry only
+  // canonical accepted content, no reviewer state).
+  const exportTags = ALLOWED_TAGS.filter(
+    (t) => t !== "ins" && t !== "del" && t !== "mark",
+  );
+  // Export data-* : KEEP fig/att/text-align (figure re-numbering needs them);
+  // DROP all suggestion/comment/author state.
+  const exportDataAttrs = DATA_ATTRS.filter(
+    (a) => a === "data-fig-id" || a === "data-att-id" || a === "data-text-align",
   );
   registerSanitizeHooks();
   const blankLinkHrefs = collectBlankLinkHrefs(preScrubbed);
   const cleaned = DOMPurify.sanitize(preScrubbed, {
     ALLOWED_TAGS: exportTags,
-    ALLOWED_ATTR: exportAttrs,
-    ADD_ATTR: ["target"],
+    ALLOWED_ATTR,
+    ADD_ATTR: ["target", ...exportDataAttrs],
     ALLOW_DATA_ATTR: false,
     KEEP_CONTENT: true,
-    USE_PROFILES: { html: true },
-    ALLOWED_URI_REGEXP:
-      /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
+    // No USE_PROFILES, no ALLOWED_URI_REGEXP — see sanitizeLetterHtml. The
+    // allowlist (sans ins/del/mark) plus the explicit stripSuggestionMarks
+    // pre/post-scrub means residual track-changes truly cannot reach a file.
+    // Crucially, data-fig-id/data-att-id now survive so resolveFigureRefsInHtml
+    // can re-number exhibits in the exported PDF/DOCX. (Senior sweep B1/B2.)
   });
-  // Post-scrub too, in case USE_PROFILES re-introduced an ins/del from input.
+  // Post-scrub too, as a defense-in-depth backstop for any residual ins/del.
   return stripSuggestionMarks(hardenSanitizedHtml(cleaned, blankLinkHrefs));
 }
 

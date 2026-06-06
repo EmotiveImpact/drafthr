@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
@@ -258,13 +259,18 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
   const consultantProfile = useConsultantStore((s) => s.profile);
-  const realDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
-  const notifs = deriveNotifications(realDrafts, profile);
-  const actionable = notifs.filter((n) => n.severity !== "info").length;
-  const top = topSeverity(notifs);
-  const inReviewCount = realDrafts.filter(
-    (d) => d.reviewStatus === "in_review"
-  ).length;
+  // Memoised: deriveNotifications runs a regex compliance scan over EVERY
+  // draft, and this sidebar re-renders on every navigation/store change.
+  // Unmemoised it cost tens of ms per render. (Senior sweep B11.)
+  const { actionable, top, inReviewCount } = useMemo(() => {
+    const realDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
+    const n = deriveNotifications(realDrafts, profile);
+    return {
+      actionable: n.filter((x) => x.severity !== "info").length,
+      top: topSeverity(n),
+      inReviewCount: realDrafts.filter((d) => d.reviewStatus === "in_review").length,
+    };
+  }, [drafts, profile]);
   const prefix = mode === "employer" ? "/hr" : mode === "employee" ? "/me" : null;
   const search = useSearchPaletteToggle();
 

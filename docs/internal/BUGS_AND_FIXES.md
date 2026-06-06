@@ -19,10 +19,108 @@ from a handler JSON 401/403 (enforced).
 |---|----------|------|---------|--------|
 | **X1** | **CRITICAL (feature gap)** | `src/lib/export/pack.ts` | **The "tribunal-grade" evidence pack is NOT signed and carries NO per-file hashes.** The crypto infra is fully built and sound (`src/lib/sign/pades.ts` PAdES-B-T signer, `api/sign/manifest.ts`, canonical-JSON + audit hash-chain — all verified clean) but has ZERO callers in the pack path. `buildManifest` records no SHA-256 for the PDF/DOCX/evidence files, and `exportLetterPack` never calls `/api/sign/manifest` or writes `manifest.sig`. A recipient can swap any file and nothing detects it — the core differentiator is unbacked today. **Also X3**: `manifest.json` uses pretty-printed/insertion-order JSON + a volatile `generatedAt`, so it's non-reproducible — must switch to `canonicalJson` before/when signing is wired. | **Needs the user.** This changes the export artifact's structure and is the product's headline claim — wants a deliberate design pass + the user's awareness, not an autonomous-loop change. Scoped & ready to build on green-light. |
 
-_Only X1 (needs the user) remains. Everything else has been fixed or verified-sound._
+### Architectural backlog (from the 2026-06-06 senior sweep — user-directed, NOT yet built)
+Ranked by impact ÷ effort. The "Fix Now" bugs from that sweep are DONE (see below); these are the medium/large bets awaiting prioritisation.
+| Item | Theme | Impact·Effort | Summary |
+|------|-------|---------------|---------|
+| I-OBS-1 | Observability | high·med | No server-side error reporting across ~81 functions. Wrap the api dispatchers in a Sentry envelope (`api/_utils/with-observability.ts`) + release tag. **Do before the sync/moat work.** |
+| I-TEST-1 | Test coverage | high·med | The DB-touching tier (store handlers, booking state machine, the new TOCTOU guards) is mock-only. Stand up `@electric-sql/pglite` + a `db-harness.ts` for real integration tests. |
+| I-MOAT-1/2/3 | The moat | high·med | (1) Add per-file SHA-256 + `canonicalJson` to the pack manifest (prerequisite for X1, independent of its green-light). (2) Embed the SERVER audit chain (`comments`/`approvals` tables are never written today). (3) One `buildCanonicalLetterModel(draft)` builder for PDF/DOCX/mobile/pack-summary (kills B4 divergence + mobile image loss as a class). |
+| I-HARD-1/2 | Hardening | high·med | Durable rate limiter (Upstash/KV — the current Map is per-warm-instance); webhook event-id dedup + `users.email` unique index (exactly-once directory sync). Required before real multi-seat WorkOS load. |
+| I-SYNC-2/3 | Sync/reconcile | high·large | Pull/reconcile layer: `GET /api/store/drafts?since=` heads + per-draft conflict signal; mirror the full graph (comments/approvals); eventually a CRDT per draft. The write-only mirror is the dominant architectural liability under multi-device. (I-SYNC-1 cross-tab listener shipped.) |
+| B6 | Marketplace | high·small | Consultant identity is localStorage-only → broken on a 2nd device. Make `users.userType='consultant'` server-authoritative + return it from `/api/auth/session`. |
+| B8 | Audit | med·med | Audit-chain verify can false-alarm "broken" (build-order vs verify-order; same-ms UUID tiebreak). Add a per-tenant `seq` column, order both by it. False ALARM only — chain data is intact. |
+| AI-1 | AI authoring | med·med | AI-rail tool regenerations use a throwaway AbortController (not covered by unmount-abort/Stop); inline diff still flattens bold/italic/headings (extend `hasNonTextContent` short-term; node-aware Tiptap-JSON diff long-term). |
+| B15 | Marketplace | low·small | AI credits are client-only (devtools-resettable) — needs a server ledger. |
+
+_X1 (evidence-pack signing) remains user-owned. The items above are the senior sweep's Next/Strategic backlog — your call to sequence._
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
+
+---
+
+## 2026-06-06 — senior architectural sweep (7 lenses) → "Fix Now" batch
+
+A senior-level review (7 architectural lenses + principal synthesis) over the
+whole codebase: 19 candidate bugs + 42 integration/design improvements. The
+principal verdict: production-grade at the perimeter, with risk concentrated at
+the integration seams. The user approved the **"Fix Now"** batch (bugs + small
+high-impact). All implemented + verified: `tsc -b` clean · `vite build` OK ·
+**464 tests** (+11). The medium/large architectural bets are queued above.
+
+### 🔴 B1/B2 (CRITICAL/HIGH) — sanitiser stripped ALL data-* attributes
+Root cause was deeper than the review diagnosed (which blamed `USE_PROFILES`).
+**The real culprit was `ALLOWED_URI_REGEXP`**: DOMPurify applies it to EVERY
+attribute value, so non-URI `data-*` values (`data-status="accepted"`, etc.)
+failed the URI test and were dropped — empirically proven in the repo's jsdom.
+`USE_PROFILES:{html:true}` was a secondary issue (it ignores the allowlists).
+Effect: per-suggestion Accept/Reject was a silent no-op, figure-ref
+re-numbering never fired, and comment anchors (`data-comment-id`) were lost.
+**Fix:** removed both `USE_PROFILES` and `ALLOWED_URI_REGEXP`; URI safety is
+now enforced precisely in the existing `uponSanitizeAttribute` hook (img.src →
+base64-image only; a.href → safe schemes only — stricter than the old regexp).
+Added `mark`+`data-comment-id` to the allowlist (comment anchors were ALWAYS
+being stripped). Split data-* into a `DATA_ATTRS` list fed via `ADD_ATTR`; the
+export sanitiser keeps `data-fig-id/att-id` (for exhibit re-numbering) but drops
+suggestion/comment state. Made `resolveFigureRefsInHtml`'s regex attribute-
+order-agnostic (DOMPurify can reorder attrs). TDD: a golden round-trip in
+`sanitize.test.ts` (+4) — the single test that locks B1, B2, and comment anchors.
+*(src/lib/sanitize.ts, src/lib/evidence.ts)*
+
+### 🟠 B3 (HIGH, security) — server-side SSRF in the PDF export inliner
+`inlineImagesForExport` (run inside the Vercel function) fetched arbitrary
+`https://` URLs from draft content — a blind SSRF (cloud metadata / internal
+hosts). **Fix:** `isAllowedImageHost` guard — https only, host allowlist
+(`*.public.blob.vercel-storage.com` + `IMAGE_INLINE_ALLOWED_HOSTS`), reject
+IP-literal hosts, `redirect:"manual"`, 10 MB cap. TDD: `inlineImagesForExport.test.ts`
+(+6) incl. "never fetches a non-allowlisted URL". *(src/lib/storage/inlineImagesForExport.ts)*
+
+### 🟠 B5 — (covered by existing healthChecks; the {{mustache}} detector is queued)
+Note: deferred into the I-MOAT/health-check work rather than patched piecemeal — tracked in the architectural backlog, not silently dropped.
+
+### 🟡 Atomic-guard one-liners (TOCTOU + filters)
+- **B12 (booking respond TOCTOU):** the transition UPDATE now includes the
+  expected-from status in its WHERE (`expectedFrom = booking.status`); zero rows
+  → 409. Stops concurrent requests double-minting share tokens / emails / ratings.
+- **B10 (invite-accept TOCTOU):** the invite is consumed by a conditional
+  `UPDATE … WHERE accepted_at IS NULL AND revoked_at IS NULL AND expires_at>now()
+  RETURNING id` AT THE START of the txn; zero rows → 410, membership writes
+  skipped. TDD: `accept-invite.test.ts` (+1 lost-race case).
+- **B13 (deprovisioned leak):** added `status='active'` to `members.ts` and to
+  both owner-count queries (`member/role.ts`, `member/remove.ts`) — last-owner
+  guard now counts only live owners.
+- **B7 (matter delete tombstone):** mirrored the bug-#6 draft fix to matters —
+  `deletedMatterIds` set, cancel pending `matterTimers`, re-issue DELETE on a
+  raced `pushMatter`. *(src/lib/dual-write.ts)*
+- **B9 (booking soft-fail):** `pushBookingRespond` now toasts + re-pulls on a
+  failed transition instead of leaving the optimistic row silently ahead.
+- **B11 (sidebar perf):** `deriveNotifications` regex scan now `useMemo`'d.
+- **B14 (export audit IP):** reuse the rate-limiter's spoof-resistant `clientIp`
+  (exported) instead of the leftmost XFF.
+
+### Release hygiene + perf (small, high-leverage)
+- **I-REL-2:** deleted dead `server/db/` (a second, stale, authoritative-looking
+  schema — a real trap; drizzle uses `src/db/schema.ts`).
+- **I-REL-1:** `package.json` — renamed/clarified scripts: `typecheck` (`tsc -b`),
+  `lint` → real build-mode check, and a canonical `verify` (`tsc -b && vite build
+  && vitest run`).
+- **I-SYNC-1:** cross-tab `storage` listener re-hydrates the store when another
+  tab writes the persist key — kills single-machine multi-tab clobber.
+- **I-PERF-1/2/3:** lazy-loaded heavy routes (Reports/BulkOps/Finalize/Matter+
+  EmployeeDetail/Calendar/Activity/Notifications/Exported/Mockups) behind one
+  Suspense boundary; lazy `OnboardingTour` (react-joyride out of main); split the
+  `marked`/`dompurify` chunk (marked is editor-only, dompurify is first-paint).
+  **Main chunk 1.88 MB → 1.65 MB (489 → 421 KB gz).**
+
+### What the reviewers got wrong (verified)
+- The "critical sanitiser bug" export-leak scope was OVERSTATED — accepted+merged
+  text already exports correctly (the prior `forExport` merge + `stripSuggestionMarks`
+  handle it). The genuinely-broken parts were UI Accept/Reject, figure renumbering,
+  and comment anchors — and the true root cause was `ALLOWED_URI_REGEXP`, not
+  `USE_PROFILES`. Verifying empirically caught both.
+- B8 audit-chain issue is a false-ALARM risk (verifier cries "tampered" on clean
+  data), NOT a tamper-miss — queued, not treated as a breach.
 
 ---
 

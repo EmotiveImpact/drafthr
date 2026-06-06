@@ -4,14 +4,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { respondMock } = vi.hoisted(() => ({ respondMock: vi.fn() }));
 vi.mock("@/lib/consultantApi", () => ({
   respondToBooking: respondMock,
-  // The other named imports must exist for the module to load.
+  // The other named imports must exist for the module to load. getInbox /
+  // listMyBookings return a well-formed !ok envelope because the B9 error
+  // path now re-pulls both on a failed respond.
   getConsultantProfile: vi.fn(),
   saveConsultantProfile: vi.fn(),
   createBooking: vi.fn(),
-  getInbox: vi.fn(),
-  listMyBookings: vi.fn(),
+  getInbox: vi.fn(async () => ({ ok: false, error: "x", status: 500 })),
+  listMyBookings: vi.fn(async () => ({ ok: false, error: "x", status: 500 })),
   sendBookingMessage: vi.fn(),
 }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { pushBookingRespond } from "@/lib/marketplaceSync";
 import { useBookingsStore, type Booking } from "@/lib/bookings";

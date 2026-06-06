@@ -1,12 +1,41 @@
-import { describe, expect, it, vi } from "vitest";
-import { inlineImagesForExport } from "./inlineImagesForExport";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { inlineImagesForExport, isAllowedImageHost } from "./inlineImagesForExport";
 
 // A 1x1 transparent PNG — used as the fetched blob payload.
 const PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
+describe("isAllowedImageHost — SSRF guard (senior sweep B3)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("allows Vercel Blob hosts over https", () => {
+    expect(isAllowedImageHost("https://abc123.public.blob.vercel-storage.com/x.png")).toBe(true);
+  });
+  it("rejects non-https", () => {
+    expect(isAllowedImageHost("http://abc.public.blob.vercel-storage.com/x.png")).toBe(false);
+  });
+  it("rejects IP-literal hosts (metadata/loopback/private vectors)", () => {
+    expect(isAllowedImageHost("https://169.254.169.254/latest/meta-data/")).toBe(false);
+    expect(isAllowedImageHost("https://127.0.0.1/x.png")).toBe(false);
+    expect(isAllowedImageHost("https://10.0.0.5/x.png")).toBe(false);
+  });
+  it("rejects an arbitrary host not on the allowlist", () => {
+    expect(isAllowedImageHost("https://evil.example.com/x.png")).toBe(false);
+  });
+  it("honours IMAGE_INLINE_ALLOWED_HOSTS", () => {
+    vi.stubEnv("IMAGE_INLINE_ALLOWED_HOSTS", "cdn.acme.test, blob.example");
+    expect(isAllowedImageHost("https://cdn.acme.test/x.png")).toBe(true);
+    expect(isAllowedImageHost("https://blob.example/x.png")).toBe(true);
+    expect(isAllowedImageHost("https://other.test/x.png")).toBe(false);
+  });
+});
+
 describe("inlineImagesForExport", () => {
+  // The existing tests use https://blob.example/* — allowlist it so the
+  // inlining behaviour is exercised; the SSRF rejection is covered separately.
+  beforeEach(() => vi.stubEnv("IMAGE_INLINE_ALLOWED_HOSTS", "blob.example"));
+  afterEach(() => vi.unstubAllEnvs());
   it("leaves html unchanged when there are no https images", async () => {
     const html = `<p>Hello</p><img src="data:image/png;base64,AAAA" />`;
     const out = await inlineImagesForExport(html, makeFetcher());
@@ -59,6 +88,20 @@ describe("inlineImagesForExport", () => {
     const out = await inlineImagesForExport(html, fetcher as unknown as typeof fetch);
     expect(out).toContain("https://blob.example/scary.svg");
     expect(out).not.toContain("data:image/svg+xml");
+  });
+
+  it("#B3: NEVER fetches a non-allowlisted (SSRF) URL", async () => {
+    const fetchSpy = vi.fn(async () =>
+      new Response(new Blob([new Uint8Array(PNG_BYTES)]), {
+        status: 200,
+        headers: { "Content-Type": "image/png" },
+      }),
+    );
+    const html = `<img src="https://169.254.169.254/latest/meta-data/" /><img src="https://internal.svc/secret.png" />`;
+    const out = await inlineImagesForExport(html, fetchSpy as unknown as typeof fetch);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    // src left intact (downstream render decides) — but no fetch happened.
+    expect(out).toContain("169.254.169.254");
   });
 });
 

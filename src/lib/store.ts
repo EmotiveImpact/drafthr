@@ -1626,6 +1626,21 @@ export const useDraftStore = create<Store>()(
   )
 );
 
+// Cross-tab coherence (senior sweep I-SYNC-1). The persist middleware writes to
+// localStorage but does NOT listen for writes from OTHER tabs — so two tabs on
+// one machine silently clobber each other's drafts through localStorage with no
+// server round-trip. A `storage` event fires in every OTHER tab when our key
+// changes; re-hydrate from it so the tabs converge. Cheap, immediate win; the
+// real multi-DEVICE reconcile (pull/merge) is the larger strategic item.
+if (typeof window !== "undefined") {
+  const PERSIST_KEY = "scribehr-store-v1";
+  window.addEventListener("storage", (e) => {
+    if (e.key !== PERSIST_KEY || e.newValue === null) return;
+    // rehydrate() re-reads localStorage and replaces in-memory state.
+    void useDraftStore.persist?.rehydrate?.();
+  });
+}
+
 // Dual-write hook: subscribe to the store and enqueue a debounced server
 // sync per draft whenever its identity changes. No-op when the flag is off.
 // We register a snapshot getter so dual-write.ts can read drafts without
