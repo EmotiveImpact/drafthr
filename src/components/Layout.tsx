@@ -9,6 +9,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext } from "@/components/SearchPaletteContext";
 import { Onboarding } from "@/components/Onboarding";
+import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 
 /** Routes that render WITHOUT the authenticated app chrome (sidebar,
  * notifications, search palette). These show before the user has a session
@@ -38,15 +39,38 @@ const CHROMELESS_PREFIXES = [
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
+  const { user, activeTenant, isLoaded } = useAuth();
   const isEditor = loc.pathname.startsWith("/editor/");
   const isChromeless =
     CHROMELESS_EXACT.includes(loc.pathname) ||
     CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
   const { open, setOpen } = useSearchPalette();
 
+  // Gate the app SHELL (sidebar/topbar) on auth, not just the pathname.
+  // Without this, an unauthenticated visitor to a protected URL (/hr,
+  // /matters, /editor/x, …) saw the full sidebar — nav, recent drafts from
+  // localStorage, workspace name, user card — for the entire async
+  // /api/auth/session round-trip, before Protected redirected to /sign-in.
+  // That's the "logged-in app showing before auth" flash. Until a session
+  // is confirmed, render the minimal chromeless shell so no app chrome paints
+  // pre-auth. (The route BODY is separately gated by <Protected>, which now
+  // branches synchronously.)
+  //
+  // Tenant nuance: most surfaces also require an active tenant before the
+  // workspace chrome makes sense — EXCEPT consultant routes (/c, /c/*), where
+  // the tenant is minted lazily on first marketplace call, so a consultant
+  // legitimately has activeTenant === null while using the app. Requiring a
+  // tenant there would wrongly strip their sidebar. So: always require a
+  // confirmed session; require a tenant only off the consultant surface.
+  const onConsultantSurface =
+    loc.pathname === "/c" || loc.pathname.startsWith("/c/");
+  const authPending =
+    AUTH_ENABLED &&
+    (!isLoaded || !user || (!activeTenant && !onConsultantSurface));
+
   // Public / onboarding routes get a minimal shell — no sidebar, no chrome.
   // Stops the flash-of-logged-in-app between page load and the WorkOS redirect.
-  if (isChromeless) {
+  if (isChromeless || authPending) {
     return (
       <TooltipProvider delayDuration={150}>
         <div className="min-h-screen flex flex-col bg-background">

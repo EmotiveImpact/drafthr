@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { AUTH_ENABLED, AUTH_MISCONFIGURED } from "./index";
 import { useAuth } from "./AuthProvider";
 import { useProfileStore } from "@/lib/profile";
@@ -39,6 +38,31 @@ export function Protected({
   return <ProtectedGate roles={roles}>{children}</ProtectedGate>;
 }
 
+/**
+ * Is `pathname` an onboarding/consultant entry point that a signed-in user
+ * WITHOUT an active tenant is allowed to reach? Consultants mint their
+ * bootstrap tenant lazily on first marketplace call, so /c and /c/* must
+ * stay reachable tenant-less; the workspace-setup + invite-landing routes
+ * are the onboarding flow itself.
+ */
+function isOnboardingPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/signup/workspace") ||
+    pathname.startsWith("/join/") ||
+    pathname === "/c" ||
+    pathname.startsWith("/c/")
+  );
+}
+
+/**
+ * Branches SYNCHRONOUSLY during render — no useEffect. Every non-authorized
+ * state returns a <Navigate replace/> (which renders nothing and commits no
+ * children) or a skeleton, so the gated child can NEVER mount/paint or fire
+ * its mount-effects before the redirect lands. (The previous useEffect-based
+ * redirect let children flash for a frame whenever the render guard and the
+ * effect's predicate diverged — see RootRedirect's header comment for the
+ * same lesson.)
+ */
 function ProtectedGate({
   children,
   roles,
@@ -47,7 +71,6 @@ function ProtectedGate({
   roles?: GateRole[];
 }) {
   const { user, activeTenant, isLoaded } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const profileRole = useProfileStore((s) => s.profile.role);
   const consultantEnrolled = useConsultantStore((s) => s.enrolled);
@@ -57,47 +80,29 @@ function ProtectedGate({
   const effectiveRole: GateRole | null =
     profileRole ?? (consultantEnrolled ? "consultant" : null);
 
-  const roleMismatch =
-    !!roles && !!effectiveRole && !roles.includes(effectiveRole);
+  // 1. Still resolving the session → skeleton, never the child.
+  if (!isLoaded) return <LoadingSkeleton />;
 
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (!user) {
-      const redirect = encodeURIComponent(location.pathname + location.search);
-      navigate(`/sign-in?redirect=${redirect}`, { replace: true });
-      return;
-    }
-    // Signed in but no workspace yet — force onboarding. Allow the workspace
-    // signup route itself + the invite landing + consultant onboarding
-    // through so we don't loop.
-    const onboardingPath =
-      location.pathname.startsWith("/signup/workspace") ||
-      location.pathname.startsWith("/join/") ||
-      location.pathname === "/c" ||
-      location.pathname.startsWith("/c/");
-    if (!activeTenant && !onboardingPath) {
-      navigate("/signup/workspace", { replace: true });
-      return;
-    }
-    // Role-gated route + wrong role (or no role yet) → bounce to "/", which
-    // RootRedirect resolves to the user's correct home / role picker.
-    if (roles && (!effectiveRole || !roles.includes(effectiveRole))) {
-      navigate("/", { replace: true });
-    }
-  }, [
-    isLoaded,
-    user,
-    activeTenant,
-    navigate,
-    location.pathname,
-    location.search,
-    roles,
-    effectiveRole,
-  ]);
+  // 2. Signed out → sign-in, preserving the intended destination.
+  if (!user) {
+    const redirect = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/sign-in?redirect=${redirect}`} replace />;
+  }
 
-  if (!isLoaded || !user) return <LoadingSkeleton />;
-  // Don't flash the wrong-role surface while the redirect effect runs.
-  if (roleMismatch) return <LoadingSkeleton />;
+  // 3. Signed in but no workspace yet → force onboarding (except on the
+  //    onboarding/consultant routes themselves, so we don't loop).
+  if (!activeTenant && !isOnboardingPath(location.pathname)) {
+    return <Navigate to="/signup/workspace" replace />;
+  }
+
+  // 4. Role-gated route + wrong OR not-yet-resolved role → "/", which
+  //    RootRedirect resolves to the user's correct home / role picker.
+  //    Guarding on `!effectiveRole` too (not just a mismatch) closes the
+  //    fresh-login / cleared-localStorage window where the role is still null.
+  if (roles && (!effectiveRole || !roles.includes(effectiveRole))) {
+    return <Navigate to="/" replace />;
+  }
+
   return <>{children}</>;
 }
 
