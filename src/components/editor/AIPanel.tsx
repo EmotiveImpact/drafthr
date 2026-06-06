@@ -1255,7 +1255,13 @@ function ToolCard({
 
 function parseScopeFromUserBody(content: string, isUser: boolean): { body: string; scopeChip?: string } {
   if (!isUser) return { body: content };
-  const m = content.match(/^([\s\S]*?)\n\[scope:\s*([^\]]+)\]\s*$/);
+  // Tolerate a trailing [selection: "..."] block after [scope: ...]. The
+  // composer appends BOTH for selection scope; the old regex anchored [scope:]
+  // at end-of-string, so selection-scope messages failed to match and rendered
+  // the raw annotations with no scope chip (bug #15).
+  const m = content.match(
+    /^([\s\S]*?)\n\[scope:\s*([^\]]+)\](?:\n\[selection:[\s\S]*?\])?\s*$/,
+  );
   if (!m) return { body: content };
   return { body: m[1].trim(), scopeChip: m[2].trim() };
 }

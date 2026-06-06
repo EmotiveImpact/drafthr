@@ -40,6 +40,13 @@ describe("substituteHtml", () => {
       .toBe("<p>Jane</p>");
   });
 
+  it("#18: resolves a camelCase placeholder against a snake_case column", () => {
+    // The model may emit the wizard's camelCase id; the CSV column is snake_case.
+    expect(
+      substituteHtml("<p>{{reviewMeetingDate}}</p>", { review_meeting_date: "2026-01-05" }),
+    ).toBe("<p>2026-01-05</p>");
+  });
+
   it("folds dots and hyphens to underscores when matching", () => {
     expect(substituteHtml("<p>{{employee-name}}</p>", { employee_name: "Jane" }))
       .toBe("<p>Jane</p>");

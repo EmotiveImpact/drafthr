@@ -123,16 +123,21 @@ function buildAttachmentsListHtml(draft: Draft): string {
   );
   if (attached.length === 0) return "";
   const items = attached
-    .map((e, i) => {
-      const num = `${i + 1}.`;
+    .map((e) => {
+      // No literal "N." prefix — the <ol> numbers the items. Prefixing here
+      // AND using a decimal <ol> double-numbered ("1. 1.") on PDF surfaces,
+      // which (unlike the mobile view) have no Tailwind Preflight to strip the
+      // marker (bug #9). Matches the DOCX exporter, which never prefixes.
       const name = e.filename || `${e.kind} item`;
       const note = e.content ? ` — ${e.content}` : "";
-      return `<li>${num} <strong>${escapeHtml(name)}</strong>${escapeHtml(note)}</li>`;
+      return `<li><strong>${escapeHtml(name)}</strong>${escapeHtml(note)}</li>`;
     })
     .join("\n");
+  // Explicit list-style:decimal so the numbering survives on surfaces with no
+  // Tailwind Preflight (server Puppeteer PDF + client iframe fallback).
   return `<div class="attachments-block">
     <h3 style="margin-top:24px;font-size:13pt;">Attachments</h3>
-    <ol style="padding-left:1.2em;margin:6pt 0;">${items}</ol>
+    <ol style="list-style:decimal;padding-left:1.2em;margin:6pt 0;">${items}</ol>
   </div>`;
 }
 
@@ -386,7 +391,7 @@ function injectSignatureIntoSignatureSection(
   // Merge any accepted suggestions, then run the export-flavour sanitiser
   // which strips any remaining <ins>/<del> wrappers so reviewer track-changes
   // never leak into the rendered document.
-  const merged = mergeAcceptedSuggestionsHtml(section.html);
+  const merged = mergeAcceptedSuggestionsHtml(section.html, { forExport: true });
   const html = sanitizeLetterHtmlForExport(merged);
   if (!signature) return html;
   if (section.sectionId === "signature") {

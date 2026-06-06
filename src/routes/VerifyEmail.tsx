@@ -76,7 +76,7 @@ export function VerifyEmail() {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(data.error ?? `Verification failed (HTTP ${res.status})`);
         }
-        await refresh();
+        await refresh({ force: true });
         setStage("ok");
         // Brief pause so the user sees the success state, then route on.
         // RootRedirect picks the right next destination based on tenant

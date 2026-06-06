@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronsUpDown, Check, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,7 +67,20 @@ export function WorkspaceSwitcher() {
         // Hard reload so every Zustand store + sidebar nav re-reads the new
         // tenant's data. Cheap; we already do this on sign-out.
         window.location.assign("/");
+        return;
       }
+      // Surface the failure instead of silently no-op'ing (bug #20). A
+      // deprovisioned seat still appears in the list and returns 403 here;
+      // tell the user and refresh the list so the dead entry drops out.
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(
+        res.status === 403
+          ? "You no longer have access to that workspace."
+          : data.error ?? "Couldn't switch workspace. Please try again.",
+      );
+      void load();
+    } catch {
+      toast.error("Couldn't switch workspace — you appear to be offline.");
     } finally {
       setSwitching(false);
     }

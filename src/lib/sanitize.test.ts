@@ -1,5 +1,29 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeLetterHtml } from "./sanitize";
+import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "./sanitize";
+
+describe("sanitizeLetterHtmlForExport — track-changes never reach a file (bug #1)", () => {
+  it("removes a residual <ins> with its text (rejected/pending insertion)", () => {
+    const out = sanitizeLetterHtmlForExport(
+      '<p>Before <ins data-status="rejected">leaked clause</ins> after</p>',
+    );
+    expect(out).not.toContain("leaked clause");
+    expect(out).not.toContain("<ins");
+  });
+
+  it("unwraps a residual <del>, keeping its text without strike markup", () => {
+    const out = sanitizeLetterHtmlForExport(
+      '<p>keep <del data-status="rejected">original</del> end</p>',
+    );
+    expect(out).toContain("original");
+    expect(out).not.toContain("<del");
+  });
+
+  it("leaves ordinary prose untouched", () => {
+    const out = sanitizeLetterHtmlForExport("<p>Plain <strong>letter</strong> body.</p>");
+    expect(out).toContain("Plain");
+    expect(out).toContain("<strong>letter</strong>");
+  });
+});
 
 describe("sanitizeLetterHtml", () => {
   it("strips script tags", () => {

@@ -53,8 +53,10 @@ export type AuthContextValue = {
    */
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
-  /** Re-fetches /api/auth/session. Useful after the callback completes. */
-  refresh: () => Promise<void>;
+  /** Re-fetches /api/auth/session. Useful after the callback completes.
+   *  Pass { force: true } after a mutation that changed the session/tenant
+   *  so the call doesn't coalesce onto a stale in-flight background refresh. */
+  refresh: (opts?: { force?: boolean }) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -87,8 +89,14 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
   // Avoid concurrent /session fetches stomping each other on rapid focus events.
   const inflight = useRef<Promise<void> | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (inflight.current) return inflight.current;
+  const refresh = useCallback(async (opts?: { force?: boolean }) => {
+    // Coalesce concurrent callers onto the in-flight fetch — EXCEPT a forced
+    // refresh. A background focus/visibility refresh may already be in flight
+    // reading the OLD cookie; a post-mutation caller (just created a workspace,
+    // signed in, verified email) must NOT coalesce onto that stale fetch, or
+    // it observes pre-mutation state (user/tenant null) and bounces the user
+    // backward. force:true always starts a fresh fetch against the new cookie.
+    if (inflight.current && !opts?.force) return inflight.current;
     const p = (async () => {
       try {
         const res = await fetch("/api/auth/session", {

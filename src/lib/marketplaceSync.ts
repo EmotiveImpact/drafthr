@@ -131,6 +131,11 @@ function dtoToBooking(
     consultantInitials,
     consultantProfileId: dto.consultantProfileId,
     draftId: dto.draftId ?? "",
+    // Preserve the original readable draft id so the HR "Open draft" link
+    // keeps working after sync — the server only knows the hashed UUID, which
+    // the editor store can't resolve. (Bug #3: link dead-ended on "Draft not
+    // found" once a booking synced.)
+    localDraftId: prior?.localDraftId ?? prior?.draftId,
     matterTitle: dto.matterTitle ?? undefined,
     message: dto.message ?? undefined,
     responseNote: dto.responseNote ?? undefined,
@@ -177,7 +182,10 @@ export async function pullInbox(): Promise<void> {
   if (!profile) return;
   const res = await getInbox();
   if (!res.ok) return; // soft-fail
-  const list = res.data.bookings.map((dto) => dtoToBooking(dto, profile.initials));
+  const priorById = new Map(useBookingsStore.getState().bookings.map((b) => [b.id, b]));
+  const list = res.data.bookings.map((dto) =>
+    dtoToBooking(dto, profile.initials, priorById.get(dto.id)),
+  );
   mergeBookings(list);
 }
 
@@ -188,12 +196,15 @@ export async function pullMyBookings(): Promise<void> {
   // We don't know the consultant's initials from this response, so use
   // a placeholder. The marketplace listing fills the real initials when
   // the consultant card is rendered alongside.
+  const priorById = new Map(useBookingsStore.getState().bookings.map((b) => [b.id, b]));
   const list = res.data.bookings.map((dto) =>
     // Prefer the real initials from the server join; fall back to a
-    // UUID-slice only if the join returned nothing.
+    // UUID-slice only if the join returned nothing. Pass the prior local row
+    // so localDraftId (readable id for "Open draft") survives the hydrate.
     dtoToBooking(
       dto,
       dto.consultantInitials ?? (dto.consultantProfileId ?? "").slice(0, 2).toUpperCase(),
+      priorById.get(dto.id),
     ),
   );
   mergeBookings(list);
@@ -222,7 +233,10 @@ export async function pushBookingCreate(
   const res = await createBooking(input);
   if (!res.ok) return; // keep local placeholder
   const state = useBookingsStore.getState();
-  const serverBooking = dtoToBooking(res.data.booking, consultantInitials);
+  // Capture the optimistic local row BEFORE filtering it out — it holds the
+  // readable draftId we must preserve as localDraftId so "Open draft" works.
+  const placeholder = state.bookings.find((b) => b.id === localPlaceholderId);
+  const serverBooking = dtoToBooking(res.data.booking, consultantInitials, placeholder);
   useBookingsStore.setState({
     bookings: [
       ...state.bookings.filter((b) => b.id !== localPlaceholderId),

@@ -99,7 +99,7 @@ export function SignIn() {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
       }
-      await refresh();
+      await refresh({ force: true });
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");

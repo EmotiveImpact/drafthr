@@ -302,15 +302,22 @@ function BookingRow({
         </div>
       )}
 
-      {booking.draftId && !booking.draftId.startsWith("demo-") && (
-        <a
-          href={`/editor/${booking.draftId}`}
-          className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <FileText className="size-3.5" aria-hidden />
-          Open draft
-        </a>
-      )}
+      {(() => {
+        // Prefer the readable local id — the editor store is keyed by it.
+        // booking.draftId becomes a server UUID after sync, which the store
+        // can't resolve, so fall back to it only when no local id exists.
+        const openId = booking.localDraftId ?? booking.draftId;
+        if (!openId || openId.startsWith("demo-")) return null;
+        return (
+          <a
+            href={`/editor/${openId}`}
+            className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+          >
+            <FileText className="size-3.5" aria-hidden />
+            Open draft
+          </a>
+        );
+      })()}
 
       <BookingThread booking={booking} perspective="requester" />
     </article>

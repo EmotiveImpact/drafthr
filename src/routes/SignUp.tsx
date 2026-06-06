@@ -362,7 +362,7 @@ function CheckYourEmail({
       // the auth context so the next render sees the signed-in user,
       // then bounce to / — RootRedirect handles whether to show
       // /signup/workspace (no tenant yet) or /hr or /me.
-      await refresh();
+      await refresh({ force: true });
       if (asConsultant) {
         // Skip the HR/Employee picker entirely — the user explicitly
         // came in via the "Join the marketplace" door, so drop them

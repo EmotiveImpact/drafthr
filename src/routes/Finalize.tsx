@@ -161,8 +161,16 @@ export function Finalize() {
     if (!guardCounsel()) return;
     setBusyFormat("txt");
     try {
+      // Route through the DOM so HTML entities are DECODED, not left as raw
+      // "&amp;"/"&lt;" tokens in the .txt (bug #11). innerHTML strips tags AND
+      // decodes entities in one step, matching the PDF/DOCX textContent paths.
+      const htmlToPlain = (html: string): string => {
+        const el = document.createElement("div");
+        el.innerHTML = html ?? "";
+        return (el.textContent ?? "").trim();
+      };
       const plain = draft.sections
-        .map((s) => (s.html ?? "").replace(/<[^>]+>/g, "").trim())
+        .map((s) => htmlToPlain(s.html ?? ""))
         .filter(Boolean)
         .join("\n\n");
       const blob = new Blob([plain], { type: "text/plain;charset=utf-8" });

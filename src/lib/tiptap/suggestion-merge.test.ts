@@ -238,4 +238,49 @@ describe("mergeAcceptedSuggestionsHtml + listSuggestionsHtml (DOM)", () => {
       )
     ).toBe(true);
   });
+
+  // --- export mode (bug #1): reviewer track-changes must never reach a file ---
+  describe("forExport mode", () => {
+    it("removes a REJECTED insertion's text entirely (not reinstated as prose)", () => {
+      const html =
+        '<p>Before <ins data-suggestion-id="r" data-suggestion-kind="insertion" data-status="rejected">This clause is waived.</ins> after</p>';
+      const out = mergeAcceptedSuggestionsHtml(html, { forExport: true });
+      expect(out).not.toContain("This clause is waived.");
+      expect(out).not.toContain("<ins");
+      expect(out).toContain("Before");
+      expect(out).toContain("after");
+    });
+
+    it("unwraps a REJECTED deletion — original text stays, strike markup gone", () => {
+      const html =
+        '<p>keep <del data-suggestion-id="d" data-suggestion-kind="deletion" data-status="rejected">original text</del> end</p>';
+      const out = mergeAcceptedSuggestionsHtml(html, { forExport: true });
+      expect(out).toContain("original text");
+      expect(out).not.toContain("<del");
+    });
+
+    it("drops a PENDING insertion's text on export", () => {
+      const html =
+        '<p><ins data-suggestion-id="p" data-suggestion-kind="insertion" data-status="pending">draft only</ins>final</p>';
+      const out = mergeAcceptedSuggestionsHtml(html, { forExport: true });
+      expect(out).not.toContain("draft only");
+      expect(out).toContain("final");
+    });
+
+    it("still folds accepted insertions in (export keeps accepted edits)", () => {
+      const html =
+        '<p><ins data-suggestion-id="a" data-suggestion-kind="insertion" data-status="accepted">accepted addition</ins></p>';
+      const out = mergeAcceptedSuggestionsHtml(html, { forExport: true });
+      expect(out).toContain("accepted addition");
+      expect(out).not.toContain("<ins");
+    });
+
+    it("authoring mode (default) still LEAVES rejected marks intact", () => {
+      const html =
+        '<p><ins data-suggestion-id="r" data-status="rejected">stays in editor</ins></p>';
+      const out = mergeAcceptedSuggestionsHtml(html);
+      expect(out).toContain("stays in editor");
+      expect(out).toContain('data-suggestion-id="r"');
+    });
+  });
 });

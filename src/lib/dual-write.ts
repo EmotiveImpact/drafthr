@@ -22,6 +22,12 @@ const pendingDraftIds = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const syncedAt = new Map<string, number>();
 const staleRevisionByDraftId = new Map<string, number>();
+// Tombstones: ids deleted locally. A debounced upsert POST already on the wire
+// must NOT resurrect a draft the user just deleted — if the DELETE commits
+// first server-side, the POST's create branch would blindly re-INSERT it
+// (bug #6). We check this set both before sending and after the response so a
+// raced POST is dropped / re-deleted instead of recreating the row.
+const deletedDraftIds = new Set<string>();
 let consecutiveDeleteFailures = 0;
 let deleteFailureToastShown = false;
 let consecutiveStaleConflicts = 0;
@@ -108,6 +114,26 @@ export async function deleteMatterRemotely(matterId: string): Promise<void> {
   }
 }
 
+// Debounced matter-sync timers (mirrors the per-draft timer pattern).
+const matterTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Schedule a debounced mirror of one matter. Needed because matter-only edits
+ * (rename / close / archive / counsel-reviewed) never touch a draft, so they
+ * weren't syncing — the server row stayed stale until an incidental draft edit
+ * re-ran pushMatter (bug #16). Collapses rapid edits into one POST.
+ */
+export function enqueueMatterSync(matterId: string): void {
+  if (!ENABLED || !matterId) return;
+  const existing = matterTimers.get(matterId);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    matterTimers.delete(matterId);
+    void pushMatter(matterId).catch((err) => void err);
+  }, DEBOUNCE_MS);
+  matterTimers.set(matterId, t);
+}
+
 /** Schedule a debounced sync for one draft. Multiple calls in a short window
  * collapse into a single POST. */
 export function enqueueSync(draftId: string): void {
@@ -133,6 +159,9 @@ export function enqueueSync(draftId: string): void {
  * Safe to call when dual-write is off — resolves to a no-op. */
 export async function syncDraft(draftId: string): Promise<void> {
   if (!ENABLED) return;
+  // Don't sync a draft that's been deleted locally — a stale debounced POST
+  // would resurrect it server-side (bug #6).
+  if (deletedDraftIds.has(draftId)) return;
   const draft = snapshotGetter?.(draftId);
   if (!draft) return;
   if (isStaleSnapshot(draft)) return;
@@ -152,6 +181,12 @@ export async function syncDraft(draftId: string): Promise<void> {
       staleRevisionByDraftId.delete(draftId);
       syncedAt.set(draftId, Date.now());
       consecutiveStaleConflicts = 0;
+      // The user deleted this draft WHILE the POST was on the wire — the POST
+      // just (re)created/updated the row, so re-issue the DELETE to converge
+      // (bug #6: delete-during-sync left a ghost row in the server mirror).
+      if (deletedDraftIds.has(draftId)) {
+        void deleteDraftRemotely(draftId);
+      }
     } else if (res.status === 409) {
       markSnapshotStale(draftId, payload.clientRevision);
       console.warn("[dual-write] stale snapshot skipped", draftId, res.status);
@@ -214,8 +249,11 @@ export async function syncAllPending(
 export function resetDualWriteTimers(): void {
   for (const t of timers.values()) clearTimeout(t);
   timers.clear();
+  for (const t of matterTimers.values()) clearTimeout(t);
+  matterTimers.clear();
   pendingDraftIds.clear();
   staleRevisionByDraftId.clear();
+  deletedDraftIds.clear();
   consecutiveDeleteFailures = 0;
   deleteFailureToastShown = false;
   consecutiveStaleConflicts = 0;
@@ -236,6 +274,15 @@ export function _hasSynced(draftId: string): boolean {
 export async function deleteDraftRemotely(draftId: string): Promise<void> {
   if (!ENABLED) return;
   if (!draftId) return;
+  // Tombstone the id and cancel any debounced upsert so an in-flight / pending
+  // POST can't recreate the row after we delete it (bug #6).
+  deletedDraftIds.add(draftId);
+  const pendingTimer = timers.get(draftId);
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    timers.delete(draftId);
+  }
+  pendingDraftIds.delete(draftId);
   try {
     const res = await fetch("/api/store/drafts", {
       method: "DELETE",

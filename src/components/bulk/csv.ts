@@ -84,6 +84,21 @@ export function parseCsv(raw: string): CsvParseResult {
       error: "CSV must include an 'employee_name' column.",
     };
   }
+  // Reject duplicate columns. With two same-named headers, the second cell
+  // (often empty) overwrote the first in the row object — silently clobbering
+  // populated data, or skipping a row as "missing employee_name" when the name
+  // was actually present (bug #7). Surfacing the malformed file is safer than
+  // guessing first-or-last.
+  const seen = new Set<string>();
+  const duplicate = headers.find((h) => (seen.has(h) ? true : (seen.add(h), false)));
+  if (duplicate) {
+    return {
+      headers,
+      rows: [],
+      warnings: [],
+      error: `Duplicate column '${duplicate}' — column names must be unique.`,
+    };
+  }
 
   const rows: Record<string, string>[] = [];
   const warnings: { rowIndex: number; message: string }[] = [];

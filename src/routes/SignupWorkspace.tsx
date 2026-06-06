@@ -73,7 +73,7 @@ export function SignupWorkspace() {
       // Re-fetch session so `activeTenant` is populated BEFORE we navigate.
       // Without this, <Protected> sees stale auth state, sees no active tenant,
       // and bounces us right back here. (#workspace-create-loop)
-      await refresh();
+      await refresh({ force: true });
       // Land on the mode chooser, not /hr — we don't yet know whether
       // this person is HR/Management or Employee. RootRedirect at /
       // would also handle this, but routing explicitly avoids a beat
@@ -113,7 +113,7 @@ export function SignupWorkspace() {
       }
       // Re-fetch session so `activeTenant` is populated BEFORE we navigate.
       // Same fix as onCreate above — see #workspace-create-loop.
-      await refresh();
+      await refresh({ force: true });
       // Land on the mode chooser, not /hr — we don't yet know whether
       // this person is HR/Management or Employee. RootRedirect at /
       // would also handle this, but routing explicitly avoids a beat

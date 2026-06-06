@@ -101,12 +101,14 @@ export async function POST(req: Request): Promise<Response> {
     // still gets a usable email (it'll be a fresh verification link),
     // then return the generic success shape.
     if (isWorkosConflict(err)) {
+      // Anti-enumeration: the response body must be IDENTICAL across the
+      // fresh-create, duplicate-unverified, and duplicate-VERIFIED branches.
+      // Previously the verified-already branch returned userId:null, which was
+      // a precise "this email is a verified account" oracle (bug #12). We now
+      // always return the existing user's id (resending only when unverified);
+      // for a verified account the subsequent verify-email attempt simply
+      // fails generically like any wrong code — no information is leaked.
       const existingUserId = await silentlyResendVerificationByEmail(email);
-      // Returning the userId only when we actually re-sent (i.e. account is
-      // unverified) is fine for anti-enumeration: verified-vs-unverified is
-      // not information an attacker who already knows the email gains real
-      // leverage from. Crucially we still always return ok() shape; the
-      // userId field is just absent in the verified-already branch.
       return ok(existingUserId);
     }
 
@@ -161,11 +163,14 @@ async function silentlyResendVerificationByEmail(email: string): Promise<string 
     const list = await workos.userManagement.listUsers({ email, limit: 1 });
     const user = list.data?.[0];
     if (!user) return null;
-    // Only resend if the email is still unverified — confirmed accounts
+    // Only RESEND if the email is still unverified — confirmed accounts
     // shouldn't receive unsolicited verification emails (would look like
-    // phishing to a security-aware user).
-    if (user.emailVerified) return null;
-    await workos.userManagement.sendVerificationEmail({ userId: user.id });
+    // phishing to a security-aware user). But we still RETURN the user id in
+    // both cases so the sign-up response body is identical for verified and
+    // unverified duplicates (anti-enumeration — bug #12).
+    if (!user.emailVerified) {
+      await workos.userManagement.sendVerificationEmail({ userId: user.id });
+    }
     return user.id;
   } catch (err) {
     console.warn("[auth/sign-up] silent resend failed", err);

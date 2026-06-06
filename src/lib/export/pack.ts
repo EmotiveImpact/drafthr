@@ -64,22 +64,14 @@ export async function exportLetterPack(
   if (evidence.length > 0) {
     const evidenceFolder = zip.folder("evidence")!;
     evidence.forEach((item, idx) => {
-      const padded = String(idx + 1).padStart(2, "0");
       if (item.fileDataUrl) {
         const parsed = parseDataUrl(item.fileDataUrl);
         if (parsed) {
-          const ext = extFromMime(parsed.mime) || extFromFilename(item.filename);
-          const safeName = sanitizeFilename(item.filename || `${item.kind}.${ext || "bin"}`);
-          const name = ext && !safeName.endsWith(`.${ext}`) ? `${safeName}.${ext}` : safeName;
-          evidenceFolder.file(`${padded}-${name}`, parsed.bytes, { binary: true });
+          evidenceFolder.file(evidenceFileName(item, idx), parsed.bytes, { binary: true });
         }
       } else if (item.content) {
         // Note-only items get written as .txt
-        const safeName = sanitizeFilename(item.filename || `${item.kind}-${padded}.txt`);
-        evidenceFolder.file(
-          `${padded}-${safeName.endsWith(".txt") ? safeName : `${safeName}.txt`}`,
-          item.content
-        );
+        evidenceFolder.file(evidenceFileName(item, idx), item.content);
       }
     });
     evidenceFolder.file("index.html", buildEvidenceIndexHtml(draft));
@@ -296,7 +288,15 @@ function renderExhibitItem(
       ${item.sectionIds?.length ? `<div class="caption">Backs up: ${escapeHtml(sectionLabels(draft, item.sectionIds))}</div>` : ""}
       ${item.content ? `<div class="body">${escapeHtml(item.content)}</div>` : ""}
       ${imageUrl ? `<img src="${escapeAttribute(imageUrl)}" alt="${escapeHtml(item.filename || "")}" />` : ""}
-      ${!isImage && item.fileDataUrl ? `<p style="margin-top:8px"><a href="./${padded}-${escapeHtml(item.filename || "file")}">Open file →</a></p>` : ""}
+      ${
+        !isImage && item.fileDataUrl
+          ? `<p style="margin-top:8px"><a href="${escapeAttribute(
+              // Use the SAME name the write loop produced (full-array index +
+              // ext/sanitize/truncation) so the link resolves (bug #10).
+              "./" + evidenceFileName(item, allEvidence.indexOf(item)),
+            )}">Open file →</a></p>`
+          : ""
+      }
     </div>`;
 }
 
@@ -315,6 +315,29 @@ function parseDataUrl(url: string): { mime: string; bytes: Uint8Array } | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The on-disk filename for an evidence item inside the pack — `NN-<name>`.
+ * `idx` MUST be the item's index in the full `draft.evidence` array (not a
+ * per-display-mode filtered index) so the index.html links and the written
+ * files agree (bug #10). Shared by the write loop and the index renderer so
+ * the href always points at the file that actually exists (correct extension,
+ * sanitised chars, 80-char truncation).
+ */
+function evidenceFileName(item: EvidenceItem, idx: number): string {
+  const padded = String(idx + 1).padStart(2, "0");
+  if (item.fileDataUrl) {
+    const parsed = parseDataUrl(item.fileDataUrl);
+    const mime = parsed?.mime ?? item.mimeType ?? "";
+    const ext = (mime ? extFromMime(mime) : null) || extFromFilename(item.filename);
+    const safeName = sanitizeFilename(item.filename || `${item.kind}.${ext || "bin"}`);
+    const name = ext && !safeName.endsWith(`.${ext}`) ? `${safeName}.${ext}` : safeName;
+    return `${padded}-${name}`;
+  }
+  // Note-only item → .txt
+  const safeName = sanitizeFilename(item.filename || `${item.kind}-${padded}.txt`);
+  return `${padded}-${safeName.endsWith(".txt") ? safeName : `${safeName}.txt`}`;
 }
 
 function extFromMime(mime: string): string | null {

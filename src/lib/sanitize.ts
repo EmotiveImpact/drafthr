@@ -163,6 +163,16 @@ export function sanitizeLetterHtml(dirty: string): string {
  */
 export function sanitizeLetterHtmlForExport(dirty: string): string {
   if (typeof window === "undefined") return dirty;
+  // Belt-and-braces: callers run mergeAcceptedSuggestionsHtml(..., {forExport:true})
+  // first, which already removes all <ins>/<del> wrappers. But DOMPurify's
+  // USE_PROFILES:{html:true} RE-PERMITS standard HTML5 tags (including ins/del)
+  // regardless of the narrowed ALLOWED_TAGS, and KEEP_CONTENT:true keeps inner
+  // text — so on its own the allowlist does NOT strip suggestion marks. We
+  // therefore explicitly scrub any residual ins/del from the DOM before AND
+  // after sanitising: a stray <ins> (rejected/pending insertion) is removed
+  // WITH its text; a <del> is unwrapped (original text kept, markup dropped).
+  // This guarantees reviewer track-changes can never reach an exported file.
+  const preScrubbed = stripSuggestionMarks(dirty);
   // Same allowlists minus the suggestion tags + attributes. We rebuild the
   // arrays inline so the authoring path's lists aren't mutated.
   const exportTags = ALLOWED_TAGS.filter((t) => t !== "ins" && t !== "del");
@@ -172,8 +182,8 @@ export function sanitizeLetterHtmlForExport(dirty: string): string {
       !a.startsWith("data-status"),
   );
   registerSanitizeHooks();
-  const blankLinkHrefs = collectBlankLinkHrefs(dirty);
-  const cleaned = DOMPurify.sanitize(dirty, {
+  const blankLinkHrefs = collectBlankLinkHrefs(preScrubbed);
+  const cleaned = DOMPurify.sanitize(preScrubbed, {
     ALLOWED_TAGS: exportTags,
     ALLOWED_ATTR: exportAttrs,
     ADD_ATTR: ["target"],
@@ -183,5 +193,28 @@ export function sanitizeLetterHtmlForExport(dirty: string): string {
     ALLOWED_URI_REGEXP:
       /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i,
   });
-  return hardenSanitizedHtml(cleaned, blankLinkHrefs);
+  // Post-scrub too, in case USE_PROFILES re-introduced an ins/del from input.
+  return stripSuggestionMarks(hardenSanitizedHtml(cleaned, blankLinkHrefs));
+}
+
+/**
+ * Remove every <ins>/<del> from an HTML string for the EXPORT path:
+ *   <ins> → removed entirely (text + element) — an insertion not already
+ *           folded in by the merge step is non-accepted and must not appear.
+ *   <del> → unwrapped (children kept, element dropped) — the original text
+ *           survives without the strike-through markup.
+ * No-op when there are no such tags (cheap string probe first).
+ */
+function stripSuggestionMarks(html: string): string {
+  if (!html || (!html.includes("<ins") && !html.includes("<del"))) return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll("ins").forEach((el) => el.remove());
+  root.querySelectorAll("del").forEach((el) => {
+    const parent = el.parentNode;
+    if (!parent) return;
+    while (el.firstChild) parent.insertBefore(el.firstChild, el);
+    parent.removeChild(el);
+  });
+  return root.innerHTML;
 }

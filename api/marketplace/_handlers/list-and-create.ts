@@ -44,6 +44,15 @@ export async function GET(req: Request): Promise<Response> {
     eq(consultantBookings.tenantId, auth.activeTenant.id),
   ];
   if (filterConsultantProfileId) {
+    // The column is a uuid — a non-UUID filter value makes Postgres raise
+    // 22P02, which surfaced as a generic 500 (bug #19). A non-UUID consultant
+    // can't match anything, so return an empty list cleanly instead.
+    if (!serverUuidOrNull(filterConsultantProfileId)) {
+      return new Response(JSON.stringify({ bookings: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
     filters.push(eq(consultantBookings.consultantProfileId, filterConsultantProfileId));
   }
 
@@ -100,6 +109,12 @@ export async function POST(req: Request): Promise<Response> {
   const body = parsed.body;
   if (typeof body.consultantProfileId !== "string") {
     return jsonError("consultantProfileId required", 400);
+  }
+  // Guard the uuid column: a non-UUID id would make Postgres raise 22P02 →
+  // generic 500 (bug #19). Treat it as a missing profile (same as a real
+  // not-found), which is the honest outcome.
+  if (!serverUuidOrNull(body.consultantProfileId)) {
+    return jsonError("Consultant profile not found", 404);
   }
 
   const db = getDb();

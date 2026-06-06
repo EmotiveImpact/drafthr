@@ -858,7 +858,7 @@ function injectSignatureIntoSignatureSection(
   // Same export-time discipline as PDF: collapse accepted suggestions first,
   // strip the rest via the export sanitiser so track-changes never reaches
   // the .docx output.
-  const merged = mergeAcceptedSuggestionsHtml(section.html);
+  const merged = mergeAcceptedSuggestionsHtml(section.html, { forExport: true });
   const html = sanitizeLetterHtmlForExport(merged);
   if (!signature) return html;
   if (section.sectionId === "signature") return signature + html;

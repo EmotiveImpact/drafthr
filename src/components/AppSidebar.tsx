@@ -302,18 +302,19 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
                 </SidebarMenuItem>
               ))}
               <SidebarMenuItem>
+                {/* Disabled placeholder until a real booking-inbox route
+                 * exists. Previously this linked to "/c" — the SAME target as
+                 * "Home" — so both rows highlighted active on /c and clicking
+                 * Inbox just re-navigated home (bug #22). Rendered disabled
+                 * (no link, no active state) so it reads as "coming soon". */}
                 <SidebarMenuButton
-                  asChild
-                  tooltip="Booking inbox"
-                  isActive={loc.pathname === "/c"}
+                  tooltip="Booking inbox — coming soon"
+                  className="text-muted-foreground cursor-not-allowed"
+                  aria-disabled
                 >
-                  <Link to="/c">
-                    <Inbox />
-                    <span>Inbox</span>
-                  </Link>
+                  <Inbox />
+                  <span>Inbox</span>
                 </SidebarMenuButton>
-                {/* Empty-state badge until the bookings backend lands. The
-                 * shell stays so the badge slot is reserved for later. */}
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

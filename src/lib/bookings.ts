@@ -38,8 +38,14 @@ export type Booking = {
    *  neither unique nor stable, so display/lookup uses this when present.
    *  Absent only for local-only demo bookings against seed consultants. */
   consultantProfileId?: string;
-  /** Optional — set when an HR user books from inside a draft. */
+  /** Optional — set when an HR user books from inside a draft. After a server
+   *  sync this holds the server's UUID (the draft_id column is a uuid). */
   draftId: string;
+  /** The ORIGINAL local, human-readable draft id (e.g. "draft_x7k2…") used to
+   *  open the draft in the editor. `draftId` is hashed to a one-way UUID for
+   *  the server, so without this the HR "Open draft" link breaks after sync
+   *  (the editor store is keyed by readable ids). Preserved across hydrates. */
+  localDraftId?: string;
   /** Optional human-friendly title — used by the consultant inbox card. */
   matterTitle?: string;
   /** Free-text request from HR — what they want reviewed and why. */

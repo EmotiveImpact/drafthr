@@ -19,10 +19,139 @@ from a handler JSON 401/403 (enforced).
 |---|----------|------|---------|--------|
 | **X1** | **CRITICAL (feature gap)** | `src/lib/export/pack.ts` | **The "tribunal-grade" evidence pack is NOT signed and carries NO per-file hashes.** The crypto infra is fully built and sound (`src/lib/sign/pades.ts` PAdES-B-T signer, `api/sign/manifest.ts`, canonical-JSON + audit hash-chain — all verified clean) but has ZERO callers in the pack path. `buildManifest` records no SHA-256 for the PDF/DOCX/evidence files, and `exportLetterPack` never calls `/api/sign/manifest` or writes `manifest.sig`. A recipient can swap any file and nothing detects it — the core differentiator is unbacked today. **Also X3**: `manifest.json` uses pretty-printed/insertion-order JSON + a volatile `generatedAt`, so it's non-reproducible — must switch to `canonicalJson` before/when signing is wired. | **Needs the user.** This changes the export artifact's structure and is the product's headline claim — wants a deliberate design pass + the user's awareness, not an autonomous-loop change. Scoped & ready to build on green-light. |
 
-_The autonomous safe queue is now empty — only X1 (needs the user) remains. Everything else has been fixed or verified-sound across 15 iterations._
+_Only X1 (needs the user) remains. Everything else has been fixed or verified-sound._
 
 ### Known infra note (not a bug)
 - **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
+
+---
+
+## 2026-06-06 — auth render-gating + full multi-agent bug sweep (22 fixed)
+
+Two user-requested passes. **(A)** Make the app fully auth-protected — no app
+chrome or route content paints before authentication. **(B)** An exhaustive
+multi-agent bug hunt (8 surfaces × find→adversarial-verify): 22 confirmed bugs
+(1 candidate rejected as a false positive), ALL fixed. Final gate: `tsc -b`
+clean · `vite build` OK · **453 tests** (+17). Verification used the real gate
+(`npm run build` + `npx vitest run`), TDD where the seam allowed.
+
+### (A) Auth render-gating — app no longer shows before sign-in
+The route boundary was already sound (all 46 routes correctly classified;
+server perimeter 401/400 to anon, re-confirmed at runtime). The leak was
+CLIENT-SIDE rendering:
+- **AUTH-1 (HIGH) — app shell painted pre-auth.** `Layout.tsx` chose
+  sidebar-vs-minimal-shell purely by pathname, with no auth awareness — so an
+  unauthenticated visitor to `/hr`, `/matters`, `/editor/x` saw the full
+  `AppSidebar` (nav, recent drafts from localStorage, workspace name, user
+  card) for the entire `/api/auth/session` round-trip before redirect. Fix:
+  gate the shell on auth — render the minimal chromeless shell until a session
+  (and a tenant, except on consultant `/c` routes where the tenant is minted
+  lazily) is confirmed.
+- **AUTH-2 (HIGH) — render-then-bounce in Protected.** `ProtectedGate`
+  redirected via `useEffect` (post-render), and two states (signed-in-no-tenant,
+  role-not-yet-resolved) had no render guard → the gated child mounted and fired
+  effects for a frame before bouncing. Rewrote it to branch SYNCHRONOUSLY with
+  `<Navigate>` (mirroring RootRedirect) so a non-authorized state commits no
+  children at all. TDD: `src/lib/auth/Protected.test.tsx` (8) — child never
+  renders while loading / signed-out / no-tenant / wrong-or-null-role; renders
+  only when fully authorized; tenant-less consultant passes on `/c`;
+  auth-disabled passes through.
+
+### (B) Bug sweep — 22 fixed (severity order)
+
+**HIGH**
+- **#1 — rejected/pending AI suggestions leaked into PDF/DOCX/mobile exports.**
+  `mergeAcceptedSuggestionsHtml` left rejected `<ins>` text intact, and
+  `sanitizeLetterHtmlForExport` (KEEP_CONTENT + USE_PROFILES re-permitting
+  `<ins>/<del>`) didn't strip them — so a clause the reviewer explicitly
+  REJECTED reappeared as prose in the final legal document. Fix: a `forExport`
+  merge mode (rejected/pending insertion → removed with text; rejected/pending
+  deletion → unwrapped to original text) wired into all three export sinks, PLUS
+  a defense-in-depth `stripSuggestionMarks` post-scrub in the export sanitiser.
+  TDD: `suggestion-merge.test.ts` (+5), `sanitize.test.ts` (+3).
+- **#2 — inline AI diff flattened images/tables/links/figure-refs; Accept made
+  it permanent.** The default inline diff rebuilds a section from flattened
+  text, silently dropping embedded evidence images, table structure, hyperlinks,
+  and the `figure-ref`/`attachment-ref` spans the export resolves. Fix:
+  `proposeSectionChange` now detects non-text content (`hasNonTextContent`) and
+  falls back to CARD mode (Accept replaces verbatim — nothing flattened). TDD:
+  `store.propose.test.ts`.
+- **#3 — HR "Open draft" link broke after a booking synced.** `draftId` is
+  hashed to a one-way UUID for the server; after sync `dtoToBooking` overwrote
+  the readable id with the UUID, so the editor (keyed by readable ids) showed
+  "Draft not found". Fix: a preserved `localDraftId` on `Booking`, threaded
+  through `pushBookingCreate` / `pullMyBookings` / `pullInbox`; MyBookings links
+  to `localDraftId ?? draftId`.
+- **#4 — `refresh()` returned a stale pre-mutation session.** Inflight-coalescing
+  meant a post-auth caller (workspace-create / sign-in / verify) could attach to
+  a background focus-refresh reading the OLD cookie → observed null user/tenant →
+  bounced backward (workspace-create loop, sign-in bounce-back). Fix:
+  `refresh({ force: true })` bypasses the in-flight fetch; all 7 post-mutation
+  callers now force.
+
+**MEDIUM**
+- **#5 — second AI proposal over an unresolved pending change corrupted
+  prevHtml.** Diffed against already-marked-up html and overwrote the clean
+  snapshot → Reject restored garbled marks. Fix: diff against (and preserve)
+  the canonical `pendingChange.prevHtml`. *(store.ts; same change as #2)*
+- **#6 — dual-write DELETE raced an in-flight upsert POST → ghost row + spurious
+  `draft.created` audit.** Fix: client-side tombstone set (`deletedDraftIds`) +
+  cancel pending timer on delete; `syncDraft` skips/re-deletes a tombstoned id.
+  Also #13 server clamp hardens the create path. *(src/lib/dual-write.ts)*
+- **#7 — bulk CSV duplicate header silently dropped/clobbered row data.** Fix:
+  reject the CSV with a clear "Duplicate column" error. TDD: `csv.test.ts`.
+- **#8 — Reports "Time to resolve" excluded archived matters** (disagreeing with
+  `closedMatters()`). Fix: count both terminal states (`status !== "active"`).
+- **#9 — PDF "Attachments" list double-numbered** ("1. 1.") — literal prefix
+  inside a decimal `<ol>` with no Tailwind Preflight on PDF surfaces. Fix: drop
+  the literal prefix, set explicit `list-style:decimal`.
+- **#10 — broken "Open file" links in `evidence/index.html`.** The href
+  re-derived from the raw filename while the file was written with a sanitised/
+  extension-augmented name + full-array index. Fix: shared `evidenceFileName()`
+  used by both the write loop and the index renderer (full-array index).
+- **#11 — TXT export left HTML entities undecoded** (`&amp;`, `&lt;`). Fix:
+  route through `div.textContent` (strips tags AND decodes), matching PDF/DOCX.
+- **#12 — sign-up leaked verified-account existence via `userId:null`** (an
+  enumeration oracle contradicting the anti-enumeration contract). Fix: always
+  return the existing user's id; the body is now identical across fresh /
+  duplicate-unverified / duplicate-verified. *(api/auth/_handlers/sign-up.ts)*
+- **#13 — client-controlled `clientRevision` stored verbatim as
+  `drafts.updatedAt`** → a far-future value permanently 409-locked the draft.
+  Fix: `updatedAt` is server-authoritative (clamped to now + small skew); the
+  client revision is used only for the stale comparison.
+- **#14 — NotificationsBell popover stayed open after a click** (the bell lives
+  in persistent chrome, so navigation doesn't unmount it). Fix: controlled
+  Popover, `setOpen(false)` before every navigation.
+
+**LOW**
+- **#15 — selection-scope chat rendered raw `[scope:]`/`[selection:]`
+  annotations.** Fix: parser regex tolerates a trailing `[selection:…]` block.
+- **#16 — standalone matter rename/close/archive never synced** (only deletions
+  + draft-triggered pushes did). Fix: debounced `enqueueMatterSync` on every
+  matter create/update in the store subscription. *(dual-write.ts, store.ts)*
+- **#17 — one-shot image migration could clobber a letterhead uploaded during
+  the upload round-trip.** Fix: compare-and-set — only apply the migrated URL if
+  the field still equals the original source value. *(App.tsx)*
+- **#18 — mail-merge advertised camelCase wizard ids the snake_case substitution
+  layer couldn't fill.** Fix: shared `foldKey` (camelCase→snake_case) for
+  key derivation, dedup, and substitution. TDD: `mailmerge.test.ts` (+1).
+- **#19 — marketplace bookings GET/POST 500'd on a non-UUID id** (unhandled
+  Postgres 22P02). Fix: `serverUuidOrNull` guard → empty list (GET) / 404 (POST).
+- **#20 — WorkspaceSwitcher swallowed a failed `/switch`** (silent no-op on a
+  403 deprovisioned seat). Fix: toast the error + reload the list; also filter
+  deprovisioned seats out of `/api/workspace/list`.
+- **#21 — AuthCallback hung on "Signing you in…" under React StrictMode (dev).**
+  The `cancelled` cleanup killed the only surviving run. Fix: drop the
+  `cancelled` gating — the `started` ref is the single-run guard.
+- **#22 — consultant sidebar "Home" and "Inbox" both pointed to `/c`** (both
+  highlighted active; Inbox was a dead duplicate). Fix: render Inbox as a
+  disabled "coming soon" placeholder until a real inbox route ships.
+
+**Rejected (false positive):** "last-active-owner guard counts deprovisioned
+owners" — the missing `status='active'` filter in the owner-count query is real,
+but the claimed "zero owners" outcome is unreachable (three concurrent gates —
+`canManageOwners`, no-self-target, and the session-level active-status check —
+prevent it). Logged as a latent hardening note, not a live bug.
 
 ---
 

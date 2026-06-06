@@ -90,7 +90,7 @@ export function ResetPassword() {
       }
       // Session minted server-side; pull it into the provider before
       // navigating so RootRedirect sees the user and routes correctly.
-      await refresh();
+      await refresh({ force: true });
       navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset your password.");

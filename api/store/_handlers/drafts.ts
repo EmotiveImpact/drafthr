@@ -95,7 +95,16 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
     const referenceError = await validateTenantReferences(db, tenantId, matterId, templateSourceId);
     if (referenceError) return referenceError;
 
-    const acceptedRevision = new Date(clientRevision ?? Date.now());
+    // updatedAt must be server-authoritative. The client's revision is trusted
+    // only for the stale COMPARISON above; persisting it verbatim let a caller
+    // send a far-future epoch that poisons drafts.updatedAt and permanently
+    // 409s every subsequent legitimate write (bug #13). Clamp to now (+ a small
+    // clock-skew window) so a future value can never lock the draft.
+    const MAX_SKEW_MS = 60_000;
+    const nowMs = Date.now();
+    const acceptedRevision = new Date(
+      Math.min(clientRevision ?? nowMs, nowMs + MAX_SKEW_MS),
+    );
 
     const writeResult = await db.transaction(async (tx) => {
       if (isCreate) {

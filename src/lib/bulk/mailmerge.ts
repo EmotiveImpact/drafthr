@@ -74,11 +74,25 @@ function escapeHtml(value: string): string {
  * hyphens folded to underscores. Lets the model write {{employee-name}}
  * and still match the CSV column `employee_name`.
  */
+/**
+ * Canonical placeholder/column key: lowercase, with `.`/`-` AND camelCase
+ * boundaries folded to `_`. This is the single normalisation both sides of the
+ * merge agree on — without the camelCase fold, a wizard scalar id like
+ * `reviewMeetingDate` (advertised verbatim as a {{placeholder}}) could never
+ * match a snake_case CSV column `review_meeting_date` (bug #18).
+ */
+function foldKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[.\-]/g, "_");
+}
+
 function normaliseRow(row: MergeRow): Map<string, string> {
   const out = new Map<string, string>();
   for (const [rawKey, rawValue] of Object.entries(row)) {
     if (rawValue === undefined || rawValue === null) continue;
-    const key = rawKey.toLowerCase().replace(/[.\-]/g, "_");
+    const key = foldKey(rawKey);
     const value = typeof rawValue === "number" ? String(rawValue) : rawValue;
     if (value === "") continue;
     out.set(key, value);
@@ -96,8 +110,9 @@ export function substituteHtml(html: string, row: MergeRow): string {
   if (!html) return html;
   const lookup = normaliseRow(row);
   return html.replace(PLACEHOLDER_RE, (_match, rawName: string) => {
-    const key = rawName.toLowerCase().replace(/[.\-]/g, "_");
-    const value = lookup.get(key);
+    // foldKey handles camelCase too, so a stray {{reviewMeetingDate}} the model
+    // emitted still resolves against a review_meeting_date column (bug #18).
+    const value = lookup.get(foldKey(rawName));
     if (value === undefined) {
       return `[${rawName} not set]`;
     }
@@ -163,7 +178,11 @@ export function placeholderKeysFor(
         q.type === "date" ||
         q.type === "currency"
       ) {
-        wizardScalars.push(q.id);
+        // Emit snake_case so the advertised token matches the snake_case
+        // substitution layer (bug #18). A camelCase wizard id like
+        // reviewMeetingDate becomes review_meeting_date — the form the CSV
+        // column and the model's {{placeholder}} both resolve through.
+        wizardScalars.push(foldKey(q.id));
       }
     }
   }
@@ -181,10 +200,13 @@ export function placeholderKeysFor(
   const seen = new Set<string>();
   const out: string[] = [];
   for (const key of merged) {
-    const norm = key.trim().toLowerCase();
+    const trimmed = key.trim();
+    // Dedup by the FOLDED key so a snake_case CSV header and its camelCase
+    // wizard-id twin collapse to one advertised placeholder (bug #18).
+    const norm = foldKey(trimmed);
     if (!norm || seen.has(norm)) continue;
     seen.add(norm);
-    out.push(key.trim());
+    out.push(trimmed);
   }
   return out;
 }

@@ -956,7 +956,11 @@ function timeToResolve(matters: Matter[]): Resolution {
   // closed matters that pre-date the archivedAt field.
   const durations: number[] = [];
   for (const m of matters) {
-    if (m.status !== "closed") continue;
+    // Count BOTH terminal states. "archived" is also a resolved state (set by
+    // the Archive action, which records archivedAt) — excluding it under-
+    // reported resolution data and disagreed with closedMatters() in
+    // matters.ts, which counts archived as closed (bug #8).
+    if (m.status === "active") continue;
     const closed = m.archivedAt ?? m.updatedAt;
     if (!closed || !m.createdAt) continue;
     const days = differenceInCalendarDays(new Date(closed), new Date(m.createdAt));

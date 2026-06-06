@@ -823,16 +823,42 @@ export const useDraftStore = create<Store>()(
           if (!target) return s;
           // Mode resolution: caller can force a mode via change.diffViewMode;
           // otherwise we read the user's preference. Defaults to inline.
-          const mode = change.diffViewMode ?? getDiffViewMode();
+          let mode = change.diffViewMode ?? getDiffViewMode();
+
+          // The canonical text to diff against / restore on reject. If a
+          // pending inline change is still open, sec.html already carries
+          // <ins>/<del> marks — diffing against THAT flattens both sides and
+          // corrupts prevHtml (bug #5). Use the existing pendingChange.prevHtml
+          // (the clean original) as the diff base and preserve it, so a later
+          // reject still restores clean text.
+          const canonicalHtml =
+            target.pendingChange?.prevHtml ?? target.html;
+
+          // Inline diff rebuilds the section from flattened text (htmlToText →
+          // sentences), which silently DROPS images, tables, links, and the
+          // figure/attachment-ref spans that the export pipeline resolves —
+          // and Accept makes that loss permanent (bug #2). When either the
+          // current canonical text OR the proposal contains such non-text
+          // content, fall back to card mode (Accept replaces with proposedHtml
+          // verbatim — nothing is flattened).
+          if (
+            mode === "inline" &&
+            (hasNonTextContent(canonicalHtml) ||
+              hasNonTextContent(change.proposedHtml))
+          ) {
+            mode = "card";
+          }
+
           const sections = d.sections.map((sec) => {
             if (sec.id !== sectionId) return sec;
             if (mode === "inline") {
               // Stage the diff as section.html so the editor renders the
               // proposal as track-changes marks the user can accept /
               // reject one-at-a-time. prevHtml is the canonical text
-              // we'll restore on reject-all.
+              // we'll restore on reject-all — always the CLEAN original,
+              // even when re-proposing over an unresolved pending change.
               const diffed = sanitizeLetterHtml(
-                diffHtmlAsSuggestion(sec.html, change.proposedHtml, {
+                diffHtmlAsSuggestion(canonicalHtml, change.proposedHtml, {
                   author: "Claude AI",
                   body: change.instruction,
                 }),
@@ -843,14 +869,17 @@ export const useDraftStore = create<Store>()(
                 pendingChange: {
                   ...change,
                   diffViewMode: "inline" as const,
-                  prevHtml: sec.html,
+                  prevHtml: canonicalHtml,
                 },
               };
             }
-            // Card mode — leave section.html alone; PendingChangeCard reads
+            // Card mode — restore section.html to the clean canonical text (so
+            // a prior inline proposal's marks don't linger) and surface the
+            // proposal in pendingChange; PendingChangeCard reads
             // pendingChange.proposedHtml for the "after" pane.
             return {
               ...sec,
+              html: canonicalHtml,
               pendingChange: { ...change, diffViewMode: "card" as const },
             };
           });
@@ -1605,6 +1634,7 @@ import {
   enqueueSync as _dualWriteEnqueueSync,
   deleteDraftRemotely as _dualWriteDeleteDraftRemotely,
   deleteMatterRemotely as _dualWriteDeleteMatterRemotely,
+  enqueueMatterSync as _dualWriteEnqueueMatterSync,
   setDualWriteSnapshotGetter as _setDualWriteSnapshotGetter,
   setDualWriteMatterGetter as _setDualWriteMatterGetter,
   isDualWriteEnabled as _isDualWriteEnabled,
@@ -1636,12 +1666,17 @@ if (_isDualWriteEnabled()) {
       prevDrafts = next;
     }
 
-    // Matter deletions — mirror so a removed matter is cleared server-side.
-    // Matter *creates/updates* don't need their own push: the draft sync
-    // mirrors a draft's matter before linking it (pushMatter in syncDraft),
-    // which is the only point where the server actually needs the matter row.
+    // Matters: mirror deletions immediately, and debounce-sync any
+    // create/update so matter-only edits (rename / close / archive /
+    // counsel-reviewed) reach the server — previously they only synced as a
+    // side-effect of an incidental draft edit, leaving the row stale (bug #16).
     const nextMatters = state.matters;
     if (nextMatters !== prevMatters) {
+      for (const [id, matter] of Object.entries(nextMatters)) {
+        if (prevMatters[id] !== matter) {
+          _dualWriteEnqueueMatterSync(id);
+        }
+      }
       for (const id of Object.keys(prevMatters)) {
         if (!(id in nextMatters)) {
           void _dualWriteDeleteMatterRemotely(id);
@@ -1751,6 +1786,30 @@ function computeProtectedDeadline(
  * Tolerates extra attributes inside the <mark> tag and arbitrary nested
  * inline content. Returns the original sections array if no change.
  */
+/**
+ * True when HTML carries content the inline sentence-diff would silently lose:
+ * images, tables, hyperlinks, or the figure/attachment-reference spans the
+ * export pipeline resolves to numbered exhibits. The inline diff rebuilds a
+ * section from flattened text, so any of these must route through card mode
+ * (which replaces with the proposal verbatim on accept). Cheap string probe
+ * first; falls back to a regex scan when no DOM is available.
+ */
+function hasNonTextContent(html: string): boolean {
+  if (!html) return false;
+  // Fast path: none of the markers present → plain text, inline diff is safe.
+  if (
+    !/<img\b/i.test(html) &&
+    !/<table\b/i.test(html) &&
+    !/<a\b[^>]*\bhref=/i.test(html) &&
+    !/\bdata-fig-id=/i.test(html) &&
+    !/\bdata-att-id=/i.test(html) &&
+    !/class="(?:figure-ref|attachment-ref)"/i.test(html)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function stripMark(
   sections: Section[],
   sectionId: string | undefined,

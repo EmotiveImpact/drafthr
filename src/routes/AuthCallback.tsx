@@ -16,9 +16,15 @@ export function AuthCallback() {
   const started = useRef(false);
 
   useEffect(() => {
+    // The `started` ref is the single-run guard — it survives React
+    // StrictMode's dev-only double-invoke (and remount), so the code is
+    // exchanged exactly once. We deliberately do NOT gate the async chain on a
+    // `cancelled` cleanup flag: under StrictMode the first effect's cleanup
+    // runs immediately, and if it cancelled the chain, the ONLY surviving run
+    // (the 2nd invoke returns early on the ref) would never navigate — leaving
+    // the user stuck on "Signing you in…" forever. (Bug #21.)
     if (started.current) return;
     started.current = true;
-    let cancelled = false;
 
     const code = params.get("code");
     const state = params.get("state");
@@ -39,8 +45,9 @@ export function AuthCallback() {
           const data = await res.json().catch(() => ({}) as { error?: string });
           throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
         }
-        await refresh();
-        if (cancelled) return;
+        // Force a fresh session fetch (don't coalesce onto a stale background
+        // refresh — see AuthProvider).
+        await refresh({ force: true });
 
         // After auth: if the user arrived via /join/{code}, the JoinInvite route
         // stashed the code in sessionStorage. Pick it back up so the workspace
@@ -92,17 +99,12 @@ export function AuthCallback() {
           } catch {
             /* network blip — fall through to the default route */
           }
-          if (cancelled) return;
           navigate(activeTenant ? "/" : "/signup/workspace", { replace: true });
         }
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Sign-in failed");
+        setError(err instanceof Error ? err.message : "Sign-in failed");
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
   }, [params, navigate, refresh]);
 
   return (

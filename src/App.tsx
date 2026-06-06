@@ -98,8 +98,23 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     const { profile, patchEmployer } = useProfileStore.getState();
-    void migrateEmployerImages(profile.employer).then((patch) => {
-      if (!cancelled && patch) patchEmployer(patch);
+    const before = profile.employer;
+    void migrateEmployerImages(before).then((patch) => {
+      if (cancelled || !patch) return;
+      // Compare-and-set: only apply a migrated URL if that image field is STILL
+      // the original value the migration started from. The upload round-trip is
+      // slow; if the user uploaded a new letterhead/signature in Settings
+      // meanwhile, applying the stale migrated URL would silently revert it
+      // (bug #17). Re-read the live store at apply time.
+      const cur = useProfileStore.getState().profile.employer;
+      const safe: typeof patch = {};
+      if (patch.letterheadDataUrl !== undefined && cur.letterheadDataUrl === before.letterheadDataUrl) {
+        safe.letterheadDataUrl = patch.letterheadDataUrl;
+      }
+      if (patch.signatureDataUrl !== undefined && cur.signatureDataUrl === before.signatureDataUrl) {
+        safe.signatureDataUrl = patch.signatureDataUrl;
+      }
+      if (Object.keys(safe).length > 0) patchEmployer(safe);
     });
     return () => {
       cancelled = true;

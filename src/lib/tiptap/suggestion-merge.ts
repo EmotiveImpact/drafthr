@@ -140,12 +140,31 @@ function collect(
 const SUGGESTION_SELECTOR =
   "ins[data-suggestion-id], del[data-suggestion-id]";
 
-/** Apply mergeAcceptedSuggestions to an HTML string. Same semantics. */
-export function mergeAcceptedSuggestionsHtml(html: string): string {
+/**
+ * Apply mergeAcceptedSuggestions to an HTML string.
+ *
+ * Two modes:
+ *   - authoring (default): rejected marks are LEFT intact, so the reviewer
+ *     still sees their decision in the editor.
+ *   - export (`{ forExport: true }`): the result is a FINAL document, so
+ *     reviewer state must never appear. Rejected/pending INSERTIONS are
+ *     removed with their text (they were never wanted); rejected/pending
+ *     DELETIONS are unwrapped, keeping the original text but dropping the
+ *     strike-through markup. After this, no <ins>/<del> wrapper remains.
+ *
+ * (Bug: in authoring mode rejected insertions kept their text inside <ins>,
+ * and the export sanitiser's KEEP_CONTENT + USE_PROFILES re-permitted <ins>,
+ * so a clause the reviewer explicitly rejected reappeared as plain prose in
+ * the exported PDF/DOCX/mobile view.)
+ */
+export function mergeAcceptedSuggestionsHtml(
+  html: string,
+  opts?: { forExport?: boolean },
+): string {
   if (!html || typeof window === "undefined") return html;
   const root = document.createElement("div");
   root.innerHTML = html;
-  applyMergeToDom(root);
+  applyMergeToDom(root, opts?.forExport ?? false);
   return root.innerHTML;
 }
 
@@ -191,7 +210,7 @@ export function listSuggestionsHtml(html: string): SuggestionSummary[] {
   return Array.from(out.values());
 }
 
-function applyMergeToDom(root: ParentNode): void {
+function applyMergeToDom(root: ParentNode, forExport = false): void {
   // Iterate over a static snapshot because we mutate the tree as we go.
   const nodes = Array.from(
     root.querySelectorAll<HTMLElement>(SUGGESTION_SELECTOR),
@@ -207,7 +226,20 @@ function applyMergeToDom(root: ParentNode): void {
           ? "deletion"
           : "insertion";
     const status = el.getAttribute("data-status") ?? "pending";
-    if (status === "rejected") continue;
+    if (status === "rejected") {
+      if (!forExport) continue;
+      // EXPORT: a final document must not carry reviewer state. A rejected
+      // insertion was never wanted → remove it and its text. A rejected
+      // deletion means the original text STAYS → unwrap, keeping the text but
+      // dropping the <del> strike-through markup.
+      if (kind === "insertion") {
+        el.parentNode.removeChild(el);
+      } else {
+        while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+        el.parentNode.removeChild(el);
+      }
+      continue;
+    }
     if (kind === "deletion" && status === "accepted") {
       el.parentNode.removeChild(el);
       continue;

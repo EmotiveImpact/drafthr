@@ -2,7 +2,7 @@
  * GET /api/workspace/list — returns the current user's tenant memberships.
  * Client uses this for the sidebar workspace switcher + Settings members tab.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { jsonError } from "../../_utils/request.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -29,7 +29,14 @@ export async function GET(req: Request): Promise<Response> {
       })
       .from(tenantMembers)
       .innerJoin(tenants, eq(tenants.id, tenantMembers.tenantId))
-      .where(eq(tenantMembers.userId, auth.userRow.id));
+      // Only ACTIVE seats — a deprovisioned membership must not show in the
+      // switcher (clicking it 403s at /switch). Mirrors session.ts's filter.
+      .where(
+        and(
+          eq(tenantMembers.userId, auth.userRow.id),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
 
     return new Response(JSON.stringify({ workspaces: rows }), {
       status: 200,

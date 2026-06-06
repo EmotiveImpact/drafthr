@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,14 @@ export function NotificationsBell() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
+  const [open, setOpen] = useState(false);
+  // Close the popover on navigation. The bell lives in persistent chrome, so a
+  // route change does NOT unmount it — without this the popover floated over
+  // the destination page until an outside click/Escape (bug #14).
+  const go = (href: string) => {
+    setOpen(false);
+    nav(href);
+  };
 
   const list = useMemo(
     () =>
@@ -46,7 +54,7 @@ export function NotificationsBell() {
   const preview = list.slice(0, 4);
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="size-8 relative" aria-label="Notifications">
           <Bell className="size-4" />
@@ -64,7 +72,7 @@ export function NotificationsBell() {
           <span className="text-sm font-medium">Notifications</span>
           <button
             className="text-xs text-muted-foreground hover:text-foreground underline"
-            onClick={() => nav("/notifications")}
+            onClick={() => go("/notifications")}
           >
             View all
           </button>
@@ -78,7 +86,7 @@ export function NotificationsBell() {
             {preview.map((n) => (
               <li
                 key={n.id}
-                onClick={() => n.actionHref && nav(n.actionHref)}
+                onClick={() => n.actionHref && go(n.actionHref)}
                 className={`px-3 py-2.5 cursor-pointer hover:bg-muted/40 ${RING[n.severity]}`}
               >
                 <div className="flex items-center gap-2 mb-0.5">
@@ -103,7 +111,7 @@ export function NotificationsBell() {
             {list.length > preview.length && (
               <li
                 className="px-3 py-2 text-center text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer"
-                onClick={() => nav("/notifications")}
+                onClick={() => go("/notifications")}
               >
                 + {list.length - preview.length} more →
               </li>
