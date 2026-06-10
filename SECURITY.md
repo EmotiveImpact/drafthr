@@ -32,8 +32,11 @@ no PII**. Re-run the sweep in the security-board skill's
 | `/admin/consultants` | deny | deny | deny | deny | deny | allowlist¹ |
 | `/sign-in/*`,`/privacy`,`/terms`,`/join/:code`,`/auth/callback` | allow | allow | allow | allow | allow | allow |
 
-¹ Client-side `VITE_ADMIN_EMAILS` allowlist only — cosmetic until a
-server-side admin role exists. No admin server endpoint ships today.
+¹ **Server-side** allowlist: `requireAdmin` (`api/_utils/admin.ts`) authorises
+only a signed-in user whose email is on the server-only `DRAFTHR_ADMIN_EMAILS`
+env list, and **fails closed** (empty list ⇒ nobody is admin). It gates
+`admin-queue` + `admin-review`. The client `VITE_ADMIN_EMAILS` check only hides
+nav; the real boundary is the server gate (verified 2026-06-10).
 
 Routes are role-gated in `Protected` (`roles` prop), not just hidden in the
 nav — direct URL navigation to another role's surface redirects to `/`.
@@ -86,9 +89,11 @@ nav — direct URL navigation to another role's surface redirects to `/`.
    connection + `SET LOCAL app.current_tenant` per request, or Neon's RLS
    role) remains the gold-standard next step for true defence-in-depth, but
    is a larger, branch-tested migration. (No missing filter found today.)
-2. **`/admin/consultants` gate is client-side** (`VITE_ADMIN_EMAILS`). Fine
-   while there's no server admin API. → Add a server-side admin-role check
-   before any admin endpoint ships.
+2. ~~**`/admin/consultants` gate is client-side**~~ **DONE.** `requireAdmin`
+   (server-side `DRAFTHR_ADMIN_EMAILS` allowlist, fails closed) now gates
+   `admin-queue`/`admin-review`. The page also renders a neutral skeleton
+   (not the admin header) until the server confirms admin, so the surface
+   never paints for a non-admin (PM-04, 2026-06-10).
 3. **Vercel single-segment catch-all matcher.** `[...path].ts` →
    `^/api/x/([^/]+)$`. Keep ALL API paths single-segment; a multi-segment
    path silently 404s (unreachable ≠ secured). Documented in the dispatchers.
@@ -96,9 +101,8 @@ nav — direct URL navigation to another role's surface redirects to `/`.
    `/` inside an API path string before shipping.
 4. **Function cap (Hobby = 12).** At 11. Adding 2 raw functions drops one
    silently. Use dispatchers.
-5. **`photoUrl` stored verbatim** on consultant profiles and rendered on the
-   public listing → arbitrary-URL beacon. → Validate `https://` on the
-   Blob/CDN host before persisting. (Medium; tracked.)
+5. ~~**`photoUrl` stored verbatim**~~ **DONE.** `profile.ts` persists the
+   `validatePhotoUrl`-checked value, not the raw body (verified 2026-06-10).
 6. **In-memory rate limiter is per-instance** (`api/_utils/rate-limit.ts`) —
    effective limit is `max × warm instances`. → Move to a shared store
    (Upstash/Vercel KV) for credential/LLM/upload routes. WorkOS throttles
@@ -106,5 +110,40 @@ nav — direct URL navigation to another role's surface redirects to `/`.
 7. **No server-side session revocation.** Sign-out clears the cookie only; a
    captured cookie is valid for its 7-day TTL. → Wire WorkOS `revokeSession`
    before enterprise GA.
-8. **`VETTING_AUTO_PUBLISH=1`** self-publishes consultant cards with no review
-   → confirm it's unset in prod; publishing should be admin-only.
+8. ~~**`VETTING_AUTO_PUBLISH=1`** self-publishes consultant cards~~ **HARDENED.**
+   Now hard-disabled whenever `VERCEL_ENV === "production"`, so a misconfigured
+   prod env can never ship unvetted cards regardless of the flag (PM-05,
+   2026-06-10). Still confirm the flag is unset in prod as belt-and-suspenders.
+
+---
+
+## 2026-06-10 — full security board (6 specialists + adversarial verification)
+
+**Verdict: nothing remotely-exploitable.** 23 findings → 19 confirmed after
+2-skeptic adversarial verification, **0 Critical, 0 network-reachable**. All
+prior fix batches (auth render-gating, B1/B2 sanitiser, B3 SSRF, B10/B12 TOCTOU,
+B13 deprovisioned filter, S1–S4) re-verified landed with no regressions;
+`tenant-isolation.guard.test.ts` passes 16/16.
+
+Fixed this pass:
+- 🟠 **Shared-browser PII leak (SA-01/SE-02).** Persisted drafts/matters/
+  employees (PII) survived sign-out **and** workspace-switch in localStorage.
+  Added `clearTenantScopedLocalData()` (`src/lib/session/clearLocalData.ts`),
+  called before both hard-navigations. Local-only confidentiality leak;
+  cross-tenant writes were already 403-blocked.
+- 🟡 **AI cost cap (SE-01).** `api/draft.ts` let the client pick
+  `maxOutputTokens` with no ceiling → unbounded Anthropic spend. Now clamped
+  ≤2000 + temperature ∈ [0,1].
+- 🟡 **Consultant routing (PM-03).** Onboarding routed off a localStorage-only
+  flag; made server-authoritative — `session.ts` reports `isConsultant` (a
+  `consultant_profiles` row exists), threaded through the auth context.
+- 🟢 **SSRF size cap (SA-04)** enforced from `Content-Length` before buffering ·
+  **admin-review UUID guard (SE-04)** (malformed id → 404 not 500) ·
+  **admin skeleton (PM-04)** · **auto-publish prod gate (PM-05)**.
+
+Refuted (false positives the skeptics killed): "employee self-promotes to HR"
+(view toggle, not a privilege boundary — the server has no such role); "server
+can't distinguish a consultant" (true, but nothing access-controls on it); CSP
+`unsafe-inline` (non-exploitable given the sanitiser). See residual risks above
+for the items that need infra/migration (session revocation, distributed
+rate-limiting, RLS).

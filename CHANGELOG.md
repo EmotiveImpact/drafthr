@@ -2,6 +2,38 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.19.0 — 2026-06-10
+
+Hardening release: auth render-gating, two multi-agent bug sweeps, and a full
+security board. See `SECURITY.md` for the threat model and
+`docs/internal/BUGS_AND_FIXES.md` for per-finding detail.
+
+**Security board (6 specialists + adversarial verification).** Verdict: nothing
+remotely-exploitable; 0 Critical. Closed the one real exposure — persisted
+draft/employee **PII survived sign-out and workspace-switch in localStorage**,
+so a shared/kiosk browser leaked it to the next user; it's now wiped at both
+transitions. Also: clamped `api/draft.ts` output tokens (was an unbounded AI
+spend lever), made consultant onboarding **server-authoritative** (no longer
+misroutes a consultant on a new device into HR setup), enforced the export
+image size cap before buffering (SSRF/memory), added a UUID guard on
+`admin-review`, a neutral skeleton on `/admin/consultants`, and a production
+hard-disable for `VETTING_AUTO_PUBLISH`.
+
+**Auth render-gating.** No app chrome or route content paints before the session
+is confirmed. `<Protected>` branches synchronously and `Layout` withholds the
+sidebar/topbar until auth resolves — kills the "logged-in app flashes before
+redirect" leak. Role-gated routes (`/hr`, `/reports`, `/employees`, …) now
+redirect a wrong-role user instead of rendering.
+
+**Two multi-agent bug sweeps (22 + 14 confirmed fixes).** Highlights: the
+sanitiser was silently stripping every `data-*` attribute (`ALLOWED_URI_REGEXP`
+applied to all attribute values) — breaking per-suggestion Accept/Reject,
+figure renumbering, and comment anchors; fixed with URI safety moved into the
+sanitise hook. Server-side SSRF allowlist on the PDF image inliner. TOCTOU
+guards on invite-accept (410) and booking-respond (409). Deprovisioned-member
+filtering on member lists and owner-count guards. Cross-tab store coherence,
+lazy-loaded heavy routes (main chunk 1.88 MB → 1.65 MB), and dead-code removal.
+
 ## 0.18.1 — 2026-05-30
 
 Real consultant vetting + a deploy-blocker fix.

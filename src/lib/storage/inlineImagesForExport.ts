@@ -96,7 +96,16 @@ async function tryFetchAsDataUrl(
     if (!res.ok) return null;
     const mime = (res.headers.get("content-type") ?? "").toLowerCase().split(";")[0].trim();
     if (!ALLOWED_MIME.has(mime)) return null;
+    // Reject oversize objects from the advertised Content-Length BEFORE buffering
+    // the whole body into memory. Any tenant can upload to the allowlisted Vercel
+    // blob namespace, so without this an attacker could make the export function
+    // buffer a multi-hundred-MB object per <img> (memory/cost amplification) and
+    // only fail the cap after the full read. (Security board SA-04, 2026-06-10.)
+    const declaredLen = Number(res.headers.get("content-length"));
+    if (Number.isFinite(declaredLen) && declaredLen > MAX_IMAGE_BYTES) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
+    // Defense in depth: a server can lie about / omit Content-Length, so still
+    // enforce the cap on the actual bytes read.
     if (buf.byteLength > MAX_IMAGE_BYTES) return null;
     return `data:${mime};base64,${bytesToBase64(buf)}`;
   } catch {

@@ -19,6 +19,9 @@ import { consultantProfiles } from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 
+/** RFC-4122 uuid shape (any version). Guards the uuid PK lookup from 22P02. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 type Body = { profileId?: string; action?: string };
 
 export async function POST(req: Request): Promise<Response> {
@@ -35,6 +38,10 @@ export async function POST(req: Request): Promise<Response> {
   const profileId = typeof parsed.body.profileId === "string" ? parsed.body.profileId : "";
   const action = parsed.body.action;
   if (!profileId) return jsonError("profileId required", 400);
+  // The id maps to a uuid column; a non-uuid value makes Postgres raise 22P02,
+  // which would surface as a 500 instead of a clean 404. Validate the shape
+  // first. (Security board SE-04, 2026-06-10.)
+  if (!UUID_RE.test(profileId)) return jsonError("Profile not found", 404);
   if (action !== "approve" && action !== "reject") {
     return jsonError("action must be 'approve' or 'reject'", 400);
   }

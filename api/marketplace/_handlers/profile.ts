@@ -23,7 +23,12 @@ import { consultantProfiles } from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 
-const AUTO_PUBLISH = process.env.VETTING_AUTO_PUBLISH === "1";
+// Dev/demo convenience: skip admin vetting and publish a consultant's first
+// save immediately. HARD-DISABLED in production regardless of the flag, so a
+// misconfigured prod env can never ship unvetted consultant cards (name, bio,
+// rate, photo) to the public marketplace listing. (Security board PM-05.)
+const AUTO_PUBLISH =
+  process.env.VETTING_AUTO_PUBLISH === "1" && process.env.VERCEL_ENV !== "production";
 
 type Availability = "this_week" | "one_two_weeks" | "three_four_weeks" | "booked";
 const AVAILABILITY_VALUES: Availability[] = [

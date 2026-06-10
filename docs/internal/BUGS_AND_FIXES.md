@@ -40,6 +40,89 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-06-10 — security board (6 specialists + adversarial verification)
+
+Full multi-disciplinary security sweep: Security Engineer · System Architect ·
+PM-Journeys · Red-Teamer · AuthN/Crypto · Supply-chain/AI, dispatched in
+parallel, **every finding put through 2 skeptic verifiers (default-refute)**
+before reaching the memo. 23 findings → **19 confirmed, 4 refuted**.
+**Verdict: 0 Critical, nothing remotely-exploitable.** All prior batches
+re-verified landed with no regressions; `tenant-isolation.guard.test.ts` 16/16.
+Gate: `tsc -b` clean · `vite build` OK · **474 tests** (+10). See `SECURITY.md`
+for the standing threat model.
+
+### 🟠 HIGH — SA-01/SE-02: persisted tenant PII leaked across users on a shared browser
+The zustand store persists the full drafts/matters/employees maps (employee
+legal names, matter facts, generated letter HTML — all PII) to `localStorage`
+(`scribehr-store-v1`). **Neither sign-out nor workspace-switch cleared it** —
+`signOut` only nulled in-memory React state then hard-navigated; the
+`WorkspaceSwitcher` just reloaded. So on a shared/kiosk browser the next user
+(or anyone reopening the app / devtools) read the previous tenant's PII straight
+out of `localStorage`. Cross-tenant *writes* were already 403-blocked and the
+mirror is write-only, so this is **confidentiality, not escalation** — but real.
+**Fix:** new `clearTenantScopedLocalData()` (`src/lib/session/clearLocalData.ts`)
+wipes the four tenant-scoped persist keys (drafts, profile, consultant,
+bookings); called in `AuthProvider.signOut` and `WorkspaceSwitcher.onSwitch`
+*before* the hard navigation. Theme/branding prefs intentionally preserved.
+TDD: `clearLocalData.test.ts` (+4) — wipes PII keys, preserves prefs, idempotent,
+and a guard test so a newly-added PII store is a conscious decision.
+
+### 🟡 MEDIUM — SE-01: `api/draft.ts` unbounded output tokens (cost / DoS-spend)
+`maxOutputTokens: body.maxTokens ?? 1200` took the client's value with no cap.
+`api/agent.ts` hard-caps its own generations, but `draft.ts` let a client POST
+`{"maxTokens": 64000}` and, under the 40/min `ai` limit, drive ~40 max-length
+generations a minute = unbounded Anthropic spend. **Fix:** `clampMaxTokens`
+(≤2000) + `clampTemperature` ([0,1]). TDD: `draft.clamp.test.ts` (+4).
+
+### 🟡 MEDIUM — PM-03: consultant onboarding routed off a client-only flag
+The client inferred "is a consultant" purely from a `localStorage` `enrolled`
+flag, so a consultant signing in on a **new device** (empty storage) was
+misrouted by `RootRedirect` into HR workspace creation. **Fix:** made it
+server-authoritative — `api/auth/_handlers/session.ts` now reports
+`isConsultant` (a `consultant_profiles` row exists), threaded through the auth
+context (`AuthProvider`), and `RootRedirect` ORs it with the local flag.
+Journey-correctness, not data exposure. TDD: RootRedirect (+1).
+
+### 🟢 LOW hardening (clean wins)
+- **SA-04** — `inlineImagesForExport` buffered the whole response body via
+  `arrayBuffer()` *before* the 10 MB cap (memory/cost amplification on the
+  allowlisted Vercel-blob namespace; classic SSRF already blocked by B3). Now
+  rejects from `Content-Length` before buffering, with the post-read check kept
+  as defense-in-depth. TDD: (+1) proves the body is never read on oversize.
+- **SE-04** — `admin-review` `profileId` hit a uuid column with no shape guard,
+  so a non-uuid raised Postgres `22P02` → 500. Added a UUID regex → clean 404.
+- **PM-04** — `/admin/consultants` painted its admin header to any authed user
+  before the API 403 bounced them. Now renders a neutral, role-agnostic skeleton
+  until the server confirms admin (`authChecked`). Data was always server-gated.
+- **PM-05** — `VETTING_AUTO_PUBLISH=1` could ship unvetted consultant cards to
+  the public listing. Now **hard-disabled when `VERCEL_ENV==="production"`**, so
+  a misconfigured prod env can't honour it.
+- **SE-05/SA-03 (spec reconciliation, no code change)** — member-ops
+  (`member-role`/`member-remove`/`invite-revoke`) accept owner **OR** admin, not
+  the "owner-only" some drafts implied. Owner-targeted changes stay owner-only
+  (`canManageOwners` + last-active-owner guard), so there's no escalation. The
+  intended "admins manage non-owners" model is now documented in `SECURITY.md`.
+
+### Refuted (false positives the skeptics killed)
+- "Employee self-promotes to HR" — HR/employee is a per-user **view toggle**
+  over the user's own tenant data; the server has no employer/employee role and
+  the HR surfaces fetch the same tenant-scoped store. No escalation.
+- "Server can't distinguish a consultant from a customer" — factually true
+  (`userType` is never written `consultant`) but **nothing access-controls on
+  it**, so not a vuln. (PM-03's fix keys on the `consultant_profiles` row, not
+  `userType`.)
+- "CSP `script-src 'unsafe-inline'`" — non-exploitable given the sanitiser and
+  no untrusted script sinks; removing needs a nonce-based CSP refactor (backlog).
+- "Convention-only tenant isolation" — real architectural note, but the guard
+  test passes and every reader has its scope clause; no present leak.
+
+### Deferred (needs infra / migration — tracked in SECURITY.md residual risk)
+Stolen-cookie revocation (per-user `session_epoch` column + prod migration) ·
+distributed rate-limiting (Vercel KV/WAF) · Postgres RLS backstop ·
+constant-time compares.
+
+---
+
 ## 2026-06-06 — senior architectural sweep (7 lenses) → "Fix Now" batch
 
 A senior-level review (7 architectural lenses + principal synthesis) over the

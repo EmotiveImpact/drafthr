@@ -24,12 +24,18 @@ export function ConsultantAdminReview() {
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Until the FIRST admin-queue response resolves we don't know whether the
+  // caller is an admin, so we render a neutral skeleton rather than the admin
+  // header — a non-admin who deep-links here must never see the admin surface
+  // paint before the 403 bounces them. (Security board PM-04, 2026-06-10.)
+  const [authChecked, setAuthChecked] = useState(false);
 
   const load = useCallback(async (all: boolean) => {
     setProfiles(null);
     setError(null);
     const res = await getAdminQueue(all);
     if (!res.ok) {
+      setAuthChecked(true);
       if (res.status === 403 || res.status === 401) {
         setForbidden(true);
       } else {
@@ -38,6 +44,7 @@ export function ConsultantAdminReview() {
       }
       return;
     }
+    setAuthChecked(true);
     setProfiles(res.data.profiles);
   }, []);
 
@@ -65,6 +72,22 @@ export function ConsultantAdminReview() {
   };
 
   if (forbidden) return <Navigate to="/" replace />;
+
+  // Pre-confirmation: neutral, role-agnostic skeleton (no "Admin · Consultant
+  // vetting" wording) so the admin surface doesn't reveal itself to a
+  // non-admin during the round-trip that ends in a 403 redirect.
+  if (!authChecked) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12" aria-busy="true">
+        <div className="h-4 w-24 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+        <div className="mt-4 h-9 w-64 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+        <div className="mt-8 space-y-3">
+          <div className="h-20 animate-pulse rounded-[10px] bg-[var(--ds-surface-2)]" />
+          <div className="h-20 animate-pulse rounded-[10px] bg-[var(--ds-surface-2)]" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">

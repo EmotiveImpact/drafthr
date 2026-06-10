@@ -103,6 +103,32 @@ describe("inlineImagesForExport", () => {
     // src left intact (downstream render decides) — but no fetch happened.
     expect(out).toContain("169.254.169.254");
   });
+
+  it("#SA-04: rejects an oversize Content-Length WITHOUT buffering the body", async () => {
+    let bodyRead = false;
+    const fetcher = vi.fn(async () => ({
+      ok: true,
+      headers: {
+        get: (name: string) => {
+          const n = name.toLowerCase();
+          if (n === "content-type") return "image/png";
+          if (n === "content-length") return String(50 * 1024 * 1024); // 50MB > 10MB cap
+          return null;
+        },
+      },
+      // If this is called the guard failed — we must bail on Content-Length first.
+      arrayBuffer: async () => {
+        bodyRead = true;
+        return new ArrayBuffer(50 * 1024 * 1024);
+      },
+    })) as unknown as typeof fetch;
+
+    const html = `<img src="https://blob.example/huge.png" />`;
+    const out = await inlineImagesForExport(html, fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(1); // it DID fetch (headers), but…
+    expect(bodyRead).toBe(false); // …never buffered the 50MB body
+    expect(out).toContain("https://blob.example/huge.png"); // src left intact, not inlined
+  });
 });
 
 function makeFetcher(map: Record<string, { bytes: Uint8Array; contentType: string }> = {}) {
