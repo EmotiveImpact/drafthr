@@ -30,6 +30,7 @@ import {
   getWorkos,
   type SessionPayload,
 } from "../../_utils/workos.js";
+import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -154,6 +155,8 @@ async function respondWithSession(input: {
     },
     workosSession: input.sealedSession,
     iat: Date.now(),
+    // Current revocation epoch — see session-epoch.ts (SE-03).
+    epoch: (await getUserSessionEpoch(input.id)) ?? 0,
   };
 
   const sessionCookie = await buildSessionCookie(payload);

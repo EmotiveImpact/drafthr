@@ -23,6 +23,7 @@ import {
   getWorkos,
   type SessionPayload,
 } from "../../_utils/workos.js";
+import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -86,6 +87,9 @@ export async function POST(req: Request): Promise<Response> {
       },
       workosSession: sealedSession ?? "",
       iat: Date.now(),
+      // Embed the user's current revocation epoch so the cookie stays valid
+      // until their epoch is next bumped (sign-out / password reset). (SE-03.)
+      epoch: (await getUserSessionEpoch(user.id)) ?? 0,
     };
 
     const sessionCookie = await buildSessionCookie(payload);

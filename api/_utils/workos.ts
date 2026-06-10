@@ -36,6 +36,14 @@ export type SessionPayload = {
   workosSession: string;
   /** Issued-at, so we can detect very old seals even if TTL skew bites us. */
   iat: number;
+  /**
+   * Session epoch at mint time — the server-side revocation counter
+   * (api/_utils/session-epoch.ts). Optional for back-compat: cookies minted
+   * before this feature have no epoch and are treated as epoch 0. A request is
+   * rejected when this is behind the user's stored epoch (bumped on sign-out /
+   * password reset). (Security board SE-03.)
+   */
+  epoch?: number;
 };
 
 let cachedClient: WorkOS | null = null;

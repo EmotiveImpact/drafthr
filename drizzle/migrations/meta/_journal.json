@@ -71,6 +71,13 @@
       "when": 1780619829119,
       "tag": "0009_crazy_thanos",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781400000000,
+      "tag": "0010_session_epoch",
+      "breakpoints": true
     }
   ]
 }

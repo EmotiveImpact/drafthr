@@ -18,6 +18,7 @@ import {
   type SessionPayload,
 } from "./workos.js";
 import { jsonError } from "./request.js";
+import { getUserSessionEpoch, isCookieEpochStale } from "./session-epoch.js";
 
 export type RequireSessionAndTenantResult =
   | {
@@ -84,6 +85,16 @@ export async function requireSessionAndTenant(
         .where(eq(users.id, userRow.id))
         .returning();
       userRow = updated;
+    }
+
+    // Server-side session revocation (SE-03): reject a cookie whose epoch is
+    // behind the user's stored epoch. Bumped on sign-out / password reset, so a
+    // stolen cookie dies immediately instead of surviving its 7-day TTL.
+    // Fails OPEN (no enforcement) if the epoch can't be read — pre-migration or
+    // a transient DB blip must never log a valid user out.
+    const dbEpoch = await getUserSessionEpoch(session.user.id);
+    if (isCookieEpochStale(session.epoch, dbEpoch)) {
+      return { ok: false, response: jsonError("Session expired — please sign in again.", 401) };
     }
 
     const [member] = await db

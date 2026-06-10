@@ -107,9 +107,15 @@ nav — direct URL navigation to another role's surface redirects to `/`.
    effective limit is `max × warm instances`. → Move to a shared store
    (Upstash/Vercel KV) for credential/LLM/upload routes. WorkOS throttles
    auth server-side as a backstop.
-7. **No server-side session revocation.** Sign-out clears the cookie only; a
-   captured cookie is valid for its 7-day TTL. → Wire WorkOS `revokeSession`
-   before enterprise GA.
+7. ~~**No server-side session revocation.**~~ **DONE (SE-03, 2026-06-10).**
+   Per-user `session_epoch` (migration `0010_session_epoch`): the sealed cookie
+   carries the epoch it was minted with, `requireSessionAndTenant` rejects any
+   cookie behind the user's stored epoch, and the epoch is bumped on **sign-out**
+   and **password-reset-confirm** — so a stolen/extra cookie dies immediately
+   instead of surviving its 7-day TTL. Managed via defensive raw SQL
+   (`api/_utils/session-epoch.ts`) so it's safe in either deploy order: until the
+   migration is applied it fails open (no enforcement, no outage). **Apply
+   migration `0010` to activate.**
 8. ~~**`VETTING_AUTO_PUBLISH=1`** self-publishes consultant cards~~ **HARDENED.**
    Now hard-disabled whenever `VERCEL_ENV === "production"`, so a misconfigured
    prod env can never ship unvetted cards regardless of the flag (PM-05,
@@ -145,5 +151,6 @@ Refuted (false positives the skeptics killed): "employee self-promotes to HR"
 (view toggle, not a privilege boundary — the server has no such role); "server
 can't distinguish a consultant" (true, but nothing access-controls on it); CSP
 `unsafe-inline` (non-exploitable given the sanitiser). See residual risks above
-for the items that need infra/migration (session revocation, distributed
-rate-limiting, RLS).
+for the items that need infra (distributed rate-limiting, RLS). **Follow-up,
+same day:** server-side session revocation (SE-03) is now implemented — see
+residual risk #7; apply migration `0010_session_epoch` to activate.

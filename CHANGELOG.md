@@ -2,6 +2,17 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.19.1 — 2026-06-10
+
+**Server-side session revocation (SE-03).** Sign-out previously only cleared the
+cookie, so an exfiltrated sealed session stayed valid for its full 7-day TTL.
+Added a per-user **session epoch**: the cookie carries the epoch it was minted
+with, the API rejects any cookie behind the user's stored epoch, and the epoch
+is bumped on **sign-out** and **password reset** — so a stolen or extra cookie is
+invalidated immediately. Ships migration `0010_session_epoch`; the code is safe
+to deploy before or after the migration (it fails open until the column exists).
+**Run the migration to activate.**
+
 ## 0.19.0 — 2026-06-10
 
 Hardening release: auth render-gating, two multi-agent bug sweeps, and a full

@@ -18,6 +18,7 @@ import {
   STATE_COOKIE,
   type SessionPayload,
 } from "../../_utils/workos.js";
+import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -63,6 +64,8 @@ export async function POST(req: Request): Promise<Response> {
       },
       workosSession: sealedSession ?? "",
       iat: Date.now(),
+      // Current revocation epoch — see session-epoch.ts (SE-03).
+      epoch: (await getUserSessionEpoch(user.id)) ?? 0,
     };
 
     const sessionCookie = await buildSessionCookie(payload);

@@ -20,6 +20,7 @@ import {
   getWorkos,
   type SessionPayload,
 } from "../../_utils/workos.js";
+import { bumpUserSessionEpoch } from "../../_utils/session-epoch.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -93,10 +94,15 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
+  // Reset invalidates every existing session for this user: bump their epoch so
+  // any cookie minted before the reset is rejected, then mint a fresh cookie
+  // carrying the NEW epoch so the just-reset user stays signed in here. (SE-03.)
+  const newEpoch = await bumpUserSessionEpoch(resetUser.id);
   const payload: SessionPayload = {
     user: resetUser,
     workosSession: "",
     iat: Date.now(),
+    epoch: newEpoch ?? 0,
   };
   const sessionCookie = await buildSessionCookie(payload);
   const headers = new Headers({

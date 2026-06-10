@@ -117,9 +117,25 @@ Journey-correctness, not data exposure. TDD: RootRedirect (+1).
   test passes and every reader has its scope clause; no present leak.
 
 ### Deferred (needs infra / migration — tracked in SECURITY.md residual risk)
-Stolen-cookie revocation (per-user `session_epoch` column + prod migration) ·
-distributed rate-limiting (Vercel KV/WAF) · Postgres RLS backstop ·
+Distributed rate-limiting (Vercel KV/WAF) · Postgres RLS backstop ·
 constant-time compares.
+
+### Follow-up — SE-03 server-side session revocation (implemented same day)
+Sign-out previously only cleared the cookie; an exfiltrated sealed cookie stayed
+valid for its full 7-day TTL. Implemented a per-user **session epoch**: the
+sealed cookie carries the epoch it was minted with (`SessionPayload.epoch`, set
+at all four mint sites — password / callback / verify-email / reset-confirm),
+`requireSessionAndTenant` rejects any cookie behind the user's stored epoch
+(`isCookieEpochStale`), and the epoch is **bumped on sign-out and
+password-reset-confirm** so every outstanding cookie for that user dies at once.
+Deliberately **not** a Drizzle-schema column — it's managed via defensive raw
+SQL (`api/_utils/session-epoch.ts`) that returns `null` (→ fail-open, no
+enforcement) if the DB is off or the column isn't migrated yet, so the code is
+safe to deploy in either order relative to migration `0010_session_epoch`.
+Fails open on any read error so a transient blip never logs a valid user out.
+TDD: `session-epoch.test.ts` (+11) covers the staleness gate + helper fail-open.
+**Activation:** apply migration `0010` (`ALTER TABLE users ADD COLUMN
+session_epoch …`); until then it's a no-op.
 
 ---
 
