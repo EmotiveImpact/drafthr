@@ -13,6 +13,7 @@ const authMock = vi.hoisted(() => ({
     user: null,
     activeTenant: null,
     hasAnyTenant: false,
+    isConsultant: false,
     isLoaded: true,
     signIn: vi.fn(),
     signOut: vi.fn(),
@@ -44,6 +45,7 @@ describe("RootRedirect", () => {
       user: null,
       activeTenant: null,
       hasAnyTenant: false,
+      isConsultant: false,
       isLoaded: true,
       signIn: vi.fn(),
       signOut: vi.fn(),
@@ -85,6 +87,37 @@ describe("RootRedirect", () => {
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/me"));
     expect(authMock.value.signIn).not.toHaveBeenCalled();
+  });
+
+  it("routes a server-known consultant to /c even with empty local state (PM-03)", async () => {
+    // New device: localStorage enrolled flag is false, no role saved, no
+    // tenant yet — but the session endpoint reported a consultant_profiles
+    // row. Routing must trust the server signal, not localStorage.
+    authMock.authEnabled = true;
+    authMock.role = null;
+    authMock.value = {
+      user: { id: "u1", email: "c@x.io", firstName: null, lastName: null, profilePictureUrl: null },
+      activeTenant: null,
+      hasAnyTenant: false,
+      isConsultant: true,
+      isLoaded: true,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      refresh: vi.fn(),
+    } as AuthContextValue;
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/c" element={<LocationProbe />} />
+          <Route path="/signup/workspace" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    // Must land on /c, NOT /signup/workspace (the old misroute).
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/c"));
   });
 
   it("shows the role picker when auth is disabled and no role is saved", () => {

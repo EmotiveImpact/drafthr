@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { AUTH_ENABLED, AUTH_MISCONFIGURED } from "./index";
+import { clearTenantScopedLocalData } from "@/lib/session/clearLocalData";
 
 /**
  * AuthProvider — WorkOS AuthKit, SPA-shaped.
@@ -45,6 +46,9 @@ export type AuthContextValue = {
   activeTenant: ActiveTenant | null;
   /** True when the user has joined at least one tenant (active or not). */
   hasAnyTenant: boolean;
+  /** Server-authoritative: the user has a consultant_profiles row. Drives
+   *  cross-device consultant routing without trusting localStorage (PM-03). */
+  isConsultant: boolean;
   isLoaded: boolean;
   /**
    * Navigates the browser to the in-app /sign-in page. The page itself
@@ -65,6 +69,7 @@ const PASSTHROUGH_CONTEXT: AuthContextValue = {
   user: null,
   activeTenant: null,
   hasAnyTenant: false,
+  isConsultant: false,
   isLoaded: true,
   signIn: async () => {},
   signOut: async () => {},
@@ -85,6 +90,7 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [activeTenant, setActiveTenant] = useState<ActiveTenant | null>(null);
   const [hasAnyTenant, setHasAnyTenant] = useState(false);
+  const [isConsultant, setIsConsultant] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   // Avoid concurrent /session fetches stomping each other on rapid focus events.
   const inflight = useRef<Promise<void> | null>(null);
@@ -107,16 +113,19 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setActiveTenant(null);
           setHasAnyTenant(false);
+          setIsConsultant(false);
           return;
         }
         const data = (await res.json()) as {
           user: AuthUser | null;
           activeTenant?: ActiveTenant | null;
           hasAnyTenant?: boolean;
+          isConsultant?: boolean;
         };
         setUser(data.user);
         setActiveTenant(data.activeTenant ?? null);
         setHasAnyTenant(Boolean(data.hasAnyTenant));
+        setIsConsultant(Boolean(data.isConsultant));
       } catch {
         // Network error — keep prior state. The next focus event will retry.
       } finally {
@@ -174,14 +183,19 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setActiveTenant(null);
       setHasAnyTenant(false);
+      setIsConsultant(false);
+      // Wipe tenant-scoped PII from localStorage BEFORE navigating so the next
+      // user on a shared/kiosk browser can't read the previous user's drafts,
+      // matters, employees, profile, or bookings (security board SA-01/SE-02).
+      clearTenantScopedLocalData();
       // Hard navigation so any in-memory route guards re-evaluate cleanly.
       window.location.assign("/");
     }
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, activeTenant, hasAnyTenant, isLoaded, signIn, signOut, refresh }),
-    [user, activeTenant, hasAnyTenant, isLoaded, signIn, signOut, refresh]
+    () => ({ user, activeTenant, hasAnyTenant, isConsultant, isLoaded, signIn, signOut, refresh }),
+    [user, activeTenant, hasAnyTenant, isConsultant, isLoaded, signIn, signOut, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

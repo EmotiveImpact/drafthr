@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
+import { clearTenantScopedLocalData } from "@/lib/session/clearLocalData";
 
 /**
  * Sidebar workspace switcher. Renders nothing when the user has <=1 workspace
@@ -64,6 +65,10 @@ export function WorkspaceSwitcher() {
         body: JSON.stringify({ tenantId }),
       });
       if (res.ok) {
+        // Wipe the previous tenant's persisted PII before reloading so a
+        // workspace switch never surfaces tenant A's drafts/matters/employees
+        // in tenant B's session on a shared browser (security board SA-01).
+        clearTenantScopedLocalData();
         // Hard reload so every Zustand store + sidebar nav re-reads the new
         // tenant's data. Cheap; we already do this on sign-out.
         window.location.assign("/");

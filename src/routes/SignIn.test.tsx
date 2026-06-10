@@ -35,6 +35,7 @@ vi.mock("@/lib/auth", () => ({
     refresh: authMock.refresh,
     activeTenant: null,
     hasAnyTenant: false,
+    isConsultant: false,
     signIn: vi.fn(),
     signOut: vi.fn(),
   }),

@@ -24,17 +24,22 @@ import { Skeleton } from "@/components/ui/skeleton";
  * previous state's UI paints before the redirect fires.
  */
 export function RootRedirect() {
-  const { user, isLoaded, activeTenant } = useAuth();
+  const { user, isLoaded, activeTenant, isConsultant: serverIsConsultant } = useAuth();
   const profile = useProfileStore((s) => s.profile);
   const consultantEnrolled = useConsultantStore((s) => s.enrolled);
 
   // A consultant is identified by enrollment with NO employer/employee
   // role chosen. If they later explicitly pick an HR/Employee role, that
-  // wins (they opted into the other surface). This is the single signal
-  // RootRedirect was missing — without it a returning consultant was
-  // dumped into ModePicker (tenant minted) or stranded on workspace
-  // setup (tenant not yet minted) every login.
-  const isConsultant = consultantEnrolled && !profile.role;
+  // wins (they opted into the other surface).
+  //
+  // The enrollment signal comes from TWO sources, OR'd together:
+  //   - serverIsConsultant: a consultant_profiles row exists (authoritative,
+  //     works on a fresh device with empty localStorage — PM-03 fix).
+  //   - consultantEnrolled: the local zustand flag (fast path; also covers
+  //     AUTH_ENABLED=false dev mode where there's no server signal).
+  // Without the server signal a returning consultant on a new device was
+  // misrouted into HR workspace creation.
+  const isConsultant = (serverIsConsultant || consultantEnrolled) && !profile.role;
 
   if (!AUTH_ENABLED) {
     if (isConsultant) return <Navigate to="/c" replace />;

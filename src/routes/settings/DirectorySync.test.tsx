@@ -22,6 +22,7 @@ vi.mock("@/lib/auth", () => ({
     activeTenant: authMock.activeTenant,
     user: { id: "u_1", email: "admin@acme.com", firstName: null, lastName: null, profilePictureUrl: null },
     hasAnyTenant: true,
+    isConsultant: false,
     isLoaded: true,
     signIn: vi.fn(),
     signOut: vi.fn(),

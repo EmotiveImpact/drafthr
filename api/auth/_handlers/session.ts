@@ -31,7 +31,7 @@
 import { and, eq } from "drizzle-orm";
 import { getSessionFromRequest } from "../../_utils/workos.js";
 import { dbEnabled, getDb } from "../../../src/db/index.js";
-import { tenantMembers, tenants, users } from "../../../src/db/schema.js";
+import { consultantProfiles, tenantMembers, tenants, users } from "../../../src/db/schema.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -48,6 +48,13 @@ export async function GET(req: Request): Promise<Response> {
   const session = await getSessionFromRequest(req);
   let activeTenant: { id: string; name: string; role: string } | null = null;
   let hasAnyTenant = false;
+  // Server-authoritative consultant signal. The client previously inferred
+  // "is a consultant" purely from a localStorage `enrolled` flag, so a
+  // consultant signing in on a NEW device (empty storage) was misrouted into
+  // HR workspace creation by RootRedirect. The durable signal is a row in
+  // consultant_profiles — report it so routing no longer depends on local
+  // state. (Security board PM-03, 2026-06-10.)
+  let isConsultant = false;
 
   // Look up the active tenant when the DB is configured. Failures here must
   // not block the session response — the SPA polls this on every load and
@@ -61,6 +68,15 @@ export async function GET(req: Request): Promise<Response> {
         .where(eq(users.externalId, session.user.id))
         .limit(1);
       if (userRow) {
+        // A single indexed lookup on the unique user_id — cheap, and it makes
+        // consultant routing work cross-device without trusting localStorage.
+        const [consultantRow] = await db
+          .select({ id: consultantProfiles.id })
+          .from(consultantProfiles)
+          .where(eq(consultantProfiles.userId, userRow.id))
+          .limit(1);
+        isConsultant = Boolean(consultantRow);
+
         const memberships: MembershipRow[] = await db
           .select({
             tenantId: tenantMembers.tenantId,
@@ -110,7 +126,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   return new Response(
-    JSON.stringify({ user: session?.user ?? null, activeTenant, hasAnyTenant }),
+    JSON.stringify({ user: session?.user ?? null, activeTenant, hasAnyTenant, isConsultant }),
     {
       status: 200,
       headers: {

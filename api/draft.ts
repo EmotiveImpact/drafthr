@@ -63,6 +63,27 @@ type DraftRequest = {
 
 const MAX_EXTRA_HINT_CHARS = 4_000;
 
+// Server-side ceiling on model output. The client picks maxTokens for the
+// editor's short-vs-long generations, but an authenticated user could
+// otherwise POST {"maxTokens": 64000} and, under the 40/min ai rate limit,
+// drive ~40 max-length generations a minute — unbounded Anthropic spend.
+// agent.ts already hard-caps its own generations; mirror that here.
+// (Security board SE-01, 2026-06-10.)
+const DEFAULT_OUTPUT_TOKENS = 1_200;
+const MAX_OUTPUT_TOKENS = 2_000;
+
+/** Clamp a client-supplied output-token request into [1, MAX_OUTPUT_TOKENS]. */
+export function clampMaxTokens(requested: number | undefined): number {
+  const n = typeof requested === "number" && Number.isFinite(requested) ? Math.floor(requested) : DEFAULT_OUTPUT_TOKENS;
+  return Math.min(Math.max(n, 1), MAX_OUTPUT_TOKENS);
+}
+
+/** Clamp temperature into the valid [0, 1] sampling range. */
+export function clampTemperature(requested: number | undefined): number {
+  const n = typeof requested === "number" && Number.isFinite(requested) ? requested : 0.4;
+  return Math.min(Math.max(n, 0), 1);
+}
+
 export async function POST(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
@@ -113,8 +134,8 @@ export async function POST(req: Request): Promise<Response> {
         const result = streamText({
           model: buildModel(body.model),
           messages,
-          temperature: body.temperature ?? 0.4,
-          maxOutputTokens: body.maxTokens ?? 1200,
+          temperature: clampTemperature(body.temperature),
+          maxOutputTokens: clampMaxTokens(body.maxTokens),
           onError: (err) => {
             const msg =
               err instanceof Error
