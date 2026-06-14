@@ -72,9 +72,25 @@ export function DataTable<Row>({
             <tr
               key={rowKey?.(row, i) ?? (row as { id?: string }).id ?? i}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
+              // TODO(a11y): no sensible per-row label source on this component
+              // (rowKey is a key fn, not a human label). Add an optional
+              // rowLabel?: (row) => string prop and wire it to aria-label here.
+              role={onRowClick ? "button" : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onRowClick(row);
+                      }
+                    }
+                  : undefined
+              }
               className={cn(
                 "transition-colors",
-                onRowClick && "cursor-pointer hover:bg-[var(--ds-canvas)]"
+                onRowClick &&
+                  "cursor-pointer hover:bg-[var(--ds-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               )}
             >
               {columns.map((c) => (

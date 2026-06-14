@@ -84,36 +84,41 @@ export function NotificationsBell() {
         ) : (
           <ul className="divide-y divide-sidebar-border max-h-[60vh] overflow-auto">
             {preview.map((n) => (
-              <li
-                key={n.id}
-                onClick={() => n.actionHref && go(n.actionHref)}
-                className={`px-3 py-2.5 cursor-pointer hover:bg-muted/40 ${RING[n.severity]}`}
-              >
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-xs font-medium truncate flex-1">{n.title}</span>
-                  <Badge
-                    className={
-                      n.severity === "urgent"
-                        ? "bg-rose-50 text-rose-900 border-rose-200"
-                        : n.severity === "warn"
-                        ? "bg-amber-50 text-amber-900 border-amber-200"
-                        : "bg-muted text-foreground border-letter-rule"
-                    }
-                  >
-                    {n.severity}
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-                  {n.description}
-                </p>
+              <li key={n.id}>
+                <button
+                  type="button"
+                  onClick={() => n.actionHref && go(n.actionHref)}
+                  className={`text-left w-full px-3 py-2.5 cursor-pointer hover:bg-muted/40 ${RING[n.severity]}`}
+                >
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-xs font-medium truncate flex-1">{n.title}</span>
+                    <Badge
+                      className={
+                        n.severity === "urgent"
+                          ? "bg-rose-50 text-rose-900 border-rose-200"
+                          : n.severity === "warn"
+                          ? "bg-amber-50 text-amber-900 border-amber-200"
+                          : "bg-muted text-foreground border-letter-rule"
+                      }
+                    >
+                      {n.severity}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                    {n.description}
+                  </p>
+                </button>
               </li>
             ))}
             {list.length > preview.length && (
-              <li
-                className="px-3 py-2 text-center text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer"
-                onClick={() => go("/notifications")}
-              >
-                + {list.length - preview.length} more →
+              <li>
+                <button
+                  type="button"
+                  className="text-left w-full px-3 py-2 text-center text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer"
+                  onClick={() => go("/notifications")}
+                >
+                  + {list.length - preview.length} more →
+                </button>
               </li>
             )}
           </ul>

@@ -555,7 +555,14 @@ export function AIPanel({
         </div>
       </div>
 
-      <div ref={scrollerRef} className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0">
+      <div
+        ref={scrollerRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-busy={isStreaming}
+        className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0"
+      >
         <SuggestionTestStrip
           draft={draft}
           activeSectionId={activeSectionId}

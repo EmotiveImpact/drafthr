@@ -74,7 +74,8 @@ export function Layout({ children }: { children: ReactNode }) {
     return (
       <TooltipProvider delayDuration={150}>
         <div className="min-h-screen flex flex-col bg-background">
-          <main className="flex-1 flex flex-col min-h-0">{children}</main>
+          <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
+          <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
         </div>
       </TooltipProvider>
     );
@@ -89,7 +90,8 @@ export function Layout({ children }: { children: ReactNode }) {
            * children scroll independently so the chat composer + sections
            * list stay sticky on screen at any letter length. */}
           <div className="h-screen h-dvh flex flex-col overflow-hidden">
-            <main className="flex-1 flex flex-col min-h-0">{children}</main>
+            <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
+            <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
           </div>
           <SearchPalette open={open} onOpenChange={setOpen} />
           <Onboarding />
@@ -102,10 +104,11 @@ export function Layout({ children }: { children: ReactNode }) {
     <TooltipProvider delayDuration={150}>
       <SearchPaletteContext.Provider value={{ open, setOpen }}>
         <SidebarProvider defaultOpen>
+          <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
           <AppSidebar />
           <SidebarInset className="min-h-screen flex flex-col">
             <MobileTopbar />
-            <main className="flex-1">{children}</main>
+            <main id="main" aria-label="Main content" className="flex-1">{children}</main>
           </SidebarInset>
         </SidebarProvider>
         <SearchPalette open={open} onOpenChange={setOpen} />

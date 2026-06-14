@@ -41,10 +41,22 @@ export function MyBookings() {
   const nav = useNavigate();
   const bookings = useBookingsStore((s) => s.bookings);
 
+  // True until the first server hydrate resolves. On a fresh device the
+  // store starts empty, so without this the page flashes "No bookings yet"
+  // before the fetched bookings pop in. We render a skeleton during this
+  // window instead of the empty state.
+  const [hydrating, setHydrating] = useState(true);
+
   // Hydrate the HR-side bookings list from the server on mount so a
   // booking placed on device A shows up on device B.
   useEffect(() => {
-    void pullMyBookings();
+    let cancelled = false;
+    void pullMyBookings().finally(() => {
+      if (!cancelled) setHydrating(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const myProfile = useConsultantStore((s) => s.profile);
   const myCard =
@@ -67,6 +79,31 @@ export function MyBookings() {
         } as Consultant)
       : null;
   const allConsultants = myCard ? [myCard, ...CONSULTANTS] : CONSULTANTS;
+
+  // First-load skeleton: the store is empty but the server fetch is still
+  // in flight, so show muted placeholder rows rather than flashing the
+  // "No bookings yet" empty state. Once the fetch resolves we fall through
+  // to either the real empty state or the list below.
+  if (hydrating && bookings.length === 0) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
+        <header className="mb-8">
+          <div className="h-3 w-24 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+          <div className="mt-3 h-9 w-48 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+          <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded bg-[var(--ds-surface-2)]" />
+        </header>
+        <div className="space-y-2" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-20 animate-pulse rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]"
+            />
+          ))}
+        </div>
+        <span className="sr-only">Loading your bookings…</span>
+      </div>
+    );
+  }
 
   if (bookings.length === 0) {
     return (

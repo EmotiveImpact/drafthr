@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/ds/BrandMark";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import {
   runHealthChecks,
   computeHealthScore,
@@ -385,6 +386,14 @@ export function Finalize() {
               consultant={bookingFor}
               draftId={draft.id}
               onClose={() => setBookingFor(null)}
+              onBooked={() => {
+                toast.success("Booking confirmed — track it in My bookings", {
+                  action: {
+                    label: "My bookings",
+                    onClick: () => nav("/bookings"),
+                  },
+                });
+              }}
             />
 
             {/* Skip row */}

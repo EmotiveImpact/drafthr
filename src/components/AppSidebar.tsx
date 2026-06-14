@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   Sidebar,
@@ -307,21 +308,12 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
-                {/* Disabled placeholder until a real booking-inbox route
-                 * exists. Previously this linked to "/c" — the SAME target as
-                 * "Home" — so both rows highlighted active on /c and clicking
-                 * Inbox just re-navigated home (bug #22). Rendered disabled
-                 * (no link, no active state) so it reads as "coming soon". */}
-                <SidebarMenuButton
-                  tooltip="Booking inbox — coming soon"
-                  className="text-muted-foreground cursor-not-allowed"
-                  aria-disabled
-                >
-                  <Inbox />
-                  <span>Inbox</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {/* No standalone "Inbox" row: the booking inbox already renders
+               * on /c (ConsultantHome → ConsultantInbox), which is the "Home"
+               * row above. A separate Inbox row pointing at /c duplicated
+               * Home's target and double-highlighted on /c (bug #22), and a
+               * disabled "coming soon" placeholder falsely implied the inbox
+               * didn't exist yet. Removed rather than re-pointed at /c. */}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -330,9 +322,15 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Notifications" className="cursor-default">
-                  <Bell />
-                  <span>Notifications</span>
+                <SidebarMenuButton
+                  asChild
+                  tooltip="Notifications"
+                  isActive={loc.pathname === "/notifications"}
+                >
+                  <Link to="/notifications">
+                    <Bell />
+                    <span>Notifications</span>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -716,7 +714,28 @@ function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => deleteDraft(d.id)}
+                        onClick={() => {
+                          // Optimistic delete with a 6s undo window. We capture
+                          // the full draft object BEFORE deleting so undo can
+                          // re-insert it verbatim — restoring it via setState
+                          // re-triggers the dual-write subscription, so the
+                          // server copy is recreated too (the delete had fired
+                          // a remote delete). One misclick no longer destroys a
+                          // draft permanently.
+                          const snapshot = d;
+                          deleteDraft(snapshot.id);
+                          toast(`Deleted "${label}"`, {
+                            duration: 6000,
+                            action: {
+                              label: "Undo",
+                              onClick: () => {
+                                useDraftStore.setState((s) => ({
+                                  drafts: { ...s.drafts, [snapshot.id]: snapshot },
+                                }));
+                              },
+                            },
+                          });
+                        }}
                         className="gap-2 text-destructive focus:text-destructive"
                       >
                         <Trash2 className="size-4" />

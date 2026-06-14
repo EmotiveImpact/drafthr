@@ -23,7 +23,7 @@ export function QuestionField({ q, value, onChange }: Props) {
   const id = `q-${q.id}`;
   return (
     <div className="space-y-2">
-      <Label htmlFor={id} className="text-sm font-medium">
+      <Label id={`${id}-label`} htmlFor={id} className="text-sm font-medium">
         {q.label}
         {q.required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
@@ -52,7 +52,13 @@ function renderControl(
         onChange(next);
       };
       return (
-        <div id={id} role="group" className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-md border border-letter-rule p-3">
+        <div
+          id={id}
+          role="group"
+          aria-labelledby={`${id}-label`}
+          aria-required={q.required}
+          className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-md border border-letter-rule p-3"
+        >
           {q.options?.map((opt) => {
             const checked = selected.includes(opt.value);
             return (
@@ -75,6 +81,7 @@ function renderControl(
       return (
         <Textarea
           id={id}
+          aria-required={q.required}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder={q.placeholder}
@@ -89,7 +96,7 @@ function renderControl(
           value={(value as string) ?? ""}
           onValueChange={(v) => onChange(v)}
         >
-          <SelectTrigger id={id}>
+          <SelectTrigger id={id} aria-required={q.required}>
             <SelectValue placeholder="Select…" />
           </SelectTrigger>
           <SelectContent>
@@ -107,6 +114,7 @@ function renderControl(
         <div className="flex items-center gap-3">
           <Switch
             id={id}
+            aria-required={q.required}
             checked={Boolean(value)}
             onCheckedChange={(v) => onChange(v)}
           />
@@ -120,6 +128,7 @@ function renderControl(
       return (
         <Input
           id={id}
+          aria-required={q.required}
           type="date"
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
@@ -130,6 +139,7 @@ function renderControl(
       return (
         <Input
           id={id}
+          aria-required={q.required}
           type="number"
           value={(value as number | string | undefined) ?? ""}
           onChange={(e) =>
@@ -143,6 +153,7 @@ function renderControl(
       return (
         <Input
           id={id}
+          aria-required={q.required}
           type="number"
           inputMode="decimal"
           step="0.01"
@@ -159,6 +170,7 @@ function renderControl(
       return (
         <Input
           id={id}
+          aria-required={q.required}
           type="text"
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}

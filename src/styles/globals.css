@@ -134,7 +134,7 @@
   --ds-ink: oklch(0.10 0.008 250);
   --ds-body: oklch(0.30 0.011 250);
   --ds-muted: oklch(0.50 0.013 250);
-  --ds-subtle: oklch(0.65 0.013 250);
+  --ds-subtle: oklch(0.55 0.013 250);
 
   /* Status — only used on dots, badges, inline status cells */
   --ds-red-bg: #fef2f2;

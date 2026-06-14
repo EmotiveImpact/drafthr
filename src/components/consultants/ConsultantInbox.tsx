@@ -170,15 +170,11 @@ function BookingRow({ booking }: { booking: Booking }) {
             <X className="size-3.5" aria-hidden />
             Decline
           </button>
-          {booking.draftId && (
-            <a
-              href={`/editor/${booking.draftId}`}
-              className="ml-auto inline-flex h-8 items-center gap-1.5 text-[12px] font-semibold text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
-            >
-              <FileText className="size-3.5" aria-hidden />
-              Open draft
-            </a>
-          )}
+          {/* No "Open draft" link in the requested state: the consultant
+           * hasn't accepted yet, isn't a tenant member, and booking.draftId
+           * is a server UUID — so /editor/:id dead-ends at "Draft not found".
+           * The read-only review surface (/c/review/:id) only exists once the
+           * booking is accepted, which is why it appears in that state below. */}
         </div>
       )}
 
