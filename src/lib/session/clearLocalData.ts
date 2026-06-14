@@ -38,10 +38,20 @@ export const TENANT_SCOPED_PERSIST_KEYS = [
  * Callers hard-navigate immediately afterwards, so the in-memory zustand
  * state is torn down by the reload; this function only has to guarantee the
  * on-disk copy is gone before the next user's session initialises.
+ *
+ * `keepProfile` is set on a WORKSPACE SWITCH (board JA-03): a switch is the
+ * SAME user moving between their own tenants, so their profile (the
+ * employer/employee mode choice + credits) must survive — otherwise
+ * RootRedirect sees a null role and forces them back through the role picker
+ * on every switch. On SIGN-OUT we wipe everything (a different person may use
+ * the browser next), so callers there pass nothing.
  */
-export function clearTenantScopedLocalData(): void {
+export function clearTenantScopedLocalData(opts?: { keepProfile?: boolean }): void {
   if (typeof window === "undefined") return;
-  for (const key of TENANT_SCOPED_PERSIST_KEYS) {
+  const keys = opts?.keepProfile
+    ? TENANT_SCOPED_PERSIST_KEYS.filter((k) => k !== "scribehr-profile-v1")
+    : TENANT_SCOPED_PERSIST_KEYS;
+  for (const key of keys) {
     try {
       window.localStorage.removeItem(key);
     } catch {

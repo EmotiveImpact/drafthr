@@ -267,7 +267,7 @@ function HrDashboard() {
         className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-7"
       >
         <TodayCard items={todayItems} prefix={prefix} />
-        <RiskRegister summary={riskSummary} prefix={prefix} />
+        <RiskRegister summary={riskSummary} />
         <ComplianceHealth summary={complianceSummary} prefix={prefix} />
       </motion.div>
 
@@ -318,7 +318,7 @@ function HrDashboard() {
       >
         <button
           type="button"
-          onClick={() => nav(`${prefix}/matters`)}
+          onClick={() => nav("/matters")}
           className="inline-flex items-center gap-2 px-[16px] py-[10px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px] shadow-sm hover:-translate-y-px hover:shadow-md transition"
         >
           <PlusCircle className="size-4" />
@@ -418,7 +418,7 @@ type RiskSummary = {
   hasAnyExposure: boolean;
 };
 
-function RiskRegister({ summary, prefix }: { summary: RiskSummary; prefix: string }) {
+function RiskRegister({ summary }: { summary: RiskSummary }) {
   const nav = useNavigate();
   const bands: RiskBand[] = ["low", "moderate", "high", "critical"];
   // Show the panel when there are matters at all — even with zero
@@ -479,7 +479,7 @@ function RiskRegister({ summary, prefix }: { summary: RiskSummary; prefix: strin
             </div>
           </div>
           <PanelFooterButton
-            onClick={() => nav(`${prefix}/matters`)}
+            onClick={() => nav("/matters")}
             label="Risk register"
           />
         </>

@@ -5,10 +5,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Strip of participant chips. Each chip shows initials, name and role tag.
- * Empty state: a single "+ Add participant" affordance.
  *
- * The participant editor is not built yet — the "+ Add" button just stubs an
- * alert. The slice + types are ready for the next wave.
+ * The participant editor is not built yet, so the "Add" affordance is rendered
+ * as an honest, non-clickable "coming soon" control rather than a button whose
+ * only behaviour is an apology alert (board CPO-04/JA-05). The slice + types are
+ * ready for when the editor lands.
  */
 const ROLE_LABEL: Record<MatterParticipantRole, string> = {
   subject: "subject",
@@ -39,10 +40,6 @@ function initials(name: string): string {
     .join("");
 }
 
-function onAddStub() {
-  alert("Participant editor coming next wave");
-}
-
 export function MatterParticipants({
   participants,
 }: {
@@ -60,23 +57,23 @@ export function MatterParticipants({
           <Users className="size-3" /> Participants
         </h2>
         {participants.length > 0 && (
-          <button
-            type="button"
-            onClick={onAddStub}
-            className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
+          <span
+            aria-disabled="true"
+            title="Adding participants is coming soon"
+            className="text-[11px] text-[var(--ds-subtle)] inline-flex items-center gap-1 cursor-not-allowed select-none"
           >
-            <UserPlus className="size-3" /> Add
-          </button>
+            <UserPlus className="size-3" /> Add · soon
+          </span>
         )}
       </div>
       {participants.length === 0 ? (
-        <button
-          type="button"
-          onClick={onAddStub}
-          className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] rounded-md border border-dashed border-[var(--ds-line)] px-3 py-1.5 hover:bg-[var(--ds-line-2)] transition"
+        <span
+          aria-disabled="true"
+          title="Adding participants is coming soon"
+          className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ds-subtle)] rounded-md border border-dashed border-[var(--ds-line)] px-3 py-1.5 cursor-not-allowed select-none"
         >
-          <UserPlus className="size-3.5" /> Add participant
-        </button>
+          <UserPlus className="size-3.5" /> No participants yet — adding coming soon
+        </span>
       ) : (
         <div className="flex flex-wrap gap-2">
           {participants.map((p, i) => (

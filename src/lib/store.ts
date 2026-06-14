@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { toast } from "sonner";
 import { createQuotaSafeStorage } from "./storage/quota-safe-storage";
+import { TENANT_SCOPED_PERSIST_KEYS } from "./session/clearLocalData";
 import type {
   AIAction,
   AIChatMessage,
@@ -1635,9 +1636,25 @@ export const useDraftStore = create<Store>()(
 if (typeof window !== "undefined") {
   const PERSIST_KEY = "scribehr-store-v1";
   window.addEventListener("storage", (e) => {
-    if (e.key !== PERSIST_KEY || e.newValue === null) return;
-    // rehydrate() re-reads localStorage and replaces in-memory state.
-    void useDraftStore.persist?.rehydrate?.();
+    if (!e.key) return;
+    // Another tab signed out / switched workspace → it WIPED a tenant-scoped
+    // key. Tear this tab down too, so it can't keep the previous tenant's PII
+    // in memory and re-persist it under the wiped key for the next user (board
+    // SI-01 — the cross-tab counterpart to the sign-out wipe). A hard
+    // navigation re-initialises every store from the now-cleared storage; the
+    // session check on reload then routes to /sign-in or the new tenant.
+    if (
+      e.newValue === null &&
+      (TENANT_SCOPED_PERSIST_KEYS as readonly string[]).includes(e.key)
+    ) {
+      window.location.assign("/");
+      return;
+    }
+    // Same-key cross-tab edit (not a wipe): rehydrate so the tabs converge.
+    if (e.key === PERSIST_KEY && e.newValue !== null) {
+      // rehydrate() re-reads localStorage and replaces in-memory state.
+      void useDraftStore.persist?.rehydrate?.();
+    }
   });
 }
 

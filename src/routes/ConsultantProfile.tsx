@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { pushProfile } from "@/lib/marketplaceSync";
+import { toast } from "sonner";
 
 const AVAILABILITY_LABEL: Record<Availability, string> = {
   this_week: "Available this week",
@@ -117,7 +118,7 @@ export function ConsultantProfile() {
     setCustomSpecialty("");
   };
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     saveProfile({
       fullName: fullName.trim(),
@@ -131,12 +132,18 @@ export function ConsultantProfile() {
       photoUrl,
       availability,
     });
+    // Publish to the cross-tenant marketplace and only claim success once the
+    // SERVER accepts it. Previously this was fire-and-forget + an immediate
+    // "Saved", so a failed push left the consultant believing they were listed
+    // when HR could never find them (board CPO-06).
+    const published = await pushProfile();
+    if (!published) {
+      toast.error(
+        "Saved on this device, but we couldn't publish your profile to the marketplace yet. Check your connection and press Save to retry.",
+      );
+      return; // stay on the form so they can retry — don't show "Saved" or redirect
+    }
     setSubmitted(true);
-    // Dual-write: mirror the freshly-saved local profile to the API so it
-    // shows up in the cross-tenant marketplace. Fire-and-forget; the local
-    // store is already updated, so a network failure doesn't reverse the
-    // user's save.
-    void pushProfile();
     // Brief affordance, then bounce back to /c — feels less abrupt than
     // an immediate redirect and lets the user see their save landed.
     setTimeout(() => nav("/c"), 800);

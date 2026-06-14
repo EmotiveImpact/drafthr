@@ -68,7 +68,9 @@ export function WorkspaceSwitcher() {
         // Wipe the previous tenant's persisted PII before reloading so a
         // workspace switch never surfaces tenant A's drafts/matters/employees
         // in tenant B's session on a shared browser (security board SA-01).
-        clearTenantScopedLocalData();
+        // keepProfile: a switch is the same user, so preserve their role/credits
+        // — otherwise they're forced back through the role picker (board JA-03).
+        clearTenantScopedLocalData({ keepProfile: true });
         // Hard reload so every Zustand store + sidebar nav re-reads the new
         // tenant's data. Cheap; we already do this on sign-out.
         window.location.assign("/");

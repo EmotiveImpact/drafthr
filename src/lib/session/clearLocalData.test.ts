@@ -51,6 +51,26 @@ describe("clearTenantScopedLocalData (shared-browser PII leak — SA-01/SE-02)",
     expect(() => clearTenantScopedLocalData()).not.toThrow();
   });
 
+  it("keepProfile preserves the user's profile on a workspace switch but still wipes tenant data (JA-03)", () => {
+    for (const k of TENANT_SCOPED_PERSIST_KEYS) window.localStorage.setItem(k, "x");
+
+    clearTenantScopedLocalData({ keepProfile: true });
+
+    // Same user switching tenants — their role/credits must survive so they
+    // aren't forced back through the role picker.
+    expect(window.localStorage.getItem("scribehr-profile-v1")).toBe("x");
+    // Tenant-scoped data is still wiped so tenant A's drafts don't bleed into B.
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBeNull();
+    expect(window.localStorage.getItem("drafthr.consultant")).toBeNull();
+    expect(window.localStorage.getItem("drafthr.bookings.v1")).toBeNull();
+  });
+
+  it("full wipe (sign-out, no opts) still removes the profile too", () => {
+    for (const k of TENANT_SCOPED_PERSIST_KEYS) window.localStorage.setItem(k, "x");
+    clearTenantScopedLocalData();
+    expect(window.localStorage.getItem("scribehr-profile-v1")).toBeNull();
+  });
+
   it("keeps the key list in sync with the four known tenant-scoped stores", () => {
     // A guard so a newly-added persisted PII store is a conscious decision:
     // if you add a store that holds tenant data, add its key here too.

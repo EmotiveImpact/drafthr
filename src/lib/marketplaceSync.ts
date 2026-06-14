@@ -86,10 +86,12 @@ export async function pullProfile(): Promise<void> {
 }
 
 /** Persist the locally-saved profile to the server. Currency translates
- *  from the symbol form the local store keeps. */
-export async function pushProfile(): Promise<void> {
+ *  from the symbol form the local store keeps. Returns true only when the
+ *  server accepted the profile (i.e. it's actually published to the
+ *  cross-tenant marketplace) so callers don't show a false "Saved". */
+export async function pushProfile(): Promise<boolean> {
   const p = useConsultantStore.getState().profile;
-  if (!p) return;
+  if (!p) return false;
   const codeByCurrency: Record<"£" | "$" | "€", "GBP" | "USD" | "EUR"> = {
     "£": "GBP",
     "$": "USD",
@@ -110,9 +112,10 @@ export async function pushProfile(): Promise<void> {
   });
   if (!res.ok) {
     useConsultantStore.getState().setSync("local", res.error);
-    return;
+    return false;
   }
   useConsultantStore.getState().hydrateFromServer(dtoToProfile(res.data.profile));
+  return true;
 }
 
 // ─── Bookings ────────────────────────────────────────────────────────

@@ -1,57 +1,35 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowRight,
-  Coins,
   ShieldCheck,
   Sparkles,
   Users,
 } from "lucide-react";
-import { useProfileStore, AI_REVIEW_COST } from "@/lib/profile";
 import { cn } from "@/lib/utils";
 
 /**
- * IMPROVE tab — three reviewer lanes for getting eyes on the letter before
- * Finalize. Mirrors the "Independent review" block on Finalize but lives in
- * the rail so the assess → improve → ship flow happens in one place.
+ * IMPROVE tab — reviewer lanes for getting eyes on the letter before Finalize.
  *
- * Handlers are ported from Finalize.tsx (AI critique uses credits + the
- * profile store; team + consultant are stubs). The page passes nothing in;
- * the tab owns its lane state because it's self-contained per Review session.
+ * Only the "External consultant" lane is wired today: it routes to the live
+ * /consultants marketplace (carrying the current draft so the booking has
+ * letter context). The "AI specialist" and "Your team" lanes are honest
+ * "coming soon" placeholders — they are NOT clickable and charge NOTHING.
+ *
+ * (Board CPO-01/02/03: the AI lane previously debited credits for a fake 2.5s
+ * setTimeout with no model call and no critique view; the consultant lane
+ * alerted and misdirected users to a "Consult tab" that isn't mounted; the
+ * team lane was an alert stub. The editor's real AI assistant lives in the
+ * chat panel — a genuine in-rail critique can be built here later.)
  */
 export function ImproveTab() {
-  const credits = useProfileStore((s) => s.profile.credits ?? 0);
-  const spendCredits = useProfileStore((s) => s.spendCredits);
+  const navigate = useNavigate();
+  // The review rail renders under /editor/:draftId/review, so the draft id is
+  // on the route — carry it to the marketplace so the booking has context.
+  const { draftId } = useParams<{ draftId: string }>();
 
-  const [aiReviewState, setAiReviewState] = useState<
-    "idle" | "running" | "complete" | "low-credits"
-  >("idle");
-
-  // Mirrors the Finalize implementation — same store, same cost, same stub
-  // ~2.5s simulation so the flow is testable until the real /api/agent
-  // critique endpoint is wired in.
-  const onAiCritique = () => {
-    if (credits < AI_REVIEW_COST) {
-      setAiReviewState("low-credits");
-      return;
-    }
-    const ok = spendCredits(AI_REVIEW_COST);
-    if (!ok) {
-      setAiReviewState("low-credits");
-      return;
-    }
-    setAiReviewState("running");
-    setTimeout(() => setAiReviewState("complete"), 2500);
-  };
-
-  const aiCta =
-    aiReviewState === "running"
-      ? "Analysing…"
-      : aiReviewState === "complete"
-        ? "View critique"
-        : aiReviewState === "low-credits"
-          ? "Top up credits"
-          : "Get AI critique";
+  const browseConsultants = () =>
+    navigate(draftId ? `/consultants?draft=${encodeURIComponent(draftId)}` : "/consultants");
 
   return (
     <motion.div
@@ -67,25 +45,12 @@ export function ImproveTab() {
       <ReviewLane
         icon={<Sparkles className="size-4" />}
         title="AI specialist"
-        desc="Pick a lens — Tribunal counsel, Employee advocate, or DEI lead. Structured critique in ~30s."
+        desc="Structured critique through a chosen lens — Tribunal counsel, Employee advocate, or DEI lead."
         statLabel="Cost"
-        statValue={
-          <span className="inline-flex items-center gap-1">
-            <Coins className="size-3 text-[var(--ds-amber-fg)]" />
-            {AI_REVIEW_COST} credits
-          </span>
-        }
+        statValue={<>Credits</>}
         timeLabel="Returns"
         timeValue="~30s"
-        cta={aiCta}
-        loading={aiReviewState === "running"}
-        onClick={onAiCritique}
-        primary
-        footer={
-          <span className="text-[10.5px] text-[var(--ds-muted)] inline-flex items-center gap-1">
-            <Coins className="size-3" /> {credits} credits available
-          </span>
-        }
+        comingSoon
       />
 
       <ReviewLane
@@ -96,8 +61,7 @@ export function ImproveTab() {
         statValue={<>Free</>}
         timeLabel="Returns"
         timeValue="Async"
-        cta="Send to teammate"
-        onClick={() => alert("Team review — coming soon")}
+        comingSoon
       />
 
       <ReviewLane
@@ -109,7 +73,8 @@ export function ImproveTab() {
         timeLabel="SLA"
         timeValue="24–48h"
         cta="Browse consultants"
-        onClick={() => alert("Consultant marketplace — see the Consult tab")}
+        onClick={browseConsultants}
+        primary
       />
     </motion.div>
   );
@@ -124,10 +89,9 @@ function ReviewLane({
   timeLabel,
   timeValue,
   cta,
-  loading,
   onClick,
   primary,
-  footer,
+  comingSoon,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -136,11 +100,10 @@ function ReviewLane({
   statValue: React.ReactNode;
   timeLabel: string;
   timeValue: React.ReactNode;
-  cta: string;
-  loading?: boolean;
-  onClick: () => void;
+  cta?: string;
+  onClick?: () => void;
   primary?: boolean;
-  footer?: React.ReactNode;
+  comingSoon?: boolean;
 }) {
   return (
     <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-3.5">
@@ -149,7 +112,14 @@ function ReviewLane({
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="text-[13px] font-semibold m-0 mb-0.5">{title}</h4>
+          <h4 className="text-[13px] font-semibold m-0 mb-0.5 flex items-center gap-1.5">
+            {title}
+            {comingSoon && (
+              <span className="text-[9.5px] uppercase tracking-wider font-semibold text-[var(--ds-muted)] bg-[var(--ds-line-2)] rounded-full px-1.5 py-px">
+                Coming soon
+              </span>
+            )}
+          </h4>
           <p className="text-[11.5px] text-[var(--ds-muted)] m-0 leading-snug">
             {desc}
           </p>
@@ -175,34 +145,31 @@ function ReviewLane({
         </div>
       </div>
 
-      <motion.button
-        type="button"
-        onClick={onClick}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.97 }}
-        transition={{ duration: 0.12 }}
-        className={cn(
-          "mt-2.5 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition",
-          primary
-            ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
-            : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
-        )}
-      >
-        {cta}
-        {loading ? (
-          <motion.span
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-            className="inline-flex"
-          >
-            <Sparkles className="size-3.5" />
-          </motion.span>
-        ) : (
+      {comingSoon ? (
+        <div
+          aria-disabled="true"
+          className="mt-2.5 inline-flex items-center justify-center w-full h-8 px-3 rounded-md text-[12px] font-semibold bg-[var(--ds-line-2)] text-[var(--ds-muted)] cursor-not-allowed select-none"
+        >
+          Coming soon
+        </div>
+      ) : (
+        <motion.button
+          type="button"
+          onClick={onClick}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.12 }}
+          className={cn(
+            "mt-2.5 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition",
+            primary
+              ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
+              : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
+          )}
+        >
+          {cta}
           <ArrowRight className="size-3.5" />
-        )}
-      </motion.button>
-
-      {footer && <div className="mt-2">{footer}</div>}
+        </motion.button>
+      )}
     </div>
   );
 }
