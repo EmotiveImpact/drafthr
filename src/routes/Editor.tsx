@@ -799,6 +799,12 @@ export function Editor() {
                       beta
                     </span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => nav(`/pagedly2/${draft.id}`)}>
+                    <FileEdit className="size-4 mr-2" /> Try the polished editor
+                    <span className="ml-auto text-[9px] uppercase tracking-wider font-semibold text-[var(--ds-muted)] bg-[var(--ds-line-2)] rounded-full px-1.5 py-px">
+                      beta v2
+                    </span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
