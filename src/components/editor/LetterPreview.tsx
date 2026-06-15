@@ -2,7 +2,8 @@ import type { MutableRefObject } from "react";
 
 import type { Draft } from "@/lib/letters/types";
 import { PaginatedLetter } from "./PaginatedLetter";
-import { PagedEditor, type PagedEditorActions } from "./paged-edit/PagedEditor";
+import { type PagedEditorActions } from "./paged-edit/PagedEditor";
+import { PagedlyDocEditor } from "./paged-edit/PagedlyDocEditor";
 
 type AddCommentOpts = {
   quote?: string;
@@ -74,11 +75,11 @@ export function LetterPreview({
     );
   }
 
-  // Edit-on-page: the paged.js render IS the editor. The legacy one-long-page
-  // TipTap surface is intentionally not used here; Preview and edit-preview
-  // must be the same page model.
+  // Edit-on-page: now backed by the vendored pagedly editor (replacing the
+  // home-grown paged.js engine). Same contract, so the menubar Edit actions and
+  // the parent toggle drive it unchanged; edits persist per-section to the store.
   return (
-    <PagedEditor
+    <PagedlyDocEditor
       draft={draft}
       onDone={() => onEditableDone?.()}
       actionsRef={editorActionsRef}
