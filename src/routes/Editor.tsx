@@ -790,6 +790,15 @@ export function Editor() {
                   <DropdownMenuItem onClick={() => setTimelineDialogOpen(true)}>
                     <Clock3 className="size-4 mr-2" /> Timeline
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {/* Opens this same letter in the pagedly paged editor (beta).
+                   * Parallel surface — the normal editor is unchanged. */}
+                  <DropdownMenuItem onClick={() => nav(`/pagedly/${draft.id}`)}>
+                    <FileEdit className="size-4 mr-2" /> Try the new editor
+                    <span className="ml-auto text-[9px] uppercase tracking-wider font-semibold text-[var(--ds-muted)] bg-[var(--ds-line-2)] rounded-full px-1.5 py-px">
+                      beta
+                    </span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
