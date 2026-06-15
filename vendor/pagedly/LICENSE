@@ -1,103 +1,141 @@
-Pagedly Commercial License Agreement
+Pagedly Commercial License, Version 1.0
+Copyright (c) 2026 Pagedly. All rights reserved.
 
-Copyright (c) 2026 Emotive Impact. All rights reserved.
+This is a commercial software license agreement (the "Agreement") between
+you ("Licensee") and Pagedly ("Licensor"). By installing, copying, or
+otherwise using the Pagedly software, including its source code,
+compiled output, documentation, and associated files (collectively, the
+"Software"), you agree to be bound by the terms of this Agreement. If
+you do not agree, do not install, copy, or use the Software.
 
-This software, including its source code, build outputs, demos, and
-accompanying documentation (collectively, the "Software"), is the
-proprietary property of Emotive Impact ("Licensor"). The Software is
-licensed, not sold.
 
 1. GRANT OF LICENSE
 
-   Subject to the Licensee's payment of the applicable license fee and
-   continued compliance with this Agreement, Licensor grants Licensee a
-   non-exclusive, non-transferable, non-sublicensable, perpetual right to
-   integrate and use the Software in the application(s) for which the
-   license was purchased (the "Licensed Application(s)"), and to modify
-   the Software's source code for the sole purpose of integrating it
-   into and operating the Licensed Application(s).
+Subject to Licensee's continuing compliance with this Agreement and
+payment of all applicable fees, Licensor grants Licensee a non-
+exclusive, non-transferable, non-sublicensable, perpetual license to:
+
+  (a) install and use the Software within the scope purchased
+      (e.g., a single application, a defined set of applications,
+      or an organisation-wide entitlement as set out in the order);
+
+  (b) modify the source code of the Software for Licensee's own
+      internal use, including bug fixes, feature additions, and
+      integration with Licensee's products; and
+
+  (c) distribute the Software, in source or compiled form, solely
+      as an integrated, non-separable component of Licensee's own
+      applications offered to end users — provided that no end user
+      gains, by virtue of such distribution, any of the rights
+      granted to Licensee under this Agreement.
+
 
 2. RESTRICTIONS
 
-   Licensee shall NOT:
+Licensee shall not, and shall not permit any third party to:
 
-   a. Redistribute, sublicense, sell, lease, rent, lend, or otherwise
-      transfer the Software or any portion of its source code to any
-      third party, whether modified or unmodified, whether for fee or
-      free of charge, except as embedded within the executable form of
-      a Licensed Application.
+  (a) sell, rent, lease, sublicense, distribute, publish, host as
+      a public package, or otherwise make the Software available
+      to any third party as a standalone product, library, SDK,
+      or component, separate from Licensee's own applications;
 
-   b. Use the Software, in whole or in part, to develop, build, or
-      offer any product that competes with the Software, including but
-      not limited to any paged document editor, paginated rich-text
-      editor, or React component library marketed for similar use
-      cases.
+  (b) use the Software, in whole or in part, to develop, train,
+      test, benchmark, or operate any product that competes with
+      the Software (including but not limited to other paged or
+      print-layout rich-text editors);
 
-   c. Publish the Software's source code, in whole or in part, on any
-      public source repository, package registry, file-sharing service,
-      or other publicly accessible location.
+  (c) remove, obscure, or alter any copyright, trademark, or other
+      proprietary notices in or on the Software;
 
-   d. Remove, alter, or obscure any copyright notice, trademark, or
-      attribution contained within the Software, including the
-      attributions in THIRD_PARTY_NOTICES.md.
+  (d) reverse engineer the Software for any purpose other than
+      Licensee's permitted modifications under Section 1(b), nor
+      use such modifications to circumvent the restrictions of
+      this Agreement; or
 
-   e. Reverse engineer the Software for the purpose of recreating it
-      or any substantial portion of it as a competing product.
+  (e) transfer this license, in whole or in part, to any third
+      party without Licensor's prior written consent.
 
-3. SCOPE OF "LICENSED APPLICATION"
 
-   A Licensed Application is a single, distinct software product owned
-   and operated by the Licensee (or by Licensee's legal parent company
-   under a multi-application license). Embedding the Software in a
-   Licensee-owned product that is then sold to end users is permitted;
-   the end users acquire no rights to the Software's source code.
+3. OWNERSHIP
 
-4. UPDATES
+The Software is licensed, not sold. Licensor retains all right, title,
+and interest in and to the Software, including all intellectual
+property rights therein. No rights are granted to Licensee other than
+those expressly set forth in this Agreement.
 
-   This license grants Licensee access to the version of the Software
-   purchased and any updates issued during the support window (if any)
-   specified at the time of purchase. Updates issued after the support
-   window expires require renewal of the support entitlement. The
-   originally licensed version may be used in perpetuity regardless of
-   renewal status.
 
-5. THIRD-PARTY ATTRIBUTIONS
+4. SUPPORT AND UPDATES
 
-   Portions of the Software incorporate code from open-source projects
-   listed in THIRD_PARTY_NOTICES.md, used in accordance with their
-   respective licenses. Those attributions must be preserved in any
-   integration of the Software.
+Support, maintenance, and updates are not included in this Agreement
+unless purchased separately as a subscription. Licensee's perpetual
+license under Section 1 covers the version(s) of the Software for which
+Licensee has paid; access to subsequent versions is subject to a
+current update subscription where applicable.
 
-6. WARRANTY DISCLAIMER
 
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
-   NONINFRINGEMENT.
+5. THIRD-PARTY COMPONENTS
 
-7. LIMITATION OF LIABILITY
+The Software incorporates open-source components that retain their
+original licenses. See the file THIRD_PARTY_NOTICES.md distributed
+alongside the Software for the list of such components and their
+respective license terms. Nothing in this Agreement is intended to,
+or shall, override the terms of those third-party licenses.
 
-   IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
-   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
-   OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE
-   OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. LICENSOR'S TOTAL
-   AGGREGATE LIABILITY UNDER THIS AGREEMENT SHALL NOT EXCEED THE
-   AMOUNT PAID BY LICENSEE FOR THE APPLICABLE LICENSE.
 
-8. TERMINATION
+6. CONFIDENTIALITY
 
-   This Agreement terminates automatically if Licensee breaches any of
-   its terms. Upon termination, Licensee must cease all use of the
-   Software and destroy all copies of the source code in Licensee's
-   possession or control. Sections 2, 5, 6, 7, and 9 survive
-   termination.
+The source code of the Software is Licensor's confidential and
+proprietary information. Licensee shall protect it with at least the
+same degree of care it uses to protect its own confidential
+information of comparable importance, and in any event with no less
+than reasonable care. Public disclosure of the source code, in any
+form, is a material breach of this Agreement.
 
-9. GOVERNING LAW
 
-   This Agreement shall be governed by and construed in accordance with
-   the laws of England and Wales, without regard to its conflict-of-law
-   provisions. Any dispute arising under this Agreement shall be
-   subject to the exclusive jurisdiction of the courts of England and
-   Wales.
+7. TERMINATION
 
-For licensing inquiries, contact: hello@pagedly.dev
+This Agreement terminates automatically and immediately upon
+Licensee's breach of any of its terms. Upon termination, Licensee
+shall cease all use of the Software and destroy all copies in its
+possession. Sections 2, 3, 6, 8, 9, and 10 survive termination.
+
+
+8. DISCLAIMER OF WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY
+OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE,
+TITLE, AND NON-INFRINGEMENT. LICENSOR DOES NOT WARRANT THAT THE
+SOFTWARE WILL BE ERROR-FREE OR UNINTERRUPTED.
+
+
+9. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF
+PROFITS, REVENUE, DATA, OR USE, ARISING OUT OF OR IN CONNECTION WITH
+THIS AGREEMENT OR THE SOFTWARE, WHETHER IN CONTRACT, TORT, OR ANY
+OTHER LEGAL THEORY, EVEN IF LICENSOR HAS BEEN ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES. LICENSOR'S TOTAL CUMULATIVE LIABILITY
+ARISING OUT OF OR RELATED TO THIS AGREEMENT SHALL NOT EXCEED THE
+FEES ACTUALLY PAID BY LICENSEE TO LICENSOR FOR THE SOFTWARE IN THE
+TWELVE (12) MONTHS PRECEDING THE EVENT GIVING RISE TO THE CLAIM.
+
+
+10. GENERAL
+
+This Agreement constitutes the entire agreement between the parties
+with respect to the Software and supersedes all prior or contemporaneous
+understandings, whether written or oral. No modification of this
+Agreement is binding unless in writing and signed by Licensor. If any
+provision of this Agreement is held to be unenforceable, the remaining
+provisions shall remain in full force. Failure to enforce any right
+under this Agreement is not a waiver of that right.
+
+This Agreement is governed by and construed in accordance with the
+laws of the jurisdiction in which Licensor is incorporated, without
+regard to its conflict-of-laws principles.
+
+
+For licensing inquiries, contact: licensing@pagedly.dev
