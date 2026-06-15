@@ -127,6 +127,9 @@
   /* DRAFTHR design system tokens. Canonical names mirrored from
    * /public/design-system.html so React components consume the same vars. */
   --ds-canvas: oklch(0.987 0.003 250);
+  /* pagedly desk = the editor canvas, so the pagedly editor surface sits on the
+   * same background as the read-only preview (no grey #e8eaed desk mismatch). */
+  --pagedly-desk-background: var(--ds-canvas);
   --ds-surface: #ffffff;
   --ds-surface-2: oklch(0.98 0.003 250);
   --ds-line: oklch(0.93 0.005 250);
