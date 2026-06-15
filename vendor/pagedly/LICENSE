@@ -1,0 +1,103 @@
+Pagedly Commercial License Agreement
+
+Copyright (c) 2026 Emotive Impact. All rights reserved.
+
+This software, including its source code, build outputs, demos, and
+accompanying documentation (collectively, the "Software"), is the
+proprietary property of Emotive Impact ("Licensor"). The Software is
+licensed, not sold.
+
+1. GRANT OF LICENSE
+
+   Subject to the Licensee's payment of the applicable license fee and
+   continued compliance with this Agreement, Licensor grants Licensee a
+   non-exclusive, non-transferable, non-sublicensable, perpetual right to
+   integrate and use the Software in the application(s) for which the
+   license was purchased (the "Licensed Application(s)"), and to modify
+   the Software's source code for the sole purpose of integrating it
+   into and operating the Licensed Application(s).
+
+2. RESTRICTIONS
+
+   Licensee shall NOT:
+
+   a. Redistribute, sublicense, sell, lease, rent, lend, or otherwise
+      transfer the Software or any portion of its source code to any
+      third party, whether modified or unmodified, whether for fee or
+      free of charge, except as embedded within the executable form of
+      a Licensed Application.
+
+   b. Use the Software, in whole or in part, to develop, build, or
+      offer any product that competes with the Software, including but
+      not limited to any paged document editor, paginated rich-text
+      editor, or React component library marketed for similar use
+      cases.
+
+   c. Publish the Software's source code, in whole or in part, on any
+      public source repository, package registry, file-sharing service,
+      or other publicly accessible location.
+
+   d. Remove, alter, or obscure any copyright notice, trademark, or
+      attribution contained within the Software, including the
+      attributions in THIRD_PARTY_NOTICES.md.
+
+   e. Reverse engineer the Software for the purpose of recreating it
+      or any substantial portion of it as a competing product.
+
+3. SCOPE OF "LICENSED APPLICATION"
+
+   A Licensed Application is a single, distinct software product owned
+   and operated by the Licensee (or by Licensee's legal parent company
+   under a multi-application license). Embedding the Software in a
+   Licensee-owned product that is then sold to end users is permitted;
+   the end users acquire no rights to the Software's source code.
+
+4. UPDATES
+
+   This license grants Licensee access to the version of the Software
+   purchased and any updates issued during the support window (if any)
+   specified at the time of purchase. Updates issued after the support
+   window expires require renewal of the support entitlement. The
+   originally licensed version may be used in perpetuity regardless of
+   renewal status.
+
+5. THIRD-PARTY ATTRIBUTIONS
+
+   Portions of the Software incorporate code from open-source projects
+   listed in THIRD_PARTY_NOTICES.md, used in accordance with their
+   respective licenses. Those attributions must be preserved in any
+   integration of the Software.
+
+6. WARRANTY DISCLAIMER
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NONINFRINGEMENT.
+
+7. LIMITATION OF LIABILITY
+
+   IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
+   OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE
+   OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. LICENSOR'S TOTAL
+   AGGREGATE LIABILITY UNDER THIS AGREEMENT SHALL NOT EXCEED THE
+   AMOUNT PAID BY LICENSEE FOR THE APPLICABLE LICENSE.
+
+8. TERMINATION
+
+   This Agreement terminates automatically if Licensee breaches any of
+   its terms. Upon termination, Licensee must cease all use of the
+   Software and destroy all copies of the source code in Licensee's
+   possession or control. Sections 2, 5, 6, 7, and 9 survive
+   termination.
+
+9. GOVERNING LAW
+
+   This Agreement shall be governed by and construed in accordance with
+   the laws of England and Wales, without regard to its conflict-of-law
+   provisions. Any dispute arising under this Agreement shall be
+   subject to the exclusive jurisdiction of the courts of England and
+   Wales.
+
+For licensing inquiries, contact: hello@pagedly.dev
