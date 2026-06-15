@@ -1,6 +1,11 @@
 node_modules
 dist
 dist-ssr
+# Vendored pagedly is a real dependency and its built output MUST ship to the
+# Vercel build — keep it tracked even though the global `dist` rule above would
+# otherwise ignore it. (Without this the deploy fails: "Cannot find module 'pagedly'".)
+!vendor/pagedly/dist/
+!vendor/pagedly/dist/**
 *.local
 
 .env
