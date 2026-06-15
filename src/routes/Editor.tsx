@@ -11,7 +11,7 @@ import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
 import { DocumentPopover } from "@/components/editor/DocumentPopover";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
-import { LetterPreview } from "@/components/editor/LetterPreview";
+import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
 import type { PagedEditorActions } from "@/components/editor/paged-edit/PagedEditor";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
 import { InlineSuggestionBanner } from "@/components/editor/InlineSuggestionBanner";
@@ -40,7 +40,6 @@ import {
   Minimize2,
   ArrowUp,
   ArrowRight,
-  Pencil,
   Clock3,
   MessageSquare,
   Wand2,
@@ -135,10 +134,6 @@ export function Editor() {
    * exit. See public/editor-designs.html#v6 for the proposal this implements.
    */
   const [focusMode, setFocusMode] = useState(false);
-  // Edit-on-page swaps the read-only preview for the paged.js-backed
-  // editor so the user can type / format / paste on the rendered A4 page.
-  // Only meaningful when viewMode === "preview".
-  const [editOnPage, setEditOnPage] = useState(false);
   const [rightTab, setRightTab] = useState<RightRailTab>("ai");
   const [pendingComment, setPendingComment] = useState<{
     sectionId: string;
@@ -267,25 +262,6 @@ export function Editor() {
 
   const commentCount = (sectionId: string) =>
     (draft?.comments ?? []).filter((c) => c.sectionId === sectionId && !c.resolved).length;
-
-  const onSectionAddComment = (
-    sectionId: string,
-    opts?: { quote?: string; applyMark?: (commentId: string) => void }
-  ) => {
-    // Capture the selection rect at the moment of click — it'll get cleared
-    // when focus moves, so we snapshot once and keep using it.
-    const sel = window.getSelection();
-    let rect: DOMRect | null = null;
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      const r = range.getBoundingClientRect();
-      if (r.width > 0 || r.height > 0) rect = r;
-    }
-    setFloatingComment({
-      anchor: { getRect: () => rect },
-      mode: { kind: "new", sectionId, ...opts },
-    });
-  };
 
   const onFocusComment = (commentId: string) => {
     // Find the inline mark in the canvas and open the floating thread
@@ -422,21 +398,13 @@ export function Editor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [focusMode, pinnedDock]);
 
-  // Edit-on-page is only meaningful in Preview. Leaving Preview while
-  // it's active would strand the user in an invisible state, so we
-  // auto-exit it whenever the view switches away.
+  // Auto-collapse the AI rail when the user switches into the Page view —
+  // the full-width "see the actual letter" mode where the AI rail just steals
+  // page width. Doesn't auto-expand on exit — if the user later wants AI back,
+  // they tap the Ask AI pill, and that intent should stick.
   useEffect(() => {
-    if (editOnPage && viewMode !== "preview") setEditOnPage(false);
-  }, [viewMode, editOnPage]);
-
-  // Auto-collapse the AI rail when the user switches into Preview or
-  // enters edit-on-page — both are "look at the actual letter" modes
-  // where the AI rail just steals page width. Doesn't auto-expand on
-  // exit — if the user later wants AI back, they tap the Ask AI pill,
-  // and that intent should stick rather than fight a re-collapse.
-  useEffect(() => {
-    if (viewMode === "preview" || editOnPage) setRailCollapsed(true);
-  }, [viewMode, editOnPage]);
+    if (viewMode === "preview") setRailCollapsed(true);
+  }, [viewMode]);
 
   // Imperative handle into the PagedEditor for the top File / Edit /
   // Tools menubar. PagedEditor populates this on mount, nulls it on
@@ -809,14 +777,14 @@ export function Editor() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-[220px]">
                   <DropdownMenuItem
-                    disabled={!editOnPage}
+                    disabled={viewMode !== "preview"}
                     onClick={() => pagedEditorActionsRef.current?.undo()}
                   >
                     <Undo2 className="size-4 mr-2" /> Undo
                     <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘Z</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={!editOnPage}
+                    disabled={viewMode !== "preview"}
                     onClick={() => pagedEditorActionsRef.current?.redo()}
                   >
                     <Redo2 className="size-4 mr-2" /> Redo
@@ -824,14 +792,14 @@ export function Editor() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    disabled={!editOnPage}
+                    disabled={viewMode !== "preview"}
                     onClick={() => pagedEditorActionsRef.current?.selectAll()}
                   >
                     <TextSelect className="size-4 mr-2" /> Select all
                     <span className="ml-auto text-[10px] text-[var(--ds-muted)]">⌘A</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    disabled={!editOnPage}
+                    disabled={viewMode !== "preview"}
                     onClick={() => pagedEditorActionsRef.current?.openFind()}
                   >
                     <Search className="size-4 mr-2" /> Find in letter…
@@ -852,26 +820,19 @@ export function Editor() {
                 <DropdownMenuContent align="start" className="min-w-[220px]">
                   <DropdownMenuItem onClick={() => setViewMode("edit")}>
                     <FileEdit className="size-4 mr-2" />
-                    Edit
+                    Sections
                     {viewMode === "edit" && (
                       <span className="ml-auto text-[10px]">✓</span>
                     )}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setViewMode("preview")}>
                     <Eye className="size-4 mr-2" />
-                    Preview
+                    Page
                     {viewMode === "preview" && (
                       <span className="ml-auto text-[10px]">✓</span>
                     )}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={viewMode !== "preview"}
-                    onClick={() => setEditOnPage((v) => !v)}
-                  >
-                    <Pencil className="size-4 mr-2" />
-                    {editOnPage ? "Stop editing on page" : "Edit on page"}
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setFocusMode((f) => !f)}>
                     {focusMode ? (
                       <Minimize2 className="size-4 mr-2" />
@@ -1006,37 +967,14 @@ export function Editor() {
               role="tablist"
               aria-label="View mode"
             >
-              <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Edit" />
-              <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Preview" />
+              <ViewModeButton mode="edit" current={viewMode} setMode={setViewMode} icon={<FileEdit className="size-3.5" />} label="Sections" />
+              <ViewModeButton mode="preview" current={viewMode} setMode={setViewMode} icon={<Eye className="size-3.5" />} label="Page" />
             </div>
 
             {/* Right-of-canvas: Edit-on-page + Focus + pending pill +
              * Drafting indicator. ml-auto pushes them to the right edge
              * of the canvas column. */}
             <div className="ml-auto flex items-center gap-2">
-              {/* Edit-on-page — swaps the rendered preview for the
-               * paged.js-backed editor. Only meaningful while Preview is
-               * active; disabled (but visible) in Edit so the affordance
-               * stays discoverable. Used to live as a floating button
-               * above the page card; promoted here so it sits with the
-               * other view-state controls. */}
-              <Button
-                variant={editOnPage ? "default" : "outline"}
-                size="sm"
-                className="md:hidden h-7 w-7 p-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={viewMode !== "preview"}
-                onClick={() => setEditOnPage((v) => !v)}
-                aria-pressed={editOnPage}
-                title={
-                  viewMode !== "preview"
-                    ? "Switch to Preview to edit directly on the page"
-                    : editOnPage
-                      ? "Stop editing on page"
-                      : "Edit directly on the rendered page"
-                }
-              >
-                <Pencil className="size-3.5" />
-              </Button>
 
               {/* Focus mode — hides both rails for distraction-free
                * working. Available in both Edit and Preview. Esc exits. */}
@@ -1499,36 +1437,14 @@ export function Editor() {
 
           <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
-            // Double-click anywhere on the rendered page flips into
-            // Edit-on-page mode — spreadsheet-cell pattern. Single
-            // click stays read-only; the View menu's toggle is still
-            // available for users who want to commit to one or the other.
-            <div
-              className={[
-                "px-3 sm:px-6",
-                editOnPage ? "pt-2 pb-6 sm:pt-3 sm:pb-8" : "py-6 sm:py-8",
-              ].join(" ")}
-              onDoubleClick={() => {
-                if (!editOnPage) setEditOnPage(true);
-              }}
-              title={editOnPage ? undefined : "Double-click to edit on page"}
-            >
-              <LetterPreview
-                draft={draft}
-                activeSectionId={activeSectionId}
-                onFocusSection={(sectionId) => setActiveSectionId(sectionId)}
-                onRefineSection={(sectionId) => setRefineSectionId(sectionId)}
-                onShowSectionHistory={(sectionId) => {
-                  const sec = draft.sections.find((s) => s.id === sectionId);
-                  if (sec) setHistorySection(sec);
-                }}
-                onAddComment={(sectionId, opts) => onSectionAddComment(sectionId, opts)}
-                onFocusComment={onFocusComment}
-                editable={editOnPage}
-                onEditableDone={() => setEditOnPage(false)}
-                editorActionsRef={pagedEditorActionsRef}
-              />
-            </div>
+            // The Page view IS the pagedly editor (editable) — you land here
+            // directly, no read-only intermediate. Locked to read-only when the
+            // draft can't be edited (e.g. during review).
+            <PagedlyDocEditor
+              draft={draft}
+              readOnly={!canvasEditable}
+              actionsRef={pagedEditorActionsRef}
+            />
           ) : (
             <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
               {/* Matter breadcrumb + linked-employee chip — render above

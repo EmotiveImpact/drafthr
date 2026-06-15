@@ -34,9 +34,13 @@ const FEATURES = { ...FEATURES_FULL, comments: false, ai: false };
 
 export function PagedlyDocEditor({
   draft,
+  readOnly,
   actionsRef,
 }: {
   draft: Draft;
+  /** Render non-editable (e.g. while a draft is locked for review). Pagination
+   *  + selection still work; the content just can't be changed. */
+  readOnly?: boolean;
   /** Present for contract parity with the old PagedEditor; pagedly has no
    *  in-surface "done" affordance — the parent toggle owns exit. */
   onDone?: () => void;
@@ -88,6 +92,7 @@ export function PagedlyDocEditor({
       key={draftId}
       draft={mapped}
       editorRef={editorRef}
+      readOnly={readOnly}
       toolbar
       toolbarPosition="sticky"
       toolbarLayout="full"
