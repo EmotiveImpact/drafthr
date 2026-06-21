@@ -12,7 +12,7 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, lte, inArray } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -48,6 +48,81 @@ type DraftInput = {
   sections?: SectionInput[];
   clientRevision?: number | null;
 };
+
+/**
+ * GET — read back every draft for the caller's active tenant, with sections
+ * nested, in the SAME shape toServerPayload writes (so the client merge is
+ * symmetric). Tenant-scoped; gated by the same dual-write flag as writes so
+ * read+write are consistent. This is the pull half of cross-device sync.
+ */
+export async function GET(req: Request): Promise<Response> {
+  if (process.env.DRAFTHR_DUAL_WRITE !== "true") {
+    return jsonError("Dual-write disabled", 503);
+  }
+  const limited = rateLimit(req, { name: "store-drafts-get", max: 120, windowMs: 60_000 });
+  if (limited) return limited;
+
+  const auth = await requireSessionAndTenant(req);
+  if (!auth.ok) return auth.response;
+  if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const tenantId = auth.activeTenant.id;
+
+  try {
+    const db = getDb();
+    const draftRows = await db
+      .select()
+      .from(drafts)
+      .where(eq(drafts.tenantId, tenantId));
+
+    const ids = draftRows.map((d) => d.id);
+    const sectionRows = ids.length
+      ? await db.select().from(sections).where(inArray(sections.draftId, ids))
+      : [];
+
+    const sectionsByDraft = new Map<string, typeof sectionRows>();
+    for (const s of sectionRows) {
+      const list = sectionsByDraft.get(s.draftId) ?? [];
+      list.push(s);
+      sectionsByDraft.set(s.draftId, list);
+    }
+
+    const out = draftRows.map((d) => ({
+      id: d.id,
+      letterType: d.letterType,
+      mode: d.mode,
+      title: d.title,
+      jurisdiction: d.jurisdiction,
+      matterId: d.matterId,
+      reviewStatus: d.reviewStatus,
+      isTemplateSource: d.isTemplateSource,
+      templateSourceId: d.templateSourceId,
+      context: d.contextJson ?? {},
+      employer: d.employerJson ?? null,
+      employee: d.employeeJson ?? null,
+      answers: d.answersJson ?? null,
+      createdAt: d.createdAt.getTime(),
+      updatedAt: d.updatedAt.getTime(),
+      sections: (sectionsByDraft.get(d.id) ?? [])
+        .slice()
+        .sort((a, b) => a.position - b.position)
+        .map((s) => ({
+          sectionId: s.sectionId,
+          title: s.title,
+          html: s.html,
+          status: s.status,
+          position: s.position,
+        })),
+    }));
+
+    return new Response(JSON.stringify({ drafts: out }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  } catch (err) {
+    console.error("[store/drafts GET] failed", err);
+    return jsonError("Draft fetch failed", 500);
+  }
+}
 
 export async function POST(req: Request): Promise<Response> {
   return writeDraft(req, "POST");

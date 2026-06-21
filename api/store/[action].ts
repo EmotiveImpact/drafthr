@@ -12,7 +12,7 @@ import { jsonError } from "../_utils/request.js";
 export const config = { runtime: "nodejs" };
 
 type Handler = (req: Request) => Promise<Response>;
-type HandlerModule = { POST?: Handler; PATCH?: Handler; DELETE?: Handler };
+type HandlerModule = { GET?: Handler; POST?: Handler; PATCH?: Handler; DELETE?: Handler };
 
 async function loadHandler(action: string): Promise<HandlerModule | null> {
   switch (action) {
@@ -27,7 +27,10 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
   }
 }
 
-async function dispatch(req: Request, method: "POST" | "PATCH" | "DELETE"): Promise<Response> {
+async function dispatch(
+  req: Request,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+): Promise<Response> {
   const url = new URL(req.url);
   const segments = url.pathname.split("/").filter(Boolean);
   // ['api', 'store', '<action>']
@@ -39,6 +42,9 @@ async function dispatch(req: Request, method: "POST" | "PATCH" | "DELETE"): Prom
   return handler(req);
 }
 
+export async function GET(req: Request): Promise<Response> {
+  return dispatch(req, "GET");
+}
 export async function POST(req: Request): Promise<Response> {
   return dispatch(req, "POST");
 }

@@ -4,6 +4,7 @@ import { useProfileStore } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
 import { isDualWriteEnabled, syncAllPending } from "@/lib/dual-write";
+import { pullRemoteDrafts, mergeRemoteDrafts } from "@/lib/remote-pull";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
@@ -147,6 +148,24 @@ export function App() {
       if (result.failed > 0) {
         console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
       }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, activeTenant]);
+
+  // Cross-device PULL — when the flag is on AND the user has an active tenant,
+  // fetch the tenant's drafts from the server and merge them into the local
+  // store so a second device / teammate sees the same letters. The merge is
+  // non-destructive (preserves newer local edits + all local-only fields).
+  useEffect(() => {
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    let cancelled = false;
+    void pullRemoteDrafts((remote) => {
+      if (cancelled) return;
+      // Re-read the live store at apply time so a concurrent edit isn't lost.
+      const local = useDraftStore.getState().drafts;
+      useDraftStore.setState({ drafts: mergeRemoteDrafts(local, remote) });
     });
     return () => {
       cancelled = true;
