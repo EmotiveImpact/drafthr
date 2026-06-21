@@ -48,21 +48,25 @@ local-first, so disabling sync never loses local data.
 
 ---
 
-## 🟡 Collaboration-data sync (comments / evidence / timeline) — next, after the above
+## 🟡 Collaboration-data sync (comments / timeline / approvals) — BUILT, owner-activation required
 
-These are currently local-only. Making them cross-device is a small, additive
-build on top of the draft sync, done the **safe decoupled way** so it can never
-break base draft sync:
+Now code-complete and tested (decoupled `draft_extras` table, best-effort write,
+non-destructive union-by-id merge — see `src/lib/remote-pull.ts` +
+`api/store/_handlers/draft-extras.ts`). It runs behind the **same** dual-write
+flag as base sync, and needs migration **0011** applied so the `draft_extras`
+table exists.
 
-1. New `draft_extras` table (one JSON blob per draft: comments, evidence,
-   timeline, approvals) + a Drizzle migration.
-2. A separate, best-effort write (independent of the draft INSERT) + include it
-   in `GET /api/store/drafts` + extend `mergeRemoteDrafts` (same non-destructive
-   rules).
+**Enable (after, or together with, the draft-sync flags above):**
+```bash
+cd ~/HRLETTER
+npm run db:migrate     # applies 0011_secret_groot.sql (draft_extras) to your Neon DB
+# the dual-write flags from the section above also gate this; no extra flag.
+```
+It's fully decoupled: if you enable the sync flags but DON'T run the migration,
+base draft sync still works — the extras write/read just no-op (best-effort).
 
-This needs the migration applied to prod Neon (`drizzle-kit migrate` against
-`DATABASE_URL`, or your deploy's migrate step). Say the word and I'll build it in
-one pass behind the same flag.
+> Evidence file blobs are intentionally NOT synced here — they're base64 and
+> belong in object storage (Vercel Blob), which is a separate piece.
 
 ---
 
