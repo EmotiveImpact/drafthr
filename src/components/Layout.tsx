@@ -9,6 +9,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { SearchPalette, useSearchPalette } from "@/components/SearchPalette";
 import { SearchPaletteContext } from "@/components/SearchPaletteContext";
 import { Onboarding } from "@/components/Onboarding";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 
 /** Routes that render WITHOUT the authenticated app chrome (sidebar,
@@ -39,6 +40,7 @@ const CHROMELESS_PREFIXES = [
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
+  useDocumentTitle(loc.pathname);
   const { user, activeTenant, isLoaded } = useAuth();
   const isEditor = loc.pathname.startsWith("/editor/");
   const isChromeless =
