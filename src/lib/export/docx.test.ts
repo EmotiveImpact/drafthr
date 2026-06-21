@@ -69,6 +69,37 @@ describe("renderLetterDocxBlob", () => {
     expect(relsXml).toContain("relationships/image");
     expect(Object.keys(zip.files).some((name) => name.startsWith("word/media/image"))).toBe(true);
   });
+
+  it("regression: strips XML-illegal control chars so the package isn't corrupt", async () => {
+    // Non-whitespace C0 control chars (SOH/BEL/NUL) survive DOMPurify as legal
+    // HTML text and used to reach document.xml verbatim, making Word reject the
+    // file as corrupt. escapeXml must remove them (these don't match \s, so the
+    // surrounding whitespace normalization won't — this isolates the fix).
+    const SOH = String.fromCharCode(0x01);
+    const BEL = String.fromCharCode(0x07);
+    const NUL = String.fromCharCode(0x00);
+    const draft = makeDraft();
+    draft.sections = [
+      {
+        id: "s1",
+        sectionId: "body",
+        title: "Body",
+        required: true,
+        status: "ready",
+        versions: [],
+        html: `<p>before${SOH}${BEL}${NUL}after</p>`,
+      },
+    ];
+
+    const blob = await renderLetterDocxBlob(draft);
+    const zip = await JSZip.loadAsync(blob);
+    const documentXml = await zip.file("word/document.xml")!.async("string");
+
+    // No XML 1.0-illegal C0 control characters remain anywhere in the part.
+    expect(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(documentXml)).toBe(false);
+    // The visible text survives with the illegal chars excised.
+    expect(documentXml).toContain("beforeafter");
+  });
 });
 
 function makeDraft(): Draft {

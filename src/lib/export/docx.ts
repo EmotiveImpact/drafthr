@@ -829,10 +829,17 @@ function escapeHtmlD(s: string): string {
 }
 
 function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return (
+    s
+      // XML 1.0 forbids most C0 control characters; DOMPurify leaves them in
+      // (they're legal HTML text), so they would reach word/document.xml
+      // verbatim and Word rejects the file as corrupt. Strip the illegal
+      // range, keeping the only valid controls: tab, LF, CR.
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+  );
 }
 
 function escapeXmlAttr(s: string): string {
