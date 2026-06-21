@@ -39,7 +39,16 @@ export function addDaysToDateOnly(iso: string, days: number): string {
 export function addMonthsToDateOnly(iso: string, months: number): string {
   const date = parseDateOnly(iso);
   if (!date) return iso;
+  // Date.setMonth overflows when the source day doesn't exist in the target
+  // month (e.g. Nov 30 + 3mo → "Feb 30" → rolls into Mar 1/2). That silently
+  // pushes month-end dates 1-2 days too late — and this feeds the UK ET
+  // limitation deadline ("3 months less one day"), so an overflow tells users
+  // they have MORE time than they legally do. Clamp to the last valid day.
+  const day = date.getDate();
+  date.setDate(1); // park on the 1st so the month shift can't overflow
   date.setMonth(date.getMonth() + months);
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDay));
   return toDateOnly(date);
 }
 
