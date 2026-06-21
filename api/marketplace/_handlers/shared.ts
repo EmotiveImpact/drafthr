@@ -66,6 +66,11 @@ export async function GET(req: Request): Promise<Response> {
   // PII like employer.legalName is included because it's needed for the
   // review, but we deliberately strip notes-on-employee / private
   // metadata that the HR-side editor would otherwise expose.
+  //
+  // The draft is fetched by id alone (no tenant filter): booking creation
+  // (list-and-create.ts) verifies the draftId belongs to the booker's tenant
+  // before binding it, so a leaked/guessed draftId can never be attached to a
+  // booking in the first place. Do NOT relax that creation-time check.
   const [draftRow] = await db
     .select()
     .from(drafts)

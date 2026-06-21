@@ -14,6 +14,7 @@ import { getDb } from "../../../src/db/index.js";
 import {
   consultantBookings,
   consultantProfiles,
+  drafts,
 } from "../../../src/db/schema.js";
 import { sendBookingRequestEmail } from "../../_utils/consultant-emails.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
@@ -128,6 +129,24 @@ export async function POST(req: Request): Promise<Response> {
   if (profile.status !== "published")
     return jsonError("Consultant is not currently accepting bookings", 412);
 
+  // SECURITY: verify the attached draft belongs to the caller's tenant BEFORE
+  // binding it to the booking. The share-review read path (shared.ts) fetches
+  // the draft by id alone — deliberately, trusting that creation authorised it.
+  // Without this check an HR user could pass ANY draft UUID (incl. another
+  // tenant's) and, once a consultant accepts, leak that draft's full letter +
+  // PII via the 30-day share token. Coerce non-UUID ids to a draftless booking
+  // (as before); reject a valid-format id that isn't in this tenant.
+  let boundDraftId: string | null = serverUuidOrNull(body.draftId ?? null);
+  if (boundDraftId) {
+    const [ownedDraft] = await db
+      .select({ id: drafts.id })
+      .from(drafts)
+      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant.id)))
+      .limit(1);
+    if (!ownedDraft) return jsonError("Draft not found in this workspace", 404);
+    boundDraftId = ownedDraft.id;
+  }
+
   const expected = body.expectedDeliveryAt
     ? new Date(body.expectedDeliveryAt)
     : new Date(Date.now() + parseSlaMs(profile.sla));
@@ -139,11 +158,8 @@ export async function POST(req: Request): Promise<Response> {
       requesterUserId: auth.userRow.id,
       consultantUserId: profile.userId,
       consultantProfileId: profile.id,
-      // draft_id is a uuid column. Accept only a valid UUID; coerce
-      // anything else (e.g. a raw local "draft_x7k2…" id that slipped
-      // through) to null so a malformed id degrades to a draftless
-      // booking instead of a 500 that silently loses the booking.
-      draftId: serverUuidOrNull(body.draftId ?? null),
+      // Tenant-verified above (or null for a draftless / malformed-id booking).
+      draftId: boundDraftId,
       matterTitle: body.matterTitle?.slice(0, 280) ?? null,
       message: body.message?.slice(0, 4000) ?? null,
       status: "requested",
