@@ -65,7 +65,7 @@ export function InvitePopover({
 
 I'd like you to ${role} this DRAFTHR draft with me.
 
-Open the draft here:
+Open the draft here (you'll need access to our DRAFTHR workspace):
 ${shareLink}
 
 — sent from DRAFTHR`
@@ -76,9 +76,12 @@ ${shareLink}
     setName("");
   };
 
+  // A canonical deep-link to this draft. It opens for teammates who are already
+  // members of this workspace (the draft is tenant-scoped) — it does not by
+  // itself grant access, so we don't dress it up as an invite token.
   const shareLink =
     typeof window !== "undefined"
-      ? `${window.location.origin}/editor/${draft.id}?invite=1`
+      ? `${window.location.origin}/editor/${draft.id}`
       : "";
 
   const onCopy = async () => {
@@ -182,6 +185,10 @@ ${shareLink}
               </button>
             </div>
             <div className="text-[11px] text-[var(--ds-body)] font-mono truncate">{shareLink}</div>
+            <p className="mt-1.5 text-[10.5px] leading-relaxed text-[var(--ds-muted)]">
+              Opens for teammates already in your workspace. To give someone
+              access, add them in Settings → Members.
+            </p>
           </div>
 
           {/* Roster */}
