@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { mergeRemoteDrafts, type RemoteDraft } from "./remote-pull";
+import {
+  mergeRemoteDrafts,
+  mergeRemoteExtras,
+  extractExtras,
+  type RemoteDraft,
+  type RemoteExtras,
+} from "./remote-pull";
 import { toServerUuid } from "./remote-ids";
 import type { Draft } from "./letters/types";
 
@@ -168,5 +174,54 @@ describe("mergeRemoteDrafts — non-destructive cross-device merge", () => {
     expect(secs[0].id).toBe("sec_local_1"); // existing section keeps its local id
     expect(secs[1].id).toMatch(/^sec/); // new section gets a generated id
     expect(secs[1].sectionId).toBe("closing");
+  });
+});
+
+describe("mergeRemoteExtras — collaboration-data union (non-destructive)", () => {
+  it("unions comments by id (no local OR remote comment lost), ordered by createdAt", () => {
+    const local = {
+      draft_1: localDraft({
+        comments: [
+          { id: "c1", body: "local one", createdAt: 100 },
+          { id: "c2", body: "local two", createdAt: 300 },
+        ] as never,
+      }),
+    };
+    const remote: RemoteExtras[] = [
+      {
+        id: toServerUuid("draft_1"),
+        extras: {
+          comments: [
+            { id: "c2", body: "REMOTE edit of c2", createdAt: 300 } as never, // collision → local wins
+            { id: "c3", body: "remote three", createdAt: 200 } as never, // remote-only → added
+          ],
+        },
+      },
+    ];
+    const merged = mergeRemoteExtras(local, remote);
+    const comments = merged.draft_1.comments ?? [];
+    expect(comments.map((c) => c.id)).toEqual(["c1", "c3", "c2"]); // sorted by createdAt
+    // Local content wins on id collision (c2 keeps local body).
+    expect(comments.find((c) => c.id === "c2")?.body).toBe("local two");
+    // Remote-only comment is adopted.
+    expect(comments.find((c) => c.id === "c3")?.body).toBe("remote three");
+  });
+
+  it("fills outcomeSought only when local is empty; skips drafts not held locally", () => {
+    const local = { draft_1: localDraft({ outcomeSought: undefined }) };
+    const merged = mergeRemoteExtras(local, [
+      { id: toServerUuid("draft_1"), extras: { outcomeSought: "Reinstatement" } },
+      { id: "uuid-unknown", extras: { outcomeSought: "ignored" } }, // no local draft → skipped
+    ]);
+    expect(merged.draft_1.outcomeSought).toBe("Reinstatement");
+    expect(merged["uuid-unknown"]).toBeUndefined();
+  });
+
+  it("extractExtras returns null when there's nothing collaborative to sync", () => {
+    expect(extractExtras(localDraft({ comments: [], timeline: [], evidence: [] }))).toBeNull();
+    const withComment = localDraft({
+      comments: [{ id: "c1", body: "x", createdAt: 1 }] as never,
+    });
+    expect(extractExtras(withComment)?.comments?.length).toBe(1);
   });
 });

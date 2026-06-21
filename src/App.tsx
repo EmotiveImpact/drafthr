@@ -4,7 +4,12 @@ import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
 import { isDualWriteEnabled, syncAllPending } from "@/lib/dual-write";
-import { pullRemoteDrafts, mergeRemoteDrafts } from "@/lib/remote-pull";
+import {
+  pullRemoteDrafts,
+  mergeRemoteDrafts,
+  pullRemoteExtras,
+  mergeRemoteExtras,
+} from "@/lib/remote-pull";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
@@ -161,12 +166,22 @@ export function App() {
   useEffect(() => {
     if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
     let cancelled = false;
-    void pullRemoteDrafts((remote) => {
+    void (async () => {
+      await pullRemoteDrafts((remote) => {
+        if (cancelled) return;
+        // Re-read the live store at apply time so a concurrent edit isn't lost.
+        const local = useDraftStore.getState().drafts;
+        useDraftStore.setState({ drafts: mergeRemoteDrafts(local, remote) });
+      });
       if (cancelled) return;
-      // Re-read the live store at apply time so a concurrent edit isn't lost.
-      const local = useDraftStore.getState().drafts;
-      useDraftStore.setState({ drafts: mergeRemoteDrafts(local, remote) });
-    });
+      // Then merge collaboration data (comments / timeline / approvals) — a
+      // separate best-effort pull so a missing extras table can't break drafts.
+      await pullRemoteExtras((remoteExtras) => {
+        if (cancelled) return;
+        const local = useDraftStore.getState().drafts;
+        useDraftStore.setState({ drafts: mergeRemoteExtras(local, remoteExtras) });
+      });
+    })();
     return () => {
       cancelled = true;
     };

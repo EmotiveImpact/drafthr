@@ -15,6 +15,7 @@
 import { toast } from "sonner";
 import type { Draft, Matter } from "./letters/types";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
+import { extractExtras } from "./remote-pull";
 
 const DEBOUNCE_MS = 400;
 const ENABLED = readFlag();
@@ -202,6 +203,10 @@ export async function syncDraft(draftId: string): Promise<void> {
       staleRevisionByDraftId.delete(draftId);
       syncedAt.set(draftId, Date.now());
       consecutiveStaleConflicts = 0;
+      // Best-effort: mirror the draft's collaboration data (comments / timeline
+      // / approvals) to the decoupled extras endpoint. Failure here never
+      // affects the draft sync (the draft is already saved).
+      void pushDraftExtras(draft);
       // The user deleted this draft WHILE the POST was on the wire — the POST
       // just (re)created/updated the row, so re-issue the DELETE to converge
       // (bug #6: delete-during-sync left a ghost row in the server mirror).
@@ -327,6 +332,25 @@ function readFlag(): boolean {
     return (import.meta.env?.VITE_DRAFTHR_DUAL_WRITE as string | undefined) === "true";
   } catch {
     return false;
+  }
+}
+
+/** Best-effort mirror of a draft's collaboration data to the decoupled extras
+ *  endpoint. Never throws — a missing table / 503 / network error is swallowed
+ *  so it can't affect the (already-succeeded) draft sync. Skips drafts with no
+ *  collab data so we don't write empty rows. */
+async function pushDraftExtras(draft: Draft): Promise<void> {
+  const extras = extractExtras(draft);
+  if (!extras) return;
+  try {
+    await fetch("/api/store/draft-extras", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ id: toServerUuid(draft.id), extras }),
+    });
+  } catch {
+    /* best-effort — collaboration data will re-sync on the next draft write */
   }
 }
 

@@ -290,6 +290,28 @@ export const sections = pgTable(
   (t) => [index("sections_draft_idx").on(t.draftId)],
 );
 
+// Per-draft "extras" — the small, structured collaboration data that the draft
+// row + sections don't hold: comments, the event timeline, approvals, and the
+// employee-mode outcomeSought. Kept in a SEPARATE table (one JSON blob per
+// draft) so its sync is fully decoupled from the core draft write: a failed or
+// absent extras write can never block a draft from saving, and the read is a
+// separate best-effort fetch. Deliberately EXCLUDES evidence file blobs — those
+// are base64 and belong in object storage, not a JSON column (tracked separately).
+export const draftExtras = pgTable(
+  "draft_extras",
+  {
+    draftId: uuid("draft_id")
+      .primaryKey()
+      .references(() => drafts.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    extrasJson: jsonb("extras_json").$type<Record<string, unknown>>().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("draft_extras_tenant_idx").on(t.tenantId)],
+);
+
 export const sectionVersions = pgTable(
   "section_versions",
   {

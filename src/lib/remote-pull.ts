@@ -229,3 +229,97 @@ function dualWriteEnabled(): boolean {
     return false;
   }
 }
+
+/* ===========================================================================
+ * Collaboration-data sync (comments / timeline / approvals / outcomeSought).
+ * Decoupled from the draft sync above — a separate endpoint + merge so it can
+ * never block base draft sync. Evidence file blobs are intentionally excluded
+ * (base64 → object storage, not JSON).
+ * ========================================================================= */
+
+/** The collab subset of a Draft that syncs through /api/store/draft-extras. */
+export type DraftExtras = {
+  comments?: Draft["comments"];
+  timeline?: Draft["timeline"];
+  approvals?: Draft["approvals"];
+  outcomeSought?: Draft["outcomeSought"];
+};
+
+export type RemoteExtras = { id: string; extras: DraftExtras };
+
+/** Pull the collab fields off a draft for pushing. Returns null when there's
+ *  nothing to sync (so we don't write empty rows). */
+export function extractExtras(draft: Draft): DraftExtras | null {
+  const extras: DraftExtras = {};
+  if (draft.comments?.length) extras.comments = draft.comments;
+  if (draft.timeline?.length) extras.timeline = draft.timeline;
+  if (draft.approvals?.length) extras.approvals = draft.approvals;
+  if (draft.outcomeSought) extras.outcomeSought = draft.outcomeSought;
+  return Object.keys(extras).length ? extras : null;
+}
+
+/** Union two id-keyed lists: keep the LOCAL copy on an id collision (local
+ *  edits win), append remote-only items, then order by createdAt. Never drops
+ *  a local OR a remote item — non-destructive both ways. */
+function unionById<T extends { id: string; createdAt?: number }>(
+  local: T[] | undefined,
+  remote: T[] | undefined,
+): T[] {
+  const map = new Map<string, T>();
+  for (const x of remote ?? []) map.set(x.id, x); // remote first…
+  for (const x of local ?? []) map.set(x.id, x); // …local overwrites on collision
+  return [...map.values()].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+}
+
+/**
+ * Merge server collab-extras into the local draft map. Pure + non-destructive:
+ * comments/timeline/approvals union by id (no item lost from either side);
+ * outcomeSought fills only when local is empty. Returns a new map.
+ */
+export function mergeRemoteExtras(
+  local: Record<string, Draft>,
+  remote: RemoteExtras[],
+): Record<string, Draft> {
+  const localByServerId = new Map<string, Draft>();
+  for (const d of Object.values(local)) localByServerId.set(toServerUuid(d.id), d);
+
+  const merged: Record<string, Draft> = { ...local };
+  for (const r of remote) {
+    const existing = localByServerId.get(r.id);
+    if (!existing) continue; // extras for a draft we don't have locally — skip
+    const e = r.extras ?? {};
+    merged[existing.id] = {
+      ...existing,
+      comments: unionById(existing.comments, e.comments),
+      timeline: unionById(existing.timeline, e.timeline),
+      approvals: unionById(existing.approvals, e.approvals),
+      outcomeSought: existing.outcomeSought || e.outcomeSought,
+    } as Draft;
+  }
+  return merged;
+}
+
+/** Fetch the tenant's draft-extras and merge them into the local store.
+ *  Best-effort: any failure (incl. the table not existing yet) is swallowed so
+ *  base draft sync is never affected. */
+export async function pullRemoteExtras(
+  applyMerge: (remote: RemoteExtras[]) => void,
+): Promise<{ ok: boolean; count: number }> {
+  if (!dualWriteEnabled()) return { ok: false, count: 0 };
+  try {
+    const res = await fetch("/api/store/draft-extras", {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return { ok: false, count: 0 };
+    const ct = res.headers.get("content-type") ?? "";
+    if (!ct.toLowerCase().includes("application/json")) return { ok: false, count: 0 };
+    const data = (await res.json()) as { extras?: RemoteExtras[] };
+    const remote = Array.isArray(data.extras) ? data.extras : [];
+    applyMerge(remote);
+    return { ok: true, count: remote.length };
+  } catch {
+    return { ok: false, count: 0 };
+  }
+}
