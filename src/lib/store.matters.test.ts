@@ -60,6 +60,48 @@ describe("deleteMatter orphan cleanup", () => {
   });
 });
 
+describe("matter participants add/remove", () => {
+  beforeEach(() => installMemoryLocalStorage());
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.resetModules();
+  });
+
+  it("adds employee + external participants, de-dupes employees, and removes by index", async () => {
+    const { useDraftStore } = await import("./store");
+    const store = useDraftStore.getState();
+    const matterId = store.createMatter({ name: "Grievance", mode: "employer", color: "red" });
+    const empId = store.createEmployee({
+      legalName: "Jamie Worker",
+      jobTitle: "Analyst",
+      address: "",
+      startDate: "2025-01-01",
+      serviceMonths: 12,
+      status: "active",
+    } as never);
+
+    store.addMatterParticipant(matterId, { employeeId: empId, name: "Jamie Worker", role: "subject" });
+    store.addMatterParticipant(matterId, { employeeId: null, name: "Outside Witness", role: "witness" });
+    // Duplicate employee — must be ignored.
+    store.addMatterParticipant(matterId, { employeeId: empId, name: "Jamie Worker", role: "manager" });
+
+    let parts = useDraftStore.getState().matters[matterId].participants ?? [];
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toMatchObject({ employeeId: empId, role: "subject" });
+    expect(parts[1]).toMatchObject({ employeeId: null, name: "Outside Witness" });
+
+    // Remove the first (employee) participant.
+    store.removeMatterParticipant(matterId, 0);
+    parts = useDraftStore.getState().matters[matterId].participants ?? [];
+    expect(parts).toHaveLength(1);
+    expect(parts[0].name).toBe("Outside Witness");
+
+    // Out-of-range index is a no-op.
+    store.removeMatterParticipant(matterId, 5);
+    expect(useDraftStore.getState().matters[matterId].participants).toHaveLength(1);
+  });
+});
+
 function installMemoryLocalStorage() {
   const entries = new Map<string, string>();
   const storage: Storage = {

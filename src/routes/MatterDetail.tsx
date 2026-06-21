@@ -273,7 +273,7 @@ export function MatterDetail() {
       />
 
       {/* Participants */}
-      <MatterParticipants participants={matter.participants ?? []} />
+      <MatterParticipants matterId={matter.id} participants={matter.participants ?? []} />
 
       {/* Tasks */}
       <MatterTasks matterId={matter.id} tasks={matterTasks} />

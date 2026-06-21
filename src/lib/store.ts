@@ -21,6 +21,7 @@ import type {
   Matter,
   MatterColor,
   MatterEvent,
+  MatterParticipant,
   Mode,
   Section,
   SectionVersion,
@@ -99,6 +100,11 @@ type Store = {
   closeMatter: (id: string) => void;
   archiveMatter: (id: string) => void;
   deleteMatter: (id: string) => void;
+  /** Add a participant (employee or external party) to a matter. No-op if the
+   *  same employeeId is already a participant. */
+  addMatterParticipant: (matterId: string, participant: MatterParticipant) => void;
+  /** Remove the participant at the given index from a matter. */
+  removeMatterParticipant: (matterId: string, index: number) => void;
   /** Set or clear a draft's matter membership. Pass null to remove. */
   assignDraftToMatter: (draftId: string, matterId: string | null) => void;
   /** Promote an auto-group (set of drafts sharing a person/employer) into
@@ -537,6 +543,47 @@ export const useDraftStore = create<Store>()(
             Object.entries(s.events).filter(([, e]) => e.matterId !== id),
           );
           return { matters: remaining, drafts, tasks, events };
+        }),
+
+      addMatterParticipant: (matterId, participant) =>
+        set((s) => {
+          const m = s.matters[matterId];
+          if (!m) return s;
+          const existing = m.participants ?? [];
+          // De-dupe by employeeId (a known employee can only be added once);
+          // external parties (employeeId null) can repeat by name.
+          if (
+            participant.employeeId &&
+            existing.some((p) => p.employeeId === participant.employeeId)
+          ) {
+            return s;
+          }
+          return {
+            matters: {
+              ...s.matters,
+              [matterId]: {
+                ...m,
+                participants: [...existing, participant],
+                updatedAt: Date.now(),
+              },
+            },
+          };
+        }),
+
+      removeMatterParticipant: (matterId, index) =>
+        set((s) => {
+          const m = s.matters[matterId];
+          if (!m?.participants || index < 0 || index >= m.participants.length) return s;
+          return {
+            matters: {
+              ...s.matters,
+              [matterId]: {
+                ...m,
+                participants: m.participants.filter((_, i) => i !== index),
+                updatedAt: Date.now(),
+              },
+            },
+          };
         }),
 
       assignDraftToMatter: (draftId, matterId) =>
