@@ -26,7 +26,12 @@ export function NextActionBanner({
     .sort((a, b) => (a.dueISO ?? "").localeCompare(b.dueISO ?? ""))[0];
 
   const label = matter.nextAction ?? soonestOpenTask?.label;
-  const dueISO = soonestOpenTask?.dueISO;
+  // The deadline must describe the SAME item as the headline. When
+  // matter.nextAction supplies the headline, the soonest task's due date
+  // belongs to a different item — showing it would caption the next-action
+  // text with an unrelated countdown. Only surface a due date when the
+  // headline itself came from that task.
+  const dueISO = matter.nextAction ? undefined : soonestOpenTask?.dueISO;
 
   if (!label) return null;
 

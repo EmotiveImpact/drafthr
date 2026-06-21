@@ -641,6 +641,11 @@ function deriveTodayItems(
       if (due == null) return false;
       return due - now <= sevenDays;
     })
+    // Sort by actual due date (ascending = most overdue/soonest first) BEFORE
+    // mapping. Sorting on dueLabel afterwards compares human strings
+    // lexicographically ("due in 10d" < "due in 2d"), which scrambles urgency.
+    // dueISO is guaranteed present by the filter above.
+    .sort((a, b) => (a.dueISO ?? "").localeCompare(b.dueISO ?? ""))
     .map((t) => {
       const matter = matters[t.matterId];
       const days = t.dueISO ? daysUntilDateOnly(t.dueISO) : null;
@@ -661,8 +666,7 @@ function deriveTodayItems(
         urgent,
         kind: "task" as const,
       };
-    })
-    .sort((a, b) => a.dueLabel.localeCompare(b.dueLabel));
+    });
 
   const matterNextActions: TodayItem[] = Object.values(matters)
     .filter((m) => m.mode === "employer" && m.status === "active" && m.nextAction)

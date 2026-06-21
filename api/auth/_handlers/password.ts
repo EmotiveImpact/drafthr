@@ -17,7 +17,7 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
@@ -36,10 +36,13 @@ type PasswordBody = { email?: string; password?: string };
 const MAX_EMAIL = 320;
 const MAX_PASSWORD = 256;
 
-function clientIp(req: Request): string | undefined {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || undefined;
-  return req.headers.get("x-real-ip")?.trim() || undefined;
+/** Spoof-resistant client IP for WorkOS risk signals. The shared resolver
+ *  (senior sweep B14) uses the proxy-appended last hop and returns the
+ *  "unknown" sentinel when no IP is present; WorkOS wants a real IP or
+ *  nothing, so collapse the sentinel to undefined. */
+function resolveIp(req: Request): string | undefined {
+  const ip = clientIp(req);
+  return ip === "unknown" ? undefined : ip;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -69,7 +72,7 @@ export async function POST(req: Request): Promise<Response> {
       clientId: process.env.WORKOS_CLIENT_ID!,
       email,
       password,
-      ipAddress: clientIp(req),
+      ipAddress: resolveIp(req),
       userAgent: req.headers.get("user-agent") ?? undefined,
       session: {
         sealSession: true,

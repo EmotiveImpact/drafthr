@@ -218,12 +218,18 @@ function buildIcs(events: Event[]): string {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
   ];
-  for (const e of events) {
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
     const date = stamp(e.iso);
     const nextDate = stamp(addDaysToDateOnly(e.iso, 1));
+    // UID must be unique per VEVENT. Several distinct answer fields share a
+    // single `kind` (e.g. remedyDeadline, demandDeadline and reviewDate all
+    // map to "remedy"), so `draftId-kind` alone collides when a draft has
+    // more than one populated — calendar apps dedupe same-UID events on
+    // import and silently drop the extras. Fold in the date and index.
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${e.draftId}-${e.kind}@drafthr.app`,
+      `UID:${e.draftId}-${e.kind}-${date}-${i}@drafthr.app`,
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${date}`,
       `DTEND;VALUE=DATE:${nextDate}`,
