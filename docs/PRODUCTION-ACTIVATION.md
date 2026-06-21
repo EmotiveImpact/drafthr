@@ -70,13 +70,31 @@ base draft sync still works — the extras write/read just no-op (best-effort).
 
 ---
 
-## 🔭 Marketplace payments (Stripe Connect) — needs your Stripe account first
+## 🟡 Marketplace payments (Stripe Connect) — BUILT, needs your Stripe account to activate
 
-Booking + payout state exist in the schema; no charge/payout is wired. This
-requires **your** Stripe account and product decisions (price model, payout
-split) before it can be built responsibly — shipping untested payment code blind
-would be the opposite of production-ready. Provide Stripe keys + the model and
-I'll build Connect onboarding for consultants + checkout/escrow on booking.
+Now code-complete: consultant payout onboarding (Connect Express), HR Checkout
+at booking time (destination charge to the consultant + optional platform fee),
+and a signature-verified webhook. Decoupled tables (`stripe_connect_accounts`,
+`booking_payments`, migration 0012) so it never affects the live marketplace,
+and it's **off when keys are unset** (endpoints return 503; the booking flow
+stays request-based). Code: `api/_utils/stripe.ts`,
+`api/marketplace/_handlers/stripe-{connect,checkout,webhook}.ts`.
+
+**Activate (after creating/rotating your Stripe keys):**
+1. Set env (server-only secret; never commit): `STRIPE_SECRET_KEY`,
+   `VITE_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, optional
+   `STRIPE_PLATFORM_FEE_BPS` (basis points, default 0), `APP_BASE_URL`.
+2. `npm run db:migrate` (applies 0012 — payments tables).
+3. In Stripe → Developers → Webhooks, add an endpoint
+   `https://<your-domain>/api/marketplace/stripe-webhook` for events
+   `account.updated` and `checkout.session.completed`; copy its signing secret
+   into `STRIPE_WEBHOOK_SECRET`.
+4. `vercel --prod`, then test in **Stripe test mode**: a consultant connects
+   payouts (Profile → Connect Stripe), an HR user pays an accepted booking
+   (My bookings → Pay for review).
+
+⚠️ Test it in Stripe test mode before going live — this is real payment code I
+could not exercise without your keys.
 
 ---
 

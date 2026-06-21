@@ -562,6 +562,44 @@ export const consultantBookings = pgTable(
   ],
 );
 
+// --- Stripe (payments) -------------------------------------------------------
+// SEPARATE tables so payment wiring is fully decoupled from the LIVE marketplace
+// flows: the existing consultant_profiles / consultant_bookings handlers never
+// touch these, so the marketplace keeps working even if migration 0012 isn't
+// applied yet. Only the new Stripe endpoints + webhook read/write here.
+
+// A consultant's Stripe Connect (Express) account, for receiving payouts.
+export const stripeConnectAccounts = pgTable(
+  "stripe_connect_accounts",
+  {
+    profileId: uuid("profile_id")
+      .primaryKey()
+      .references(() => consultantProfiles.id, { onDelete: "cascade" }),
+    accountId: text("account_id").notNull(), // acct_…
+    payoutsEnabled: boolean("payouts_enabled").notNull().default(false),
+    detailsSubmitted: boolean("details_submitted").notNull().default(false),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("stripe_connect_accounts_account_idx").on(t.accountId)],
+);
+
+// Payment state for a booking (HR pays for the review at booking time).
+export const bookingPayments = pgTable(
+  "booking_payments",
+  {
+    bookingId: uuid("booking_id")
+      .primaryKey()
+      .references(() => consultantBookings.id, { onDelete: "cascade" }),
+    checkoutSessionId: text("checkout_session_id"),
+    paymentIntentId: text("payment_intent_id"),
+    status: text("status").notNull().default("unpaid"), // unpaid | paid | refunded
+    amount: integer("amount"), // minor units (pence/cents)
+    currency: text("currency"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("booking_payments_session_idx").on(t.checkoutSessionId)],
+);
+
 // --- inferred types ----------------------------------------------------------
 
 export type Tenant = typeof tenants.$inferSelect;

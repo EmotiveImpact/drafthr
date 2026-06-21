@@ -1,6 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Banknote, Camera, CheckCircle2, Plus, X } from "lucide-react";
+import { ArrowLeft, Banknote, Camera, CheckCircle2, Loader2, Plus, X } from "lucide-react";
+import {
+  getStripeConnectStatus,
+  startStripeConnect,
+  type StripeConnectStatus,
+} from "@/lib/consultantApi";
 import {
   useConsultantStore,
   isProfileComplete,
@@ -437,30 +442,7 @@ export function ConsultantProfile() {
               this when they need urgent work.
             </p>
           </div>
-          <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-4">
-            <div className="flex items-start gap-3">
-              <Banknote className="size-5 text-[var(--ds-muted)] shrink-0 mt-0.5" aria-hidden />
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-[var(--ds-ink)]">
-                  Payouts via Stripe Connect
-                </p>
-                <p className="mt-1 text-[12px] leading-relaxed text-[var(--ds-body)]">
-                  {profile?.payout?.payoutsEnabled
-                    ? "Your bank account is connected — payouts run weekly."
-                    : "Payouts launch soon. When they do, you'll connect a Stripe account here and we'll take a planned 12% platform fee on each completed booking — the rest goes to your bank. Nothing is charged today."}
-                </p>
-                <button
-                  type="button"
-                  disabled
-                  title="Stripe Connect integration arrives in the next release"
-                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white opacity-60 cursor-not-allowed"
-                >
-                  Connect Stripe
-                  <span aria-hidden>→</span>
-                </button>
-              </div>
-            </div>
-          </div>
+          <PayoutConnect enabledFromProfile={!!profile?.payout?.payoutsEnabled} />
         </Fieldset>
 
         <div className="flex items-center justify-between gap-3 border-t border-[var(--ds-line)] pt-6">
@@ -542,6 +524,86 @@ function Field({
         className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
       />
       {hint && <p className="mt-1 text-[11.5px] text-[var(--ds-muted)]">{hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Stripe Connect payout onboarding. Real (not a stub): fetches the consultant's
+ * payout status and either starts/resumes Connect onboarding or confirms
+ * payouts are live. When the operator hasn't configured Stripe yet
+ * (status.configured === false) it shows an honest "not available yet" note —
+ * no fake "coming soon" button.
+ */
+function PayoutConnect({ enabledFromProfile }: { enabledFromProfile: boolean }) {
+  const [status, setStatus] = useState<StripeConnectStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getStripeConnectStatus().then((r) => {
+      if (!cancelled && r.ok) setStatus(r.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const connect = async () => {
+    setBusy(true);
+    const r = await startStripeConnect();
+    if (r.ok) {
+      window.location.assign(r.data.url);
+      return;
+    }
+    toast.error(r.error || "Could not start payout onboarding");
+    setBusy(false);
+  };
+
+  const configured = status?.configured ?? true; // assume configured until told otherwise
+  const payoutsEnabled = status?.payoutsEnabled ?? enabledFromProfile;
+
+  return (
+    <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-4">
+      <div className="flex items-start gap-3">
+        <Banknote className="size-5 text-[var(--ds-muted)] shrink-0 mt-0.5" aria-hidden />
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-[var(--ds-ink)]">
+            Payouts via Stripe Connect
+          </p>
+          {!configured ? (
+            <p className="mt-1 text-[12px] leading-relaxed text-[var(--ds-body)]">
+              Payouts aren't enabled on this workspace yet — nothing is charged.
+              You'll be able to connect a payout account here once the
+              marketplace operator turns on payments.
+            </p>
+          ) : payoutsEnabled ? (
+            <p className="mt-1 inline-flex items-center gap-1.5 text-[12px] leading-relaxed text-[var(--ds-green-fg)]">
+              <CheckCircle2 className="size-3.5" aria-hidden />
+              Connected — you can receive payouts. Manage details in Stripe.
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-[12px] leading-relaxed text-[var(--ds-body)]">
+                Connect a Stripe account to receive payment for completed reviews.
+                You're paid the booking amount{" "}
+                {/* platform fee, if any, is configured by the operator */}
+                directly to your bank; nothing is charged to you.
+              </p>
+              <button
+                type="button"
+                onClick={connect}
+                disabled={busy}
+                className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+              >
+                {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : null}
+                {busy ? "Starting…" : "Connect Stripe"}
+                {!busy && <span aria-hidden>→</span>}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -83,6 +83,34 @@ export function saveConsultantProfile(
   );
 }
 
+// ─── Stripe payments ───────────────────────────────────────────────────
+
+export type StripeConnectStatus = {
+  /** Whether the server has Stripe keys configured at all. */
+  configured: boolean;
+  hasProfile: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+};
+
+/** Consultant payout status (Stripe Connect). */
+export function getStripeConnectStatus() {
+  return call<StripeConnectStatus>("/api/marketplace/stripe-connect");
+}
+
+/** Start (or resume) Stripe Connect onboarding — returns a URL to redirect to. */
+export function startStripeConnect() {
+  return call<{ url: string }>("/api/marketplace/stripe-connect", { method: "POST" });
+}
+
+/** Begin Stripe Checkout to pay for a booking — returns a URL to redirect to. */
+export function startBookingCheckout(bookingId: string) {
+  return call<{ url: string }>("/api/marketplace/stripe-checkout", {
+    method: "POST",
+    body: JSON.stringify({ bookingId }),
+  });
+}
+
 // ─── Marketplace listing ───────────────────────────────────────────────
 
 export type MarketplaceConsultantDTO = Omit<ConsultantProfileDTO, "status" | "updatedAt">;

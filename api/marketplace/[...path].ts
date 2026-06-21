@@ -53,6 +53,12 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/admin-queue.js");
     case "admin-review":
       return import("./_handlers/admin-review.js");
+    case "stripe-connect":
+      return import("./_handlers/stripe-connect.js");
+    case "stripe-checkout":
+      return import("./_handlers/stripe-checkout.js");
+    case "stripe-webhook":
+      return import("./_handlers/stripe-webhook.js");
     default:
       return null;
   }

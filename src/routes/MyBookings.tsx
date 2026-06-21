@@ -7,6 +7,8 @@ import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { BookingThread } from "@/components/consultants/BookingThread";
 import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { pullMyBookings, pushBookingRespond } from "@/lib/marketplaceSync";
+import { getStripeConnectStatus, startBookingCheckout } from "@/lib/consultantApi";
+import { toast } from "sonner";
 
 /**
  * /bookings — HR-side bookings list.
@@ -46,11 +48,17 @@ export function MyBookings() {
   // before the fetched bookings pop in. We render a skeleton during this
   // window instead of the empty state.
   const [hydrating, setHydrating] = useState(true);
+  // Whether the marketplace operator has Stripe configured — gates the "Pay"
+  // affordance so it only appears when payments are actually available.
+  const [paymentsOn, setPaymentsOn] = useState(false);
 
   // Hydrate the HR-side bookings list from the server on mount so a
   // booking placed on device A shows up on device B.
   useEffect(() => {
     let cancelled = false;
+    void getStripeConnectStatus().then((r) => {
+      if (!cancelled && r.ok) setPaymentsOn(r.data.configured);
+    });
     void pullMyBookings().finally(() => {
       if (!cancelled) setHydrating(false);
     });
@@ -187,6 +195,7 @@ export function MyBookings() {
                   <BookingRow
                     key={b.id}
                     booking={b}
+                    paymentsOn={paymentsOn}
                     consultant={allConsultants.find((c) =>
                       // Match by stable profile id first (server bookings),
                       // fall back to initials for local-only seed bookings.
@@ -208,10 +217,23 @@ export function MyBookings() {
 function BookingRow({
   booking,
   consultant,
+  paymentsOn,
 }: {
   booking: Booking;
   consultant?: Consultant;
+  paymentsOn: boolean;
 }) {
+  const [paying, setPaying] = useState(false);
+  const payForReview = async () => {
+    setPaying(true);
+    const r = await startBookingCheckout(booking.id);
+    if (r.ok) {
+      window.location.assign(r.data.url);
+      return;
+    }
+    toast.error(r.error || "Couldn't start checkout");
+    setPaying(false);
+  };
   const complete = useBookingsStore((s) => s.completeBooking);
   const [rating, setRating] = useState(booking.rating ?? 0);
   // Hover preview is separate from the committed rating, so mousing over
@@ -261,6 +283,22 @@ function BookingRow({
         </div>
         <StatusBadge status={booking.status} />
       </header>
+
+      {paymentsOn && booking.status === "accepted" && (
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={payForReview}
+            disabled={paying}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+          >
+            {paying ? "Starting…" : "Pay for review"}
+          </button>
+          <span className="text-[11px] text-[var(--ds-muted)]">
+            Secure checkout via Stripe.
+          </span>
+        </div>
+      )}
 
       {booking.responseNote && (
         <p className="mt-3 text-[12.5px] text-[var(--ds-body)] italic">
