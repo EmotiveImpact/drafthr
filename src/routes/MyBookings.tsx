@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
-import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
+import type { Consultant } from "@/components/consultants/types";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { BookingThread } from "@/components/consultants/BookingThread";
 import { StatusBadge } from "@/components/consultants/StatusBadge";
@@ -78,7 +78,10 @@ export function MyBookings() {
           specialties: myProfile.specialties,
         } as Consultant)
       : null;
-  const allConsultants = myCard ? [myCard, ...CONSULTANTS] : CONSULTANTS;
+  // Only real cards: the signed-in consultant's own (if complete). Booking
+  // rows already carry the server-resolved consultantName for display, so no
+  // seed lookup is needed.
+  const allConsultants = myCard ? [myCard] : [];
 
   // First-load skeleton: the store is empty but the server fetch is still
   // in flight, so show muted placeholder rows rather than flashing the

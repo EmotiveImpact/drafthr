@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/ds/BrandMark";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import {
   runHealthChecks,
   computeHealthScore,
@@ -34,9 +33,6 @@ import {
 } from "@/lib/finalize/healthChecks";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
 import { WizardChrome } from "@/components/editor/WizardChrome";
-import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
-import { ConsultantCard } from "@/components/consultants/ConsultantCard";
-import { BookingDialog } from "@/components/consultants/BookingDialog";
 
 /**
  * Finalise — Option H layout.
@@ -67,7 +63,6 @@ export function Finalize() {
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
   const [counselConfirmed, setCounselConfirmed] = useState(false);
-  const [bookingFor, setBookingFor] = useState<Consultant | null>(null);
 
   const checks = useMemo<HealthCheck[]>(
     () => (draft ? runHealthChecks(draft) : []),
@@ -337,63 +332,14 @@ export function Finalize() {
               />
             )}
 
-            {/* Document hero + social-proof upsell. Three blocks stacked:
-             *   1. Letter title (Playfair serif) + breadcrumb meta
-             *   2. Violet social-proof block — avatar stack + headline stat + CTA
-             *   3. Customer testimonial quote
-             *
-             * The 412 number and testimonial are placeholder data — when we
-             * have real booking metrics + permissioned testimonials, swap in
-             * via props from a stats API. Don't ship lorem-ipsum proof in
-             * production. */}
+            {/* Document hero + honest specialist-review CTA. No fabricated
+             * stats, testimonials, or seed cards — the real marketplace
+             * (/consultants) owns listing, loading, and empty states. */}
             <DocumentHero
               letterTitle={draft.title ?? meta.title}
               draftedBy={draftedBy}
               recipient={recipientNameFor(draft) ?? "HR Officer"}
-              letterTypeLabel={meta.title}
-              onSeeSpecialists={() => {
-                // Smooth-scroll to the consultant grid below
-                document
-                  .querySelector("[data-consultant-grid]")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-            />
-
-            {/* 3-card consultant grid */}
-            <div data-consultant-grid className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-              {CONSULTANTS.slice(0, 3).map((c) => (
-                <ConsultantCard
-                  key={c.initials}
-                  consultant={c}
-                  onBook={() => setBookingFor(c)}
-                />
-              ))}
-            </div>
-
-            {/* Trust line */}
-            <div className="mt-4 flex items-center gap-3 px-4 py-2.5 bg-[var(--ds-line-2)] rounded-lg text-[11.5px] text-[var(--ds-muted)]">
-              <span>All UK-qualified · £1M PI insurance · ICO registered · 4.86 avg rating</span>
-              <Link
-                to={`/consultants?draft=${draft.id}`}
-                className="ml-auto font-semibold text-[var(--ds-ink)] whitespace-nowrap hover:underline"
-              >
-                See all 14 →
-              </Link>
-            </div>
-
-            {/* Booking dialog — rendered at page level so it sits above the grid */}
-            <BookingDialog
-              consultant={bookingFor}
-              draftId={draft.id}
-              onClose={() => setBookingFor(null)}
-              onBooked={() => {
-                toast.success("Booking confirmed — track it in My bookings", {
-                  action: {
-                    label: "My bookings",
-                    onClick: () => nav("/bookings"),
-                  },
-                });
-              }}
+              onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)}
             />
 
             {/* Skip row */}
@@ -514,35 +460,13 @@ function DocumentHero({
   letterTitle,
   draftedBy,
   recipient,
-  letterTypeLabel,
   onSeeSpecialists,
 }: {
   letterTitle: string;
   draftedBy: string;
   recipient: string;
-  letterTypeLabel: string;
   onSeeSpecialists: () => void;
 }) {
-  // PLACEHOLDER STATS — replace with real metrics once we have booking data.
-  // Three numbers, stacked to combine social proof + outcome + speed:
-  //   recentBookings   — how many peers chose this (lateral pressure)
-  //   resolutionRate   — outcome statistic (vertical pressure)
-  //   speedDaysFaster  — concrete behavioural benefit
-  // Keep all three honest or we destroy the trust the rest of the product
-  // is building.
-  const recentBookings = 412;
-  const resolutionRate = 73;
-  const speedDaysFaster = 2;
-  const testimonial = {
-    quote:
-      "Sarah caught a regulation 15(3) point I'd missed entirely. The response came back two days later, settled.",
-    author: "Mark T.",
-    resolved: "March 2026",
-  };
-  // Avatar stack — random pravatar IDs picked to look like a varied set
-  // of real users. Cheap social-proof signal.
-  const avatarStack = [12, 22, 5, 18];
-
   return (
     <motion.section
       initial={{ opacity: 0, y: 6 }}
@@ -583,42 +507,18 @@ function DocumentHero({
         </div>
       </div>
 
-      {/* Social-proof block — the commercial layer */}
+      {/* Optional specialist review — an honest CTA into the real marketplace.
+       * No fabricated stats or testimonials; pricing/availability live on the
+       * specialists' actual profiles. */}
       <div className="mt-1 rounded-xl border border-[var(--ds-violet-bd,#ddd6fe)] bg-gradient-to-br from-[var(--ds-violet-bg,#f5f3ff)] to-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-        {/* Avatar stack */}
-        <div className="flex shrink-0" aria-hidden>
-          {avatarStack.map((id, i) => (
-            <img
-              key={id}
-              src={`https://i.pravatar.cc/64?img=${id}`}
-              alt=""
-              className="size-8 rounded-full border-2 border-white object-cover"
-              style={{ marginLeft: i === 0 ? 0 : -10 }}
-              loading="lazy"
-            />
-          ))}
-        </div>
-
-        {/* Headline + sub. Variant B (stacked) — three persuasion modes in
-         * one sentence: social proof (recentBookings) + outcome
-         * (resolutionRate) + behavioural specificity (speedDaysFaster).
-         * Reads anxious-first ("did others do this?") then analytical
-         * ("what did it get them?"). */}
         <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-[var(--ds-body)]">
           <strong className="text-[var(--ds-ink)] font-semibold">
-            {recentBookings} people had a {letterTypeLabel} reviewed by a specialist
-          </strong>
-          {" — "}
-          <strong className="text-[var(--ds-violet-fg,#7c3aed)] font-semibold">
-            {resolutionRate}%
+            Want a second opinion before you send?
           </strong>{" "}
-          landed the outcome they wanted.{" "}
-          <span className="text-[var(--ds-muted)]">
-            Average response: {speedDaysFaster} days faster.
-          </span>
+          Book a qualified employment-law specialist to review this letter — most
+          reviews come back within 24 hours.
         </div>
 
-        {/* CTA — smooth-scrolls to the consultant grid */}
         <button
           type="button"
           onClick={onSeeSpecialists}
@@ -628,16 +528,6 @@ function DocumentHero({
           <ArrowRight className="size-3.5" />
         </button>
       </div>
-
-      {/* Testimonial — adds a human voice */}
-      <blockquote className="pt-3 border-t border-[var(--ds-line-2)] m-0 px-0">
-        <p className="m-0 text-[12.5px] italic text-[var(--ds-body)] leading-relaxed">
-          &ldquo;{testimonial.quote}&rdquo;
-        </p>
-        <footer className="mt-1.5 text-[11px] text-[var(--ds-muted)] not-italic">
-          — {testimonial.author} · Resolved {testimonial.resolved}
-        </footer>
-      </blockquote>
     </motion.section>
   );
 }

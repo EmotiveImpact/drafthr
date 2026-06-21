@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Edit3,
   MoreHorizontal,
-  Sparkles,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -68,6 +67,7 @@ function EmployeeDetailBody() {
   const matters = useDraftStore((s) => s.matters);
   const updateEmployee = useDraftStore((s) => s.updateEmployee);
   const archiveEmployee = useDraftStore((s) => s.archiveEmployee);
+  const deleteEmployee = useDraftStore((s) => s.deleteEmployee);
 
   const [editOpen, setEditOpen] = useState(false);
   const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
@@ -103,6 +103,34 @@ function EmployeeDetailBody() {
     () => linkedMatters.filter((m) => m.status === "active"),
     [linkedMatters]
   );
+
+  // Real, data-derived prompts (NOT AI) drawn from this employee's actual
+  // letter history + open matters. Empty when there's no signal — we render
+  // nothing rather than inventing insight.
+  const reviewSignals = useMemo(() => {
+    const out: string[] = [];
+    const has = (re: RegExp) => matchingDrafts.filter((d) => re.test(d.letterType)).length;
+    const warnings = has(/warning/);
+    const grievances = has(/grievance/);
+    const performance = has(/pip|performance|probation/);
+    if (warnings >= 2) {
+      out.push(`${warnings} warning letters on file — consider a formal review`);
+    } else if (warnings === 1) {
+      out.push("A warning letter is on file — track any follow-up");
+    }
+    if (grievances >= 1) {
+      out.push(
+        `${grievances} grievance${grievances > 1 ? "s" : ""} recorded — track to resolution`,
+      );
+    }
+    if (performance >= 1) {
+      out.push("Performance/PIP letter on file — check the review date");
+    }
+    if (activeMatters.length >= 2) {
+      out.push(`${activeMatters.length} active matters open for this person`);
+    }
+    return out;
+  }, [matchingDrafts, activeMatters]);
 
   if (!employee) {
     return (
@@ -226,9 +254,16 @@ function EmployeeDetailBody() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => {
-                  // eslint-disable-next-line no-alert
-                  alert("Not yet supported — archive instead.");
+                  const ok = window.confirm(
+                    `Delete ${employee.legalName}? This removes the employee record permanently. ` +
+                      `Their letters stay, but they'll be unlinked from any matters. ` +
+                      `To keep the record, use Archive instead.`,
+                  );
+                  if (!ok) return;
+                  deleteEmployee(employee.id);
+                  nav("/employees", { replace: true });
                 }}
+                className="text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
               >
                 <Trash2 className="size-3.5" />
                 Delete
@@ -252,9 +287,9 @@ function EmployeeDetailBody() {
 
         <TabsContent value="matters">
           <ActiveMattersPanel matters={activeMatters} onOpen={(id) => nav(`/matters/${id}`)} />
-          {!dismissedSuggestions && (
-            <AISuggestionsPanel
-              employee={employee}
+          {!dismissedSuggestions && reviewSignals.length > 0 && (
+            <ReviewPanel
+              signals={reviewSignals}
               onDismiss={() => setDismissedSuggestions(true)}
             />
           )}
@@ -409,31 +444,21 @@ function LetterHistoryPanel({
   );
 }
 
-function AISuggestionsPanel({
-  employee,
+function ReviewPanel({
+  signals,
   onDismiss,
 }: {
-  employee: Employee;
+  signals: string[];
   onDismiss: () => void;
 }) {
-  // STUB — hardcoded demo suggestions. Real LLM-derived insights land
-  // in a future wave once the directory has signal to learn from.
-  const suggestions = [
-    "3 sickness episodes in 6 months — open absence matter?",
-    "2 grievances in 12 months — consider escalation review",
-  ];
-  // Touch the param so the lint rule is happy + we have a hook for
-  // future personalization without changing the call sites.
-  void employee;
-
   return (
     <section className="mt-2">
-      <SectionHeader title="AI suggestions" />
+      <SectionHeader title="Things to review" />
       <div className="rounded-lg border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] p-4">
         <div className="flex items-start gap-3">
-          <Sparkles className="size-4 text-[var(--ds-amber-fg)] mt-0.5 shrink-0" />
+          <AlertTriangle className="size-4 text-[var(--ds-amber-fg)] mt-0.5 shrink-0" />
           <ul className="flex-1 m-0 p-0 list-none space-y-1.5">
-            {suggestions.map((s, i) => (
+            {signals.map((s, i) => (
               <li
                 key={i}
                 className="text-[13px] text-[var(--ds-ink)] leading-snug"

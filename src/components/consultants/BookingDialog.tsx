@@ -9,7 +9,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import type { Consultant } from "@/components/editor/review/ConsultTab";
+import type { Consultant } from "@/components/consultants/types";
 import { useBookingsStore, slaMs, type Booking } from "@/lib/bookings";
 import { pushBookingCreate } from "@/lib/marketplaceSync";
 import { toServerUuid } from "@/lib/remote-ids";

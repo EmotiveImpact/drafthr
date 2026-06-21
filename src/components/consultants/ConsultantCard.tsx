@@ -1,5 +1,5 @@
 import { ArrowRight, Star } from "lucide-react";
-import type { Consultant } from "@/components/editor/review/ConsultTab";
+import type { Consultant } from "@/components/consultants/types";
 import { cn } from "@/lib/utils";
 
 /**

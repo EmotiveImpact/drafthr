@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Search, X } from "lucide-react";
-import { CONSULTANTS, type Consultant } from "@/components/editor/review/ConsultTab";
+import type { Consultant } from "@/components/consultants/types";
 import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import { BookingDialog } from "@/components/consultants/BookingDialog";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
@@ -75,11 +75,6 @@ function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["
   };
 }
 
-// Collect all unique specialty tags across the 14 consultants
-const ALL_TAGS = Array.from(
-  new Set(CONSULTANTS.flatMap((c) => c.specialties)),
-).sort();
-
 type SortKey = "rating" | "price-asc" | "price-desc" | "sla";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -138,37 +133,54 @@ export function ConsultantsIndex() {
   /** Real consultants from the server (status='published'). Empty until
    *  the API responds. */
   const [serverConsultants, setServerConsultants] = useState<Consultant[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
 
   /** The signed-in consultant's own card, included so they can see how
    *  they appear in the marketplace. Null until profile is complete. */
   const myCard = useMemo(() => profileToConsultant(myProfile), [myProfile]);
 
-  // Pull the cross-tenant marketplace from the server on mount so HR
-  // teams see consultants who signed up on other devices. The hardcoded
-  // seed set still renders behind these as "Example specialists".
+  // Pull the cross-tenant marketplace from the server on mount so HR teams see
+  // every published consultant, regardless of which device they signed up on.
+  // Only real, published profiles are shown — no seed/demo data.
   useEffect(() => {
     let cancelled = false;
-    void listMarketplace().then((res) => {
-      if (cancelled || !res.ok) return;
-      setServerConsultants(res.data.consultants.map(dtoToConsultant));
-    });
+    setLoadState("loading");
+    void listMarketplace()
+      .then((res) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setLoadState("error");
+          return;
+        }
+        setServerConsultants(res.data.consultants.map(dtoToConsultant));
+        setLoadState("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setLoadState("error");
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  /** Server-live consultants first, then myCard (if not already in the
-   *  server list), then hardcoded seed. De-dupe by profileId so a
-   *  signed-in consultant doesn't see themselves twice. */
+  /** All real consultants: server-published profiles, plus the signed-in
+   *  consultant's own card (so they can see how they appear). De-duped by
+   *  profileId. No hardcoded specialists. */
   const ALL_CONSULTANTS = useMemo(() => {
     const liveById = new Map<string, Consultant>();
     serverConsultants.forEach((c) => c.profileId && liveById.set(c.profileId, c));
     if (myCard?.profileId && !liveById.has(myCard.profileId)) {
       liveById.set(myCard.profileId, myCard);
     }
-    const live = Array.from(liveById.values());
-    return [...live, ...CONSULTANTS];
+    return Array.from(liveById.values());
   }, [serverConsultants, myCard]);
+
+  /** Filter chips derived from the specialties actually present in the live
+   *  marketplace (was a static list off the old seed set). */
+  const ALL_TAGS = useMemo(
+    () => Array.from(new Set(ALL_CONSULTANTS.flatMap((c) => c.specialties))).sort(),
+    [ALL_CONSULTANTS],
+  );
 
   const filtered = useMemo(() => {
     let list = ALL_CONSULTANTS;
@@ -323,28 +335,63 @@ export function ConsultantsIndex() {
             </div>
           </div>
 
-          {/* Results count + transparency note about the seed cards. We
-           * don't pretend the 14 hardcoded specialists are live. The
-           * single "real" card (when the signed-in consultant has saved
-           * a complete profile) appears above the seed set. */}
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-            <p className="text-[11.5px] text-[var(--ds-muted)]">
-              {filtered.length} of {ALL_CONSULTANTS.length} specialists
-              {myCard && <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>}
-            </p>
-            {/* Seed disclaimer — visible enough to be honest, quiet
-             * enough to not undermine the page. */}
-            <p className="text-[11px] italic text-[var(--ds-muted)]">
-              Example specialists shown during early access. Live consultant cards mark themselves with a "Live" badge.
-            </p>
-          </div>
+          {/* Results count */}
+          {loadState === "ready" && ALL_CONSULTANTS.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+              <p className="text-[11.5px] text-[var(--ds-muted)]">
+                {filtered.length} of {ALL_CONSULTANTS.length} specialists
+                {myCard && <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>}
+              </p>
+            </div>
+          )}
 
-          {/* Cards grid */}
-          {filtered.length > 0 ? (
+          {/* Cards grid — loading / error / empty-marketplace / no-match / cards */}
+          {loadState === "loading" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[220px] rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]/50 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : loadState === "error" ? (
+            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-12 text-center">
+              <p className="text-[13.5px] text-[var(--ds-body)]">
+                We couldn't load the marketplace just now.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoadState("loading");
+                  void listMarketplace()
+                    .then((res) => {
+                      if (!res.ok) return setLoadState("error");
+                      setServerConsultants(res.data.consultants.map(dtoToConsultant));
+                      setLoadState("ready");
+                    })
+                    .catch(() => setLoadState("error"));
+                }}
+                className="mt-2 text-[12.5px] font-semibold text-[var(--ds-ink)] underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : ALL_CONSULTANTS.length === 0 ? (
+            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-12 text-center">
+              <p className="text-[13.5px] font-medium text-[var(--ds-ink)]">
+                No specialists are listed yet.
+              </p>
+              <p className="mt-1 text-[12.5px] text-[var(--ds-body)]">
+                Qualified employment-law specialists will appear here as they join the
+                marketplace. Check back soon.
+              </p>
+            </div>
+          ) : filtered.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((c) => (
                 <ConsultantCard
-                  key={c.profileId ?? `seed-${c.initials}`}
+                  key={c.profileId ?? c.initials}
                   consultant={c}
                   onBook={() => requestBooking(c)}
                 />

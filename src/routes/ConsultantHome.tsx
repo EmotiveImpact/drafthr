@@ -155,16 +155,20 @@ export function ConsultantHome() {
             </h2>
             <div className="flex items-center gap-3 text-[11.5px] text-[var(--ds-muted)]">
               {allBookings.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={seedSampleBooking}
-                  disabled={!complete}
-                  title={complete ? undefined : "Complete your profile first"}
-                  className="inline-flex items-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] px-2 py-1 text-[11px] font-semibold text-[var(--ds-muted)] transition hover:border-[var(--ds-subtle)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Sparkles className="size-3" aria-hidden />
-                  Add a demo request
-                </button>
+                // Dev-only affordance to seed a sample booking while building
+                // the inbox. Never shown to real consultants in production.
+                import.meta.env.DEV ? (
+                  <button
+                    type="button"
+                    onClick={seedSampleBooking}
+                    disabled={!complete}
+                    title={complete ? undefined : "Complete your profile first"}
+                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] px-2 py-1 text-[11px] font-semibold text-[var(--ds-muted)] transition hover:border-[var(--ds-subtle)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Sparkles className="size-3" aria-hidden />
+                    Add a demo request
+                  </button>
+                ) : null
               ) : (
                 <>
                   {pendingCount > 0 && <span>{pendingCount} new</span>}

@@ -75,6 +75,8 @@ type Store = {
   updateEmployee: (id: string, patch: Partial<Employee>) => void;
   /** Soft-archive — flips status to "left" and stamps endDate if absent. */
   archiveEmployee: (id: string) => void;
+  /** Hard-delete the employee record and strip them from matter participants. */
+  deleteEmployee: (id: string) => void;
   createTask: (input: Omit<Task, "id" | "createdAt" | "updatedAt">) => string;
   updateTask: (id: string, patch: Partial<Task>) => void;
   completeTask: (id: string) => void;
@@ -344,6 +346,29 @@ export const useDraftStore = create<Store>()(
               },
             },
           };
+        }),
+
+      deleteEmployee: (id) =>
+        set((s) => {
+          if (!s.employees[id]) return s;
+          const employees = { ...s.employees };
+          delete employees[id];
+          // Strip the deleted employee from any matter participants so no
+          // link dangles after the record is gone.
+          const matters = { ...s.matters };
+          let mattersChanged = false;
+          const now = Date.now();
+          for (const [mid, m] of Object.entries(matters)) {
+            if (m.participants?.some((p) => p.employeeId === id)) {
+              matters[mid] = {
+                ...m,
+                participants: m.participants.filter((p) => p.employeeId !== id),
+                updatedAt: now,
+              };
+              mattersChanged = true;
+            }
+          }
+          return mattersChanged ? { employees, matters } : { employees };
         }),
 
       /* ----------------------------------------------------------------
