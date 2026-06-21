@@ -181,9 +181,9 @@ export function ConsultantAdminReview() {
                   <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--ds-body)]">
                     {p.bio}
                   </p>
-                  {p.specialties.length > 0 && (
+                  {(p.specialties?.length ?? 0) > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {p.specialties.map((s) => (
+                      {(p.specialties ?? []).map((s) => (
                         <span
                           key={s}
                           className="rounded-full border border-[var(--ds-line)] bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--ds-body)]"

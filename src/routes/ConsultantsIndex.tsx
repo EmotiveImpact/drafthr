@@ -45,8 +45,10 @@ function dtoToConsultant(dto: MarketplaceConsultantDTO): Consultant {
     photoUrl:
       dto.photoUrl ??
       "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
-    specialty: dto.specialty || `${dto.specialties.slice(0, 2).join(" & ")} reviews`,
-    specialties: dto.specialties,
+    // Unvalidated server DTO — specialties may be absent; guard the .slice
+    // and the copy so a partial payload can't crash the marketplace list.
+    specialty: dto.specialty || `${(dto.specialties ?? []).slice(0, 2).join(" & ")} reviews`,
+    specialties: dto.specialties ?? [],
   };
 }
 
@@ -68,8 +70,8 @@ function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["
       // Neutral placeholder so the card renders even before the consultant
       // uploads a photo. Same Unsplash sizing as the hardcoded set.
       "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
-    specialty: p.specialty || `${p.specialties.slice(0, 2).join(" & ")} reviews`,
-    specialties: p.specialties,
+    specialty: p.specialty || `${(p.specialties ?? []).slice(0, 2).join(" & ")} reviews`,
+    specialties: p.specialties ?? [],
   };
 }
 

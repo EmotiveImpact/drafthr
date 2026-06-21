@@ -49,7 +49,11 @@ function dtoToProfile(dto: ConsultantProfileDTO) {
     role: dto.role,
     bio: dto.bio,
     specialty: dto.specialty,
-    specialties: dto.specialties,
+    // Default to [] like the other server fields below: unvalidated server
+    // JSON may omit specialties (e.g. a row created before the column
+    // existed), and the first `profile.specialties.length` read would throw
+    // → white screen. Mirrors the persisted-store `migrate` guard.
+    specialties: dto.specialties ?? [],
     price: dto.price,
     currency: symbolByCode[dto.currency] ?? "£",
     sla: dto.sla,

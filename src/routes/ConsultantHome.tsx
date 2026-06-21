@@ -189,7 +189,7 @@ export function ConsultantHome() {
             </Row>
             <Row label="SLA">{profile?.sla ?? "—"}</Row>
             <Row label="Specialties">
-              {profile?.specialties.length
+              {profile?.specialties?.length
                 ? profile.specialties.slice(0, 2).join(" · ") + (profile.specialties.length > 2 ? ` +${profile.specialties.length - 2}` : "")
                 : <span className="text-[var(--ds-muted)]">None yet</span>}
             </Row>
