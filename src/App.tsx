@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { useProfileStore } from "@/lib/profile";
+import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
 import { isDualWriteEnabled, syncAllPending } from "@/lib/dual-write";
@@ -171,6 +171,20 @@ export function App() {
       cancelled = true;
     };
   }, [isLoaded, activeTenant]);
+
+  // Hydrate the workspace role from the SERVER (the authoritative
+  // tenant-membership role) instead of the local "owner" default. The
+  // tenant_members role values are exactly the WorkspaceRole enum
+  // (owner/admin/drafter/reviewer/viewer), so a viewer/drafter no longer sees
+  // owner-level UI they aren't entitled to. Re-runs on workspace switch.
+  useEffect(() => {
+    const role = activeTenant?.role;
+    if (!role) return;
+    const VALID: WorkspaceRole[] = ["owner", "admin", "drafter", "reviewer", "viewer"];
+    if (!(VALID as string[]).includes(role)) return;
+    const { profile, setWorkspaceRole } = useProfileStore.getState();
+    if (profile.workspaceRole !== role) setWorkspaceRole(role as WorkspaceRole);
+  }, [activeTenant]);
   // Editor routes are exempted from the page transition. The editor has
   // its own internal animations (rails, sheet, streaming) and a fade on
   // top of that double-animates and looks busy.
