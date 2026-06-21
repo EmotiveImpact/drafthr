@@ -2,7 +2,7 @@ import type { MutableRefObject } from "react";
 
 import type { Draft } from "@/lib/letters/types";
 import { PaginatedLetter } from "./PaginatedLetter";
-import { type PagedEditorActions } from "./paged-edit/PagedEditor";
+import { type PagedEditorActions } from "./paged-edit/types";
 import { PagedlyDocEditor } from "./paged-edit/PagedlyDocEditor";
 
 type AddCommentOpts = {

@@ -26,8 +26,6 @@ import { Approvals } from "@/routes/Approvals";
 // lazy() block below for the rest (Editor, EvidenceStep, ConsultantsIndex,
 // MobileReadView).
 const Mockups = lazy(() => import("@/routes/Mockups").then((m) => ({ default: m.Mockups })));
-const PagedlyEditor = lazy(() => import("@/routes/PagedlyEditor").then((m) => ({ default: m.PagedlyEditor })));
-const PagedlyEditorV2 = lazy(() => import("@/routes/PagedlyEditorV2").then((m) => ({ default: m.PagedlyEditorV2 })));
 const Calendar = lazy(() => import("@/routes/Calendar").then((m) => ({ default: m.Calendar })));
 const Exported = lazy(() => import("@/routes/Exported").then((m) => ({ default: m.Exported })));
 const Activity = lazy(() => import("@/routes/Activity").then((m) => ({ default: m.Activity })));
@@ -228,12 +226,6 @@ export function App() {
         />
         <Route path="/editor/:draftId/review" element={<Protected><ReviewStep /></Protected>} />
         <Route path="/editor/:draftId/finalize" element={<Protected><Finalize /></Protected>} />
-        {/* Pagedly paged editor — parallel surface to validate the vendored
-         * pagedly plugin on a real draft. Renders the same draft in pagedly's
-         * Word-style Print Layout editor. Chromeless (see Layout). */}
-        <Route path="/pagedly/:draftId" element={<Protected><PagedlyEditor /></Protected>} />
-        {/* v2 — the polished pagedly surface (top bar, save status, PDF/Word). */}
-        <Route path="/pagedly2/:draftId" element={<Protected><PagedlyEditorV2 /></Protected>} />
         {/* HR portfolio surfaces — employer role only. Previously these
          * were auth-gated but not role-gated, so an employee/consultant
          * could render them by typing the URL (data was API-scoped, but

@@ -10,14 +10,14 @@ import "pagedly/styles.css";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { toLetterDraft } from "@/lib/letters/toLetterDraft";
-import type { PagedEditorActions } from "./PagedEditor";
+import type { PagedEditorActions } from "./types";
 
 /**
  * Edit-on-page engine, backed by the vendored **pagedly** library. This is the
- * drop-in replacement for the home-grown PagedEditor (paged.js): it exposes the
- * SAME contract — `{ draft, onDone?, actionsRef? }` — so LetterPreview and the
- * editor's File/Edit/Tools menubar drive it unchanged. Toggling "Edit on page"
- * in the editor now mounts THIS, not the old engine.
+ * sole on-page editor (the home-grown paged.js engine it replaced has been
+ * removed). It exposes the small `{ draft, onDone?, actionsRef? }` contract
+ * (see ./types `PagedEditorActions`) so LetterPreview and the editor's
+ * File/Edit/Tools menubar drive it directly. Toggling "Edit on page" mounts THIS.
  *
  * Source of truth stays the app store: edits flow back per-section through
  * updateSection (the same path the section editors + AI use), so switching

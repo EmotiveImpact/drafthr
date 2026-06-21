@@ -40,10 +40,7 @@ const CHROMELESS_PREFIXES = [
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const { user, activeTenant, isLoaded } = useAuth();
-  const isEditor =
-    loc.pathname.startsWith("/editor/") ||
-    loc.pathname.startsWith("/pagedly/") ||
-    loc.pathname.startsWith("/pagedly2/");
+  const isEditor = loc.pathname.startsWith("/editor/");
   const isChromeless =
     CHROMELESS_EXACT.includes(loc.pathname) ||
     CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));

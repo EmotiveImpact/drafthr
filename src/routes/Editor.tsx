@@ -12,7 +12,7 @@ import { DocumentPopover } from "@/components/editor/DocumentPopover";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
-import type { PagedEditorActions } from "@/components/editor/paged-edit/PagedEditor";
+import type { PagedEditorActions } from "@/components/editor/paged-edit/types";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
 import { InlineSuggestionBanner } from "@/components/editor/InlineSuggestionBanner";
 import { Button } from "@/components/ui/button";
@@ -975,24 +975,8 @@ export function Editor() {
              * Drafting indicator. ml-auto pushes them to the right edge
              * of the canvas column. */}
             <div className="ml-auto flex items-center gap-2">
-
-              {/* Focus mode — hides both rails for distraction-free
-               * working. Available in both Edit and Preview. Esc exits. */}
-              <Button
-                variant={focusMode ? "default" : "outline"}
-                size="sm"
-                className="hidden h-7 w-7 p-0"
-                onClick={() => setFocusMode((f) => !f)}
-                aria-pressed={focusMode}
-                aria-label={focusMode ? "Exit focus mode" : "Enter focus mode"}
-                title={
-                  focusMode
-                    ? "Exit focus mode (Esc)"
-                    : "Focus mode — hide rails for distraction-free work"
-                }
-              >
-                {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </Button>
+              {/* Focus mode lives in the View menu (+ Esc to exit); the old
+               * always-hidden header button here was dead and was removed. */}
               {(() => {
                 const pendingCount = draft.sections.filter((s) => s.pendingChange).length;
                 if (pendingCount === 0) return null;
