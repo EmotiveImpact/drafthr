@@ -287,6 +287,32 @@ export function AIPanel({
     };
   }, [draft.id]);
 
+  // Apply / addClause / tighten each run their OWN streaming LLM call
+  // (regenerateSectionAsPending), separate from the chat stream. Track their
+  // AbortControllers so the composer Stop button — and unmount — can cancel an
+  // in-flight Apply, not just the chat. applyingCount drives the Stop
+  // affordance because by the time a tool-call is being applied the chat status
+  // is "ready", so isStreaming alone would hide it.
+  const applyAbortsRef = useRef<Set<AbortController>>(new Set());
+  const [applyingCount, setApplyingCount] = useState(0);
+
+  const stopAll = useCallback(() => {
+    stop();
+    for (const c of applyAbortsRef.current) c.abort();
+    applyAbortsRef.current.clear();
+  }, [stop]);
+
+  // Abort any in-flight section regen if the panel unmounts (draft switch,
+  // focus-mode toggle, desktop/mobile breakpoint) so it can't keep mutating a
+  // section after the user has navigated away.
+  useEffect(() => {
+    const aborts = applyAbortsRef.current;
+    return () => {
+      for (const c of aborts) c.abort();
+      aborts.clear();
+    };
+  }, []);
+
   const scopeLabel =
     scope === "section" && scopeSection
       ? `section "${scopeSection.title}" (id=${scopeSection.id})`
@@ -312,6 +338,8 @@ export function AIPanel({
     e?.preventDefault();
     const text = input.trim();
     if (!text || status === "streaming" || status === "submitted") return;
+    // Don't fire a new chat turn while a section regen is mutating the draft.
+    if (applyAbortsRef.current.size > 0) return;
 
     let resolvedLabel = scopeLabel;
     let scopePayload = "";
@@ -339,6 +367,9 @@ export function AIPanel({
   };
 
   const isStreaming = status === "streaming" || status === "submitted";
+  // "busy" = chat is streaming OR a section regen (Apply/addClause/tighten) is
+  // in flight. Drives the composer Stop affordance and input gating.
+  const busy = isStreaming || applyingCount > 0;
 
   // Auto-scroll the message list to the bottom as new messages arrive.
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -369,17 +400,26 @@ export function AIPanel({
   ): Promise<Section> => {
     const section = draft.sections.find((s) => s.id === sectionId);
     if (!section) throw new Error(`Unknown section_id: ${sectionId}`);
+    // Register the controller so Stop / unmount can abort this regen; bump the
+    // applying count so the Stop button is shown while it runs.
     const ctl = new AbortController();
-    await regenerateSectionAsPending(
-      draft,
-      section,
-      { appendToSection, setSectionStatus, pushSectionVersion, updateSection, proposeSectionChange },
-      ctl.signal,
-      {},
-      instruction,
-      source
-    );
-    return section;
+    applyAbortsRef.current.add(ctl);
+    setApplyingCount((n) => n + 1);
+    try {
+      await regenerateSectionAsPending(
+        draft,
+        section,
+        { appendToSection, setSectionStatus, pushSectionVersion, updateSection, proposeSectionChange },
+        ctl.signal,
+        {},
+        instruction,
+        source
+      );
+      return section;
+    } finally {
+      applyAbortsRef.current.delete(ctl);
+      setApplyingCount((n) => Math.max(0, n - 1));
+    }
   };
 
   const applyRegenerate = async (
@@ -713,7 +753,7 @@ export function AIPanel({
                   key={q.label}
                   type="button"
                   onClick={() => setInput(q.prompt)}
-                  disabled={isStreaming}
+                  disabled={busy}
                   className="shrink-0 text-[11px] px-2 py-1 rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition disabled:opacity-50"
                 >
                   {q.label}
@@ -721,10 +761,10 @@ export function AIPanel({
               ))}
             </div>
             {/* Send button — bottom-right inside the composer */}
-            {isStreaming ? (
+            {busy ? (
               <button
                 type="button"
-                onClick={() => stop()}
+                onClick={() => stopAll()}
                 className="size-7 shrink-0 rounded-md bg-[var(--ds-line-2)] text-[var(--ds-ink)] grid place-items-center hover:bg-[var(--ds-line)]"
                 aria-label="Stop"
                 title="Stop"

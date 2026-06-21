@@ -148,6 +148,13 @@ export async function regenerateSectionAsPending(
     throw err;
   }
 
+  // Aborted right as the stream finished — restore status and don't surface a
+  // proposal the user already cancelled (mirrors the mid-stream throw above).
+  if (signal.aborted) {
+    store.setSectionStatus(draft.id, section.id, restingStatus);
+    return;
+  }
+
   const html = sanitiseHtml(acc);
   store.setSectionStatus(draft.id, section.id, restingStatus);
   store.proposeSectionChange(draft.id, section.id, {

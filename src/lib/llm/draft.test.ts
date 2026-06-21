@@ -84,4 +84,22 @@ describe("regenerateSectionAsPending — status never stranded on 'streaming'", 
     expect(statuses[statuses.length - 1]).toBe("edited");
     expect(store.proposeSectionChange).toHaveBeenCalledTimes(1);
   });
+
+  it("when aborted as the stream finishes, resets status and does NOT propose", async () => {
+    // Stream completes normally, but the user aborted in the meantime — the
+    // cancelled regen must not surface a proposal the user already dismissed.
+    streamDraftMock.mockImplementation(async (opts: { onToken: (d: string) => void }) => {
+      opts.onToken("<p>new text</p>");
+    });
+    const store = makeStore();
+    const section = makeSection("<p>existing</p>");
+    const ctl = new AbortController();
+    ctl.abort();
+
+    await regenerateSectionAsPending(makeDraft(section), section, store, ctl.signal);
+
+    const statuses = store.setSectionStatus.mock.calls.map((c) => c[2]);
+    expect(statuses[statuses.length - 1]).toBe("edited"); // status restored, not stuck
+    expect(store.proposeSectionChange).not.toHaveBeenCalled(); // no proposal
+  });
 });
