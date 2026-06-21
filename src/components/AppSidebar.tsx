@@ -762,6 +762,8 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
   const { isMobile, state } = useSidebar();
   const profile = useProfileStore((s) => s.profile);
   const setRole = useProfileStore((s) => s.setRole);
+  const clearRole = useProfileStore((s) => s.clearRole);
+  const enrolConsultant = useConsultantStore((s) => s.enrol);
   const { signOut, user } = useAuth();
   const nav = useNavigate();
   const isCollapsed = state === "collapsed" && !isMobile;
@@ -776,10 +778,57 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
     .join("")
     .toUpperCase();
 
-  const roleLabel = mode === "employer" ? "HR / Management" : mode === "employee" ? "Employee" : "Not set";
-  const swapTo: Mode = mode === "employer" ? "employee" : "employer";
-  const swapLabel = swapTo === "employer" ? "HR / Management" : "Employee";
-  const SwapIcon = swapTo === "employer" ? Briefcase : UserRound;
+  const roleLabel =
+    mode === "employer"
+      ? "HR / Management"
+      : mode === "employee"
+      ? "Employee"
+      : mode === "consultant"
+      ? "Consultant"
+      : "Not set";
+
+  // All three roles are switchable from one place. Switching is coherent with
+  // the mode derivation (route + profileRole win over the enrolled fallback):
+  //   • employer/employee → set the profile role + go to its home
+  //   • consultant        → enrol + clear the letter-writing role + go to /c
+  // (consultant enrolment is preserved when switching away, so the user keeps
+  //  their marketplace profile and can switch back.)
+  const ROLE_OPTIONS: {
+    key: SidebarMode;
+    label: string;
+    Icon: typeof Briefcase;
+    onSwitch: () => void;
+  }[] = [
+    {
+      key: "employer",
+      label: "HR / Management",
+      Icon: Briefcase,
+      onSwitch: () => {
+        setRole("employer");
+        nav("/hr");
+      },
+    },
+    {
+      key: "employee",
+      label: "Employee",
+      Icon: UserRound,
+      onSwitch: () => {
+        setRole("employee");
+        nav("/me");
+      },
+    },
+    {
+      key: "consultant",
+      label: "Consultant",
+      Icon: Store,
+      onSwitch: () => {
+        enrolConsultant();
+        clearRole();
+        nav("/c");
+      },
+    },
+  ];
+  const otherRoles = ROLE_OPTIONS.filter((r) => r.key !== mode);
 
   return (
     <DropdownMenu>
@@ -811,21 +860,13 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
         sideOffset={8}
       >
         <DropdownMenuLabel className="text-xs text-muted-foreground">Role · {roleLabel}</DropdownMenuLabel>
-        <DropdownMenuItem
-          onClick={() => {
-            setRole(swapTo);
-            nav(swapTo === "employer" ? "/hr" : "/me");
-          }}
-          className="gap-2"
-        >
-          <SwapIcon className="size-4" />
-          <span>Switch to {swapLabel}</span>
-          <ArrowUpRight className="ml-auto size-3.5 text-muted-foreground" />
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => nav("/pick-role")} className="gap-2">
-          <UserRound className="size-4" />
-          Role picker
-        </DropdownMenuItem>
+        {otherRoles.map((r) => (
+          <DropdownMenuItem key={r.key} onClick={r.onSwitch} className="gap-2">
+            <r.Icon className="size-4" />
+            <span>Switch to {r.label}</span>
+            <ArrowUpRight className="ml-auto size-3.5 text-muted-foreground" />
+          </DropdownMenuItem>
+        ))}
 
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Account</DropdownMenuLabel>

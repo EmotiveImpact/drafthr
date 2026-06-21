@@ -141,6 +141,9 @@ const EMPTY_PROFILE: Profile = {
 type Store = {
   profile: Profile;
   setRole: (role: Mode) => void;
+  /** Clear the employer/employee mode (e.g. when switching to the consultant
+   *  context, whose "mode" is the absence of a letter-writing role). */
+  clearRole: () => void;
   patch: (patch: Partial<Profile>) => void;
   patchPersonal: (patch: Partial<Profile["personal"]>) => void;
   patchEmployer: (patch: Partial<Profile["employer"]>) => void;
@@ -161,6 +164,8 @@ export const useProfileStore = create<Store>()(
       profile: EMPTY_PROFILE,
       setRole: (role) =>
         set((s) => ({ profile: { ...s.profile, role } })),
+      clearRole: () =>
+        set((s) => ({ profile: { ...s.profile, role: null } })),
       patch: (patch) =>
         set((s) => ({ profile: { ...s.profile, ...patch } })),
       patchPersonal: (patch) =>
