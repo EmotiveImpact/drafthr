@@ -58,7 +58,7 @@ const KIND_ICON: Record<Kind, typeof FileText> = {
   note: NotebookText,
 };
 
-type FilterTab = "all" | "email" | "screenshot" | "document" | "note";
+type FilterTab = "all" | "email" | "calendar" | "screenshot" | "document" | "note";
 
 // Short labels — long ones ("Screenshots", "Documents") overflowed the
 // pinned-rail width even with overflow-x-auto. These fit cleanly into a
@@ -66,6 +66,7 @@ type FilterTab = "all" | "email" | "screenshot" | "document" | "note";
 const FILTER_TABS: { id: FilterTab; label: string; kind?: Kind }[] = [
   { id: "all", label: "All" },
   { id: "email", label: "Email", kind: "email" },
+  { id: "calendar", label: "Cal", kind: "calendar" },
   { id: "screenshot", label: "Screens", kind: "screenshot" },
   { id: "document", label: "Docs", kind: "document" },
   { id: "note", label: "Notes", kind: "note" },
@@ -168,13 +169,20 @@ export function EvidenceDrawer({
     const result: Record<FilterTab, number> = {
       all: allItems.length,
       email: 0,
+      calendar: 0,
       screenshot: 0,
       document: 0,
       note: 0,
     };
     for (const item of allItems) {
       const tab = item.kind as FilterTab;
-      if (tab === "email" || tab === "screenshot" || tab === "document" || tab === "note") {
+      if (
+        tab === "email" ||
+        tab === "calendar" ||
+        tab === "screenshot" ||
+        tab === "document" ||
+        tab === "note"
+      ) {
         result[tab] += 1;
       }
     }

@@ -64,11 +64,12 @@ const KIND_OPTIONS: { value: Kind; label: string }[] = [
   { value: "note", label: "Note" },
 ];
 
-type FilterTab = "all" | "email" | "screenshot" | "document" | "note";
+type FilterTab = "all" | "email" | "calendar" | "screenshot" | "document" | "note";
 
 const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "email", label: "Emails" },
+  { id: "calendar", label: "Calendar" },
   { id: "screenshot", label: "Screenshots" },
   { id: "document", label: "Docs" },
   { id: "note", label: "Notes" },
@@ -121,12 +122,12 @@ export function EvidencePanel({
     const result: Record<FilterTab, number> = {
       all: evidence.length,
       email: 0,
+      calendar: 0,
       screenshot: 0,
       document: 0,
       note: 0,
     };
     for (const item of evidence) {
-      if (item.kind === "calendar") continue;
       result[item.kind] += 1;
     }
     return result;
