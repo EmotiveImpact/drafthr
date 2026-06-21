@@ -20,6 +20,7 @@ export function MatterTasks({
 }) {
   const createTask = useDraftStore((s) => s.createTask);
   const completeTask = useDraftStore((s) => s.completeTask);
+  const updateTask = useDraftStore((s) => s.updateTask);
   const deleteTask = useDraftStore((s) => s.deleteTask);
 
   const [adding, setAdding] = useState(false);
@@ -104,7 +105,10 @@ export function MatterTasks({
               <TaskRow
                 key={t.id}
                 task={t}
-                onToggle={() => completeTask(t.id)}
+                // The completed check renders as a toggle button — clicking it
+                // must RE-OPEN the task, not call the one-way completeTask
+                // (which would just re-stamp doneAt to today).
+                onToggle={() => updateTask(t.id, { status: "open", doneAt: undefined })}
                 onDelete={() => deleteTask(t.id)}
                 completed
               />
