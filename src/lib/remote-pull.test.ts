@@ -109,6 +109,50 @@ describe("mergeRemoteDrafts — non-destructive cross-device merge", () => {
     expect(merged.draft_offline.sections[0].html).toBe("<p>local body</p>");
   });
 
+  it("gives DISTINCT ids to duplicate remote sectionIds (no React key collision)", () => {
+    const local = { draft_1: localDraft() };
+    const merged = mergeRemoteDrafts(local, [
+      remoteDraft({
+        sections: [
+          { sectionId: "body", title: "Body", html: "<p>1</p>", status: "ready", position: 0 },
+          { sectionId: "body", title: "Body", html: "<p>2</p>", status: "ready", position: 1 },
+        ],
+      }),
+    ]);
+    const ids = merged.draft_1.sections.map((s) => s.id);
+    expect(new Set(ids).size).toBe(2); // no duplicate ids
+    expect(ids[0]).toBe("sec_local_1"); // first reuses the local id (consumed once)
+  });
+
+  it("does NOT wipe local answers when the server stores answers=null", () => {
+    const local = { draft_1: localDraft({ answers: { tone: "firm", q1: "x" } as never }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ answers: null as never })]);
+    expect(merged.draft_1.answers).toEqual({ tone: "firm", q1: "x" });
+  });
+
+  it("preserves the immutable local createdAt across an overlay", () => {
+    const local = { draft_1: localDraft({ createdAt: 500 }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ createdAt: 99999, updatedAt: 9000 })]);
+    expect(merged.draft_1.createdAt).toBe(500);
+  });
+
+  it("keeps local on an equal-updatedAt tie (no same-ms clobber)", () => {
+    const local = { draft_1: localDraft({ updatedAt: 9000, title: "Local tie" }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ updatedAt: 9000, title: "Server tie" })]);
+    expect(merged.draft_1.title).toBe("Local tie");
+  });
+
+  it("adopts a remote-only draft with schema-valid party blocks when server fields are null", () => {
+    const merged = mergeRemoteDrafts({}, [
+      remoteDraft({ id: "uuid-x", employer: null, employee: null }),
+    ]);
+    const d = merged["uuid-x"];
+    expect(d.employer.legalName).toBe("");
+    expect(d.employer.hasLetterhead).toBe(false);
+    expect(d.employee.serviceMonths).toBe(0);
+    expect(typeof d.employee.jobTitle).toBe("string");
+  });
+
   it("adopts a brand-new remote section's id while keeping existing ones stable", () => {
     const local = { draft_1: localDraft() };
     const merged = mergeRemoteDrafts(local, [

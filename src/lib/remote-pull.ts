@@ -20,10 +20,16 @@
  * Gated by the same VITE_DRAFTHR_DUAL_WRITE flag as the write path, so read and
  * write are always consistent and the default (flag off) behaviour is unchanged.
  *
- * Known limitation (documented, not a data-loss risk): a delete performed on
- * another device does not propagate on pull (the row is simply absent from the
- * server response, and we keep local-only drafts). Deletes still apply on the
- * device that issued them. Full delete reconciliation is a later feature.
+ * Known limitations (documented, none are data-loss):
+ *   • A delete on another device doesn't propagate on pull (the row is simply
+ *     absent from the response, and we keep local-only drafts). Deletes still
+ *     apply on the device that issued them.
+ *   • A pulled draft's matterId is the SERVER matter UUID. Matters are still
+ *     push-only (no matters GET yet), so on the pulling device that id won't
+ *     resolve to a local matter and the draft↔matter link is hidden in the UI.
+ *     The UUID is preserved (every dereference is null-safe) so the link is
+ *     restored once a symmetric matters-pull lands; it's never written wrong.
+ * Both are later features (delete reconciliation + matters pull).
  */
 import type {
   Draft,
@@ -70,7 +76,13 @@ export type RemoteDraft = {
 };
 
 /** Rebuild the sections array, preserving local section id/required/versions/
- *  pendingChange when a section with the same sectionId already exists. */
+ *  pendingChange when a section with the same sectionId already exists.
+ *
+ *  Local-id reuse is ONE-SHOT: the server's sections table has no unique
+ *  constraint on (draftId, sectionId), so a draft can have two rows with the
+ *  same sectionId. We consume each local match once, so a second duplicate
+ *  falls through to a fresh uid() — never two Sections sharing one id (which
+ *  would collide React keys and misroute every edit to the first match). */
 function mergeSections(remote: RemoteSection[], local?: Draft): Section[] {
   const localBySectionId = new Map<string, Section>();
   for (const s of local?.sections ?? []) localBySectionId.set(s.sectionId, s);
@@ -78,6 +90,7 @@ function mergeSections(remote: RemoteSection[], local?: Draft): Section[] {
     .sort((a, b) => a.position - b.position)
     .map((rs) => {
       const ls = localBySectionId.get(rs.sectionId);
+      if (ls) localBySectionId.delete(rs.sectionId); // consume once
       return {
         id: ls?.id ?? uid("sec"),
         sectionId: rs.sectionId as SectionId,
@@ -94,15 +107,41 @@ function mergeSections(remote: RemoteSection[], local?: Draft): Section[] {
     });
 }
 
+/** Fill a (possibly null) server party block out to a schema-valid object, so
+ *  an adopted remote-only draft is never structurally incomplete. */
+function withEmployerDefaults(e: Record<string, unknown> | null | undefined): EmployerDetails {
+  return {
+    legalName: "",
+    address: "",
+    hasLetterhead: false,
+    signatoryName: "",
+    signatoryTitle: "",
+    ...(e ?? {}),
+  } as unknown as EmployerDetails;
+}
+function withEmployeeDefaults(e: Record<string, unknown> | null | undefined): EmployeeDetails {
+  return {
+    legalName: "",
+    jobTitle: "",
+    address: "",
+    startDate: "",
+    serviceMonths: 0,
+    ...(e ?? {}),
+  } as unknown as EmployeeDetails;
+}
+
 /** Server-synced fields applied over a (possibly existing) local draft. */
 function syncedFields(r: RemoteDraft, local?: Draft) {
   return {
     mode: r.mode as Mode,
     letterType: r.letterType as LetterTypeId,
     context: r.context as unknown as LetterContext,
-    employer: (r.employer ?? local?.employer ?? {}) as unknown as EmployerDetails,
-    employee: (r.employee ?? local?.employee ?? {}) as unknown as EmployeeDetails,
-    answers: (r.answers ?? {}) as unknown as LetterAnswers,
+    // Null server party/answers blobs fall back to the local copy (a draft
+    // first synced while empty stores null), then to schema-valid defaults —
+    // never erasing populated local data.
+    employer: withEmployerDefaults(r.employer ?? (local?.employer as Record<string, unknown> | undefined)),
+    employee: withEmployeeDefaults(r.employee ?? (local?.employee as Record<string, unknown> | undefined)),
+    answers: (r.answers ?? local?.answers ?? {}) as unknown as LetterAnswers,
     sections: mergeSections(r.sections, local),
     title: r.title ?? undefined,
     matterId: r.matterId ?? undefined,
@@ -132,13 +171,17 @@ export function mergeRemoteDrafts(
   for (const r of remote) {
     const existing = localByServerId.get(r.id);
     if (existing) {
-      // Local edit strictly newer than server → keep local untouched.
-      if (existing.updatedAt > r.updatedAt) continue;
+      // Keep local on newer-OR-EQUAL timestamp: a strict > would let a
+      // same-millisecond server copy clobber an unsynced local edit.
+      if (existing.updatedAt >= r.updatedAt) continue;
       // Overlay synced fields; SPREAD local first so local-only fields survive.
+      // createdAt is an immutable creation fact — never let the server row's
+      // (sync-time) createdAt overwrite the true local one.
       merged[existing.id] = {
         ...existing,
         ...syncedFields(r, existing),
         id: existing.id,
+        createdAt: existing.createdAt,
       } as Draft;
     } else {
       // Remote-only — adopt it under the server UUID as the local id.

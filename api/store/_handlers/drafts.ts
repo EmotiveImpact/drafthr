@@ -12,7 +12,7 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, lte, inArray } from "drizzle-orm";
+import { and, eq, lte, inArray, desc } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -69,10 +69,17 @@ export async function GET(req: Request): Promise<Response> {
 
   try {
     const db = getDb();
+    // Bound the response: return the most-recently-updated drafts up to a cap
+    // so one large tenant can't produce a multi-hundred-MB payload that OOMs /
+    // times out the function. A delta pull (updatedAt > since) is the future
+    // optimization; this cap is the safety net.
+    const MAX_DRAFTS = 1000;
     const draftRows = await db
       .select()
       .from(drafts)
-      .where(eq(drafts.tenantId, tenantId));
+      .where(eq(drafts.tenantId, tenantId))
+      .orderBy(desc(drafts.updatedAt))
+      .limit(MAX_DRAFTS);
 
     const ids = draftRows.map((d) => d.id);
     const sectionRows = ids.length
