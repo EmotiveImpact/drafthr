@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import { useProfileStore } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
@@ -51,6 +51,7 @@ import { MyBookings } from "@/routes/MyBookings";
 import { ConsultantAdminReview } from "@/routes/ConsultantAdminReview";
 import { SharedDraftReview } from "@/routes/SharedDraftReview";
 import { Layout } from "@/components/Layout";
+import { NotFound } from "@/routes/NotFound";
 import { Protected } from "@/lib/auth/Protected";
 import { Skeleton } from "@/components/ui/skeleton";
 // Lazy — react-joyride is a one-time first-run tour; keep it out of the main
@@ -307,7 +308,7 @@ export function App() {
             </Protected>
           }
         />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
         </motion.div>
