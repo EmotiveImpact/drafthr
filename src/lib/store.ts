@@ -1852,14 +1852,24 @@ function stripMark(
   if (idx < 0) return sections;
   const target = sections[idx];
   if (!target.html) return sections;
-  const escaped = commentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(
-    `<mark[^>]*data-comment-id="${escaped}"[^>]*>([\\s\\S]*?)</mark>`,
-    "g"
-  );
-  const next = target.html.replace(re, "$1");
-  if (next === target.html) return sections;
+  // Unwrap via the DOM, not a regex. CommentMark has `excludes: ""`, so two
+  // comments on overlapping/nested ranges render as nested <mark> elements; a
+  // non-greedy `([\s\S]*?)</mark>` regex stops at the FIRST </mark> and
+  // mis-pairs the tags, dragging trailing text into a surviving comment's
+  // highlight. Matching the attribute on a parsed tree pairs tags correctly.
+  const root = document.createElement("div");
+  root.innerHTML = target.html;
+  let changed = false;
+  root.querySelectorAll("mark[data-comment-id]").forEach((el) => {
+    if (el.getAttribute("data-comment-id") !== commentId) return;
+    const parent = el.parentNode;
+    if (!parent) return;
+    while (el.firstChild) parent.insertBefore(el.firstChild, el);
+    parent.removeChild(el);
+    changed = true;
+  });
+  if (!changed) return sections; // no match → leave HTML untouched (no reserialize)
   const updated = [...sections];
-  updated[idx] = { ...target, html: next };
+  updated[idx] = { ...target, html: root.innerHTML };
   return updated;
 }
