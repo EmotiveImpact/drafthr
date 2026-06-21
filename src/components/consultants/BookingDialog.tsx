@@ -135,17 +135,25 @@ export function BookingDialog({
                 "{consultant.specialty}"
               </div>
 
-              {/* Cost summary */}
-              <div className="flex items-center gap-3 px-3 py-2.5 rounded-[8px] bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[12px]">
-                <span className="font-semibold text-[var(--ds-ink)] text-[16px]">
-                  {(consultant.currency ?? "£")}{consultant.price}
-                </span>
-                <span className="text-[var(--ds-muted)]">·</span>
-                <span className="text-[var(--ds-muted)]">
-                  Expected response in{" "}
-                  <strong className="text-[var(--ds-ink)] font-semibold">
-                    {consultant.sla}
-                  </strong>
+              {/* Rate summary. This is the specialist's RATE, not an in-app
+               * charge — DraftHR doesn't process the payment, so we don't
+               * dress the booking up as a checkout. */}
+              <div className="flex flex-col gap-1 px-3 py-2.5 rounded-[8px] bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[12px]">
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-[var(--ds-ink)] text-[16px]">
+                    {(consultant.currency ?? "£")}{consultant.price}
+                  </span>
+                  <span className="text-[var(--ds-muted)]">·</span>
+                  <span className="text-[var(--ds-muted)]">
+                    Expected response in{" "}
+                    <strong className="text-[var(--ds-ink)] font-semibold">
+                      {consultant.sla}
+                    </strong>
+                  </span>
+                </div>
+                <span className="text-[11px] text-[var(--ds-muted)] leading-snug">
+                  This is the specialist's rate. You won't be charged here —
+                  this sends a request and you arrange the fee with them directly.
                 </span>
               </div>
 
@@ -180,7 +188,7 @@ export function BookingDialog({
                 onClick={handleConfirm}
                 className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:-translate-y-px hover:shadow-md text-[13px] font-semibold"
               >
-                Confirm booking · {(consultant.currency ?? "£")}{consultant.price}
+                Send booking request
               </Button>
             </DialogFooter>
           </>
