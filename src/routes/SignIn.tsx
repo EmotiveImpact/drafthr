@@ -6,6 +6,7 @@ import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
 import { AuthFooter, AuthSecurityNote } from "@/routes/sign-in/AuthShell";
 import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
+import { CheckYourEmail } from "@/routes/SignUp";
 
 /**
  * /sign-in — the in-app, DraftHR-branded sign-in page.
@@ -45,6 +46,13 @@ export function SignIn() {
     null | "password" | "google" | "microsoft" | "linkedin"
   >(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when sign-in succeeds on credentials but the email isn't verified yet
+  // (WorkOS email_verification_required). Carries the pending token so the
+  // code-entry screen can finish via Flow B instead of dead-ending the user.
+  const [pendingVerify, setPendingVerify] = useState<{
+    email: string;
+    token: string;
+  } | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
   // Where to go after a successful sign-in. Validated to be same-origin
@@ -95,9 +103,27 @@ export function SignIn() {
             "If you're on production, please report this — it shouldn't happen.",
         );
       }
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        status?: string;
+        pendingAuthenticationToken?: string;
+      };
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
+      }
+      // Credentials were correct but the inbox isn't verified yet — hand off to
+      // the code-entry screen (Flow B) rather than treating it as a failure.
+      if (
+        data.status === "email_verification_required" &&
+        data.pendingAuthenticationToken
+      ) {
+        setPendingVerify({
+          email: email.trim(),
+          token: data.pendingAuthenticationToken,
+        });
+        setSubmitting(null);
+        return;
       }
       await refresh({ force: true });
       navigate(redirectTo, { replace: true });
@@ -147,6 +173,20 @@ export function SignIn() {
   };
 
   const isBusy = submitting !== null;
+
+  // Unverified-account hand-off: same 6-digit code UI as sign-up, but finishing
+  // via the pending-authentication token (Flow B) so the user lands signed in.
+  if (pendingVerify) {
+    return (
+      <CheckYourEmail
+        email={pendingVerify.email}
+        userId={null}
+        pendingAuthenticationToken={pendingVerify.token}
+        heading="Confirm your email to continue."
+        blurb="Your email isn't verified yet."
+      />
+    );
+  }
 
   return (
     <AuthSplitShell>

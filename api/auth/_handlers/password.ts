@@ -108,10 +108,48 @@ export async function POST(req: Request): Promise<Response> {
       headers,
     });
   } catch (err) {
+    // Sign-in-while-unverified: WorkOS throws an AuthenticationException with
+    // code "email_verification_required" and a single-use pending token. The
+    // credentials were CORRECT — the inbox just isn't confirmed yet. Surface
+    // the token (not an error) so the client can collect the emailed code and
+    // finish via /api/auth/verify-email (Flow B). Without this branch the user
+    // is told "incorrect password" forever with no way out.
+    const pendingToken = pendingVerificationToken(err);
+    if (pendingToken) {
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          status: "email_verification_required",
+          pendingAuthenticationToken: pendingToken,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        },
+      );
+    }
+
     // Don't echo WorkOS's raw error — it can leak whether an email exists
     // (e.g. "user not found" vs "invalid password"). Collapse the failure
     // case to one message; log the original server-side for triage.
     console.warn("[auth/password] authenticate failed", err);
     return jsonError("Incorrect email or password.", 401);
   }
+}
+
+/** Extract the pending-authentication token from a WorkOS
+ *  email_verification_required exception, or null for any other error. The
+ *  SDK's AuthenticationException carries `.code` + `.pendingAuthenticationToken`
+ *  (mapped from rawData.pending_authentication_token). */
+function pendingVerificationToken(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as {
+    code?: unknown;
+    pendingAuthenticationToken?: unknown;
+    rawData?: { code?: unknown; pending_authentication_token?: unknown };
+  };
+  const code = e.code ?? e.rawData?.code;
+  if (code !== "email_verification_required") return null;
+  const token = e.pendingAuthenticationToken ?? e.rawData?.pending_authentication_token;
+  return typeof token === "string" && token ? token : null;
 }

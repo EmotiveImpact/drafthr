@@ -298,12 +298,21 @@ function PasswordField({
 
 /* ─── "Check your email" screen with 6-digit OTP entry ─────────────────── */
 
-function CheckYourEmail({
+export function CheckYourEmail({
   email,
   userId,
+  pendingAuthenticationToken = null,
+  heading,
+  blurb,
 }: {
   email: string;
   userId: string | null;
+  /** Flow B (sign-in-while-unverified): verify via this token instead of a
+   *  userId. Exactly one of userId / pendingAuthenticationToken is set. */
+  pendingAuthenticationToken?: string | null;
+  /** Optional copy overrides so the sign-in entry point can reword the screen. */
+  heading?: string;
+  blurb?: string;
 }) {
   const navigate = useNavigate();
   const { refresh } = useAuth();
@@ -331,11 +340,11 @@ function CheckYourEmail({
   }, []);
 
   const normalisedCode = code.replace(/\D/g, "").slice(0, 6);
-  // The verified-already branch sends no userId; without it, the
-  // verify-email endpoint will 400 with "Verification context is
-  // missing." Better to disable the form entirely and point the user
-  // at sign-in.
-  const canVerify = !verifying && normalisedCode.length === 6 && !!userId;
+  // Need a verification context — either a userId (Flow A, post-sign-up) or a
+  // pendingAuthenticationToken (Flow B, sign-in-while-unverified). Without
+  // either, /api/auth/verify-email 400s; disable the form and point at sign-in.
+  const hasContext = !!userId || !!pendingAuthenticationToken;
+  const canVerify = !verifying && normalisedCode.length === 6 && hasContext;
 
   const onVerify = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -350,7 +359,11 @@ function CheckYourEmail({
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({ code: normalisedCode, userId }),
+        body: JSON.stringify({
+          code: normalisedCode,
+          userId: userId || undefined,
+          pendingAuthenticationToken: pendingAuthenticationToken || undefined,
+        }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -405,10 +418,13 @@ function CheckYourEmail({
   };
 
   return (
-    <AuthShell eyebrow="Check your email" heading="Verify your email.">
+    <AuthShell eyebrow="Check your email" heading={heading ?? "Verify your email."}>
       <div className="mt-1 flex items-start gap-3 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]/60 p-4">
         <MailCheck className="mt-0.5 size-5 text-[var(--ds-muted)]" aria-hidden />
         <div className="text-[13.5px] leading-relaxed text-[var(--ds-body)]">
+          {blurb ? (
+            <>{blurb} </>
+          ) : null}
           We sent a 6-digit code to{" "}
           <span className="font-semibold text-[var(--ds-ink)]">{displayEmail}</span>. Enter
           it below — the code expires in 10 minutes.

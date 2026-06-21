@@ -109,6 +109,52 @@ describe("POST /api/auth/password", () => {
     }
   });
 
+  it("returns the pending token (200, not 401) when email is unverified", async () => {
+    // WorkOS throws AuthenticationException{ code, pendingAuthenticationToken }
+    // when credentials are correct but the inbox isn't verified. The handler
+    // must surface the token so the client can finish via verify-email (Flow B),
+    // NOT collapse it to "incorrect password" (the old dead end).
+    authenticateWithPassword.mockRejectedValueOnce({
+      name: "AuthenticationException",
+      status: 403,
+      code: "email_verification_required",
+      pendingAuthenticationToken: "pat_test_123",
+    });
+
+    const { POST } = await import("./password.js");
+    const res = await POST(makeRequest({ email: "alice@example.com", password: "real-pw-here" }));
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      ok: boolean;
+      status: string;
+      pendingAuthenticationToken: string;
+    };
+    expect(json.ok).toBe(false);
+    expect(json.status).toBe("email_verification_required");
+    expect(json.pendingAuthenticationToken).toBe("pat_test_123");
+    // No session cookie yet — the user isn't signed in until they verify.
+    expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("also reads the pending token from rawData.pending_authentication_token", async () => {
+    authenticateWithPassword.mockRejectedValueOnce({
+      name: "AuthenticationException",
+      status: 403,
+      rawData: {
+        code: "email_verification_required",
+        pending_authentication_token: "pat_raw_456",
+      },
+    });
+
+    const { POST } = await import("./password.js");
+    const res = await POST(makeRequest({ email: "bob@example.com", password: "real-pw-here" }));
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { pendingAuthenticationToken: string };
+    expect(json.pendingAuthenticationToken).toBe("pat_raw_456");
+  });
+
   it("returns 400 for missing or malformed email", async () => {
     const { POST } = await import("./password.js");
     for (const body of [
