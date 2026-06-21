@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import {
   LetterEditor,
-  FEATURES_FULL,
+  type EditorFeatures,
   type EditorHandle,
   type LetterEditorChange,
 } from "pagedly";
@@ -29,8 +29,74 @@ import type { PagedEditorActions } from "./PagedEditor";
  *
  * comments + inline-AI are OFF: pagedly stores comment spans inside section HTML
  * (comments are app-owned), and the AI adapter is a separate follow-up.
+ *
+ * The toolbar is a curated, letter-appropriate set rather than pagedly's full
+ * ~45-control surface. An HR letter has a fixed format owned by the template /
+ * letterhead, so document-authoring controls (font family/size, colour, tables,
+ * columns, TOC, footnotes, page breaks, code, etc.) are off — they'd clutter the
+ * bar and let a user break the house style. The in-toolbar export/print buttons
+ * are off too: export is deliberately centralised at the /review step, so those
+ * would be a duplicate path. Every flag is spelled out explicitly so the result
+ * is exactly this set regardless of how partial configs merge over defaults.
  */
-const FEATURES = { ...FEATURES_FULL, comments: false, ai: false };
+const FEATURES: EditorFeatures = {
+  // — Inline text formatting a letter actually uses —
+  bold: true,
+  italic: true,
+  underline: true,
+  removeFormat: true,
+  // — Block structure —
+  headings: true,
+  bulletList: true,
+  numberedList: true,
+  alignment: true,
+  link: true,
+  // — Quality-of-life behaviours (little/no toolbar footprint) —
+  find: true,
+  paste: true,
+  wordCount: true,
+  markdownShortcuts: true,
+  smartTypography: true,
+  autoLink: true,
+  slashMenu: true,
+  commandPalette: true,
+  hyphenation: true,
+  widowControl: true,
+  // — Off: not appropriate for a fixed-format HR letter —
+  strikethrough: false,
+  superscript: false,
+  subscript: false,
+  inlineCode: false,
+  fontColor: false,
+  highlight: false,
+  fontFamily: false,
+  fontSize: false,
+  blockquote: false,
+  codeBlock: false,
+  indent: false,
+  lineSpacing: false,
+  footnotes: "off",
+  checklist: false,
+  image: false,
+  table: false,
+  horizontalRule: false,
+  pageBreak: false,
+  outline: false,
+  toc: false,
+  sections: false,
+  columns: false,
+  leaders: false,
+  // — Off: duplicate paths / app-owned —
+  print: false,
+  downloadPdf: false,
+  exportDocx: false,
+  importDocx: false,
+  exportMarkdown: false,
+  importMarkdown: false,
+  trackChanges: false, // app owns the suggestion/diff review surface
+  comments: false, // app-owned (spans would pollute stored section HTML)
+  ai: false, // inline-AI adapter is a separate follow-up
+};
 
 export function PagedlyDocEditor({
   draft,
@@ -95,7 +161,7 @@ export function PagedlyDocEditor({
       readOnly={readOnly}
       toolbar
       toolbarPosition="sticky"
-      toolbarLayout="full"
+      toolbarLayout="compact"
       features={FEATURES}
       showPageNumbers
       pageSize="A4"
