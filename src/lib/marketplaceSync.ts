@@ -72,6 +72,7 @@ function dtoToProfile(dto: ConsultantProfileDTO) {
         payoutsEnabled: false,
       },
     updatedAt: dto.updatedAt ?? Date.now(),
+    status: dto.status,
   };
 }
 

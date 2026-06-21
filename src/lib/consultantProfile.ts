@@ -59,6 +59,11 @@ export type ConsultantProfile = {
   /** When the profile was last saved — used to surface "complete your profile"
    *  empty states on first sign-in. */
   updatedAt: number | null;
+  /** Server-side moderation status. Only "published" profiles appear in the
+   *  marketplace; new sign-ups are "pending_review" until an admin vets them.
+   *  Undefined until the server profile has been pulled. Surfaced as an honest
+   *  banner on the consultant home (don't claim "discoverable" while pending). */
+  status?: "pending_review" | "published" | "paused" | "rejected" | "suspended";
 };
 
 type ConsultantStore = {

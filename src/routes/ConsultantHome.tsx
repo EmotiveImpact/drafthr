@@ -47,6 +47,10 @@ export function ConsultantHome() {
   const profile = useConsultantStore((s) => s.profile);
   const enrolled = useConsultantStore((s) => s.enrolled);
   const complete = isProfileComplete(profile);
+  // Server moderation status — only "published" profiles actually appear in the
+  // marketplace. New sign-ups are "pending_review" until an admin vets them, so
+  // we must not claim the card is "live" / discoverable until it really is.
+  const published = complete && profile?.status === "published";
 
   // Hydrate from the server on mount so a consultant who signed up on
   // device A sees their profile + inbox on device B. Profile pull first
@@ -54,9 +58,15 @@ export function ConsultantHome() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      await pullProfile();
-      if (cancelled) return;
-      await pullInbox();
+      try {
+        await pullProfile();
+        if (cancelled) return;
+        await pullInbox();
+      } catch (err) {
+        // Best-effort hydration — a network failure must not wedge the page;
+        // the local store still drives the UI.
+        if (!cancelled) console.warn("[ConsultantHome] hydrate failed", err);
+      }
     })();
     return () => {
       cancelled = true;
@@ -111,14 +121,20 @@ export function ConsultantHome() {
             </span>
             <div>
               <h2 className="text-[15px] font-semibold text-[var(--ds-ink)]">
-                {complete ? "Your marketplace card is live." : "Finish your marketplace card."}
+                {!complete
+                  ? "Finish your marketplace card."
+                  : published
+                    ? "Your marketplace card is live."
+                    : "Your profile is under review."}
               </h2>
               <p className="mt-1 max-w-[52ch] text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-                {complete
-                  ? "HR teams can find and book you. Edit anytime to change rate, specialties, or bio."
-                  : enrolled
-                    ? "Add your specialties, rate, and a short bio — five minutes and you're discoverable on /consultants."
-                    : "Set up your marketplace card so HR teams can find and book you."}
+                {!complete
+                  ? enrolled
+                    ? "Add your specialties, rate, and a short bio — five minutes and you're ready to submit for review."
+                    : "Set up your marketplace card so HR teams can find and book you."
+                  : published
+                    ? "HR teams can find and book you. Edit anytime to change rate, specialties, or bio."
+                    : "Thanks for completing your profile — our team is reviewing it. You'll be listed in the marketplace once it's approved, usually within one business day."}
               </p>
             </div>
           </div>
@@ -131,7 +147,7 @@ export function ConsultantHome() {
               {complete ? "Edit profile" : "Set up profile"}
               <span aria-hidden>→</span>
             </button>
-            {complete && (
+            {published && (
               <button
                 type="button"
                 onClick={() => nav("/consultants")}
