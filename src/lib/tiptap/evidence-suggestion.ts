@@ -247,11 +247,18 @@ export const EvidenceSuggestion = Extension.create<EvidenceSuggestionOptions>({
       const html = buildInsertHtml(entry.item, allEvidence);
 
       // Delete the slash-query range, then insert the HTML at that spot.
-      // Re-derive positions from the current view state so a mid-flight
-      // re-mapping doesn't corrupt the document.
-      const { from, to } = state;
+      // Re-derive positions from the LIVE plugin state: the `apply` reducer
+      // remaps from/to across every transaction (tr.mapping.map), so the
+      // `state` captured in this command's closure at render time can be
+      // stale if the doc was remapped between render and click (e.g. a
+      // streaming setContent re-sync). Reading the snapshot would delete the
+      // wrong span and insert at the wrong offset, corrupting the document.
+      const live = pluginKey.getState(view.state);
+      const { from, to } = live?.active ? live : state;
       const tr = view.state.tr.delete(from, to);
       view.dispatch(tr);
+      // insertContentAt at `from`: after the delete above, the slash window
+      // collapsed to a single point at `from`, so this is the correct spot.
       extension.editor.chain().focus().insertContentAt(from, html).run();
       close();
     };

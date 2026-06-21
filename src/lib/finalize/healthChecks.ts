@@ -146,8 +146,11 @@ function expectedWordRange(letterType: string): { min: number; max: number } {
   if (letterType.includes("settlement") || letterType.includes("tribunal")) {
     return { min: 400, max: 1200 };
   }
-  if (letterType.includes("resign")) return { min: 80, max: 300 };
+  // Check grievance BEFORE resign: "resignation_with_grievance" contains
+  // both substrings but is substantively a grievance letter (long), so the
+  // resign branch would wrongly cap it at 300 words and warn on every draft.
   if (letterType.includes("grievance")) return { min: 200, max: 800 };
+  if (letterType.includes("resign")) return { min: 80, max: 300 };
   return { min: 200, max: 700 };
 }
 
