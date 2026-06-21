@@ -213,6 +213,17 @@ export function AIPanel({
     [draft.id]
   );
 
+  // useChat constructs its internal Chat once per `id` (agent-${draft.id}) and
+  // captures the transport at construction — a transport rebuilt mid-draft is
+  // NOT adopted. So the transport must have a stable identity and read live
+  // values at send time via refs; otherwise every request ships the mount-time
+  // letter snapshot (stale section list/recipient) and mount-time model, even
+  // after the user edits the draft or changes the model in Settings.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const modelRef = useRef(profile.defaults.qwenModel);
+  modelRef.current = profile.defaults.qwenModel;
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -225,13 +236,13 @@ export function AIPanel({
             // the user ignored a proposal, the cleanest thing to do is
             // drop it so the agent moves on.
             messages: stripPendingToolCalls(messages),
-            system: buildAgentSystemPrompt(draft),
-            model: profile.defaults.qwenModel,
+            system: buildAgentSystemPrompt(draftRef.current),
+            model: modelRef.current,
             ...(body ?? {}),
           },
         }),
       }),
-    [draft, profile.defaults.qwenModel]
+    []
   );
 
   const {
