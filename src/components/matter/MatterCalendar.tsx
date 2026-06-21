@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { CalendarDays, Plus, Trash2 } from "lucide-react";
 import type { EventKind, MatterEvent } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { formatDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +30,10 @@ function formatEventWhen(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const hasTime = iso.includes("T") || iso.includes(":");
   if (!hasTime) {
-    return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+    // Bare "YYYY-MM-DD" parses as UTC midnight via new Date(), so
+    // toLocaleDateString renders the prior day west of UTC. Use the
+    // local-parse helper which constructs the date from local components.
+    return formatDateOnly(iso, { day: "2-digit", month: "short" });
   }
   return `${d.toLocaleDateString(undefined, {
     day: "2-digit",

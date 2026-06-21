@@ -182,18 +182,27 @@ export function Activity() {
     () => [...eventsByDay.keys()].sort((a, b) => (a < b ? 1 : -1)),
     [eventsByDay],
   );
+  // recentDays is newest-first. "Prev" navigates to an OLDER day, "Next" to a
+  // NEWER day. selectedDay may not be in recentDays — the calendar popover lets
+  // the user pick any day, including ones with zero activity — so resolve the
+  // neighbours by date rather than assuming an in-list index (a -1 index made
+  // "Previous" jump to the newest day and disabled "Next").
   const idxInRecent = recentDays.indexOf(selectedDay);
-  const canPrev = idxInRecent >= 0 ? idxInRecent < recentDays.length - 1 : recentDays.length > 0;
-  const canNext = idxInRecent > 0;
+  const olderDay =
+    idxInRecent >= 0
+      ? recentDays[idxInRecent + 1]
+      : recentDays.find((d) => d < selectedDay);
+  const newerDay =
+    idxInRecent >= 0
+      ? recentDays[idxInRecent - 1]
+      : [...recentDays].reverse().find((d) => d > selectedDay);
+  const canPrev = !!olderDay;
+  const canNext = !!newerDay;
   const goPrev = () => {
-    if (idxInRecent === -1 && recentDays.length > 0) {
-      setSelectedDay(recentDays[0]);
-      return;
-    }
-    if (canPrev) setSelectedDay(recentDays[idxInRecent + 1]);
+    if (olderDay) setSelectedDay(olderDay);
   };
   const goNext = () => {
-    if (canNext) setSelectedDay(recentDays[idxInRecent - 1]);
+    if (newerDay) setSelectedDay(newerDay);
   };
 
   const toggleExpanded = (draftId: string) => {

@@ -210,7 +210,14 @@ export function ConsultantsIndex() {
   }
 
   function handleBooked(booking: Booking) {
-    const c = ALL_CONSULTANTS.find((x) => x.initials === booking.consultantInitials);
+    // Match on the stable profileId when available (initials are neither
+    // unique nor stable — see bookings.ts), mirroring MyBookings/bookings.ts.
+    // Falling back to initials only when a profileId isn't present.
+    const c = ALL_CONSULTANTS.find((x) =>
+      booking.consultantProfileId && x.profileId
+        ? x.profileId === booking.consultantProfileId
+        : x.initials === booking.consultantInitials,
+    );
     toast.success(
       `Booking confirmed — ${c?.name ?? "specialist"} will review your letter within ${c?.sla ?? "24h"}.`,
     );
