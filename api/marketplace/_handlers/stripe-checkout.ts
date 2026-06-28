@@ -61,6 +61,20 @@ export async function POST(req: Request): Promise<Response> {
       return jsonError("Booking has no specialist attached", 412);
     }
 
+    // Idempotency / double-charge guard: never start a second checkout for a
+    // booking that's already paid. Without this, a retried redirect or a
+    // double-click creates a second Stripe session and charges the card twice
+    // (the onConflictDoUpdate below would point the row at the new session
+    // while leaving status "paid", silently losing the first payment intent).
+    const [existingPayment] = await db
+      .select({ status: bookingPayments.status })
+      .from(bookingPayments)
+      .where(eq(bookingPayments.bookingId, booking.id))
+      .limit(1);
+    if (existingPayment?.status === "paid") {
+      return jsonError("This booking is already paid", 409);
+    }
+
     const [acct] = await db
       .select()
       .from(stripeConnectAccounts)

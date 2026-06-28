@@ -325,19 +325,23 @@ function parseDataUrl(url: string): { mime: string; bytes: Uint8Array } | null {
  * the href always points at the file that actually exists (correct extension,
  * sanitised chars, 80-char truncation).
  */
-function evidenceFileName(item: EvidenceItem, idx: number): string {
+export function evidenceFileName(item: EvidenceItem, idx: number): string {
   const padded = String(idx + 1).padStart(2, "0");
   if (item.fileDataUrl) {
     const parsed = parseDataUrl(item.fileDataUrl);
     const mime = parsed?.mime ?? item.mimeType ?? "";
     const ext = (mime ? extFromMime(mime) : null) || extFromFilename(item.filename);
     const safeName = sanitizeFilename(item.filename || `${item.kind}.${ext || "bin"}`);
-    const name = ext && !safeName.endsWith(`.${ext}`) ? `${safeName}.${ext}` : safeName;
+    // `ext` is always lowercase but `safeName` preserves the filename's case, so
+    // the "already has this extension?" check must be case-insensitive —
+    // otherwise "Photo.PNG" becomes "Photo.PNG.png" (doubled extension).
+    const name =
+      ext && !safeName.toLowerCase().endsWith(`.${ext}`) ? `${safeName}.${ext}` : safeName;
     return `${padded}-${name}`;
   }
   // Note-only item → .txt
   const safeName = sanitizeFilename(item.filename || `${item.kind}-${padded}.txt`);
-  return `${padded}-${safeName.endsWith(".txt") ? safeName : `${safeName}.txt`}`;
+  return `${padded}-${safeName.toLowerCase().endsWith(".txt") ? safeName : `${safeName}.txt`}`;
 }
 
 function extFromMime(mime: string): string | null {
