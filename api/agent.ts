@@ -171,7 +171,15 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("messages[] required", 400);
   }
 
-  const modelMessages: ModelMessage[] = await convertToModelMessages(body.messages);
+  // convertToModelMessages throws on malformed UIMessage parts (unmatched tool
+  // results, unknown part types). body.messages is untrusted, so guard the
+  // conversion and return a 400 instead of an unhandled 500.
+  let modelMessages: ModelMessage[];
+  try {
+    modelMessages = await convertToModelMessages(body.messages);
+  } catch {
+    return jsonError("Invalid messages payload", 400);
+  }
 
   const system =
     typeof body.system === "string" && body.system.length > 0

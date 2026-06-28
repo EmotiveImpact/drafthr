@@ -147,9 +147,17 @@ export async function POST(req: Request): Promise<Response> {
     boundDraftId = ownedDraft.id;
   }
 
-  const expected = body.expectedDeliveryAt
-    ? new Date(body.expectedDeliveryAt)
-    : new Date(Date.now() + parseSlaMs(profile.sla));
+  let expected: Date;
+  if (body.expectedDeliveryAt) {
+    expected = new Date(body.expectedDeliveryAt);
+    // A malformed caller-supplied value yields an Invalid Date, which Drizzle's
+    // pg driver throws on (toISOString) → an unhandled 500. Reject it cleanly.
+    if (Number.isNaN(expected.getTime())) {
+      return jsonError("Invalid expectedDeliveryAt", 400);
+    }
+  } else {
+    expected = new Date(Date.now() + parseSlaMs(profile.sla));
+  }
 
   const [row] = await db
     .insert(consultantBookings)

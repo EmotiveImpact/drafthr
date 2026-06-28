@@ -154,7 +154,12 @@ function dtoToBooking(
     acceptedAt: dto.acceptedAt ?? undefined,
     deliveredAt: dto.deliveredAt ?? undefined,
     completedAt: dto.completedAt ?? undefined,
-    expectedDeliveryAt: dto.expectedDeliveryAt ?? Date.now() + 24 * 60 * 60 * 1000,
+    // Like the consultant display fields below, the respond/create/message
+    // DTOs don't carry expectedDeliveryAt (only the list-join does). Fall back
+    // to the prior local row so a state transition doesn't silently reset the
+    // SLA deadline to "now + 24h" and make an overdue booking look on-time.
+    expectedDeliveryAt:
+      dto.expectedDeliveryAt ?? prior?.expectedDeliveryAt ?? Date.now() + 24 * 60 * 60 * 1000,
     status: dto.status as BookingStatus,
     shareToken: dto.shareToken ?? undefined,
     shareTokenExpiresAt: dto.shareTokenExpiresAt ?? undefined,

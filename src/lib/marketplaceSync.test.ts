@@ -109,6 +109,33 @@ describe("pushBookingRespond — preserves consultant display fields", () => {
     expect(row.consultantRole).toBe("Employment Solicitor");
   });
 
+  it("preserves the prior expectedDeliveryAt when the respond DTO omits it (no SLA reset)", async () => {
+    // Real respond DTOs do NOT carry expectedDeliveryAt — only the list-join
+    // does. The fallback must keep the prior deadline (2_000), not fabricate a
+    // fresh "now + 24h" that would make an overdue booking look on-time.
+    respondMock.mockResolvedValue({
+      ok: true,
+      data: {
+        booking: {
+          id: "bk_1",
+          consultantProfileId: "prof_1",
+          draftId: null,
+          status: "accepted",
+          acceptedAt: 3_000,
+          bookedAt: 1_000,
+          messages: [],
+          // expectedDeliveryAt ABSENT
+        },
+      },
+    });
+
+    await pushBookingRespond("bk_1", "accept");
+
+    const row = useBookingsStore.getState().bookings.find((b) => b.id === "bk_1")!;
+    expect(row.status).toBe("accepted");
+    expect(row.expectedDeliveryAt).toBe(2_000);
+  });
+
   it("soft-fails (leaves the row untouched) when the server errors", async () => {
     respondMock.mockResolvedValue({ ok: false, error: "boom", status: 500 });
     await pushBookingRespond("bk_1", "complete", { rating: 4 });

@@ -1847,16 +1847,23 @@ function truncateTimelineText(text: string, max = 120): string {
   return `${compact.slice(0, max - 1).trim()}…`;
 }
 
-function monthsBetween(isoDate?: string): number {
+// Exported for unit testing (the day-of-month boundary gates statutory
+// service thresholds, so it's worth proving directly).
+export function monthsBetween(isoDate?: string): number {
   if (!isoDate) return 0;
   const start = parseDateOnly(isoDate);
   const now = new Date();
   if (!start) return 0;
-  return Math.max(
-    0,
+  // Count COMPLETED months of service, not calendar-month boundaries crossed.
+  // If today's day-of-month is before the start day, the current month hasn't
+  // completed yet — otherwise we'd credit a full month the instant the month
+  // number ticks over, pushing employees over statutory thresholds (e.g. the
+  // 2-year redundancy-pay line) up to ~a month early.
+  let months =
     (now.getFullYear() - start.getFullYear()) * 12 +
-      (now.getMonth() - start.getMonth())
-  );
+    (now.getMonth() - start.getMonth());
+  if (now.getDate() < start.getDate()) months -= 1;
+  return Math.max(0, months);
 }
 
 function computeProtectedDeadline(
