@@ -368,14 +368,16 @@ export function filenameFor(draft: Draft): string {
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
   if (!isSafeImageRef(url)) return "";
-  return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${url}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
+  // isSafeImageRef only checks the scheme (https/data); an https URL can still
+  // carry attribute-breaking chars (`"`, `>`), so escape before interpolating.
+  return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${escapeHtml(url)}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
 }
 
 /** Render the signature image (if any) inline. */
 function signatureHtml(draft: Draft): string {
   const url = draft.employer.signatureDataUrl;
   if (!isSafeImageRef(url)) return "";
-  return `<div style="margin:8px 0 4px 0;"><img src="${url}" style="max-height:60px;display:inline-block;" alt="" /></div>`;
+  return `<div style="margin:8px 0 4px 0;"><img src="${escapeHtml(url)}" style="max-height:60px;display:inline-block;" alt="" /></div>`;
 }
 
 /**

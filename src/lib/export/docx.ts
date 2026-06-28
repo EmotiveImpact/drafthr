@@ -849,13 +849,15 @@ function escapeXmlAttr(s: string): string {
 function letterheadHtml(draft: Draft): string {
   const url = draft.employer.letterheadDataUrl;
   if (!isSafeImageRef(url)) return "";
-  return `<div style="text-align:center;margin-bottom:18pt;"><img src="${url}" style="max-width:100%;max-height:120px;" /></div>`;
+  // isSafeImageRef only validates the scheme; escape so a crafted https URL
+  // with `"`/`>` can't break out of the src attribute.
+  return `<div style="text-align:center;margin-bottom:18pt;"><img src="${escapeHtmlD(url)}" style="max-width:100%;max-height:120px;" /></div>`;
 }
 
 function signatureHtml(draft: Draft): string {
   const url = draft.employer.signatureDataUrl;
   if (!isSafeImageRef(url)) return "";
-  return `<div style="margin:6pt 0;"><img src="${url}" style="max-height:54px;" /></div>`;
+  return `<div style="margin:6pt 0;"><img src="${escapeHtmlD(url)}" style="max-height:54px;" /></div>`;
 }
 
 function injectSignatureIntoSignatureSection(
