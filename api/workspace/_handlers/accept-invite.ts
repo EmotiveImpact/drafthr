@@ -108,14 +108,19 @@ export async function POST(req: Request): Promise<Response> {
         // status gate (session-with-tenant / switch) would lock out a user
         // who just accepted a valid admin re-invite. Apply the invite's role
         // too: a re-invite grants the role the inviter chose now, not a stale
-        // prior one.
+        // prior one — EXCEPT we never DEMOTE an existing owner. An admin can
+        // mint a low-role invite for an owner's email (invite.ts only blocks
+        // minting OWNER invites), and this path bypasses the dedicated role
+        // endpoint's owner + last-owner guards, so demoting here could strip
+        // the workspace's sole owner. Owners keep owner.
+        const reactivatedRole = existing.role === "owner" ? "owner" : invite.role;
         await tx
           .update(tenantMembers)
           .set({
             isActiveTenant: true,
             status: "active",
             deprovisionedAt: null,
-            role: invite.role,
+            role: reactivatedRole,
           })
           .where(
             and(

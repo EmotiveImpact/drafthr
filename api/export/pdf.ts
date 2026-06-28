@@ -25,6 +25,7 @@ import { appendAuditEvent } from "../../src/db/audit.js";
 import { getDb } from "../../src/db/index.js";
 import { drafts } from "../../src/db/schema.js";
 import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
+import { toServerUuid } from "../../src/lib/remote-ids.js";
 
 export const config = {
   runtime: "nodejs",
@@ -111,11 +112,15 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("filename must be a string", 400);
   }
 
-  const draftId = typeof body.draftId === "string" ? body.draftId.trim() : "";
+  // The client sends the LOCAL draft id (e.g. "draft_abc_123"); drafts are
+  // mirrored to Postgres under the toServerUuid() bridge (see dual-write.ts),
+  // so the raw id never matches the uuid column. Map it first. Per the
+  // ExportRequest contract, draftId is best-effort audit metadata and must
+  // NEVER block the PDF response — so we only use draftExists to gate the
+  // audit write below, not to 404.
+  const rawDraftId = typeof body.draftId === "string" ? body.draftId.trim() : "";
+  const draftId = rawDraftId ? toServerUuid(rawDraftId) : "";
   const draftExists = draftId ? await draftBelongsToTenant(draftId, tenantId) : false;
-  if (!draftExists) {
-    return jsonError("draft not found in active tenant", 404);
-  }
 
   const packUrl = process.env.CHROMIUM_PACK_URL ?? DEFAULT_PACK_URL;
 
@@ -172,21 +177,25 @@ export async function POST(req: Request): Promise<Response> {
     const tsr = await requestTsr(sha256);
     const tsrParsed = tsr ? parseTsr(tsr) : null;
 
-    // Best-effort audit write. The export must not fail if Postgres is down,
-    // so we swallow every error and log for backfill.
-    await tryAppendExportAudit(
-      req,
-      body,
-      {
-        tenantId,
-        draftId,
-        actorUserId,
-      },
-      pdfBytes,
-      sha256,
-      tsr,
-      tsrParsed,
-    ).catch(() => {});
+    // Best-effort audit write — only when the draft resolves to one in this
+    // tenant (a bogus/foreign draftId still renders, but writes no audit row
+    // pointing at a draft we don't own). The export must not fail if Postgres
+    // is down, so we swallow every error and log for backfill.
+    if (draftExists) {
+      await tryAppendExportAudit(
+        req,
+        body,
+        {
+          tenantId,
+          draftId,
+          actorUserId,
+        },
+        pdfBytes,
+        sha256,
+        tsr,
+        tsrParsed,
+      ).catch(() => {});
+    }
 
     const filename = safePdfFilename(body.filename);
     // Audit-aware clients can read these headers and persist the TSR

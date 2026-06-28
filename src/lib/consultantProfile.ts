@@ -139,6 +139,9 @@ export const useConsultantStore = create<ConsultantStore>()(
           photoUrl: existing?.photoUrl ?? "",
           availability: existing?.availability ?? "this_week",
           payout: existing?.payout ?? { stripeAccountId: null, payoutsEnabled: false },
+          // Server-owned moderation status — a local edit must not wipe it,
+          // otherwise on a failed push the card reverts to "not published".
+          status: existing?.status,
           ...patch,
           updatedAt: Date.now(),
         };
