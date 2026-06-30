@@ -40,6 +40,135 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-06-28 — automated daily bug-fix sweep (5 rounds, 11 fixed)
+
+Multi-agent sweep over `src/`, `server/`, `api/`, committed directly to `main`
+(4 commits). Baseline was fully green (`tsc -b` clean · **500 tests** · `vite
+build` OK), so this was a latent-bug hunt, not a gate-failure cleanup. Ran 5
+rounds (find → adversarial-verify → fix-with-test); **stopped early** when round
+5 returned zero findings. Bug counts per round: 4 → 4 → 2 → 1 → 0. Final gate:
+`tsc -b` clean · **515 tests** (+19) · `vite build` OK. Every commit pushed
+green. Commits: `e062bc8` (R1), `bd7e4e1` (R2), `0bd3130` (R3), `ad2ff9b` (R4).
+
+### 🟠 HIGH (security) — letterhead/signature image URL → attribute-breakout XSS in PDF/DOCX export
+`src/lib/export/pdf.ts` (letterhead/signature) and `src/lib/export/docx.ts`
+interpolated the employer letterhead/signature image URL straight into an
+`<img src="...">` attribute with **no escaping**. `isSafeImageRef()` only
+validates the URL *scheme* (`https`/`data`) via `new URL()`, which happily
+parses a value like `https://x/"><img src=x onerror=alert(document.domain)>` —
+so a crafted https URL breaks out of the `src` attribute and injects an
+`onerror` handler. On the **client-side PDF fallback** this HTML is assigned via
+`innerHTML` in a same-origin, non-sandboxed iframe → DOM XSS in the app origin
+whenever the victim exports. Every sibling renderer (`sourceHtml.ts`,
+`pack.ts`) already escapes this exact value; only these four lines were missed.
+**Fix:** escape with the file-local `escapeHtml`/`escapeHtmlD` (both escape
+`& < > "`) before interpolation. TDD: `pdf.letterhead-xss.test.ts` (+1) asserts
+`letterBodyHtml()` entity-escapes the attribute-breaking chars. *(R4)*
+
+### 🟠 HIGH — Stripe double-charge: no already-paid guard on checkout
+`api/marketplace/_handlers/stripe-checkout.ts` never read `bookingPayments.status`
+before creating a Checkout session, so a retried redirect / double-click on an
+already-paid booking created a **second** Stripe session and charged the card
+again — and the `onConflictDoUpdate` then repointed the row at the new session
+while leaving `status:"paid"`, silently losing the first payment intent.
+**Fix:** read the payment row after the IDOR check; refuse with **409** when
+already paid. *(Payments are currently off until keys + migration 0012 ship, so
+this is a latent fix on the not-yet-live path.)* Evaluated and intentionally
+NOT changed: the webhook's `bookingId`-keyed update — duplicate/late deliveries
+of the same `checkout.session.completed` write identical values (idempotent),
+and with this guard a booking never has two live sessions; scoping the update
+to `session.id` would instead risk orphaning a legitimately-paid session. *(R3)*
+
+### 🟠 HIGH (integrity) — invite acceptance could demote the workspace's sole owner
+`api/workspace/_handlers/accept-invite.ts` re-activation path set
+`role: invite.role` unconditionally. An **admin** can mint a low-role invite for
+an existing owner's email (`invite.ts` only blocks minting *owner* invites via
+`canManageOwners`), and this path bypasses the dedicated `member/role` endpoint's
+owner + last-owner guards — so an owner who accepts such a re-invite is silently
+demoted, potentially stripping the workspace's only owner. **Fix:** never demote
+an existing owner here — `reactivatedRole = existing.role === "owner" ? "owner"
+: invite.role`. Strictly protective; the email-match gate means the victim must
+accept, so this is integrity-hardening, not a direct takeover. *(R2)*
+
+### 🟠 HIGH (feature-dead) — server-side PDF export never worked in production
+`api/export/pdf.ts` 404'd every real export. The client sends the **local**
+draft id (e.g. `draft_abc_123`), but drafts are mirrored to Postgres under the
+`toServerUuid()` bridge (`dual-write.ts`) into a `uuid` column — so the raw id
+never matched and `draftBelongsToTenant()` returned false → 404 → silent
+fallback to the lower-fidelity client `html2pdf`, losing the Puppeteer render,
+the RFC-3161 TSA timestamp, and the `draft.exported` audit. **Fix:** map the id
+through `toServerUuid` (same pattern as `matters.ts`), and honor the documented
+"`draftId` never blocks the PDF response" contract by gating only the **audit
+write** on `draftExists` rather than 404-ing. *(R2)*
+
+### 🟡 MEDIUM (legal-correctness) — `monthsBetween` over-counted service by ignoring day-of-month
+`monthsBetween` (`src/lib/store.ts`) counted calendar-month *boundaries crossed*
+(`(yA-yB)*12 + (mA-mB)`), not *completed* months — crediting a full month the
+instant the month number ticked over. `serviceMonths` feeds the system prompt
+and gates UK statutory thresholds (the `uk_redundancy_pay` rule keys on ≥2
+years), so an employee crossed the 2-year qualifying line up to ~a month early —
+a real eligibility error. Example: start `2022-12-15`, evaluated `2024-12-01` →
+returned **24**, correct is **23** (anniversary is two weeks later). **Fix:**
+subtract a month when `now.getDate() < start.getDate()`. Exported for testing.
+TDD: `store.monthsBetween.test.ts` (+6, fake-timers). *(R1)*
+
+### 🟡 MEDIUM — booking SLA deadline silently reset to "now + 24h" on every transition
+`dtoToBooking` (`src/lib/marketplaceSync.ts`) fell back
+`expectedDeliveryAt ?? Date.now() + 24h` with no `prior` fallback. The
+respond/create/message DTOs don't carry `expectedDeliveryAt` (only the list-join
+does), and `pushBookingRespond`/`pushBookingMessage` pass the prior local row —
+so every accept/deliver/complete/chat **fabricated a fresh deadline**, making an
+overdue booking look on-time. Every sibling display field immediately below it
+already fell back to `prior?.…`; this one was missed. **Fix:**
+`dto.expectedDeliveryAt ?? prior?.expectedDeliveryAt ?? <default>`. TDD:
+`marketplaceSync.test.ts` (+1) — the existing "complete+rate" test masked this
+by including `expectedDeliveryAt` in its DTO; the new test omits it. *(R1)*
+
+### 🟡 MEDIUM — `saveProfile` dropped the server-owned consultant `status` on every edit
+`useConsultantStore.saveProfile` (`src/lib/consultantProfile.ts`) rebuilt the
+profile from a fixed field list plus `...patch` (which never carries `status`),
+so every local edit set `status: undefined`. On a failed push the marketplace
+card reverted to "not published" (`ConsultantHome` keys on `status ===
+"published"`). **Fix:** carry `status: existing?.status` through the merge. TDD:
+`consultantProfile.status.test.ts` (+2). *(R2)*
+
+### 🟡 MEDIUM — two crash-on-bad-input handlers (500 where 400 is right)
+- **`api/marketplace/_handlers/list-and-create.ts`** — a malformed caller
+  `expectedDeliveryAt` produced an Invalid Date passed straight into the Drizzle
+  insert; the pg driver's `toISOString()` throws `RangeError` → unhandled 500.
+  **Fix:** validate `Number.isNaN(getTime())` → clean **400**. *(R1)*
+- **`api/agent.ts`** — `convertToModelMessages(body.messages)` (untrusted, only
+  array-checked) throws on malformed UIMessage parts *before* `streamText`, so
+  the SDK `onError` doesn't cover it → unhandled 500. **Fix:** wrap in try/catch
+  → **400** (mirrors how `/api/draft` already guards). *(R1)*
+
+### 🟢 LOW — doubled file extension on uppercase/mixed-case evidence filenames
+`evidenceFileName` (`src/lib/export/pack.ts`) checked
+`safeName.endsWith(\`.${ext}\`)` case-sensitively, but `ext` is always lowercased
+while `safeName` preserves the original case — so `"Photo.PNG"` became
+`"Photo.PNG.png"` in the evidence ZIP (same for the note-only `.txt` branch).
+**Fix:** compare case-insensitively (`safeName.toLowerCase().endsWith(…)`).
+Exported the helper. TDD: `pack.evidenceFileName.test.ts` (+5). *(R3)*
+
+### Evaluated and intentionally NOT changed (verified correct-by-design)
+- **`evidence.figureLabelFor`** — positional figure numbering is intentional and
+  locked by an existing test (custom "Fig 7" on figure A keeps figure B at
+  "Fig 2", not renumbered to 1).
+- **`session-epoch.ts` `!==` staleness check** — correct: a single primary Neon
+  pool means no replica lag, so the "cookie newer than DB" branch is unreachable;
+  switching to `<` would *weaken* it against a forged high-epoch cookie.
+- **`stripe-webhook` `bookingId`-keyed update** — idempotent (see HIGH note above).
+
+### Verified clean (no reportable bug)
+React hooks/components (effect deps, cleanup, list keys, controlled inputs all
+sound — codebase is saturated with prior-bug guards), `server/` + both LLM
+streaming endpoints (single close/end per path, no double-send), `sanitize.ts` /
+`safe-data-url.ts` (the URL laxness only mattered at the unescaped output sinks,
+fixed above), mailmerge, tiptap editor commands, wizard/onboarding, and the
+`reports/`/`finalize/` predicate layer.
+
+---
+
 ## 2026-06-10 — security board (6 specialists + adversarial verification)
 
 Full multi-disciplinary security sweep: Security Engineer · System Architect ·

@@ -2,6 +2,48 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.19.2 — 2026-06-28
+
+**Automated bug-fix sweep (5 rounds, 11 fixes).** A multi-agent latent-bug hunt
+over `src/`, `server/`, and `api/` — baseline was already green, so these are
+correctness/security fixes, not a build cleanup. See
+`docs/internal/BUGS_AND_FIXES.md` for per-finding detail. Highlights:
+
+- **Export XSS (HIGH).** Letterhead/signature image URLs were interpolated raw
+  into `<img src="…">` in the PDF and DOCX exporters. `isSafeImageRef` only
+  checks the URL *scheme*, so a crafted `https://…"><img onerror=…>` broke out
+  of the attribute and executed on the client-side PDF fallback (rendered via
+  `innerHTML` in a same-origin iframe). Now escaped at all four sinks.
+- **Stripe double-charge (HIGH).** Checkout never checked whether a booking was
+  already paid, so a retried redirect could charge the card twice. Now refused
+  with a 409. *(Payments remain off until keys + migration 0012.)*
+- **Invite owner-demotion (HIGH).** An admin could mint a low-role invite for an
+  owner's email; accepting it bypassed the owner / last-owner guards and could
+  strip the workspace's only owner. Owners are no longer demoted on re-invite.
+- **Server PDF export was dead in production (HIGH).** The client sent the local
+  draft id while drafts are mirrored under the `toServerUuid` bridge, so every
+  export 404'd and silently fell back to the lower-fidelity client renderer
+  (losing the Puppeteer render, RFC-3161 timestamp, and export audit). Fixed the
+  id mapping; the audit write — not the response — is what's gated now.
+- **Statutory service miscount (MEDIUM).** `monthsBetween` counted calendar
+  boundaries, not completed months, so employees crossed the UK 2-year
+  redundancy line up to a month early. Now day-of-month aware.
+- Plus: booking SLA deadlines no longer reset on every transition; the consultant
+  profile `status` is no longer wiped on edit; two handlers that 500'd on
+  malformed input now return a clean 400; and uppercase evidence-file extensions
+  are no longer doubled in the export ZIP. **19 new tests**; `tsc -b` + `vite
+  build` + `vitest` all green at every commit.
+
+**Also landed since 0.19.1** (see the activation runbooks under `docs/` for the
+owner-gated features): Stripe Connect marketplace **payments** (built, off until
+keys are set); **collaboration-data sync** for comments / timeline / approvals
+(needs migration `0011` + flag); a **cross-device draft read path** (non-
+destructive pull + merge); the **pagedly** on-page editor replacing the
+home-grown one; a coherent **3-role switcher** (employer / employee / consultant)
+with server-hydrated workspace roles; a cross-tenant **IDOR fix** on booking
+creation (verify draft ownership); per-route document titles; and a real 404
+page. Several smaller editor/date/docx correctness fixes are in the git log.
+
 ## 0.19.1 — 2026-06-10
 
 **Server-side session revocation (SE-03).** Sign-out previously only cleared the
