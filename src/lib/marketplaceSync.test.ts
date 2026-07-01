@@ -144,3 +144,34 @@ describe("pushBookingRespond — preserves consultant display fields", () => {
     expect(row.consultantName).toBe("Jane Smith");
   });
 });
+
+describe("pushBookingRespond — return value signals success (round 19)", () => {
+  beforeEach(() => {
+    respondMock.mockReset();
+    useBookingsStore.setState({ bookings: [seedBooking()] });
+  });
+
+  it("returns true on an ok response", async () => {
+    respondMock.mockResolvedValue({
+      ok: true,
+      data: {
+        booking: {
+          id: "bk_1",
+          consultantProfileId: "prof_1",
+          draftId: null,
+          status: "completed",
+          rating: 5,
+          bookedAt: 1_000,
+          expectedDeliveryAt: 2_000,
+          messages: [],
+        },
+      },
+    });
+    await expect(pushBookingRespond("bk_1", "complete", { rating: 5 })).resolves.toBe(true);
+  });
+
+  it("returns false on a not-ok response so the caller can roll back optimistic UI", async () => {
+    respondMock.mockResolvedValue({ ok: false, error: "boom", status: 500 });
+    await expect(pushBookingRespond("bk_1", "complete", { rating: 5 })).resolves.toBe(false);
+  });
+});

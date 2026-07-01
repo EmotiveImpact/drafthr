@@ -241,12 +241,17 @@ function BookingRow({
   const [hoverRating, setHoverRating] = useState(0);
   const [submitted, setSubmitted] = useState(booking.status === "completed");
 
-  const submit = () => {
+  const submit = async () => {
     if (rating === 0) return;
     complete(booking.id, rating);
-    // Dual-write: mirror the complete + rating to the server.
-    void pushBookingRespond(booking.id, "complete", { rating });
     setSubmitted(true);
+    // Dual-write: mirror the complete + rating to the server. On failure
+    // pushBookingRespond already toasts + re-pulls (reverting the store booking
+    // to "delivered"), so roll the optimistic `submitted` flag back too —
+    // otherwise the rating widget stays permanently hidden and the user can't
+    // retry without navigating away.
+    const ok = await pushBookingRespond(booking.id, "complete", { rating });
+    if (!ok) setSubmitted(false);
   };
 
   // Prefer the server-joined display fields (reliable cross-device), then

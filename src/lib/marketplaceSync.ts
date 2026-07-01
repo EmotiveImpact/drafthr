@@ -298,7 +298,7 @@ export async function pushBookingRespond(
   bookingId: string,
   action: "accept" | "decline" | "deliver" | "complete",
   opts?: { note?: string; rating?: number },
-): Promise<void> {
+): Promise<boolean> {
   const res = await respondToBooking(bookingId, action, opts);
   if (!res.ok) {
     // Don't silently leave the optimistic local row ahead of the server
@@ -312,7 +312,7 @@ export async function pushBookingRespond(
     );
     void pullInbox();
     void pullMyBookings();
-    return;
+    return false;
   }
   const state = useBookingsStore.getState();
   const local = state.bookings.find((b) => b.id === bookingId);
@@ -325,4 +325,5 @@ export async function pushBookingRespond(
   useBookingsStore.setState({
     bookings: state.bookings.map((b) => (b.id === bookingId ? merged : b)),
   });
+  return true;
 }
