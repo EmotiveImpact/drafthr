@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (42 fixed — running)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (44 fixed — running)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -52,15 +52,16 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
 
-**Running gate:** `tsc -b` clean · **556 tests** (+41) · `vite build` OK. **15
-rounds, 42 real bugs fixed**, every commit pushed green. Commits through R14:
-`53a1183`·`13dbee6`·`6e120de`·`23a1f7a`·`07e59d4`·`43db7d2`·`9de6b8e`·`f99939d`·
-`6fb0c92`·`60dc0d3`·`b54e407`·`8f2c8ed`·`0d7907b`·`cdb1604`; R15 `93f82c9`.
-Per-round landable: 2·3·3·6·3·5·6·2·2·1·2·1·3·1·2. After R14's drained-class
-confirmation, the loop was re-fired to hunt genuinely UNDER-EXAMINED surfaces
-(server/ proxy, keyboard/focus, config, byte/geometry math) rather than re-run
-empty class lanes — which kept finding real one-offs (R15: a dev-server crash +
-a Cmd+K interruption). **Stopped on convergence:** R14's class-drain and
+**Running gate:** `tsc -b` clean · **560 tests** (+45) · `vite build` OK. **16
+rounds, 44 real bugs fixed**, every commit pushed green. R15 `93f82c9`, R16
+`7d6fead` (earlier commits R1–R14 listed in git log). Per-round landable:
+2·3·3·6·3·5·6·2·2·1·2·1·3·1·2·2. After R14's drained-class confirmation, the loop
+was re-fired to hunt genuinely UNDER-EXAMINED surfaces rather than re-run empty
+class lanes — which kept finding real one-offs (R15: dev-server crash + Cmd+K
+hijack; R16: version-history cross-draft state + relativeTime rounding). *(The
+original R14 "convergence" note below refers to the systematic bug CLASSES,
+which remain drained; the later rounds mine the long tail of one-off bugs on
+fresh surfaces.)* R14's class-drain and
 drain-confirmation lanes returned EMPTY — the systematic bug classes
 (unstable-identity reseed · missing-`showIf`/jurisdiction · 0-row atomic-write ·
 weak image/URL validators · date-only comparisons) are confirmed drained; its
@@ -117,6 +118,24 @@ composer (the `FloatingCommentPanel` / `CommentPopover` textareas) or any form
 `<input>` stole focus mid-sentence. **Fix:** skip when an `<input>`/`<textarea>`
 is focused (the rich-text editor keeps the shortcut as its primary opener). TDD:
 `SearchPalette.test.tsx` (+3). *(R15)*
+
+### 🟠 HIGH — version-history dialog carried stale section state across drafts
+`Editor.tsx` keeps one instance across draft navigation (`key="editor"`), but
+`historySection` wasn't reset on draft change. Opening a section's version
+history in draft A, switching to draft B, then clicking Restore called
+`updateSection(draftB.id, sectionA.id, …)` — a no-op, or a cross-draft
+corruption if a section id collides. **Fix:** a `[draftId]` effect that clears
+`historySection` on draft switch, matching the two existing draftId-reset
+effects. *(R16)*
+
+### 🟡 MEDIUM — `relativeTime` rounded elapsed time into the wrong bucket
+`relativeTime` (`src/components/consultants/ConsultantInbox.tsx`) used
+`Math.round`, so a 45-second-old booking showed "1 min ago" instead of "just
+now", and 90 min showed "2h ago" (the `mins < 1` guard could only fire under 30s
+instead of 60s). **Fix:** `Math.floor` for mins/hours/days (the elapsed-time
+convention already used by `CustomTemplateCard`); exported the pure helper. TDD:
+`ConsultantInbox.relativeTime.test.ts` (+4). No other `Math.round` time-bucketing
+exists (scanned). *(R16)*
 
 ### 🟡 MEDIUM — three more whitespace-only-base64 image validators (class drain)
 An exhaustive validator-consistency sweep found three siblings of the R9
