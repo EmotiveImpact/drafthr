@@ -136,7 +136,12 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
     try {
       await p;
     } finally {
-      inflight.current = null;
+      // Only clear if we're still the current in-flight promise. A later
+      // force:true caller may have overwritten inflight.current with its own
+      // promise; clearing unconditionally would drop that reference and let a
+      // concurrent non-forced caller start a duplicate /session fetch instead
+      // of coalescing onto the still-running forced one.
+      if (inflight.current === p) inflight.current = null;
     }
   }, []);
 

@@ -534,7 +534,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
             { value: "yes", label: "Yes — disclose the impairment" },
           ],
         },
-        { id: "impairment", type: "text", label: "Impairment to disclose (only if you chose 'yes')", showIf: (a) => a.discloseDiagnosis === "yes" },
+        { id: "impairment", type: "text", label: "Impairment to disclose", required: true, showIf: (a) => a.discloseDiagnosis === "yes" },
         {
           id: "barriersAndAdjustments",
           type: "repeater",

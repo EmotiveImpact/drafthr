@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isQuestionAnswered, type Question } from "./questions";
+import { isQuestionAnswered, letterStepsFor, type Question } from "./questions";
 
 /* ============================================================================
  * isQuestionAnswered — the wizard's required-field gate.
@@ -71,6 +71,24 @@ describe("isQuestionAnswered — repeater (the bug)", () => {
 
   it("is unanswered when the value is not an array at all", () => {
     expect(isQuestionAnswered(findingsRepeater, undefined)).toBe(false);
+  });
+
+  it("gates the accommodation_request impairment field once disclosure is chosen", () => {
+    // Regression: the impairment field is shown when the user opts to disclose,
+    // and must be `required` so the wizard blocks a blank submission (otherwise
+    // an unfilled impairment leaks into the generated letter).
+    const steps = letterStepsFor("accommodation_request");
+    const impairment = steps
+      .flatMap((s) => s.questions)
+      .find((q) => q.id === "impairment");
+    expect(impairment).toBeDefined();
+    expect(impairment!.required).toBe(true);
+    // Only surfaces when the user chose to disclose.
+    expect(impairment!.showIf?.({ discloseDiagnosis: "yes" })).toBe(true);
+    expect(impairment!.showIf?.({ discloseDiagnosis: "no" })).toBe(false);
+    // And when visible + required, a blank value is unanswered.
+    expect(isQuestionAnswered(impairment!, "")).toBe(false);
+    expect(isQuestionAnswered(impairment!, "Chronic migraine")).toBe(true);
   });
 
   it("with no required sub-fields, still rejects an array of bare {} items", () => {

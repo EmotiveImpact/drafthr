@@ -28,4 +28,13 @@ describe("compliance rules", () => {
     expect(appeal).toBeDefined();
     expect(ruleMatches(appeal!, "You have the right of appeal against this dismissal.")).toBe(true);
   });
+
+  it("COBRA rule matches case-insensitively (not just uppercase)", () => {
+    const cobra = rulesFor("termination", "US").find((r) => r.id === "us_termination_cobra")!;
+    expect(cobra).toBeDefined();
+    expect(ruleMatches(cobra, "You may elect COBRA continuation coverage.")).toBe(true);
+    // The bug: a lowercase / mixed-case reference must still satisfy the rule.
+    expect(ruleMatches(cobra, "You may elect Cobra continuation coverage.")).toBe(true);
+    expect(ruleMatches(cobra, "continuation coverage under cobra is available.")).toBe(true);
+  });
 });
