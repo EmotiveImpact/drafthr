@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (39 fixed — running)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (40 fixed — SWEEP COMPLETE)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -52,19 +52,21 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
 
-**Running gate:** `tsc -b` clean · **553 tests** (+38) · `vite build` OK. **13
-rounds, 39 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
+**Final gate:** `tsc -b` clean · **553 tests** (+38) · `vite build` OK. **14
+rounds, 40 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
 `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5), `43db7d2` (R6),
 `9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9), `60dc0d3` (R10), `b54e407` (R11),
-`8f2c8ed` (R12), `0d7907b` (R13). Per-round landable: 2·3·3·6·3·5·6·2·2·1·2·1·3
-(R13's tick-up was an exhaustive validator-consistency sweep draining the
-whitespace-only-base64 class). The R11
-self-audit **confirmed none of the 33 prior fixes introduced a regression**; R12
-(re-fired loop) found that the R11 sanitiser-href fix had two SIBLINGS —
-`Markdown.tsx` (fixed below) and the `member/role|remove` last-owner race
-(flagged to the user; see below). Two items handed to the user as separate tasks:
-`pay_dispute {{deadlineDays}}` (content decision) and the last-owner TOCTOU
-(needs transactional row-locking + a live-DB integration test).
+`8f2c8ed` (R12), `0d7907b` (R13), `cdb1604` (R14). Per-round landable:
+2·3·3·6·3·5·6·2·2·1·2·1·3·1. **Stopped on convergence:** R14's class-drain and
+drain-confirmation lanes returned EMPTY — the systematic bug classes
+(unstable-identity reseed · missing-`showIf`/jurisdiction · 0-row atomic-write ·
+weak image/URL validators · date-only comparisons) are confirmed drained; its
+only finding was a one-off completeness-critic robustness item (the draft-stream
+abort guard). The R11 self-audit **confirmed none of the prior fixes introduced a
+regression**. Two items handed to the user as separate tasks:
+`pay_dispute {{deadlineDays}}` (content decision) and the last-owner TOCTOU in
+`member/role|remove` (needs transactional row-locking + a live-DB integration
+test — not safely auto-fixable without a Postgres to verify concurrency).
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -80,6 +82,19 @@ it: `[x](//evil.com)` in an AI reply rendered a live attacker-controlled link.
 **Fix:** exported the authoritative `isSafeLinkHref` and used it in the harden
 pass; tightened `ALLOWED_URI_REGEXP` to `\/(?!\/)` (single slash yes, `//` no).
 TDD: `Markdown.test.tsx` (+3). *(R12)*
+
+### 🟢 LOW (robustness) — draft SSE stream threw on client abort
+`api/draft.ts` builds its SSE `ReadableStream` by hand and called
+`controller.enqueue` unguarded. When a client aborts mid-generation (stop /
+navigate away — common), the consumer cancels the stream and closes the
+controller; the still-running `streamText` loop then enqueued into a closed
+controller → `TypeError: Invalid state: Controller is already closed`, the catch
+block double-threw, and the trailing `[DONE]`/`close` threw too. (Node v22
+absorbs these silently — no crash — but error logging and a clean close were
+skipped on every abort.) **Fix:** a `cancelled` flag set by the stream's
+`cancel()` handler; `writeEvent` no-ops when cancelled and try/wraps the enqueue;
+the final `[DONE]`/`close` is guarded. `api/agent.ts` is unaffected (it uses the
+SDK's `toUIMessageStreamResponse`). *(R14)*
 
 ### 🟡 MEDIUM — three more whitespace-only-base64 image validators (class drain)
 An exhaustive validator-consistency sweep found three siblings of the R9
