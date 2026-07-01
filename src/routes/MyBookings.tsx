@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
@@ -48,9 +48,20 @@ export function MyBookings() {
   // before the fetched bookings pop in. We render a skeleton during this
   // window instead of the empty state.
   const [hydrating, setHydrating] = useState(true);
+  // A failed hydrate must not masquerade as "No bookings yet" on a fresh device
+  // — track it so we can show an error + retry instead of a false empty state.
+  const [loadFailed, setLoadFailed] = useState(false);
   // Whether the marketplace operator has Stripe configured — gates the "Pay"
   // affordance so it only appears when payments are actually available.
   const [paymentsOn, setPaymentsOn] = useState(false);
+
+  const hydrate = useCallback(async () => {
+    setHydrating(true);
+    setLoadFailed(false);
+    const ok = await pullMyBookings();
+    setHydrating(false);
+    if (!ok) setLoadFailed(true);
+  }, []);
 
   // Hydrate the HR-side bookings list from the server on mount so a
   // booking placed on device A shows up on device B.
@@ -59,13 +70,11 @@ export function MyBookings() {
     void getStripeConnectStatus().then((r) => {
       if (!cancelled && r.ok) setPaymentsOn(r.data.configured);
     });
-    void pullMyBookings().finally(() => {
-      if (!cancelled) setHydrating(false);
-    });
+    void hydrate();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hydrate]);
   const myProfile = useConsultantStore((s) => s.profile);
   const myCard =
     myProfile && isProfileComplete(myProfile)
@@ -128,20 +137,31 @@ export function MyBookings() {
           Back
         </button>
         <h1 className="text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          No bookings yet.
+          {loadFailed ? "Couldn't load your bookings." : "No bookings yet."}
         </h1>
         <p className="mt-3 max-w-[60ch] text-[14.5px] leading-relaxed text-[var(--ds-body)]">
-          Once you've booked a consultant for a review, every request and its
-          status lands here.
+          {loadFailed
+            ? "Something went wrong fetching your bookings — this doesn't mean they're gone. Check your connection and try again."
+            : "Once you've booked a consultant for a review, every request and its status lands here."}
         </p>
         <div className="mt-6 flex gap-2">
-          <a
-            href="/consultants"
-            className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-          >
-            Browse marketplace
-            <Sparkles className="size-3.5" aria-hidden />
-          </a>
+          {loadFailed ? (
+            <button
+              type="button"
+              onClick={() => void hydrate()}
+              className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
+            >
+              Try again
+            </button>
+          ) : (
+            <a
+              href="/consultants"
+              className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
+            >
+              Browse marketplace
+              <Sparkles className="size-3.5" aria-hidden />
+            </a>
+          )}
         </div>
       </div>
     );
@@ -234,6 +254,15 @@ function BookingRow({
     toast.error(r.error || "Couldn't start checkout");
     setPaying(false);
   };
+  // If the user hits Back from Stripe, the page is restored from the bfcache
+  // with paying=true and the button stuck on "Starting…". Reset it on restore.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPaying(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
   const complete = useBookingsStore((s) => s.completeBooking);
   const [rating, setRating] = useState(booking.rating ?? 0);
   // Hover preview is separate from the committed rating, so mousing over

@@ -538,15 +538,61 @@ function Field({
 function PayoutConnect({ enabledFromProfile }: { enabledFromProfile: boolean }) {
   const [status, setStatus] = useState<StripeConnectStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    void getStripeConnectStatus().then((r) => {
-      if (!cancelled && r.ok) setStatus(r.data);
-    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const params = new URLSearchParams(window.location.search);
+    const returning = params.get("stripe") === "return";
+    if (returning) setVerifying(true);
+
+    const clearParam = () => {
+      params.delete("stripe");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (qs ? `?${qs}` : ""),
+      );
+    };
+
+    const poll = async (attemptsLeft: number) => {
+      const r = await getStripeConnectStatus();
+      if (cancelled) return;
+      if (r.ok) {
+        setStatus(r.data);
+        // Returning from Connect onboarding, the account.updated webhook that
+        // flips payouts_enabled usually lands AFTER this redirect — a single
+        // fetch would show the stale "Connect Stripe" state as if onboarding
+        // failed. Re-poll briefly until it flips on.
+        if (returning && !r.data.payoutsEnabled && attemptsLeft > 0) {
+          timer = setTimeout(() => void poll(attemptsLeft - 1), 1500);
+          return;
+        }
+      }
+      if (returning) {
+        setVerifying(false);
+        clearParam(); // don't re-trigger polling on a manual refresh
+      }
+    };
+
+    void poll(returning ? 6 : 0);
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
+  }, []);
+
+  // Reset the spinner if the user returns via the browser back/forward cache:
+  // bfcache restores the JS heap with busy=true after the redirect to Stripe,
+  // otherwise leaving the button stuck on "Starting…" with no way to retry.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setBusy(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
   }, []);
 
   const connect = async () => {
@@ -581,6 +627,11 @@ function PayoutConnect({ enabledFromProfile }: { enabledFromProfile: boolean }) 
             <p className="mt-1 inline-flex items-center gap-1.5 text-[12px] leading-relaxed text-[var(--ds-green-fg)]">
               <CheckCircle2 className="size-3.5" aria-hidden />
               Connected — you can receive payouts. Manage details in Stripe.
+            </p>
+          ) : verifying ? (
+            <p className="mt-1 inline-flex items-center gap-1.5 text-[12px] leading-relaxed text-[var(--ds-body)]">
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              Finishing Stripe setup — this can take a few seconds…
             </p>
           ) : (
             <>
