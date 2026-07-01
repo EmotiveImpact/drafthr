@@ -190,7 +190,14 @@ function MatterCard({
     () => draftsInMatter(drafts, matter.id),
     [drafts, matter.id]
   );
-  const lastActivity = matterDrafts[matterDrafts.length - 1];
+  // The card labels this "Last:" and renders its `updatedAt`, so it must be the
+  // most-recently-*updated* draft — not the one created last. (draftsInMatter
+  // sorts by createdAt ascending, which other callers rely on, so don't reorder
+  // it here.)
+  const lastActivity = matterDrafts.reduce<Draft | undefined>(
+    (a, b) => (b.updatedAt > (a?.updatedAt ?? -Infinity) ? b : a),
+    undefined
+  );
 
   const daysToDeadline = matter.deadlineISO
     ? daysUntilDateOnly(matter.deadlineISO)

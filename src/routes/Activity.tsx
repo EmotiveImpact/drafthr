@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge, Box, Flex, Text } from "@radix-ui/themes";
 import {
@@ -127,8 +127,16 @@ export function Activity() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // Auto-follow the newest day (e.g. as drafts hydrate, or a new event arrives)
+  // only while the user is still sitting on the previously-newest day. If they
+  // have scrubbed back to an older day, an incoming event must not yank them
+  // back to the top.
+  const prevMostRecentDay = useRef(mostRecentDay);
   useEffect(() => {
-    setSelectedDay(mostRecentDay);
+    setSelectedDay((current) =>
+      current === prevMostRecentDay.current ? mostRecentDay : current
+    );
+    prevMostRecentDay.current = mostRecentDay;
   }, [mostRecentDay]);
 
   /* Day-filtered + category-filtered events. */

@@ -5,7 +5,7 @@ import {
   letterStepsFor,
   type QuestionStep,
 } from "@/lib/letters/questions";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import { LETTER_CATALOG } from "@/lib/letters/catalog";
 import type { LetterTypeId, Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import {
@@ -27,7 +27,13 @@ import { Triage } from "@/components/wizard/Triage";
 export function Wizard({ mode }: { mode: Mode }) {
   const { letterType } = useParams<{ letterType: LetterTypeId }>();
   const nav = useNavigate();
-  const meta = useMemo(() => getLetterMeta(letterType as LetterTypeId), [letterType]);
+  // `letterType` comes straight from the URL, so it may not match any known
+  // letter. Look up defensively (getLetterMeta throws on a miss) and render a
+  // graceful not-found below instead of crashing the whole app.
+  const meta = useMemo(
+    () => LETTER_CATALOG.find((l) => l.id === (letterType as LetterTypeId)),
+    [letterType]
+  );
   const createDraft = useDraftStore((s) => s.createDraft);
 
   const profile = useProfileStore((s) => s.profile);
@@ -37,8 +43,8 @@ export function Wizard({ mode }: { mode: Mode }) {
   const patchDefaults = useProfileStore((s) => s.patchDefaults);
 
   const steps: QuestionStep[] = useMemo(
-    () => [...universalStepsFor(mode), ...letterStepsFor(meta.id)],
-    [mode, meta.id]
+    () => [...universalStepsFor(mode), ...(meta ? letterStepsFor(meta.id) : [])],
+    [mode, meta]
   );
 
   // Initial answers seeded from profile (snapshot taken once on mount).
@@ -57,6 +63,7 @@ export function Wizard({ mode }: { mode: Mode }) {
   // The user can skip; we don't block.
   const triageApplies =
     mode === "employee" &&
+    !!meta &&
     (meta.riskClass === "high" || Boolean(meta.tribunalBound));
   const [triageDone, setTriageDone] = useState(!triageApplies);
 
@@ -70,6 +77,21 @@ export function Wizard({ mode }: { mode: Mode }) {
     // We deliberately don't depend on `answers` — only on the profile changing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.autoFill]);
+
+  if (!meta) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">Letter type not found</h1>
+        <p className="text-sm text-muted-foreground mt-2 mb-6">
+          We couldn't find a letter template for this URL. It may have been
+          renamed or removed.
+        </p>
+        <Button onClick={() => nav(mode === "employer" ? "/hr" : "/me")}>
+          Back to letters
+        </Button>
+      </div>
+    );
+  }
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
