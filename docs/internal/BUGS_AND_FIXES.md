@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (35 fixed — SWEEP COMPLETE)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (36 fixed — running)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -52,22 +52,43 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
 
-**Final gate:** `tsc -b` clean · **550 tests** (+35) · `vite build` OK. **11
-rounds, 35 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
+**Running gate:** `tsc -b` clean · **553 tests** (+38) · `vite build` OK. **12
+rounds, 36 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
 `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5), `43db7d2` (R6),
-`9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9), `60dc0d3` (R10), `b54e407` (R11).
-**Stopped on convergence:** per-round landable counts ran
-2·3·3·6·3·5·6·2·2·1·2 — the tail rounds (exhaustive class audit, broad confirming
-sweep, completeness-critic, then a self-audit of all prior fixes) yielded only
-latent/defensive/sibling fixes with high rejection rates. The R11 self-audit
-**confirmed none of the 33 prior fixes introduced a regression**, and found one
-missed sibling (matters.ts 0-row race) + one defense-in-depth gap
-(sanitize href hook). One item (`pay_dispute {{deadlineDays}}`) was handed to the
-user as a separate task (a content decision, not a mechanical fix).
+`9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9), `60dc0d3` (R10), `b54e407` (R11),
+`8f2c8ed` (R12). Per-round landable counts: 2·3·3·6·3·5·6·2·2·1·2·1. The R11
+self-audit **confirmed none of the 33 prior fixes introduced a regression**; R12
+(re-fired loop) found that the R11 sanitiser-href fix had two SIBLINGS —
+`Markdown.tsx` (fixed below) and the `member/role|remove` last-owner race
+(flagged to the user; see below). Two items handed to the user as separate tasks:
+`pay_dispute {{deadlineDays}}` (content decision) and the last-owner TOCTOU
+(needs transactional row-locking + a live-DB integration test).
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
 in-progress edits.** Three independent instances were found and fixed.
+
+### 🟠 HIGH (security) — protocol-relative link bypass in the AI-chat Markdown renderer
+`Markdown.tsx` (renders untrusted AI-chat replies) used a raw `DOMPurify.sanitize`
+with its OWN `ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#)/i` **and** a
+`hardenMarkdownLinks` pass with the same weak regex — both accept protocol-
+relative `//evil.com` (the `\/` alternative). Unlike the letter sanitiser, this
+path never runs `registerSanitizeHooks` (fixed R11), so nothing downstream caught
+it: `[x](//evil.com)` in an AI reply rendered a live attacker-controlled link.
+**Fix:** exported the authoritative `isSafeLinkHref` and used it in the harden
+pass; tightened `ALLOWED_URI_REGEXP` to `\/(?!\/)` (single slash yes, `//` no).
+TDD: `Markdown.test.tsx` (+3). *(R12)*
+
+### ⚑ FLAGGED (integrity, NOT auto-fixed) — last-owner TOCTOU in member role/remove
+`api/workspace/_handlers/member/role.ts` and `.../member/remove.ts` check the
+active-owner count and then UPDATE/DELETE in a **separate, unguarded** statement.
+Under READ COMMITTED, two owners concurrently demoting/removing each other both
+pass the `owners <= 1` guard and both commit → **zero owners**. (The prior B13
+note added `status='active'` and judged a *single-request* variant unreachable,
+but not this concurrent case.) The correct fix is a `db.transaction` +
+`SELECT … FOR UPDATE` on the owner rows (mirroring `accept-invite.ts`), which
+**cannot be runtime-verified without a live Postgres** — so it was handed to the
+user as a task rather than blind-patched into auth-critical code. *(R12)*
 
 ### 🟡 MEDIUM — matter-update returned success (+ spurious audit) on a 0-row race
 `api/store/_handlers/matters.ts` discarded the UPDATE result; a concurrent DELETE
