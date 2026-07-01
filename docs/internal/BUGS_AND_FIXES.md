@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (17 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (22 fixed so far)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -51,10 +51,10 @@ default-refute verifier, then a final senior human triage that rejected ~half
 the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
-Running gate: `tsc -b` clean · **536 tests** (+21) · `vite build` OK. Commits:
-`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5).
-**This sweep is still running** under the user's `/loop` directive; later rounds
-append below.
+Running gate: `tsc -b` clean · **544 tests** (+29) · `vite build` OK. Commits:
+`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5),
+`43db7d2` (R6). **This sweep is still running** under the user's `/loop`
+directive; later rounds append below.
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -213,6 +213,59 @@ third `/session` fetch instead of coalescing — defeating the anti-stomp guard.
 **Fix:** clear only if we're still the current promise
 (`if (inflight.current === p) inflight.current = null`). Provider-agnostic pure
 coalescing logic; no dedicated test (1-line invariant). *(R5)*
+
+### 🟠 HIGH (systemic) — jurisdiction-tagged wizard questions shown to BOTH jurisdictions
+The `Question.jurisdiction` field was dead metadata — the wizard's visibility
+filter (`Wizard.tsx`) only ever checked `showIf`, never `q.jurisdiction`. So
+**13** `(UK)`/`(US)`-labelled employer questions that carried a jurisdiction
+marker but no `showIf` rendered for every jurisdiction: a US termination showed
+UK "Disciplinary hearing date" + "Appeal officer"; a UK redundancy showed US
+"Severance package"/"Recall rights"; UK KIT days, UK/US immigration fields,
+FLSA, s.401 tax-free element, etc. Wrong-jurisdiction answers then flowed into
+the draft and the LLM prompt. **Fix:** new pure `isQuestionVisible(q, answers)`
+that enforces BOTH the jurisdiction marker and `showIf`; `Wizard` uses it. One
+fix for all 13 (vs. patching `showIf` onto each). TDD:
+`questions.isQuestionAnswered.test.ts` (+5, incl. a US-termination integration
+case). *(R6)*
+
+### 🟠 HIGH — wizard tone/employeeTone never persisted back to the profile
+`profileUpdatesFromAnswers` (`src/lib/profile.ts`) wrote signatory fields but
+neither `defaults.tone` (employer) nor `defaults.employeeTone` (employee), even
+though `prefillsFromProfile` reads both back — so the tone a user picked in the
+wizard silently failed to prefill on their next letter. **Fix:** persist both.
+TDD: `profile.test.ts` (+2, round-trip). *(R6)*
+
+### 🟡 MEDIUM — AI tool-call reported success for a proposal it never applied
+If a section was deleted DURING an AI tool-call's multi-second stream,
+`proposeSectionChange` (`store.ts`) silently no-ops on the missing section, but
+`runSectionRegen` (`AIPanel.tsx`) still returned the stale snapshot and the tool
+reported `ok:true` — the UI showed "Applied" for a proposal that was never set.
+**Fix:** a post-stream live-state guard in `runSectionRegen` throws when the
+section is gone, so the caller's catch reports `ok:false`. *(R6)*
+
+### 🟡 MEDIUM — bulk mail-merge dropped currency columns
+`scalarQuestionsFor` (`src/components/bulk/csv.ts`) omitted `"currency"`, so
+currency fields (baseSalary, newSalary, exGratiaAmount, …) were dropped from the
+sample CSV headers and never mapped in `rowToAnswers` — yet `placeholderKeysFor`
+advertised them as valid `{{...}}` placeholders to the template AI. **Fix:**
+include `currency` in `scalarQuestionsFor`. TDD: `csv.test.ts` (+1). *(R6)*
+
+### 🟢 LOW — custom-template internal fields polluted seeded drafts
+`createDraftFromCustomTemplate` (`store.ts`) spread `tpl.answers` verbatim, so a
+template saved FROM a template-source draft carried the internal
+`_templateName` / `_templateDescription` fields into every ordinary draft seeded
+from it. **Fix:** strip both at seed time. *(R6)*
+
+### Rejected in R6 (verified false-positive / cleanup-not-bug — did NOT land)
+- **`matters/risk.ts` line 75** — `if (piiFails>=1 && complianceFail>=1)` is
+  DEAD code (line 76's `piiFails>=1 || complianceFail>=2` subsumes it); the
+  counters are disjoint dimensions. Zero behavior change to remove → cleanup,
+  not a bug. **Left as-is** (bug-fixes-only).
+- **`MatterCalendar` datetime-local timezone** — the input always emits a full
+  `YYYY-MMDDTHH:MM` (local-parsed), never a bare date, so the claimed
+  UTC-midnight offset can't occur.
+- **CSV camelCase header claim** — mechanism real but the cited field
+  (`probationOutcome`) is a `select`, never emitted as a scalar CSV column.
 
 ### Rejected in R5 (skeptical-verified false positives — did NOT land)
 - **Prompt-"injection" via `evidence.ts` / `system.ts` party fields** — this is
