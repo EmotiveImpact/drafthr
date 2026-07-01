@@ -20,6 +20,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantProfiles } from "../../../src/db/schema.js";
+import { isSafeImageDataUrl } from "../../../src/lib/safe-data-url.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -58,10 +59,6 @@ function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-// Self-contained base64 image data URLs (the current upload path) — no
-// external fetch, safe to render on the public listing.
-const SAFE_DATA_IMAGE_RE = /^data:image\/(png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i;
-
 /**
  * Validate a consultant photoUrl before it lands on the public marketplace
  * card. Returns { ok, value } — value is the sanitised URL or null.
@@ -81,7 +78,9 @@ export function validatePhotoUrl(input: unknown): { ok: true; value: string | nu
   if (typeof input !== "string") return { ok: false };
   const v = input.trim();
   if (v.length > 2_000_000) return { ok: false }; // ~1.5 MB base64 ceiling
-  if (SAFE_DATA_IMAGE_RE.test(v)) return { ok: true, value: v };
+  // Canonical base64-image check (shared with the client + sanitiser) — rejects
+  // whitespace-only payloads the old inline regex accepted.
+  if (isSafeImageDataUrl(v)) return { ok: true, value: v };
   try {
     const u = new URL(v);
     if (u.protocol === "https:") return { ok: true, value: v };

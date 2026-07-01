@@ -35,7 +35,10 @@ const EXT_FOR_MIME: Record<string, string> = {
   "image/gif": "gif",
 };
 // data:image/png;base64,...  — keep the regex pinned to the same mime set above.
-const DATA_URL_RE = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([a-z0-9+/=\s]+)$/i;
+// Require at least one real base64 char so a whitespace-only payload doesn't
+// match (consistent with isSafeImageDataUrl); the later \s+ strip + payload
+// check are defence-in-depth.
+const DATA_URL_RE = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([a-z0-9+/=][a-z0-9+/=\s]*)$/i;
 
 export async function POST(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);

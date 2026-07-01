@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import { isSafeImageDataUrl } from "./safe-data-url";
 
 let hooksRegistered = false;
 function registerSanitizeHooks() {
@@ -13,7 +14,10 @@ function registerSanitizeHooks() {
       data.attrValue
     ) {
       const src = String(data.attrValue);
-      const isImageData = /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,/i.test(src);
+      // Canonical check (shared with the export/profile/upload paths): the old
+      // prefix-only regex accepted `data:image/png;base64,` with an empty or
+      // whitespace-only payload; isSafeImageDataUrl requires real base64.
+      const isImageData = isSafeImageDataUrl(src);
       if (!isImageData) {
         data.keepAttr = false;
         // Drop the whole <img> when src is unsafe — an <img> without src is
