@@ -67,7 +67,12 @@ export function EditDetailsSheet({
   const [employeeAddress, setEmployeeAddress] = useState(draft.employee.address);
   const [employeeStartDate, setEmployeeStartDate] = useState(draft.employee.startDate);
 
-  // Re-sync if a different draft is opened or upstream values change.
+  // Seed the form when the sheet opens (or a different draft is opened). We
+  // deliberately depend on `draft.id`, NOT the whole `draft` object: every
+  // store mutation of this draft (e.g. a streaming regeneration calling
+  // appendToSection on each chunk) produces a new `draft` reference with a
+  // bumped updatedAt, and re-seeding on that would silently wipe the user's
+  // in-progress edits while the sheet is open.
   useEffect(() => {
     if (!open) return;
     setJurisdiction(draft.context.jurisdiction);
@@ -84,7 +89,8 @@ export function EditDetailsSheet({
     setEmployeeJobTitle(draft.employee.jobTitle);
     setEmployeeAddress(draft.employee.address);
     setEmployeeStartDate(draft.employee.startDate);
-  }, [open, draft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draft.id]);
 
   const isEmployer = draft.mode === "employer";
 

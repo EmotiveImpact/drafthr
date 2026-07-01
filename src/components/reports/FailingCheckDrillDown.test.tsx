@@ -168,6 +168,21 @@ describe("HEALTH_CHECKS predicates", () => {
     expect(reason).toMatch(/no approval recorded/);
   });
 
+  it("unapproved-7d honors its \">7d\" label at the 7/8-day boundary", () => {
+    const pred = HEALTH_CHECKS.find((c) => c.id === "unapproved-7d")!.predicate;
+    // Same time-of-day N days ago → exactly N calendar days (matches how the
+    // other cases in this file construct stale drafts).
+    const daysAgo = (n: number) => Date.now() - n * 24 * 60 * 60 * 1000;
+    // Exactly 7 days ago → NOT flagged (label/description say "more than a week").
+    expect(
+      pred(makeDraft({ id: "seven", reviewStatus: "draft", updatedAt: daysAgo(7) }))
+    ).toBeNull();
+    // 8 days ago → flagged.
+    expect(
+      pred(makeDraft({ id: "eight", reviewStatus: "draft", updatedAt: daysAgo(8) }))
+    ).toBeTruthy();
+  });
+
   it("unresolved-placeholders predicate trips a draft with [placeholder] tokens", () => {
     const draft = makeDraft({
       id: "ph",

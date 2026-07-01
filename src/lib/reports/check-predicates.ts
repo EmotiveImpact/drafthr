@@ -82,7 +82,9 @@ function predicateUnapprovedSevenDays(draft: Draft): null | string {
   const wasSent = (draft.exports ?? []).some((e) => e.format === "marked-sent");
   if (wasSent) return null;
   const days = differenceInCalendarDays(new Date(), new Date(draft.updatedAt));
-  if (days < 7) return null;
+  // Label + description both say ">7d" / "more than a week", so a draft edited
+  // exactly 7 calendar days ago must NOT trip — only 8+ days does.
+  if (days <= 7) return null;
   const editedOn = format(new Date(draft.updatedAt), "yyyy-MM-dd");
   return `Last edited ${editedOn}, no approval recorded (${days} days ago)`;
 }

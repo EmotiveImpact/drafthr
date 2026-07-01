@@ -43,6 +43,50 @@ export type Question = {
 /** Type guard for the value stored under a repeater question. */
 export type RepeaterValue = Array<Record<string, unknown>>;
 
+/**
+ * Whether a stored answer satisfies a question's `required` constraint.
+ *
+ * Repeater-aware: `RepeaterField` auto-hydrates a required repeater that has
+ * `defaultItems >= 1` into an array of EMPTY objects (`[{}, {}]`). A naive
+ * `Array.isArray(v) && v.length > 0` gate therefore treats a brand-new,
+ * untouched repeater as "answered", letting the wizard enable "Generate draft"
+ * with completely blank findings/incidents/criteria — a real validation
+ * bypass on tribunal-grade letters. Here a required repeater counts as answered
+ * only when it has at least `max(minItems, 1)` items whose own required
+ * sub-fields are filled (and which carry at least one value).
+ */
+export function isQuestionAnswered(q: Question, value: unknown): boolean {
+  if (q.type === "repeater") {
+    if (!Array.isArray(value)) return false;
+    const fields = q.repeater?.fields ?? [];
+    const needed = Math.max(q.repeater?.minItems ?? 0, 1);
+    const complete = (value as RepeaterValue).filter((item) =>
+      isRepeaterItemComplete(fields, item)
+    );
+    return complete.length >= needed;
+  }
+  // select_multi and other array-valued answers: any non-empty selection.
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== "" && value !== null;
+}
+
+function isRepeaterItemComplete(
+  fields: Question[],
+  item: Record<string, unknown>
+): boolean {
+  const requiredOk = fields
+    .filter((f) => f.required)
+    .every((f) => isQuestionAnswered(f, item[f.id]));
+  // Guard the no-required-sub-fields case: an item must carry at least one
+  // value so a bare `{}` never counts as complete.
+  const hasAnyValue = fields.some((f) => {
+    const v = item[f.id];
+    if (Array.isArray(v)) return v.length > 0;
+    return v !== undefined && v !== "" && v !== null;
+  });
+  return requiredOk && hasAnyValue;
+}
+
 export type QuestionStep = {
   id: string;
   title: string;

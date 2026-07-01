@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   universalStepsFor,
   letterStepsFor,
+  isQuestionAnswered,
   type QuestionStep,
 } from "@/lib/letters/questions";
 import { LETTER_CATALOG } from "@/lib/letters/catalog";
@@ -98,11 +99,7 @@ export function Wizard({ mode }: { mode: Mode }) {
   const visibleQuestions = step.questions.filter((q) => !q.showIf || q.showIf(answers));
   const requiredAnswered = visibleQuestions
     .filter((q) => q.required)
-    .every((q) => {
-      const v = answers[q.id];
-      if (Array.isArray(v)) return v.length > 0;
-      return v !== undefined && v !== "" && v !== null;
-    });
+    .every((q) => isQuestionAnswered(q, answers[q.id]));
 
   const onNext = () => {
     if (isLast) {
