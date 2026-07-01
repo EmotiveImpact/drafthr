@@ -13,9 +13,12 @@ export function isAllowedEmbeddedImageFile(file: File): boolean {
 }
 
 export function isSafeImageDataUrl(value: unknown): value is string {
+  // Require at least one real base64 character in the payload. Whitespace is
+  // tolerated (some encoders wrap long base64), but a whitespace-only payload
+  // like "data:image/png;base64,   " must NOT pass this image-safety gate.
   return (
     typeof value === "string" &&
-    /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(value)
+    /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,\s*[a-z0-9+/=][a-z0-9+/=\s]*$/i.test(value)
   );
 }
 

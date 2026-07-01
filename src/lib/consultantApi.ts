@@ -16,12 +16,17 @@ async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> 
   try {
     const res = await fetch(path, {
       credentials: "same-origin",
+      // Spread `init` BEFORE headers so method/body override the baseline but
+      // the merged headers object always wins. (Previously `...init` came last,
+      // so a caller passing `init.headers` would clobber the merged object and
+      // silently drop Content-Type/Accept. No current caller passes headers —
+      // latent — but this keeps the shared chokepoint correct for future ones.)
+      ...init,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
         ...(init?.headers ?? {}),
       },
-      ...init,
     });
     const ct = res.headers.get("content-type") ?? "";
     const body = ct.includes("application/json") ? await res.json().catch(() => ({})) : {};
