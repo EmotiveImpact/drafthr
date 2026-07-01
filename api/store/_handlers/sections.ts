@@ -14,6 +14,7 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { drafts, sections } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
+import { isValidSectionInput } from "./_section-input.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -43,6 +44,9 @@ export async function POST(req: Request): Promise<Response> {
   const sectionList = Array.isArray(parsed.body.sections) ? parsed.body.sections : null;
   if (!draftId) return jsonError("draftId required", 400);
   if (!sectionList) return jsonError("sections array required", 400);
+  if (!sectionList.every(isValidSectionInput)) {
+    return jsonError("Invalid section in sections array", 400);
+  }
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;

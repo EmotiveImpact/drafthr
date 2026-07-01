@@ -108,8 +108,11 @@ export async function regenerateSectionAsPending(
   source: "regenerate" | "addClause" | "tighten" = "regenerate"
 ): Promise<void> {
   const system = buildSystemPrompt(draft);
-  const priorTitles = draft.sections
-    .slice(0, draft.sections.findIndex((s) => s.id === section.id))
+  // Guard the not-found case: findIndex → -1 would make slice(0, -1) return
+  // ALL sections except the last (a concurrent delete could remove `section`
+  // between lookup and here), feeding the LLM the wrong prior-section context.
+  const sectionIndex = draft.sections.findIndex((s) => s.id === section.id);
+  const priorTitles = (sectionIndex < 0 ? [] : draft.sections.slice(0, sectionIndex))
     .map((s) => s.title);
 
   // Don't blank section.html — keep the current content visible while
@@ -181,8 +184,11 @@ export async function regenerateSection(
   refineInstruction?: string
 ): Promise<void> {
   const system = buildSystemPrompt(draft);
-  const priorTitles = draft.sections
-    .slice(0, draft.sections.findIndex((s) => s.id === section.id))
+  // Guard the not-found case: findIndex → -1 would make slice(0, -1) return
+  // ALL sections except the last (a concurrent delete could remove `section`
+  // between lookup and here), feeding the LLM the wrong prior-section context.
+  const sectionIndex = draft.sections.findIndex((s) => s.id === section.id);
+  const priorTitles = (sectionIndex < 0 ? [] : draft.sections.slice(0, sectionIndex))
     .map((s) => s.title);
 
   store.updateSection(draft.id, section.id, "");

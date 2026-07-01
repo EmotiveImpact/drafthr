@@ -19,6 +19,7 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
+import { isValidSectionInput } from "./_section-input.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -148,6 +149,9 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
   const body = parsed.body;
   if (!body || typeof body.id !== "string" || !body.id) {
     return jsonError("Draft id required", 400);
+  }
+  if (Array.isArray(body.sections) && !body.sections.every(isValidSectionInput)) {
+    return jsonError("Invalid section in sections array", 400);
   }
 
   const auth = guard.auth;

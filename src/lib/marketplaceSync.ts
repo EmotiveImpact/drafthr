@@ -244,12 +244,19 @@ export async function pushBookingCreate(
   localPlaceholderId: string,
   consultantInitials: string,
 ): Promise<void> {
+  // Snapshot the optimistic local row BEFORE the await — it holds the readable
+  // draftId we must preserve as localDraftId so "Open draft" works. A concurrent
+  // pullMyBookings()/pullInbox() during createBooking() can replace the bookings
+  // array and drop the not-yet-server-known placeholder; without this snapshot
+  // the placeholder lookup below would miss and localDraftId would be lost.
+  const placeholderBefore = useBookingsStore
+    .getState()
+    .bookings.find((b) => b.id === localPlaceholderId);
   const res = await createBooking(input);
   if (!res.ok) return; // keep local placeholder
   const state = useBookingsStore.getState();
-  // Capture the optimistic local row BEFORE filtering it out — it holds the
-  // readable draftId we must preserve as localDraftId so "Open draft" works.
-  const placeholder = state.bookings.find((b) => b.id === localPlaceholderId);
+  const placeholder =
+    state.bookings.find((b) => b.id === localPlaceholderId) ?? placeholderBefore;
   const serverBooking = dtoToBooking(res.data.booking, consultantInitials, placeholder);
   useBookingsStore.setState({
     bookings: [

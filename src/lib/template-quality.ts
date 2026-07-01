@@ -100,7 +100,11 @@ function matchesRequirement(sectionText: string, requirement: string): boolean {
   const tokens = requirement
     .replace(/\bMUST\b/gi, "")
     .replace(/\bNOT\b/gi, "")
-    .split(/[^a-zA-Z0-9§.]+/)
+    // Split on periods too — keeping them glued a sentence-final word like
+    // "days." to the token, so `haystack.includes("days.")` never matched the
+    // bare "days" in the section text (a false "not covered"). Legal citations
+    // like "s.95" are <=4 chars and dropped by the length filter anyway.
+    .split(/[^a-zA-Z0-9§]+/)
     .map((token) => token.toLowerCase())
     .filter((token) => token.length > 4 && !COMMON_WORDS.has(token));
 

@@ -85,7 +85,12 @@ export async function POST(req: Request): Promise<Response> {
     .where(eq(consultantBookings.id, booking.id))
     .returning({ messages: consultantBookings.messages });
 
-  const messages = Array.isArray(updated?.messages)
+  // Zero rows means the booking was deleted between the SELECT and this UPDATE
+  // (the message was never persisted). Report it rather than returning 200 with
+  // a stale, fabricated array — mirrors respond.ts's not-found handling.
+  if (!updated) return jsonError("Booking not found", 404);
+
+  const messages = Array.isArray(updated.messages)
     ? (updated.messages as BookingMessage[])
     : [...existing, msg];
 
