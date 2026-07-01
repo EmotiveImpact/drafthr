@@ -25,8 +25,10 @@ function registerSanitizeHooks() {
     }
     if (nodeName === "A" && attrName === "href" && data.attrValue) {
       const href = String(data.attrValue).trim();
-      const isSafeLink = /^(?:https?:|mailto:|tel:|\/|#)/i.test(href);
-      data.keepAttr = isSafeLink;
+      // Use the authoritative check (also used by the harden pass) rather than a
+      // weaker inline regex — the old `|\/|` alternative also matched
+      // protocol-relative `//evil.com`, which isSafeLinkHref correctly rejects.
+      data.keepAttr = isSafeLinkHref(href);
     }
     if (nodeName === "A" && attrName === "target" && data.attrValue) {
       const target = String(data.attrValue).trim().toLowerCase();

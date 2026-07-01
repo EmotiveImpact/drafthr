@@ -106,7 +106,16 @@ export async function POST(req: Request): Promise<Response> {
     };
 
     if (existing) {
-      await db.update(matters).set(values).where(and(eq(matters.id, rowId), eq(matters.tenantId, tenantId)));
+      // Check the row count: a concurrent DELETE between the SELECT above and
+      // this UPDATE would touch 0 rows, and returning 200 + a spurious
+      // "matter.updated" audit for a row that no longer exists is wrong.
+      // (Mirrors the returning-checked pattern in drafts.ts.)
+      const updated = await db
+        .update(matters)
+        .set(values)
+        .where(and(eq(matters.id, rowId), eq(matters.tenantId, tenantId)))
+        .returning({ id: matters.id });
+      if (updated.length === 0) return jsonError("Matter not found", 404);
     } else {
       await db.insert(matters).values({ id: rowId, ...values });
     }
