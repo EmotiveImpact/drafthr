@@ -209,6 +209,10 @@ export default function BulkOperations() {
     });
     const summaries: GeneratedDraftSummary[] = [];
     for (let i = 0; i < parsed.rows.length; i++) {
+      // Stop creating drafts the moment the user clicks Cancel — Phase 1 (the
+      // AI call) honors the abort signal, but this fan-out loop did not, so
+      // Cancel let it run to completion and even show a success screen.
+      if (abortRef.current?.signal.aborted) break;
       const row = parsed.rows[i];
       const answers = rowToAnswers(row, letterType);
       const draftId = createDraft(
@@ -262,6 +266,14 @@ export default function BulkOperations() {
         doneRows: i + 1,
         totalRows: parsed.rows.length,
       });
+    }
+
+    // If the run was cancelled mid-loop, don't surface the success screen/toast
+    // for a partial batch. (Drafts already created stay in the store — same
+    // partial-work semantics as reset(), which doesn't delete in-progress drafts.)
+    if (abortRef.current?.signal.aborted) {
+      setGenerateState({ phase: "idle" });
+      return;
     }
 
     setGenerated(summaries);
