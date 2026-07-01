@@ -76,7 +76,7 @@ We're shipping an HR letter authoring product with a defensible audit trail and 
 - **Profile:** Salaried HR generalist at a growing company. Often the only HR person.
 - **Volume:** ~8–20 letters/month — warnings, offers, exits, restructure
 - **Pain:** ACAS Code compliance, tribunal exposure, no time to read case law, anxiety about high-stakes letters
-- **Plan tier:** **Pro (£79/mo)** or **Business (£249/mo)**
+- **Plan tier:** **Pro (£79/mo)** or **Business (£199/mo)**
 - **Marketplace usage:** Monthly for tribunal-bound letters (£120–200 per review)
 - **Annual value:** £950–2,500 plan + £500–2k marketplace = **£1,500–4,500/yr**
 - **Acquisition:** Inbound (SEO around "redundancy letter template", "settlement agreement template"), trade press
@@ -85,7 +85,7 @@ We're shipping an HR letter authoring product with a defensible audit trail and 
 - **Profile:** Director + generalists, possibly an in-house ER specialist
 - **Volume:** ~30–100 letters/month
 - **Pain:** Consistency across team, audit defensibility, vendor security posture
-- **Plan tier:** **Business (£249/mo)** or **Enterprise (£30k+/yr)**
+- **Plan tier:** **Business (£199/mo)** or **Enterprise (£30k+/yr)**
 - **Marketplace usage:** Weekly for high-stakes (£120–200)
 - **Annual value:** £2.5k–30k plan + £4k–15k marketplace = **£6.5k–45k/yr**
 - **Acquisition:** Outbound, partnerships, conference (CIPD ACE)
@@ -129,7 +129,14 @@ We're shipping an HR letter authoring product with a defensible audit trail and 
 
 ### Plans — paid from day 1, value-tiered employee pricing
 
-**Pricing live from day 1.** Not the "free until 2027" Linear playbook (wrong fit for solo + AI). Low-friction acquisition (first letter free) is enough.
+> **FINAL — decided 2026-07-01 (supersedes any conflicting numbers elsewhere in this doc):**
+> - **Hard paywall. No free letters, no free tier, no trials, no free anything — ever.** Payment precedes drafting. The marketing site may show static sample letters/screenshots; the product itself is paid from the first action.
+> - **HR plans:** PAYG £9.99/letter · **Starter £29/mo** (capped 5 letters/mo) · **Pro £79/mo** · **Business £199/mo** (not £249) · Enterprise bespoke.
+> - **Annual = 1 month free** (pay for 11): Starter £319/yr · Pro £869/yr · Business £2,189/yr.
+> - **Credits drip monthly** — never roll over, never granted upfront on annual plans. Purchased credit packs never expire.
+> - **Employee one-offs can upgrade to Employee Plus mid-case** — no retroactive credit for prior one-off purchases.
+
+**Pricing live from day 1.** Not the "free until 2027" Linear playbook (wrong fit for solo + AI).
 
 **Critical insight: the employee side has huge value gradient.** A resignation letter is worth £150 vs solicitor; an ET1 prep letter helps someone win a £40k discrimination claim — pricing both at £9.99 leaves money on the table. Tier by stakes.
 
@@ -137,11 +144,13 @@ We're shipping an HR letter authoring product with a defensible audit trail and 
 
 | Tier | Price (live from day 1) | What you get | Target |
 |---|---|---|---|
-| **First letter** | **Free, no card** | 1 full letter, all features, full export, no watermark | Acquisition |
-| **Pay-as-you-go** | £9.99/letter (HR-side simple letters) | Single letter, no subscription. For HR consultants doing occasional one-offs. | Persona A |
-| **Pro** ★ | £79/mo or £790/yr | Unlimited letters · all 35 templates · 20 AI critique credits/mo · marketplace access · evidence pack signing | Persona B (modal) |
-| **Business** | £199/mo or £1,990/yr | Pro + 5 seats · team review · audit trail dashboard · priority support · custom letterhead · **bulk-draft from CSV** · approval queue | Persona C |
+| **Pay-as-you-go** | £9.99/letter (HR-side simple letters) | Single letter, no subscription. For HR consultants doing occasional one-offs. | Persona A (light) |
+| **Starter** | £29/mo or £319/yr | **5 letters/mo cap** · all 35 templates · full export · marketplace access · AI credits purchasable à la carte (none included) | Persona A |
+| **Pro** ★ | £79/mo or £869/yr | Unlimited letters · all 35 templates · 20 AI critique credits/mo · marketplace access · evidence pack signing | Persona B (modal) |
+| **Business** | £199/mo or £2,189/yr | Pro + 5 seats · team review · audit trail dashboard · priority support · custom letterhead · **bulk-draft from CSV** · approval queue | Persona C |
 | **Enterprise** | bespoke £30k+/yr | Business + SSO/SAML · SCIM · EU residency option · dedicated CS · contractual SLA · audit log API · HRIS integrations | Persona D |
+
+**No free tier, no trials — the entry point is a £9.99 letter.** The ladder self-sorts by volume: 1–2 letters/mo → PAYG is cheapest · 3–5/mo → Starter beats PAYG (£29 vs £30–50) and converts lumpy one-offs into recurring revenue · 6+/mo → Pro. The 5-letter cap means genuine Persona-A volume (10–15/mo) still requires Pro — Starter can't cannibalize it.
 
 #### Employee mode pricing (Persona E) — value-tiered by stakes
 
@@ -154,9 +163,7 @@ The employee side is anchored against solicitor costs (£150-£5,000) — we win
 | **High-stakes** | Settlement counter-offer, escalated grievance, discrimination grievance, breach of contract notice, redundancy challenge | **£59** | Single letter + evidence pack + **1 AI critique credit included** | vs £400 (85% saving) |
 | **Tribunal-bound** | ET1 prep, constructive dismissal escalation, discrimination claim (race/sex/disability), whistleblowing detriment | **£99** | Single letter + evidence pack + **2 AI critique credits + £20 marketplace credit** | vs £1,500 (93% saving) |
 
-**First-letter-free works differently per tier:**
-- **Routine + Standard:** first letter free, full export (these are SEO-driven volume; "resignation letter UK" gets us 8,000 monthly searches alone)
-- **High-stakes + Tribunal-bound:** first letter free to **draft + preview**, paywalled at export. The user has invested 5 minutes drafting; conversion to export-and-pay is high. (How Lawpath's lawyer calls work.)
+**Hard paywall on every tier (decided 2026-07-01):** payment comes before drafting — no free letter, no free draft-and-preview, no watermarked teaser. SEO landing pages (e.g. "resignation letter UK" — 8,000 monthly searches) sell with static sample letters and the price; checkout is the first in-product action. This trades top-of-funnel volume for zero free-rider compute cost and pure buyer signal.
 
 #### Multi-letter SKUs for employee cases
 
@@ -168,6 +175,8 @@ Most employee cases aren't one letter — they're a sequence over weeks or month
 | **Settlement Pack** | £119 | Counter-offer + employer reply + revised offer + final settle (4-6 letters) | Settlement negotiation usually 3-6 letters |
 | **Tribunal Prep Pack** | £249 | ET1 + schedule of loss + witness statement outline + supporting letters (6-8 documents) | Full ET1 lodgement support |
 | **Employee Plus subscription** ★ | **£99/mo** | Unlimited letters within ONE matter · **10 AI critique credits/mo** · **£30 marketplace credit/mo** (pools toward consultant review) · priority support · case timeline dashboard · tribunal deadline calendar with email/SMS reminders · cancel any time | The right SKU for multi-month cases (grievance arc, settlement negotiation, tribunal prep). Typical 4-9 month lifetime = **£396-£891 LTV**. Solicitor monthly retainer alternative is £500-2,000/mo — we're 80%+ cheaper. |
+
+**Mid-case upgrade (decided 2026-07-01):** an employee who bought a one-off letter can upgrade to Employee Plus at any point in the same matter — the upsell shows post-purchase and whenever a second letter is started in the same matter ("This case is growing — Employee Plus covers unlimited letters for this matter, £99/mo"). **No retroactive credit** for prior one-off purchases: they paid for a letter, they got a letter. (A paid-credit-toward-first-month lever can be added later if conversion data shows friction.)
 
 #### Marketplace pricing (both modes)
 
@@ -182,26 +191,22 @@ Most employee cases aren't one letter — they're a sequence over weeks or month
 
 **Why this works for a solo + AI founder:**
 - Revenue from week 1 (PAYG converts fast — employees with one issue pay £9.99 immediately)
-- Pro subscriptions start the recurring engine immediately
+- Starter + Pro subscriptions start the recurring engine immediately
 - Marketplace earns from first booking
 - No cliff at graduation, no awkward "you used to be free" conversation later
-- The product proves itself via the free first letter — that's enough acquisition signal
+- Zero free compute ever spent on non-payers — every user in the system is a buyer
 
-**Conversion math:**
-- 100 first-letter signups → ~25 pay £9.99 (25% one-shot conversion) = £250 + ~8 subscribe to Pro (8% subscription conversion) = £640/mo recurring
-- At 1,000 signups/mo (achievable from SEO + LinkedIn organic by month 6): ~£2.5k/mo PAYG + ~£6k/mo recurring = **£8.5k/mo by end of Y1**
+**Conversion math (hard-paywall funnel — visitor converts directly to paid; no free-signup middle step):**
+- Assume 1.5–3% visitor→paid on high-intent SEO landings (cold paywall). 10,000 visitors/mo → 150–300 paid letters ≈ £1.5–4k/mo PAYG (tier mix) + ~8% of buyers subscribing (Starter/Pro/Employee Plus) compounding recurring revenue monthly
+- These rates are assumptions to validate in months 1–2. The hard paywall means lower headline conversion than a freebie funnel, but every conversion is revenue and the signal is pure — price/page tests read clean.
 
 ★ = expected modal plan (most users land here)
 
 **Why this packaging works:**
-- **First letter free** = "we will prove it to you in 60 seconds" — demonstrates the product, removes the trial-stinginess feeling
 - **£9.99/letter** = matches the mental model of an employee or solo person dealing with one issue — they don't want a subscription, they want THIS letter handled
-- **£79/mo Pro** = the obvious upgrade path the moment someone needs more than 1 letter — frictionless conversion (one paid letter then "unlock unlimited for £79" lands every time)
-- **Two paths to revenue** = wider top-of-funnel than a pure subscription model
-
-**Conversion math:**
-- 1,000 first-letter signups → ~250 pay £9.99 (25% one-shot conversion) = £2,498 + ~80 subscribe to Pro (8% subscription conversion) = £6,320/mo recurring
-- Industry-standard SaaS conversion is 2-5%; "first letter free" should out-perform because the user has experienced the value before the price ask
+- **£29 Starter** = converts the 3–5-letters/mo consultant from lumpy PAYG into recurring revenue; the 5-letter cap keeps real Persona-A volume on Pro
+- **£79/mo Pro** = the obvious upgrade the moment someone outgrows PAYG or hits the Starter cap — less than one billable hour for the professionals buying it
+- **Two paths to revenue** = PAYG + subscriptions; every user is a payer from their first action
 
 ### Marketplace (separate, not bundled)
 
@@ -220,6 +225,8 @@ Most employee cases aren't one letter — they're a sequence over weeks or month
 | Best value | £19.99 | 25 | £0.80 | ~95% |
 
 Cost-per-credit to DraftHR: ~£0.05 (Sonnet at our prompt sizes with caching). **97% gross margin** — this is the highest-margin line in the entire business. Convert AI from "biggest cost" to "biggest profit center."
+
+**Credit policy (decided 2026-07-01):** plan-included credits (Pro 20/mo, Employee Plus 10/mo + £30 marketplace credit/mo, tier-included credits on High-stakes/Tribunal letters) **drip monthly, do not roll over, and are never granted as a lump sum on annual plans** — an annual Pro buyer gets 20/mo for 12 months, not 240 on day 1. This keeps the annual discount from inflating AI-cost liability. **Purchased credit packs never expire.** Starter includes no credits — Starter users buy packs à la carte (highest-margin upsell).
 
 ---
 
@@ -313,30 +320,30 @@ Anthropic spend crosses **$100k/yr between 5k–10k users** without intervention
 |---|---|---|---|
 | Pay-as-you-go | 1,500 letters × £9.99 | £14,985 | Long tail one-shot buyers |
 | Pro | 100 × £948/yr | £94,800 | Modal plan |
-| Business | 8 × £2,490/yr | £19,920 | |
+| Business | 8 × £2,189/yr | £17,512 | |
 | Enterprise | 1 × £30,000 | £30,000 | Lighthouse close |
 | Marketplace | 100 bookings/mo × £17 × 8mo | £13,600 | Ramp from month 5 |
 | AI credits | 200 packs/mo × £4.47 × 8mo | £7,152 | |
-| **Y1 ARR (run-rate at month 12)** | | **~£180k** | |
+| **Y1 ARR (run-rate at month 12)** | | **~£178k** | |
 
 #### Realistic — ProductHunt launch, 1 podcast, founder LinkedIn 5×/wk, SEO compounds from month 6 ★ default plan
 | Line | Users / volume | £/yr | Notes |
 |---|---|---|---|
 | Employee letters (tiered PAYG) | 5,000 letters/yr · 60% routine £9.99 / 25% standard £29 / 10% high-stakes £59 / 5% tribunal £99 | £120,470 | **Tiered pricing — 2.4x vs flat £9.99** |
 | Case Packs + Employee Plus | 250 packs × £150 avg + 100 sub-months × £99 | £47,400 | Multi-letter cases monetized · Plus subscription at proper price |
-| Pro | 250 × £948/yr | £237,000 | Trial-to-paid 8% on 3,000 first-letter signups |
-| Business | 20 × £2,490/yr | £49,800 | Small mid-market wins |
+| Pro | 250 × £948/yr | £237,000 | 8% buyer→subscriber conversion on ~3,000 paid buyers (no trials — hard paywall) |
+| Business | 20 × £2,189/yr | £43,780 | Small mid-market wins (£199/mo · annual = 1 month free) |
 | Enterprise | 2 × £40,000 | £80,000 | Founder-led close, average deal up |
 | Marketplace | 350 bookings/mo × £17 × 8mo | £47,600 | Higher attach rate from tribunal-tier letters |
 | AI credits (separate from bundled) | 1,200 packs/mo × £4.47 × 8mo | £42,912 | Upsell to Pro users |
-| **Y1 ARR (run-rate at month 12)** | | **~£625,182** | **+29% vs prior projection** |
+| **Y1 ARR (run-rate at month 12)** | | **~£619,162** | **+28% vs prior projection** (Business repriced £249→£199) |
 
 #### Aggressive — PR moment (TechCrunch, FT, HR Magazine), CIPD partnership, strong inbound
 | Line | Users / volume | £/yr | Notes |
 |---|---|---|---|
 | Pay-as-you-go | 12,000 letters × £9.99 | £119,880 | Viral spikes |
-| Pro | 500 × £948/yr | £474,000 | Trial-to-paid holds at 8% on 6,000 signups |
-| Business | 40 × £2,490/yr | £99,600 | |
+| Pro | 500 × £948/yr | £474,000 | Buyer→subscriber holds at 8% on ~6,000 paid buyers |
+| Business | 40 × £2,189/yr | £87,560 | |
 | Enterprise | 3 × £50,000 | £150,000 | Word-of-mouth from a flagship customer |
 | Marketplace | 500 bookings/mo × £17 × 8mo | £68,000 | 50 consultants live by month 9 |
 | AI credits | 2,500 packs/mo × £4.47 × 8mo | £89,400 | |
@@ -367,11 +374,11 @@ Anthropic spend crosses **$100k/yr between 5k–10k users** without intervention
 |---|---|---|---|
 | Pay-as-you-go | 15,000 letters/yr × £9.99 | £149,850 | SEO compounds, employee searches dominate |
 | Pro | 1,000 × £948/yr | £948,000 | Modal plan + Pro+ at £149/mo introduced |
-| Business | 80 × £2,490 | £199,200 | |
+| Business | 80 × £2,189 | £175,120 | |
 | Enterprise | 12 × £75,000 | £900,000 | Mid-market wins compound |
 | Marketplace | 3,000/mo × £17 | £612,000 | 50 consultants × ~60 reviews/mo each |
 | AI credits | 8,000/mo × £4.47 | £429,000 | |
-| **Y2 ARR** | | **~£3.24M** | |
+| **Y2 ARR** | | **~£3.21M** | |
 
 **Conservative Y2:** ~£1.8M · **Aggressive Y2:** ~£5M
 
@@ -395,11 +402,11 @@ Anthropic spend crosses **$100k/yr between 5k–10k users** without intervention
 |---|---|---|---|
 | Pay-as-you-go | 50,000 letters/yr | £499,500 | Mature SEO + employee market |
 | Pro + Pro+ | 4,000 × £1,100 (blended) | £4,400,000 | Pro+ tier at £149 captures 30% of base |
-| Business | 250 × £2,490 | £622,500 | |
+| Business | 250 × £2,189 | £547,250 | |
 | Enterprise | 35 × £100,000 | £3,500,000 | |
 | Marketplace | 12,000/mo × £17 | £2,448,000 | 200 active consultants |
 | AI credits | 40,000/mo × £4.47 | £2,145,600 | |
-| **Y3 ARR** | | **~£13.6M** | |
+| **Y3 ARR** | | **~£13.5M** | |
 
 **Conservative Y3:** ~£9.5M · **Aggressive Y3:** ~£20M
 
@@ -660,7 +667,7 @@ The product has always supported two modes (`src/routes/ModePicker.tsx`, README:
 | Mental model | "I'm dealing with ONE issue: my grievance / resignation / flexible-working request" | "I operate a portfolio of employees and matters" |
 | Data shape | 1 Employee (themselves) + 1-3 Matters lifetime | Many Employees + Many Matters concurrent |
 | Primary surface | **Single-letter wizard** (today's UX, mostly unchanged) | **Portfolio dashboard** (NEW per this section) |
-| Plans | First letter free → £9.99 PAYG → £79 Pro if recurring | £79 Pro → £199 Business → £30k+ Enterprise |
+| Plans | Tiered PAYG £9.99–£99 by stakes → Case Packs → Employee Plus £99/mo for multi-month cases | £9.99 PAYG → £29 Starter → £79 Pro → £199 Business → £30k+ Enterprise |
 | Marketplace | Used occasionally for high-stakes letters (e.g. tribunal-bound grievance) | Used regularly across the portfolio |
 | Bulk operations | N/A | Killer Business feature (CSV → 50 letters at once) |
 | HRIS sync | N/A | Required at Business+ |
@@ -723,21 +730,22 @@ A Matter can link **multiple** employees (a grievance has a grievant, an accused
 
 **Pricing live from day 1** (per founder reality — solo + AI + ~£40-50k personal runway, needs revenue from week 1, not week 40). The Growth specialist's "Free until 31 March 2027" recommendation was the Linear playbook — right for venture-backed startups, wrong for self-funded indies.
 
-**Mechanic:**
-- **First letter free** — pure acquisition demo, no card required. Proves the product in 90 seconds. This is what "no paywall at the beginning" actually means.
-- **PAYG £9.99/letter** — revenue from the first paying user, no subscription friction
+**Mechanic (hard paywall — decided 2026-07-01, supersedes "first letter free"):**
+- **No free anything, ever** — no free letter, no trial, no watermarked preview. Payment precedes drafting. Marketing pages sell with static sample letters + the price; checkout is the first in-product action.
+- **PAYG £9.99/letter** — revenue from the first user, no subscription friction
+- **Starter £29/mo** (5 letters/mo cap) — full price, day 1
 - **Pro £79/mo** — full price, day 1
 - **Business £199/mo** — full price, day 1
 - **Enterprise £30k+/yr** — full price, day 1
 - **Marketplace** charges from day 1 (real consultant cost)
-- **Branded export footer** appears on free + PAYG exports ("Drafted with DraftHR — try free at drafthr.com"). Removable on Pro+.
+- **Branded export footer** appears on PAYG + Starter exports ("Drafted with DraftHR — drafthr.com"). Removable on Pro+.
 - No grandfathering. No deadlines. Clean clear pricing.
 
 **Why this works for solo + AI:**
-- Revenue from week 1 (first £9.99 PAYG within first 100 signups)
-- Pro subscriptions start the recurring engine immediately
+- Revenue from week 1 (first £9.99 PAYG within the first visitors)
+- Starter + Pro subscriptions start the recurring engine immediately
 - No cliff-edge graduation event to manage
-- Free first letter is enough acquisition signal — every confident SaaS does this
+- Zero free compute spent on non-payers; every user in the funnel is a buyer, so conversion data reads clean
 
 ### Activation = first letter EXPORTED, not drafted
 
