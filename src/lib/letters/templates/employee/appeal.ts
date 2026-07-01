@@ -64,13 +64,13 @@ export const APPEAL_UK: LetterTemplate = {
         "Use the four canonical grounds as numbered headings: 1. Procedural unfairness; 2. Factual error; 3. Severity disproportionate; 4. New evidence. The writer need not use all four — use only those that apply, but use the canonical labels. Each ground: specific facts, dates, references to the original outcome letter, and (for new evidence) what the new evidence is and why it was not produced earlier.",
       scaffold: `<p>I appeal on the following grounds:</p>
 <p><strong>1. Procedural unfairness</strong></p>
-<p>{{proceduralGround}}</p>
+<p>{{groundProcedural}}</p>
 <p><strong>2. Factual error</strong></p>
-<p>{{factualErrorGround}}</p>
+<p>{{groundFactual}}</p>
 <p><strong>3. The sanction is disproportionate</strong></p>
-<p>{{severityGround}}</p>
+<p>{{groundSeverity}}</p>
 <p><strong>4. New evidence</strong></p>
-<p>{{newEvidenceGround}}</p>`,
+<p>{{groundNewEvidence}}</p>`,
       constraints: [
         "MUST use the canonical four ground labels (procedural unfairness, factual error, severity disproportionate, new evidence).",
         "MUST cite specific paragraphs of the original outcome letter where challenged.",
@@ -210,13 +210,13 @@ export const APPEAL_US: LetterTemplate = {
         "Use the four canonical grounds: procedural unfairness, factual error, severity disproportionate, new evidence. Cite specific paragraphs of the outcome letter and produce new evidence with explanation.",
       scaffold: `<p>I appeal on the following grounds:</p>
 <p><strong>1. Procedural unfairness</strong></p>
-<p>{{proceduralGround}}</p>
+<p>{{groundProcedural}}</p>
 <p><strong>2. Factual error</strong></p>
-<p>{{factualErrorGround}}</p>
+<p>{{groundFactual}}</p>
 <p><strong>3. The decision is disproportionate</strong></p>
-<p>{{severityGround}}</p>
+<p>{{groundSeverity}}</p>
 <p><strong>4. New evidence</strong></p>
-<p>{{newEvidenceGround}}</p>`,
+<p>{{groundNewEvidence}}</p>`,
       constraints: [
         "MUST use the canonical four labels.",
         "MUST cite paragraphs of the outcome letter.",

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { CalendarDays, Plus, Trash2 } from "lucide-react";
 import type { EventKind, MatterEvent } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { formatDateOnly } from "@/lib/date-only";
+import { formatDateOnly, parseDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -63,8 +63,17 @@ export function MatterCalendar({
   const now = Date.now();
   const upcoming = events
     .filter((e) => {
-      const t = new Date(e.whenISO).getTime();
-      return !Number.isNaN(t) && t >= now - 60 * 60 * 1000; // include past hour
+      // A bare "YYYY-MM-DD" whenISO (allowed by MatterEvent) parses as UTC
+      // midnight via new Date(), which is in the past all day west of UTC and
+      // would wrongly hide today's all-day events. Parse date-only values in
+      // local time (as formatEventWhen already does) and give them a full-day
+      // lookback so an all-day event stays visible for its whole day.
+      const isDateOnly = !e.whenISO.includes("T") && !e.whenISO.includes(":");
+      const t = isDateOnly
+        ? (parseDateOnly(e.whenISO)?.getTime() ?? NaN)
+        : new Date(e.whenISO).getTime();
+      const threshold = isDateOnly ? now - 24 * 60 * 60 * 1000 : now - 60 * 60 * 1000;
+      return !Number.isNaN(t) && t >= threshold;
     })
     .sort((a, b) => a.whenISO.localeCompare(b.whenISO));
 

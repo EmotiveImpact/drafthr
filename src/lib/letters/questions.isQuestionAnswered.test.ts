@@ -158,4 +158,33 @@ describe("isQuestionVisible — jurisdiction + showIf gating", () => {
     expect(isQuestionVisible(hearing!, { jurisdiction: "UK" })).toBe(true);
     expect(isQuestionVisible(appeal!, { jurisdiction: "US" })).toBe(false);
   });
+
+  it("gates conditional employer fields on their controlling answer", () => {
+    const findQ = (letterType: string, id: string) =>
+      letterStepsFor(letterType as Parameters<typeof letterStepsFor>[0])
+        .flatMap((s) => s.questions)
+        .find((q) => q.id === id);
+
+    // "(for character reference)" — only shown for a character reference.
+    const responsibilities = findQ("reference", "responsibilities");
+    expect(responsibilities).toBeDefined();
+    expect(isQuestionVisible(responsibilities!, { referenceType: "character" })).toBe(true);
+    expect(isQuestionVisible(responsibilities!, { referenceType: "factual" })).toBe(false);
+
+    // "(if applicable)" phased schedule — only for a phased return.
+    const phasedSchedule = findQ("return_to_work", "phasedSchedule");
+    expect(phasedSchedule).toBeDefined();
+    expect(isQuestionVisible(phasedSchedule!, { phasedReturn: true })).toBe(true);
+    expect(isQuestionVisible(phasedSchedule!, { phasedReturn: false })).toBe(false);
+
+    // "(if extending)" fields — only on the extend outcome.
+    const newEndDate = findQ("probation_outcome", "newEndDate");
+    const objectives = findQ("probation_outcome", "objectivesIfExtending");
+    expect(newEndDate).toBeDefined();
+    expect(objectives).toBeDefined();
+    expect(isQuestionVisible(newEndDate!, { probationOutcome: "extend" })).toBe(true);
+    expect(isQuestionVisible(newEndDate!, { probationOutcome: "pass" })).toBe(false);
+    expect(isQuestionVisible(objectives!, { probationOutcome: "extend" })).toBe(true);
+    expect(isQuestionVisible(objectives!, { probationOutcome: "fail" })).toBe(false);
+  });
 });
