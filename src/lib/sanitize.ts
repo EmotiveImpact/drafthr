@@ -44,7 +44,7 @@ function registerSanitizeHooks() {
   });
 }
 
-function isSafeLinkHref(href: string): boolean {
+export function isSafeLinkHref(href: string): boolean {
   const value = href.trim();
   return /^(?:https?:|mailto:|tel:|#)/i.test(value) || (value.startsWith("/") && !value.startsWith("//"));
 }

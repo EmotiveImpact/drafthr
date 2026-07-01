@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { isSafeLinkHref } from "@/lib/sanitize";
 
 /**
  * Minimal markdown renderer for AI chat replies. Uses `marked` for the
@@ -21,7 +22,10 @@ export function Markdown({ children }: { children: string }) {
       ],
       ALLOWED_ATTR: ["href", "target", "rel"],
       ALLOW_DATA_ATTR: false,
-      ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#)/i,
+      // `\/(?!\/)` allows a single-slash absolute path but rejects
+      // protocol-relative `//evil.com` (which the old `\/` alternative let
+      // through) — matching the authoritative isSafeLinkHref used below.
+      ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/))/i,
     });
     return hardenMarkdownLinks(cleaned);
   }, [children]);
@@ -55,7 +59,9 @@ function hardenMarkdownLinks(html: string): string {
   root.innerHTML = html;
   root.querySelectorAll("a").forEach((anchor) => {
     const href = anchor.getAttribute("href")?.trim() ?? "";
-    if (href && !/^(?:https?:|mailto:|tel:|\/|#)/i.test(href)) {
+    // Authoritative check (shared with sanitize.ts) — rejects protocol-relative
+    // `//evil.com`, which the old inline regex allowed through.
+    if (href && !isSafeLinkHref(href)) {
       anchor.removeAttribute("href");
     }
     const target = anchor.getAttribute("target");
