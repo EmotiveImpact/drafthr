@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — running)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -52,10 +52,14 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
 
-**Running gate:** `tsc -b` clean · **562 tests** (+47) · `vite build` OK. **19
+**Final gate:** `tsc -b` clean · **562 tests** (+47) · `vite build` OK. **20
 rounds, 47 real bugs fixed**, every commit pushed green. R15 `93f82c9` · R16
 `7d6fead` · R17 `43d1955` · R18 `771c224` · R19 `0080ab6` (R1–R14 in git log).
-Per-round landable: 2·3·3·6·3·5·6·2·2·1·2·1·3·1·2·2·1·1·1 — the systematic classes
+Per-round landable: 2·3·3·6·3·5·6·2·2·1·2·1·3·1·2·2·1·1·1·**0** — **Round 20 was
+the first fully DRY round** (its R19-sibling check confirmed the ConsultantInbox
+respond paths reconcile via re-pull with no stale local state; double-submit /
+localStorage-key / effect-deps lanes all empty), so the sweep is closed. The
+systematic classes
 were drained by ~R14; rounds since mine the long tail of one-off bugs on fresh
 surfaces at ~1/round of decreasing severity. After R14's drained-class confirmation, the loop
 was re-fired to hunt genuinely UNDER-EXAMINED surfaces rather than re-run empty
