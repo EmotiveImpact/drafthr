@@ -281,15 +281,18 @@ function BookingRow({ booking }: { booking: Booking }) {
   );
 }
 
-function relativeTime(ts: number, future = false): string {
+export function relativeTime(ts: number, future = false): string {
   const now = Date.now();
   const diffMs = future ? ts - now : now - ts;
   if (diffMs < 0) return future ? "overdue" : "just now";
-  const mins = Math.round(diffMs / 60000);
+  // Floor (not round) so elapsed time falls into the lower bucket — otherwise a
+  // 45-second-old timestamp rounds to "1 min ago" instead of "just now", and
+  // 90 min shows as "2h ago". (Matches CustomTemplateCard's relative-time.)
+  const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return future ? "<1 min" : "just now";
   if (mins < 60) return `${mins} min${future ? "" : " ago"}`;
-  const hours = Math.round(mins / 60);
+  const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h${future ? "" : " ago"}`;
-  const days = Math.round(hours / 24);
+  const days = Math.floor(hours / 24);
   return `${days}d${future ? "" : " ago"}`;
 }

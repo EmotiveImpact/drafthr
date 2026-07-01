@@ -346,6 +346,14 @@ export function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
+  // Close the version-history dialog when navigating to a different draft — the
+  // Editor instance persists across drafts (key="editor"), so a stale
+  // historySection from the previous draft would otherwise show the wrong
+  // history and let Restore target a section id that isn't in the current draft.
+  useEffect(() => {
+    setHistorySection(null);
+  }, [draftId]);
+
   // Auto-open the floating evidence drawer when arriving with ?openEvidence=1
   // (used by the legacy /editor/:draftId/evidence redirect so old bookmarks
   // land on something useful). Clears the query param after consumption so a
