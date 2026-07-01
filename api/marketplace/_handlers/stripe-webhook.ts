@@ -23,19 +23,33 @@ export const config = { runtime: "nodejs" };
 export async function POST(req: Request): Promise<Response> {
   const stripe = getStripe();
   if (!stripe) return jsonError("Payments are not configured", 503);
-  const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
-  if (!secret) return jsonError("Webhook secret not configured", 503);
+  // Two Stripe webhook scopes hit this same URL, each with its own signing
+  // secret: the ACCOUNT endpoint (checkout.session.completed — destination
+  // charges settle on the platform) and the CONNECT endpoint
+  // (account.updated — events on the consultants' connected accounts). We can't
+  // know which one signed a given delivery, so try each configured secret.
+  const secrets = [
+    process.env.STRIPE_WEBHOOK_SECRET?.trim(),
+    process.env.STRIPE_WEBHOOK_SECRET_CONNECT?.trim(),
+  ].filter((s): s is string => Boolean(s));
+  if (secrets.length === 0) return jsonError("Webhook secret not configured", 503);
 
   const sig = req.headers.get("stripe-signature") ?? "";
   // Raw body is required for signature verification — read it as text, never
   // JSON-parse before constructEvent.
   const raw = await req.text();
 
-  let event: Stripe.Event;
-  try {
-    event = await stripe.webhooks.constructEventAsync(raw, sig, secret);
-  } catch (err) {
-    console.warn("[stripe-webhook] signature verification failed", err);
+  let event: Stripe.Event | null = null;
+  for (const secret of secrets) {
+    try {
+      event = await stripe.webhooks.constructEventAsync(raw, sig, secret);
+      break;
+    } catch {
+      // Signature didn't match this secret — try the next configured scope.
+    }
+  }
+  if (!event) {
+    console.warn("[stripe-webhook] signature verification failed for all configured secrets");
     return jsonError("Invalid signature", 400);
   }
 
