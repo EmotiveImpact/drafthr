@@ -325,6 +325,9 @@ export function profileUpdatesFromAnswers(
   if (mode === "employer") {
     if (typeof a.signatoryName === "string") employer.signatoryName = a.signatoryName;
     if (typeof a.signatoryTitle === "string") employer.signatoryTitle = a.signatoryTitle;
+    // prefillsFromProfile reads defaults.tone back for employer mode, so persist
+    // the wizard's tone choice or the round-trip silently drops it.
+    if (typeof a.tone === "string") defaults.tone = a.tone as Tone;
   } else {
     if (typeof a.employeeLegalName === "string") personal.legalName = a.employeeLegalName;
     if (typeof a.employeePreferredName === "string")
@@ -336,6 +339,9 @@ export function profileUpdatesFromAnswers(
     if (typeof a.employeeStartDate === "string") personal.startDate = a.employeeStartDate;
     if (typeof a.recipientName === "string") employer.recipientName = a.recipientName;
     if (typeof a.recipientTitle === "string") employer.recipientTitle = a.recipientTitle;
+    // Symmetric to the employer tone above — prefillsFromProfile reads
+    // defaults.employeeTone back for employee mode.
+    if (typeof a.employeeTone === "string") defaults.employeeTone = a.employeeTone as EmployeeTone;
   }
 
   return { personal, employer, defaults };

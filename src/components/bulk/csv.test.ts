@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv } from "./csv";
+import { parseCsv, sampleHeadersFor } from "./csv";
+
+describe("sampleHeadersFor", () => {
+  it("includes currency-type fields as columns (consistent with placeholderKeysFor)", () => {
+    // Regression: scalarQuestionsFor omitted "currency", so currency fields
+    // never appeared in the sample CSV nor mapped in rowToAnswers, even though
+    // placeholderKeysFor advertised them as valid {{...}} placeholders.
+    const headers = sampleHeadersFor("offer");
+    expect(headers).toContain("baseSalary");
+  });
+});
 
 describe("parseCsv", () => {
   it("parses a basic CSV with employee_name", () => {

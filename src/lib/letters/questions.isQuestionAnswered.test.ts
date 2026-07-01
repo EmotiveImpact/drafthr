@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { isQuestionAnswered, letterStepsFor, type Question } from "./questions";
+import {
+  isQuestionAnswered,
+  isQuestionVisible,
+  letterStepsFor,
+  type Question,
+} from "./questions";
 
 /* ============================================================================
  * isQuestionAnswered — the wizard's required-field gate.
@@ -106,5 +111,51 @@ describe("isQuestionAnswered — repeater (the bug)", () => {
     };
     expect(isQuestionAnswered(q, [{}])).toBe(false);
     expect(isQuestionAnswered(q, [{ note: "something" }])).toBe(true);
+  });
+});
+
+describe("isQuestionVisible — jurisdiction + showIf gating", () => {
+  const ukQ: Question = { id: "hd", type: "date", label: "Hearing (UK)", jurisdiction: "UK" };
+  const usQ: Question = { id: "flsa", type: "boolean", label: "FLSA (US)", jurisdiction: "US" };
+  const plainQ: Question = { id: "x", type: "text", label: "x" };
+  const showIfQ: Question = { id: "y", type: "text", label: "y", showIf: (a) => a.foo === "bar" };
+
+  it("hides a jurisdiction-tagged question for the other jurisdiction", () => {
+    expect(isQuestionVisible(ukQ, { jurisdiction: "US" })).toBe(false);
+    expect(isQuestionVisible(ukQ, { jurisdiction: "UK" })).toBe(true);
+    expect(isQuestionVisible(usQ, { jurisdiction: "UK" })).toBe(false);
+    expect(isQuestionVisible(usQ, { jurisdiction: "US" })).toBe(true);
+  });
+
+  it("hides a jurisdiction-tagged question until jurisdiction is answered", () => {
+    expect(isQuestionVisible(ukQ, {})).toBe(false);
+  });
+
+  it("shows an untagged question in any jurisdiction and still honors showIf", () => {
+    expect(isQuestionVisible(plainQ, {})).toBe(true);
+    expect(isQuestionVisible(plainQ, { jurisdiction: "US" })).toBe(true);
+    expect(isQuestionVisible(showIfQ, { foo: "bar" })).toBe(true);
+    expect(isQuestionVisible(showIfQ, { foo: "no" })).toBe(false);
+  });
+
+  it("requires BOTH gates when a question carries jurisdiction + showIf", () => {
+    const both: Question = {
+      id: "z", type: "text", label: "z", jurisdiction: "UK",
+      showIf: (a) => a.foo === "bar",
+    };
+    expect(isQuestionVisible(both, { jurisdiction: "UK", foo: "bar" })).toBe(true);
+    expect(isQuestionVisible(both, { jurisdiction: "US", foo: "bar" })).toBe(false);
+    expect(isQuestionVisible(both, { jurisdiction: "UK", foo: "no" })).toBe(false);
+  });
+
+  it("hides the UK-only termination fields for a US termination letter", () => {
+    const qs = letterStepsFor("termination").flatMap((s) => s.questions);
+    const hearing = qs.find((q) => q.id === "hearingDate");
+    const appeal = qs.find((q) => q.id === "appealOfficer");
+    expect(hearing).toBeDefined();
+    expect(appeal).toBeDefined();
+    expect(isQuestionVisible(hearing!, { jurisdiction: "US" })).toBe(false);
+    expect(isQuestionVisible(hearing!, { jurisdiction: "UK" })).toBe(true);
+    expect(isQuestionVisible(appeal!, { jurisdiction: "US" })).toBe(false);
   });
 });

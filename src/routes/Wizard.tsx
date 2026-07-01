@@ -4,6 +4,7 @@ import {
   universalStepsFor,
   letterStepsFor,
   isQuestionAnswered,
+  isQuestionVisible,
   type QuestionStep,
 } from "@/lib/letters/questions";
 import { LETTER_CATALOG } from "@/lib/letters/catalog";
@@ -96,7 +97,7 @@ export function Wizard({ mode }: { mode: Mode }) {
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
-  const visibleQuestions = step.questions.filter((q) => !q.showIf || q.showIf(answers));
+  const visibleQuestions = step.questions.filter((q) => isQuestionVisible(q, answers));
   const requiredAnswered = visibleQuestions
     .filter((q) => q.required)
     .every((q) => isQuestionAnswered(q, answers[q.id]));

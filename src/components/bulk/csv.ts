@@ -123,13 +123,23 @@ export function parseCsv(raw: string): CsvParseResult {
 }
 
 /** Walk every question step for a letter type and return the scalar-type
- *  questions (text / number / date) suitable for a CSV column. */
+ *  questions (text / textarea / number / date / currency) suitable for a CSV
+ *  column. `currency` must be included to stay consistent with
+ *  placeholderKeysFor (mailmerge.ts), which advertises currency placeholders to
+ *  the template AI — omitting it here dropped currency columns from the sample
+ *  headers and never mapped them in rowToAnswers. */
 function scalarQuestionsFor(letterType: string): Question[] {
   const steps = letterStepsFor(letterType as Parameters<typeof letterStepsFor>[0]);
   const scalars: Question[] = [];
   for (const step of steps) {
     for (const q of step.questions) {
-      if (q.type === "text" || q.type === "textarea" || q.type === "number" || q.type === "date") {
+      if (
+        q.type === "text" ||
+        q.type === "textarea" ||
+        q.type === "number" ||
+        q.type === "date" ||
+        q.type === "currency"
+      ) {
         scalars.push(q);
       }
     }

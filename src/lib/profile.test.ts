@@ -118,4 +118,21 @@ describe("profileUpdatesFromAnswers", () => {
     expect(updates.employer).toEqual({});
     expect(updates.defaults).toEqual({});
   });
+
+  it("round-trips the wizard tone back into profile defaults (employer)", () => {
+    // Regression: prefillsFromProfile reads defaults.tone for employer mode,
+    // but the save path never wrote it, so the tone never prefilled next time.
+    const updates = profileUpdatesFromAnswers({ tone: "firm" }, "employer");
+    expect(updates.defaults.tone).toBe("firm");
+    const profile: Profile = {
+      ...baseProfile,
+      defaults: { ...baseProfile.defaults, tone: "firm" },
+    };
+    expect(prefillsFromProfile(profile, "employer").tone).toBe("firm");
+  });
+
+  it("round-trips the wizard employeeTone back into profile defaults (employee)", () => {
+    const updates = profileUpdatesFromAnswers({ employeeTone: "forensic" }, "employee");
+    expect(updates.defaults.employeeTone).toBe("forensic");
+  });
 });

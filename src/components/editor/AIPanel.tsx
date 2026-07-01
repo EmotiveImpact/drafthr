@@ -415,6 +415,15 @@ export function AIPanel({
         instruction,
         source
       );
+      // The section could have been deleted DURING the (multi-second) stream.
+      // proposeSectionChange silently no-ops on a missing section, so without
+      // this check the tool call would report ok:true and the UI would show
+      // "Applied" for a proposal that was never set. Detect it here and throw
+      // so the caller's catch reports ok:false instead.
+      const liveDraft = useDraftStore.getState().drafts[draft.id];
+      if (!liveDraft?.sections.some((s) => s.id === sectionId)) {
+        throw new Error(`Section was removed while the AI was editing it: ${sectionId}`);
+      }
       return section;
     } finally {
       applyAbortsRef.current.delete(ctl);

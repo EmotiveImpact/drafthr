@@ -87,6 +87,26 @@ function isRepeaterItemComplete(
   return requiredOk && hasAnyValue;
 }
 
+/**
+ * Whether a question should be shown for the current answers.
+ *
+ * Enforces BOTH gates: the `jurisdiction` marker (previously dead metadata —
+ * many `(UK)`/`(US)`-labelled questions carried it but the wizard only ever
+ * checked `showIf`, so e.g. a US termination showed the UK "Disciplinary
+ * hearing date" and "Appeal officer" fields, polluting the draft/LLM with
+ * wrong-jurisdiction data) AND the `showIf` predicate. A jurisdiction-tagged
+ * question is hidden until the (universal, first-step) jurisdiction answer
+ * matches.
+ */
+export function isQuestionVisible(
+  q: Question,
+  answers: Record<string, unknown>
+): boolean {
+  if (q.jurisdiction && q.jurisdiction !== answers.jurisdiction) return false;
+  if (q.showIf && !q.showIf(answers)) return false;
+  return true;
+}
+
 export type QuestionStep = {
   id: string;
   title: string;

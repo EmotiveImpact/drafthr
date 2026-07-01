@@ -281,6 +281,12 @@ export const useDraftStore = create<Store>()(
           ...(tpl.answers ?? {}),
           ...(tpl.jurisdiction ? { jurisdiction: tpl.jurisdiction } : {}),
         };
+        // Strip template-source-only internal fields (injected by
+        // createTemplateSourceDraft). If the template was saved FROM a
+        // template-source draft they ride along in tpl.answers and would
+        // otherwise pollute every ordinary draft seeded from this template.
+        delete (seededAnswers as Record<string, unknown>)._templateName;
+        delete (seededAnswers as Record<string, unknown>)._templateDescription;
         const newDraftId = get().createDraft(
           tpl.baseLetterType,
           seededAnswers,
