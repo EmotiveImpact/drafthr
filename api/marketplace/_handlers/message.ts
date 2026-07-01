@@ -17,6 +17,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantBookings } from "../../../src/db/schema.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -44,6 +45,9 @@ export async function POST(req: Request): Promise<Response> {
   if (typeof body.bookingId !== "string" || typeof body.text !== "string") {
     return jsonError("bookingId and text required", 400);
   }
+  // Validate the uuid before it hits the uuid column (else 22P02 → opaque 500).
+  const bookingId = serverUuidOrNull(body.bookingId);
+  if (!bookingId) return jsonError("Booking not found", 404);
   const text = body.text.trim().slice(0, 4000);
   if (!text) return jsonError("Empty message", 400);
 
@@ -51,7 +55,7 @@ export async function POST(req: Request): Promise<Response> {
   const [booking] = await db
     .select()
     .from(consultantBookings)
-    .where(eq(consultantBookings.id, body.bookingId))
+    .where(eq(consultantBookings.id, bookingId))
     .limit(1);
   if (!booking) return jsonError("Booking not found", 404);
 

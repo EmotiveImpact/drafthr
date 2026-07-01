@@ -19,6 +19,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import {
   sendBookingAcceptedEmail,
   sendBookingDeclinedEmail,
@@ -51,12 +52,17 @@ export async function POST(req: Request): Promise<Response> {
   if (typeof body.bookingId !== "string" || typeof body.action !== "string") {
     return jsonError("bookingId and action required", 400);
   }
+  // Validate the uuid before it reaches the uuid column — a non-uuid string
+  // otherwise throws Postgres 22P02 out of this un-try/catch'd handler as an
+  // opaque 500 instead of a clean 404. (Matches bug-#19 / SE-04.)
+  const bookingId = serverUuidOrNull(body.bookingId);
+  if (!bookingId) return jsonError("Booking not found", 404);
 
   const db = getDb();
   const [booking] = await db
     .select()
     .from(consultantBookings)
-    .where(eq(consultantBookings.id, body.bookingId))
+    .where(eq(consultantBookings.id, bookingId))
     .limit(1);
 
   if (!booking) return jsonError("Booking not found", 404);

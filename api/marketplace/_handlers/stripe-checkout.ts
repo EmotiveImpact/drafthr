@@ -67,12 +67,29 @@ export async function POST(req: Request): Promise<Response> {
     // (the onConflictDoUpdate below would point the row at the new session
     // while leaving status "paid", silently losing the first payment intent).
     const [existingPayment] = await db
-      .select({ status: bookingPayments.status })
+      .select({
+        status: bookingPayments.status,
+        checkoutSessionId: bookingPayments.checkoutSessionId,
+      })
       .from(bookingPayments)
       .where(eq(bookingPayments.bookingId, booking.id))
       .limit(1);
     if (existingPayment?.status === "paid") {
       return jsonError("This booking is already paid", 409);
+    }
+    // Expire any prior unpaid Checkout session before minting a new one. Stripe
+    // sessions stay completable for ~24h, so without this a click-Pay → Back →
+    // click-Pay-again (or a resumed stale tab) leaves TWO live sessions for the
+    // same booking — the card can be charged twice, and the second
+    // checkout.session.completed would overwrite the first payment_intent_id,
+    // hiding the duplicate from reconciliation. Best-effort: expiring a session
+    // that's already completed/expired throws, which we ignore.
+    if (existingPayment?.checkoutSessionId) {
+      try {
+        await stripe.checkout.sessions.expire(existingPayment.checkoutSessionId);
+      } catch (err) {
+        console.warn("[stripe-checkout] could not expire prior session", err);
+      }
     }
 
     const [acct] = await db
