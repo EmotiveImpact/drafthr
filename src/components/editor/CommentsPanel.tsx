@@ -140,6 +140,11 @@ export function CommentsPanel({
               onClick={() => {
                 setComposerSection(g.sectionId);
                 setComposerBody("");
+                // Clear any quote/mark carried over from a text-selection flow,
+                // otherwise a fresh section comment would attach the stale quote
+                // and apply a highlight mark to unrelated text.
+                setComposerQuote(undefined);
+                setComposerApplyMark(undefined);
               }}
             >
               + Comment

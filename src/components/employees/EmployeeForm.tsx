@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -74,9 +74,14 @@ export function EmployeeForm({
 }) {
   const [values, setValues] = useState<EmployeeFormValues>({ ...EMPTY, ...initial });
 
-  // Reset form whenever the dialog opens so each invocation is fresh.
+  // Reset the form only on the closed→open transition so each invocation is
+  // fresh. Callers often build `initial` as a new object literal every render
+  // (e.g. EmployeeDetail), so keying the reset on `initial`'s identity would
+  // re-fire on any parent re-render and silently wipe in-progress edits.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) setValues({ ...EMPTY, ...initial });
+    if (open && !wasOpen.current) setValues({ ...EMPTY, ...initial });
+    wasOpen.current = open;
   }, [open, initial]);
 
   const canSubmit = values.legalName.trim().length > 0;
