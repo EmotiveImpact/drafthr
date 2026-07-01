@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (30 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (32 fixed so far)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -51,11 +51,11 @@ default-refute verifier, then a final senior human triage that rejected ~half
 the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
-Running gate: `tsc -b` clean · **545 tests** (+30) · `vite build` OK. Commits:
+Running gate: `tsc -b` clean · **550 tests** (+35) · `vite build` OK. Commits:
 `53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5),
-`43db7d2` (R6), `9de6b8e` (R7), `f99939d` (R8). By R8 the two recurring classes
-(missing-`showIf`, placeholder↔id) were nearly drained — the exhaustive audit
-found only 2 landable fixes. **Sweep still running** under the user's `/loop`.
+`43db7d2` (R6), `9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9). Convergence by
+R7→R8→R9 (6→2→2 landable; R9's broad+skeptical pass rejected 5 of 7). **Sweep
+still running** under the user's `/loop`.
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -214,6 +214,30 @@ third `/session` fetch instead of coalescing — defeating the anti-stomp guard.
 **Fix:** clear only if we're still the current promise
 (`if (inflight.current === p) inflight.current = null`). Provider-agnostic pure
 coalescing logic; no dedicated test (1-line invariant). *(R5)*
+
+### 🟡 MEDIUM — `isSafeImageDataUrl` accepted a whitespace-only base64 payload
+`isSafeImageDataUrl` (`src/lib/safe-data-url.ts`) — the image-safety gate used
+by export (pdf/docx/pack), store hydration, profile validation, and migration —
+had `\s` inside its base64 char class, so `data:image/png;base64,   `
+(whitespace only) passed as "safe" and would embed a broken image (no security
+impact — the MIME is still image-restricted). **Fix:** require at least one real
+base64 char while still tolerating (line-wrapped) whitespace — zero regression
+on valid data URLs. TDD: `safe-data-url.test.ts` (+5). *(R9)*
+
+### 🟢 LOW (latent) — `consultantApi.call()` could drop default headers
+`call()` (`src/lib/consultantApi.ts`) spread `...init` AFTER the merged
+`headers`, so a caller passing `init.headers` would clobber the merged object
+and silently drop `Content-Type`/`Accept`. No current caller passes `headers`
+(latent — first flagged R1, re-surfaced R9), but the shared chokepoint should be
+correct: spread `...init` first so method/body override the baseline while the
+merged headers always win. *(R9)*
+
+### Rejected in R9 (verified false-positive / by-design — did NOT land)
+Stripe `checkoutSessionId` (written at checkout creation, not lost); admin-review
+"missing status guard" (documented re-moderation is intentional); `MyBookings`
+`useState` prop-sync (keyed by `b.id`, not triggerable); `EditDetailsSheet`
+"missing reseed" (already the R3/R6 fix — the effect keys on `[open, draft.id]`);
+`bookingsForConsultant` profileId strategy (documented three-way match).
 
 ### 🟡 MEDIUM — two more conditional fields lacked their `showIf` gate (exhaustive audit)
 An exhaustive audit of the "labelled-conditional field with no `showIf`" class
