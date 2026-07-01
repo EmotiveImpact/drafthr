@@ -121,11 +121,21 @@ export async function POST(req: Request): Promise<Response> {
     ? [{ role: "system", content: hint, ...cacheControl } as ModelMessage, ...supplied]
     : supplied;
 
+  let cancelled = false;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
+      // Guard every controller write: if the client disconnects mid-stream the
+      // consumer cancels the stream and the controller closes, so a later
+      // enqueue would throw "Invalid state: Controller is already closed" (and
+      // the catch block below would then double-throw). Stop writing instead.
       const writeEvent = (payload: object) => {
-        controller.enqueue(enc.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        if (cancelled) return;
+        try {
+          controller.enqueue(enc.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        } catch {
+          cancelled = true;
+        }
       };
 
       let totalTokens = 0;
@@ -171,8 +181,18 @@ export async function POST(req: Request): Promise<Response> {
         writeEvent({ error: realError });
       }
 
-      controller.enqueue(enc.encode("data: [DONE]\n\n"));
-      controller.close();
+      if (!cancelled) {
+        try {
+          controller.enqueue(enc.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch {
+          /* client already disconnected — nothing to flush */
+        }
+      }
+    },
+    cancel() {
+      // Client disconnected — stop the (still-running) streamText writes above.
+      cancelled = true;
     },
   });
 
