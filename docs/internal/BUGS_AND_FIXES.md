@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (33 fixed — SWEEP COMPLETE)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (35 fixed — SWEEP COMPLETE)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -52,20 +52,39 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
 
-**Final gate:** `tsc -b` clean · **550 tests** (+35) · `vite build` OK. **10
-rounds, 33 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
+**Final gate:** `tsc -b` clean · **550 tests** (+35) · `vite build` OK. **11
+rounds, 35 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
 `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5), `43db7d2` (R6),
-`9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9), `60dc0d3` (R10). **Stopped on
-convergence:** per-round landable counts ran 2·3·3·6·3·5·6·2·2·1 — the last three
-rounds (an exhaustive class audit, a broad confirming sweep, and a
-completeness-critic pass) yielded only latent/defensive fixes with high rejection
-rates, so the substantive well is dry. One item (`pay_dispute {{deadlineDays}}`)
-was handed to the user as a separate task (a content decision, not a mechanical
-fix).
+`9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9), `60dc0d3` (R10), `b54e407` (R11).
+**Stopped on convergence:** per-round landable counts ran
+2·3·3·6·3·5·6·2·2·1·2 — the tail rounds (exhaustive class audit, broad confirming
+sweep, completeness-critic, then a self-audit of all prior fixes) yielded only
+latent/defensive/sibling fixes with high rejection rates. The R11 self-audit
+**confirmed none of the 33 prior fixes introduced a regression**, and found one
+missed sibling (matters.ts 0-row race) + one defense-in-depth gap
+(sanitize href hook). One item (`pay_dispute {{deadlineDays}}`) was handed to the
+user as a separate task (a content decision, not a mechanical fix).
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
 in-progress edits.** Three independent instances were found and fixed.
+
+### 🟡 MEDIUM — matter-update returned success (+ spurious audit) on a 0-row race
+`api/store/_handlers/matters.ts` discarded the UPDATE result; a concurrent DELETE
+between the SELECT and UPDATE touches 0 rows, yet it returned **200**
+`{created:false}` and emitted a `matter.updated` audit for a row that no longer
+exists — the direct sibling of the R4 `message.ts` 0-row fix (`drafts.ts` already
+uses the returning-checked pattern). **Fix:** `.returning()` + **404** on 0 rows,
+before the audit. Found by the R11 self-audit's missed-sibling lane. *(R11)*
+
+### 🟠 HIGH (defense-in-depth) — sanitiser href hook was weaker than the harden pass
+`sanitize.ts`'s `uponSanitizeAttribute` href hook used an inline
+`/^(?:https?:|mailto:|tel:|\/|#)/i` whose `\/` alternative also matched
+protocol-relative `//evil.com`, while the authoritative `isSafeLinkHref` rejects
+`//`. **Not exploitable** — `hardenSanitizedHtml` unconditionally strips it
+downstream (the existing "strips protocol-relative links" test stays green) — but
+a real first-layer inconsistency. **Fix:** the hook now calls `isSafeLinkHref`
+directly so both layers agree. *(R11)*
 
 ### 🟢 LOW (defensive) — PDF export could infinite-loop on a zero-width canvas
 `canvasToA4PdfBlob` (`src/lib/export/pdf.ts`) computed `imageHeight =
