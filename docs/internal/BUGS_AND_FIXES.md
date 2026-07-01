@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (45 fixed — running)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (46 fixed — running)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -52,10 +52,12 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
 
-**Running gate:** `tsc -b` clean · **560 tests** (+45) · `vite build` OK. **17
-rounds, 45 real bugs fixed**, every commit pushed green. R15 `93f82c9`, R16
-`7d6fead`, R17 `43d1955` (earlier commits R1–R14 in git log). Per-round landable:
-2·3·3·6·3·5·6·2·2·1·2·1·3·1·2·2·1 — yield now clearly tapering in the long tail. After R14's drained-class confirmation, the loop
+**Running gate:** `tsc -b` clean · **560 tests** (+45) · `vite build` OK. **18
+rounds, 46 real bugs fixed**, every commit pushed green. R15 `93f82c9`, R16
+`7d6fead`, R17 `43d1955`, R18 `771c224` (earlier commits R1–R14 in git log).
+Per-round landable: 2·3·3·6·3·5·6·2·2·1·2·1·3·1·2·2·1·1 — the systematic classes
+were drained by ~R14; rounds since mine the long tail of one-off bugs on fresh
+surfaces at ~1–2/round of decreasing severity. After R14's drained-class confirmation, the loop
 was re-fired to hunt genuinely UNDER-EXAMINED surfaces rather than re-run empty
 class lanes — which kept finding real one-offs (R15: dev-server crash + Cmd+K
 hijack; R16: version-history cross-draft state + relativeTime rounding). *(The
@@ -145,6 +147,14 @@ the loop create ALL remaining drafts and then show a success screen + toast.
 **Fix:** `if (abortRef.current?.signal.aborted) break;` at the loop top + a
 post-loop guard that returns to idle (no success screen) when aborted; drafts
 already created stay (same partial-work semantics as `reset()`). *(R17)*
+
+### 🟡 MEDIUM — employer onboarding tour silently skipped a step
+`OnboardingTour.tsx` `HR_STEPS[3]` ("Start a new letter") anchored to
+`[data-tour="new-letter-cta"]`, which exists only on the Employee home — the HR
+dashboard has none. On `/hr` the step fired `TARGET_NOT_FOUND`, which
+`handleEvent` treats like `STEP_AFTER`, so employers never saw it. **Fix:** make
+it an un-anchored centered step (`target:"body"`, `placement:"center"`) — the
+pattern `EMPLOYEE_STEPS` already uses for its un-anchored intro steps. *(R18)*
 
 ### 🟡 MEDIUM — three more whitespace-only-base64 image validators (class drain)
 An exhaustive validator-consistency sweep found three siblings of the R9
