@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (22 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (28 fixed so far)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -51,10 +51,10 @@ default-refute verifier, then a final senior human triage that rejected ~half
 the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
-Running gate: `tsc -b` clean · **544 tests** (+29) · `vite build` OK. Commits:
+Running gate: `tsc -b` clean · **545 tests** (+30) · `vite build` OK. Commits:
 `53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5),
-`43db7d2` (R6). **This sweep is still running** under the user's `/loop`
-directive; later rounds append below.
+`43db7d2` (R6), `9de6b8e` (R7). **This sweep is still running** under the user's
+`/loop` directive; later rounds append below.
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -213,6 +213,49 @@ third `/session` fetch instead of coalescing — defeating the anti-stomp guard.
 **Fix:** clear only if we're still the current promise
 (`if (inflight.current === p) inflight.current = null`). Provider-agnostic pure
 coalescing logic; no dedicated test (1-line invariant). *(R5)*
+
+### 🟡 MEDIUM — four conditional employer fields lacked their `showIf` gate
+Four questions whose labels literally announce conditionality rendered
+unconditionally (the wizard gates only on `showIf`/jurisdiction), so their
+values leaked into the LLM data dump (`relevantData` dumps every non-empty
+answer) in the wrong context: `reference` "Headline responsibilities (for
+character reference)" showed for factual references; `return_to_work` "Phased
+schedule (if applicable)" showed when `phasedReturn` was No; `probation_outcome`
+"New end date (if extending)" + "Objectives if extending" showed on pass/fail.
+**Fix:** add the `showIf` each label implies (`referenceType === "character"`,
+`phasedReturn === true`, `probationOutcome === "extend"`), each keyed on a
+verified controlling id/value. TDD: `questions.isQuestionAnswered.test.ts` (+1).
+*(R7)*
+
+### 🟡 MEDIUM — appeal-letter grounds placeholders didn't match their question ids
+The `appeal` grounds-of-appeal scaffold used `{{proceduralGround}}` /
+`{{factualErrorGround}}` / `{{severityGround}}` / `{{newEvidenceGround}}`, but
+the questions are `groundProcedural` / `groundFactual` / `groundSeverity` /
+`groundNewEvidence` — the exact keys the prompt data-dump (`relevantData`) emits.
+The model had to *infer* the mapping, and `sanitiseHtml` turns any unresolved
+`{{...}}` into `[TBD]`, so a tribunal-grade appeal risked blank grounds. **Fix:**
+rename the scaffold placeholders (UK+US blocks) to the exact question ids so they
+resolve deterministically. *(R7)*
+
+### 🟡 MEDIUM — all-day matter events hidden west of UTC
+`MatterCalendar`'s upcoming-events filter parsed a bare `YYYY-MM-DD` `whenISO`
+(allowed by `MatterEvent`, exercised by store tests) with `new Date()` = UTC
+midnight, which is in the past all local day in any timezone west of UTC — so
+today's all-day event was filtered out and vanished. `formatEventWhen` already
+guarded this via `parseDateOnly`; the filter didn't. **Fix:** local-parse
+date-only values + a full-day lookback for them. *(R7)*
+
+### Rejected in R7 (verified false-positive / out-of-scope — did NOT land)
+- **Grievance `{{witness1Name}}` scaffold** — witnesses live as free text inside
+  the incidents repeater; "fixing" it is a scaffold rewrite / letter-quality
+  judgment, not a mechanical bug (the LLM synthesizes the list from the dump).
+- **Grievance/resignation "placeholder" mismatches** — scaffolds are LLM
+  guidance, not mechanical substitution; a capable model bridges near-identical
+  names (rejected the ones with no clean 1:1 rename).
+- **`display.ts recipientNameFor` optional-chaining** — `Draft.employer/employee`
+  are required, non-optional; no code path yields undefined.
+- **`notifications.ts` "nondeterministic sort"** — `Array.prototype.sort` is
+  stable (ES2019); equal-weight ordering is deterministic.
 
 ### 🟠 HIGH (systemic) — jurisdiction-tagged wizard questions shown to BOTH jurisdictions
 The `Question.jurisdiction` field was dead metadata — the wizard's visibility
