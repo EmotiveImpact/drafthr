@@ -40,6 +40,136 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (8 fixed so far)
+
+Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
+`api/`, and the export/bulk/reports/wizard surfaces, committed directly to
+`main`. Baseline fully green (`tsc -b` clean · **515 tests** · `vite build` OK),
+so this was a latent-bug hunt. Each finding was adversarially verified against
+source before landing; every fix ships with a regression test where the seam
+allows, and the buggy code path was confirmed to fail the new test first.
+Running gate: `tsc -b` clean · **528 tests** (+13) · `vite build` OK. Commits:
+`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3). **This sweep is still running**
+under the user's `/loop` directive; later rounds append below on the same date.
+
+The dominant theme this sweep is a **single class of bug — form/dialog state
+re-seeded from an unstable prop or object identity, silently wiping the user's
+in-progress edits.** Three independent instances were found and fixed.
+
+### 🟠 HIGH — required-repeater wizard validation bypass → blank tribunal-grade letters
+`RepeaterField` (`src/components/wizard/QuestionField.tsx`) auto-hydrates a
+`required` repeater with `defaultItems >= 1` into an array of EMPTY objects
+(`[{}, {}]`) via `queueMicrotask(onChange)`. The wizard's required-field gate
+(`Wizard.tsx`) treated any non-empty array as satisfied (`Array.isArray(v) &&
+v.length > 0`), so the moment a step like termination's **Decision details**
+mounted, `answers.factualFindings` became `[{}, {}]` and **"Generate draft"
+enabled with completely blank findings** — defeating `required` on every
+`defaultItems>=1` repeater (`factualFindings`, `specificConcerns`,
+`selectionCriteria`, `grievance.incidents`, `whistleblowing.disclosedFacts`, …).
+**Fix:** new pure exported `isQuestionAnswered(q, value)` (`questions.ts`); a
+required repeater counts as answered only when `>= max(minItems, 1)` items have
+their required sub-fields filled (and carry a value, so a bare `{}` never
+counts). `select_multi` and scalar branches unchanged. TDD:
+`questions.isQuestionAnswered.test.ts` (+8). *(R3)*
+
+### 🟠 HIGH — `EditDetailsSheet` discarded in-progress edits on any background draft update
+The sheet holds all 14 fields in local `useState` seeded from the `draft` prop
+and re-synced by `useEffect(…, [open, draft])`. `draft` comes live from the
+store, and **every** mutation of that draft yields a new object with a bumped
+`updatedAt`. So while the sheet was open, a streaming section regeneration
+(`appendToSection` per chunk) — or any collaborator/comment/answers update —
+produced a new `draft` reference, re-ran the effect, and **snapped all 14
+fields back to their stored values, wiping the user's typing mid-edit**.
+**Fix:** key the seed effect on `draft.id`, not the whole object — hydrate on
+open / draft-switch, never on unrelated store churn. TDD:
+`EditDetailsSheet.test.tsx` (+2), fails against the old deps. *(R3)*
+
+### 🟠 HIGH — `EmployeeForm` reset user edits on every parent re-render
+Same class, in the Edit-employee dialog. `EmployeeDetail.tsx` builds
+`initialForm` as a fresh object literal each render and passes it as `initial`;
+`EmployeeForm`'s reset effect keyed on `[open, initial]`, so **any** parent
+re-render (a Zustand store update, a sibling toast, an animation) re-fired the
+reset and overwrote the in-progress form. **Fix:** gate the reset on the
+closed→open transition via a `wasOpen` ref — read `initial` fresh at open time,
+ignore later identity changes. Protects all callers, not just this one. TDD:
+`EmployeeForm.test.tsx` (+2). *(R1)*
+
+### 🟠 HIGH — `Wizard` crashed the whole app on an unknown letter-type URL
+`/hr/new/:letterType` and `/me/new/:letterType` are free URL segments;
+`Wizard.tsx` passed the raw param to `getLetterMeta()`, which **throws**
+`Unknown letter type` on a miss → the app crashed to the generic ErrorBoundary
+screen. A stale bookmark or a renamed/removed letter id (every other
+`getLetterMeta` caller passes a persisted, always-valid `draft.letterType`; only
+the wizard feeds raw URL input) triggered it. **Fix:** look the meta up
+defensively via `LETTER_CATALOG.find` and render a graceful "Letter type not
+found" with a back-to-letters action; all hooks still run unconditionally before
+the early return. *(R2)*
+
+### 🟡 MEDIUM — `CommentsPanel` "+ Comment" leaked a stale quote/mark into a fresh section comment
+The per-section `+ Comment` header button reset only `composerSection` and
+`composerBody`, leaving `composerQuote` / `composerApplyMark` set from an earlier
+text-selection flow. Clicking it (instead of cancelling) attached the **wrong
+quote** to the new comment and called the wrong section's `composerApplyMark`,
+applying a Tiptap comment-highlight mark to unrelated text — cross-section
+corruption. **Fix:** clear `composerQuote`/`composerApplyMark` in the button's
+onClick, matching `onCancel`. *(R1)*
+
+### 🟡 MEDIUM — `MattersIndex` "Last:" showed the wrong draft and a misleading time
+The matter card's footer picked `matterDrafts[length-1]` — the draft created
+*last* (`draftsInMatter` sorts by `createdAt` asc) — but labels it "Last:" and
+renders `timeAgo(updatedAt)`, presenting it as most-recent *activity*. Editing an
+older letter in the matter therefore showed the wrong letter and a stale time.
+**Fix:** pick the draft with the greatest `updatedAt` via a local reduce, without
+reordering the shared `draftsInMatter` helper (other callers rely on
+created-order). *(R2)*
+
+### 🟡 MEDIUM — `Activity` clobbered the user's manually-selected day
+`useEffect(() => setSelectedDay(mostRecentDay), [mostRecentDay])` force-reset the
+selected day whenever `mostRecentDay` changed. Scrub back to an older day, then a
+new event enters the store (async hydration, a regeneration, a new comment) →
+`mostRecentDay` changes → the effect **snaps the view back to the newest day**,
+yanking the user off the day they were reading. **Fix:** track the previous
+most-recent day in a ref and auto-advance only while the user is still sitting on
+it; otherwise leave their selection intact. *(R2)*
+
+### 🟢 LOW — reports `unapproved-7d` boundary contradicted its own label
+`predicateUnapprovedSevenDays` (`src/lib/reports/check-predicates.ts`) tripped at
+`days >= 7`, but the check's label ("Unapproved >7d") and description ("more than
+a week") both say **strictly** greater than 7 — so a draft edited exactly 7
+calendar days ago was reported as failing a ">7d" rule (and counted in the
+failing-checks roll-up). **Fix:** `days <= 7` returns null; only 8+ days trips,
+matching both text descriptions. TDD: 7/8-day boundary case added to
+`FailingCheckDrillDown.test.tsx` (+1). *(R3)*
+
+### Evaluated and intentionally NOT changed (verified benign or correct-by-design)
+- **`CommentPopover` 700ms auto-close timer is never cleared** — real uncleaned
+  timer, but on unmount it calls the *same* unmounted `SectionEditor`'s own
+  `setCommentOpen`/`setCommentTarget` (React 18 no-op; no crash, no warning, no
+  cross-instance effect). Five sibling copy-confirmation timers share the pattern
+  with even lower impact (local `setCopied` only). Cosmetic — not landed.
+- **`SectionEditor` `handleClickOn` captures mount-time `onFocusComment`** — the
+  captured closure holds only stable `useState` setters and does a live DOM
+  query, so the "stale" reference behaves identically to any later render's. Not
+  a real bug.
+- **`consultantApi.ts` `call()` spread order** (`...init` after `headers`) — would
+  clobber the merged headers, but no current caller passes `headers`. Latent
+  footgun, not a live bug.
+- **Wizard `showIf`-hidden-but-required answers persist into the draft** — stale
+  `ukRegion`/`usState` etc. can ride along after a jurisdiction flip. Real, but
+  severity depends on whether templates read the now-irrelevant field; deferred
+  pending that confirmation rather than changing the createDraft payload shape.
+
+### Verified clean (no reportable bug) — surfaces swept this session
+`server/` + both LLM streaming endpoints, `api/` handlers (auth, workspace,
+marketplace, stripe, workos, export, password-reset), the store reducers
+(section/comment/matter/task mutations, id-lookups, sort comparators),
+`date-only.ts` / `sanitize.ts` / `evidence.ts` / `monthsBetween` (re-verified
+intact), export/bulk (`pdf.ts`/`docx.ts`/`pack.ts`, CSV, mailmerge), the
+reports predicate + aggregation layer (div-by-zero/NaN all guarded), and the
+collaborators/marketplace/notifications UI.
+
+---
+
 ## 2026-06-28 — automated daily bug-fix sweep (5 rounds, 11 fixed)
 
 Multi-agent sweep over `src/`, `server/`, `api/`, committed directly to `main`
