@@ -238,7 +238,11 @@ async function renderClientSidePdf(doc: HTMLElement): Promise<Blob> {
 function canvasToA4PdfBlob(canvas: HTMLCanvasElement, JsPDF: JsPdfConstructor): Blob {
   const pageWidth = 8.27;
   const pageHeight = 11.69;
-  const imageHeight = (canvas.height * pageWidth) / canvas.width;
+  // Guard a zero-width canvas (e.g. html2canvas rendering a display:none host):
+  // width 0 makes imageHeight Infinity, and `pageTop < Infinity` below would
+  // loop forever, hanging the browser. Fall back to a single A4 page.
+  const imageHeight =
+    canvas.width > 0 ? (canvas.height * pageWidth) / canvas.width : pageHeight;
   const imageData = canvas.toDataURL("image/jpeg", 0.98);
   const pdf = new JsPDF({ unit: "in", format: "a4", orientation: "portrait" });
 

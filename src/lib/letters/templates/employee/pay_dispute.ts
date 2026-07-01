@@ -81,12 +81,12 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
       title: "Demand for payment within reasonable period",
       instruction:
         "Demand payment by a reasonable but specific deadline (typically 14 or 21 calendar days from the date of the letter). Refer to the limitation period (3 months less one day per s.23 ERA) and the ACAS EC route as the next procedural step.",
-      scaffold: `<p>I ask that the sum of £{{totalShortfall}} be paid into my nominated account within {{deadlineDays}} calendar days of the date of this letter, that is, by {{paymentDeadlineUK}}. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
+      scaffold: `<p>I ask that the sum of £{{totalShortfall}} be paid into my nominated account by {{paymentDeadlineUK}}. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
       constraints: [
         "MUST demand payment by a specific date.",
         "MUST reference ACAS EC and s.23 ERA limitation.",
       ],
-      example: `<p>I ask that the sum of £14,832 be paid into my nominated account within 14 calendar days of the date of this letter, that is, by 26 May 2026. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
+      example: `<p>I ask that the sum of £14,832 be paid into my nominated account by 26 May 2026. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
     },
     {
       sectionId: "reservation_of_rights",
@@ -199,12 +199,12 @@ export const PAY_DISPUTE_US: LetterTemplate = {
       title: "Demand for payment",
       instruction:
         "Demand payment by specific date. Reference DOL / state labor commissioner / private action as next steps.",
-      scaffold: `<p>I ask that the sum of ${"$"}{{totalShortfall}} be paid within {{deadlineDays}} calendar days of the date of this letter, that is, by {{paymentDeadlineUS}}. If payment is not made by that date I will, without further notice, file a complaint with the U.S. Department of Labor Wage and Hour Division and / or {{stateLaborAgency}}, and / or commence civil proceedings under FLSA §216(b) and applicable state law to recover the unpaid wages, statutory penalties, liquidated damages, interest, and attorneys' fees.</p>`,
+      scaffold: `<p>I ask that the sum of ${"$"}{{totalShortfall}} be paid by {{paymentDeadlineUS}}. If payment is not made by that date I will, without further notice, file a complaint with the U.S. Department of Labor Wage and Hour Division and / or {{stateLaborAgency}}, and / or commence civil proceedings under FLSA §216(b) and applicable state law to recover the unpaid wages, statutory penalties, liquidated damages, interest, and attorneys' fees.</p>`,
       constraints: [
         "MUST demand payment by a specific date.",
         "MUST reference DOL / state labor commissioner / private action.",
       ],
-      example: `<p>I ask that the sum of $29,624.16 be paid within 14 calendar days of the date of this letter, that is, by May 26, 2026. If payment is not made by that date I will, without further notice, file a complaint with the U.S. Department of Labor Wage and Hour Division and the California Labor Commissioner, and / or commence civil proceedings under FLSA §216(b) and Cal. Lab. Code §§203, 218.5 and 1194 to recover the unpaid wages, statutory penalties, liquidated damages, interest, and attorneys' fees.</p>`,
+      example: `<p>I ask that the sum of $29,624.16 be paid by May 26, 2026. If payment is not made by that date I will, without further notice, file a complaint with the U.S. Department of Labor Wage and Hour Division and the California Labor Commissioner, and / or commence civil proceedings under FLSA §216(b) and Cal. Lab. Code §§203, 218.5 and 1194 to recover the unpaid wages, statutory penalties, liquidated damages, interest, and attorneys' fees.</p>`,
     },
     {
       sectionId: "reservation_of_rights",

@@ -249,13 +249,22 @@ Both leaked into the LLM data dump in the wrong context. **Fix:** `showIf`
 gates (`probationOutcome === "extend"||"fail"`, `fitNoteAttached === true`),
 verified controlling ids/values. TDD extended. *(R8)*
 
-### Flagged for the user, deliberately NOT auto-fixed (R8)
-- **`pay_dispute` `{{deadlineDays}}` placeholder** — no wizard question collects
-  a day-count, and the value can't be reliably computed per-section (issueDate
-  is in the system prompt, demandDeadline in the data dump), so it risks
-  rendering `[TBD]` in a legal demand letter. The fix is a content/wording
-  decision (drop the "within N days" phrase, or add a `deadlineDays` question),
-  not a mechanical rename — spun off as a separate task for the user.
+### Flagged for the user, then resolved by decision (R8 → R9)
+- **`pay_dispute` `{{deadlineDays}}` placeholder (fixed)** — no wizard question
+  collected a day-count, and the value can't be reliably computed per-section
+  (issueDate is in the system prompt, demandDeadline in the data dump), so it
+  risked rendering `[TBD]` in a legal demand letter. **Decision: drop the phrase**
+  (Option a) rather than add a `deadlineDays` question (Option b) — a second
+  day-count input alongside the existing absolute `demandDeadline` date could
+  contradict it ("within 30 calendar days … that is, by 26 May 2026"), which is
+  worse than `[TBD]` in a demand letter, and wouldn't cover the case where the
+  (optional) `demandDeadline` is left blank. The section constraint already
+  requires "payment by a specific date", so the explicit `{{paymentDeadlineUK/US}}`
+  date is sufficient. **Fix:** removed "within {{deadlineDays}} calendar days of
+  the date of this letter, that is," from both `next_steps` scaffolds *and* both
+  worked examples (so the LLM's strongest signal doesn't reintroduce the computed
+  day-count pattern), keeping "…be paid … by {{paymentDeadlineUK/US}}". No question
+  or data-shape change. Lint + `vitest run` + build green.
 
 ### Rejected in R8 (verified false-positive / intentional — did NOT land)
 - **`store.ts appendAIMessageBody` "missing updatedAt"** — INTENTIONAL: it's the
