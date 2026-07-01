@@ -186,5 +186,18 @@ describe("isQuestionVisible — jurisdiction + showIf gating", () => {
     expect(isQuestionVisible(newEndDate!, { probationOutcome: "pass" })).toBe(false);
     expect(isQuestionVisible(objectives!, { probationOutcome: "extend" })).toBe(true);
     expect(isQuestionVisible(objectives!, { probationOutcome: "fail" })).toBe(false);
+
+    // "Areas for development" — help says extend/fail only; hidden on pass.
+    const areas = findQ("probation_outcome", "areasForDevelopment");
+    expect(areas).toBeDefined();
+    expect(isQuestionVisible(areas!, { probationOutcome: "extend" })).toBe(true);
+    expect(isQuestionVisible(areas!, { probationOutcome: "fail" })).toBe(true);
+    expect(isQuestionVisible(areas!, { probationOutcome: "pass" })).toBe(false);
+
+    // sickness "may be fit for work adjustments" — only when a Fit Note is attached.
+    const adjustments = findQ("sickness_notification", "adjustmentsReferenced");
+    expect(adjustments).toBeDefined();
+    expect(isQuestionVisible(adjustments!, { fitNoteAttached: true })).toBe(true);
+    expect(isQuestionVisible(adjustments!, { fitNoteAttached: false })).toBe(false);
   });
 });

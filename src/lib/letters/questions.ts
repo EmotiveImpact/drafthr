@@ -754,6 +754,7 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
           type: "repeater",
           label: "Areas for development",
           help: "Required only on extend / fail outcomes. For pass, leave empty.",
+          showIf: (a) => a.probationOutcome === "extend" || a.probationOutcome === "fail",
           repeater: {
             itemLabel: "Area",
             minItems: 0,

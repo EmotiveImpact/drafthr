@@ -690,7 +690,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         { id: "absenceFromDate", type: "date", label: "First day of absence", required: true },
         { id: "absenceToDate", type: "date", label: "Expected last day (if known)" },
         { id: "fitNoteAttached", type: "boolean", label: "Have you attached a Fit Note / medical certificate?" },
-        { id: "adjustmentsReferenced", type: "textarea", label: "Any 'may be fit for work' adjustments?" },
+        { id: "adjustmentsReferenced", type: "textarea", label: "Any 'may be fit for work' adjustments?", showIf: (a) => a.fitNoteAttached === true },
       ],
     },
   ] as QuestionStep[],
