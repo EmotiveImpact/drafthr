@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (28 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (30 fixed so far)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -53,8 +53,9 @@ the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 seam allows, and the buggy path was confirmed to fail the new test first.
 Running gate: `tsc -b` clean · **545 tests** (+30) · `vite build` OK. Commits:
 `53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5),
-`43db7d2` (R6), `9de6b8e` (R7). **This sweep is still running** under the user's
-`/loop` directive; later rounds append below.
+`43db7d2` (R6), `9de6b8e` (R7), `f99939d` (R8). By R8 the two recurring classes
+(missing-`showIf`, placeholder↔id) were nearly drained — the exhaustive audit
+found only 2 landable fixes. **Sweep still running** under the user's `/loop`.
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -213,6 +214,34 @@ third `/session` fetch instead of coalescing — defeating the anti-stomp guard.
 **Fix:** clear only if we're still the current promise
 (`if (inflight.current === p) inflight.current = null`). Provider-agnostic pure
 coalescing logic; no dedicated test (1-line invariant). *(R5)*
+
+### 🟡 MEDIUM — two more conditional fields lacked their `showIf` gate (exhaustive audit)
+An exhaustive audit of the "labelled-conditional field with no `showIf`" class
+surfaced two remaining cases: `probation_outcome` "Areas for development" (help
+text: "Required only on extend / fail outcomes. For pass, leave empty.") showed
+on a pass outcome; `sickness_notification` "Any 'may be fit for work'
+adjustments?" (a UK Fit Note concept) showed even with no Fit Note attached.
+Both leaked into the LLM data dump in the wrong context. **Fix:** `showIf`
+gates (`probationOutcome === "extend"||"fail"`, `fitNoteAttached === true`),
+verified controlling ids/values. TDD extended. *(R8)*
+
+### Flagged for the user, deliberately NOT auto-fixed (R8)
+- **`pay_dispute` `{{deadlineDays}}` placeholder** — no wizard question collects
+  a day-count, and the value can't be reliably computed per-section (issueDate
+  is in the system prompt, demandDeadline in the data dump), so it risks
+  rendering `[TBD]` in a legal demand letter. The fix is a content/wording
+  decision (drop the "within N days" phrase, or add a `deadlineDays` question),
+  not a mechanical rename — spun off as a separate task for the user.
+
+### Rejected in R8 (verified false-positive / intentional — did NOT land)
+- **`store.ts appendAIMessageBody` "missing updatedAt"** — INTENTIONAL: it's the
+  per-token streaming reducer, bracketed by `appendAIMessage` (start) and
+  `finalizeAIMessage` (end) which both bump `updatedAt`. Bumping per-token would
+  spam the dual-write sync — the omission is the optimization, not a bug.
+- **`raisedAt` "(if ...)" sub-fields** — free-text sub-fields inside a repeater,
+  intentionally always-rendered so any incident can record the detail.
+- **`updateAIAction` actions-preserve** — re-flagged, still not triggerable (no
+  actionId to patch on an action-less message).
 
 ### 🟡 MEDIUM — four conditional employer fields lacked their `showIf` gate
 Four questions whose labels literally announce conditionality rendered
