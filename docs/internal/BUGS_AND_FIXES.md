@@ -40,17 +40,20 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (8 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (14 fixed so far)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
-`api/`, and the export/bulk/reports/wizard surfaces, committed directly to
-`main`. Baseline fully green (`tsc -b` clean · **515 tests** · `vite build` OK),
-so this was a latent-bug hunt. Each finding was adversarially verified against
-source before landing; every fix ships with a regression test where the seam
-allows, and the buggy code path was confirmed to fail the new test first.
-Running gate: `tsc -b` clean · **528 tests** (+13) · `vite build` OK. Commits:
-`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3). **This sweep is still running**
-under the user's `/loop` directive; later rounds append below on the same date.
+`api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
+to `main`. Baseline fully green (`tsc -b` clean · **515 tests** · `vite build`
+OK), so this was a latent-bug hunt. Each finding was adversarially verified
+against source before landing (rounds 4+ use fan-out finders → a skeptical
+default-refute verifier, then a final senior human triage that rejected ~half
+the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
+— see the "Rejected" notes). Every fix ships with a regression test where the
+seam allows, and the buggy path was confirmed to fail the new test first.
+Running gate: `tsc -b` clean · **534 tests** (+19) · `vite build` OK. Commits:
+`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4). **This sweep is
+still running** under the user's `/loop` directive; later rounds append below.
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -140,6 +143,64 @@ calendar days ago was reported as failing a ">7d" rule (and counted in the
 failing-checks roll-up). **Fix:** `days <= 7` returns null; only 8+ days trips,
 matching both text descriptions. TDD: 7/8-day boundary case added to
 `FailingCheckDrillDown.test.tsx` (+1). *(R3)*
+
+### 🟠 HIGH — booking "Open draft" link could dead-end after a concurrent pull
+`pushBookingCreate` (`src/lib/marketplaceSync.ts`) looked up the optimistic
+placeholder row **after** awaiting `createBooking()`. A `pullMyBookings()` /
+`pullInbox()` firing during that await replaces the whole bookings array and
+drops the not-yet-server-known placeholder — so the post-await lookup missed,
+`dtoToBooking` got `prior=undefined`, and the readable `localDraftId` was lost
+(the server only knows the hashed UUID, which the editor can't resolve → "Draft
+not found"). **Fix:** snapshot the placeholder BEFORE the await and fall back to
+it. Single-file, no signature churn. *(R4)*
+
+### 🟠 HIGH — booking message endpoint returned 200 with a never-persisted message
+`api/marketplace/_handlers/message.ts` appended atomically via
+`UPDATE … RETURNING`; if the booking was deleted between the SELECT and the
+UPDATE (0 rows) it fell back to returning `[...existing, msg]` with **200** — a
+success for a message that was never stored. **Fix:** `if (!updated) return
+404`, mirroring `respond.ts`'s not-found handling. *(R4)*
+
+### 🟡 MEDIUM — malformed section rows returned 500 instead of 400
+`api/store/_handlers/sections.ts` and `drafts.ts` inserted client section rows
+with no runtime validation; a section missing `title`/`html`/`status`/`position`
+hit a DB NOT NULL constraint → unhandled **500** (TS types are erased at
+runtime). **Fix:** shared `isValidSectionInput` guard → clean **400**, matching
+the prior sweep's "500 where 400 is right" fixes. TDD: `_section-input.test.ts`
+(+6). *(R4)*
+
+### 🟡 MEDIUM — LLM prior-section context corrupted when a section was missing
+`regenerateSection`/`regenerateSectionAsPending` (`src/lib/llm/draft.ts`) built
+`priorTitles` via `slice(0, findIndex(...))`. If the section wasn't in
+`draft.sections` (a concurrent delete between lookup and the async call),
+`findIndex` returned `-1` and `slice(0, -1)` yielded **all sections but the
+last** instead of an empty list — feeding the model the wrong prior-section
+context. **Fix:** guard `idx < 0 → []` at both call sites. *(R4)*
+
+### 🟢 LOW — template-quality requirement matcher glued periods to tokens
+`matchesRequirement` (`src/lib/template-quality.ts`) split on `/[^a-zA-Z0-9§.]+/`,
+keeping the period inside tokens — so a sentence-final requirement word like
+`"days."` never substring-matched the bare `"days"` in the section text, a false
+"not covered" on the advisory template-coverage report. Citations like `s.95`
+are ≤4 chars and dropped by the length filter anyway. **Fix:** split on periods
+too (`/[^a-zA-Z0-9§]+/`). *(R4)*
+
+### Rejected in R4 (machine-"confirmed" but wrong / unsafe — did NOT land)
+- **`remote-ids.ts` `hashToBytes` "uses new h1"** — a bespoke deterministic hash
+  whose only contract is stable local-id → server-UUID mapping. It's not a
+  correctness defect, and "fixing" it would re-map EVERY existing draft/matter's
+  server UUID (orphaning synced rows, missing deletes, 404ing exports). Actively
+  dangerous — left untouched.
+- **`src/db/audit.ts` same-millisecond chain tiebreak** — real but already the
+  logged backlog item **B8** (false-ALARM only; chain data intact) and requires
+  a per-tenant `seq`-column migration — out of scope for an autonomous loop.
+- **`AIPanel` CopyButton timer** / **`FloatingCommentPanel` 220px initial
+  height** — benign React-18 no-op / self-correcting first-paint cosmetic.
+- **`store.ts` `updateAIAction` actions-preserve** — not triggerable: you can
+  only patch an `actionId` on a message that already has an `actions` array, so
+  the `?.` never yields undefined in any real call.
+- **`PaginatedLetter` selection bubble doesn't track scroll** — UX polish (the
+  comment still works on click), not a correctness bug.
 
 ### Evaluated and intentionally NOT changed (verified benign or correct-by-design)
 - **`CommentPopover` 700ms auto-close timer is never cleared** — real uncleaned
