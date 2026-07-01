@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (14 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (17 fixed so far)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -51,9 +51,10 @@ default-refute verifier, then a final senior human triage that rejected ~half
 the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
-Running gate: `tsc -b` clean · **534 tests** (+19) · `vite build` OK. Commits:
-`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4). **This sweep is
-still running** under the user's `/loop` directive; later rounds append below.
+Running gate: `tsc -b` clean · **536 tests** (+21) · `vite build` OK. Commits:
+`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5).
+**This sweep is still running** under the user's `/loop` directive; later rounds
+append below.
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
@@ -184,6 +185,48 @@ keeping the period inside tokens — so a sentence-final requirement word like
 "not covered" on the advisory template-coverage report. Citations like `s.95`
 are ≤4 chars and dropped by the length filter anyway. **Fix:** split on periods
 too (`/[^a-zA-Z0-9§]+/`). *(R4)*
+
+### 🟠 HIGH — US COBRA compliance check was case-sensitive (false "missing notice")
+`us_termination_cobra` (`src/lib/letters/compliance.ts`) set `flags: ""`, which
+defeats `ruleMatches`'s `rule.match.flags ?? "i"` default — an empty string is
+not nullish, so `new RegExp("COBRA", "")` ran **case-sensitive** while all 17
+sibling rules use `"i"`. A US termination letter that referenced "Cobra" /
+"cobra" in any non-uppercase form was wrongly flagged as missing the required
+COBRA continuation notice (29 USC §1166). **Fix:** `flags: "i"`. TDD:
+`compliance.test.ts` (+1, mixed/lower-case). *(R5)*
+
+### 🟠 HIGH — accommodation-request "impairment" field wasn't required when disclosed
+`accommodation_request` (`src/lib/letters/questions/employee.ts`) shows the
+`impairment` text field only when the user opts in (`showIf discloseDiagnosis
+=== "yes"`), but it lacked `required: true`. Because the wizard gate only checks
+*visible + required* questions, a user who chose to disclose could proceed with
+it blank, leaking an unfilled impairment into the generated letter. **Fix:** add
+`required: true` (activates only while visible — the ukRegion/usState +
+sibling-repeater pattern). TDD: `questions.isQuestionAnswered.test.ts` (+1). *(R5)*
+
+### 🟡 MEDIUM — auth refresh() could fire a duplicate /session fetch under overlapping forced refreshes
+`AuthProvider.refresh()` (`src/lib/auth/AuthProvider.tsx`) cleared
+`inflight.current` unconditionally in its `finally`. When two `force:true`
+refreshes overlapped, the faster one nulled the shared ref while the other was
+still in flight, so a subsequent non-forced caller saw `null` and started a
+third `/session` fetch instead of coalescing — defeating the anti-stomp guard.
+**Fix:** clear only if we're still the current promise
+(`if (inflight.current === p) inflight.current = null`). Provider-agnostic pure
+coalescing logic; no dedicated test (1-line invariant). *(R5)*
+
+### Rejected in R5 (skeptical-verified false positives — did NOT land)
+- **Prompt-"injection" via `evidence.ts` / `system.ts` party fields** — this is
+  a single-user drafting tool; the person supplying wizard answers / evidence is
+  the one whose own prompt is built. Self-injection isn't a vulnerability, and
+  the proposed newline-collapse would mangle legitimately multi-line evidence.
+- **`pack.ts` "Attachment N" label vs file number** — the filtered-index label
+  is CORRECT: it matches the letter body's `[Attachment N]`
+  (`sourceHtml.ts` numbers attachments by the same filtered ordinal). Changing
+  it to the full-array index would desync the pack index from the letter. The
+  file *link* already resolves via the full-array `evidenceFileName`.
+- **`Finalize.tsx` mark-as-sent desktop/mobile disable mismatch** — real
+  inconsistency, but every proposed one-liner just moves the inconsistency
+  elsewhere; needs a product decision, not an autonomous-loop change.
 
 ### Rejected in R4 (machine-"confirmed" but wrong / unsafe — did NOT land)
 - **`remote-ids.ts` `hashToBytes` "uses new h1"** — a bespoke deterministic hash
