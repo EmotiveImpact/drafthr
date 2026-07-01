@@ -51,11 +51,16 @@ const HR_STEPS: Step[] = [
     placement: "right",
   },
   {
-    target: '[data-tour="new-letter-cta"]',
+    // Un-anchored: the HR dashboard has no [data-tour="new-letter-cta"] element
+    // (that anchor lives only on the Employee home), so anchoring here fired
+    // TARGET_NOT_FOUND and silently skipped this step for employers. Describe it
+    // centered instead — the same pattern EMPLOYEE_STEPS uses for its
+    // un-anchored intro steps.
+    target: "body",
     title: "Start a new letter",
     content:
       "35 templates across HR and Employee modes. UK + US legal scaffolding baked into every one.",
-    placement: "bottom",
+    placement: "center",
   },
   {
     target: '[data-tour="workspace-switcher"]',
