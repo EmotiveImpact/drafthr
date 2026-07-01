@@ -42,11 +42,33 @@ export async function handleDraftRequest(
   res.setHeader("X-Content-Type-Options", "nosniff");
 
   const encoder = new TextEncoder();
+  // A client disconnecting mid-stream destroys the response. Without an 'error'
+  // listener Node escalates the socket error into an unhandled exception that
+  // crashes the dev server; and writing to a destroyed response throws. Track
+  // the closed state and stop writing once the client is gone.
+  let cancelled = false;
+  res.on("close", () => {
+    cancelled = true;
+  });
+  res.on("error", () => {
+    cancelled = true;
+  });
+  const canWrite = () => !cancelled && !res.writableEnded && !res.destroyed;
   const writeEvent = (payload: object) => {
-    res.write(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+    if (!canWrite()) return;
+    try {
+      res.write(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+    } catch {
+      cancelled = true;
+    }
   };
   const writeRaw = (line: string) => {
-    res.write(encoder.encode(`data: ${line}\n\n`));
+    if (!canWrite()) return;
+    try {
+      res.write(encoder.encode(`data: ${line}\n\n`));
+    } catch {
+      cancelled = true;
+    }
   };
 
   let totalTokens = 0;
@@ -97,7 +119,13 @@ export async function handleDraftRequest(
   }
 
   writeRaw("[DONE]");
-  res.end();
+  if (!res.writableEnded && !res.destroyed) {
+    try {
+      res.end();
+    } catch {
+      /* client already disconnected */
+    }
+  }
 }
 
 /**

@@ -336,6 +336,17 @@ export function useSearchPalette() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        // Don't hijack Cmd/Ctrl+K while the user is typing in a form field or
+        // comment composer — it would steal focus mid-sentence and interrupt
+        // their input. (The rich-text editor keeps the shortcut as the primary
+        // way to open the palette.)
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement
+        ) {
+          return;
+        }
         e.preventDefault();
         setOpen((v) => !v);
       }
