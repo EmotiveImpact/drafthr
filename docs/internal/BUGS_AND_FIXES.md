@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (32 fixed so far)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (33 fixed — SWEEP COMPLETE)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -51,15 +51,30 @@ default-refute verifier, then a final senior human triage that rejected ~half
 the machine-"confirmed" candidates as false-positive / by-design / unsafe-to-fix
 — see the "Rejected" notes). Every fix ships with a regression test where the
 seam allows, and the buggy path was confirmed to fail the new test first.
-Running gate: `tsc -b` clean · **550 tests** (+35) · `vite build` OK. Commits:
-`53a1183` (R1), `13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5),
-`43db7d2` (R6), `9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9). Convergence by
-R7→R8→R9 (6→2→2 landable; R9's broad+skeptical pass rejected 5 of 7). **Sweep
-still running** under the user's `/loop`.
+
+**Final gate:** `tsc -b` clean · **550 tests** (+35) · `vite build` OK. **10
+rounds, 33 real bugs fixed**, every commit pushed green. Commits: `53a1183` (R1),
+`13dbee6` (R2), `6e120de` (R3), `23a1f7a` (R4), `07e59d4` (R5), `43db7d2` (R6),
+`9de6b8e` (R7), `f99939d` (R8), `6fb0c92` (R9), `60dc0d3` (R10). **Stopped on
+convergence:** per-round landable counts ran 2·3·3·6·3·5·6·2·2·1 — the last three
+rounds (an exhaustive class audit, a broad confirming sweep, and a
+completeness-critic pass) yielded only latent/defensive fixes with high rejection
+rates, so the substantive well is dry. One item (`pay_dispute {{deadlineDays}}`)
+was handed to the user as a separate task (a content decision, not a mechanical
+fix).
 
 The dominant theme this sweep is a **single class of bug — form/dialog state
 re-seeded from an unstable prop or object identity, silently wiping the user's
 in-progress edits.** Three independent instances were found and fixed.
+
+### 🟢 LOW (defensive) — PDF export could infinite-loop on a zero-width canvas
+`canvasToA4PdfBlob` (`src/lib/export/pdf.ts`) computed `imageHeight =
+canvas.height * pageWidth / canvas.width`; a zero-width canvas from html2canvas
+(display:none host, sandboxed-iframe quirk) makes it `Infinity`, and the paging
+loop `while (pageTop < imageHeight)` never terminates → browser hang mid-export.
+The earlier export audit checked zero-*height* (terminates → empty PDF) but
+missed zero-*width*. **Fix:** guard `canvas.width > 0`, else fall back to a
+single A4 page. *(R10)*
 
 ### 🟠 HIGH — required-repeater wizard validation bypass → blank tribunal-grade letters
 `RepeaterField` (`src/components/wizard/QuestionField.tsx`) auto-hydrates a
