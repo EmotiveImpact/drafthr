@@ -122,6 +122,10 @@ export async function POST(req: Request): Promise<Response> {
     : supplied;
 
   let cancelled = false;
+  // Abort the upstream Anthropic generation when the client disconnects, so an
+  // aborted request stops consuming (and billing) tokens instead of running to
+  // completion in the background.
+  const controllerAbort = new AbortController();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
@@ -146,6 +150,7 @@ export async function POST(req: Request): Promise<Response> {
           messages,
           temperature: clampTemperature(body.temperature),
           maxOutputTokens: clampMaxTokens(body.maxTokens),
+          abortSignal: controllerAbort.signal,
           onError: (err) => {
             const msg =
               err instanceof Error
@@ -160,6 +165,7 @@ export async function POST(req: Request): Promise<Response> {
         });
 
         for await (const chunk of result.textStream) {
+          if (cancelled) break;
           if (!chunk) continue;
           totalTokens += 1;
           writeEvent({ delta: chunk });
@@ -191,8 +197,10 @@ export async function POST(req: Request): Promise<Response> {
       }
     },
     cancel() {
-      // Client disconnected — stop the (still-running) streamText writes above.
+      // Client disconnected — stop the (still-running) streamText writes above
+      // and abort the upstream generation so we stop consuming/paying tokens.
       cancelled = true;
+      controllerAbort.abort();
     },
   });
 

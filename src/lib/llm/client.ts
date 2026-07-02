@@ -94,7 +94,6 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  let sawAnyToken = false;
   let proxyError: string | null = null;
 
   while (true) {
@@ -111,9 +110,12 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
         if (!line.startsWith("data: ")) continue;
         const payload = line.slice(6);
         if (payload === "[DONE]") {
-          if (!sawAnyToken && proxyError) {
-            // Treat upstream rate-limit / quota errors as retryable.
-            if (/rate limit|quota|429|allocation/i.test(proxyError)) {
+          // A mid-stream error must fail the whole stream even if tokens
+          // already flowed — otherwise a half-written section gets marked
+          // 'ready'. Callers' catch paths reset status and keep partial text.
+          if (proxyError) {
+            // Treat upstream rate-limit / quota / overload errors as retryable.
+            if (/rate limit|quota|429|allocation|overloaded/i.test(proxyError)) {
               throw new RetryableError(proxyError);
             }
             throw new Error(proxyError);
@@ -128,7 +130,6 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
             continue;
           }
           if (json.delta) {
-            sawAnyToken = true;
             opts.onToken(json.delta);
           }
         } catch {
@@ -136,6 +137,14 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
         }
       }
     }
+  }
+  // Stream ended without an explicit [DONE] sentinel. If an error event was
+  // seen, fail rather than reporting success on a possibly-truncated section.
+  if (proxyError) {
+    if (/rate limit|quota|429|allocation|overloaded/i.test(proxyError)) {
+      throw new RetryableError(proxyError);
+    }
+    throw new Error(proxyError);
   }
   opts.onDone?.();
 }

@@ -18,6 +18,7 @@ import {
   stripeConnectAccounts,
 } from "../../../src/db/schema.js";
 import { getStripe, appBaseUrl, platformFeeBps } from "../../_utils/stripe.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -37,8 +38,14 @@ export async function POST(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<{ bookingId?: string }>(req);
   if (!parsed.ok) return parsed.response;
-  const bookingId = typeof parsed.body.bookingId === "string" ? parsed.body.bookingId.trim() : "";
-  if (!bookingId) return jsonError("bookingId required", 400);
+  const rawBookingId = typeof parsed.body.bookingId === "string" ? parsed.body.bookingId.trim() : "";
+  if (!rawBookingId) return jsonError("bookingId required", 400);
+  // Validate the uuid before it hits the uuid column — a non-uuid id (reachable
+  // when paying against an optimistic local booking not yet swapped for the
+  // server UUID) otherwise raises Postgres 22P02 → opaque 500. Treat as
+  // not-found. (Matches respond.ts / message.ts / bug-#19.)
+  const bookingId = serverUuidOrNull(rawBookingId);
+  if (!bookingId) return jsonError("Booking not found", 404);
 
   try {
     const db = getDb();

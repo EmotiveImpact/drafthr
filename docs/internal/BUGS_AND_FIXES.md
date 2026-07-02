@@ -73,11 +73,55 @@ so a fast Page→Sections toggle doesn't drop the last keystroke burst, and the
 Page view is forced read-only while any section streams (Editor.tsx). TDD:
 `PagedlyDocEditor.test.ts` (+9) locks every guard branch.
 
-Remaining audit findings (queued for the next waves): last-owner role/remove
-TOCTOU (R12 FLAGGED — now actionable), sidebar delete-Undo blocked by the
-dual-write tombstone, drafts.ts 409 collision between reference-validation and
-revision-conflict, viewMode not reset on draft switch, Review "jump to section"
-param ignored, and a set of best-fix upgrades from the ledger review.
+### Wave 2 — safe high-value batch (audit findings 2–10, disjoint files)
+
+Ran as parallel fix-agents on non-overlapping files + two Editor.tsx edits by
+hand, then one central `npm run build` + `npx vitest run` (573 passing, +1
+dual-write guard). All confirmed by ≥1 audit lens.
+
+- **🟠 Truncated AI section stored as "ready".** A mid-stream Anthropic error
+  (`data: {error}` then `[DONE]`) was swallowed once any token had flowed, so a
+  half-written section committed as complete. `src/lib/llm/client.ts` now throws
+  on `proxyError` at both the `[DONE]` branch and the stream-end fall-through
+  regardless of tokens seen (retryable on rate-limit/quota/overloaded); callers'
+  catch paths reset status + keep partial text. `client.test.ts` locks it.
+- **🟢 Aborted generation kept billing.** `api/draft.ts` now threads an
+  `AbortController` into `streamText({ abortSignal })`, breaks the `textStream`
+  loop on `cancelled`, and calls `controllerAbort.abort()` in `cancel()` — an
+  aborted request stops consuming Anthropic tokens instead of running to
+  completion in the background.
+- **🟠 TXT export emitted unresolved-suggestion diff-soup.** `Finalize.tsx` TXT
+  path now runs the same `mergeAcceptedSuggestionsHtml(…, {forExport:true})` →
+  `sanitizeLetterHtmlForExport` → `htmlToPlain` pipeline as PDF/DOCX, so it can
+  no longer dump both sides of a pending AI edit into the plain-text artifact.
+- **🟢 PDF export 500 on a DB blip.** `api/export/pdf.ts` wraps the
+  `draftBelongsToTenant` call in `.catch(() => false)` and the helper returns
+  false when `!DATABASE_URL`, preserving the "always produce the PDF" contract
+  instead of 500-ing on a transient tenant-lookup failure.
+- **🟡 Silently-dropped booking messages.** `marketplaceSync.pushBookingMessage`
+  now returns a boolean; on `!res.ok` it toasts + re-pulls (inbox + my-bookings)
+  and `BookingThread` snapshots messages before the optimistic append and rolls
+  back on failure — was a silent lie to the counterparty.
+- **🟢 Non-UUID ids → 500.** `serverUuidOrNull` guards added to
+  `stripe-checkout.ts` (404), `draft-extras.ts` POST + `drafts.ts` writeDraft
+  (400) so a malformed id returns a clean status instead of a Postgres 22P02 500.
+- **🟡 Sidebar delete-Undo blocked by the dual-write tombstone.** Exported
+  `undeleteDraft(draftId)` clears the `deletedDraftIds` tombstone + re-mirrors;
+  `AppSidebar` Undo calls it after re-inserting. (Rejected the agent's snapshot-
+  inference convergence branch in `deleteDraftRemotely` — a lagging local removal
+  would un-tombstone a genuinely-deleted row; the explicit Undo path is the only
+  trigger.) `dual-write.test.ts` locks it.
+- **🟠 Editor stale state across drafts.** The `[draftId]` reset effect now
+  drains all cross-draft UI state (active section, floating/pending comment,
+  refine target, review panel, viewMode) — fixes wrong-draft comments + the
+  blank-page auto-generate. Plus a new `?section=` consume effect so the Review
+  "Fix this first" link actually scrolls to and selects the flagged section.
+
+Still queued (riskier / DB-transaction — deferred to a dedicated wave): last-owner
+role/remove TOCTOU (R12 FLAGGED — needs `db.transaction` + `FOR UPDATE`/advisory
+lock), drafts.ts 409 collision between reference-validation and revision-conflict,
+`relevantData` wrong-jurisdiction filter, EditDetailsSheet dirty-field patch,
+letterhead `hasLetterhead` divergence, dead `SaveStatusChip`.
 
 ---
 

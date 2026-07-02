@@ -33,6 +33,8 @@ import {
 } from "@/lib/finalize/healthChecks";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
 import { WizardChrome } from "@/components/editor/WizardChrome";
+import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
+import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 
 /**
  * Finalise — Option H layout.
@@ -165,8 +167,19 @@ export function Finalize() {
         el.innerHTML = html ?? "";
         return (el.textContent ?? "").trim();
       };
+      // Resolve inline AI suggestions the same way the PDF/DOCX/pack sinks do
+      // (mergeAcceptedSuggestionsHtml → sanitizeLetterHtmlForExport) BEFORE
+      // flattening to text. On raw s.html, an unresolved suggestion carries both
+      // a <del>(original) and an <ins>(proposed) run, so textContent would
+      // concatenate BOTH → doubled/contradictory sentences in the .txt.
       const plain = draft.sections
-        .map((s) => htmlToPlain(s.html ?? ""))
+        .map((s) =>
+          htmlToPlain(
+            sanitizeLetterHtmlForExport(
+              mergeAcceptedSuggestionsHtml(s.html ?? "", { forExport: true }),
+            ),
+          ),
+        )
         .filter(Boolean)
         .join("\n\n");
       const blob = new Blob([plain], { type: "text/plain;charset=utf-8" });

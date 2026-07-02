@@ -64,6 +64,7 @@ import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matte
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
 import type { Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { undeleteDraft } from "@/lib/dual-write";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { useAuth } from "@/lib/auth";
@@ -732,6 +733,10 @@ function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
                                 useDraftStore.setState((s) => ({
                                   drafts: { ...s.drafts, [snapshot.id]: snapshot },
                                 }));
+                                // Clear the delete tombstone so future syncs of
+                                // this id aren't dropped, and re-mirror it to
+                                // the server (the delete had removed it there).
+                                undeleteDraft(snapshot.id);
                               },
                             },
                           });

@@ -18,6 +18,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections } from "../../../src/db/schema.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { isValidSectionInput } from "./_section-input.js";
 
@@ -150,6 +151,11 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
   if (!body || typeof body.id !== "string" || !body.id) {
     return jsonError("Draft id required", 400);
   }
+  // Guard the uuid PK/columns: a non-uuid client id would throw a Postgres
+  // 22P02 and surface as a 500. Normalize to the canonical uuid (or 400).
+  const draftId = serverUuidOrNull(body.id);
+  if (!draftId) return jsonError("Invalid draft id", 400);
+  body.id = draftId;
   if (Array.isArray(body.sections) && !body.sections.every(isValidSectionInput)) {
     return jsonError("Invalid section in sections array", 400);
   }

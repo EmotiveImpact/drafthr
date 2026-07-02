@@ -289,9 +289,19 @@ export async function pushBookingMessage(
   bookingId: string,
   from: "requester" | "consultant",
   text: string,
-): Promise<void> {
+): Promise<boolean> {
   const res = await sendBookingMessage(bookingId, text);
-  if (!res.ok) return;
+  if (!res.ok) {
+    // Don't silently leave the optimistic bubble looking "delivered" while
+    // the server thread never received it — the counterpart only sees the
+    // SERVER thread and would never get this message (the B9/R19 silent-lie
+    // class, mirrored from pushBookingRespond). Tell the sender and re-pull
+    // both sides' threads so the local state reconciles to the server truth.
+    toast.error("Message didn't send — check your connection and try again.");
+    void pullInbox();
+    void pullMyBookings();
+    return false;
+  }
   // Server returns the full messages array — replace local with that
   // so any messages from the other party that were missing also land.
   const state = useBookingsStore.getState();
@@ -303,6 +313,7 @@ export async function pushBookingMessage(
   // Tip 'from' is unused at this point — the server-truth wins — but
   // we accept the param so callers don't need to know.
   void from;
+  return true;
 }
 
 /** Mirror a booking state transition to the server. When the server

@@ -319,12 +319,31 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
     });
     if (res.ok) {
       consecutiveDeleteFailures = 0;
+      // Undo is handled explicitly: the sidebar's Undo re-inserts the draft and
+      // calls undeleteDraft(), which clears the tombstone and re-mirrors. We
+      // deliberately do NOT infer an undo from the store snapshot here — local
+      // removal can lag the DELETE round-trip, and a stale snapshot would
+      // un-tombstone (and recreate) a row the user genuinely deleted.
       return;
     }
     recordDeleteFailure(draftId, res.status);
   } catch (err) {
     recordDeleteFailure(draftId, err);
   }
+}
+
+/**
+ * Reverse a local delete's tombstone so future syncs of this id are no longer
+ * dropped by syncDraft's `deletedDraftIds.has(draftId)` guard, then re-mirror
+ * the (restored) draft to the server. Called by the sidebar's Undo action after
+ * it re-inserts the draft into the store. Without this, every subsequent sync of
+ * an undeleted draft was silently discarded for the rest of the session (the
+ * tombstone was never cleared), so edits only reappeared after a full reload.
+ */
+export function undeleteDraft(draftId: string): void {
+  if (!ENABLED || !draftId) return;
+  deletedDraftIds.delete(draftId);
+  void syncDraft(draftId).catch((err) => void err);
 }
 
 function readFlag(): boolean {

@@ -262,6 +262,37 @@ describe("dual-write enqueueSync", () => {
     expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/aren't syncing/i);
   });
 
+  it("undeleteDraft clears the tombstone so a restored draft re-syncs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    const draft = makeDraft("undel_1", 1_768_000_000_000);
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    // Delete tombstones the id — a subsequent sync is dropped by the guard.
+    await mod.deleteDraftRemotely("undel_1");
+    fetchMock.mockClear();
+    await mod.syncDraft("undel_1");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Undo path: clear the tombstone and re-mirror.
+    mod.undeleteDraft("undel_1");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // syncDraft now fires the upsert POST for the restored draft.
+    expect(fetchMock).toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/store/drafts");
+    expect(init.method).toBe("POST");
+
+    // And a later ordinary sync is no longer dropped.
+    fetchMock.mockClear();
+    await mod.syncDraft("undel_1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("logs failed deletes and shows one toast after consecutive failures", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 500 }));
