@@ -297,8 +297,12 @@ export async function DELETE(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<{ id?: string }>(req);
   if (!parsed.ok) return parsed.response;
-  const id = typeof parsed.body.id === "string" ? parsed.body.id.trim() : "";
-  if (!id) return jsonError("Draft id required", 400);
+  const rawId = typeof parsed.body.id === "string" ? parsed.body.id.trim() : "";
+  if (!rawId) return jsonError("Draft id required", 400);
+  // Same guard as writeDraft above: a non-uuid id would raise Postgres 22P02
+  // on the eq(drafts.id, …) query and surface as a 500.
+  const id = serverUuidOrNull(rawId);
+  if (!id) return jsonError("Invalid draft id", 400);
 
   const auth = guard.auth;
   const tenantId = auth.activeTenant!.id;

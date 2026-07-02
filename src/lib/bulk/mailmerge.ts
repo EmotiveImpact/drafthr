@@ -433,6 +433,9 @@ export async function generateMergeTemplate(
         acc += delta;
       },
       onRetry: (retryCount, delayMs, reason) => {
+        // Retry re-streams the whole section — drop the truncated attempt so
+        // the template section isn't first-attempt + second-attempt garbage.
+        acc = "";
         options.onProgress?.({ phase: "retry", retryCount, delayMs, reason });
       },
     });

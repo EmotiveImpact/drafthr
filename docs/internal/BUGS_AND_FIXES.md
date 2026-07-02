@@ -117,6 +117,32 @@ dual-write guard). All confirmed by ≥1 audit lens.
   blank-page auto-generate. Plus a new `?section=` consume effect so the Review
   "Fix this first" link actually scrolls to and selects the flagged section.
 
+### Wave 2b — adversarial review of wave 2 itself (4 findings, all fixed)
+
+An independent review agent audited commit 75ac30a for correctness AND best-fix
+quality. It confirmed 6 of the 8 fixes as-is and caught four real problems:
+
+- **🔴 (NEW regression from wave 2) Retry duplicated streamed tokens.** Making a
+  post-token proxy error retryable meant `streamDraft`'s retry re-streamed the
+  whole section while every caller kept its `acc` accumulator + store copy from
+  the truncated first attempt — doubled/garbled sections (the old `sawAnyToken`
+  gate had prevented exactly this). Fixed at all FOUR callers (the reviewer found
+  3; `mailmerge.ts` was the 4th): each `onRetry` now resets `acc` (and the store
+  copy where the caller streams into the store) before the retry re-streams.
+- **🟠 Undo racing an in-flight DELETE.** `undeleteDraft`'s restore POST could
+  reach the server before the still-on-the-wire DELETE it reverses → DELETE lands
+  last, wipes the restored row, nothing re-syncs. `dual-write.ts` now tracks
+  in-flight DELETEs per id (`inFlightDeletes`) and `undeleteDraft` orders its
+  `syncDraft` after that promise settles. Ordering test added.
+- **🟠 drafts.ts DELETE was the one id path left unguarded** (the exact 22P02→500
+  class wave 2 set out to kill). `serverUuidOrNull` guard added → 400.
+- **🟡 BookingThread rollback clobbered concurrent sends.** The whole-thread
+  snapshot restore wiped a second in-flight message and raced the failure-path
+  re-pull. `appendMessage` now returns the minted message id and the rollback
+  removes exactly that bubble (composes with concurrent sends + server re-pull).
+
+Verified: build green, 574 tests passing.
+
 Still queued (riskier / DB-transaction — deferred to a dedicated wave): last-owner
 role/remove TOCTOU (R12 FLAGGED — needs `db.transaction` + `FOR UPDATE`/advisory
 lock), drafts.ts 409 collision between reference-validation and revision-conflict,

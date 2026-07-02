@@ -293,6 +293,42 @@ describe("dual-write enqueueSync", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("orders an Undo's restore POST after a still-in-flight DELETE", async () => {
+    // Undo while the DELETE round-trip is on the wire: the restore POST must
+    // wait for the DELETE to settle, or the DELETE lands last and wipes the
+    // just-restored server row with nothing left to re-sync it.
+    let resolveDelete!: (r: Response) => void;
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve;
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    const draft = makeDraft("undel_2", 1_768_000_000_000);
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    const deletePromise = mod.deleteDraftRemotely("undel_2"); // DELETE hangs
+    mod.undeleteDraft("undel_2"); // Undo before it settles
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Only the (pending) DELETE has hit the wire — no POST raced ahead of it.
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST")).toHaveLength(0);
+
+    resolveDelete(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    await deletePromise;
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST"),
+      ).toHaveLength(1);
+    });
+  });
+
   it("logs failed deletes and shows one toast after consecutive failures", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 500 }));

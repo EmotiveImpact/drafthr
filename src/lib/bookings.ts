@@ -99,8 +99,10 @@ type Store = {
   declineBooking: (id: string, responseNote?: string) => void;
   deliverBooking: (id: string, deliveryNote?: string) => void;
   completeBooking: (id: string, rating?: number) => void;
-  /** Append a chat message to a booking. */
-  appendMessage: (id: string, from: BookingMessage["from"], text: string) => void;
+  /** Append a chat message to a booking. Returns the minted message id (null
+   *  when the text was blank) so an optimistic sender can remove exactly its
+   *  own bubble on failure instead of restoring a whole-thread snapshot. */
+  appendMessage: (id: string, from: BookingMessage["from"], text: string) => string | null;
 };
 
 /** Migrate persisted bookings from older lifecycle vocab to the new one. */
@@ -177,7 +179,7 @@ export const useBookingsStore = create<Store>()(
         })),
       appendMessage: (id, from, text) => {
         const trimmed = text.trim();
-        if (!trimmed) return;
+        if (!trimmed) return null;
         const msg: BookingMessage = {
           id: crypto.randomUUID(),
           from,
@@ -189,6 +191,7 @@ export const useBookingsStore = create<Store>()(
             b.id === id ? { ...b, messages: [...(b.messages ?? []), msg] } : b,
           ),
         }));
+        return msg.id;
       },
     }),
     {

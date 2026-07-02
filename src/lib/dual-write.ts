@@ -297,6 +297,11 @@ export function _hasSynced(draftId: string): boolean {
   return syncedAt.has(draftId);
 }
 
+/** In-flight DELETE round-trips, keyed by draft id. undeleteDraft() awaits the
+ *  entry so an Undo's restore POST can never race ahead of the DELETE it is
+ *  reversing (POST lands first → DELETE lands last → restored row wiped). */
+const inFlightDeletes = new Map<string, Promise<void>>();
+
 /** Fire-and-forget remote delete. The caller owns local state removal. */
 export async function deleteDraftRemotely(draftId: string): Promise<void> {
   if (!ENABLED) return;
@@ -310,25 +315,34 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
     timers.delete(draftId);
   }
   pendingDraftIds.delete(draftId);
-  try {
-    const res = await fetch("/api/store/drafts", {
-      method: "DELETE",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ id: toServerUuid(draftId) }),
-    });
-    if (res.ok) {
-      consecutiveDeleteFailures = 0;
-      // Undo is handled explicitly: the sidebar's Undo re-inserts the draft and
-      // calls undeleteDraft(), which clears the tombstone and re-mirrors. We
-      // deliberately do NOT infer an undo from the store snapshot here — local
-      // removal can lag the DELETE round-trip, and a stale snapshot would
-      // un-tombstone (and recreate) a row the user genuinely deleted.
-      return;
+  const run = (async () => {
+    try {
+      const res = await fetch("/api/store/drafts", {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ id: toServerUuid(draftId) }),
+      });
+      if (res.ok) {
+        consecutiveDeleteFailures = 0;
+        // Undo is handled explicitly: the sidebar's Undo re-inserts the draft
+        // and calls undeleteDraft(), which clears the tombstone and re-mirrors
+        // AFTER this round-trip settles (inFlightDeletes). We deliberately do
+        // NOT infer an undo from the store snapshot here — local removal can
+        // lag the DELETE round-trip, and a stale snapshot would un-tombstone
+        // (and recreate) a row the user genuinely deleted.
+        return;
+      }
+      recordDeleteFailure(draftId, res.status);
+    } catch (err) {
+      recordDeleteFailure(draftId, err);
     }
-    recordDeleteFailure(draftId, res.status);
-  } catch (err) {
-    recordDeleteFailure(draftId, err);
+  })();
+  inFlightDeletes.set(draftId, run);
+  try {
+    await run;
+  } finally {
+    if (inFlightDeletes.get(draftId) === run) inFlightDeletes.delete(draftId);
   }
 }
 
@@ -343,7 +357,14 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
 export function undeleteDraft(draftId: string): void {
   if (!ENABLED || !draftId) return;
   deletedDraftIds.delete(draftId);
-  void syncDraft(draftId).catch((err) => void err);
+  // Order the restore POST after any DELETE still on the wire for this id —
+  // otherwise the POST can reach the server first and the trailing DELETE
+  // wipes the just-restored row with nothing left to re-sync it.
+  const pendingDelete = inFlightDeletes.get(draftId) ?? Promise.resolve();
+  void pendingDelete
+    .catch(() => undefined)
+    .then(() => syncDraft(draftId))
+    .catch((err) => void err);
 }
 
 function readFlag(): boolean {
