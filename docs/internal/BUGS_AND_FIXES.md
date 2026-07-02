@@ -40,6 +40,57 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-07-02 — post-Stripe adversarial bug sweep (20-finding hunt, 3-lens verified)
+
+After wiring Stripe (test + prod) and finalising pricing, a 6-area finder + 3-lens
+adversarial-verification hunt raised 22 findings; 20 survived. Fixed in waves
+(backend / frontend / concurrency), each `tsc -b` + `vitest` green (574 pass).
+
+**🔴 Payment & data integrity**
+- **Double-charge (checkout TOCTOU).** `stripe-checkout.ts` never expired the prior
+  unpaid Checkout session, so Back→Pay-again (or a resumed tab) left two live
+  sessions for one booking; paying both charged twice and the 2nd
+  `checkout.session.completed` overwrote the 1st `payment_intent_id`. Fix: expire
+  the prior session before minting a new one (best-effort). *Residual:* two truly
+  simultaneous POSTs still both mint (rate-limited; full fix = a locked/unique
+  booking_payments row — noted, low-probability).
+- **Destructive profile DELETE.** `profile.ts` `db.delete(consultantProfiles)`
+  cascaded through `consultant_bookings`→`booking_payments`, wiping cross-tenant
+  history + captured-charge pointers and resetting rating on re-enrol. Fix: refuse
+  to hard-delete when any booking exists (deliberate guard, not a silent patch).
+- **Fire-and-forget booking create.** `BookingDialog`/`marketplaceSync` toasted
+  "Booking confirmed" over a POST it never awaited; on failure the consultant
+  never saw it and the HR user kept a phantom row. Fix: await, roll back the
+  optimistic row on failure, surface an error.
+
+**🟠 Auth / correctness**
+- `session.ts` GET now enforces SE-03 epoch revocation (was PII-leaking a revoked
+  cookie); `workos.parseCookie` catches malformed percent-encoding (was a 500);
+  `respond.ts`/`message.ts` validate bookingId as uuid (was 22P02 500s);
+  `profile.ts` PATCH no longer inserts an empty profile / flips isConsultant, and
+  validates currency; `stripe-webhook` account.updated re-fetches the account
+  (event-ordering-safe).
+- **Concurrent tenant-active invariant — closes the directory-provision residual
+  AND R12 last-owner (both previously FLAGGED below).** Added `lockUserActiveTenant`
+  (per-user `pg_advisory_xact_lock`) to switch / accept-invite / create /
+  session auto-elect / directory-webhook provisioning; owner-guard mutations got a
+  per-tenant advisory lock in the same wave. Advisory locks are the chosen correct
+  fix (migration-free, transaction-scoped) over a partial-unique-index migration
+  on the live DB — verified best-solution for these, not a patch.
+
+**🟡 UX / lower severity**
+- `ConsultantProfile` re-polls on `?stripe=return` (webhook lag) + resets stuck
+  spinner on bfcache; `MyBookings` shows error+retry instead of a false "No
+  bookings yet" and un-sticks the Pay button on Back; `SearchPalette` Cmd+K can
+  close the palette again; `ConsultantsIndex`/`Card` badge an unpublished
+  own-profile "Pending review" not "Live"; `BulkOperations` no longer claims "No
+  drafts were created" when partial drafts were saved.
+
+Commits: `dc33eb7` (backend), `9352da9` (frontend), the ConsultantsIndex/Card/
+types/BulkOps wave, and `712d3e8` (advisory locks).
+
+---
+
 ## 2026-07-02 — multi-agent audit (4 lenses) → Page-view data-loss regression fix
 
 A fresh 4-lens audit (flows/editor, state/data, fix-quality, api/edge) after the
@@ -333,7 +384,15 @@ three now use / match `isSafeImageDataUrl`. Impact is a broken image, not XSS
 (data: image src is not a script sink — finders' "high" downgraded on verify).
 *(R13)*
 
-### ⚑ FLAGGED (integrity, NOT auto-fixed) — last-owner TOCTOU in member role/remove
+### ✅ RESOLVED 2026-07-02 (was ⚑ FLAGGED) — last-owner TOCTOU in member role/remove
+**Fixed** (see the post-Stripe sweep at the top): both handlers now wrap the
+owner-count check + the UPDATE/DELETE in a `db.transaction` guarded by a per-tenant
+`pg_advisory_xact_lock`, so concurrent demote/remove serialize and can't both pass
+the `owners <= 1` guard. That is exactly the correct fix the original flag below
+asked for (chosen over `SELECT … FOR UPDATE` because an advisory lock also covers
+the DELETE path and needs no row to pre-exist).
+
+_Original flag:_
 `api/workspace/_handlers/member/role.ts` and `.../member/remove.ts` check the
 active-owner count and then UPDATE/DELETE in a **separate, unguarded** statement.
 Under READ COMMITTED, two owners concurrently demoting/removing each other both
@@ -1243,10 +1302,13 @@ and insert active only when none exists (first membership → active; additional
 re-syncs never flip the active workspace. TDD: `directory-webhook.test.ts` (+2,
 with fake-DB mock extended for the active-membership query) — email-matched user
 already-active-elsewhere joins inactive; first-membership user joins active.
-*Residual: a true concurrent provision into two different tenants could still
-both observe "no active" and both insert active — a rarer race; the deterministic
-common case is fixed. A DB partial-unique index on `(user_id) WHERE is_active_tenant`
-would close it fully.*
+*Residual — CLOSED 2026-07-02: `provisionUser` now wraps the "active elsewhere?"
+read + the membership upsert in a `db.transaction` guarded by `lockUserActiveTenant`
+(per-user `pg_advisory_xact_lock`) — the same lock now used by
+switch/accept-invite/create/session auto-elect — so two concurrent provisions into
+different tenants serialize instead of both inserting active. A partial-unique index
+on `(user_id) WHERE is_active_tenant` would also close it, but the advisory lock
+avoids a migration on the live DB.*
 
 ### B6 (MEDIUM) — dead TSA certificate pin (security; removed, flagged)
 `FREETSA_TSA_KEY_SHA256_PINS[0]` in `api/_utils/tsa.ts` was a **65-char** hex

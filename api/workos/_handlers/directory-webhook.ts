@@ -27,6 +27,7 @@ import { tenantMembers, tenants, users } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { getWorkos } from "../../_utils/workos.js";
 import { jsonError } from "../../_utils/request.js";
+import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import {
   extractDirectoryEmail,
   extractDirectoryName,
@@ -268,40 +269,42 @@ async function provisionUser(tenantId: string, user: DirectoryUserLike): Promise
   // The invariant is "exactly one active membership per user", so a new
   // directory-provisioned membership joins as inactive when an active one
   // exists elsewhere, and active only when it's the user's first.
-  const [activeElsewhere] = await db
-    .select({ tenantId: tenantMembers.tenantId })
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.userId, userId),
-        eq(tenantMembers.isActiveTenant, true),
-      ),
-    )
-    .limit(1);
-  const isActiveTenant = !activeElsewhere;
+  // Serialize the "active elsewhere?" read + the membership insert under a
+  // per-user advisory lock so they're atomic against a concurrent provision
+  // into a DIFFERENT tenant (and against switch/accept-invite/create). Without
+  // it, two provisions both observe "no active" and both insert active, leaving
+  // two active rows. (Closes the previously-flagged directory-provision residual.)
+  await db.transaction(async (tx) => {
+    await lockUserActiveTenant(tx, userId);
+    const [activeElsewhere] = await tx
+      .select({ tenantId: tenantMembers.tenantId })
+      .from(tenantMembers)
+      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActiveTenant, true)))
+      .limit(1);
+    const isActiveTenant = !activeElsewhere;
 
-  // Upsert membership. Drizzle's onConflictDoUpdate keeps the write
-  // single-statement so concurrent webhook deliveries don't race. Note the
-  // conflict `set` deliberately does NOT touch isActiveTenant, so re-syncing
-  // an existing membership never flips the user's active workspace.
-  await db
-    .insert(tenantMembers)
-    .values({
-      userId,
-      tenantId,
-      role,
-      isActiveTenant,
-      status: "active",
-      deprovisionedAt: null,
-    })
-    .onConflictDoUpdate({
-      target: [tenantMembers.userId, tenantMembers.tenantId],
-      set: {
+    // Upsert membership. onConflictDoUpdate keeps re-syncs idempotent; the
+    // conflict `set` deliberately does NOT touch isActiveTenant, so re-syncing
+    // an existing membership never flips the user's active workspace.
+    await tx
+      .insert(tenantMembers)
+      .values({
+        userId,
+        tenantId,
         role,
+        isActiveTenant,
         status: "active",
         deprovisionedAt: null,
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [tenantMembers.userId, tenantMembers.tenantId],
+        set: {
+          role,
+          status: "active",
+          deprovisionedAt: null,
+        },
+      });
+  });
 
   await safelyAppendAudit({
     tenantId,
