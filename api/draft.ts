@@ -183,7 +183,11 @@ export async function POST(req: Request): Promise<Response> {
           error:
             "Model returned no tokens. Check the API key and that the prompt is valid.",
         });
-      } else if (totalTokens === 0 && realError) {
+      } else if (realError) {
+        // Emit the error even when tokens already flowed: the AI SDK's
+        // non-throwing onError can fire mid-stream (upstream drop, overload)
+        // and without this event the client would see a clean [DONE] and
+        // store the truncated section as complete.
         writeEvent({ error: realError });
       }
 

@@ -31,6 +31,7 @@
 import { and, eq } from "drizzle-orm";
 import { getSessionFromRequest } from "../../_utils/workos.js";
 import { getUserSessionEpoch, isCookieEpochStale } from "../../_utils/session-epoch.js";
+import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import { dbEnabled, getDb } from "../../../src/db/index.js";
 import { consultantProfiles, tenantMembers, tenants, users } from "../../../src/db/schema.js";
 
@@ -184,6 +185,9 @@ function electDefaultMembership(live: MembershipRow[]): MembershipRow | null {
 async function persistActiveMembership(userId: string, tenantId: string): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
+    // Serialize against concurrent switch/accept-invite/create so the
+    // auto-election can't race them into two active rows. (Released at commit.)
+    await lockUserActiveTenant(tx, userId);
     await tx
       .update(tenantMembers)
       .set({ isActiveTenant: false })

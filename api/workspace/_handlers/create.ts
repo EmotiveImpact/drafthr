@@ -10,6 +10,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { tenants, tenantMembers, auditEvents } from "../../../src/db/schema.js";
+import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 
 export const config = { runtime: "nodejs" };
@@ -41,6 +42,9 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const db = getDb();
     const tenant = await db.transaction(async (tx) => {
+      // Serialize this user's active-tenant writes against a concurrent
+      // switch/accept-invite so we can't leave two active rows. (Released at commit.)
+      await lockUserActiveTenant(tx, auth.userRow.id);
       // Repurpose-not-recreate: requireSessionAndTenant (which ran a few
       // lines above when we called it) mints a bootstrap tenant on first
       // sign-in so audit events have a tenant_id. If the user's ONLY

@@ -18,6 +18,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { invites, tenantMembers } from "../../../src/db/schema.js";
+import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 
 export const config = { runtime: "nodejs" };
@@ -70,6 +71,10 @@ export async function POST(req: Request): Promise<Response> {
 
     let lostRace = false;
     await db.transaction(async (tx) => {
+      // Serialize this user's active-tenant writes against a concurrent
+      // switch/create — without it the UPDATE-all-false below can't see a row
+      // another txn is inserting, leaving two active rows. (Released at commit.)
+      await lockUserActiveTenant(tx, auth.userRow.id);
       // Consume the invite ATOMICALLY first: the conditional UPDATE only
       // succeeds if it's still unaccepted/unrevoked/unexpired. The pre-txn
       // checks above are a fast path; this closes the TOCTOU where two

@@ -2,7 +2,7 @@
  * POST /api/workspace/member/role — change a member's role in the active
  * tenant. Admin-only, with owner-role changes reserved to owners.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request.js";
 import { rateLimit } from "../../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js";
@@ -40,43 +40,52 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const db = getDb();
-    const [member] = await db
-      .select({ role: tenantMembers.role })
-      .from(tenantMembers)
-      .where(
-        and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, auth.activeTenant.id)),
-      )
-      .limit(1);
-    if (!member) return jsonError("Member not found", 404);
-    if (!canManageOwners(requesterRole, member.role) || !canManageOwners(requesterRole, role)) {
-      return jsonError("only owners can manage owners.", 403);
-    }
-    if (member.role === "owner" && role !== "owner") {
-      const owners = await db
-        .select({ userId: tenantMembers.userId })
+    const tenantId = auth.activeTenant.id;
+    // The whole check-then-act runs in one transaction under a per-tenant
+    // advisory lock shared with member/remove: two concurrent demotes of the
+    // last two owners otherwise each count 2 owners and both proceed, leaving
+    // the workspace ownerless (TOCTOU, R12 FLAGGED). The lock serializes all
+    // owner-affecting mutations for the tenant; the count is then authoritative.
+    const outcome = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${"owner-guard:" + tenantId}))`,
+      );
+      const [member] = await tx
+        .select({ role: tenantMembers.role })
         .from(tenantMembers)
-        // Count only LIVE owners — a deprovisioned owner row would inflate the
-        // count and could let the last active owner be demoted. (Senior sweep B13.)
-        .where(
-          and(
-            eq(tenantMembers.tenantId, auth.activeTenant.id),
-            eq(tenantMembers.role, "owner"),
-            eq(tenantMembers.status, "active"),
-          ),
-        );
-      if (owners.length <= 1) {
-        return jsonError("workspace must have at least one owner", 409);
+        .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, tenantId)))
+        .limit(1);
+      if (!member) return { error: "Member not found", status: 404 } as const;
+      if (!canManageOwners(requesterRole, member.role) || !canManageOwners(requesterRole, role)) {
+        return { error: "only owners can manage owners.", status: 403 } as const;
       }
-    }
+      if (member.role === "owner" && role !== "owner") {
+        const owners = await tx
+          .select({ userId: tenantMembers.userId })
+          .from(tenantMembers)
+          // Count only LIVE owners — a deprovisioned owner row would inflate the
+          // count and could let the last active owner be demoted. (Senior sweep B13.)
+          .where(
+            and(
+              eq(tenantMembers.tenantId, tenantId),
+              eq(tenantMembers.role, "owner"),
+              eq(tenantMembers.status, "active"),
+            ),
+          );
+        if (owners.length <= 1) {
+          return { error: "workspace must have at least one owner", status: 409 } as const;
+        }
+      }
 
-    const [updated] = await db
-      .update(tenantMembers)
-      .set({ role })
-      .where(
-        and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, auth.activeTenant.id)),
-      )
-      .returning();
-    if (!updated) return jsonError("Member not found", 404);
+      const [updated] = await tx
+        .update(tenantMembers)
+        .set({ role })
+        .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, tenantId)))
+        .returning();
+      if (!updated) return { error: "Member not found", status: 404 } as const;
+      return { error: null } as const;
+    });
+    if (outcome.error) return jsonError(outcome.error, outcome.status);
 
     await safelyAppendAudit({
       tenantId: auth.activeTenant.id,

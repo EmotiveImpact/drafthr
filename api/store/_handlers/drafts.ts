@@ -370,26 +370,30 @@ async function validateTenantReferences(
   matterId: string | null,
   templateSourceId: string | null,
 ): Promise<Response | null> {
+  // 422, NOT 409: the dual-write client treats every 409 as "stale revision"
+  // and permanently marks the draft's snapshot stale (stops syncing it). A bad
+  // reference is a semantic error with the payload, not a revision conflict —
+  // 409 is reserved for staleRevisionResponse().
   if (matterId) {
-    if (!isUuid(matterId)) return jsonError("matterId belongs to a different workspace", 409);
+    if (!isUuid(matterId)) return jsonError("matterId belongs to a different workspace", 422);
     const [matter] = await db
       .select({ id: matters.id })
       .from(matters)
       .where(and(eq(matters.id, matterId), eq(matters.tenantId, tenantId)))
       .limit(1);
-    if (!matter) return jsonError("matterId belongs to a different workspace", 409);
+    if (!matter) return jsonError("matterId belongs to a different workspace", 422);
   }
 
   if (templateSourceId) {
     if (!isUuid(templateSourceId)) {
-      return jsonError("templateSourceId belongs to a different workspace", 409);
+      return jsonError("templateSourceId belongs to a different workspace", 422);
     }
     const [template] = await db
       .select({ id: customTemplates.id })
       .from(customTemplates)
       .where(and(eq(customTemplates.id, templateSourceId), eq(customTemplates.tenantId, tenantId)))
       .limit(1);
-    if (!template) return jsonError("templateSourceId belongs to a different workspace", 409);
+    if (!template) return jsonError("templateSourceId belongs to a different workspace", 422);
   }
 
   return null;
