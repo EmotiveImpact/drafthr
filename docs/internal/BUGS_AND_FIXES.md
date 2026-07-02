@@ -40,6 +40,47 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-07-02 — multi-agent audit (4 lenses) → Page-view data-loss regression fix
+
+A fresh 4-lens audit (flows/editor, state/data, fix-quality, api/edge) after the
+pagedly "Page = editor" rewrite. Three independent agents converged on one
+**CRITICAL data-loss regression** introduced by that rewrite. Fixed first.
+
+### 🔴 CRITICAL (regression, data loss) — Page view wrote a stale/sanitiser-stripped snapshot of EVERY section back to the store
+`PagedlyDocEditor.persist()` walked pagedly's `onChange.sections` — which pagedly
+emits for ALL sections of the document, not just the edited one — and wrote back
+any that differed from the store, with only no-op/blank guards. Two failure
+modes: (1) pagedly maps the draft ONCE at mount, so any store change underneath
+(an AI rewrite from the still-reachable rail, Accept-all, a streaming
+generation, another tab) was reverted by the first keystroke anywhere on the
+page; (2) pagedly's own sanitiser strips the app's inline markup — `<mark
+data-comment-id>` (comment anchors), `data-fig-id` (figure refs), `data-suggestion-*`
+(pending AI diffs) — so a single edit permanently destroyed comments, exhibit
+renumbering, and unresolved suggestions across the whole draft (a new-seam
+regression of the 2026-06-06 B1/B2 sanitiser class).
+**Fix (src/components/editor/paged-edit/PagedlyDocEditor.tsx):** rewrote persist
+as `decideSectionWrite()` — a pure, exported, unit-tested guard that only writes
+a section when it is genuinely a user edit AND safe:
+  - baseline guard — a per-section mount-time snapshot advanced after each write;
+    a section whose STORE copy moved since then (AI/other-tab/Accept-all) is
+    skipped (external edit wins), which neutralises the whole-draft fan-out;
+  - streaming guard — never write a section whose status is "streaming";
+  - app-marks guard — refuse (and toast "edit in the Sections view") any section
+    carrying comment/figure/suggestion markup pagedly can't round-trip;
+  - blank-artifact + no-op guards retained.
+Plus: read-only ⇒ no write-back at all (`onChange` unwired), an unmount `flush()`
+so a fast Page→Sections toggle doesn't drop the last keystroke burst, and the
+Page view is forced read-only while any section streams (Editor.tsx). TDD:
+`PagedlyDocEditor.test.ts` (+9) locks every guard branch.
+
+Remaining audit findings (queued for the next waves): last-owner role/remove
+TOCTOU (R12 FLAGGED — now actionable), sidebar delete-Undo blocked by the
+dual-write tombstone, drafts.ts 409 collision between reference-validation and
+revision-conflict, viewMode not reset on draft switch, Review "jump to section"
+param ignored, and a set of best-fix upgrades from the ledger review.
+
+---
+
 ## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,

@@ -72,6 +72,9 @@ function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["
       "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
     specialty: p.specialty || `${(p.specialties ?? []).slice(0, 2).join(" & ")} reviews`,
     specialties: p.specialties ?? [],
+    // Only a published profile is discoverable by HR users; anything else is a
+    // self-preview card that must not badge itself "Live" / "you are listed".
+    pending: p.status !== "published",
   };
 }
 
@@ -340,7 +343,12 @@ export function ConsultantsIndex() {
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
               <p className="text-[11.5px] text-[var(--ds-muted)]">
                 {filtered.length} of {ALL_CONSULTANTS.length} specialists
-                {myCard && <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>}
+                {myCard &&
+                  (myCard.pending ? (
+                    <span className="ml-1.5 text-[var(--ds-muted)]">· your profile is pending review</span>
+                  ) : (
+                    <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>
+                  ))}
               </p>
             </div>
           )}

@@ -1430,11 +1430,17 @@ export function Editor() {
           <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
             // The Page view IS the pagedly editor (editable) — you land here
-            // directly, no read-only intermediate. Locked to read-only when the
-            // draft can't be edited (e.g. during review).
+            // directly, no read-only intermediate. Read-only when the draft
+            // can't be edited (review lock) OR while any AI generation is
+            // streaming — pagedly holds a mount-time snapshot, so editing on
+            // the page mid-stream would fight the still-updating store.
             <PagedlyDocEditor
               draft={draft}
-              readOnly={!canvasEditable}
+              readOnly={
+                !canvasEditable ||
+                globallyStreaming ||
+                draft.sections.some((s) => s.status === "streaming")
+              }
               actionsRef={pagedEditorActionsRef}
             />
           ) : (
