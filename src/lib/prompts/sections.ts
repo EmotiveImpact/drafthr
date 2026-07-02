@@ -2,6 +2,12 @@ import type { Draft, Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { getSectionTemplate } from "@/lib/letters/templates";
 import { evidencePromptBlock } from "@/lib/evidence";
+import {
+  isQuestionVisible,
+  letterStepsFor,
+  universalStepsFor,
+  type Question,
+} from "@/lib/letters/questions";
 
 /**
  * Build a section-specific user prompt. Pairs with the master system prompt
@@ -355,11 +361,30 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
   },
 };
 
+/** Map of question id → question for the draft's mode + letter type, so the
+ *  data dump can apply the same visibility gates as the wizard. */
+function questionIndex(draft: Draft): Map<string, Question> {
+  const index = new Map<string, Question>();
+  for (const step of [...universalStepsFor(draft.mode), ...letterStepsFor(draft.letterType)]) {
+    for (const q of step.questions) index.set(q.id, q);
+  }
+  return index;
+}
+
 function relevantData(draft: Draft): string {
   const a = draft.answers as Record<string, unknown>;
+  // Answers persist across a jurisdiction switch (deliberately — switching
+  // back shouldn't lose data), but the prompt must only see answers whose
+  // question is visible for the CURRENT jurisdiction. Without this filter a
+  // UK→US switch fed e.g. the UK "Disciplinary hearing date" into a US
+  // termination letter (wrong-jurisdiction data in the letter text).
+  const questions = questionIndex(draft);
+  const gates = { ...a, jurisdiction: draft.context.jurisdiction };
   const lines: string[] = [];
   for (const [k, v] of Object.entries(a)) {
     if (v == null || v === "") continue;
+    const q = questions.get(k);
+    if (q && !isQuestionVisible(q, gates)) continue;
     if (Array.isArray(v) && v.length === 0) continue;
     if (Array.isArray(v) && typeof v[0] === "object" && v[0] !== null) {
       // Structured repeater data — render as numbered list so the AI can

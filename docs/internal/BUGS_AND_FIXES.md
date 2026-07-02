@@ -143,11 +143,49 @@ quality. It confirmed 6 of the 8 fixes as-is and caught four real problems:
 
 Verified: build green, 574 tests passing.
 
-Still queued (riskier / DB-transaction — deferred to a dedicated wave): last-owner
-role/remove TOCTOU (R12 FLAGGED — needs `db.transaction` + `FOR UPDATE`/advisory
-lock), drafts.ts 409 collision between reference-validation and revision-conflict,
-`relevantData` wrong-jurisdiction filter, EditDetailsSheet dirty-field patch,
-letterhead `hasLetterhead` divergence, dead `SaveStatusChip`.
+### Wave 3 — the deferred riskier batch (DB transactions + semantics)
+
+- **🔴 (integrity, closes R12 FLAGGED) Last-owner TOCTOU in member role/remove.**
+  Two concurrent demote/remove requests against the last two owners each counted
+  2 live owners and both proceeded → ownerless workspace. Both handlers now run
+  the whole check-then-act inside `db.transaction` under a shared per-tenant
+  `pg_advisory_xact_lock(hashtext('owner-guard:'+tenantId))` (we're on the Neon
+  WebSocket pool, so real transactions are available). Demote+remove serialize
+  against each other in any combination; the owner count inside the lock is
+  authoritative.
+- **🟠 (post-token stream error, api side) `api/draft.ts` now emits the error
+  event even when tokens already flowed.** The AI SDK's non-throwing `onError`
+  could set `realError` mid-stream after deltas, and the old branch only wrote
+  an error event when `totalTokens === 0` — the client saw a clean `[DONE]` and
+  stored a truncated section as complete. (Pre-existing gap the wave-2b reviewer
+  flagged; the client-side fix alone couldn't catch it because no error event
+  ever reached it.)
+- **🟠 Reference-validation 409 → 422.** `validateTenantReferences` returned 409
+  for cross-tenant/invalid matterId/templateSourceId, but the dual-write client
+  treats every 409 as "stale revision" and permanently stops syncing that draft.
+  409 is now reserved for the real revision conflict; reference errors are 422.
+- **🟠 Wrong-jurisdiction answers leaked into the prompt.** Answers survive a
+  jurisdiction switch (deliberately), but `relevantData` dumped ALL of
+  `draft.answers` — a UK→US switch fed e.g. the UK "Disciplinary hearing date"
+  into a US termination letter. `sections.ts` now indexes the wizard's question
+  set and applies the same `isQuestionVisible` gates (jurisdiction + showIf,
+  keyed to `draft.context.jurisdiction`) before including an answer.
+- **🟡 Letterhead divergence (BUG-08).** `toLetterDraft` (Page editor) gated the
+  letterhead on `hasLetterhead` while Review preview + PDF + DOCX gated only on
+  URL presence — the user proofread a different first page than they shipped
+  (profile prefills `letterheadDataUrl` unconditionally). All renderers
+  (`sourceHtml.ts`, `pdf.ts`, `docx.ts`) now honour the `hasLetterhead` switch.
+- **🟡 Review-lock bypass trap removed (IMP-01).** `LetterPreview`'s dead
+  `editable` branch mounted `PagedlyDocEditor` with no review-lock — any future
+  caller would silently bypass the approval workflow Editor.tsx enforces.
+  LetterPreview is now strictly read-only (its only caller, ReviewStep, always
+  was); dead `SaveStatusChip.tsx` deleted.
+
+Verified: build green, 574 tests passing.
+
+Still queued: dual-write per-draft 409 counter (FQ-02), EditDetailsSheet
+dirty-field patch, FQ-03 vendored pagedly base64 regex, agent.ts unbounded
+system prompt, persistent delete tombstones + keepalive (BUG-05).
 
 ---
 

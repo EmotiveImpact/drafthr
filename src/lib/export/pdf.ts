@@ -370,6 +370,11 @@ export function filenameFor(draft: Draft): string {
 
 /** Render the letterhead image (if any) as the first block of the export. */
 function letterheadHtml(draft: Draft): string {
+  // hasLetterhead is the user's "goes out on company letterhead" switch. The
+  // profile prefills letterheadDataUrl unconditionally, so gate on the switch
+  // too — matching the Page editor (toLetterDraft.ts) so the user proofreads
+  // the same first page they ship. (Audit BUG-08.)
+  if (!draft.employer.hasLetterhead) return "";
   const url = draft.employer.letterheadDataUrl;
   if (!isSafeImageRef(url)) return "";
   // isSafeImageRef only checks the scheme (https/data); an https URL can still

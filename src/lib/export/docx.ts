@@ -847,6 +847,9 @@ function escapeXmlAttr(s: string): string {
 }
 
 function letterheadHtml(draft: Draft): string {
+  // Gate on the hasLetterhead switch as well as URL presence — matches the
+  // Page editor + PDF so every renderer ships the same first page. (BUG-08.)
+  if (!draft.employer.hasLetterhead) return "";
   const url = draft.employer.letterheadDataUrl;
   if (!isSafeImageRef(url)) return "";
   // isSafeImageRef only validates the scheme; escape so a crafted https URL
