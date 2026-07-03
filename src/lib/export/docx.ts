@@ -672,7 +672,8 @@ export function clampImageSizePx(
   return { widthPx: Math.max(w, minPx), heightPx: Math.max(h, minPx) };
 }
 
-function imageSizeFromElement(
+// Exported for unit testing (the ratio-preserving derivation is easy to break).
+export function imageSizeFromElement(
   img: HTMLImageElement,
   intrinsic?: { w: number; h: number } | null,
 ): { widthPx: number; heightPx: number } {
@@ -693,16 +694,23 @@ function imageSizeFromElement(
 
   if (!widthPx && !heightPx) {
     if (ratio) {
-      // Default the height to ~1.1in and derive width from the real ratio,
-      // clamped to the page width.
+      // Default the height to ~1.1in and derive width from the real ratio.
+      // Do NOT pre-clamp width to maxWidthPx here: clampImageSizePx() below
+      // receives the ratio and shrinks BOTH axes uniformly to fit the caps.
+      // Pre-clamping only the width would hand it an inconsistent (w,h) pair,
+      // squashing wide images (e.g. a 10:1 letterhead) to the page-width cap
+      // while leaving height untouched.
       heightPx = 1.1 * 96;
-      widthPx = Math.min(heightPx * ratio, maxWidthPx);
+      widthPx = heightPx * ratio;
     } else {
       widthPx = 3.2 * 96;
       heightPx = 1.1 * 96;
     }
   } else if (!widthPx && heightPx) {
-    widthPx = ratio ? Math.min(heightPx * ratio, maxWidthPx) : Math.min(heightPx * 4, maxWidthPx);
+    // Same reasoning: derive width from the true ratio unclamped and let
+    // clampImageSizePx apply the width cap proportionally. Only the ratio-less
+    // heuristic keeps its own clamp (clampImageSizePx can't fix an unknown ratio).
+    widthPx = ratio ? heightPx * ratio : Math.min(heightPx * 4, maxWidthPx);
   } else if (widthPx && !heightPx) {
     heightPx = ratio ? widthPx / ratio : Math.max(widthPx * 0.25, 0.45 * 96);
   }

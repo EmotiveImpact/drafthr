@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
-import { clampImageSizePx, renderLetterDocxBlob } from "./docx";
+import { clampImageSizePx, imageSizeFromElement, renderLetterDocxBlob } from "./docx";
 import type { Draft } from "@/lib/letters/types";
 
 describe("clampImageSizePx — preserves aspect ratio under size caps", () => {
@@ -45,6 +45,31 @@ describe("clampImageSizePx — preserves aspect ratio under size caps", () => {
     const r = clampImageSizePx(2, 1, 2, { minPx: 24 });
     expect(r.widthPx).toBeGreaterThanOrEqual(24);
     expect(r.heightPx).toBeGreaterThanOrEqual(24);
+  });
+});
+
+describe("imageSizeFromElement — height-only markup keeps the true ratio", () => {
+  const MAXW = 6 * 96; // 576
+
+  it("regression: a wide letterhead with max-height is not squashed to the page width", () => {
+    // Letterhead 1500x150 (true ratio 10:1) exported with the standard
+    // "max-height:120px;max-width:100%" markup. The OLD code pre-clamped width
+    // to 576 while leaving height at 120 -> ratio 4.8:1 (squashed). The width
+    // cap must instead shrink both axes proportionally.
+    const img = document.createElement("img");
+    img.setAttribute("style", "max-width:100%;max-height:120px;");
+    const r = imageSizeFromElement(img, { w: 1500, h: 150 });
+    expect(r.widthPx).toBeCloseTo(MAXW); // clamped to page width
+    expect(r.widthPx / r.heightPx).toBeCloseTo(10, 5); // ratio preserved, NOT 4.8
+  });
+
+  it("a narrow-enough height-only image keeps its height and derives width from ratio", () => {
+    // 300x150 (2:1) at max-height:120 -> width 240, well under the 576 cap.
+    const img = document.createElement("img");
+    img.setAttribute("style", "max-height:120px;");
+    const r = imageSizeFromElement(img, { w: 300, h: 150 });
+    expect(r.heightPx).toBeCloseTo(120);
+    expect(r.widthPx).toBeCloseTo(240);
   });
 });
 
