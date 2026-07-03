@@ -40,6 +40,100 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-07-03 — daily bug-fix sweep (6 fixed — SWEEP COMPLETE · ships as 0.19.4)
+
+Multi-agent latent-bug hunt over `src/`, `server/`, `api/` and the export/
+compliance/store surfaces, committed directly to `main`. **3 rounds, 6 real
+bugs fixed** (Round 3 fully DRY → stopped early). Each finding was verified
+against source before landing and ships with a regression test where the seam
+allows. **Final gate:** `tsc -b` clean · **569 tests** (562 → 569, +7) ·
+`vite build` OK. Commits: R1 `484f7b3` (5 fixes) · R2 `1436a37` (1 fix).
+
+**Environment note — concurrent tree churn.** A second automated `/loop` sweep
+was running against the same working tree during this run, repeatedly switching
+the checked-out branch to `feat/billing` mid-investigation and authoring two
+unpushed local `main` commits (`72b7c55`, `7f01431`). One of those (`72b7c55`,
+the seed-script recreate) is what introduced the broken build below. Handled
+safely: all fixes were committed on `main`, verified green, and pushed; investigation
+agents were given explicit no-git-mutation guards after the first round. Two
+concurrent automated sweeps on one tree can churn branches under each other —
+worth serialising in future.
+
+### 🟠 HIGH (build) — clean `tsc -b` / `vite build` was RED on `main` (masked by stale tsbuildinfo)
+`scripts/stripe/seed-catalog.ts` (tracked on `main`, recreated in `72b7c55`
+"lost to concurrent tree churn") imports `../../src/lib/billing/catalog.js`, but
+`src/lib/billing/catalog.ts` was never on `main` → `TS2307: Cannot find module`.
+The baseline sweep gate looked green only because a stale incremental
+`.tsbuildinfo` skipped re-checking the file; a clean build (`rm *.tsbuildinfo`)
+fails. So `main` did not actually build from a fresh checkout. **Fix:** restored
+`src/lib/billing/catalog.ts` byte-identical from `feat/billing` (self-contained
+pure data/types module the script was written against — zero merge divergence).
+Verified with a wiped build cache. *(R1 `484f7b3`)*
+
+### 🟠 HIGH (statutory correctness) — `monthsBetween` under-counted month-end start dates
+`store.ts` `monthsBetween` (gates statutory service thresholds, incl. the 2-year
+redundancy-pay line via `serviceMonths`) compared `now.getDate() < start.getDate()`
+to decide whether the current service month had completed. When the start
+day-of-month doesn't exist in the evaluation month, the month completes on that
+month's **last day**, not a non-existent later date — so anyone who started on
+the 29th–31st was under-credited a whole month in shorter months. E.g. start
+`2022-03-31`, evaluated `2022-04-30` → returned **0**, correct is **1**; start
+`2022-01-31`, evaluated `2024-02-29` → returned **24**, correct is **25**. Always
+under-credits, never over. **Fix:** clamp the anniversary day to the last day of
+the evaluation month before comparing (`Math.min(start.getDate(), lastDayOfMonth)`).
+TDD: `store.monthsBetween.test.ts` (+3). *(R1 `484f7b3`)*
+
+### 🟠 HIGH (legal risk) — inverted compliance `warn` rules were counted/shown backwards
+The two `warn`-severity rules in `letters/compliance.ts` (`us_ca_no_noncompete`,
+`ref_consent`) have **inverted semantics** — a regex match means a *problem is
+present* (a void non-compete clause / salary disclosed without consent), not a
+satisfied requirement. But `CompliancePanel.tsx`, `template-quality.ts`, and (via
+the quality report) `export/pack.ts` + `ReviewRail` all treated
+`present = ruleMatches(...)` as "satisfied". Result on a CA offer letter: a void
+non-compete rendered under the green **"Detected"** (satisfied) list, a compliant
+letter was told to *add* one under "Recommended missing", and the export-pack
+`complianceMissing` count + ReviewRail "N flagged" badge were backwards.
+(`notifications.ts` dodged this — it filters to `severity === "required"`, and
+`warn` rules are never required.) **Fix:** added the single-source
+`ruleSatisfied(rule, content)` helper (inverts `warn` rules) and used it at both
+independent evaluation sites; pack.ts + ReviewRail inherit it via the quality
+report. TDD: `compliance.test.ts` (+2). *(R1 `484f7b3`)*
+
+### 🟡 MEDIUM — DOCX export squashed wide letterheads/signatures (aspect ratio broken)
+`export/docx.ts` `imageSizeFromElement` pre-clamped the derived width
+(`Math.min(heightPx * ratio, maxWidthPx)`) **before** handing off to
+`clampImageSizePx`, which takes the intrinsic ratio and shrinks *both* axes
+uniformly. Pre-clamping only width gave it an inconsistent `(w, h)` pair, so any
+image wider than the page-width cap was distorted. A 1500×150 letterhead (true
+10:1) with the standard `max-height:120px;max-width:100%` markup rendered as
+576×120 (ratio **4.8:1**) instead of 576×57.6 (ratio **10:1**). Letterheads and
+signatures both use height-only markup, so any horizontal logo banner wider than
+~4.8:1 was squashed in every DOCX export. **Fix:** derive width from the true
+ratio unclamped in the two width-derivation branches and let `clampImageSizePx`
+apply the width cap proportionally (the ratio-less heuristic keeps its own clamp).
+Exported `imageSizeFromElement`; TDD: `docx.test.ts` (+2). *(R2 `1436a37`)*
+
+### 🟡 MEDIUM — Home draft card showed "Not started" for an actively-generating draft
+`routes/Home.tsx` `draftStatus` never checked the `"streaming"` section status
+(the union is `empty|streaming|ready|edited`). During generation a section is set
+to `{ html: "", status: "streaming" }` *before* the first token arrives; in that
+window every branch is false and it fell through to `return "empty"` → the Home
+card rendered "Not started" for a draft that was actively generating (and stayed
+there if the stream stalled before producing text). **Fix:** treat `"streaming"`
+sections as `"drafting"`. *(R1 `484f7b3`)*
+
+### 🟡 MEDIUM (audit trail) — TXT export left no export record
+`routes/Finalize.tsx` `onExportTxt` ran the counsel gate and downloaded the file
+but — unlike `onExportPdf`/`onExportDocx`/`onExportZip`/`onMarkAsSent` — never
+called `recordExport`. A user who exported as TXT after passing the counsel gate
+produced no export event, no timeline entry, and no attestation record: an
+incomplete compliance trail unique to the TXT path. **Fix:** record the export
+(with attestation) after download; added `"txt"` to `ExportEvent.format` (all
+consumers uppercase it or compare to `"marked-sent"`, so no switch broke).
+*(R1 `484f7b3`)*
+
+---
+
 ## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE · ships as 0.19.3)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,

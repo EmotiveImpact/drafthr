@@ -2,6 +2,40 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.19.4 — 2026-07-03
+
+**Automated daily bug-fix sweep (3 rounds, 6 fixes).** A multi-agent latent-bug
+hunt over `src/`, `server/`, `api/` and the export/compliance/store surfaces,
+committed directly to `main`. Round 3 was fully dry, so the sweep stopped early.
+Every fix ships with a regression test where the seam allowed; `tsc -b` +
+`vite build` + `vitest` green at every push. **+7 tests** (562 → 569).
+Per-finding detail in `docs/internal/BUGS_AND_FIXES.md`. Highlights:
+
+- **Clean build was actually RED on `main` (HIGH, build).** `scripts/stripe/
+  seed-catalog.ts` (tracked, recreated during concurrent tree churn) imported
+  `src/lib/billing/catalog.ts`, which was never on `main` → `TS2307`. A stale
+  incremental `.tsbuildinfo` masked it, so the repo did not build from a fresh
+  checkout. Restored the missing module byte-identical from `feat/billing`.
+- **`monthsBetween` under-counted month-end start dates (HIGH, statutory).**
+  Starting on the 29th–31st under-credited a completed month of service in
+  shorter months (e.g. started 31 Mar, evaluated 30 Apr → 0 instead of 1),
+  under-counting statutory service that gates eligibility thresholds (the 2-year
+  redundancy-pay line). Now clamps the anniversary day to the month's last day.
+- **Inverted compliance `warn` rules read backwards (HIGH, legal risk).** The
+  two `warn` rules (`us_ca_no_noncompete`, `ref_consent`) detect a *problem* on
+  match, but the panel / export-pack / ReviewRail counted a match as a satisfied
+  clause — so a void California non-compete showed as "Detected/compliant", a
+  clean letter was told to add one, and the "N flagged" counts were inverted. A
+  single-source `ruleSatisfied()` helper now inverts them everywhere.
+- **DOCX squashed wide letterheads/signatures (MEDIUM).** `imageSizeFromElement`
+  pre-clamped width before the ratio-preserving `clampImageSizePx`, so a 10:1
+  letterhead exported as 4.8:1 in every DOCX. Now derives width unclamped and
+  lets the shared clamp scale both axes.
+- **Smaller correctness/audit fixes.** The Home dashboard showed "Not started"
+  for an actively-generating (streaming) draft; a TXT export left no export
+  event / timeline / attestation record (unlike PDF/DOCX/ZIP), an incomplete
+  compliance trail on that one path.
+
 ## 0.19.3 — 2026-07-01
 
 **Automated bug-fix sweep — user-directed `/loop` (20 rounds, 47 fixes).** A
