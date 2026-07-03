@@ -40,7 +40,7 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
-## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE)
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE · ships as 0.19.3)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly

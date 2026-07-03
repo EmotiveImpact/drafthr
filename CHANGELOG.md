@@ -2,6 +2,56 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.19.3 — 2026-07-01
+
+**Automated bug-fix sweep — user-directed `/loop` (20 rounds, 47 fixes).** A
+multi-agent latent-bug hunt over the whole codebase (`src/`, `server/`, `api/`).
+Baseline was already green, so these are correctness / security / robustness
+fixes, not a build cleanup. Every finding was adversarially verified, then
+senior-triaged (≈half of machine-"confirmed" candidates were rejected as
+false-positive / by-design / unsafe-to-fix); each fix ships with a regression
+test where the seam allowed. **Ran to convergence:** round 20 was the first fully
+dry round, and a dynamic smoke-test confirmed a clean app boot with no
+regressions. `tsc -b` + `vite build` + `vitest` green at every commit;
+**+47 tests** (515 → 562). Per-finding detail in
+`docs/internal/BUGS_AND_FIXES.md`. Highlights:
+
+- **AI-chat Markdown link bypass (HIGH, security).** The Markdown renderer for
+  untrusted AI replies used a weak `…|/|…` URL allowlist in both its DOMPurify
+  config and its harden pass, so a protocol-relative `[x](//evil.com)` rendered
+  as a live attacker-controlled link (this path never ran the letter
+  sanitiser's href hook). Now uses the authoritative `isSafeLinkHref`; the same
+  weaker-than-canonical gap was closed in `sanitize.ts` (href hook + `<img>`
+  data-URL validator) and three more image-data-URL validators.
+- **Systemic: jurisdiction-gated wizard questions leaked across jurisdictions
+  (HIGH).** The `Question.jurisdiction` marker was dead metadata — the wizard
+  only gated on `showIf` — so 13 `(UK)`/`(US)` employer questions showed to both
+  jurisdictions and their answers flowed into the LLM. One `isQuestionVisible`
+  fix corrected all 13, plus 6 more conditional fields that lacked their
+  `showIf`, plus the required-repeater validation bypass that let blank
+  tribunal-grade letters through.
+- **Lost edits (HIGH).** `EmployeeForm` and `EditDetailsSheet` re-seeded their
+  form state from an unstable prop/object identity, silently wiping the user's
+  in-progress edits on any unrelated re-render / streaming update.
+- **Client↔server races.** Matter-update and booking-message handlers returned
+  success (+ spurious audit) on a 0-row concurrent-delete; the booking
+  "Open draft" link could dead-end after a concurrent pull dropped the readable
+  id; bulk generation ignored **Cancel** and created all drafts anyway; a failed
+  booking-rating left the UI stuck on "submitted" with no rollback.
+- **App-crash / correctness.** The wizard crashed the whole app on an unknown
+  letter-type URL; the US **COBRA** compliance check was case-sensitive (false
+  "missing notice"); bulk mail-merge dropped currency columns; `relativeTime`
+  rounded elapsed time into the wrong bucket; the employer onboarding tour
+  silently skipped a step; all-day matter events were hidden west of UTC.
+- **Robustness.** The dev-server LLM proxy crashed on a client disconnect
+  mid-stream (unhandled socket error); the draft SSE stream threw on abort;
+  `Cmd/Ctrl+K` hijacked focus while typing in a comment field.
+
+Two items were **handed off rather than auto-fixed** (see `BUGS_AND_FIXES.md`):
+the `pay_dispute {{deadlineDays}}` template placeholder (a content decision) and
+a last-owner **TOCTOU** in the member role/remove handlers (a real integrity
+race whose `SELECT … FOR UPDATE` fix needs a live-DB integration test).
+
 ## 0.19.2 — 2026-06-28
 
 **Automated bug-fix sweep (5 rounds, 11 fixes).** A multi-agent latent-bug hunt
