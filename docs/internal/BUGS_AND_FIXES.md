@@ -234,9 +234,44 @@ Verified: build green, 574 tests passing.
 
 Verified: build green, 574 tests passing.
 
-Still queued: dual-write per-draft 409 counter (FQ-02), EditDetailsSheet
-dirty-field patch, FQ-03 vendored pagedly base64 regex, agent.ts unbounded
-system prompt, persistent delete tombstones + keepalive (BUG-05).
+### Wave 4 — queue drained (audit backlog complete)
+
+- **🟠 Deleted drafts resurrected across sessions (BUG-05).** The delete
+  tombstone was in-memory only and the DELETE had no `keepalive`: delete → close
+  tab → DELETE never lands → next mount's pull re-adopts the server row and the
+  store subscription re-POSTs it — destroyed PII resurrects and re-entrenches.
+  Now: `keepalive: true` on draft + matter DELETEs; the server uuid is persisted
+  to localStorage (`drafthr.deleted-draft-uuids.v1`) BEFORE the fetch and cleared
+  only on a confirmed 2xx; `mergeRemoteDrafts` takes the tombstone set and never
+  adopts a tombstoned remote-only row (a locally-restored draft still merges —
+  Undo clears the tombstone); `reissuePendingDeletes()` retries unconfirmed
+  deletes at mount before the pull (4xx also clears — idempotent server DELETE).
+  Merge tests added.
+- **🟡 The "your edits aren't syncing" toast never fired in practice (FQ-02).**
+  The >3-consecutive-409 counter was global and reset by ANY draft's success, so
+  healthy drafts syncing in between kept resetting it; the once-per-session
+  latch also muted later conflicts. Now per-draft (`staleConflictsByDraftId` +
+  per-draft toast flag, cleared on that draft's success so recovery→new conflict
+  re-notifies). Interleaved-success regression test added.
+- **🟡 agent.ts unbounded client system prompt (input-spend, SE-01's other
+  half).** `body.system` is now capped at 100k chars → 413 (reject, not
+  truncate — a silently truncated letter context would produce confidently-wrong
+  AI output).
+- **🟡 Vendored pagedly weak image validators (FQ-03).** Both dist bundles
+  patched: the whitespace-tolerant data-URL payload class now requires a leading
+  real base64 char, and the three prefix-only gates (2× ALLOWED_URI_REGEXP + one
+  inline test) require ≥1 payload char. Recorded in vendor/pagedly/CHANGELOG.md
+  so an upstream refresh re-applies.
+- **🟡 EditDetailsSheet last-writer-wins save.** Save wrote all 14 fields from
+  the open-time snapshot, clobbering background updates (streaming regen, remote
+  pull, another tab) to fields the user never touched. Now a dirty-field patch:
+  only fields changed vs the seeded values are included (patchDraft merges
+  per-subobject, so omitted fields keep the live store value). A jurisdiction
+  switch still owns both region fields.
+
+Verified: build green, 577 tests passing. The 2026-07-02 audit queue is empty;
+remaining structural items live in the Architectural backlog table above
+(I-SYNC-2/3 pull-reconcile, I-HARD-1 durable rate limiter, I-MOAT-*, X1).
 
 ---
 

@@ -161,6 +161,12 @@ function syncedFields(r: RemoteDraft, local?: Draft) {
 export function mergeRemoteDrafts(
   local: Record<string, Draft>,
   remote: RemoteDraft[],
+  /** Server uuids deleted locally whose DELETE hasn't been confirmed yet
+   *  (dual-write persistedDraftTombstones). Without this, deleting a draft and
+   *  closing the tab before the DELETE landed resurrected it on next mount:
+   *  the merge adopted the server row, the store subscription re-POSTed it,
+   *  and PII the user destroyed re-entrenched itself (BUG-05). */
+  tombstonedServerIds: ReadonlySet<string> = new Set(),
 ): Record<string, Draft> {
   // Index local drafts by their server-uuid so we can match against remote.
   const localByServerId = new Map<string, Draft>();
@@ -169,6 +175,10 @@ export function mergeRemoteDrafts(
   const merged: Record<string, Draft> = { ...local };
 
   for (const r of remote) {
+    // A tombstoned row is pending deletion — never adopt it. (If it ALSO
+    // exists locally the user restored it via Undo, which clears the
+    // tombstone, so this guard only ever suppresses remote-only ghosts.)
+    if (tombstonedServerIds.has(r.id) && !localByServerId.has(r.id)) continue;
     const existing = localByServerId.get(r.id);
     if (existing) {
       // Keep local on newer-OR-EQUAL timestamp: a strict > would let a

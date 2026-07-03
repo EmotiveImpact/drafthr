@@ -262,6 +262,38 @@ describe("dual-write enqueueSync", () => {
     expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/aren't syncing/i);
   });
 
+  it("a healthy draft's successful sync does not reset another draft's conflict count", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // conflicted_1 always 409s; healthy_1 always succeeds. With a global
+    // counter the healthy syncs interleaved between the conflicts kept
+    // resetting it and the toast never fired (FQ-02) — per-draft it must.
+    const { toServerUuid } = await import("./remote-ids");
+    const conflictedUuid = toServerUuid("conflicted_1");
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { id?: string };
+      return body.id === conflictedUuid
+        ? new Response(JSON.stringify({ error: "stale revision" }), { status: 409 })
+        : new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { toast } = await import("sonner");
+    const mod = await import("./dual-write");
+
+    let conflicted = makeDraft("conflicted_1", 100);
+    const healthy = makeDraft("healthy_1", 100);
+    mod.setDualWriteSnapshotGetter((id) => (id === "conflicted_1" ? conflicted : healthy));
+
+    for (let i = 1; i <= 4; i++) {
+      conflicted = makeDraft("conflicted_1", 100 + i);
+      await mod.syncDraft("conflicted_1");
+      await mod.syncDraft("healthy_1"); // interleaved success
+    }
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/aren't syncing/i);
+  });
+
   it("undeleteDraft clears the tombstone so a restored draft re-syncs", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);

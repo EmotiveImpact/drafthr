@@ -155,6 +155,14 @@ type AgentRequest = {
   model?: string;
 };
 
+// Input-side spend cap (the other half of SE-01, which capped output tokens):
+// the client's real system prompt carries the letter + sections index and tops
+// out well under this, but without a ceiling an authenticated caller could ship
+// a ~1M-token system prompt (cache-tagged, full price on first hit) 40×/min
+// under the shared "ai" rate limit. Reject rather than truncate — a silently
+// truncated letter context would produce confidently-wrong AI output.
+const MAX_SYSTEM_CHARS = 100_000;
+
 export async function POST(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
@@ -179,6 +187,10 @@ export async function POST(req: Request): Promise<Response> {
     modelMessages = await convertToModelMessages(body.messages);
   } catch {
     return jsonError("Invalid messages payload", 400);
+  }
+
+  if (typeof body.system === "string" && body.system.length > MAX_SYSTEM_CHARS) {
+    return jsonError("system prompt too large", 413);
   }
 
   const system =

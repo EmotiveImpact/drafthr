@@ -1,5 +1,15 @@
 # Changelog
 
+## HRLETTER vendor patches (re-apply on upstream refresh)
+
+- **2026-07-03 — base64 image-validator hardening (audit FQ-03).** Both dist
+  bundles patched in-place: the whitespace-tolerant data-URL payload class
+  `[a-z0-9+/=\s]+` now requires a leading real base64 char
+  (`[a-z0-9+/=][a-z0-9+/=\s]*`), and the three prefix-only gates
+  (`ALLOWED_URI_REGEXP` ×2 + one inline `;base64,` test) require at least one
+  payload char so a bare/empty `data:image/png;base64,` no longer passes.
+  Matches the host app's `isSafeImageDataUrl` discipline (R9/R13).
+
 ## Unreleased (dev)
 
 DOCX round-trip fidelity + editing-UX polish. Builds on the import-fidelity work
