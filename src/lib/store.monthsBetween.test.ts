@@ -31,6 +31,26 @@ describe("monthsBetween", () => {
     expect(monthsBetween("2024-01-31")).toBe(0);
   });
 
+  it("credits a month-end start once the shorter month completes", () => {
+    // Started 31 March; April has no 31st, so the first service month completes
+    // on 30 April. The raw day-of-month comparison would wrongly return 0 here.
+    vi.setSystemTime(new Date(2022, 3, 30, 12, 0, 0)); // 2022-04-30 (local)
+    expect(monthsBetween("2022-03-31")).toBe(1);
+  });
+
+  it("does not credit the month-end start one day early", () => {
+    // 29 April is still short of the 30 April completion of the first month.
+    vi.setSystemTime(new Date(2022, 3, 29, 12, 0, 0)); // 2022-04-29 (local)
+    expect(monthsBetween("2022-03-31")).toBe(0);
+  });
+
+  it("credits a Jan-31 start on the leap-Feb boundary (29th)", () => {
+    // Started 31 Jan 2022; on 29 Feb 2024 exactly 25 months have completed
+    // (Feb has no 31st, so the month completes on its last day).
+    vi.setSystemTime(new Date(2024, 1, 29, 12, 0, 0)); // 2024-02-29 (local)
+    expect(monthsBetween("2022-01-31")).toBe(25);
+  });
+
   it("counts whole years on the start-of-month boundary", () => {
     vi.setSystemTime(new Date(2024, 11, 1, 12, 0, 0)); // 2024-12-01 (local)
     expect(monthsBetween("2022-12-01")).toBe(24);

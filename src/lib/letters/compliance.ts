@@ -284,3 +284,19 @@ export function ruleMatches(rule: ComplianceRule, content: string): boolean {
   const re = new RegExp(rule.match.value, rule.match.flags ?? "i");
   return re.test(content);
 }
+
+/**
+ * Whether the rule's requirement is *satisfied* (i.e. the letter is compliant
+ * on this dimension). For most rules a match means the required clause is
+ * present, so satisfied === matched. The `warn` rules have inverted semantics —
+ * their pattern detects a *problem* (e.g. a void non-compete clause, or salary
+ * disclosed in a reference), so a match means the letter is NOT satisfied.
+ * Callers must use this — not raw `ruleMatches` — when deciding "present /
+ * missing / detected", otherwise warn rules read backwards (a void non-compete
+ * would be shown as a satisfied clause and a compliant letter would be told to
+ * add one).
+ */
+export function ruleSatisfied(rule: ComplianceRule, content: string): boolean {
+  const matched = ruleMatches(rule, content);
+  return rule.severity === "warn" ? !matched : matched;
+}

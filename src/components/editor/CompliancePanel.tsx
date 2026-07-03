@@ -1,5 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
-import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
+import { rulesFor, ruleSatisfied } from "@/lib/letters/compliance";
 import { CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
 import { useMemo } from "react";
 import { TemplateQualityInspector } from "./TemplateQualityInspector";
@@ -55,9 +55,13 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
     [draft.letterType, draft.context.jurisdiction, draft.context.usState]
   );
 
+  // `present` = requirement satisfied/compliant. ruleSatisfied inverts the
+  // warn rules (non-compete / salary-consent) so a detected problem lands in
+  // the "missing" (flagged) buckets with its removal recommendation, rather
+  // than being ticked off as a satisfied clause.
   const evaluations = rules.map((r) => ({
     rule: r,
-    present: ruleMatches(r, fullText),
+    present: ruleSatisfied(r, fullText),
   }));
 
   const missing = evaluations.filter((e) => !e.present);

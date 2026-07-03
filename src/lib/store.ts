@@ -1868,7 +1868,14 @@ export function monthsBetween(isoDate?: string): number {
   let months =
     (now.getFullYear() - start.getFullYear()) * 12 +
     (now.getMonth() - start.getMonth());
-  if (now.getDate() < start.getDate()) months -= 1;
+  // Clamp the anniversary day to the last day of the evaluation month: when the
+  // start day-of-month doesn't exist in this month (e.g. started the 31st, now
+  // in a 30-day month), the service month completes on the month's last day, not
+  // on a non-existent later date. Comparing against the raw start day would
+  // under-credit a completed month for anyone who started on the 29th–31st.
+  const lastDayOfNowMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const anniversaryDay = Math.min(start.getDate(), lastDayOfNowMonth);
+  if (now.getDate() < anniversaryDay) months -= 1;
   return Math.max(0, months);
 }
 

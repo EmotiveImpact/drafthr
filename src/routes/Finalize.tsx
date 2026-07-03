@@ -175,6 +175,8 @@ export function Finalize() {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
       downloadBlob(blob, `${slug || "letter"}.txt`);
+      const att = exportAttestation();
+      recordExport(draft.id, { format: "txt", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
     } catch (err) {
       alert(`TXT export failed: ${err instanceof Error ? err.message : err}`);
     } finally {

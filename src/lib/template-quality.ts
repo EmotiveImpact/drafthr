@@ -1,6 +1,6 @@
 import type { Draft, Section } from "@/lib/letters/types";
 import { getSectionTemplate, getTemplate } from "@/lib/letters/templates";
-import { rulesFor, ruleMatches, type ComplianceRule } from "@/lib/letters/compliance";
+import { rulesFor, ruleSatisfied, type ComplianceRule } from "@/lib/letters/compliance";
 
 export type TemplateRequirementStatus = "covered" | "missing" | "needs_review" | "guardrail";
 
@@ -35,7 +35,10 @@ export function buildTemplateQualityReport(draft: Draft): QualityReport {
     draft.letterType,
     draft.context.jurisdiction,
     draft.context.usState
-  ).map((rule) => ({ rule, present: ruleMatches(rule, fullHtml) }));
+    // `present` here means "requirement satisfied / compliant" — ruleSatisfied
+    // inverts the warn rules so their problem-detecting matches aren't counted
+    // as satisfied. Consumers read `!present` as "flagged / missing".
+  ).map((rule) => ({ rule, present: ruleSatisfied(rule, fullHtml) }));
 
   const sections = draft.sections.map((section) => {
     const tpl = getSectionTemplate(

@@ -293,7 +293,7 @@ export type ExportEvent = {
   id: string;
   /** "marked-sent" is a state transition — recorded here so Activity shows
    * the moment a letter was finalised, even though no file was produced. */
-  format: "pdf" | "docx" | "pack" | "marked-sent";
+  format: "pdf" | "docx" | "txt" | "pack" | "marked-sent";
   exportedAt: number;
   reviewedBy?: string;
   reviewedOn?: string;

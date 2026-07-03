@@ -1241,7 +1241,8 @@ function draftStatus(d: {
   if (all.length === 0) return "empty";
   if (all.every((s) => s.status === "empty" && !s.html)) return "empty";
   if (all.every((s) => s.status === "ready")) return "ready";
-  if (all.some((s) => s.status === "ready" || s.status === "edited" || s.html)) return "drafting";
+  if (all.some((s) => s.status === "ready" || s.status === "edited" || s.status === "streaming" || s.html))
+    return "drafting";
   return "empty";
 }
 
