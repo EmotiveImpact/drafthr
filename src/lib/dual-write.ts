@@ -378,9 +378,12 @@ export async function reissuePendingDeletes(): Promise<void> {
         body: JSON.stringify({ id: serverUuid }),
       });
       // DELETE is idempotent server-side (unknown id → 200 idempotent:true),
-      // so any 2xx confirms the row is gone. 4xx means it will never succeed
-      // (bad id / different tenant) — drop the entry rather than retry forever.
-      if (res.ok || (res.status >= 400 && res.status < 500)) {
+      // so any 2xx confirms the row is gone. 400 (malformed id) will never
+      // succeed — drop it. 401/403 are RECOVERABLE (session expired, or the
+      // draft belongs to a tenant that isn't active right now — this runs on
+      // every activeTenant change): keep the tombstone so the delete retries
+      // once the right session/tenant is back, instead of resurrecting the row.
+      if (res.ok || res.status === 400) {
         unpersistTombstone(serverUuid);
       }
     } catch {

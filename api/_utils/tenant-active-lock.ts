@@ -23,3 +23,15 @@ type SqlExecutor = { execute: (query: SQL) => Promise<unknown> };
 export async function lockUserActiveTenant(tx: SqlExecutor, userId: string): Promise<void> {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 0))`);
 }
+
+/**
+ * Serialize every owner-affecting mutation for a tenant (member demote,
+ * member remove, directory deprovision). The "at least one active owner"
+ * invariant is enforced by an app-level count-then-act; without a common lock
+ * two concurrent mutations can each count 2 live owners and both proceed,
+ * leaving the workspace ownerless (R12). Transaction-scoped like the lock
+ * above; keyed per tenant so unrelated tenants never contend.
+ */
+export async function lockTenantOwnerGuard(tx: SqlExecutor, tenantId: string): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"owner-guard:" + tenantId}, 0))`);
+}

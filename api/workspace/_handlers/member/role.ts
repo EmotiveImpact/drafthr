@@ -2,7 +2,8 @@
  * POST /api/workspace/member/role — change a member's role in the active
  * tenant. Admin-only, with owner-role changes reserved to owners.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { lockTenantOwnerGuard } from "../../../_utils/tenant-active-lock.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request.js";
 import { rateLimit } from "../../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js";
@@ -47,9 +48,7 @@ export async function POST(req: Request): Promise<Response> {
     // the workspace ownerless (TOCTOU, R12 FLAGGED). The lock serializes all
     // owner-affecting mutations for the tenant; the count is then authoritative.
     const outcome = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${"owner-guard:" + tenantId}))`,
-      );
+      await lockTenantOwnerGuard(tx, tenantId);
       const [member] = await tx
         .select({ role: tenantMembers.role })
         .from(tenantMembers)

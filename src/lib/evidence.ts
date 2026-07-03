@@ -86,6 +86,18 @@ export function validFigureNumbers(allEvidence: EvidenceItem[]): Set<number> {
   return nums;
 }
 
+// Per-item ceiling on verbatim evidence embedded in prompts. The evidence
+// panel accepts text files up to 512KB; unclamped, one large file pushed the
+// agent system prompt past the server's 100k-char cap (api/agent.ts → 413)
+// and hard-failed the AI rail for the whole draft. 40k chars ≈ 10k tokens per
+// item keeps even a few verbatim items comfortably under the cap.
+const MAX_VERBATIM_CHARS = 40_000;
+
+function clampVerbatim(content: string): string {
+  if (content.length <= MAX_VERBATIM_CHARS) return content;
+  return `${content.slice(0, MAX_VERBATIM_CHARS)}\n  [evidence truncated at ${MAX_VERBATIM_CHARS.toLocaleString()} characters — full file remains attached to the draft]`;
+}
+
 export function evidencePromptBlock(draft: Draft, sectionId?: string): string {
   const items = evidenceForSection(draft, sectionId);
   if (items.length === 0) return "(no evidence supplied)";
@@ -100,7 +112,7 @@ export function evidencePromptBlock(draft: Draft, sectionId?: string): string {
         "No summary supplied";
       const verbatim =
         item.includeVerbatim && item.content.trim()
-          ? `\n  Verbatim user-supplied content: ${item.content.trim()}`
+          ? `\n  Verbatim user-supplied content: ${clampVerbatim(item.content.trim())}`
           : "";
       return `${index + 1}. ${item.kind.toUpperCase()}${
         item.filename ? ` · ${item.filename}` : ""

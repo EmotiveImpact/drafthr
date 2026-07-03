@@ -27,7 +27,7 @@ import { tenantMembers, tenants, users } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { getWorkos } from "../../_utils/workos.js";
 import { jsonError } from "../../_utils/request.js";
-import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
+import { lockTenantOwnerGuard, lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import {
   extractDirectoryEmail,
   extractDirectoryName,
@@ -346,10 +346,38 @@ async function deprovisionUser(
     return;
   }
 
-  await db
-    .update(tenantMembers)
-    .set({ status: "deprovisioned", deprovisionedAt: new Date(), isActiveTenant: false })
-    .where(and(eq(tenantMembers.userId, existing.id), eq(tenantMembers.tenantId, tenantId)));
+  // Run under the same owner-guard lock as member role/remove: without it a
+  // webhook deprovision racing an admin demote could each see 2 live owners
+  // and together leave the workspace ownerless (the R12 TOCTOU class). The
+  // IdP stays authoritative — a sole-owner deprovision still proceeds — but
+  // it is now serialized (so the admin request sees the true count and 409s)
+  // and an ownerless outcome is flagged loudly instead of happening silently.
+  let leftOwnerless = false;
+  await db.transaction(async (tx) => {
+    await lockTenantOwnerGuard(tx, tenantId);
+    await tx
+      .update(tenantMembers)
+      .set({ status: "deprovisioned", deprovisionedAt: new Date(), isActiveTenant: false })
+      .where(and(eq(tenantMembers.userId, existing.id), eq(tenantMembers.tenantId, tenantId)));
+    const owners = await tx
+      .select({ userId: tenantMembers.userId })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenantId, tenantId),
+          eq(tenantMembers.role, "owner"),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+    leftOwnerless = owners.length === 0;
+  });
+  if (leftOwnerless) {
+    console.error(
+      "[directory-webhook] tenant left with NO active owner after deprovision",
+      tenantId,
+      existing.id,
+    );
+  }
 
   await safelyAppendAudit({
     tenantId,

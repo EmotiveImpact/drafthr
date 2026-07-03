@@ -175,7 +175,8 @@ export async function POST(req: Request): Promise<Response> {
         realError = msg;
         // eslint-disable-next-line no-console
         console.error("[api/draft] error:", err);
-        writeEvent({ error: msg });
+        // No writeEvent here — the post-loop branch below is the single
+        // emitter (emitting in both places doubled the error event).
       }
 
       if (totalTokens === 0 && !realError) {

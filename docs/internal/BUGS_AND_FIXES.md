@@ -273,6 +273,42 @@ Verified: build green, 577 tests passing. The 2026-07-02 audit queue is empty;
 remaining structural items live in the Architectural backlog table above
 (I-SYNC-2/3 pull-reconcile, I-HARD-1 durable rate limiter, I-MOAT-*, X1).
 
+### Wave 4b — adversarial review of waves 3+4 (4 real findings, all fixed)
+
+An independent reviewer audited waves 3+4; it confirmed the transaction/lock
+mechanics, the 409→422 split, the jurisdiction filter (exactly mirrors the
+wizard's visibility), letterhead parity, the dirty-field save, and that the
+pagedly bundle patch is intact (`node --check` clean). Four real problems:
+
+- **🟠 Tombstone dropped on recoverable 401/403 (would resurrect deleted PII —
+  the exact bug wave 4 fixed).** `reissuePendingDeletes` cleared on ANY 4xx,
+  but it re-runs on every activeTenant change: a delete pending under tenant A,
+  reissued while tenant B is active, gets a 403 → tombstone gone → switch back
+  to A → row re-adopted. Now clears only on 2xx or 400 (malformed id — truly
+  unrecoverable; unknown-id is a 200 idempotent, so 404 can't happen); 401/403
+  keep the tombstone for retry under the right session/tenant.
+- **🟠 Directory-sync deprovision bypassed the owner-guard lock.** A webhook
+  deprovision racing an admin demote could still zero the active owners (the
+  R12 class through a third door). `deprovisionUser` now runs in a transaction
+  under the same shared `lockTenantOwnerGuard` (new helper in
+  tenant-active-lock.ts, `hashtextextended` like its sibling; role/remove
+  switched to it too). IdP stays authoritative — a sole-owner deprovision still
+  proceeds — but it serializes with admin mutations and an ownerless outcome is
+  console.error-flagged instead of silent.
+- **🟠 Legitimate large evidence 413'd the whole AI rail.** The evidence panel
+  accepts 512KB text files and `evidencePromptBlock` embedded them verbatim —
+  one 150KB file with "include exact content" pushed the agent system prompt
+  past the new 100k cap and every /api/agent call failed. Verbatim content is
+  now clamped per-item at 40k chars with an explicit `[evidence truncated…]`
+  marker.
+- **🟢 api/draft.ts double error emission.** The catch block AND the post-loop
+  branch both wrote the same `{error}` event on a thrown stream error. The
+  post-loop branch is now the single emitter.
+
+Accepted as-is: persisted-tombstone localStorage read-modify-write is not
+multi-tab atomic (in-memory tombstone covers the live session; noted for the
+I-SYNC-2 reconcile work).
+
 ---
 
 ## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE)

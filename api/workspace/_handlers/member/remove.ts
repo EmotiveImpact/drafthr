@@ -3,7 +3,8 @@
  * POST + JSON body (not DELETE) so the SPA fetch + same-origin check stay
  * identical to the rest of /api/workspace/*.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { lockTenantOwnerGuard } from "../../../_utils/tenant-active-lock.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request.js";
 import { rateLimit } from "../../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js";
@@ -44,9 +45,7 @@ export async function POST(req: Request): Promise<Response> {
     // concurrent requests can't each pass the owner-count check and leave the
     // workspace ownerless (TOCTOU, R12 FLAGGED).
     const outcome = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtext(${"owner-guard:" + tenantId}))`,
-      );
+      await lockTenantOwnerGuard(tx, tenantId);
       const [member] = await tx
         .select({ role: tenantMembers.role })
         .from(tenantMembers)
