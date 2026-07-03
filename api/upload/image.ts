@@ -46,13 +46,18 @@ export async function POST(req: Request): Promise<Response> {
   const rateLimitError = rateLimit(req, { name: "upload", max: 20, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
 
+  // Authenticate BEFORE any environment probe: checking the Blob token first
+  // let an unauthenticated caller (past same-origin + rate-limit) distinguish
+  // "blob configured" from "not configured" by the response shape. Gate on the
+  // session first so the deployment's config posture isn't observable to anon.
+  const sessionError = await enforceProductionSession(req);
+  if (sessionError) return sessionError;
+
   // Soft-fail so local dev without a configured Blob store still works —
   // the client falls back to the original data URL.
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return jsonResponse({ ok: false, error: "blob-not-configured" }, 200);
   }
-  const sessionError = await enforceProductionSession(req);
-  if (sessionError) return sessionError;
 
   const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
 
