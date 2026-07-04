@@ -98,6 +98,70 @@ could not exercise without your keys.
 
 ---
 
+## 🟡 Direct billing + hard paywall — BUILT & LIVE (test mode), go-live needs your Stripe live activation
+
+The whole monetisation layer is built and running on prod **in Stripe test
+mode** (v0.21.1): the `/pricing` storefront, subscriptions (Starter/Pro/Business
++ Employee Plus), one-off letters, case packs (metered per-letter), AI credit
+packs, the **AI critique** feature (spends 1 credit, Claude Opus 4.8, refunded on
+failure), and the **per-cycle credit drip**. Idempotent webhooks mirror Stripe →
+`subscriptions` / `entitlement_purchases` / `credit_ledger`. Migrations 0013,
+0016, 0017 are **already applied** to prod, so **no new migration is needed to go
+live**. The hard paywall (server gate `assertCanCreateLetter` + client
+`<PaywallGate>`) is complete but **env-gated OFF** via `DRAFTHR_ENFORCE_PAYWALL`.
+
+Direct-charge billing is separate from the marketplace's Connect flow above; it
+has its **own** webhook endpoint + signing secret. Code:
+`api/marketplace/_handlers/billing-{checkout,status,webhook}.ts`,
+`api/_utils/entitlements.ts`, `src/lib/billing/*`.
+
+**Go-live sequence (test → live) — do in order:**
+1. **Activate live payments in Stripe** (business details + bank) — your external
+   step; gets you a live secret key `sk_live_…`.
+2. **Set the live secret** on Vercel prod: `STRIPE_SECRET_KEY` = the `sk_live_`
+   key. (`VITE_STRIPE_PUBLISHABLE_KEY` is unused — checkout is Stripe-hosted.)
+3. **Re-seed the catalog against the live key** — `scripts/stripe/seed-catalog.ts`
+   creates the 18 products/prices and prints the `STRIPE_PRICE_*` ids; set **all
+   18** on Vercel prod (live price ids differ from test).
+4. **Re-create the billing webhook in LIVE mode** — Stripe → Developers →
+   Webhooks, endpoint `https://<domain>/api/marketplace/billing-webhook`, events:
+   `checkout.session.completed`, `customer.subscription.created`,
+   `customer.subscription.updated`, `customer.subscription.deleted`,
+   `invoice.paid`, `invoice.payment_failed`. Copy its signing secret into
+   `STRIPE_BILLING_WEBHOOK_SECRET`.
+5. **Re-do the marketplace Connect webhook in live mode** too (see the section
+   above — `STRIPE_WEBHOOK_SECRET` + `STRIPE_WEBHOOK_SECRET_CONNECT`).
+6. **Flip enforcement:** set `DRAFTHR_ENFORCE_PAYWALL=1` on Vercel prod.
+7. `vercel --prod`.
+
+**Before flipping enforcement (step 6), sanity-check the whole gate** — it's the
+first time it's load-bearing. In test mode, confirm each path lets a real letter
+through and blocks when it shouldn't: an active subscription, a single one-off
+letter (consumed once), a case pack (counts down to its allowance then blocks),
+and AI credits (spent by a critique, refunded on failure). Then repeat once in
+live mode with a real card.
+
+**Roll back:** unset `DRAFTHR_ENFORCE_PAYWALL` (or set it to anything but `1`) and
+redeploy → the app returns to open access instantly. It's local-first, so
+toggling enforcement never touches or loses user data.
+
+**Locked-but-revisable decisions baked in** (full rationale in `ROADMAP.md`
+§2 — each notes where it's configured in code):
+- **Hard paywall, no free anything, no trials** — payment precedes drafting.
+- **AI critique = 1 credit/run, model Claude Opus 4.8**, refunded on failure
+  (`CREDIT_COST`/`CRITIQUE_MODEL` in `api/store/_handlers/critique.ts`; client
+  mirror `CRITIQUE_CREDIT_COST` in `src/lib/critique.ts`).
+- **Case pack allowances: Grievance 4 · Settlement 6 · Tribunal 8** letters
+  (`includedLetters` in `src/lib/billing/catalog.ts`).
+- **3-day grace** on failed renewal; **Starter 5 letters/cycle**; **annual = 1
+  month free**; **plan credits drip monthly, no rollover**; **purchased packs
+  never expire**.
+
+⚠️ This is real money code exercised only in test mode so far — do the live
+end-to-end pass in step-before-6 before you turn enforcement on.
+
+---
+
 ## One-time: let the agent do the env flip for you (optional)
 
 The env changes above were intentionally left to you. If you'd rather the agent

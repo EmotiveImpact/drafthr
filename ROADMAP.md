@@ -174,6 +174,8 @@ Most employee cases aren't one letter — they're a sequence over weeks or month
 | **Grievance Pack** | £69 | Initial letter + follow-up + escalation + final position (4 letters) | Typical grievance arc 6-12 weeks |
 | **Settlement Pack** | £119 | Counter-offer + employer reply + revised offer + final settle (4-6 letters) | Settlement negotiation usually 3-6 letters |
 | **Tribunal Prep Pack** | £249 | ET1 + schedule of loss + witness statement outline + supporting letters (6-8 documents) | Full ET1 lodgement support |
+
+> **Pack letter allowance (decided 2026-07-04 · revisable):** packs are now metered per-letter — **Grievance 4 · Settlement 6 · Tribunal Prep 8** (the generous end of the ranges above; storefront copy states the exact count). Enforced by `entitlement_purchases.letters_total`/`letters_used`. **To change:** edit `includedLetters` in `src/lib/billing/catalog.ts` (applies to new purchases) and keep the blurb in `src/routes/Pricing.tsx` in sync.
 | **Employee Plus subscription** ★ | **£99/mo** | Unlimited letters within ONE matter · **10 AI critique credits/mo** · **£30 marketplace credit/mo** (pools toward consultant review) · priority support · case timeline dashboard · tribunal deadline calendar with email/SMS reminders · cancel any time | The right SKU for multi-month cases (grievance arc, settlement negotiation, tribunal prep). Typical 4-9 month lifetime = **£396-£891 LTV**. Solicitor monthly retainer alternative is £500-2,000/mo — we're 80%+ cheaper. |
 
 **Mid-case upgrade (decided 2026-07-01):** an employee who bought a one-off letter can upgrade to Employee Plus at any point in the same matter — the upsell shows post-purchase and whenever a second letter is started in the same matter ("This case is growing — Employee Plus covers unlimited letters for this matter, £99/mo"). **No retroactive credit** for prior one-off purchases: they paid for a letter, they got a letter. (A paid-credit-toward-first-month lever can be added later if conversion data shows friction.)
@@ -224,7 +226,9 @@ Most employee cases aren't one letter — they're a sequence over weeks or month
 | Medium | £8.99 | 10 | £0.90 | ~95% |
 | Best value | £19.99 | 25 | £0.80 | ~95% |
 
-Cost-per-credit to DraftHR: ~£0.05 (Sonnet at our prompt sizes with caching). **97% gross margin** — this is the highest-margin line in the entire business. Convert AI from "biggest cost" to "biggest profit center."
+Cost-per-credit to DraftHR: originally modelled at ~£0.05 on Sonnet — but the shipped **AI critique runs on Claude Opus 4.8 (decided 2026-07-04)** for a deeper "specialist" review, so real cost is roughly **£0.06–0.25/critique** depending on letter length → ~**85–95% gross margin** at pack prices (still the highest-margin line in the business), not the 97% Sonnet figure. **Revisable:** switch `CRITIQUE_MODEL` (`api/store/_handlers/critique.ts`) back to Sonnet to restore ~97% if margin ever outweighs critique depth.
+
+**AI critique mechanics (decided 2026-07-04 · revisable):** one critique run = **1 credit** (`CREDIT_COST` in `api/store/_handlers/critique.ts`, mirrored client-side as `CRITIQUE_CREDIT_COST` in `src/lib/critique.ts` — change both together); model **Opus 4.8** (`CRITIQUE_MODEL`); the credit is **refunded** if the model call fails or returns empty (never charged for a critique you didn't get). Three lenses: Tribunal counsel · Employee advocate · DEI lead.
 
 **Credit policy (decided 2026-07-01):** plan-included credits (Pro 20/mo, Employee Plus 10/mo + £30 marketplace credit/mo, tier-included credits on High-stakes/Tribunal letters) **drip monthly, do not roll over, and are never granted as a lump sum on annual plans** — an annual Pro buyer gets 20/mo for 12 months, not 240 on day 1. This keeps the annual discount from inflating AI-cost liability. **Purchased credit packs never expire.** Starter includes no credits — Starter users buy packs à la carte (highest-margin upsell).
 
