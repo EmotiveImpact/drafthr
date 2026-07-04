@@ -73,7 +73,7 @@ export async function POST(req: Request): Promise<Response> {
       mode: entry.mode,
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${base}/billing?status=success&sku=${priceKey}`,
+      success_url: `${base}/pricing?status=success&sku=${priceKey}`,
       cancel_url: `${base}/pricing?status=cancelled`,
       metadata: meta,
       ...(entry.mode === "subscription"

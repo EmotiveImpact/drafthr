@@ -60,9 +60,29 @@ export function Pricing() {
 
   useEffect(() => {
     let cancelled = false;
-    void getBillingStatus().then((s) => {
-      if (!cancelled) setStatus(s);
-    });
+    // Post-checkout return: Stripe redirects back with ?status=success|cancelled.
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("status");
+    if (outcome === "success") {
+      toast.success("Payment complete — thank you! Your plan is being activated.");
+    } else if (outcome === "cancelled") {
+      toast("Checkout cancelled — no charge was made.");
+    }
+    if (outcome) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // The subscription mirror lands via webhook shortly after redirect, so
+    // re-poll a couple of times on a success return to reflect the new plan.
+    const load = (retriesLeft: number) => {
+      void getBillingStatus().then((s) => {
+        if (cancelled) return;
+        setStatus(s);
+        if (outcome === "success" && !s?.active && retriesLeft > 0) {
+          window.setTimeout(() => load(retriesLeft - 1), 1500);
+        }
+      });
+    };
+    load(outcome === "success" ? 4 : 0);
     return () => {
       cancelled = true;
     };
