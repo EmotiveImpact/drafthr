@@ -267,7 +267,14 @@ async function recordOneOff(
   await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(entitlementPurchases)
-      .values({ userId, kind: entry.purchaseKind ?? priceKey, stripePaymentIntentId: paymentIntentId })
+      .values({
+        userId,
+        kind: entry.purchaseKind ?? priceKey,
+        stripePaymentIntentId: paymentIntentId,
+        // Packs are metered per-letter — stamp the allowance at grant time so the
+        // create-gate can count against it. Null for single-letter/credit buys.
+        lettersTotal: entry.kind === "pack" ? entry.includedLetters ?? null : null,
+      })
       .onConflictDoNothing()
       .returning({ id: entitlementPurchases.id });
     if (inserted.length === 0) return; // this payment was already recorded

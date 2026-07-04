@@ -45,9 +45,9 @@ const EMPLOYEE_SKUS: { key: PriceKey; blurb: string }[] = [
   { key: "letter_standard", blurb: "Grievance, sickness appeal + evidence pack" },
   { key: "letter_high", blurb: "Settlement counter, discrimination grievance (+1 credit)" },
   { key: "letter_tribunal", blurb: "ET1 prep, constructive dismissal (+2 credits)" },
-  { key: "pack_grievance", blurb: "4-letter grievance arc" },
-  { key: "pack_settlement", blurb: "4–6 letter settlement negotiation" },
-  { key: "pack_tribunal", blurb: "Full ET1 lodgement support (6–8 docs)" },
+  { key: "pack_grievance", blurb: "4 letters · grievance arc" },
+  { key: "pack_settlement", blurb: "6 letters · settlement negotiation" },
+  { key: "pack_tribunal", blurb: "8 documents · full ET1 lodgement support" },
   { key: "sub_employee_plus", blurb: "Unlimited letters for one matter · 10 credits + £30 marketplace credit / mo" },
 ];
 

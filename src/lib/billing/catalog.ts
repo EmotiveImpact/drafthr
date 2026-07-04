@@ -44,6 +44,8 @@ export type CatalogEntry = {
   includedCreditsPerCycle?: number;
   /** One-time AI credits granted on purchase (credit packs + some letter tiers). */
   includedCredits?: number;
+  /** For case packs: how many letters the pack authorises (metered per-letter). */
+  includedLetters?: number;
   /** For one-off purchases: the entitlement_purchases.kind value. */
   purchaseKind?: string;
   /** Env var holding the Stripe price id (seeded by the catalog script). */
@@ -68,10 +70,10 @@ export const CATALOG: Record<PriceKey, CatalogEntry> = {
   letter_high: { mode: "payment", amountMinor: 5900, label: "High-stakes letter", kind: "letter", purchaseKind: "letter_high", includedCredits: 1, stripePriceIdEnv: "STRIPE_PRICE_LETTER_HIGH" },
   letter_tribunal: { mode: "payment", amountMinor: 9900, label: "Tribunal-bound letter", kind: "letter", purchaseKind: "letter_tribunal", includedCredits: 2, stripePriceIdEnv: "STRIPE_PRICE_LETTER_TRIBUNAL" },
 
-  // --- Employee case packs ----------------------------------------------------
-  pack_grievance: { mode: "payment", amountMinor: 6900, label: "Grievance Pack", kind: "pack", purchaseKind: "pack_grievance", stripePriceIdEnv: "STRIPE_PRICE_PACK_GRIEVANCE" },
-  pack_settlement: { mode: "payment", amountMinor: 11900, label: "Settlement Pack", kind: "pack", purchaseKind: "pack_settlement", stripePriceIdEnv: "STRIPE_PRICE_PACK_SETTLEMENT" },
-  pack_tribunal: { mode: "payment", amountMinor: 24900, label: "Tribunal Prep Pack", kind: "pack", purchaseKind: "pack_tribunal", stripePriceIdEnv: "STRIPE_PRICE_PACK_TRIBUNAL" },
+  // --- Employee case packs (metered: a pack authorises N letters) ------------
+  pack_grievance: { mode: "payment", amountMinor: 6900, label: "Grievance Pack", kind: "pack", purchaseKind: "pack_grievance", includedLetters: 4, stripePriceIdEnv: "STRIPE_PRICE_PACK_GRIEVANCE" },
+  pack_settlement: { mode: "payment", amountMinor: 11900, label: "Settlement Pack", kind: "pack", purchaseKind: "pack_settlement", includedLetters: 6, stripePriceIdEnv: "STRIPE_PRICE_PACK_SETTLEMENT" },
+  pack_tribunal: { mode: "payment", amountMinor: 24900, label: "Tribunal Prep Pack", kind: "pack", purchaseKind: "pack_tribunal", includedLetters: 8, stripePriceIdEnv: "STRIPE_PRICE_PACK_TRIBUNAL" },
 
   // --- AI credit packs (never expire) ----------------------------------------
   credits_single: { mode: "payment", amountMinor: 199, label: "1 AI credit", kind: "credits", includedCredits: 1, stripePriceIdEnv: "STRIPE_PRICE_CREDITS_SINGLE" },
@@ -97,6 +99,31 @@ export function creditsPerCycleForPlan(plan: string): number {
     }
   }
   return 0;
+}
+
+/**
+ * How many letters a case pack authorises, resolved from its entitlement `kind`
+ * (the purchaseKind written to entitlement_purchases). 0 for a non-pack / unknown
+ * kind. Single source of truth for both the purchase grant and the backfill.
+ */
+export function packLetterAllowance(kind: string): number {
+  for (const entry of Object.values(CATALOG)) {
+    if (entry.kind === "pack" && entry.purchaseKind === kind && entry.includedLetters) {
+      return entry.includedLetters;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Pick the first pack that still has letters left (total − used > 0). Legacy
+ * pack rows with a null allowance are treated as having none. Pure so the gate
+ * decision is unit-testable without a DB.
+ */
+export function pickUsablePack<T extends { lettersTotal: number | null; lettersUsed: number | null }>(
+  packs: T[],
+): T | undefined {
+  return packs.find((p) => (p.lettersTotal ?? 0) - (p.lettersUsed ?? 0) > 0);
 }
 
 export function isPriceKey(v: unknown): v is PriceKey {

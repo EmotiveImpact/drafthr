@@ -7,6 +7,7 @@
 import { and, desc, eq, gte, isNull, like, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../src/db/index.js";
 import { subscriptions, creditLedger, drafts, entitlementPurchases } from "../../src/db/schema.js";
+import { pickUsablePack } from "../../src/lib/billing/catalog.js";
 
 /** db or a transaction handle — both expose the query builder + execute(). */
 type DbExecutor = {
@@ -123,8 +124,10 @@ export async function subjectHasActiveSubscription(
   return sub ? isUsable(sub.status, sub.graceUntil) : false;
 }
 
+/** What the draft-create must consume to honour this authorization, if anything. */
+export type ConsumeTarget = { entitlementId: string; kind: "letter" | "pack" };
 export type CreateGate =
-  | { ok: true; consumeEntitlementId?: string }
+  | { ok: true; consume?: ConsumeTarget }
   | { ok: false; reason: string; code: number };
 
 /** Letters created in the tenant since a cycle boundary (drafts are the source of truth). */
@@ -189,16 +192,28 @@ export async function assertCanCreateLetter(tenantId: string | null, userId: str
     .limit(1);
   // A single-letter purchase authorises exactly one create — report it so the
   // caller consumes it atomically with the draft insert.
-  if (oneOff) return { ok: true, consumeEntitlementId: oneOff.id };
+  if (oneOff) return { ok: true, consume: { entitlementId: oneOff.id, kind: "letter" } };
 
-  const [pack] = await db
-    .select({ id: entitlementPurchases.id })
+  // Case packs authorise a fixed number of letters. Authorise if any pack still
+  // has letters left, and report it so the create decrements it atomically.
+  const packs = await db
+    .select({
+      id: entitlementPurchases.id,
+      lettersTotal: entitlementPurchases.lettersTotal,
+      lettersUsed: entitlementPurchases.lettersUsed,
+    })
     .from(entitlementPurchases)
-    .where(and(eq(entitlementPurchases.userId, userId), like(entitlementPurchases.kind, "pack_%")))
-    .limit(1);
-  // Packs cover a sequence of letters within a matter; not consumed per-letter
-  // here (per-pack letter-count enforcement is a later refinement).
-  if (pack) return { ok: true };
+    .where(and(eq(entitlementPurchases.userId, userId), like(entitlementPurchases.kind, "pack_%")));
+  const usablePack = pickUsablePack(packs);
+  if (usablePack) return { ok: true, consume: { entitlementId: usablePack.id, kind: "pack" } };
+  if (packs.length > 0) {
+    // They own a pack but it's spent — say so, rather than the generic prompt.
+    return {
+      ok: false,
+      code: 402,
+      reason: "Your case pack is all used up — buy another pack, a single letter, or a plan to keep going.",
+    };
+  }
 
   return { ok: false, code: 402, reason: "Choose a plan or buy a letter to continue." };
 }

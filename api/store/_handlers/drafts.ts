@@ -12,7 +12,7 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, lte, inArray, desc, isNull } from "drizzle-orm";
+import { and, eq, lte, inArray, desc, isNull, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -20,7 +20,7 @@ import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections, entitlementPurchases } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
-import { assertCanCreateLetter } from "../../_utils/entitlements.js";
+import { assertCanCreateLetter, type ConsumeTarget } from "../../_utils/entitlements.js";
 import { isValidSectionInput } from "./_section-input.js";
 
 export const config = { runtime: "nodejs" };
@@ -190,13 +190,13 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       return jsonError("Draft belongs to a different workspace", 403);
     }
     const isCreate = existingDraft.length === 0;
-    let consumeEntitlementId: string | undefined;
+    let consume: ConsumeTarget | undefined;
     if (isCreate) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
       // letters are gated; edits to existing drafts always go through.
       const gate = await assertCanCreateLetter(tenantId, auth.userRow.id);
       if (!gate.ok) return jsonError(gate.reason, gate.code);
-      consumeEntitlementId = gate.consumeEntitlementId;
+      consume = gate.consume;
     }
     const clientRevision = parseClientRevision(body.clientRevision);
     if (!isCreate && (clientRevision === null || clientRevision < existingDraft[0].updatedAt.getTime())) {
@@ -237,21 +237,35 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
           answersJson: body.answers ?? null,
           updatedAt: acceptedRevision,
         });
-        // Consume the one-off letter entitlement that authorised this create,
-        // atomically with the insert. The isNull guard makes it single-use.
-        if (consumeEntitlementId) {
-          const consumed = await tx
-            .update(entitlementPurchases)
-            .set({ consumedAt: new Date() })
-            .where(
-              and(
-                eq(entitlementPurchases.id, consumeEntitlementId),
-                isNull(entitlementPurchases.consumedAt),
-              ),
-            )
-            .returning({ id: entitlementPurchases.id });
-          // Zero rows flipped = a concurrent create already consumed this one-off.
-          // Abort so the draft insert rolls back — never a free second letter.
+        // Consume the entitlement that authorised this create, atomically with
+        // the insert. Each guarded UPDATE flips at most one unit and returns 0
+        // rows if a concurrent create already claimed it — in which case we abort
+        // so the draft insert rolls back (never a free extra letter):
+        //  - a single-letter one-off is consumed once (consumed_at IS NULL guard);
+        //  - a case pack decrements letters_used while it's below its allowance.
+        if (consume) {
+          const consumed =
+            consume.kind === "letter"
+              ? await tx
+                  .update(entitlementPurchases)
+                  .set({ consumedAt: new Date() })
+                  .where(
+                    and(
+                      eq(entitlementPurchases.id, consume.entitlementId),
+                      isNull(entitlementPurchases.consumedAt),
+                    ),
+                  )
+                  .returning({ id: entitlementPurchases.id })
+              : await tx
+                  .update(entitlementPurchases)
+                  .set({ lettersUsed: sql`${entitlementPurchases.lettersUsed} + 1` })
+                  .where(
+                    and(
+                      eq(entitlementPurchases.id, consume.entitlementId),
+                      sql`${entitlementPurchases.lettersUsed} < ${entitlementPurchases.lettersTotal}`,
+                    ),
+                  )
+                  .returning({ id: entitlementPurchases.id });
           if (consumed.length === 0) throw new PaywallRaceError();
         }
       } else {

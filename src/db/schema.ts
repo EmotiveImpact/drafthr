@@ -652,6 +652,11 @@ export const entitlementPurchases = pgTable(
     matterId: uuid("matter_id"), // nullable; packs/plus scope to a matter
     stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }), // single-letter entitlements
+    // Case packs are metered by count, not a single consumedAt: letters_total is
+    // the pack's allowance (null for single-letter/credit purchases), letters_used
+    // increments once per letter created against it. Remaining = total − used.
+    lettersTotal: integer("letters_total"),
+    lettersUsed: integer("letters_used").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("entitlement_purchases_user_idx").on(t.userId)],

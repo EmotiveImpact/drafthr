@@ -2,6 +2,25 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.21.1 — 2026-07-04
+
+**Case packs are now metered (closes the last paywall leak).** A case pack
+previously authorised *unlimited* letters — buy one £69 Grievance Pack and never
+pay again (latent: only bites once `DRAFTHR_ENFORCE_PAYWALL` is on, which it
+isn't). Packs now carry a concrete letter allowance and are counted down.
+- **Allowances:** Grievance 4, Settlement 6, Tribunal Prep 8 (the generous end of
+  what the storefront already advertised — the Pricing blurbs now state the exact
+  count instead of a vague range).
+- **Metering:** `entitlement_purchases` gains `letters_total` (the allowance,
+  stamped at purchase) + `letters_used`. The create-gate authorises only while a
+  pack has letters left; the draft-create decrements `letters_used` atomically
+  (`WHERE letters_used < letters_total`) — the same concurrency-safe pattern as
+  single-letter consumption, so a pack can never overspend its allowance. When a
+  pack is spent, the gate says so instead of the generic prompt.
+- `CreateGate` now returns a unified `consume: { entitlementId, kind }`.
+- Migration 0017 (`letters_total` + `letters_used`, with a backfill for any packs
+  bought before this). +7 tests.
+
 ## 0.21.0 — 2026-07-04
 
 **AI critique + plan credit drip — credits now have a sink and a source.** Turns
