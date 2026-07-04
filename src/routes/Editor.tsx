@@ -71,6 +71,7 @@ import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
 import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
+import { notifyReviewRequested } from "@/lib/collab-notify";
 import { canApprove, canSubmitForReview, canEditDraft } from "@/lib/permissions";
 import { MatterEmployeeChips } from "@/components/editor/MatterEmployeeChips";
 import { MobileShareDialog } from "@/components/editor/MobileShareDialog";
@@ -603,11 +604,16 @@ export function Editor() {
     .reverse()
     .find((a) => a.decision === "changes_requested");
 
-  const onReviewSubmit = (input: { reviewerName: string; body: string }) => {
+  const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string }) => {
     if (!reviewDialogKind) return;
     const store = useDraftStore.getState();
     if (reviewDialogKind === "submit") {
       store.submitForReview(draft.id, input.reviewerName, input.body);
+      // Best-effort email to the picked workspace reviewer (fire-and-forget;
+      // the server validates membership + soft-fails without Resend).
+      if (input.reviewerUserId) {
+        notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
+      }
       toast.success("Submitted for approval");
     } else if (reviewDialogKind === "approve") {
       store.approveDraft(draft.id, input.reviewerName, input.body);
