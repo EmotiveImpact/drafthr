@@ -4,6 +4,7 @@ import { Check, MessageSquare, Quote, Reply, Trash2 } from "lucide-react";
 import type { Comment, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
+import { notifyComment } from "@/lib/collab-notify";
 import {
   type CommentIdentity,
   listIdentities,
@@ -94,6 +95,10 @@ export function CommentsPanel({
     if (!parentId && composerApplyMark && newId) {
       composerApplyMark(newId);
     }
+    // Best-effort: email the draft author that a comment landed (server skips
+    // self-comments + soft-fails without Resend). The comment itself is already
+    // saved + synced via the store — this is only the notification nudge.
+    notifyComment(draft.id, text);
     setComposerBody("");
     setComposerSection(null);
     setComposerQuote(undefined);
