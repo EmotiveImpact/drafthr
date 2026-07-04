@@ -664,11 +664,21 @@ export const creditLedger = pgTable(
     subjectType: text("subject_type").notNull(), // 'tenant' (pooled) | 'user'
     subjectId: uuid("subject_id").notNull(),
     delta: integer("delta").notNull(), // + grant, - spend
-    reason: text("reason").notNull(), // 'pack' | 'plan_drip' | 'letter_included' | 'spend' | 'expire'
+    reason: text("reason").notNull(), // 'pack' | 'plan_drip' | 'letter_included' | 'ai_critique' | 'ai_critique_refund' | 'expire'
     expiresAt: timestamp("expires_at", { withTimezone: true }), // drip expires at cycle end; packs null
+    // Idempotency anchor for grants that must land exactly once regardless of how
+    // many webhook deliveries carry them — e.g. per-period plan drip keyed
+    // `drip:<subId>:<periodStartUnix>`. NULL for one-off grants/spends (already
+    // deduped upstream). Enforced by a partial-unique index (non-null only).
+    grantKey: text("grant_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("credit_ledger_subject_idx").on(t.subjectType, t.subjectId)],
+  (t) => [
+    index("credit_ledger_subject_idx").on(t.subjectType, t.subjectId),
+    uniqueIndex("credit_ledger_grant_key_uq")
+      .on(t.grantKey)
+      .where(sql`${t.grantKey} is not null`),
+  ],
 );
 
 // Stripe webhook idempotency — insert the event id; a conflict means "already

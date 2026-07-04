@@ -33,6 +33,9 @@
     },
     "api/export/pdf.ts": {
       "maxDuration": 60
+    },
+    "api/store/[action].ts": {
+      "maxDuration": 60
     }
   }
 }

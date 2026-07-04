@@ -84,6 +84,21 @@ export function catalogFor(key: PriceKey): CatalogEntry {
   return CATALOG[key];
 }
 
+/**
+ * Plan-included AI credits dripped each billing cycle, by internal plan id.
+ * Monthly and annual share a plan and the same drip (Pro 20, Business 20,
+ * Employee Plus 10); Starter has none. Derived from the catalog so the number
+ * lives in exactly one place. 0 for unknown / non-dripping plans.
+ */
+export function creditsPerCycleForPlan(plan: string): number {
+  for (const entry of Object.values(CATALOG)) {
+    if (entry.plan === plan && entry.includedCreditsPerCycle) {
+      return entry.includedCreditsPerCycle;
+    }
+  }
+  return 0;
+}
+
 export function isPriceKey(v: unknown): v is PriceKey {
   return typeof v === "string" && Object.prototype.hasOwnProperty.call(CATALOG, v);
 }

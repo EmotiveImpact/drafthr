@@ -4,9 +4,43 @@
  * (tenant); Employee Plus + purchased credits live on the user. Credits are a
  * pooled tenant balance plus the user's own packs.
  */
-import { and, desc, eq, gte, isNull, like } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, like, sql, type SQL } from "drizzle-orm";
 import { getDb } from "../../src/db/index.js";
 import { subscriptions, creditLedger, drafts, entitlementPurchases } from "../../src/db/schema.js";
+
+/** db or a transaction handle — both expose the query builder + execute(). */
+type DbExecutor = {
+  select: ReturnType<typeof getDb>["select"];
+  execute: (query: SQL) => Promise<unknown>;
+};
+
+/**
+ * Non-expired credit balance for a caller: the tenant pool (when in a
+ * workspace) plus the user's own packs. Shared by resolveEntitlements (read)
+ * and spendCredits (inside its locked transaction) so the two can never
+ * disagree on what "balance" means.
+ */
+async function creditBalance(exec: DbExecutor, tenantId: string | null, userId: string): Promise<number> {
+  const now = Date.now();
+  const rows: { delta: number; expiresAt: Date | null }[] = [];
+  if (tenantId) {
+    rows.push(
+      ...(await exec
+        .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt })
+        .from(creditLedger)
+        .where(and(eq(creditLedger.subjectType, "tenant"), eq(creditLedger.subjectId, tenantId)))),
+    );
+  }
+  rows.push(
+    ...(await exec
+      .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt })
+      .from(creditLedger)
+      .where(and(eq(creditLedger.subjectType, "user"), eq(creditLedger.subjectId, userId)))),
+  );
+  return rows
+    .filter((r) => !r.expiresAt || r.expiresAt.getTime() > now)
+    .reduce((sum, r) => sum + r.delta, 0);
+}
 
 export type Entitlements = {
   plan: string | null; // starter | pro | business | employee_plus | null
@@ -55,25 +89,7 @@ export async function resolveEntitlements(
   }
 
   // Credit balance: tenant pool + user packs, excluding expired drip credits.
-  const now = Date.now();
-  const ledger: { delta: number; expiresAt: Date | null }[] = [];
-  if (tenantId) {
-    ledger.push(
-      ...(await db
-        .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt })
-        .from(creditLedger)
-        .where(and(eq(creditLedger.subjectType, "tenant"), eq(creditLedger.subjectId, tenantId)))),
-    );
-  }
-  ledger.push(
-    ...(await db
-      .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt })
-      .from(creditLedger)
-      .where(and(eq(creditLedger.subjectType, "user"), eq(creditLedger.subjectId, userId)))),
-  );
-  const credits = ledger
-    .filter((r) => !r.expiresAt || r.expiresAt.getTime() > now)
-    .reduce((sum, r) => sum + r.delta, 0);
+  const credits = await creditBalance(db, tenantId, userId);
 
   return {
     plan: sub?.plan ?? null,
@@ -193,10 +209,11 @@ export async function assertCanCreateLetter(tenantId: string | null, userId: str
  * negative ledger entry against the tenant when in a workspace context, else the
  * user. Returns the post-spend balance, or ok:false (unchanged) if insufficient.
  *
- * NOTE: this is the ready-to-use spend hook for a credit-gated action. The AI-
- * critique feature that would call it is currently a placeholder (see
- * ImproveTab), so nothing debits credits yet — grant + balance work; the spend
- * trigger ships when that feature is built.
+ * Atomic under concurrency: a per-pool advisory lock (keyed on the debited
+ * subject) serializes the read-balance-then-insert so two concurrent spends
+ * can't both observe a sufficient balance and overspend the shared pool. The
+ * lock is transaction-scoped (auto-released on commit/rollback) and keyed per
+ * pool, so unrelated subjects never contend. Used by the AI-critique endpoint.
  */
 export async function spendCredits(
   tenantId: string | null,
@@ -205,13 +222,40 @@ export async function spendCredits(
   reason = "spend",
 ): Promise<{ ok: boolean; balance: number }> {
   const db = getDb();
-  const ent = await resolveEntitlements(tenantId, userId);
-  if (amount <= 0 || ent.credits < amount) return { ok: false, balance: ent.credits };
+  if (amount <= 0) return { ok: false, balance: 0 };
+  const poolKey = `credits:${tenantId ?? userId}`;
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${poolKey}, 0))`);
+    const balance = await creditBalance(tx as unknown as DbExecutor, tenantId, userId);
+    if (balance < amount) return { ok: false, balance };
+    await tx.insert(creditLedger).values({
+      subjectType: tenantId ? "tenant" : "user",
+      subjectId: tenantId ?? userId,
+      delta: -amount,
+      reason,
+    });
+    return { ok: true, balance: balance - amount };
+  });
+}
+
+/**
+ * Refund `amount` credits to a subject (positive ledger entry). Used to make
+ * the caller whole when a paid action fails after the debit — e.g. the model
+ * call errors after an AI-critique credit was already spent. No lock needed: a
+ * grant only ever increases the balance.
+ */
+export async function refundCredits(
+  tenantId: string | null,
+  userId: string,
+  amount: number,
+  reason = "refund",
+): Promise<void> {
+  if (amount <= 0) return;
+  const db = getDb();
   await db.insert(creditLedger).values({
     subjectType: tenantId ? "tenant" : "user",
     subjectId: tenantId ?? userId,
-    delta: -amount,
+    delta: amount,
     reason,
   });
-  return { ok: true, balance: ent.credits - amount };
 }

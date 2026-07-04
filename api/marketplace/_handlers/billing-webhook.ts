@@ -20,7 +20,7 @@ import { jsonError } from "../../_utils/request.js";
 import { getStripe } from "../../_utils/stripe.js";
 import { getDb } from "../../../src/db/index.js";
 import { subscriptions, entitlementPurchases, creditLedger, webhookEventsSeen } from "../../../src/db/schema.js";
-import { catalogFor, isPriceKey } from "../../../src/lib/billing/catalog.js";
+import { catalogFor, isPriceKey, creditsPerCycleForPlan } from "../../../src/lib/billing/catalog.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -210,6 +210,39 @@ async function upsertSubscription(
         updatedAt: values.updatedAt,
       },
     });
+
+  // Drip the plan's included AI credits for THIS billing period. Keyed on
+  // `drip:<subId>:<periodStartUnix>` so it lands exactly once per period no
+  // matter how many subscription.created/.updated events Stripe sends (and
+  // regardless of their ordering vs invoice.paid). Only for a usable status —
+  // a past_due/incomplete period grants nothing; a later .updated flipping it
+  // active will grant then. Credits expire at period end (no rollover).
+  const drip = dripPlanCredits(plan, sub.status);
+  if (drip > 0) {
+    await db
+      .insert(creditLedger)
+      .values({
+        subjectType,
+        subjectId,
+        delta: drip,
+        reason: "plan_drip",
+        expiresAt: periodEnd,
+        grantKey: `drip:${sub.id}:${startUnix}`,
+      })
+      .onConflictDoNothing({ target: creditLedger.grantKey });
+  }
+}
+
+/**
+ * How many plan-included credits to drip for a subscription in this state.
+ * Non-zero only for a plan that includes a per-cycle drip AND a currently
+ * usable status (active/trialing) — a past_due/incomplete/canceled period
+ * grants nothing (a later .updated that flips it active grants then).
+ */
+export function dripPlanCredits(plan: string, status: string): number {
+  const perCycle = creditsPerCycleForPlan(plan);
+  if (perCycle > 0 && (status === "active" || status === "trialing")) return perCycle;
+  return 0;
 }
 
 async function recordOneOff(

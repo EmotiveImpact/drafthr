@@ -24,6 +24,8 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/matters.js");
     case "draft-extras":
       return import("./_handlers/draft-extras.js");
+    case "critique":
+      return import("./_handlers/critique.js");
     default:
       return null;
   }

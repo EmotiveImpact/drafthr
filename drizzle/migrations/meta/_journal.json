@@ -1,118 +1,125 @@
 {
- "version": "7",
- "dialect": "postgresql",
- "entries": [
-  {
-   "idx": 0,
-   "version": "7",
-   "when": 1778881543259,
-   "tag": "0000_workable_supernaut",
-   "breakpoints": true
-  },
-  {
-   "idx": 1,
-   "version": "7",
-   "when": 1778896367568,
-   "tag": "0001_fair_miek",
-   "breakpoints": true
-  },
-  {
-   "idx": 2,
-   "version": "7",
-   "when": 1778907326455,
-   "tag": "0002_third_eternals",
-   "breakpoints": true
-  },
-  {
-   "idx": 3,
-   "version": "7",
-   "when": 1779100000000,
-   "tag": "0003_workos_audit_logs",
-   "breakpoints": true
-  },
-  {
-   "idx": 4,
-   "version": "7",
-   "when": 1779110000000,
-   "tag": "0004_directory_sync",
-   "breakpoints": true
-  },
-  {
-   "idx": 5,
-   "version": "7",
-   "when": 1779271200000,
-   "tag": "0005_consultant_marketplace",
-   "breakpoints": true
-  },
-  {
-   "idx": 6,
-   "version": "7",
-   "when": 1779357600000,
-   "tag": "0006_consultant_share_tokens",
-   "breakpoints": true
-  },
-  {
-   "idx": 7,
-   "version": "7",
-   "when": 1779444000000,
-   "tag": "0007_booking_messages",
-   "breakpoints": true
-  },
-  {
-   "idx": 8,
-   "version": "7",
-   "when": 1779530400000,
-   "tag": "0008_consultant_availability",
-   "breakpoints": true
-  },
-  {
-   "idx": 9,
-   "version": "7",
-   "when": 1780619829119,
-   "tag": "0009_crazy_thanos",
-   "breakpoints": true
-  },
-  {
-   "idx": 10,
-   "version": "7",
-   "when": 1781400000000,
-   "tag": "0010_session_epoch",
-   "breakpoints": true
-  },
-  {
-   "idx": 11,
-   "version": "7",
-   "when": 1782083308402,
-   "tag": "0011_secret_groot",
-   "breakpoints": true
-  },
-  {
-   "idx": 12,
-   "version": "7",
-   "when": 1782084651026,
-   "tag": "0012_reflective_rattler",
-   "breakpoints": true
-  },
-  {
-   "idx": 13,
-   "version": "7",
-   "when": 1783053961407,
-   "tag": "0013_slim_betty_ross",
-   "breakpoints": true
-  },
-  {
-   "idx": 14,
-   "version": "7",
-   "when": 1783140361407,
-   "tag": "0014_sections_tenant_id",
-   "breakpoints": true
-  },
-  {
-   "idx": 15,
-   "version": "7",
-   "when": 1783140421407,
-   "tag": "0015_sections_tenant_id_notnull",
-   "breakpoints": true
-  }
- ]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1778881543259,
+      "tag": "0000_workable_supernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778896367568,
+      "tag": "0001_fair_miek",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778907326455,
+      "tag": "0002_third_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779100000000,
+      "tag": "0003_workos_audit_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779110000000,
+      "tag": "0004_directory_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779271200000,
+      "tag": "0005_consultant_marketplace",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779357600000,
+      "tag": "0006_consultant_share_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779444000000,
+      "tag": "0007_booking_messages",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779530400000,
+      "tag": "0008_consultant_availability",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780619829119,
+      "tag": "0009_crazy_thanos",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781400000000,
+      "tag": "0010_session_epoch",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782083308402,
+      "tag": "0011_secret_groot",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782084651026,
+      "tag": "0012_reflective_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783053961407,
+      "tag": "0013_slim_betty_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783140361407,
+      "tag": "0014_sections_tenant_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783140421407,
+      "tag": "0015_sections_tenant_id_notnull",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783181528859,
+      "tag": "0016_tough_morlun",
+      "breakpoints": true
+    }
+  ]
 }

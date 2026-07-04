@@ -2,6 +2,32 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.21.0 — 2026-07-04
+
+**AI critique + plan credit drip — credits now have a sink and a source.** Turns
+the credit ledger from plumbing into a working feature end-to-end.
+
+- **AI specialist critique (NEW).** The Improve tab's "AI specialist" lane is now
+  real (it was a placeholder that once charged for a fake 2.5s timeout). Pick a
+  lens — Tribunal counsel, Employee advocate, or DEI lead — and get a structured
+  critique of the current letter from Claude Opus 4.8. New endpoint
+  `POST /api/store/critique` (folded into the store dispatcher to stay under the
+  Hobby function cap): same-origin + rate-limited + session-scoped, spends **1
+  credit** per run, and **refunds** the credit if the model call fails or returns
+  empty — a caller is never charged for a critique they didn't get.
+- **Plan credit drip (NEW).** Pro/Business (20) and Employee Plus (10) now drip
+  their included AI credits **once per billing period**, granted inside the
+  subscription webhook and keyed `drip:<subId>:<periodStart>` so redeliveries or
+  out-of-order events can't double-grant. Credits expire at period end (no
+  rollover). `creditsPerCycleForPlan` derives the amount from the catalog.
+- **`spendCredits` hardened to atomic.** Now runs under a per-pool advisory lock
+  (read-balance-then-insert), so two concurrent critiques can't both see a
+  sufficient balance and overspend a shared tenant pool. Added `refundCredits`.
+- **Schema:** `credit_ledger.grant_key` + partial-unique index (migration 0016;
+  the idempotency anchor for per-period grants).
+- +20 tests (drip decision, catalog helper, atomic spend/refund, critique
+  endpoint spend→model→refund path).
+
 ## 0.20.7 — 2026-07-04
 
 **Billing polish (review loop, pass 4).** Minor — the substantive bugs are drained.
