@@ -30,7 +30,7 @@ export type QualityReport = {
 };
 
 export function buildTemplateQualityReport(draft: Draft): QualityReport {
-  const fullHtml = draft.sections.map((section) => section.html).join("\n");
+  const fullHtml = draft.sections.map((section) => section.html ?? "").join("\n");
   const compliance = rulesFor(
     draft.letterType,
     draft.context.jurisdiction,
@@ -47,7 +47,7 @@ export function buildTemplateQualityReport(draft: Draft): QualityReport {
       section.sectionId
     );
     const constraints = tpl?.constraints ?? fallbackConstraints(draft, section);
-    const sectionText = stripHtml(section.html);
+    const sectionText = stripHtml(section.html ?? "");
     return {
       section,
       requirements: constraints.map((constraint, index) => ({

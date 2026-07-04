@@ -103,7 +103,7 @@ export function deriveNotifications(
     }
 
     // 3) Counsel review pending — high-risk draft, content drafted, no review yet
-    const sectionsReady = d.sections.length > 0 && d.sections.every((s) => s.html.length > 0);
+    const sectionsReady = d.sections.length > 0 && d.sections.every((s) => (s.html ?? "").length > 0);
     const review = (d.answers as Record<string, unknown>)._counselReview as
       | { reviewedBy?: string; reviewedOn?: string }
       | undefined;
