@@ -86,6 +86,27 @@ export async function resolveEntitlements(
   };
 }
 
+/**
+ * Does THIS specific subject (tenant OR user) have a usable subscription right
+ * now? Unlike resolveEntitlements (which falls back tenant→user to compute an
+ * "effective plan"), this checks ONLY the exact subject — so a user's personal
+ * Employee Plus can't be mistaken for their workspace having a plan. Used by the
+ * double-subscribe guard in billing-checkout.
+ */
+export async function subjectHasActiveSubscription(
+  subjectType: "tenant" | "user",
+  subjectId: string,
+): Promise<boolean> {
+  const db = getDb();
+  const [sub] = await db
+    .select({ status: subscriptions.status, graceUntil: subscriptions.graceUntil })
+    .from(subscriptions)
+    .where(and(eq(subscriptions.subjectType, subjectType), eq(subscriptions.subjectId, subjectId)))
+    .orderBy(desc(subscriptions.updatedAt))
+    .limit(1);
+  return sub ? isUsable(sub.status, sub.graceUntil) : false;
+}
+
 export type CreateGate =
   | { ok: true; consumeEntitlementId?: string }
   | { ok: false; reason: string; code: number };

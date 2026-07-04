@@ -2,6 +2,15 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.5 — 2026-07-04
+
+**Billing hardening (review loop, pass 2).** Fixed a bug in pass 1's own fix:
+the double-subscribe guard used `resolveEntitlements` (which falls back
+tenant→user), so a user with a personal **Employee Plus** sub would be wrongly
+blocked (409) from subscribing their *workspace* to an HR plan. Added
+`subjectHasActiveSubscription()` which checks only the exact subject, and pointed
+the guard at it.
+
 ## 0.20.4 — 2026-07-04
 
 **Billing hardening (review loop, pass 1).**

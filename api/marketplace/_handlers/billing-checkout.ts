@@ -14,7 +14,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getStripe, appBaseUrl } from "../../_utils/stripe.js";
 import { getOrCreateCustomer } from "../../_utils/stripe-billing.js";
-import { resolveEntitlements } from "../../_utils/entitlements.js";
+import { subjectHasActiveSubscription } from "../../_utils/entitlements.js";
 import { catalogFor, isPriceKey, stripePriceId, type PriceKey } from "../../../src/lib/billing/catalog.js";
 
 export const config = { runtime: "nodejs" };
@@ -58,18 +58,14 @@ export async function POST(req: Request): Promise<Response> {
   const subjectId = subjectType === "tenant" ? auth.activeTenant?.id : auth.userRow.id;
   if (!subjectId) return jsonError("No active workspace for this plan", 412);
 
-  // Double-subscribe guard: a second subscription Checkout while one is already
-  // active would create a SECOND Stripe subscription and double-bill. Refuse it —
-  // plan changes belong in the billing portal, not a fresh checkout. (One-off
-  // purchases are always allowed.)
-  if (entry.mode === "subscription") {
-    const ent = await resolveEntitlements(
-      subjectType === "tenant" ? subjectId : null,
-      auth.userRow.id,
-    );
-    if (ent.active) {
-      return jsonError("You already have an active plan — manage it from billing instead.", 409);
-    }
+  // Double-subscribe guard: a second subscription Checkout while THIS subject
+  // already has an active one would create a SECOND Stripe subscription and
+  // double-bill. Refuse it — plan changes belong in the billing portal, not a
+  // fresh checkout. Checks the exact subject (not the tenant→user fallback), so a
+  // personal Employee Plus never blocks a workspace HR-plan subscribe. One-off
+  // purchases are always allowed.
+  if (entry.mode === "subscription" && (await subjectHasActiveSubscription(subjectType, subjectId))) {
+    return jsonError("You already have an active plan — manage it from billing instead.", 409);
   }
 
   const meta = {
