@@ -2,6 +2,21 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.1 — 2026-07-04
+
+**Billing metering — one-off consumption + credit-spend primitive.**
+- **One-off consumption.** A single-letter purchase (`entitlement_purchases`) is
+  now consumed atomically with the draft it authorises (`consumedAt` set inside
+  the create transaction, single-use via an `isNull` guard) — so £9.99 buys one
+  letter, not unlimited. Packs still cover a sequence (per-pack count enforcement
+  is a later refinement).
+- **`spendCredits()`** — atomic metering primitive: spends against the combined
+  non-expired balance (tenant pool + user packs), rejects when insufficient. The
+  AI-critique feature that would call it is a placeholder today (see `ImproveTab`),
+  so nothing debits credits yet — grant + balance work; the spend trigger ships
+  with that feature.
+- Both sit behind the same env-gated paywall (`DRAFTHR_ENFORCE_PAYWALL`).
+
 ## 0.20.0 — 2026-07-04
 
 **Billing & subscriptions — the storefront (Phase 1+2), live in Stripe test mode.**

@@ -86,7 +86,9 @@ export async function resolveEntitlements(
   };
 }
 
-export type CreateGate = { ok: true } | { ok: false; reason: string; code: number };
+export type CreateGate =
+  | { ok: true; consumeEntitlementId?: string }
+  | { ok: false; reason: string; code: number };
 
 /** Letters created in the tenant since a cycle boundary (drafts are the source of truth). */
 async function countLettersThisCycle(tenantId: string, periodStartMs: number | null): Promise<number> {
@@ -140,14 +142,47 @@ export async function assertCanCreateLetter(tenantId: string | null, userId: str
       ),
     )
     .limit(1);
-  if (oneOff) return { ok: true };
+  // A single-letter purchase authorises exactly one create — report it so the
+  // caller consumes it atomically with the draft insert.
+  if (oneOff) return { ok: true, consumeEntitlementId: oneOff.id };
 
   const [pack] = await db
     .select({ id: entitlementPurchases.id })
     .from(entitlementPurchases)
     .where(and(eq(entitlementPurchases.userId, userId), like(entitlementPurchases.kind, "pack_%")))
     .limit(1);
+  // Packs cover a sequence of letters within a matter; not consumed per-letter
+  // here (per-pack letter-count enforcement is a later refinement).
   if (pack) return { ok: true };
 
   return { ok: false, code: 402, reason: "Choose a plan or buy a letter to continue." };
+}
+
+/**
+ * Metering primitive: atomically spend `amount` credits for a subject, drawing
+ * against the combined non-expired balance (tenant pool + user packs). Records a
+ * negative ledger entry against the tenant when in a workspace context, else the
+ * user. Returns the post-spend balance, or ok:false (unchanged) if insufficient.
+ *
+ * NOTE: this is the ready-to-use spend hook for a credit-gated action. The AI-
+ * critique feature that would call it is currently a placeholder (see
+ * ImproveTab), so nothing debits credits yet — grant + balance work; the spend
+ * trigger ships when that feature is built.
+ */
+export async function spendCredits(
+  tenantId: string | null,
+  userId: string,
+  amount: number,
+  reason = "spend",
+): Promise<{ ok: boolean; balance: number }> {
+  const db = getDb();
+  const ent = await resolveEntitlements(tenantId, userId);
+  if (amount <= 0 || ent.credits < amount) return { ok: false, balance: ent.credits };
+  await db.insert(creditLedger).values({
+    subjectType: tenantId ? "tenant" : "user",
+    subjectId: tenantId ?? userId,
+    delta: -amount,
+    reason,
+  });
+  return { ok: true, balance: ent.credits - amount };
 }

@@ -12,12 +12,12 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, lte, inArray, desc } from "drizzle-orm";
+import { and, eq, lte, inArray, desc, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { customTemplates, drafts, matters, sections } from "../../../src/db/schema.js";
+import { customTemplates, drafts, matters, sections, entitlementPurchases } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { assertCanCreateLetter } from "../../_utils/entitlements.js";
@@ -180,11 +180,13 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       return jsonError("Draft belongs to a different workspace", 403);
     }
     const isCreate = existingDraft.length === 0;
+    let consumeEntitlementId: string | undefined;
     if (isCreate) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
       // letters are gated; edits to existing drafts always go through.
       const gate = await assertCanCreateLetter(tenantId, auth.userRow.id);
       if (!gate.ok) return jsonError(gate.reason, gate.code);
+      consumeEntitlementId = gate.consumeEntitlementId;
     }
     const clientRevision = parseClientRevision(body.clientRevision);
     if (!isCreate && (clientRevision === null || clientRevision < existingDraft[0].updatedAt.getTime())) {
@@ -225,6 +227,19 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
           answersJson: body.answers ?? null,
           updatedAt: acceptedRevision,
         });
+        // Consume the one-off letter entitlement that authorised this create,
+        // atomically with the insert. The isNull guard makes it single-use.
+        if (consumeEntitlementId) {
+          await tx
+            .update(entitlementPurchases)
+            .set({ consumedAt: new Date() })
+            .where(
+              and(
+                eq(entitlementPurchases.id, consumeEntitlementId),
+                isNull(entitlementPurchases.consumedAt),
+              ),
+            );
+        }
       } else {
         const updated = await tx
           .update(drafts)
