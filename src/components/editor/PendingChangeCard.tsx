@@ -16,10 +16,14 @@ export function PendingChangeCard({
   section,
   onAccept,
   onReject,
+  canResolve = true,
 }: {
   section: Section;
   onAccept: () => void;
   onReject: () => void;
+  /** Whether the viewer may Accept/Reject. False for a reviewer in read-only
+   *  review-lock (they can suggest, but only the author resolves). */
+  canResolve?: boolean;
 }) {
   const pending = section.pendingChange;
   if (!pending) return null;
@@ -64,26 +68,32 @@ export function PendingChangeCard({
             · {pending.instruction}
           </span>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={onReject}
-            className="inline-flex items-center gap-1 text-[11.5px] px-2 h-7 rounded-md border border-[var(--ds-line)] bg-white text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]"
-            title="Reject the proposal — keep the current text"
-          >
-            <X className="size-3" />
-            Reject
-          </button>
-          <button
-            type="button"
-            onClick={onAccept}
-            className="inline-flex items-center gap-1 text-[11.5px] px-2 h-7 rounded-md bg-[var(--ds-green-fg)] text-white hover:brightness-110"
-            title="Accept the proposal — replace the current text"
-          >
-            <Check className="size-3" />
-            Accept
-          </button>
-        </div>
+        {canResolve ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={onReject}
+              className="inline-flex items-center gap-1 text-[11.5px] px-2 h-7 rounded-md border border-[var(--ds-line)] bg-white text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]"
+              title="Reject the proposal — keep the current text"
+            >
+              <X className="size-3" />
+              Reject
+            </button>
+            <button
+              type="button"
+              onClick={onAccept}
+              className="inline-flex items-center gap-1 text-[11.5px] px-2 h-7 rounded-md bg-[var(--ds-green-fg)] text-white hover:brightness-110"
+              title="Accept the proposal — replace the current text"
+            >
+              <Check className="size-3" />
+              Accept
+            </button>
+          </div>
+        ) : (
+          <span className="text-[11px] text-[var(--ds-muted)] italic shrink-0">
+            Awaiting the author
+          </span>
+        )}
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-[var(--ds-amber-fg)]/20">
