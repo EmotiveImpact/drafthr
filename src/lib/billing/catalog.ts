@@ -88,7 +88,12 @@ export function isPriceKey(v: unknown): v is PriceKey {
   return typeof v === "string" && Object.prototype.hasOwnProperty.call(CATALOG, v);
 }
 
-/** The Stripe price id for a key, from env (seeded per environment). Null if unset. */
+/**
+ * The Stripe price id for a key, from env (seeded per environment). Null if unset.
+ * Server-only — this module is also imported client-side for labels/amounts, so
+ * guard `process` in case it's ever called there (returns null rather than crash).
+ */
 export function stripePriceId(key: PriceKey): string | null {
+  if (typeof process === "undefined" || !process.env) return null;
   return process.env[CATALOG[key].stripePriceIdEnv]?.trim() || null;
 }

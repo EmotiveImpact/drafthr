@@ -2,6 +2,14 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.7 — 2026-07-04
+
+**Billing polish (review loop, pass 4).** Minor — the substantive bugs are drained.
+- `stripePriceId` (in the client-shared `catalog.ts`) now guards `process` so a
+  future client-side call returns null instead of crashing (it's server-only).
+- The Employee Plus card shows "Current" (disabled) when already subscribed,
+  instead of a Subscribe button that 409s server-side.
+
 ## 0.20.6 — 2026-07-04
 
 **Billing hardening (review loop, pass 3).** `getOrCreateCustomer` was

@@ -225,6 +225,10 @@ export function Pricing() {
         <div className="grid gap-3 sm:grid-cols-2">
           {EMPLOYEE_SKUS.map(({ key, blurb }) => {
             const entry = catalogFor(key);
+            // Employee Plus is a subscription — show "Current" (disabled) when the
+            // user already holds it, instead of a Subscribe that 409s server-side.
+            const isCurrent =
+              entry.plan === "employee_plus" && status?.plan === "employee_plus" && status.active;
             return (
               <div
                 key={key}
@@ -240,11 +244,11 @@ export function Pricing() {
                 <button
                   type="button"
                   onClick={() => buy(key)}
-                  disabled={busy !== null}
+                  disabled={busy !== null || isCurrent}
                   className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[7px] bg-[var(--ds-ink)] px-3 text-[12.5px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
                 >
                   {busy === key && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-                  {entry.mode === "subscription" ? "Subscribe" : "Buy"}
+                  {isCurrent ? "Current" : entry.mode === "subscription" ? "Subscribe" : "Buy"}
                 </button>
               </div>
             );
