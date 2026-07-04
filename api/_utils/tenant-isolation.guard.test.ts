@@ -109,6 +109,10 @@ const VERIFIED_EXCEPTIONS: Record<string, Record<string, string>> = {
     // DRAFTHR_ADMIN_EMAILS allowlist), intentionally cross-tenant; joins
     // users to show the consultant's email to the admin.
     "admin-queue.ts": "admin-gated (requireAdmin), intentionally cross-tenant",
+    // Billing customer get-or-create: reads/writes the caller's OWN user (or
+    // tenant) row by primary key — subjectId is the authenticated caller's own
+    // id/active tenant, passed by the handler. Self-scoped, not IDOR.
+    "stripe-billing.ts": "self-scoped by PK (caller's own user/tenant id)",
   },
   // consultant_profiles is normally user-scoped; the admin endpoints read
   // it cross-tenant ON PURPOSE, gated by requireAdmin instead of by user.

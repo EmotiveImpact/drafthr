@@ -28,6 +28,8 @@ export const tenants = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
     workosOrgId: text("workos_org_id").unique(),
+    // Stripe customer for workspace-level billing (HR Starter/Pro/Business).
+    stripeCustomerId: text("stripe_customer_id").unique(),
     workosAuditLogsLastSentAt: timestamp("workos_audit_logs_last_sent_at", {
       withTimezone: true,
     }),
@@ -63,6 +65,9 @@ export const users = pgTable(
     userType: text("user_type").notNull().default("customer"),
     workosDirectoryUserId: text("workos_directory_user_id"),
     workosDirectoryId: text("workos_directory_id"),
+    // Stripe customer for user-level billing (Employee Plus, one-off letters,
+    // credit packs). Distinct from the workspace customer on `tenants`.
+    stripeCustomerId: text("stripe_customer_id").unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -600,7 +605,77 @@ export const bookingPayments = pgTable(
   (t) => [index("booking_payments_session_idx").on(t.checkoutSessionId)],
 );
 
+// --- billing (subscriptions, one-off purchases, credit ledger) ---------------
+// Direct-charge billing (DraftHR is the merchant), separate from the marketplace's
+// Connect/destination charges. Stripe is the source of truth; these mirror it via
+// idempotent webhooks. See docs/superpowers/plans/2026-07-02-billing-subscriptions.md.
+
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    subjectType: text("subject_type").notNull(), // 'tenant' (HR plan) | 'user' (Employee Plus)
+    subjectId: uuid("subject_id").notNull(),
+    stripeSubscriptionId: text("stripe_subscription_id").notNull().unique(),
+    stripePriceId: text("stripe_price_id").notNull(),
+    plan: text("plan").notNull(), // 'starter' | 'pro' | 'business' | 'employee_plus'
+    status: text("status").notNull(), // active | trialing | past_due | canceled | incomplete
+    currentPeriodStart: timestamp("current_period_start", { withTimezone: true }).notNull(),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }).notNull(),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    // Set on invoice.payment_failed to now()+3d; access continues until then, then
+    // locks. Cleared on invoice.paid. App-enforced 3-day grace (decided 2026-07-02).
+    graceUntil: timestamp("grace_until", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("subscriptions_subject_idx").on(t.subjectType, t.subjectId)],
+);
+
+export const entitlementPurchases = pgTable(
+  "entitlement_purchases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // 'letter_routine'|'letter_standard'|'letter_high'|'letter_tribunal'
+    // |'pack_grievance'|'pack_settlement'|'pack_tribunal'
+    kind: text("kind").notNull(),
+    matterId: uuid("matter_id"), // nullable; packs/plus scope to a matter
+    stripePaymentIntentId: text("stripe_payment_intent_id").notNull().unique(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }), // single-letter entitlements
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("entitlement_purchases_user_idx").on(t.userId)],
+);
+
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    subjectType: text("subject_type").notNull(), // 'tenant' (pooled) | 'user'
+    subjectId: uuid("subject_id").notNull(),
+    delta: integer("delta").notNull(), // + grant, - spend
+    reason: text("reason").notNull(), // 'pack' | 'plan_drip' | 'letter_included' | 'spend' | 'expire'
+    expiresAt: timestamp("expires_at", { withTimezone: true }), // drip expires at cycle end; packs null
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("credit_ledger_subject_idx").on(t.subjectType, t.subjectId)],
+);
+
+// Stripe webhook idempotency — insert the event id; a conflict means "already
+// processed", so ack and skip. Prevents double-crediting on redelivery.
+export const webhookEventsSeen = pgTable("webhook_events_seen", {
+  eventId: text("event_id").primaryKey(),
+  seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // --- inferred types ----------------------------------------------------------
+
+export type Subscription = typeof subscriptions.$inferSelect;
+export type NewSubscription = typeof subscriptions.$inferInsert;
+export type EntitlementPurchase = typeof entitlementPurchases.$inferSelect;
+export type CreditLedgerRow = typeof creditLedger.$inferSelect;
 
 export type Tenant = typeof tenants.$inferSelect;
 export type NewTenant = typeof tenants.$inferInsert;

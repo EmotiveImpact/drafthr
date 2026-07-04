@@ -92,6 +92,13 @@
       "when": 1782084651026,
       "tag": "0012_reflective_rattler",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783053961407,
+      "tag": "0013_slim_betty_ross",
+      "breakpoints": true
     }
   ]
 }
