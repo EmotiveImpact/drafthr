@@ -198,7 +198,13 @@ export function Editor() {
 
   const pinEvidence = () => setPinnedDock("evidence");
   const pinAI = () => setPinnedDock("ai");
-  const pinReview = () => setPinnedDock("review");
+  const pinReview = () => {
+    setPinnedDock("review");
+    // The AI drawer overlays the grid (it mounts whenever pinnedDock !== "ai"),
+    // so left open it would sit on top of the review rail AND give a second
+    // mounted CommentsPanel consuming the same pendingComment. Close it.
+    setAiDrawerOpen(false);
+  };
   const unpinAll = () => setPinnedDock(null);
 
   // Derived: evidence is pinned when pinnedDock === "evidence".
@@ -1657,7 +1663,9 @@ export function Editor() {
               canResolve={canvasEditable}
               onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
               onWithdraw={onWithdrawForReview}
-              pendingComment={pendingComment}
+              // When the AI drawer is open (⌘L over a pinned review rail), its
+              // CommentsPanel takes the pending comment — never both at once.
+              pendingComment={aiDrawerOpen ? null : pendingComment}
               onPendingCommentConsumed={() => setPendingComment(null)}
             />
           </aside>

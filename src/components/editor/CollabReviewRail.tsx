@@ -242,19 +242,29 @@ export function CollabReviewRail({
                   <CheckCircle2 className="mr-1.5 size-3.5" /> Approve
                 </Button>
               </div>
-            ) : (
+            ) : canSubmitForReview(role) ? (
               <p className="text-[12px] leading-snug text-[var(--ds-muted)]">
                 A reviewer is looking at this draft. You can withdraw it to keep
                 editing.
               </p>
+            ) : (
+              <p className="text-[12px] leading-snug text-[var(--ds-muted)]">
+                A reviewer is looking at this draft.
+              </p>
             )}
-            <button
-              type="button"
-              onClick={onWithdraw}
-              className="mt-2 w-full text-center text-[11.5px] font-medium text-[var(--ds-muted)] underline-offset-2 hover:text-[var(--ds-ink)] hover:underline"
-            >
-              Withdraw from review
-            </button>
+            {/* Withdraw is an AUTHOR-side action: not for viewers (can't edit
+             * anyway) and not for the assigned reviewer — their pushback path
+             * is "Request changes", which requires an explanatory note rather
+             * than silently cancelling the review. */}
+            {role !== "reviewer" && canSubmitForReview(role) && (
+              <button
+                type="button"
+                onClick={onWithdraw}
+                className="mt-2 w-full text-center text-[11.5px] font-medium text-[var(--ds-muted)] underline-offset-2 hover:text-[var(--ds-ink)] hover:underline"
+              >
+                Withdraw from review
+              </button>
+            )}
           </>
         )}
 
