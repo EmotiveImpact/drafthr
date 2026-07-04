@@ -4,7 +4,7 @@
  * from `_utils/stripe.ts`, which owns the marketplace's Connect/destination
  * charges, so the two charge models never get conflated.
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { getStripe } from "./stripe.js";
 import { getDb } from "../../src/db/index.js";
 import { tenants, users } from "../../src/db/schema.js";
@@ -32,17 +32,36 @@ async function readStripeCustomerId(
   return row?.id ?? null;
 }
 
-async function persistStripeCustomerId(
+/**
+ * Atomically claim the customer id: set it only if still null (first writer
+ * wins). Returns the id now stored — the one we pass if we won, or the
+ * concurrently-set one if we lost. This keeps the DB pointer consistent with the
+ * customer the subscription lands on, even if two first-ever checkouts race; a
+ * losing writer's freshly-created Stripe customer is simply left unused.
+ */
+async function claimStripeCustomerId(
   subjectType: BillingSubjectType,
   subjectId: string,
   customerId: string,
-): Promise<void> {
+): Promise<string> {
   const db = getDb();
   if (subjectType === "tenant") {
-    await db.update(tenants).set({ stripeCustomerId: customerId }).where(eq(tenants.id, subjectId));
+    const [won] = await db
+      .update(tenants)
+      .set({ stripeCustomerId: customerId })
+      .where(and(eq(tenants.id, subjectId), isNull(tenants.stripeCustomerId)))
+      .returning({ id: tenants.stripeCustomerId });
+    if (won?.id) return won.id;
   } else {
-    await db.update(users).set({ stripeCustomerId: customerId }).where(eq(users.id, subjectId));
+    const [won] = await db
+      .update(users)
+      .set({ stripeCustomerId: customerId })
+      .where(and(eq(users.id, subjectId), isNull(users.stripeCustomerId)))
+      .returning({ id: users.stripeCustomerId });
+    if (won?.id) return won.id;
   }
+  // Lost the race — another request set it first. Return theirs.
+  return (await readStripeCustomerId(subjectType, subjectId)) ?? customerId;
 }
 
 /**
@@ -65,6 +84,6 @@ export async function getOrCreateCustomer(
     email: email ?? undefined,
     metadata: { subjectType, subjectId },
   });
-  await persistStripeCustomerId(subjectType, subjectId, customer.id);
-  return customer.id;
+  // Claim atomically — if a concurrent first-time checkout beat us, use theirs.
+  return claimStripeCustomerId(subjectType, subjectId, customer.id);
 }

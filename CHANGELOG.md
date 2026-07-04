@@ -2,6 +2,15 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.6 — 2026-07-04
+
+**Billing hardening (review loop, pass 3).** `getOrCreateCustomer` was
+read-then-create-then-unconditionally-persist — two first-time checkouts racing
+would create two Stripe customers and the DB would keep the last, so a
+subscription could land on an orphaned customer the DB no longer points at. The
+claim is now atomic (`set stripe_customer_id … WHERE … IS NULL` — first writer
+wins; a loser re-reads and uses the winner's id). +1 test (lost-race path).
+
 ## 0.20.5 — 2026-07-04
 
 **Billing hardening (review loop, pass 2).** Fixed a bug in pass 1's own fix:
