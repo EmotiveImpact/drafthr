@@ -1,7 +1,7 @@
 # DRAFTHR ROADMAP
 
 **Q2 2026 → Q4 2026 (MVP) · Q1 2027 → Q4 2028 (v1, v2)**
-**Last revised:** 2026-05-16 · synthesised from two specialist boards (Marketplace + Stack); onboarding-funnel design parked pending mockup review (see Section 12)
+**Last revised:** 2026-07-04 · billing + monetisation shipped (v0.21.1, Stripe test mode, paywall env-gated off pending go-live); onboarding-funnel design still parked pending mockup review (see Section 12)
 
 ---
 
@@ -19,7 +19,7 @@ auth + onboarding flow.
 | Employee checkout softeners (30-sec product preview vs 24h money-back vs both vs neither) | parked | `employee-onboarding-preview.html` · `employee-onboarding-refund.html` |
 | Custom WorkOS auth UI vs AuthKit hosted | leaning AuthKit + custom domain `auth.drafthr.io` | (no mockup yet) |
 | Onboarding multi-step funnel (`/onboarding/hr/{workspace,team,plan}` + `/onboarding/employee`) | designed, not built | depends on marketing page outcome |
-| Stripe checkout + paywall enforcement | not built — pay-from-jump principle locked | depends on onboarding outcome |
+| Stripe checkout + paywall enforcement | **BUILT & LIVE (test mode), v0.21.1** — full storefront, subscriptions, one-offs, packs, AI credits, AI critique, credit drip; hard paywall airtight but env-gated OFF (`DRAFTHR_ENFORCE_PAYWALL`). Remaining: test→live Stripe activation, then flip enforcement. | pay-from-jump principle locked |
 
 ### Locked principles (no re-discussion needed)
 

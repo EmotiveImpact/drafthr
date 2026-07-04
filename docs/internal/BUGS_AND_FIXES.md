@@ -31,12 +31,83 @@ Ranked by impact ÷ effort. The "Fix Now" bugs from that sweep are DONE (see bel
 | B6 | Marketplace | high·small | Consultant identity is localStorage-only → broken on a 2nd device. Make `users.userType='consultant'` server-authoritative + return it from `/api/auth/session`. |
 | B8 | Audit | med·med | Audit-chain verify can false-alarm "broken" (build-order vs verify-order; same-ms UUID tiebreak). Add a per-tenant `seq` column, order both by it. False ALARM only — chain data is intact. |
 | AI-1 | AI authoring | med·med | AI-rail tool regenerations use a throwaway AbortController (not covered by unmount-abort/Stop); inline diff still flattens bold/italic/headings (extend `hasNonTextContent` short-term; node-aware Tiptap-JSON diff long-term). |
-| B15 | Marketplace | low·small | AI credits are client-only (devtools-resettable) — needs a server ledger. |
+| ~~B15~~ | Marketplace | ✅ DONE (0.20.x–0.21.x) | ~~AI credits are client-only (devtools-resettable) — needs a server ledger.~~ Server ledger shipped: `credit_ledger` (grant + atomic spend + refund), granted by webhooks (packs/drip) and spent by AI critique. Client is now display-only. |
 
 _X1 (evidence-pack signing) remains user-owned. The items above are the senior sweep's Next/Strategic backlog — your call to sequence._
 
 ### Known infra note (not a bug)
-- **Drizzle meta-snapshot drift:** `drizzle/migrations/meta/` only has snapshots `0000–0002` then `0009` (0003–0008 missing). `db:migrate` is unaffected (it tracks applied migrations in `__drizzle_migrations`), but `db:generate` diffs against the stale `0002` baseline and emits bogus `CREATE TABLE`s for tables that already exist. **Always read generated SQL before applying.** The `0009_snapshot.json` is a complete cumulative snapshot, so future generates off 0009 will be correct again.
+- **Drizzle meta-snapshot drift (recurring):** `drizzle/migrations/meta/` is missing snapshots for several migrations (0003–0008, 0010, and — on `billing-complete` — 0014/0015), so `db:generate` diffs against the newest snapshot it *can* find and re-emits DDL for tables/columns that already exist. Seen again generating 0016 (re-emitted the `sections.tenant_id` DDL from 0014/0015). **Always read generated SQL before applying**, and for billing migrations we hand-trim to the real delta + `IF NOT EXISTS` and apply directly (the journal is unreliable for `db:migrate`). Each freshly-generated snapshot is a *complete* cumulative one, so drift self-heals going forward: 0016/0017 generated cleanly off the 0016 snapshot. A proper fix would restore the missing snapshots — deferred housekeeping, affects tooling only, not the live DB.
+
+---
+
+## 2026-07-04 (later) — billing hardening loop + monetisation build (ships 0.20.4–0.21.1)
+
+After the storefront shipped (0.20.x), a self-paced 6-pass adversarial review of
+all billing/paywall code found and fixed several real payment-path bugs; then two
+deferred features were built (AI critique, credit drip) and the last paywall leak
+(unlimited-letter packs) was closed. Final gate each step: `tsc -b` clean · `vite
+build` OK · full suite green (569 → **630** tests). All via the `billing-complete`
+worktree → `origin/main`.
+
+### 🔴 HIGH (double-billing) — a second subscription Checkout would double-charge
+`billing-checkout` let a subject with an already-active subscription start a
+*second* subscription Checkout → a second Stripe subscription → two concurrent
+charges. **Fix:** refuse it with a 409 when the exact subject already has a usable
+sub (plan changes belong in the portal); one-off purchases still always allowed.
+*(pass 1, 0.20.4)*
+
+### 🟠 MEDIUM (wrong-subject block) — pass 1's guard over-blocked via tenant→user fallback
+The double-subscribe guard first used `resolveEntitlements` (which falls back
+tenant→user to compute an *effective* plan), so a user holding a personal Employee
+Plus sub was wrongly 409'd from subscribing their *workspace* to an HR plan.
+**Fix:** new `subjectHasActiveSubscription()` checks ONLY the exact subject.
+*(pass 2, 0.20.5)*
+
+### 🟠 MEDIUM (orphaned customer) — non-atomic Stripe customer-id persist raced
+`getOrCreateCustomer` was read-then-create-then-*unconditionally*-persist: two
+first-ever checkouts racing would create two Stripe customers and the DB kept the
+last, so a subscription could land on a customer the DB no longer points at.
+**Fix:** atomic `claimStripeCustomerId` (`set … WHERE stripe_customer_id IS NULL`,
+first writer wins; a loser re-reads and uses the winner's id). *(pass 3, 0.20.6)*
+
+### 🟡 LOW (Starter cap) — template-source drafts burned a Starter letter slot
+`countLettersThisCycle` counted `isTemplateSource` drafts, so saving a template
+consumed a Starter allowance letter. **Fix:** exclude template-source drafts.
+*(pass 1, 0.20.4)*
+
+### 🟡 LOW (latent client crash) — `stripePriceId` touched `process` in the client bundle
+The client-shared `catalog.ts` read `process.env` in `stripePriceId`; a future
+client-side call would `ReferenceError`. **Fix:** guard `typeof process`; returns
+null client-side (it's server-only). Plus the Employee Plus card now shows
+"Current" instead of a Subscribe that 409s. *(pass 4, 0.20.7)*
+
+### 🟠 MEDIUM (credit overspend / TOCTOU) — `spendCredits` was check-then-insert
+The credit-spend primitive read the balance, then inserted a debit — two
+concurrent spends could both pass the check and overspend a shared pool (negative
+balance / free critique). Deferred while nothing spent credits; **closed now that
+AI critique spends them:** `spendCredits` runs under a per-pool
+`pg_advisory_xact_lock` (read-balance-then-insert), serialising debits per pool.
+`+refundCredits`. *(0.21.0)*
+
+### 🟠 MEDIUM (revenue leak) — case packs authorised UNLIMITED letters
+The create-gate authorised a letter if the user owned *any* `pack_%` entitlement,
+never counting or consuming it — one pack purchase = unlimited letters forever
+(latent: only under `DRAFTHR_ENFORCE_PAYWALL`). **Fix:** packs carry an allowance
+(`entitlement_purchases.letters_total`, stamped at purchase: Grievance 4 /
+Settlement 6 / Tribunal 8) counted down via `letters_used`; the create-gate
+authorises only while letters remain and the draft-create decrements atomically
+(`WHERE letters_used < letters_total`) — same race-safe shape as single-letter
+consumption. Storefront copy now states the exact count. Migration 0017 +
+backfill. *(0.21.1)*
+
+**Features shipped alongside (not bugs — see CHANGELOG 0.21.0):** AI specialist
+critique (`POST /api/store/critique`, Opus 4.8, lens-based, 1 credit, refund on
+failure) and per-cycle plan credit drip (keyed `drip:<subId>:<periodStart>`,
+exactly-once).
+
+**Passes 5 & 6 were clean** — no genuine correctness/security/idempotency issue
+survived a high bar; one tempting "fix" (bypassing the create-gate for
+template-source drafts) was correctly rejected as a paywall-bypass hole.
 
 ---
 

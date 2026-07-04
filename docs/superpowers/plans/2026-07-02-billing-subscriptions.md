@@ -1,5 +1,7 @@
 # Billing & Subscriptions Implementation Plan
 
+> **STATUS: ✅ SHIPPED (v0.21.1, 2026-07-04)** — live on prod in Stripe **test mode**. Everything in this plan is built: storefront, subscriptions, one-offs, case packs (now metered per-letter), AI credit packs, Employee Plus, idempotent webhooks, the entitlements resolver + hard paywall (server gate + `<PaywallGate>`). Added beyond the original plan: **AI critique** (spends credits, Opus 4.8) and **per-cycle credit drip**. The paywall is env-gated **OFF** (`DRAFTHR_ENFORCE_PAYWALL`) until the test→live cutover. See CHANGELOG 0.20.0–0.21.1 and `docs/internal/BUGS_AND_FIXES.md` (2026-07-04 billing hardening loop). Kept for provenance / go-live reference.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add server-enforced billing to DraftHR — HR subscriptions (Starter/Pro/Business), employee one-off letters, case packs, AI credit packs, and Employee Plus — all via Stripe-hosted Checkout, behind a hard paywall, with plan gating, a credit ledger, and a Starter 5-letters-per-cycle cap.
