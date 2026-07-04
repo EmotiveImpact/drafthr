@@ -147,6 +147,11 @@ export async function PATCH(req: Request): Promise<Response> {
   return writeDraft(req, "PATCH");
 }
 
+/** Thrown inside the create transaction when a one-off entitlement was consumed
+ *  by a concurrent create — rolls the transaction back so a single-letter
+ *  purchase can never yield two letters. */
+class PaywallRaceError extends Error {}
+
 async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Response> {
   const guard = await guardWrite(req);
   if (!guard.ok) return guard.response;
@@ -235,7 +240,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
         // Consume the one-off letter entitlement that authorised this create,
         // atomically with the insert. The isNull guard makes it single-use.
         if (consumeEntitlementId) {
-          await tx
+          const consumed = await tx
             .update(entitlementPurchases)
             .set({ consumedAt: new Date() })
             .where(
@@ -243,7 +248,11 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
                 eq(entitlementPurchases.id, consumeEntitlementId),
                 isNull(entitlementPurchases.consumedAt),
               ),
-            );
+            )
+            .returning({ id: entitlementPurchases.id });
+          // Zero rows flipped = a concurrent create already consumed this one-off.
+          // Abort so the draft insert rolls back — never a free second letter.
+          if (consumed.length === 0) throw new PaywallRaceError();
         }
       } else {
         const updated = await tx
@@ -314,6 +323,9 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   } catch (err) {
+    if (err instanceof PaywallRaceError) {
+      return jsonError("That letter credit was just used — please refresh and choose a plan or letter.", 402);
+    }
     console.error(`[store/drafts ${method}] failed`, err);
     return jsonError("Draft sync failed", 500);
   }

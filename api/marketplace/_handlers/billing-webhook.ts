@@ -51,20 +51,19 @@ export async function POST(req: Request): Promise<Response> {
 
   const db = getDb();
 
-  // Idempotency guard: insert the event id; if it already exists (conflict →
-  // 0 rows returned) we've processed this delivery, so ack and skip.
+  // Fast-path dedup: if we've already FULLY processed this event, skip. The
+  // "seen" marker is written only AFTER processing succeeds (below), so an event
+  // is never recorded done with its side effects half-applied — and because
+  // every write below is idempotent, reprocessing after a failure is safe.
   try {
-    const inserted = await db
-      .insert(webhookEventsSeen)
-      .values({ eventId: event.id })
-      .onConflictDoNothing()
-      .returning({ eventId: webhookEventsSeen.eventId });
-    if (inserted.length === 0) return ack();
+    const [seen] = await db
+      .select({ eventId: webhookEventsSeen.eventId })
+      .from(webhookEventsSeen)
+      .where(eq(webhookEventsSeen.eventId, event.id))
+      .limit(1);
+    if (seen) return ack();
   } catch (err) {
-    console.error("[billing-webhook] dedup insert failed", err);
-    // Fall through and process — a duplicate is safer than a dropped event
-    // (subscription upserts are keyed on stripeSubscriptionId, so re-applying
-    // the same state is a no-op).
+    console.warn("[billing-webhook] dedup lookup failed — processing anyway", err);
   }
 
   try {
@@ -117,17 +116,46 @@ export async function POST(req: Request): Promise<Response> {
         break;
     }
   } catch (err) {
-    // Log but still 200 — a DB hiccup shouldn't trigger a Stripe retry-storm.
-    console.error("[billing-webhook] handler error", event.type, err);
+    // Processing failed — do NOT mark the event seen; return 500 so Stripe
+    // retries with backoff. Every write here is idempotent (subscriptions upsert
+    // by id; one-off purchase + its credit grant are atomic and keyed on the
+    // payment intent), so a retry re-applies cleanly with no double-charge or
+    // double-grant, and no paid event is ever silently dropped.
+    console.error("[billing-webhook] handler error — will retry", event.type, err);
+    return jsonError("Processing failed — retry", 500);
   }
 
+  // Success: record the event so redeliveries fast-path out. Best-effort — if
+  // this write fails, a redelivery simply reprocesses idempotently.
+  try {
+    await db.insert(webhookEventsSeen).values({ eventId: event.id }).onConflictDoNothing();
+  } catch (err) {
+    console.warn("[billing-webhook] could not record processed event", err);
+  }
   return ack();
 }
 
-function subscriptionIdOf(inv: Stripe.Invoice): string | null {
-  const sub = (inv as unknown as { subscription?: string | { id: string } }).subscription;
-  if (!sub) return null;
-  return typeof sub === "string" ? sub : sub.id;
+export function subscriptionIdOf(inv: Stripe.Invoice): string | null {
+  const pick = (v: unknown): string | null =>
+    typeof v === "string"
+      ? v
+      : v && typeof v === "object" && "id" in v
+        ? String((v as { id: string }).id)
+        : null;
+  // API ≤2025 exposed invoice.subscription; 2026-05-27.dahlia (this SDK's pinned
+  // version) moved it to invoice.parent.subscription_details.subscription, with a
+  // line-level fallback. Check all three so the 3-day grace actually fires.
+  const anyInv = inv as unknown as {
+    subscription?: string | { id: string };
+    parent?: { subscription_details?: { subscription?: string | { id: string } } };
+    lines?: { data?: Array<{ subscription?: string | { id: string } }> };
+  };
+  return (
+    pick(anyInv.subscription) ??
+    pick(anyInv.parent?.subscription_details?.subscription) ??
+    pick(anyInv.lines?.data?.find((l) => l.subscription)?.subscription) ??
+    null
+  );
 }
 
 async function upsertSubscription(
@@ -197,25 +225,27 @@ async function recordOneOff(
     typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id ?? null;
   if (!paymentIntentId) return;
 
-  // A paid letter or pack becomes an entitlement (unique on the payment intent,
-  // so a redelivery can't double-grant).
-  if (entry.kind === "letter" || entry.kind === "pack") {
-    await db
+  // Record the purchase + grant credits ATOMICALLY, keyed on the payment intent
+  // (UNIQUE). The entitlement insert is the single idempotency anchor for the
+  // WHOLE one-off — credit packs included — so credits are granted exactly once
+  // even if the event is redelivered or the event-id dedup is bypassed; and
+  // because both writes share one transaction, a mid-way failure rolls both back
+  // for a clean retry (no orphaned entitlement that would suppress the credits).
+  await db.transaction(async (tx) => {
+    const inserted = await tx
       .insert(entitlementPurchases)
       .values({ userId, kind: entry.purchaseKind ?? priceKey, stripePaymentIntentId: paymentIntentId })
-      .onConflictDoNothing();
-  }
+      .onConflictDoNothing()
+      .returning({ id: entitlementPurchases.id });
+    if (inserted.length === 0) return; // this payment was already recorded
 
-  // Credit packs (and letter tiers that include credits) grant to the user's
-  // ledger — packs never expire (expiresAt null). Keyed off the payment intent
-  // via a matching entitlement row is overkill here; the dedup guard on the
-  // event id already prevents double-processing.
-  if (entry.includedCredits && entry.includedCredits > 0) {
-    await db.insert(creditLedger).values({
-      subjectType: "user",
-      subjectId: userId,
-      delta: entry.includedCredits,
-      reason: entry.kind === "credits" ? "pack" : "letter_included",
-    });
-  }
+    if (entry.includedCredits && entry.includedCredits > 0) {
+      await tx.insert(creditLedger).values({
+        subjectType: "user",
+        subjectId: userId,
+        delta: entry.includedCredits,
+        reason: entry.kind === "credits" ? "pack" : "letter_included",
+      });
+    }
+  });
 }

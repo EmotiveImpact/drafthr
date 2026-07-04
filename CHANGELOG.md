@@ -2,6 +2,28 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.3 — 2026-07-04
+
+**Billing — adversarial-review bug fixes (4 real bugs in the payment path).** An
+independent review of the new billing code found four correctness bugs; all fixed,
+webhook now fully idempotent + retry-safe. +6 tests.
+- **3-day grace never fired (CRITICAL).** `subscriptionIdOf` read only
+  `invoice.subscription`, which is gone in the SDK's pinned API (2026-05-27.dahlia).
+  Now reads `invoice.parent.subscription_details.subscription` + a line-level
+  fallback, so `invoice.payment_failed` sets the grace window and `invoice.paid`
+  clears it. Regression test covers every shape.
+- **Paid events could be silently lost (HIGH).** The webhook marked an event
+  "seen" BEFORE processing and returned 200 on any error → Stripe never retried,
+  losing a paid subscription/purchase. Now: dedup is a read; the seen-marker is
+  written only AFTER success; a processing error returns 500 so Stripe retries.
+- **Credits could double-grant or go missing (HIGH).** The one-off purchase +
+  credit grant are now one atomic transaction keyed on the payment intent (the
+  credit ledger had no unique constraint) — granted exactly once, and a mid-way
+  failure rolls back for a clean retry.
+- **Concurrent creates could yield a free second letter (MEDIUM).** The one-off
+  consume now checks rows-affected inside the draft transaction and rolls back
+  (402) if a racing create already used the entitlement.
+
 ## 0.20.2 — 2026-07-04
 
 **Client-side paywall — the hard paywall is now airtight.** The server gate
