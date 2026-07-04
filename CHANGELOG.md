@@ -2,6 +2,29 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.19.5 — 2026-07-04
+
+**Automated daily bug-fix sweep (2 rounds, 2 fixes).** A four-agent latent-bug
+hunt over `src/`, `server/`, `api/` and the export/billing/compliance surfaces,
+committed directly to `main`. Baseline was green; the agents converged on
+"unusually clean" (prior sweeps have hardened the classic seams), so this is a
+short, high-precision run — the remaining candidates were LOW-confidence latent
+items that don't manifest on any current code path and were deliberately left
+alone. Both fixes ship with a regression test; `tsc -b` + `vite build` + `vitest`
+green at every push. **+4 tests** (569 → 573). Per-finding detail in
+`docs/internal/BUGS_AND_FIXES.md`. Fixes:
+
+- **Template Quality inspector crashed on rehydrated drafts (MEDIUM).**
+  `template-quality.ts` read `section.html` without the `?? ""` fallback that 7
+  sibling modules apply, so a draft with an undefined section body (older
+  persisted state or a server pull) threw `TypeError` in `stripHtml` and took
+  down the whole panel. Guarded both call sites plus the same unguarded
+  `s.html.length` in `notifications.ts`.
+- **CSV missing-name warning pointed at the wrong row (LOW).** The bulk-import
+  warning reported the offending record using the 0-based line index, so
+  "Row 1 missing 'employee_name'" actually pointed at the header. Now reports the
+  physical file row the user sees.
+
 ## 0.19.4 — 2026-07-03
 
 **Automated daily bug-fix sweep (3 rounds, 6 fixes).** A multi-agent latent-bug

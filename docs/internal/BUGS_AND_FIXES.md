@@ -40,6 +40,52 @@ _X1 (evidence-pack signing) remains user-owned. The items above are the senior s
 
 ---
 
+## 2026-07-04 — daily bug-fix sweep (2 fixed — SWEEP COMPLETE · ships as 0.19.5)
+
+Multi-agent latent-bug hunt over `src/`, `server/`, `api/` and the export/
+billing/compliance surfaces, committed directly to `main`. Baseline was fully
+green (`tsc -b` clean · 569 tests · `vite build` OK). Four parallel investigation
+agents (React logic · server/api · types+tests · export/billing/compliance) all
+reported the codebase "unusually clean" — prior sweeps have hardened most of the
+classic seams — surfacing **2 real correctness bugs** plus a set of LOW-confidence
+latent items that do not manifest on any current code path (deliberately left
+alone under the conservative mandate). **Final gate:** `tsc -b` clean · **573
+tests** (569 → 573, +4) · `vite build` OK. Commits: R1 `9c675da` (1 fix) · R2
+`f074fb5` (1 fix).
+
+### 🟡 MEDIUM (crash) — unguarded `section.html` crashed the Template Quality inspector
+`src/lib/template-quality.ts:33,50` read `section.html` with no fallback:
+`stripHtml(section.html)` → `undefined.replace(...)` → `TypeError`, taking down
+the whole Template Quality panel for any draft carrying a section whose `html`
+is `undefined`. `Section.html` is *typed* required, but drafts rehydrated from
+older persisted localStorage or pulled from the server (`remote-pull.ts:98`,
+`toLetterDraft.ts:39`) can arrive with it missing — which is exactly why **7**
+sibling modules (`finalize/healthChecks.ts`, `reports/check-predicates.ts`,
+`EvidenceHandoff`, `EvidenceDrawer`, `AIPanel`, …) all guard with `s.html ?? ""`.
+The `.join("\n")` on L33 also coerced `undefined` → the literal `"undefined"`,
+polluting the compliance haystack. **Fix:** added the same `?? ""` guard in both
+spots, and the identical unguarded `s.html.length` in `notifications.ts:106`.
+New `template-quality.test.ts` (3 cases) fails without the guard. *(R1 `9c675da`)*
+
+### 🟢 LOW (UX correctness) — CSV missing-name warning pointed at the header row
+`src/components/bulk/csv.ts` reported a row missing `employee_name` using the
+0-based line index `i` (1 for the first data record). But the user's spreadsheet
+counts the header as row 1, so the offending record is on file row `i+1` — the
+warning "Row 1 missing 'employee_name'" therefore sent them to the header instead
+of the real record. **Fix:** report the physical file row (`i+1`) in both the
+message and `rowIndex`. New regression test asserts the first data record is
+flagged as Row 2. *(R2 `f074fb5`)*
+
+### Investigated, deliberately NOT changed (LOW-confidence / non-manifesting)
+- **`EmployeeRail.tsx:44`** uses raw `ruleMatches` where siblings (`CompliancePanel`,
+  `template-quality`) use `ruleSatisfied` (which inverts `warn` rules). A landmine
+  if a `warn` rule is ever added for an employee-mode letter type — but the current
+  employee rule set has **zero** `warn` rules, so it cannot fire today. Left for a
+  deliberate change with a semantics-locking test rather than a speculative edit.
+- **`storage/inlineImagesForExport.ts:81`** `full.replace(src, data)` replaces the
+  first URL occurrence in the tag; only wrong if the same URL also appears in an
+  earlier attribute (e.g. `data-orig`), which the editor never emits.
+
 ## 2026-07-03 — daily bug-fix sweep (6 fixed — SWEEP COMPLETE · ships as 0.19.4)
 
 Multi-agent latent-bug hunt over `src/`, `server/`, `api/` and the export/
