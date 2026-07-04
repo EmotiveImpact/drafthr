@@ -86,7 +86,12 @@ export async function GET(req: Request): Promise<Response> {
 
     const ids = draftRows.map((d) => d.id);
     const sectionRows = ids.length
-      ? await db.select().from(sections).where(inArray(sections.draftId, ids))
+      ? await db
+          .select()
+          .from(sections)
+          // ids are already tenant-scoped (drafts filtered by tenantId above);
+          // the explicit tenant filter makes this read correct by construction.
+          .where(and(inArray(sections.draftId, ids), eq(sections.tenantId, tenantId)))
       : [];
 
     const sectionsByDraft = new Map<string, typeof sectionRows>();
@@ -267,10 +272,11 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
         // Replace strategy — sections roll over the draft id. Cheaper to
         // delete-then-insert than to diff individual rows; section_versions
         // FK is set null on cascade-from-sections so this is safe.
-        await tx.delete(sections).where(eq(sections.draftId, body.id));
+        await tx.delete(sections).where(and(eq(sections.draftId, body.id), eq(sections.tenantId, tenantId)));
         for (const s of body.sections) {
           await tx.insert(sections).values({
             draftId: body.id,
+            tenantId,
             sectionId: s.sectionId,
             title: s.title,
             html: s.html,

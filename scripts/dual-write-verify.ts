@@ -65,6 +65,7 @@ async function main() {
   for (let i = 0; i < 3; i++) {
     await db.insert(sections).values({
       draftId: draft.id,
+      tenantId: tenant.id,
       sectionId: `sec_${i}`,
       title: `Section ${i}`,
       html: `<p>Body ${i}</p>`,
