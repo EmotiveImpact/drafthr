@@ -130,9 +130,14 @@ export type PendingChange = {
   /** Human-readable description of what the AI did. */
   instruction: string;
   /** Where the proposal came from (for the audit trail). */
-  source: "regenerate" | "addClause" | "tighten" | "manual";
+  source: "regenerate" | "addClause" | "tighten" | "manual" | "review";
   /** Optional model id that produced this. */
   modelName?: string;
+  /** Who authored the suggestion. Absent = the AI (back-compat). Present =
+   *  a human collaborator, so the card shows their name + colour instead of
+   *  "AI proposed a change". authorId keys the per-collaborator colour. */
+  authorId?: string;
+  authorName?: string;
   /** Render mode — see comment above. Defaults to "inline" when unset. */
   diffViewMode?: "inline" | "card";
   /** When diffViewMode === "inline": snapshot of section.html taken just

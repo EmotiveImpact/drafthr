@@ -5,10 +5,25 @@ import { Button } from "@/components/ui/button";
 
 export type ReviewDialogKind = "submit" | "approve" | "request_changes";
 
+type WorkspaceMember = {
+  userId: string;
+  email: string;
+  legalName: string | null;
+  role: string;
+};
+
+/** Sentinel option value for the free-text "someone else" reviewer path. */
+const OTHER = "__other__";
+
 /**
  * Three-in-one modal for the approval-queue actions. Same shell so the
  * UI feels consistent across the three transitions; the kind prop swaps
  * copy + which fields are required.
+ *
+ * On "submit" the reviewer field is a WORKSPACE-MEMBER PICKER (so the chosen
+ * reviewer can be emailed a review request — the notify endpoint only accepts
+ * in-tenant members). Free-text stays available via "Someone else…" for solo
+ * workspaces / external names; those simply don't get an email.
  */
 export function ReviewDialog({
   open,
@@ -21,25 +36,54 @@ export function ReviewDialog({
   onOpenChange: (next: boolean) => void;
   kind: ReviewDialogKind;
   defaultReviewerName?: string;
-  onSubmit: (input: { reviewerName: string; body: string }) => void;
+  onSubmit: (input: { reviewerName: string; body: string; reviewerUserId?: string }) => void;
 }) {
   const [reviewerName, setReviewerName] = useState(defaultReviewerName ?? "");
   const [body, setBody] = useState("");
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [selected, setSelected] = useState<string>(OTHER);
 
   useEffect(() => {
     if (!open) {
       setBody("");
       setReviewerName(defaultReviewerName ?? "");
+      setSelected(OTHER);
     }
   }, [open, defaultReviewerName]);
+
+  // Load teammates when the submit dialog opens. Best-effort: on failure (or a
+  // one-person workspace) the picker collapses to the free-text input.
+  useEffect(() => {
+    if (!open || kind !== "submit") return;
+    let cancelled = false;
+    void fetch("/api/workspace/members", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { members?: WorkspaceMember[] } | null) => {
+        if (cancelled || !data?.members) return;
+        setMembers(data.members);
+        if (data.members.length > 0) setSelected(data.members[0].userId);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, kind]);
 
   const config = CONFIG[kind];
   const trimmedBody = body.trim();
   const bodyMissing = config.bodyRequired && !trimmedBody;
+  const usePicker = kind === "submit" && members.length > 0;
+  const pickedMember = usePicker && selected !== OTHER ? members.find((m) => m.userId === selected) : undefined;
 
   const submit = () => {
     if (bodyMissing) return;
-    onSubmit({ reviewerName: reviewerName.trim(), body: trimmedBody });
+    onSubmit({
+      reviewerName: pickedMember
+        ? (pickedMember.legalName?.trim() || pickedMember.email)
+        : reviewerName.trim(),
+      body: trimmedBody,
+      reviewerUserId: pickedMember?.userId,
+    });
     onOpenChange(false);
   };
 
@@ -72,15 +116,36 @@ export function ReviewDialog({
           {config.showReviewerName && (
             <div className="mb-3">
               <label className="block text-[11px] font-medium text-[var(--ds-muted)] mb-1">
-                Reviewer name {kind === "submit" ? "(optional)" : ""}
+                Reviewer {kind === "submit" ? "(optional)" : ""}
               </label>
-              <input
-                type="text"
-                value={reviewerName}
-                onChange={(e) => setReviewerName(e.target.value)}
-                placeholder={defaultReviewerName ?? "Workspace reviewer"}
-                className="w-full text-[13px] px-3 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
-              />
+              {usePicker && (
+                <select
+                  value={selected}
+                  onChange={(e) => setSelected(e.target.value)}
+                  className="w-full text-[13px] px-2.5 h-9 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+                >
+                  {members.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {(m.legalName?.trim() || m.email) + " · " + m.role}
+                    </option>
+                  ))}
+                  <option value={OTHER}>Someone else…</option>
+                </select>
+              )}
+              {(!usePicker || selected === OTHER) && (
+                <input
+                  type="text"
+                  value={reviewerName}
+                  onChange={(e) => setReviewerName(e.target.value)}
+                  placeholder={defaultReviewerName ?? "Workspace reviewer"}
+                  className={`w-full text-[13px] px-3 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)] ${usePicker ? "mt-2" : ""}`}
+                />
+              )}
+              {pickedMember && kind === "submit" && (
+                <p className="mt-1.5 text-[11px] text-[var(--ds-muted)]">
+                  They'll get an email with a link to this draft.
+                </p>
+              )}
             </div>
           )}
 

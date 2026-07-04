@@ -55,6 +55,7 @@ import {
   MessageSquareWarning,
   Smartphone,
   Undo,
+  Lightbulb,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -62,7 +63,9 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import { BrandMark, AvatarStack } from "@/components/ds";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { useProfileStore } from "@/lib/profile";
-import { listIdentities } from "@/lib/comments/identity";
+import { listIdentities, meIdentity } from "@/lib/comments/identity";
+import { SuggestEditDialog } from "@/components/editor/SuggestEditDialog";
+import { uid } from "@/lib/utils";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
@@ -71,6 +74,7 @@ import { TimelinePanel } from "@/components/editor/TimelinePanel";
 import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
 import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
+import { notifyReviewRequested } from "@/lib/collab-notify";
 import { canApprove, canSubmitForReview, canEditDraft } from "@/lib/permissions";
 import { MatterEmployeeChips } from "@/components/editor/MatterEmployeeChips";
 import { MobileShareDialog } from "@/components/editor/MobileShareDialog";
@@ -115,6 +119,7 @@ export function Editor() {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [globallyStreaming, setGloballyStreaming] = useState(false);
   const [historySection, setHistorySection] = useState<Section | null>(null);
+  const [suggestSection, setSuggestSection] = useState<Section | null>(null);
   const [retryEvent, setRetryEvent] = useState<RetryEvent | null>(null);
   // Export was moved to the Review step — no pending-export state lives in
   // the editor anymore. Kept the type alias below for any future surface
@@ -603,11 +608,16 @@ export function Editor() {
     .reverse()
     .find((a) => a.decision === "changes_requested");
 
-  const onReviewSubmit = (input: { reviewerName: string; body: string }) => {
+  const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string }) => {
     if (!reviewDialogKind) return;
     const store = useDraftStore.getState();
     if (reviewDialogKind === "submit") {
       store.submitForReview(draft.id, input.reviewerName, input.body);
+      // Best-effort email to the picked workspace reviewer (fire-and-forget;
+      // the server validates membership + soft-fails without Resend).
+      if (input.reviewerUserId) {
+        notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
+      }
       toast.success("Submitted for approval");
     } else if (reviewDialogKind === "approve") {
       store.approveDraft(draft.id, input.reviewerName, input.body);
@@ -1516,8 +1526,8 @@ export function Editor() {
                * null when no section has pending suggestions. */}
               <InlineSuggestionBanner draft={draft} />
               {draft.sections.map((section) => (
+                <div key={section.id}>
                 <SectionEditor
-                  key={section.id}
                   draft={draft}
                   section={section}
                   isStreaming={section.status === "streaming"}
@@ -1559,6 +1569,23 @@ export function Editor() {
                   }
                   editable={canvasEditable}
                 />
+                {/* Reviewer "Suggest an edit" — only when the canvas is locked
+                 * for this reviewer during review, and the section isn't
+                 * already carrying a pending suggestion. Opens a separate
+                 * composer; the proposal comes back as an attributed diff. */}
+                {!canvasEditable && reviewStatus === "in_review" && !section.pendingChange && section.status !== "streaming" && (
+                  <div className="mt-1 mb-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setSuggestSection(section)}
+                      className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 h-7 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                    >
+                      <Lightbulb className="size-3" />
+                      Suggest an edit
+                    </button>
+                  </div>
+                )}
+                </div>
               ))}
               {globallyStreaming && (
                 <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
@@ -1996,6 +2023,34 @@ export function Editor() {
           kind={reviewDialogKind}
           defaultReviewerName={profile.personal.preferredName || profile.personal.legalName}
           onSubmit={onReviewSubmit}
+        />
+      )}
+
+      {/* Reviewer "Suggest an edit" composer — stages the reviewer's proposal
+       * as an attributed pendingChange (author = the current user). Reuses the
+       * AI suggestion machinery so the author Accepts/Rejects exactly as they
+       * would an AI proposal. */}
+      {suggestSection && (
+        <SuggestEditDialog
+          open
+          onOpenChange={(next) => !next && setSuggestSection(null)}
+          section={suggestSection}
+          onSubmit={(proposedHtml) => {
+            const me = meIdentity(profile);
+            useDraftStore.getState().proposeSectionChange(draft.id, suggestSection.id, {
+              id: uid("sug"),
+              createdAt: Date.now(),
+              proposedHtml,
+              instruction: "Suggested edit",
+              source: "review",
+              // Stable, cross-user attribution: email seeds the reviewer's
+              // colour (matches how avatars/comments seed), name is displayed.
+              authorId: me.email || me.name,
+              authorName: me.name,
+              diffViewMode: "card",
+            });
+            toast.success("Suggestion sent to the author");
+          }}
         />
       )}
 

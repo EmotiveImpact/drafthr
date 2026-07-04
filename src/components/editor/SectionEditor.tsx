@@ -606,6 +606,7 @@ export function SectionEditor({
         <div className="px-7 pt-4">
           <PendingChangeCard
             section={section}
+            canResolve={editable}
             onAccept={() => onAcceptPending?.()}
             onReject={() => onRejectPending?.()}
           />
