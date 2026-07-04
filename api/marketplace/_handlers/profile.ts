@@ -19,7 +19,7 @@ import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/requ
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { consultantProfiles } from "../../../src/db/schema.js";
+import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
 import { isSafeImageDataUrl } from "../../../src/lib/safe-data-url.js";
 
 export const config = { runtime: "nodejs" };
@@ -30,6 +30,8 @@ export const config = { runtime: "nodejs" };
 // rate, photo) to the public marketplace listing. (Security board PM-05.)
 const AUTO_PUBLISH =
   process.env.VETTING_AUTO_PUBLISH === "1" && process.env.VERCEL_ENV !== "production";
+
+const CURRENCY_VALUES = ["GBP", "USD", "EUR"] as const;
 
 type Availability = "this_week" | "one_two_weeks" | "three_four_weeks" | "booked";
 const AVAILABILITY_VALUES: Availability[] = [
@@ -134,6 +136,12 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
 
+  // Validate currency against the DB CHECK enum — a cast (not a runtime check)
+  // let an off-enum value reach the constraint and escape as an uncaught 500.
+  if (body.currency !== undefined && !CURRENCY_VALUES.includes(body.currency)) {
+    return jsonError("currency must be GBP, USD or EUR", 400);
+  }
+
   const db = getDb();
   const [existing] = await db
     .select()
@@ -141,9 +149,12 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     .where(eq(consultantProfiles.userId, auth.userRow.id))
     .limit(1);
 
-  const fullName = (body.fullName ?? existing?.fullName ?? "").trim();
-  const role = (body.role ?? existing?.role ?? "").trim();
-  const bio = (body.bio ?? existing?.bio ?? "").trim();
+  // Coerce string fields defensively: a non-string body value would throw on
+  // .trim() below and surface as a 500 (the handler has no try/catch).
+  const asStr = (v: unknown, fallback: string) => (typeof v === "string" ? v : fallback);
+  const fullName = asStr(body.fullName, existing?.fullName ?? "").trim();
+  const role = asStr(body.role, existing?.role ?? "").trim();
+  const bio = asStr(body.bio, existing?.bio ?? "").trim();
 
   if (method === "POST") {
     if (!fullName) return jsonError("fullName is required", 400);
@@ -199,6 +210,10 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   };
 
   if (!existing) {
+    // PATCH is a partial update of an EXISTING profile. Creating one here would
+    // bypass the POST validation gauntlet (empty name/bio) AND flip the user's
+    // isConsultant routing on the strength of an empty row. Only POST creates.
+    if (method === "PATCH") return jsonError("No profile to update", 404);
     const [row] = await db
       .insert(consultantProfiles)
       .values(values)
@@ -227,9 +242,38 @@ export async function DELETE(req: Request): Promise<Response> {
   if (!auth.ok) return auth.response;
 
   const db = getDb();
-  await db
-    .delete(consultantProfiles)
-    .where(eq(consultantProfiles.userId, auth.userRow.id));
+  const [profile] = await db
+    .select({ id: consultantProfiles.id })
+    .from(consultantProfiles)
+    .where(eq(consultantProfiles.userId, auth.userRow.id))
+    .limit(1);
+  if (!profile) {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
+  // Refuse to hard-delete a profile that has bookings. The FK cascade
+  // (consultant_bookings → booking_payments) would wipe every HR tenant's
+  // booking history with this consultant AND the booking_payments rows holding
+  // checkout_session_id / payment_intent_id for money already captured — the
+  // platform's only record linking a Stripe charge to what it paid for, and the
+  // pointer needed for refunds/disputes. Also blocks rating-laundering via
+  // delete + re-enrol. (Matches the repo's soft-delete-for-audit convention.)
+  const [existingBooking] = await db
+    .select({ id: consultantBookings.id })
+    .from(consultantBookings)
+    .where(eq(consultantBookings.consultantProfileId, profile.id))
+    .limit(1);
+  if (existingBooking) {
+    return jsonError(
+      "Cannot delete a profile with existing bookings — contact support to close your account",
+      409,
+    );
+  }
+
+  await db.delete(consultantProfiles).where(eq(consultantProfiles.id, profile.id));
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },

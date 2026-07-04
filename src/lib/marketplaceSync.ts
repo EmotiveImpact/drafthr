@@ -203,10 +203,12 @@ export async function pullInbox(): Promise<void> {
   mergeBookings(list);
 }
 
-/** Pull the HR-side bookings list from the server and merge. */
-export async function pullMyBookings(): Promise<void> {
+/** Pull the HR-side bookings list from the server and merge. Returns false on a
+ *  fetch failure so callers can distinguish "genuinely no bookings" from "the
+ *  request failed" and avoid rendering a false empty state. */
+export async function pullMyBookings(): Promise<boolean> {
   const res = await listMyBookings();
-  if (!res.ok) return;
+  if (!res.ok) return false;
   // We don't know the consultant's initials from this response, so use
   // a placeholder. The marketplace listing fills the real initials when
   // the consultant card is rendered alongside.
@@ -222,6 +224,7 @@ export async function pullMyBookings(): Promise<void> {
     ),
   );
   mergeBookings(list);
+  return true;
 }
 
 /** Mirror a fresh booking to the server, then swap the local placeholder
@@ -243,7 +246,7 @@ export async function pushBookingCreate(
   },
   localPlaceholderId: string,
   consultantInitials: string,
-): Promise<void> {
+): Promise<boolean> {
   // Snapshot the optimistic local row BEFORE the await — it holds the readable
   // draftId we must preserve as localDraftId so "Open draft" works. A concurrent
   // pullMyBookings()/pullInbox() during createBooking() can replace the bookings
@@ -253,7 +256,18 @@ export async function pushBookingCreate(
     .getState()
     .bookings.find((b) => b.id === localPlaceholderId);
   const res = await createBooking(input);
-  if (!res.ok) return; // keep local placeholder
+  if (!res.ok) {
+    // The POST failed and there is NO retry path — the consultant's inbox is
+    // server-driven, so this request would never reach them. Roll back the
+    // optimistic local row (otherwise the HR user keeps a phantom "Awaiting
+    // response" booking forever) and signal failure so the caller can surface
+    // an error instead of a false "Booking confirmed".
+    const st = useBookingsStore.getState();
+    useBookingsStore.setState({
+      bookings: st.bookings.filter((b) => b.id !== localPlaceholderId),
+    });
+    return false;
+  }
   const state = useBookingsStore.getState();
   const placeholder =
     state.bookings.find((b) => b.id === localPlaceholderId) ?? placeholderBefore;
@@ -264,6 +278,7 @@ export async function pushBookingCreate(
       serverBooking,
     ],
   });
+  return true;
 }
 
 /** Append a message to a booking's thread on the server. The server
@@ -274,9 +289,19 @@ export async function pushBookingMessage(
   bookingId: string,
   from: "requester" | "consultant",
   text: string,
-): Promise<void> {
+): Promise<boolean> {
   const res = await sendBookingMessage(bookingId, text);
-  if (!res.ok) return;
+  if (!res.ok) {
+    // Don't silently leave the optimistic bubble looking "delivered" while
+    // the server thread never received it — the counterpart only sees the
+    // SERVER thread and would never get this message (the B9/R19 silent-lie
+    // class, mirrored from pushBookingRespond). Tell the sender and re-pull
+    // both sides' threads so the local state reconciles to the server truth.
+    toast.error("Message didn't send — check your connection and try again.");
+    void pullInbox();
+    void pullMyBookings();
+    return false;
+  }
   // Server returns the full messages array — replace local with that
   // so any messages from the other party that were missing also land.
   const state = useBookingsStore.getState();
@@ -288,6 +313,7 @@ export async function pushBookingMessage(
   // Tip 'from' is unused at this point — the server-truth wins — but
   // we accept the param so callers don't need to know.
   void from;
+  return true;
 }
 
 /** Mirror a booking state transition to the server. When the server

@@ -4,6 +4,7 @@
  * identical to the rest of /api/workspace/*.
  */
 import { and, eq } from "drizzle-orm";
+import { lockTenantOwnerGuard } from "../../../_utils/tenant-active-lock.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../../_utils/request.js";
 import { rateLimit } from "../../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js";
@@ -38,42 +39,49 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const db = getDb();
-    const [member] = await db
-      .select({ role: tenantMembers.role })
-      .from(tenantMembers)
-      .where(
-        and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, auth.activeTenant.id)),
-      )
-      .limit(1);
-    if (!member) return jsonError("Member not found", 404);
-    if (!canManageOwners(requesterRole, member.role)) {
-      return jsonError("only owners can manage owners.", 403);
-    }
-    if (member.role === "owner") {
-      const owners = await db
-        .select({ userId: tenantMembers.userId })
+    const tenantId = auth.activeTenant.id;
+    // Same per-tenant advisory lock as member/role: serializes ALL owner-
+    // affecting mutations (demote + remove, in any combination) so two
+    // concurrent requests can't each pass the owner-count check and leave the
+    // workspace ownerless (TOCTOU, R12 FLAGGED).
+    const outcome = await db.transaction(async (tx) => {
+      await lockTenantOwnerGuard(tx, tenantId);
+      const [member] = await tx
+        .select({ role: tenantMembers.role })
         .from(tenantMembers)
-        // Count only LIVE owners (deprovisioned rows must not inflate the
-        // last-owner guard). (Senior sweep B13.)
-        .where(
-          and(
-            eq(tenantMembers.tenantId, auth.activeTenant.id),
-            eq(tenantMembers.role, "owner"),
-            eq(tenantMembers.status, "active"),
-          ),
-        );
-      if (owners.length <= 1) {
-        return jsonError("workspace must have at least one owner", 409);
+        .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, tenantId)))
+        .limit(1);
+      if (!member) return { error: "Member not found", status: 404 } as const;
+      if (!canManageOwners(requesterRole, member.role)) {
+        return { error: "only owners can manage owners.", status: 403 } as const;
       }
-    }
+      if (member.role === "owner") {
+        const owners = await tx
+          .select({ userId: tenantMembers.userId })
+          .from(tenantMembers)
+          // Count only LIVE owners (deprovisioned rows must not inflate the
+          // last-owner guard). (Senior sweep B13.)
+          .where(
+            and(
+              eq(tenantMembers.tenantId, tenantId),
+              eq(tenantMembers.role, "owner"),
+              eq(tenantMembers.status, "active"),
+            ),
+          );
+        if (owners.length <= 1) {
+          return { error: "workspace must have at least one owner", status: 409 } as const;
+        }
+      }
 
-    const [removed] = await db
-      .delete(tenantMembers)
-      .where(
-        and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, auth.activeTenant.id)),
-      )
-      .returning();
-    if (!removed) return jsonError("Member not found", 404);
+      const [removed] = await tx
+        .delete(tenantMembers)
+        .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.tenantId, tenantId)))
+        .returning();
+      if (!removed) return { error: "Member not found", status: 404 } as const;
+      return { error: null, removed } as const;
+    });
+    if (outcome.error) return jsonError(outcome.error, outcome.status);
+    const removed = outcome.removed;
 
     await safelyAppendAudit({
       tenantId: auth.activeTenant.id,

@@ -74,7 +74,17 @@ function parseCookie(header: string | null, name: string): string | null {
   if (!header) return null;
   for (const part of header.split(";")) {
     const [k, ...rest] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(rest.join("="));
+    if (k === name) {
+      try {
+        return decodeURIComponent(rest.join("="));
+      } catch {
+        // Malformed percent-encoding (e.g. a lone '%') makes decodeURIComponent
+        // throw a URIError. This runs outside the auth path's try/catch, so an
+        // uncaught throw here becomes a 500 (incl. on GET /api/auth/session,
+        // which the SPA polls). Treat an unparseable cookie as absent.
+        return null;
+      }
+    }
   }
   return null;
 }

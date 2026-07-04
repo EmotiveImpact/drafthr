@@ -18,7 +18,7 @@ export function ConsultantCard({
   consultant: Consultant;
   onBook: () => void;
 }) {
-  const isLive = Boolean(c.profileId);
+  const isLive = Boolean(c.profileId) && !c.pending;
   const currency = c.currency ?? "£";
 
   return (
@@ -95,6 +95,10 @@ export function ConsultantCard({
           <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ds-green-bg)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--ds-green-fg)]">
             <span className="size-1.5 rounded-full bg-[var(--ds-green-fg)]" aria-hidden />
             Live
+          </span>
+        ) : c.pending ? (
+          <span className="text-[10.5px] font-semibold text-[var(--ds-amber-fg)]">
+            Pending review
           </span>
         ) : (
           <span className="text-[10.5px] font-medium text-[var(--ds-subtle)]">Example</span>

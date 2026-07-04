@@ -5669,7 +5669,7 @@ const Lg = [
   "style",
   "contenteditable",
   ...Ai
-], Mg = /^(?:https?:|mailto:|tel:|#|\/(?!\/)|blob:|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i, Og = {
+], Mg = /^(?:https?:|mailto:|tel:|#|\/(?!\/)|blob:|data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=])/i, Og = {
   ALLOWED_TAGS: Lg,
   ALLOWED_ATTR: Pg,
   // ALLOW_DATA_ATTR is false (don't blanket-allow arbitrary data-*); the editor
@@ -5703,7 +5703,7 @@ function On(e) {
   const n = /^([a-z][a-z0-9+.-]*):/i.exec(t);
   if (n) {
     const r = n[1].toLowerCase();
-    if (!(r === "http" || r === "https" || r === "mailto" || r === "tel" || r === "blob" || /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,/i.test(t))) return "";
+    if (!(r === "http" || r === "https" || r === "mailto" || r === "tel" || r === "blob" || /^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=]/i.test(t))) return "";
   }
   return t.replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -10982,7 +10982,7 @@ function oa(e) {
     ],
     ALLOW_DATA_ATTR: !1,
     KEEP_CONTENT: !0,
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=])/i
   });
   return _b(t);
 }
@@ -11176,7 +11176,7 @@ function Ir(e) {
 }
 function vu(e) {
   if (typeof e != "string") return !1;
-  if (/^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(e))
+  if (/^data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=][a-z0-9+/=\s]*$/i.test(e))
     return !0;
   if (!/^https:\/\//i.test(e)) return !1;
   try {
@@ -11690,7 +11690,7 @@ function Zb(e) {
     ],
     ALLOW_DATA_ATTR: !1,
     KEEP_CONTENT: !0,
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|blob:|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|blob:|data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=])/i
   });
 }
 function Jb(e) {

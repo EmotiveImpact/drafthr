@@ -3,7 +3,12 @@ import { Routes, Route, useLocation } from "react-router-dom";
 import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
-import { isDualWriteEnabled, syncAllPending } from "@/lib/dual-write";
+import {
+  isDualWriteEnabled,
+  persistedDraftTombstones,
+  reissuePendingDeletes,
+  syncAllPending,
+} from "@/lib/dual-write";
 import {
   pullRemoteDrafts,
   mergeRemoteDrafts,
@@ -167,11 +172,18 @@ export function App() {
     if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
     let cancelled = false;
     void (async () => {
+      // Retry deletes that never got a confirmed 2xx (tab closed / offline)
+      // BEFORE pulling, so a pending-delete row is gone rather than merged.
+      await reissuePendingDeletes();
+      if (cancelled) return;
       await pullRemoteDrafts((remote) => {
         if (cancelled) return;
         // Re-read the live store at apply time so a concurrent edit isn't lost.
+        // Skip adoption of rows whose delete is still unconfirmed (BUG-05).
         const local = useDraftStore.getState().drafts;
-        useDraftStore.setState({ drafts: mergeRemoteDrafts(local, remote) });
+        useDraftStore.setState({
+          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones()),
+        });
       });
       if (cancelled) return;
       // Then merge collaboration data (comments / timeline / approvals) — a

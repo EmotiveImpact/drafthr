@@ -1,9 +1,5 @@
-import type { MutableRefObject } from "react";
-
 import type { Draft } from "@/lib/letters/types";
 import { PaginatedLetter } from "./PaginatedLetter";
-import { type PagedEditorActions } from "./paged-edit/types";
-import { PagedlyDocEditor } from "./paged-edit/PagedlyDocEditor";
 
 type AddCommentOpts = {
   quote?: string;
@@ -24,31 +20,18 @@ export type LetterPreviewProps = {
   onAddComment?: (sectionId: string, opts?: AddCommentOpts) => void;
   /** Called when the user clicks an existing inline-anchored comment highlight. */
   onFocusComment?: (commentId: string) => void;
-  /** Controlled edit-on-page toggle. The parent topbar owns this state
-   * now so the affordance lives next to Edit/Preview rather than as
-   * a floating button above the page. */
-  editable?: boolean;
-  /** Called when the editable on-page editor signals "done". */
-  onEditableDone?: () => void;
-  /** Handle the parent can call into for top-menubar Edit actions
-   * (Undo / Redo / Find / Select all). Populated by PagedEditor on
-   * mount; null when not in edit-on-page. */
-  editorActionsRef?: MutableRefObject<PagedEditorActions | null>;
 };
 
 /**
- * Letter preview rendered as A4 page cards. Read-only Preview and
- * edit-on-page both use paged.js, the same print CSS, and the same
- * source composition so page size, margins, and typography stay aligned.
+ * Letter preview rendered as A4 page cards — STRICTLY read-only.
+ *
+ * The old `editable` branch (which mounted PagedlyDocEditor) was removed: its
+ * only caller was the read-only ReviewStep, and mounting the Page editor here
+ * bypassed the review-lock (`canEditDraft`) that Editor.tsx enforces on its
+ * own PagedlyDocEditor mount. Page editing lives in Editor.tsx only, where the
+ * lock, streaming read-only, and persist guards are all wired. (Audit IMP-01.)
  */
-export function LetterPreview({
-  draft,
-  editable = false,
-  onEditableDone,
-  editorActionsRef,
-  onAddComment,
-  onFocusComment,
-}: LetterPreviewProps) {
+export function LetterPreview({ draft, onAddComment, onFocusComment }: LetterPreviewProps) {
   const empty = draft.sections.every((s) => !s.html?.trim());
 
   if (empty) {
@@ -59,30 +42,12 @@ export function LetterPreview({
     );
   }
 
-  // Read-only path: hand off to paged.js for real multi-page A4 rendering.
-  // Comment handlers thread through so the paged page surface can host a
-  // selection-bubble "+ Comment" affordance and route mark clicks back
-  // to the parent's floating panel.
-  if (!editable) {
-    return (
-      <div className="letter-preview-shell">
-        <PaginatedLetter
-          draft={draft}
-          onAddComment={onAddComment}
-          onFocusComment={onFocusComment}
-        />
-      </div>
-    );
-  }
-
-  // Edit-on-page: now backed by the vendored pagedly editor (replacing the
-  // home-grown paged.js engine). Same contract, so the menubar Edit actions and
-  // the parent toggle drive it unchanged; edits persist per-section to the store.
+  // Hand off to paged.js for real multi-page A4 rendering. Comment handlers
+  // thread through so the paged page surface can host a selection-bubble
+  // "+ Comment" affordance and route mark clicks back to the parent's panel.
   return (
-    <PagedlyDocEditor
-      draft={draft}
-      onDone={() => onEditableDone?.()}
-      actionsRef={editorActionsRef}
-    />
+    <div className="letter-preview-shell">
+      <PaginatedLetter draft={draft} onAddComment={onAddComment} onFocusComment={onFocusComment} />
+    </div>
   );
 }

@@ -15,6 +15,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { draftExtras, drafts } from "../../../src/db/schema.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -75,6 +76,10 @@ export async function POST(req: Request): Promise<Response> {
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
   if (!body || typeof body.id !== "string" || !body.id) return jsonError("Draft id required", 400);
+  // Guard the uuid-column query: a non-uuid client id would otherwise throw a
+  // Postgres 22P02 and surface as a 500 (400 is the app's convention here).
+  const draftId = serverUuidOrNull(body.id);
+  if (!draftId) return jsonError("Invalid draft id", 400);
   const extras = body.extras && typeof body.extras === "object" ? body.extras : {};
 
   try {
@@ -83,7 +88,7 @@ export async function POST(req: Request): Promise<Response> {
     const [draft] = await db
       .select({ id: drafts.id, tenantId: drafts.tenantId })
       .from(drafts)
-      .where(eq(drafts.id, body.id))
+      .where(eq(drafts.id, draftId))
       .limit(1);
     if (!draft) return jsonError("Draft not found", 404);
     if (draft.tenantId !== tenantId) {
@@ -92,7 +97,7 @@ export async function POST(req: Request): Promise<Response> {
 
     await db
       .insert(draftExtras)
-      .values({ draftId: body.id, tenantId, extrasJson: extras, updatedAt: new Date() })
+      .values({ draftId, tenantId, extrasJson: extras, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: draftExtras.draftId,
         // Scope the update to this tenant as defence-in-depth.
@@ -100,7 +105,7 @@ export async function POST(req: Request): Promise<Response> {
         set: { extrasJson: extras, updatedAt: new Date() },
       });
 
-    return new Response(JSON.stringify({ ok: true, id: body.id }), {
+    return new Response(JSON.stringify({ ok: true, id: draftId }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });

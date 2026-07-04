@@ -38,6 +38,9 @@ function buildStoredSectionsBodyHtml(draft: Draft): string {
 }
 
 function letterheadHtml(draft: Draft): string {
+  // Gate on the hasLetterhead switch as well as URL presence — matches the
+  // Page editor + PDF/DOCX so every renderer ships the same first page. (BUG-08.)
+  if (!draft.employer.hasLetterhead) return "";
   const url = draft.employer.letterheadDataUrl;
   if (!isSafeImageRef(url)) return "";
   return `<div class="letterhead"><img src="${escAttr(url)}" alt="" /></div>`;

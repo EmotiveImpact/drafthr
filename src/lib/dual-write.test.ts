@@ -262,6 +262,105 @@ describe("dual-write enqueueSync", () => {
     expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/aren't syncing/i);
   });
 
+  it("a healthy draft's successful sync does not reset another draft's conflict count", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // conflicted_1 always 409s; healthy_1 always succeeds. With a global
+    // counter the healthy syncs interleaved between the conflicts kept
+    // resetting it and the toast never fired (FQ-02) — per-draft it must.
+    const { toServerUuid } = await import("./remote-ids");
+    const conflictedUuid = toServerUuid("conflicted_1");
+    const fetchMock = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { id?: string };
+      return body.id === conflictedUuid
+        ? new Response(JSON.stringify({ error: "stale revision" }), { status: 409 })
+        : new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { toast } = await import("sonner");
+    const mod = await import("./dual-write");
+
+    let conflicted = makeDraft("conflicted_1", 100);
+    const healthy = makeDraft("healthy_1", 100);
+    mod.setDualWriteSnapshotGetter((id) => (id === "conflicted_1" ? conflicted : healthy));
+
+    for (let i = 1; i <= 4; i++) {
+      conflicted = makeDraft("conflicted_1", 100 + i);
+      await mod.syncDraft("conflicted_1");
+      await mod.syncDraft("healthy_1"); // interleaved success
+    }
+
+    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect((toast.error as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(/aren't syncing/i);
+  });
+
+  it("undeleteDraft clears the tombstone so a restored draft re-syncs", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    const draft = makeDraft("undel_1", 1_768_000_000_000);
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    // Delete tombstones the id — a subsequent sync is dropped by the guard.
+    await mod.deleteDraftRemotely("undel_1");
+    fetchMock.mockClear();
+    await mod.syncDraft("undel_1");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    // Undo path: clear the tombstone and re-mirror.
+    mod.undeleteDraft("undel_1");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // syncDraft now fires the upsert POST for the restored draft.
+    expect(fetchMock).toHaveBeenCalled();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/store/drafts");
+    expect(init.method).toBe("POST");
+
+    // And a later ordinary sync is no longer dropped.
+    fetchMock.mockClear();
+    await mod.syncDraft("undel_1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("orders an Undo's restore POST after a still-in-flight DELETE", async () => {
+    // Undo while the DELETE round-trip is on the wire: the restore POST must
+    // wait for the DELETE to settle, or the DELETE lands last and wipes the
+    // just-restored server row with nothing left to re-sync it.
+    let resolveDelete!: (r: Response) => void;
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve;
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const mod = await import("./dual-write");
+    const draft = makeDraft("undel_2", 1_768_000_000_000);
+    mod.setDualWriteSnapshotGetter(() => draft);
+
+    const deletePromise = mod.deleteDraftRemotely("undel_2"); // DELETE hangs
+    mod.undeleteDraft("undel_2"); // Undo before it settles
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Only the (pending) DELETE has hit the wire — no POST raced ahead of it.
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST")).toHaveLength(0);
+
+    resolveDelete(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    await deletePromise;
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.filter(([, init]) => (init as RequestInit)?.method === "POST"),
+      ).toHaveLength(1);
+    });
+  });
+
   it("logs failed deletes and shows one toast after consecutive failures", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 500 }));

@@ -93,6 +93,7 @@ beforeEach(() => {
       }),
       transaction: async (fn: (tx: unknown) => unknown) =>
         fn({
+          execute: () => Promise.resolve(),
           update: () => ({ set: () => ({ where: () => ({ then: undefined }) }) }),
           insert: () => ({ values: () => Promise.resolve() }),
         }),
@@ -244,6 +245,7 @@ function buildDbMock(
       }),
       transaction: async (fn: (tx: unknown) => unknown) => {
         const tx = {
+          execute: () => Promise.resolve(),
           update: () => ({
             set: (values: Record<string, unknown>) => {
               writes.push({ kind: "update", values });

@@ -120,7 +120,12 @@ export async function POST(req: Request): Promise<Response> {
   // audit write below, not to 404.
   const rawDraftId = typeof body.draftId === "string" ? body.draftId.trim() : "";
   const draftId = rawDraftId ? toServerUuid(rawDraftId) : "";
-  const draftExists = draftId ? await draftBelongsToTenant(draftId, tenantId) : false;
+  // The lookup hits Postgres (getDb() throws if DATABASE_URL is unset; the query
+  // throws on a Neon outage). Per the "never blocks the PDF" contract, a DB blip
+  // must NOT 500 the export before Chromium runs — swallow any failure to false.
+  const draftExists = draftId
+    ? await draftBelongsToTenant(draftId, tenantId).catch(() => false)
+    : false;
 
   const packUrl = process.env.CHROMIUM_PACK_URL ?? DEFAULT_PACK_URL;
 
@@ -273,6 +278,10 @@ async function tryAppendExportAudit(
 }
 
 async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<boolean> {
+  // Mirror tryAppendExportAudit's env-guard: with no DB configured there's
+  // nothing to look up, and getDb() would throw. Fail closed to false so the
+  // export proceeds without an audit row rather than 500ing.
+  if (!process.env.DATABASE_URL) return false;
   if (!isUuid(draftId)) return false;
   const db = getDb();
   const [draft] = await db

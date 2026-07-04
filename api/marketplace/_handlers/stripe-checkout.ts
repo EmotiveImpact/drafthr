@@ -18,6 +18,7 @@ import {
   stripeConnectAccounts,
 } from "../../../src/db/schema.js";
 import { getStripe, appBaseUrl, platformFeeBps } from "../../_utils/stripe.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -37,8 +38,14 @@ export async function POST(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<{ bookingId?: string }>(req);
   if (!parsed.ok) return parsed.response;
-  const bookingId = typeof parsed.body.bookingId === "string" ? parsed.body.bookingId.trim() : "";
-  if (!bookingId) return jsonError("bookingId required", 400);
+  const rawBookingId = typeof parsed.body.bookingId === "string" ? parsed.body.bookingId.trim() : "";
+  if (!rawBookingId) return jsonError("bookingId required", 400);
+  // Validate the uuid before it hits the uuid column — a non-uuid id (reachable
+  // when paying against an optimistic local booking not yet swapped for the
+  // server UUID) otherwise raises Postgres 22P02 → opaque 500. Treat as
+  // not-found. (Matches respond.ts / message.ts / bug-#19.)
+  const bookingId = serverUuidOrNull(rawBookingId);
+  if (!bookingId) return jsonError("Booking not found", 404);
 
   try {
     const db = getDb();
@@ -67,12 +74,29 @@ export async function POST(req: Request): Promise<Response> {
     // (the onConflictDoUpdate below would point the row at the new session
     // while leaving status "paid", silently losing the first payment intent).
     const [existingPayment] = await db
-      .select({ status: bookingPayments.status })
+      .select({
+        status: bookingPayments.status,
+        checkoutSessionId: bookingPayments.checkoutSessionId,
+      })
       .from(bookingPayments)
       .where(eq(bookingPayments.bookingId, booking.id))
       .limit(1);
     if (existingPayment?.status === "paid") {
       return jsonError("This booking is already paid", 409);
+    }
+    // Expire any prior unpaid Checkout session before minting a new one. Stripe
+    // sessions stay completable for ~24h, so without this a click-Pay → Back →
+    // click-Pay-again (or a resumed stale tab) leaves TWO live sessions for the
+    // same booking — the card can be charged twice, and the second
+    // checkout.session.completed would overwrite the first payment_intent_id,
+    // hiding the duplicate from reconciliation. Best-effort: expiring a session
+    // that's already completed/expired throws, which we ignore.
+    if (existingPayment?.checkoutSessionId) {
+      try {
+        await stripe.checkout.sessions.expire(existingPayment.checkoutSessionId);
+      } catch (err) {
+        console.warn("[stripe-checkout] could not expire prior session", err);
+      }
     }
 
     const [acct] = await db

@@ -213,15 +213,23 @@ vi.mock("../../../src/db/index.js", () => {
 
   const tablesByRef = new WeakMap<object, string>();
   return {
-    getDb: () => ({
-      select: (_cols?: unknown) => ({
-        from: (table: { __table: string }) => {
-          return makeSelectBuilder(table.__table).from(table);
-        },
-      }),
-      insert: (table: { __table: string }) => makeInsertBuilder(table.__table),
-      update: (table: { __table: string }) => makeUpdateBuilder(table.__table),
-    }),
+    getDb: () => {
+      const ops = {
+        // Advisory-lock no-op for the fake DB (provisionUser takes a per-user
+        // pg_advisory_xact_lock inside its transaction).
+        execute: async () => undefined,
+        select: (_cols?: unknown) => ({
+          from: (table: { __table: string }) => {
+            return makeSelectBuilder(table.__table).from(table);
+          },
+        }),
+        insert: (table: { __table: string }) => makeInsertBuilder(table.__table),
+        update: (table: { __table: string }) => makeUpdateBuilder(table.__table),
+      };
+      // transaction runs the callback against the same in-memory ops so writes
+      // land in the shared fake state.
+      return { ...ops, transaction: async (fn: (tx: typeof ops) => unknown) => fn(ops) };
+    },
     __tablesByRef: tablesByRef,
   };
 });
@@ -260,6 +268,9 @@ vi.mock("../../../src/db/schema.js", () => {
 
 // drizzle-orm eq / and — produce predicate descriptors the fake db consumes.
 vi.mock("drizzle-orm", () => ({
+  // Template tag for lockUserActiveTenant's advisory-lock SQL — the fake tx's
+  // execute() ignores the value, so any object is fine.
+  sql: (..._args: unknown[]) => ({ __sql: true }),
   eq: (col: { __col: string }, val: unknown) => ({ __col: col.__col, __val: val }),
   and: (...preds: Array<{ __col: string; __val: unknown }>) => {
     // Collapse the eqs into a single predicate the fake builders can read.

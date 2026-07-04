@@ -62,7 +62,16 @@ export async function generateAllSections(
           acc += delta;
           store.appendToSection(draft.id, section.id, delta);
         },
-        onRetry: callbacks.onRetry,
+        // A retry re-streams the whole section from scratch. Reset the local
+        // accumulator AND the store copy first, or the retried text would be
+        // concatenated onto the truncated first attempt (doubled/garbled
+        // sections — a retryable mid-stream error now throws even after
+        // tokens flowed, see client.ts).
+        onRetry: (retryCount, delayMs, reason) => {
+          acc = "";
+          store.updateSection(draft.id, section.id, "");
+          callbacks.onRetry?.(retryCount, delayMs, reason);
+        },
       });
       store.updateSection(draft.id, section.id, sanitiseHtml(acc));
       store.setSectionStatus(draft.id, section.id, "ready");
@@ -144,7 +153,12 @@ export async function regenerateSectionAsPending(
         // sees stays untouched. We accumulate locally and materialize as
         // a pendingChange when the stream completes.
       },
-      onRetry: callbacks.onRetry,
+      // Retry re-streams from scratch — drop the truncated first attempt so
+      // the proposed diff isn't first-attempt + full-second-attempt garbage.
+      onRetry: (retryCount, delayMs, reason) => {
+        acc = "";
+        callbacks.onRetry?.(retryCount, delayMs, reason);
+      },
     });
   } catch (err) {
     store.setSectionStatus(draft.id, section.id, restingStatus);
@@ -210,7 +224,13 @@ export async function regenerateSection(
       acc += delta;
       store.appendToSection(draft.id, section.id, delta);
     },
-    onRetry: callbacks.onRetry,
+    // Retry re-streams from scratch — reset the accumulator and store copy so
+    // the retried section isn't appended onto the truncated first attempt.
+    onRetry: (retryCount, delayMs, reason) => {
+      acc = "";
+      store.updateSection(draft.id, section.id, "");
+      callbacks.onRetry?.(retryCount, delayMs, reason);
+    },
   });
 
   const html = sanitiseHtml(acc);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Command,
@@ -332,6 +332,10 @@ function htmlToPlain(html: string): string {
  */
 export function useSearchPalette() {
   const [open, setOpen] = useState(false);
+  // Track open-ness in a ref so the keydown listener sees the latest value
+  // without re-subscribing on every toggle.
+  const openRef = useRef(open);
+  openRef.current = open;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -339,11 +343,14 @@ export function useSearchPalette() {
         // Don't hijack Cmd/Ctrl+K while the user is typing in a form field or
         // comment composer — it would steal focus mid-sentence and interrupt
         // their input. (The rich-text editor keeps the shortcut as the primary
-        // way to open the palette.)
+        // way to open the palette.) BUT once the palette is open its OWN cmdk
+        // search input holds focus, so this guard would trap the user — allow
+        // Cmd+K to toggle it closed in that case.
         const active = document.activeElement;
         if (
-          active instanceof HTMLInputElement ||
-          active instanceof HTMLTextAreaElement
+          !openRef.current &&
+          (active instanceof HTMLInputElement ||
+            active instanceof HTMLTextAreaElement)
         ) {
           return;
         }

@@ -24,17 +24,32 @@ export function BookingThread({
   const messages = booking.messages ?? [];
 
   // The other party gets the "From them" treatment.
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    // Optimistic: append locally for instant feedback.
-    appendMessage(booking.id, perspective, text);
+    // Optimistic: append locally for instant feedback. Keep the minted id so
+    // a failure removes exactly THIS bubble — a whole-thread snapshot restore
+    // would clobber a second message sent while this one was in flight, and
+    // would race the failure path's re-pull (server truth must win).
+    const optimisticId = appendMessage(booking.id, perspective, text);
+    setDraft("");
     // Dual-write: mirror to the server. On success, the server returns
     // the canonical thread which replaces our local copy (picking up
-    // anything the other party sent in the meantime).
-    void pushBookingMessage(booking.id, perspective, text);
-    setDraft("");
+    // anything the other party sent in the meantime). On failure the sync
+    // layer already toasts + re-pulls; remove the optimistic bubble so the
+    // UI stops claiming a message was delivered that the counterpart (who
+    // only sees the server thread) never received.
+    const ok = await pushBookingMessage(booking.id, perspective, text);
+    if (!ok && optimisticId) {
+      useBookingsStore.setState((state) => ({
+        bookings: state.bookings.map((b) =>
+          b.id === booking.id
+            ? { ...b, messages: (b.messages ?? []).filter((m) => m.id !== optimisticId) }
+            : b,
+        ),
+      }));
+    }
   };
 
   return (

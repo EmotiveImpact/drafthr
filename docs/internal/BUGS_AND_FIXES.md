@@ -181,6 +181,278 @@ consumers uppercase it or compare to `"marked-sent"`, so no switch broke).
 ---
 
 ## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE · ships as 0.19.3)
+## 2026-07-02 — post-Stripe adversarial bug sweep (20-finding hunt, 3-lens verified)
+
+After wiring Stripe (test + prod) and finalising pricing, a 6-area finder + 3-lens
+adversarial-verification hunt raised 22 findings; 20 survived. Fixed in waves
+(backend / frontend / concurrency), each `tsc -b` + `vitest` green (574 pass).
+
+**🔴 Payment & data integrity**
+- **Double-charge (checkout TOCTOU).** `stripe-checkout.ts` never expired the prior
+  unpaid Checkout session, so Back→Pay-again (or a resumed tab) left two live
+  sessions for one booking; paying both charged twice and the 2nd
+  `checkout.session.completed` overwrote the 1st `payment_intent_id`. Fix: expire
+  the prior session before minting a new one (best-effort). *Residual:* two truly
+  simultaneous POSTs still both mint (rate-limited; full fix = a locked/unique
+  booking_payments row — noted, low-probability).
+- **Destructive profile DELETE.** `profile.ts` `db.delete(consultantProfiles)`
+  cascaded through `consultant_bookings`→`booking_payments`, wiping cross-tenant
+  history + captured-charge pointers and resetting rating on re-enrol. Fix: refuse
+  to hard-delete when any booking exists (deliberate guard, not a silent patch).
+- **Fire-and-forget booking create.** `BookingDialog`/`marketplaceSync` toasted
+  "Booking confirmed" over a POST it never awaited; on failure the consultant
+  never saw it and the HR user kept a phantom row. Fix: await, roll back the
+  optimistic row on failure, surface an error.
+
+**🟠 Auth / correctness**
+- `session.ts` GET now enforces SE-03 epoch revocation (was PII-leaking a revoked
+  cookie); `workos.parseCookie` catches malformed percent-encoding (was a 500);
+  `respond.ts`/`message.ts` validate bookingId as uuid (was 22P02 500s);
+  `profile.ts` PATCH no longer inserts an empty profile / flips isConsultant, and
+  validates currency; `stripe-webhook` account.updated re-fetches the account
+  (event-ordering-safe).
+- **Concurrent tenant-active invariant — closes the directory-provision residual
+  AND R12 last-owner (both previously FLAGGED below).** Added `lockUserActiveTenant`
+  (per-user `pg_advisory_xact_lock`) to switch / accept-invite / create /
+  session auto-elect / directory-webhook provisioning; owner-guard mutations got a
+  per-tenant advisory lock in the same wave. Advisory locks are the chosen correct
+  fix (migration-free, transaction-scoped) over a partial-unique-index migration
+  on the live DB — verified best-solution for these, not a patch.
+
+**🟡 UX / lower severity**
+- `ConsultantProfile` re-polls on `?stripe=return` (webhook lag) + resets stuck
+  spinner on bfcache; `MyBookings` shows error+retry instead of a false "No
+  bookings yet" and un-sticks the Pay button on Back; `SearchPalette` Cmd+K can
+  close the palette again; `ConsultantsIndex`/`Card` badge an unpublished
+  own-profile "Pending review" not "Live"; `BulkOperations` no longer claims "No
+  drafts were created" when partial drafts were saved.
+
+Commits: `dc33eb7` (backend), `9352da9` (frontend), the ConsultantsIndex/Card/
+types/BulkOps wave, and `712d3e8` (advisory locks).
+
+---
+
+## 2026-07-02 — multi-agent audit (4 lenses) → Page-view data-loss regression fix
+
+A fresh 4-lens audit (flows/editor, state/data, fix-quality, api/edge) after the
+pagedly "Page = editor" rewrite. Three independent agents converged on one
+**CRITICAL data-loss regression** introduced by that rewrite. Fixed first.
+
+### 🔴 CRITICAL (regression, data loss) — Page view wrote a stale/sanitiser-stripped snapshot of EVERY section back to the store
+`PagedlyDocEditor.persist()` walked pagedly's `onChange.sections` — which pagedly
+emits for ALL sections of the document, not just the edited one — and wrote back
+any that differed from the store, with only no-op/blank guards. Two failure
+modes: (1) pagedly maps the draft ONCE at mount, so any store change underneath
+(an AI rewrite from the still-reachable rail, Accept-all, a streaming
+generation, another tab) was reverted by the first keystroke anywhere on the
+page; (2) pagedly's own sanitiser strips the app's inline markup — `<mark
+data-comment-id>` (comment anchors), `data-fig-id` (figure refs), `data-suggestion-*`
+(pending AI diffs) — so a single edit permanently destroyed comments, exhibit
+renumbering, and unresolved suggestions across the whole draft (a new-seam
+regression of the 2026-06-06 B1/B2 sanitiser class).
+**Fix (src/components/editor/paged-edit/PagedlyDocEditor.tsx):** rewrote persist
+as `decideSectionWrite()` — a pure, exported, unit-tested guard that only writes
+a section when it is genuinely a user edit AND safe:
+  - baseline guard — a per-section mount-time snapshot advanced after each write;
+    a section whose STORE copy moved since then (AI/other-tab/Accept-all) is
+    skipped (external edit wins), which neutralises the whole-draft fan-out;
+  - streaming guard — never write a section whose status is "streaming";
+  - app-marks guard — refuse (and toast "edit in the Sections view") any section
+    carrying comment/figure/suggestion markup pagedly can't round-trip;
+  - blank-artifact + no-op guards retained.
+Plus: read-only ⇒ no write-back at all (`onChange` unwired), an unmount `flush()`
+so a fast Page→Sections toggle doesn't drop the last keystroke burst, and the
+Page view is forced read-only while any section streams (Editor.tsx). TDD:
+`PagedlyDocEditor.test.ts` (+9) locks every guard branch.
+
+### Wave 2 — safe high-value batch (audit findings 2–10, disjoint files)
+
+Ran as parallel fix-agents on non-overlapping files + two Editor.tsx edits by
+hand, then one central `npm run build` + `npx vitest run` (573 passing, +1
+dual-write guard). All confirmed by ≥1 audit lens.
+
+- **🟠 Truncated AI section stored as "ready".** A mid-stream Anthropic error
+  (`data: {error}` then `[DONE]`) was swallowed once any token had flowed, so a
+  half-written section committed as complete. `src/lib/llm/client.ts` now throws
+  on `proxyError` at both the `[DONE]` branch and the stream-end fall-through
+  regardless of tokens seen (retryable on rate-limit/quota/overloaded); callers'
+  catch paths reset status + keep partial text. `client.test.ts` locks it.
+- **🟢 Aborted generation kept billing.** `api/draft.ts` now threads an
+  `AbortController` into `streamText({ abortSignal })`, breaks the `textStream`
+  loop on `cancelled`, and calls `controllerAbort.abort()` in `cancel()` — an
+  aborted request stops consuming Anthropic tokens instead of running to
+  completion in the background.
+- **🟠 TXT export emitted unresolved-suggestion diff-soup.** `Finalize.tsx` TXT
+  path now runs the same `mergeAcceptedSuggestionsHtml(…, {forExport:true})` →
+  `sanitizeLetterHtmlForExport` → `htmlToPlain` pipeline as PDF/DOCX, so it can
+  no longer dump both sides of a pending AI edit into the plain-text artifact.
+- **🟢 PDF export 500 on a DB blip.** `api/export/pdf.ts` wraps the
+  `draftBelongsToTenant` call in `.catch(() => false)` and the helper returns
+  false when `!DATABASE_URL`, preserving the "always produce the PDF" contract
+  instead of 500-ing on a transient tenant-lookup failure.
+- **🟡 Silently-dropped booking messages.** `marketplaceSync.pushBookingMessage`
+  now returns a boolean; on `!res.ok` it toasts + re-pulls (inbox + my-bookings)
+  and `BookingThread` snapshots messages before the optimistic append and rolls
+  back on failure — was a silent lie to the counterparty.
+- **🟢 Non-UUID ids → 500.** `serverUuidOrNull` guards added to
+  `stripe-checkout.ts` (404), `draft-extras.ts` POST + `drafts.ts` writeDraft
+  (400) so a malformed id returns a clean status instead of a Postgres 22P02 500.
+- **🟡 Sidebar delete-Undo blocked by the dual-write tombstone.** Exported
+  `undeleteDraft(draftId)` clears the `deletedDraftIds` tombstone + re-mirrors;
+  `AppSidebar` Undo calls it after re-inserting. (Rejected the agent's snapshot-
+  inference convergence branch in `deleteDraftRemotely` — a lagging local removal
+  would un-tombstone a genuinely-deleted row; the explicit Undo path is the only
+  trigger.) `dual-write.test.ts` locks it.
+- **🟠 Editor stale state across drafts.** The `[draftId]` reset effect now
+  drains all cross-draft UI state (active section, floating/pending comment,
+  refine target, review panel, viewMode) — fixes wrong-draft comments + the
+  blank-page auto-generate. Plus a new `?section=` consume effect so the Review
+  "Fix this first" link actually scrolls to and selects the flagged section.
+
+### Wave 2b — adversarial review of wave 2 itself (4 findings, all fixed)
+
+An independent review agent audited commit 75ac30a for correctness AND best-fix
+quality. It confirmed 6 of the 8 fixes as-is and caught four real problems:
+
+- **🔴 (NEW regression from wave 2) Retry duplicated streamed tokens.** Making a
+  post-token proxy error retryable meant `streamDraft`'s retry re-streamed the
+  whole section while every caller kept its `acc` accumulator + store copy from
+  the truncated first attempt — doubled/garbled sections (the old `sawAnyToken`
+  gate had prevented exactly this). Fixed at all FOUR callers (the reviewer found
+  3; `mailmerge.ts` was the 4th): each `onRetry` now resets `acc` (and the store
+  copy where the caller streams into the store) before the retry re-streams.
+- **🟠 Undo racing an in-flight DELETE.** `undeleteDraft`'s restore POST could
+  reach the server before the still-on-the-wire DELETE it reverses → DELETE lands
+  last, wipes the restored row, nothing re-syncs. `dual-write.ts` now tracks
+  in-flight DELETEs per id (`inFlightDeletes`) and `undeleteDraft` orders its
+  `syncDraft` after that promise settles. Ordering test added.
+- **🟠 drafts.ts DELETE was the one id path left unguarded** (the exact 22P02→500
+  class wave 2 set out to kill). `serverUuidOrNull` guard added → 400.
+- **🟡 BookingThread rollback clobbered concurrent sends.** The whole-thread
+  snapshot restore wiped a second in-flight message and raced the failure-path
+  re-pull. `appendMessage` now returns the minted message id and the rollback
+  removes exactly that bubble (composes with concurrent sends + server re-pull).
+
+Verified: build green, 574 tests passing.
+
+### Wave 3 — the deferred riskier batch (DB transactions + semantics)
+
+- **🔴 (integrity, closes R12 FLAGGED) Last-owner TOCTOU in member role/remove.**
+  Two concurrent demote/remove requests against the last two owners each counted
+  2 live owners and both proceeded → ownerless workspace. Both handlers now run
+  the whole check-then-act inside `db.transaction` under a shared per-tenant
+  `pg_advisory_xact_lock(hashtext('owner-guard:'+tenantId))` (we're on the Neon
+  WebSocket pool, so real transactions are available). Demote+remove serialize
+  against each other in any combination; the owner count inside the lock is
+  authoritative.
+- **🟠 (post-token stream error, api side) `api/draft.ts` now emits the error
+  event even when tokens already flowed.** The AI SDK's non-throwing `onError`
+  could set `realError` mid-stream after deltas, and the old branch only wrote
+  an error event when `totalTokens === 0` — the client saw a clean `[DONE]` and
+  stored a truncated section as complete. (Pre-existing gap the wave-2b reviewer
+  flagged; the client-side fix alone couldn't catch it because no error event
+  ever reached it.)
+- **🟠 Reference-validation 409 → 422.** `validateTenantReferences` returned 409
+  for cross-tenant/invalid matterId/templateSourceId, but the dual-write client
+  treats every 409 as "stale revision" and permanently stops syncing that draft.
+  409 is now reserved for the real revision conflict; reference errors are 422.
+- **🟠 Wrong-jurisdiction answers leaked into the prompt.** Answers survive a
+  jurisdiction switch (deliberately), but `relevantData` dumped ALL of
+  `draft.answers` — a UK→US switch fed e.g. the UK "Disciplinary hearing date"
+  into a US termination letter. `sections.ts` now indexes the wizard's question
+  set and applies the same `isQuestionVisible` gates (jurisdiction + showIf,
+  keyed to `draft.context.jurisdiction`) before including an answer.
+- **🟡 Letterhead divergence (BUG-08).** `toLetterDraft` (Page editor) gated the
+  letterhead on `hasLetterhead` while Review preview + PDF + DOCX gated only on
+  URL presence — the user proofread a different first page than they shipped
+  (profile prefills `letterheadDataUrl` unconditionally). All renderers
+  (`sourceHtml.ts`, `pdf.ts`, `docx.ts`) now honour the `hasLetterhead` switch.
+- **🟡 Review-lock bypass trap removed (IMP-01).** `LetterPreview`'s dead
+  `editable` branch mounted `PagedlyDocEditor` with no review-lock — any future
+  caller would silently bypass the approval workflow Editor.tsx enforces.
+  LetterPreview is now strictly read-only (its only caller, ReviewStep, always
+  was); dead `SaveStatusChip.tsx` deleted.
+
+Verified: build green, 574 tests passing.
+
+### Wave 4 — queue drained (audit backlog complete)
+
+- **🟠 Deleted drafts resurrected across sessions (BUG-05).** The delete
+  tombstone was in-memory only and the DELETE had no `keepalive`: delete → close
+  tab → DELETE never lands → next mount's pull re-adopts the server row and the
+  store subscription re-POSTs it — destroyed PII resurrects and re-entrenches.
+  Now: `keepalive: true` on draft + matter DELETEs; the server uuid is persisted
+  to localStorage (`drafthr.deleted-draft-uuids.v1`) BEFORE the fetch and cleared
+  only on a confirmed 2xx; `mergeRemoteDrafts` takes the tombstone set and never
+  adopts a tombstoned remote-only row (a locally-restored draft still merges —
+  Undo clears the tombstone); `reissuePendingDeletes()` retries unconfirmed
+  deletes at mount before the pull (4xx also clears — idempotent server DELETE).
+  Merge tests added.
+- **🟡 The "your edits aren't syncing" toast never fired in practice (FQ-02).**
+  The >3-consecutive-409 counter was global and reset by ANY draft's success, so
+  healthy drafts syncing in between kept resetting it; the once-per-session
+  latch also muted later conflicts. Now per-draft (`staleConflictsByDraftId` +
+  per-draft toast flag, cleared on that draft's success so recovery→new conflict
+  re-notifies). Interleaved-success regression test added.
+- **🟡 agent.ts unbounded client system prompt (input-spend, SE-01's other
+  half).** `body.system` is now capped at 100k chars → 413 (reject, not
+  truncate — a silently truncated letter context would produce confidently-wrong
+  AI output).
+- **🟡 Vendored pagedly weak image validators (FQ-03).** Both dist bundles
+  patched: the whitespace-tolerant data-URL payload class now requires a leading
+  real base64 char, and the three prefix-only gates (2× ALLOWED_URI_REGEXP + one
+  inline test) require ≥1 payload char. Recorded in vendor/pagedly/CHANGELOG.md
+  so an upstream refresh re-applies.
+- **🟡 EditDetailsSheet last-writer-wins save.** Save wrote all 14 fields from
+  the open-time snapshot, clobbering background updates (streaming regen, remote
+  pull, another tab) to fields the user never touched. Now a dirty-field patch:
+  only fields changed vs the seeded values are included (patchDraft merges
+  per-subobject, so omitted fields keep the live store value). A jurisdiction
+  switch still owns both region fields.
+
+Verified: build green, 577 tests passing. The 2026-07-02 audit queue is empty;
+remaining structural items live in the Architectural backlog table above
+(I-SYNC-2/3 pull-reconcile, I-HARD-1 durable rate limiter, I-MOAT-*, X1).
+
+### Wave 4b — adversarial review of waves 3+4 (4 real findings, all fixed)
+
+An independent reviewer audited waves 3+4; it confirmed the transaction/lock
+mechanics, the 409→422 split, the jurisdiction filter (exactly mirrors the
+wizard's visibility), letterhead parity, the dirty-field save, and that the
+pagedly bundle patch is intact (`node --check` clean). Four real problems:
+
+- **🟠 Tombstone dropped on recoverable 401/403 (would resurrect deleted PII —
+  the exact bug wave 4 fixed).** `reissuePendingDeletes` cleared on ANY 4xx,
+  but it re-runs on every activeTenant change: a delete pending under tenant A,
+  reissued while tenant B is active, gets a 403 → tombstone gone → switch back
+  to A → row re-adopted. Now clears only on 2xx or 400 (malformed id — truly
+  unrecoverable; unknown-id is a 200 idempotent, so 404 can't happen); 401/403
+  keep the tombstone for retry under the right session/tenant.
+- **🟠 Directory-sync deprovision bypassed the owner-guard lock.** A webhook
+  deprovision racing an admin demote could still zero the active owners (the
+  R12 class through a third door). `deprovisionUser` now runs in a transaction
+  under the same shared `lockTenantOwnerGuard` (new helper in
+  tenant-active-lock.ts, `hashtextextended` like its sibling; role/remove
+  switched to it too). IdP stays authoritative — a sole-owner deprovision still
+  proceeds — but it serializes with admin mutations and an ownerless outcome is
+  console.error-flagged instead of silent.
+- **🟠 Legitimate large evidence 413'd the whole AI rail.** The evidence panel
+  accepts 512KB text files and `evidencePromptBlock` embedded them verbatim —
+  one 150KB file with "include exact content" pushed the agent system prompt
+  past the new 100k cap and every /api/agent call failed. Verbatim content is
+  now clamped per-item at 40k chars with an explicit `[evidence truncated…]`
+  marker.
+- **🟢 api/draft.ts double error emission.** The catch block AND the post-loop
+  branch both wrote the same `{error}` event on a thrown stream error. The
+  post-loop branch is now the single emitter.
+
+Accepted as-is: persisted-tombstone localStorage read-modify-write is not
+multi-tab atomic (in-memory tombstone covers the live session; noted for the
+I-SYNC-2 reconcile work).
+
+---
+
+## 2026-07-01 — daily bug-fix sweep → user-directed `/loop` continuation (47 fixed — SWEEP COMPLETE)
 
 Multi-agent sweep over `src/` (React components/hooks/routes/store), `server/`,
 `api/`, and the export/bulk/reports/wizard/LLM/sync surfaces, committed directly
@@ -324,7 +596,15 @@ three now use / match `isSafeImageDataUrl`. Impact is a broken image, not XSS
 (data: image src is not a script sink — finders' "high" downgraded on verify).
 *(R13)*
 
-### ⚑ FLAGGED (integrity, NOT auto-fixed) — last-owner TOCTOU in member role/remove
+### ✅ RESOLVED 2026-07-02 (was ⚑ FLAGGED) — last-owner TOCTOU in member role/remove
+**Fixed** (see the post-Stripe sweep at the top): both handlers now wrap the
+owner-count check + the UPDATE/DELETE in a `db.transaction` guarded by a per-tenant
+`pg_advisory_xact_lock`, so concurrent demote/remove serialize and can't both pass
+the `owners <= 1` guard. That is exactly the correct fix the original flag below
+asked for (chosen over `SELECT … FOR UPDATE` because an advisory lock also covers
+the DELETE path and needs no row to pre-exist).
+
+_Original flag:_
 `api/workspace/_handlers/member/role.ts` and `.../member/remove.ts` check the
 active-owner count and then UPDATE/DELETE in a **separate, unguarded** statement.
 Under READ COMMITTED, two owners concurrently demoting/removing each other both
@@ -1234,10 +1514,13 @@ and insert active only when none exists (first membership → active; additional
 re-syncs never flip the active workspace. TDD: `directory-webhook.test.ts` (+2,
 with fake-DB mock extended for the active-membership query) — email-matched user
 already-active-elsewhere joins inactive; first-membership user joins active.
-*Residual: a true concurrent provision into two different tenants could still
-both observe "no active" and both insert active — a rarer race; the deterministic
-common case is fixed. A DB partial-unique index on `(user_id) WHERE is_active_tenant`
-would close it fully.*
+*Residual — CLOSED 2026-07-02: `provisionUser` now wraps the "active elsewhere?"
+read + the membership upsert in a `db.transaction` guarded by `lockUserActiveTenant`
+(per-user `pg_advisory_xact_lock`) — the same lock now used by
+switch/accept-invite/create/session auto-elect — so two concurrent provisions into
+different tenants serialize instead of both inserting active. A partial-unique index
+on `(user_id) WHERE is_active_tenant` would also close it, but the advisory lock
+avoids a migration on the live DB.*
 
 ### B6 (MEDIUM) — dead TSA certificate pin (security; removed, flagged)
 `FREETSA_TSA_KEY_SHA256_PINS[0]` in `api/_utils/tsa.ts` was a **65-char** hex

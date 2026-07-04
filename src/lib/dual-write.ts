@@ -36,8 +36,13 @@ const deletedDraftIds = new Set<string>();
 const deletedMatterIds = new Set<string>();
 let consecutiveDeleteFailures = 0;
 let deleteFailureToastShown = false;
-let consecutiveStaleConflicts = 0;
-let staleConflictToastShown = false;
+// Per-draft, NOT global: a single global counter was reset by ANY draft's
+// successful sync, so in a multi-draft workspace healthy drafts kept resetting
+// it and the "your edits aren't syncing" toast for the one conflicted draft
+// never fired (FQ-02). The toast flag is also per-draft and cleared on that
+// draft's success, so a recovery followed by a NEW conflict re-notifies.
+const staleConflictsByDraftId = new Map<string, number>();
+const staleConflictToastShownFor = new Set<string>();
 
 export function isDualWriteEnabled(): boolean {
   return ENABLED;
@@ -128,6 +133,9 @@ export async function deleteMatterRemotely(matterId: string): Promise<void> {
     await fetch("/api/store/matters", {
       method: "DELETE",
       credentials: "same-origin",
+      // Survive tab close — a matter delete fired on the way out otherwise
+      // never reaches the server and the row resurrects on next pull (BUG-05).
+      keepalive: true,
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ id: toServerUuid(matterId) }),
     });
@@ -202,7 +210,7 @@ export async function syncDraft(draftId: string): Promise<void> {
     if (res.ok) {
       staleRevisionByDraftId.delete(draftId);
       syncedAt.set(draftId, Date.now());
-      consecutiveStaleConflicts = 0;
+      clearStaleConflicts(draftId);
       // Best-effort: mirror the draft's collaboration data (comments / timeline
       // / approvals) to the decoupled extras endpoint. Failure here never
       // affects the draft sync (the draft is already saved).
@@ -216,7 +224,7 @@ export async function syncDraft(draftId: string): Promise<void> {
     } else if (res.status === 409) {
       markSnapshotStale(draftId, payload.clientRevision);
       console.warn("[dual-write] stale snapshot skipped", draftId, res.status);
-      recordStaleConflict();
+      recordStaleConflict(draftId);
     } else if (res.status === 503) {
       // Server flag off — silently stop until the next refresh.
       return;
@@ -255,12 +263,12 @@ export async function syncAllPending(
       if (res.ok) {
         staleRevisionByDraftId.delete(d.id);
         syncedAt.set(d.id, Date.now());
-        consecutiveStaleConflicts = 0;
+        clearStaleConflicts(d.id);
         ok += 1;
       } else if (res.status === 409) {
         markSnapshotStale(d.id, payload.clientRevision);
         console.warn("[dual-write] stale backfill skipped", d.id, res.status);
-        recordStaleConflict();
+        recordStaleConflict(d.id);
       } else {
         failed += 1;
       }
@@ -283,8 +291,13 @@ export function resetDualWriteTimers(): void {
   deletedDraftIds.clear();
   consecutiveDeleteFailures = 0;
   deleteFailureToastShown = false;
-  consecutiveStaleConflicts = 0;
-  staleConflictToastShown = false;
+  staleConflictsByDraftId.clear();
+  staleConflictToastShownFor.clear();
+  try {
+    localStorage.removeItem(TOMBSTONE_STORAGE_KEY);
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 /** Visible for tests only. */
@@ -297,6 +310,88 @@ export function _hasSynced(draftId: string): boolean {
   return syncedAt.has(draftId);
 }
 
+/** In-flight DELETE round-trips, keyed by draft id. undeleteDraft() awaits the
+ *  entry so an Undo's restore POST can never race ahead of the DELETE it is
+ *  reversing (POST lands first → DELETE lands last → restored row wiped). */
+const inFlightDeletes = new Map<string, Promise<void>>();
+
+/* ── Persisted tombstones (BUG-05) ─────────────────────────────────────────
+ * The in-memory tombstone dies with the page: delete a draft and close the
+ * tab (or lose network) and the DELETE never lands, the local copy is gone,
+ * and the next mount's pullRemoteDrafts re-adopts the server row — deleted
+ * PII resurrects and re-entrenches itself server-side. So each delete also
+ * writes the SERVER uuid to localStorage before the fetch fires; the entry is
+ * cleared only on a confirmed 2xx. The merge (mergeRemoteDrafts) skips
+ * adoption of tombstoned uuids and reissuePendingDeletes() retries them at
+ * mount. */
+const TOMBSTONE_STORAGE_KEY = "drafthr.deleted-draft-uuids.v1";
+
+function readPersistedTombstones(): Set<string> {
+  try {
+    const raw = localStorage.getItem(TOMBSTONE_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((v) => typeof v === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writePersistedTombstones(uuids: Set<string>): void {
+  try {
+    localStorage.setItem(TOMBSTONE_STORAGE_KEY, JSON.stringify([...uuids]));
+  } catch {
+    /* storage unavailable/full — in-memory tombstone still covers the session */
+  }
+}
+
+function persistTombstone(serverUuid: string): void {
+  const set = readPersistedTombstones();
+  if (set.has(serverUuid)) return;
+  set.add(serverUuid);
+  writePersistedTombstones(set);
+}
+
+function unpersistTombstone(serverUuid: string): void {
+  const set = readPersistedTombstones();
+  if (!set.delete(serverUuid)) return;
+  writePersistedTombstones(set);
+}
+
+/** Server uuids of drafts deleted locally whose DELETE has not been confirmed.
+ *  Consulted by the remote-pull merge so it never re-adopts a deleted draft. */
+export function persistedDraftTombstones(): Set<string> {
+  return readPersistedTombstones();
+}
+
+/** Retry unconfirmed deletes from previous sessions. Called once at mount
+ *  (mirrors syncAllPending for creates). A 2xx OR a 404-class response clears
+ *  the entry; network failures keep it for the next mount. */
+export async function reissuePendingDeletes(): Promise<void> {
+  if (!ENABLED) return;
+  for (const serverUuid of readPersistedTombstones()) {
+    try {
+      const res = await fetch("/api/store/drafts", {
+        method: "DELETE",
+        credentials: "same-origin",
+        keepalive: true,
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ id: serverUuid }),
+      });
+      // DELETE is idempotent server-side (unknown id → 200 idempotent:true),
+      // so any 2xx confirms the row is gone. 400 (malformed id) will never
+      // succeed — drop it. 401/403 are RECOVERABLE (session expired, or the
+      // draft belongs to a tenant that isn't active right now — this runs on
+      // every activeTenant change): keep the tombstone so the delete retries
+      // once the right session/tenant is back, instead of resurrecting the row.
+      if (res.ok || res.status === 400) {
+        unpersistTombstone(serverUuid);
+      }
+    } catch {
+      /* offline — keep the tombstone for the next mount */
+    }
+  }
+}
+
 /** Fire-and-forget remote delete. The caller owns local state removal. */
 export async function deleteDraftRemotely(draftId: string): Promise<void> {
   if (!ENABLED) return;
@@ -304,27 +399,71 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
   // Tombstone the id and cancel any debounced upsert so an in-flight / pending
   // POST can't recreate the row after we delete it (bug #6).
   deletedDraftIds.add(draftId);
+  // Persist BEFORE the fetch so a tab close mid-flight can't lose the intent.
+  persistTombstone(toServerUuid(draftId));
   const pendingTimer = timers.get(draftId);
   if (pendingTimer) {
     clearTimeout(pendingTimer);
     timers.delete(draftId);
   }
   pendingDraftIds.delete(draftId);
-  try {
-    const res = await fetch("/api/store/drafts", {
-      method: "DELETE",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ id: toServerUuid(draftId) }),
-    });
-    if (res.ok) {
-      consecutiveDeleteFailures = 0;
-      return;
+  const run = (async () => {
+    try {
+      const res = await fetch("/api/store/drafts", {
+        method: "DELETE",
+        credentials: "same-origin",
+        // Survive tab close — the body is tiny (one uuid), well under the
+        // 64KB keepalive cap.
+        keepalive: true,
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ id: toServerUuid(draftId) }),
+      });
+      if (res.ok) {
+        consecutiveDeleteFailures = 0;
+        unpersistTombstone(toServerUuid(draftId));
+        // Undo is handled explicitly: the sidebar's Undo re-inserts the draft
+        // and calls undeleteDraft(), which clears the tombstone and re-mirrors
+        // AFTER this round-trip settles (inFlightDeletes). We deliberately do
+        // NOT infer an undo from the store snapshot here — local removal can
+        // lag the DELETE round-trip, and a stale snapshot would un-tombstone
+        // (and recreate) a row the user genuinely deleted.
+        return;
+      }
+      recordDeleteFailure(draftId, res.status);
+    } catch (err) {
+      recordDeleteFailure(draftId, err);
     }
-    recordDeleteFailure(draftId, res.status);
-  } catch (err) {
-    recordDeleteFailure(draftId, err);
+  })();
+  inFlightDeletes.set(draftId, run);
+  try {
+    await run;
+  } finally {
+    if (inFlightDeletes.get(draftId) === run) inFlightDeletes.delete(draftId);
   }
+}
+
+/**
+ * Reverse a local delete's tombstone so future syncs of this id are no longer
+ * dropped by syncDraft's `deletedDraftIds.has(draftId)` guard, then re-mirror
+ * the (restored) draft to the server. Called by the sidebar's Undo action after
+ * it re-inserts the draft into the store. Without this, every subsequent sync of
+ * an undeleted draft was silently discarded for the rest of the session (the
+ * tombstone was never cleared), so edits only reappeared after a full reload.
+ */
+export function undeleteDraft(draftId: string): void {
+  if (!ENABLED || !draftId) return;
+  deletedDraftIds.delete(draftId);
+  // Also clear the persisted tombstone so the restored draft survives the
+  // next mount's merge + reissuePendingDeletes.
+  unpersistTombstone(toServerUuid(draftId));
+  // Order the restore POST after any DELETE still on the wire for this id —
+  // otherwise the POST can reach the server first and the trailing DELETE
+  // wipes the just-restored row with nothing left to re-sync it.
+  const pendingDelete = inFlightDeletes.get(draftId) ?? Promise.resolve();
+  void pendingDelete
+    .catch(() => undefined)
+    .then(() => syncDraft(draftId))
+    .catch((err) => void err);
 }
 
 function readFlag(): boolean {
@@ -409,15 +548,21 @@ function markSnapshotStale(draftId: string, clientRevision: number): void {
  * conflicts. Mirrors recordDeleteFailure. (Full multi-device reconcile is a
  * separate feature — tracked in the bug log.)
  */
-function recordStaleConflict(): void {
-  consecutiveStaleConflicts += 1;
-  if (consecutiveStaleConflicts > 3 && !staleConflictToastShown) {
-    staleConflictToastShown = true;
+function recordStaleConflict(draftId: string): void {
+  const count = (staleConflictsByDraftId.get(draftId) ?? 0) + 1;
+  staleConflictsByDraftId.set(draftId, count);
+  if (count > 3 && !staleConflictToastShownFor.has(draftId)) {
+    staleConflictToastShownFor.add(draftId);
     toast.error("Your changes aren't syncing to your workspace", {
       description:
         "A newer copy of this letter was saved elsewhere (another tab or device). Your edits are kept on this device — reload to pull the latest.",
     });
   }
+}
+
+function clearStaleConflicts(draftId: string): void {
+  staleConflictsByDraftId.delete(draftId);
+  staleConflictToastShownFor.delete(draftId);
 }
 
 function recordDeleteFailure(draftId: string, reason: unknown): void {

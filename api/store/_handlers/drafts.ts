@@ -18,6 +18,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections } from "../../../src/db/schema.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { isValidSectionInput } from "./_section-input.js";
 
@@ -150,6 +151,11 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
   if (!body || typeof body.id !== "string" || !body.id) {
     return jsonError("Draft id required", 400);
   }
+  // Guard the uuid PK/columns: a non-uuid client id would throw a Postgres
+  // 22P02 and surface as a 500. Normalize to the canonical uuid (or 400).
+  const draftId = serverUuidOrNull(body.id);
+  if (!draftId) return jsonError("Invalid draft id", 400);
+  body.id = draftId;
   if (Array.isArray(body.sections) && !body.sections.every(isValidSectionInput)) {
     return jsonError("Invalid section in sections array", 400);
   }
@@ -291,8 +297,12 @@ export async function DELETE(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<{ id?: string }>(req);
   if (!parsed.ok) return parsed.response;
-  const id = typeof parsed.body.id === "string" ? parsed.body.id.trim() : "";
-  if (!id) return jsonError("Draft id required", 400);
+  const rawId = typeof parsed.body.id === "string" ? parsed.body.id.trim() : "";
+  if (!rawId) return jsonError("Draft id required", 400);
+  // Same guard as writeDraft above: a non-uuid id would raise Postgres 22P02
+  // on the eq(drafts.id, …) query and surface as a 500.
+  const id = serverUuidOrNull(rawId);
+  if (!id) return jsonError("Invalid draft id", 400);
 
   const auth = guard.auth;
   const tenantId = auth.activeTenant!.id;
@@ -360,26 +370,30 @@ async function validateTenantReferences(
   matterId: string | null,
   templateSourceId: string | null,
 ): Promise<Response | null> {
+  // 422, NOT 409: the dual-write client treats every 409 as "stale revision"
+  // and permanently marks the draft's snapshot stale (stops syncing it). A bad
+  // reference is a semantic error with the payload, not a revision conflict —
+  // 409 is reserved for staleRevisionResponse().
   if (matterId) {
-    if (!isUuid(matterId)) return jsonError("matterId belongs to a different workspace", 409);
+    if (!isUuid(matterId)) return jsonError("matterId belongs to a different workspace", 422);
     const [matter] = await db
       .select({ id: matters.id })
       .from(matters)
       .where(and(eq(matters.id, matterId), eq(matters.tenantId, tenantId)))
       .limit(1);
-    if (!matter) return jsonError("matterId belongs to a different workspace", 409);
+    if (!matter) return jsonError("matterId belongs to a different workspace", 422);
   }
 
   if (templateSourceId) {
     if (!isUuid(templateSourceId)) {
-      return jsonError("templateSourceId belongs to a different workspace", 409);
+      return jsonError("templateSourceId belongs to a different workspace", 422);
     }
     const [template] = await db
       .select({ id: customTemplates.id })
       .from(customTemplates)
       .where(and(eq(customTemplates.id, templateSourceId), eq(customTemplates.tenantId, tenantId)))
       .limit(1);
-    if (!template) return jsonError("templateSourceId belongs to a different workspace", 409);
+    if (!template) return jsonError("templateSourceId belongs to a different workspace", 422);
   }
 
   return null;

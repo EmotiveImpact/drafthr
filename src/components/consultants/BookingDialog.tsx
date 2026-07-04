@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Star } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -33,12 +34,18 @@ export function BookingDialog({
   onBooked,
 }: BookingDialogProps) {
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const recordBooking = useBookingsStore((s) => s.recordBooking);
 
   const open = !!consultant;
 
-  function handleConfirm() {
-    if (!consultant) return;
+  function close() {
+    setNote("");
+    onClose();
+  }
+
+  async function handleConfirm() {
+    if (!consultant || submitting) return;
     const message = note.trim() || undefined;
     const booking = recordBooking({
       consultantInitials: consultant.initials,
@@ -58,7 +65,11 @@ export function BookingDialog({
     // would 404 — we skip the call and keep the booking local-only for
     // them, which is the only honest thing to do.
     if (consultant.profileId) {
-      void pushBookingCreate(
+      setSubmitting(true);
+      // AWAIT the create: the consultant's inbox is server-driven, so a failed
+      // POST means they never see the request. Firing this and-forgetting would
+      // show a false "Booking confirmed" toast over a booking that never landed.
+      const ok = await pushBookingCreate(
         {
           consultantProfileId: consultant.profileId,
           // The draft_id column is a Postgres uuid. Local draft ids are
@@ -77,17 +88,20 @@ export function BookingDialog({
         booking.id,
         consultant.initials,
       );
+      setSubmitting(false);
+      if (!ok) {
+        // pushBookingCreate already rolled back the optimistic local row.
+        toast.error("Couldn't send your booking request — please try again.");
+        return;
+      }
     }
-    onClose();
+    close();
     onBooked?.(booking);
   }
 
-  // Reset note when dialog closes
+  // Reset note when dialog closes via Escape / overlay click.
   function handleOpenChange(isOpen: boolean) {
-    if (!isOpen) {
-      setNote("");
-      onClose();
-    }
+    if (!isOpen && !submitting) close();
   }
 
   return (
@@ -179,16 +193,18 @@ export function BookingDialog({
             <DialogFooter className="px-5 pb-5 flex-col-reverse sm:flex-row gap-2">
               <Button
                 variant="outline"
-                onClick={onClose}
+                onClick={close}
+                disabled={submitting}
                 className="flex-1 sm:flex-none text-[13px]"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleConfirm}
-                className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:-translate-y-px hover:shadow-md text-[13px] font-semibold"
+                disabled={submitting}
+                className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:-translate-y-px hover:shadow-md text-[13px] font-semibold disabled:opacity-60"
               >
-                Send booking request
+                {submitting ? "Sending…" : "Send booking request"}
               </Button>
             </DialogFooter>
           </>

@@ -28,4 +28,11 @@ export type Consultant = {
   specialty: string;
   /** Tag list driving filter chips on the marketplace index. */
   specialties: string[];
+  /**
+   * True for the signed-in consultant's OWN card when their profile is not yet
+   * published (pending_review / rejected / paused). Such a card is injected so
+   * they can preview it, but it must NOT claim to be "Live" — no HR user can
+   * discover it. Undefined for published cards.
+   */
+  pending?: boolean;
 };

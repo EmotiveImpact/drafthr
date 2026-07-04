@@ -858,7 +858,9 @@ function StepResults({
       <section>
         <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            Cancelled. No drafts were created.
+            Generation cancelled. Any letters created before you stopped are
+            saved in your Drafts — check there before running the batch again so
+            you don't create duplicates.
           </p>
           <div className="mt-4">
             <Button variant="outline" onClick={onReset}>

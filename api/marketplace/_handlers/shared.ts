@@ -13,6 +13,7 @@
  */
 import { and, eq, gt, isNotNull } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
+import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import {
@@ -25,6 +26,10 @@ import {
 export const config = { runtime: "nodejs" };
 
 export async function GET(req: Request): Promise<Response> {
+  // Rate-limit token resolution — the token is 128-bit and unguessable, but a
+  // limit removes any brute-force surface and matches the other GETs.
+  const limited = rateLimit(req, { name: "marketplace-shared", max: 60, windowMs: 60_000 });
+  if (limited) return limited;
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
 
@@ -67,16 +72,20 @@ export async function GET(req: Request): Promise<Response> {
   // review, but we deliberately strip notes-on-employee / private
   // metadata that the HR-side editor would otherwise expose.
   //
-  // The draft is fetched by id alone (no tenant filter): booking creation
-  // (list-and-create.ts) verifies the draftId belongs to the booker's tenant
-  // before binding it, so a leaked/guessed draftId can never be attached to a
-  // booking in the first place. Do NOT relax that creation-time check.
+  // The draft is fetched by id: booking creation (list-and-create.ts) verifies
+  // the draftId belongs to the booker's tenant before binding it. We ALSO
+  // re-assert draftRow.tenantId === booking.tenantId here so this read carries
+  // its own independent defense instead of relying solely on the creation-time
+  // check never being relaxed (removes the cross-file single-point-of-failure).
   const [draftRow] = await db
     .select()
     .from(drafts)
     .where(eq(drafts.id, booking.draftId))
     .limit(1);
   if (!draftRow) return jsonError("Draft not found", 404);
+  if (draftRow.tenantId !== booking.tenantId) {
+    return jsonError("Draft not found", 404);
+  }
 
   const sectionRows = await db
     .select()

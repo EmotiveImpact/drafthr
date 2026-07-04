@@ -27,6 +27,7 @@ import { tenantMembers, tenants, users } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { getWorkos } from "../../_utils/workos.js";
 import { jsonError } from "../../_utils/request.js";
+import { lockTenantOwnerGuard, lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import {
   extractDirectoryEmail,
   extractDirectoryName,
@@ -268,40 +269,42 @@ async function provisionUser(tenantId: string, user: DirectoryUserLike): Promise
   // The invariant is "exactly one active membership per user", so a new
   // directory-provisioned membership joins as inactive when an active one
   // exists elsewhere, and active only when it's the user's first.
-  const [activeElsewhere] = await db
-    .select({ tenantId: tenantMembers.tenantId })
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.userId, userId),
-        eq(tenantMembers.isActiveTenant, true),
-      ),
-    )
-    .limit(1);
-  const isActiveTenant = !activeElsewhere;
+  // Serialize the "active elsewhere?" read + the membership insert under a
+  // per-user advisory lock so they're atomic against a concurrent provision
+  // into a DIFFERENT tenant (and against switch/accept-invite/create). Without
+  // it, two provisions both observe "no active" and both insert active, leaving
+  // two active rows. (Closes the previously-flagged directory-provision residual.)
+  await db.transaction(async (tx) => {
+    await lockUserActiveTenant(tx, userId);
+    const [activeElsewhere] = await tx
+      .select({ tenantId: tenantMembers.tenantId })
+      .from(tenantMembers)
+      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActiveTenant, true)))
+      .limit(1);
+    const isActiveTenant = !activeElsewhere;
 
-  // Upsert membership. Drizzle's onConflictDoUpdate keeps the write
-  // single-statement so concurrent webhook deliveries don't race. Note the
-  // conflict `set` deliberately does NOT touch isActiveTenant, so re-syncing
-  // an existing membership never flips the user's active workspace.
-  await db
-    .insert(tenantMembers)
-    .values({
-      userId,
-      tenantId,
-      role,
-      isActiveTenant,
-      status: "active",
-      deprovisionedAt: null,
-    })
-    .onConflictDoUpdate({
-      target: [tenantMembers.userId, tenantMembers.tenantId],
-      set: {
+    // Upsert membership. onConflictDoUpdate keeps re-syncs idempotent; the
+    // conflict `set` deliberately does NOT touch isActiveTenant, so re-syncing
+    // an existing membership never flips the user's active workspace.
+    await tx
+      .insert(tenantMembers)
+      .values({
+        userId,
+        tenantId,
         role,
+        isActiveTenant,
         status: "active",
         deprovisionedAt: null,
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [tenantMembers.userId, tenantMembers.tenantId],
+        set: {
+          role,
+          status: "active",
+          deprovisionedAt: null,
+        },
+      });
+  });
 
   await safelyAppendAudit({
     tenantId,
@@ -343,10 +346,38 @@ async function deprovisionUser(
     return;
   }
 
-  await db
-    .update(tenantMembers)
-    .set({ status: "deprovisioned", deprovisionedAt: new Date(), isActiveTenant: false })
-    .where(and(eq(tenantMembers.userId, existing.id), eq(tenantMembers.tenantId, tenantId)));
+  // Run under the same owner-guard lock as member role/remove: without it a
+  // webhook deprovision racing an admin demote could each see 2 live owners
+  // and together leave the workspace ownerless (the R12 TOCTOU class). The
+  // IdP stays authoritative — a sole-owner deprovision still proceeds — but
+  // it is now serialized (so the admin request sees the true count and 409s)
+  // and an ownerless outcome is flagged loudly instead of happening silently.
+  let leftOwnerless = false;
+  await db.transaction(async (tx) => {
+    await lockTenantOwnerGuard(tx, tenantId);
+    await tx
+      .update(tenantMembers)
+      .set({ status: "deprovisioned", deprovisionedAt: new Date(), isActiveTenant: false })
+      .where(and(eq(tenantMembers.userId, existing.id), eq(tenantMembers.tenantId, tenantId)));
+    const owners = await tx
+      .select({ userId: tenantMembers.userId })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenantId, tenantId),
+          eq(tenantMembers.role, "owner"),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+    leftOwnerless = owners.length === 0;
+  });
+  if (leftOwnerless) {
+    console.error(
+      "[directory-webhook] tenant left with NO active owner after deprovision",
+      tenantId,
+      existing.id,
+    );
+  }
 
   await safelyAppendAudit({
     tenantId,

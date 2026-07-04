@@ -58,13 +58,25 @@ export async function POST(req: Request): Promise<Response> {
     switch (event.type) {
       case "account.updated": {
         const account = event.data.object as Stripe.Account;
+        // Re-fetch current account state rather than trusting the event
+        // payload. Stripe does not guarantee event ordering and retries stale
+        // deliveries, so an older account.updated (payouts_enabled=false)
+        // redelivered after a newer one would otherwise flip a live consultant
+        // back to un-payable — and account.updated may not fire again for
+        // months, so the stale false would stick. accounts.retrieve always
+        // reflects current truth. Fall back to the payload if the fetch fails.
+        let payoutsEnabled = Boolean(account.payouts_enabled);
+        let detailsSubmitted = Boolean(account.details_submitted);
+        try {
+          const fresh = await stripe.accounts.retrieve(account.id);
+          payoutsEnabled = Boolean(fresh.payouts_enabled);
+          detailsSubmitted = Boolean(fresh.details_submitted);
+        } catch (err) {
+          console.warn("[stripe-webhook] account retrieve failed, using event payload", err);
+        }
         await db
           .update(stripeConnectAccounts)
-          .set({
-            payoutsEnabled: Boolean(account.payouts_enabled),
-            detailsSubmitted: Boolean(account.details_submitted),
-            updatedAt: new Date(),
-          })
+          .set({ payoutsEnabled, detailsSubmitted, updatedAt: new Date() })
           .where(eq(stripeConnectAccounts.accountId, account.id));
         break;
       }

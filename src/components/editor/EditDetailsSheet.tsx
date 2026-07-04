@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Settings2, X } from "lucide-react";
 import type { Draft, EmployeeTone, Tone, UkRegion, UsState, WorkerClass } from "@/lib/letters/types";
@@ -73,6 +73,12 @@ export function EditDetailsSheet({
   // appendToSection on each chunk) produces a new `draft` reference with a
   // bumped updatedAt, and re-seeding on that would silently wipe the user's
   // in-progress edits while the sheet is open.
+  // Values as seeded at open — Save only patches fields the user actually
+  // changed relative to these, so a background update (streaming regen bumping
+  // context, a remote pull, another tab) to an UNTOUCHED field isn't clobbered
+  // by this sheet's mount-time snapshot (14-field last-writer-wins).
+  const seededRef = useRef<Record<string, unknown>>({});
+
   useEffect(() => {
     if (!open) return;
     setJurisdiction(draft.context.jurisdiction);
@@ -89,34 +95,66 @@ export function EditDetailsSheet({
     setEmployeeJobTitle(draft.employee.jobTitle);
     setEmployeeAddress(draft.employee.address);
     setEmployeeStartDate(draft.employee.startDate);
+    seededRef.current = {
+      jurisdiction: draft.context.jurisdiction,
+      ukRegion: draft.context.ukRegion,
+      usState: draft.context.usState,
+      workerClass: draft.context.workerClass,
+      tone: draft.context.tone,
+      employeeTone: draft.context.employeeTone ?? "assertive",
+      effectiveDate: draft.context.effectiveDate,
+      issueDate: draft.context.issueDate,
+      employerName: draft.employer.legalName,
+      employerAddress: draft.employer.address,
+      employeeName: draft.employee.legalName,
+      employeeJobTitle: draft.employee.jobTitle,
+      employeeAddress: draft.employee.address,
+      employeeStartDate: draft.employee.startDate,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, draft.id]);
 
   const isEmployer = draft.mode === "employer";
 
   const onSave = () => {
-    patchDraft(draft.id, {
-      context: {
-        jurisdiction,
-        ukRegion: jurisdiction === "UK" ? ukRegion : undefined,
-        usState: jurisdiction === "US" ? usState : undefined,
-        workerClass,
-        tone,
-        employeeTone: !isEmployer ? employeeTone : draft.context.employeeTone,
-        effectiveDate,
-        issueDate,
-      },
-      employer: {
-        legalName: employerName,
-        address: employerAddress,
-      },
-      employee: {
-        legalName: employeeName,
-        jobTitle: employeeJobTitle,
-        address: employeeAddress,
-        startDate: employeeStartDate,
-      },
-    });
+    const seeded = seededRef.current;
+    const dirty = (key: string, value: unknown) => seeded[key] !== value;
+
+    // Dirty-only patch: patchDraft merges per-subobject, so omitting an
+    // untouched field lets the live store value win (background regen /
+    // remote pull / other tab) instead of this sheet's open-time snapshot.
+    const context: Partial<Draft["context"]> = {};
+    if (dirty("jurisdiction", jurisdiction)) {
+      context.jurisdiction = jurisdiction;
+      // A jurisdiction switch owns both region fields: set the active one,
+      // clear the other (same semantics the wholesale save had).
+      context.ukRegion = jurisdiction === "UK" ? ukRegion : undefined;
+      context.usState = jurisdiction === "US" ? usState : undefined;
+    } else {
+      if (jurisdiction === "UK" && dirty("ukRegion", ukRegion)) context.ukRegion = ukRegion;
+      if (jurisdiction === "US" && dirty("usState", usState)) context.usState = usState;
+    }
+    if (dirty("workerClass", workerClass)) context.workerClass = workerClass;
+    if (isEmployer && dirty("tone", tone)) context.tone = tone;
+    if (!isEmployer && dirty("employeeTone", employeeTone)) context.employeeTone = employeeTone;
+    if (dirty("effectiveDate", effectiveDate)) context.effectiveDate = effectiveDate;
+    if (dirty("issueDate", issueDate)) context.issueDate = issueDate;
+
+    const employer: Partial<Draft["employer"]> = {};
+    if (dirty("employerName", employerName)) employer.legalName = employerName;
+    if (dirty("employerAddress", employerAddress)) employer.address = employerAddress;
+
+    const employee: Partial<Draft["employee"]> = {};
+    if (dirty("employeeName", employeeName)) employee.legalName = employeeName;
+    if (dirty("employeeJobTitle", employeeJobTitle)) employee.jobTitle = employeeJobTitle;
+    if (dirty("employeeAddress", employeeAddress)) employee.address = employeeAddress;
+    if (dirty("employeeStartDate", employeeStartDate)) employee.startDate = employeeStartDate;
+
+    const patch: Parameters<typeof patchDraft>[1] = {};
+    if (Object.keys(context).length) patch.context = context;
+    if (Object.keys(employer).length) patch.employer = employer;
+    if (Object.keys(employee).length) patch.employee = employee;
+    if (Object.keys(patch).length) patchDraft(draft.id, patch);
     onOpenChange(false);
   };
 

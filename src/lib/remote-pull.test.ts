@@ -71,6 +71,18 @@ describe("mergeRemoteDrafts — non-destructive cross-device merge", () => {
     expect(merged["uuid-remote-only"].comments).toBeUndefined();
   });
 
+  it("never adopts a tombstoned row (delete pending — BUG-05 resurrection)", () => {
+    const merged = mergeRemoteDrafts({}, [remoteDraft({ id: "uuid-deleted" })], new Set(["uuid-deleted"]));
+    expect(Object.keys(merged)).toEqual([]);
+  });
+
+  it("a tombstoned row that ALSO exists locally still merges (Undo restored it)", () => {
+    const local = { draft_1: localDraft() };
+    const merged = mergeRemoteDrafts(local, [remoteDraft()], new Set([toServerUuid("draft_1")]));
+    // Server copy is newer (9000 > 5000) so the overlay applies as usual.
+    expect(merged.draft_1.sections[0].html).toBe("<p>server body</p>");
+  });
+
   it("overlays server content but PRESERVES local-only fields when both exist", () => {
     const local = { draft_1: localDraft() };
     const merged = mergeRemoteDrafts(local, [remoteDraft()]); // remote newer (9000 > 5000)

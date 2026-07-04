@@ -83,6 +83,7 @@ function buildDbMock(opts: {
         let currentUserScope: string | null = null;
         let currentTenantScope: string | null = null;
         const tx = {
+          execute: () => Promise.resolve(),
           update: () => ({
             set: (values: Record<string, unknown>) => ({
               where: () => {

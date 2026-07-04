@@ -8,6 +8,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { tenants, tenantMembers } from "../../../src/db/schema.js";
+import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -46,6 +47,10 @@ export async function POST(req: Request): Promise<Response> {
     if (!member) return jsonError("Not a member of that workspace", 403);
 
     await db.transaction(async (tx) => {
+      // Serialize against concurrent accept-invite/create so we can't end up
+      // with two active rows (the UPDATE below can't see a row another txn is
+      // inserting under READ COMMITTED). Released on commit/rollback.
+      await lockUserActiveTenant(tx, auth.userRow.id);
       await tx
         .update(tenantMembers)
         .set({ isActiveTenant: false })

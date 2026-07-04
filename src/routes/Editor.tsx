@@ -346,12 +346,20 @@ export function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
-  // Close the version-history dialog when navigating to a different draft — the
-  // Editor instance persists across drafts (key="editor"), so a stale
-  // historySection from the previous draft would otherwise show the wrong
-  // history and let Restore target a section id that isn't in the current draft.
+  // Reset ALL draft-scoped UI state when navigating to a different draft — the
+  // Editor instance persists across drafts (key="editor"), so anything carrying
+  // the previous draft's ids would target the wrong draft: a stale history/refine
+  // section, a floating comment that would save against draft A's section id in
+  // draft B, or a leftover "preview" viewMode driving a blank-page auto-generate
+  // on a fresh draft. (Drains the R16 stale-state class rather than per-symptom.)
   useEffect(() => {
     setHistorySection(null);
+    setActiveSectionId(null);
+    setFloatingComment(null);
+    setPendingComment(null);
+    setRefineSectionId(null);
+    setReviewFeedbackOpen(false);
+    setViewMode("edit");
   }, [draftId]);
 
   // Auto-open the floating evidence drawer when arriving with ?openEvidence=1
@@ -370,6 +378,28 @@ export function Editor() {
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, evidencePinned]);
+
+  // Jump to a specific section when arriving with ?section=<id> — the Review
+  // step's "Fix this first" CTA links here (/editor/:id?section=<id>). Focus +
+  // scroll to it in the Sections view, then clear the param so a refresh doesn't
+  // re-jump. Without this the CTA silently landed at the top of the letter.
+  useEffect(() => {
+    const sectionId = searchParams.get("section");
+    if (!sectionId) return;
+    if (!draft?.sections.some((s) => s.id === sectionId)) return; // not this draft (yet)
+    setViewMode("edit"); // scrolling targets the Sections canvas
+    setActiveSectionId(sectionId);
+    const t = setTimeout(() => {
+      document
+        .querySelector(`[data-section-id="${sectionId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+    const next = new URLSearchParams(searchParams);
+    next.delete("section");
+    setSearchParams(next, { replace: true });
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, draft]);
 
   // Esc exits Focus mode. Bound at the route level so it works from any
   // child surface (canvas, floating composer, etc.). We listen on keydown
@@ -1430,11 +1460,17 @@ export function Editor() {
           <div className="flex-1 overflow-auto min-h-0">
           {viewMode === "preview" ? (
             // The Page view IS the pagedly editor (editable) — you land here
-            // directly, no read-only intermediate. Locked to read-only when the
-            // draft can't be edited (e.g. during review).
+            // directly, no read-only intermediate. Read-only when the draft
+            // can't be edited (review lock) OR while any AI generation is
+            // streaming — pagedly holds a mount-time snapshot, so editing on
+            // the page mid-stream would fight the still-updating store.
             <PagedlyDocEditor
               draft={draft}
-              readOnly={!canvasEditable}
+              readOnly={
+                !canvasEditable ||
+                globallyStreaming ||
+                draft.sections.some((s) => s.status === "streaming")
+              }
               actionsRef={pagedEditorActionsRef}
             />
           ) : (

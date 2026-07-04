@@ -30,6 +30,8 @@
 
 import { and, eq } from "drizzle-orm";
 import { getSessionFromRequest } from "../../_utils/workos.js";
+import { getUserSessionEpoch, isCookieEpochStale } from "../../_utils/session-epoch.js";
+import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import { dbEnabled, getDb } from "../../../src/db/index.js";
 import { consultantProfiles, tenantMembers, tenants, users } from "../../../src/db/schema.js";
 
@@ -45,7 +47,21 @@ type MembershipRow = {
 };
 
 export async function GET(req: Request): Promise<Response> {
-  const session = await getSessionFromRequest(req);
+  let session = await getSessionFromRequest(req);
+  // SE-03 parity: a cookie whose epoch is behind the user's stored epoch was
+  // revoked (sign-out / password reset). requireSessionAndTenant enforces this
+  // on every data route; enforce it HERE too — otherwise a stale/exfiltrated
+  // cookie keeps resolving the victim's identity, PII, workspace name + role
+  // from this endpoint (which the SPA polls) for the full 7-day TTL. Fails open
+  // on lookup error so a DB blip never spuriously logs a valid user out.
+  if (session && dbEnabled()) {
+    try {
+      const dbEpoch = await getUserSessionEpoch(session.user.id);
+      if (isCookieEpochStale(session.epoch, dbEpoch)) session = null;
+    } catch (err) {
+      console.warn("[auth/session] epoch check failed", err);
+    }
+  }
   let activeTenant: { id: string; name: string; role: string } | null = null;
   let hasAnyTenant = false;
   // Server-authoritative consultant signal. The client previously inferred
@@ -169,6 +185,9 @@ function electDefaultMembership(live: MembershipRow[]): MembershipRow | null {
 async function persistActiveMembership(userId: string, tenantId: string): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
+    // Serialize against concurrent switch/accept-invite/create so the
+    // auto-election can't race them into two active rows. (Released at commit.)
+    await lockUserActiveTenant(tx, userId);
     await tx
       .update(tenantMembers)
       .set({ isActiveTenant: false })

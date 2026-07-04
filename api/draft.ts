@@ -122,6 +122,10 @@ export async function POST(req: Request): Promise<Response> {
     : supplied;
 
   let cancelled = false;
+  // Abort the upstream Anthropic generation when the client disconnects, so an
+  // aborted request stops consuming (and billing) tokens instead of running to
+  // completion in the background.
+  const controllerAbort = new AbortController();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
@@ -146,6 +150,7 @@ export async function POST(req: Request): Promise<Response> {
           messages,
           temperature: clampTemperature(body.temperature),
           maxOutputTokens: clampMaxTokens(body.maxTokens),
+          abortSignal: controllerAbort.signal,
           onError: (err) => {
             const msg =
               err instanceof Error
@@ -160,6 +165,7 @@ export async function POST(req: Request): Promise<Response> {
         });
 
         for await (const chunk of result.textStream) {
+          if (cancelled) break;
           if (!chunk) continue;
           totalTokens += 1;
           writeEvent({ delta: chunk });
@@ -169,7 +175,8 @@ export async function POST(req: Request): Promise<Response> {
         realError = msg;
         // eslint-disable-next-line no-console
         console.error("[api/draft] error:", err);
-        writeEvent({ error: msg });
+        // No writeEvent here — the post-loop branch below is the single
+        // emitter (emitting in both places doubled the error event).
       }
 
       if (totalTokens === 0 && !realError) {
@@ -177,7 +184,11 @@ export async function POST(req: Request): Promise<Response> {
           error:
             "Model returned no tokens. Check the API key and that the prompt is valid.",
         });
-      } else if (totalTokens === 0 && realError) {
+      } else if (realError) {
+        // Emit the error even when tokens already flowed: the AI SDK's
+        // non-throwing onError can fire mid-stream (upstream drop, overload)
+        // and without this event the client would see a clean [DONE] and
+        // store the truncated section as complete.
         writeEvent({ error: realError });
       }
 
@@ -191,8 +202,10 @@ export async function POST(req: Request): Promise<Response> {
       }
     },
     cancel() {
-      // Client disconnected — stop the (still-running) streamText writes above.
+      // Client disconnected — stop the (still-running) streamText writes above
+      // and abort the upstream generation so we stop consuming/paying tokens.
       cancelled = true;
+      controllerAbort.abort();
     },
   });
 
