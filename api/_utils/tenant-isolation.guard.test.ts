@@ -51,15 +51,19 @@ const TENANT_SCOPED_TABLES = [
   "auditEvents",
   "tenantMembers",
   "users",
+  // sections gained its own tenant_id column (migration 0014, security board
+  // finding F1) — now tenant-scoped by construction, not merely parent-
+  // inherited, so every read/write must carry a direct tenant filter.
+  "sections",
 ] as const;
 
 /**
  * Tables whose own rows have no tenant_id but which inherit isolation from a
  * parent row. A read is sound if the file ALSO reads the parent and checks
- * its tenant. (sections → drafts; section_versions → sections → drafts;
+ * its tenant. (section_versions → sections → drafts;
  * comments/evidence/approvals → drafts.)
  */
-const PARENT_SCOPED_TABLES = ["sections", "sectionVersions", "comments", "evidence", "approvals"] as const;
+const PARENT_SCOPED_TABLES = ["sectionVersions", "comments", "evidence", "approvals"] as const;
 
 /**
  * The marketplace tables. Reads are sound when scoped by the caller's user
@@ -88,9 +92,6 @@ const VERIFIED_EXCEPTIONS: Record<string, Record<string, string>> = {
     // Reads the draft only after verifying the share token AND
     // consultantUserId === auth.userRow.id (matter-scoped consultant access).
     "shared.ts": "share-token + consultantUserId ACL (matter-scoped)",
-  },
-  sections: {
-    "shared.ts": "draft already authorized via share-token + consultant ACL",
   },
   users: {
     // Self-scoped: resolves the caller's own row by externalId / userRow.id.

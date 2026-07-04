@@ -7,7 +7,7 @@
  * Per-section audit events are noisy — we chain a single `section.updated`
  * event with a section_id summary instead of one per section.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -64,11 +64,15 @@ export async function POST(req: Request): Promise<Response> {
       return jsonError("Draft belongs to a different workspace", 403);
     }
 
+    const tenantId = auth.activeTenant.id;
     await db.transaction(async (tx) => {
-      await tx.delete(sections).where(eq(sections.draftId, draftId));
+      // Scope the delete by tenant too (belt-and-braces — draftId is already
+      // tenant-verified above, but this keeps the mutation itself tenant-bounded).
+      await tx.delete(sections).where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)));
       for (const s of sectionList) {
         await tx.insert(sections).values({
           draftId,
+          tenantId,
           sectionId: s.sectionId,
           title: s.title,
           html: s.html,

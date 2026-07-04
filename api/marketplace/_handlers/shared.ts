@@ -90,7 +90,10 @@ export async function GET(req: Request): Promise<Response> {
   const sectionRows = await db
     .select()
     .from(sections)
-    .where(eq(sections.draftId, draftRow.id))
+    // Scope by tenant as well as draft — sections now carries its own tenant_id,
+    // so this read is tenant-correct by construction (matches booking.tenantId,
+    // which we asserted == draftRow.tenantId above).
+    .where(and(eq(sections.draftId, draftRow.id), eq(sections.tenantId, booking.tenantId)))
     .orderBy(sections.position);
 
   // Marketplace card data, so the SharedDraftReview UI can show who

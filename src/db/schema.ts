@@ -284,6 +284,14 @@ export const sections = pgTable(
     draftId: uuid("draft_id")
       .notNull()
       .references(() => drafts.id, { onDelete: "cascade" }),
+    // Denormalized from the parent draft so section isolation is correct BY
+    // CONSTRUCTION (a direct `where tenant_id = …` on every read/write) rather
+    // than only by the discipline of tenant-verifying the parent first. There
+    // is no Postgres RLS backstop on Neon's pooler, so this column is the
+    // schema-level guarantee. (Security board 2026-07-04, finding F1.)
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
     sectionId: text("section_id").notNull(),
     title: text("title").notNull(),
     html: text("html").notNull().default(""),
@@ -292,7 +300,7 @@ export const sections = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("sections_draft_idx").on(t.draftId)],
+  (t) => [index("sections_draft_idx").on(t.draftId), index("sections_tenant_idx").on(t.tenantId)],
 );
 
 // Per-draft "extras" — the small, structured collaboration data that the draft
