@@ -4,7 +4,15 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
+import { CommentMark } from "@/lib/tiptap/comment-mark";
+import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
+import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { Lightbulb, X } from "lucide-react";
 import type { Section } from "@/lib/letters/types";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
@@ -30,12 +38,30 @@ export function SuggestEditDialog({
   /** Called with the reviewer's sanitised proposed HTML. */
   onSubmit: (proposedHtml: string) => void;
 }) {
+  // Schema MUST be a superset of what SectionEditor can hold, or Tiptap drops
+  // unknown nodes/marks (tables, images, figure refs, comment/suggestion marks)
+  // when it parses the seed HTML — and the no-op guard would then let a reviewer
+  // stage a proposal that silently strips them. Mirror the section editor's set
+  // (minus the authoring-only Placeholder + slash-command picker).
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3] } }),
+      StarterKit.configure({ codeBlock: false, code: false }),
       Underline,
-      Link.configure({ openOnClick: false }),
-      TextAlign.configure({ types: ["paragraph", "heading"], defaultAlignment: "left" }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      CommentMark,
+      SuggestionMark,
+      FigureRef,
+      AttachmentRef,
+      Image.configure({ inline: false, allowBase64: true }),
+      TextAlign.configure({
+        types: ["paragraph", "heading"],
+        alignments: ["left", "center", "right", "justify"],
+        defaultAlignment: "left",
+      }),
     ],
     content: section.html || "",
     editorProps: {
