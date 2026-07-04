@@ -59,6 +59,12 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/stripe-checkout.js");
     case "stripe-webhook":
       return import("./_handlers/stripe-webhook.js");
+    case "billing-checkout":
+      return import("./_handlers/billing-checkout.js");
+    case "billing-status":
+      return import("./_handlers/billing-status.js");
+    case "billing-webhook":
+      return import("./_handlers/billing-webhook.js");
     default:
       return null;
   }
