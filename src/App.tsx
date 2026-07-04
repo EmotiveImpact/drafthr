@@ -91,6 +91,7 @@ const EvidenceStep = lazy(() =>
 const ConsultantsIndex = lazy(() =>
   import("@/routes/ConsultantsIndex").then((m) => ({ default: m.ConsultantsIndex }))
 );
+const Pricing = lazy(() => import("@/routes/Pricing").then((m) => ({ default: m.Pricing })));
 
 // Mobile read-only view — `/m/:draftId`. Chromeless, scrollable, no editing.
 // Lazy-loaded so phone users don't pay for the editor bundle when they just
@@ -350,6 +351,17 @@ export function App() {
             <Protected roles={["employer", "consultant"]}>
               <Suspense fallback={<EditorFallback />}>
                 <ConsultantsIndex />
+              </Suspense>
+            </Protected>
+          }
+        />
+        {/* Plans & pricing — any signed-in user can pick a plan or buy a SKU. */}
+        <Route
+          path="/pricing"
+          element={
+            <Protected>
+              <Suspense fallback={<EditorFallback />}>
+                <Pricing />
               </Suspense>
             </Protected>
           }
