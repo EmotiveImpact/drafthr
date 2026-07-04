@@ -4,9 +4,9 @@
  * (tenant); Employee Plus + purchased credits live on the user. Credits are a
  * pooled tenant balance plus the user's own packs.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, like } from "drizzle-orm";
 import { getDb } from "../../src/db/index.js";
-import { subscriptions, creditLedger } from "../../src/db/schema.js";
+import { subscriptions, creditLedger, drafts, entitlementPurchases } from "../../src/db/schema.js";
 
 export type Entitlements = {
   plan: string | null; // starter | pro | business | employee_plus | null
@@ -84,4 +84,70 @@ export async function resolveEntitlements(
     cancelAtPeriodEnd: sub?.cancelAtPeriodEnd ?? false,
     credits,
   };
+}
+
+export type CreateGate = { ok: true } | { ok: false; reason: string; code: number };
+
+/** Letters created in the tenant since a cycle boundary (drafts are the source of truth). */
+async function countLettersThisCycle(tenantId: string, periodStartMs: number | null): Promise<number> {
+  const db = getDb();
+  const since = periodStartMs ? new Date(periodStartMs) : new Date(0);
+  const rows = await db
+    .select({ id: drafts.id })
+    .from(drafts)
+    .where(and(eq(drafts.tenantId, tenantId), gte(drafts.createdAt, since)));
+  return rows.length;
+}
+
+/**
+ * The hard-paywall gate for creating a new letter. ENV-GATED: enforcement is
+ * OFF unless DRAFTHR_ENFORCE_PAYWALL=1, so flipping on the "no free anything"
+ * model is a deliberate switch, not a silent change that locks out every
+ * existing user mid-rollout. When on:
+ *   - an active subscription (workspace plan, or the user's Employee Plus) is
+ *     required; Starter is additionally capped at 5 letters per billing cycle;
+ *   - failing that, an unconsumed one-off letter/pack purchase lets the user
+ *     through (pay-per-letter). Returns a 402 with an upgrade reason otherwise.
+ */
+export async function assertCanCreateLetter(tenantId: string | null, userId: string): Promise<CreateGate> {
+  if (process.env.DRAFTHR_ENFORCE_PAYWALL !== "1") return { ok: true };
+
+  const ent = await resolveEntitlements(tenantId, userId);
+  if (ent.active) {
+    if (ent.plan === "starter") {
+      const used = tenantId ? await countLettersThisCycle(tenantId, ent.currentPeriodStart) : 0;
+      if (used >= 5) {
+        return {
+          ok: false,
+          code: 402,
+          reason: "Starter includes 5 letters per month — upgrade to Pro for unlimited.",
+        };
+      }
+    }
+    return { ok: true };
+  }
+
+  // No active plan — allow if the user holds an unconsumed one-off letter/pack.
+  const db = getDb();
+  const [oneOff] = await db
+    .select({ id: entitlementPurchases.id })
+    .from(entitlementPurchases)
+    .where(
+      and(
+        eq(entitlementPurchases.userId, userId),
+        isNull(entitlementPurchases.consumedAt),
+        like(entitlementPurchases.kind, "letter_%"),
+      ),
+    )
+    .limit(1);
+  if (oneOff) return { ok: true };
+
+  const [pack] = await db
+    .select({ id: entitlementPurchases.id })
+    .from(entitlementPurchases)
+    .where(and(eq(entitlementPurchases.userId, userId), like(entitlementPurchases.kind, "pack_%")))
+    .limit(1);
+  if (pack) return { ok: true };
+
+  return { ok: false, code: 402, reason: "Choose a plan or buy a letter to continue." };
 }

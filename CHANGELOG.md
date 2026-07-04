@@ -2,6 +2,42 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.0 — 2026-07-04
+
+**Billing & subscriptions — the storefront (Phase 1+2), live in Stripe test mode.**
+Direct-charge billing (DraftHR is the merchant — separate from the marketplace's
+Stripe Connect flow): a `/pricing` page → Stripe-hosted Checkout → webhook that
+mirrors the result into the DB. Plan:
+`docs/superpowers/plans/2026-07-02-billing-subscriptions.md`.
+
+- **Catalog — 18 SKUs.** HR subscriptions (Starter £29 / Pro £79 / Business £199,
+  monthly + annual), Employee Plus £99/mo, tiered employee letters (£9.99–£99),
+  case packs (£69/£119/£249), AI credit packs (£1.99–£19.99). Seeded into Stripe
+  by `scripts/stripe/seed-catalog.ts` (idempotent by `lookup_key`);
+  `src/lib/billing/catalog.ts` is the single source of truth (ids from
+  `STRIPE_PRICE_*` env).
+- **Schema — migration 0013.** `subscriptions`, `entitlement_purchases`,
+  `credit_ledger`, `webhook_events_seen` + `stripe_customer_id` on tenants/users.
+- **Endpoints** (folded into the marketplace dispatcher — no new Vercel function):
+  `billing-checkout` (Checkout for any SKU; HR plans bill the workspace, Employee
+  Plus + one-offs bill the user), `billing-webhook` (own registered endpoint +
+  secret; mirrors subscription lifecycle + one-off purchases/credits, deduped via
+  `webhook_events_seen`, 3-day grace on `invoice.payment_failed`), `billing-status`
+  (server-authoritative entitlements resolver).
+- **UI — `/pricing`.** Plan picker with monthly/annual toggle + Enterprise
+  contact-sales, employee one-offs and credit packs, wired to checkout with a
+  post-payment confirmation.
+- **Hard-paywall enforcement — env-gated, OFF by default (`DRAFTHR_ENFORCE_PAYWALL=1`).**
+  `assertCanCreateLetter` gates new-letter creation on an active plan (or an
+  unconsumed one-off), enforcing the Starter 5-letters-per-cycle cap. Ships OFF so
+  it can't lock out existing users until deliberately switched on.
+- Pricing decisions in `ROADMAP.md §2`: hard paywall / no free tier / no trials,
+  workspace-scoped HR plans, shared credit pool, annual = 1 month free.
+
+**Still to wire:** AI-credit *metering* (spending on AI actions) and one-off
+entitlement *consumption* — the resolver + gate exist; the spend hooks are next.
+**+2 tests** (595 → 597). `tsc -b` + `vite build` + `vitest` green.
+
 ## 0.19.5 — 2026-07-04
 
 **Automated daily bug-fix sweep (2 rounds, 2 fixes).** A four-agent latent-bug

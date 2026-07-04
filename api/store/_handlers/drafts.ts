@@ -20,6 +20,7 @@ import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
+import { assertCanCreateLetter } from "../../_utils/entitlements.js";
 import { isValidSectionInput } from "./_section-input.js";
 
 export const config = { runtime: "nodejs" };
@@ -179,6 +180,12 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       return jsonError("Draft belongs to a different workspace", 403);
     }
     const isCreate = existingDraft.length === 0;
+    if (isCreate) {
+      // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
+      // letters are gated; edits to existing drafts always go through.
+      const gate = await assertCanCreateLetter(tenantId, auth.userRow.id);
+      if (!gate.ok) return jsonError(gate.reason, gate.code);
+    }
     const clientRevision = parseClientRevision(body.clientRevision);
     if (!isCreate && (clientRevision === null || clientRevision < existingDraft[0].updatedAt.getTime())) {
       return staleRevisionResponse();
