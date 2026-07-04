@@ -110,9 +110,14 @@ export function parseCsv(raw: string): CsvParseResult {
       row[h] = cells[idx] ?? "";
     });
     if (!row.employee_name) {
+      // `i` is the 0-based index into `lines`, where lines[0] is the header.
+      // The physical file/spreadsheet row the user sees is therefore i + 1
+      // (header = row 1, first data record = row 2). Reporting bare `i` sent
+      // the user to the header row instead of the offending record.
+      const fileRow = i + 1;
       warnings.push({
-        rowIndex: i,
-        message: `Row ${i} missing 'employee_name' — will skip.`,
+        rowIndex: fileRow,
+        message: `Row ${fileRow} missing 'employee_name' — will skip.`,
       });
       continue;
     }

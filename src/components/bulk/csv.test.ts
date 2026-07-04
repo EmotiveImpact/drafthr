@@ -36,4 +36,14 @@ describe("parseCsv", () => {
     const r = parseCsv("employee_name,employee_job_title,employee_job_title\r\nJane,Engineer,");
     expect(r.error).toMatch(/Duplicate column 'employee_job_title'/i);
   });
+
+  it("warns with the physical file row number, not the data-row index", () => {
+    // Header is file row 1; the first data record is file row 2. A missing name
+    // on that record must point the user at row 2, not row 1 (the header).
+    const r = parseCsv("employee_name,employee_job_title\r\n,Engineer\r\nJane,Analyst");
+    expect(r.rows).toEqual([{ employee_name: "Jane", employee_job_title: "Analyst" }]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0].rowIndex).toBe(2);
+    expect(r.warnings[0].message).toMatch(/Row 2 missing 'employee_name'/);
+  });
 });
