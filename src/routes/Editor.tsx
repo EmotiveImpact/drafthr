@@ -56,6 +56,7 @@ import {
   Smartphone,
   Undo,
   Lightbulb,
+  ClipboardCheck,
 } from "lucide-react";
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
@@ -65,6 +66,7 @@ import { Wordmark } from "@/components/ds/Wordmark";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities, meIdentity } from "@/lib/comments/identity";
 import { SuggestEditDialog } from "@/components/editor/SuggestEditDialog";
+import { CollabReviewRail } from "@/components/editor/CollabReviewRail";
 import { uid } from "@/lib/utils";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
@@ -171,11 +173,11 @@ export function Editor() {
   // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
   // Lazy initialiser reads from localStorage on first mount so the correct
   // dock is shown immediately — no flash of the unpinned state.
-  const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
+  const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | "review" | null>(() => {
     if (typeof window === "undefined") return null;
     try {
       const raw = window.localStorage.getItem(`drafthr.pinnedDock:${draft?.id ?? draftId}`);
-      return raw === "evidence" || raw === "ai" ? raw : null;
+      return raw === "evidence" || raw === "ai" || raw === "review" ? raw : null;
     } catch {
       return null;
     }
@@ -196,6 +198,7 @@ export function Editor() {
 
   const pinEvidence = () => setPinnedDock("evidence");
   const pinAI = () => setPinnedDock("ai");
+  const pinReview = () => setPinnedDock("review");
   const unpinAll = () => setPinnedDock(null);
 
   // Derived: evidence is pinned when pinnedDock === "evidence".
@@ -335,11 +338,15 @@ export function Editor() {
   useEffect(() => {
     if (!draftId) return;
     if (typeof window === "undefined") return;
-    let next: "evidence" | "ai" | null = null;
+    let next: "evidence" | "ai" | "review" | null = null;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draftId));
-      if (raw === "evidence" || raw === "ai") {
+      if (raw === "evidence" || raw === "ai" || raw === "review") {
         next = raw;
+      } else if (draft?.reviewStatus && draft.reviewStatus !== "draft") {
+        // No stored preference and the draft is in the approval flow → open
+        // the Review rail: review is the primary activity at that point.
+        next = "review";
       } else if (draft?.evidenceTier === "heavy") {
         next = "evidence";
       }
@@ -607,6 +614,11 @@ export function Editor() {
     .slice()
     .reverse()
     .find((a) => a.decision === "changes_requested");
+  // Open review items (badge on the Review-rail toggle): pending suggestions +
+  // unresolved comments.
+  const openReviewCount =
+    draft.sections.filter((s) => s.pendingChange).length +
+    (draft.comments ?? []).filter((c) => !c.resolved).length;
 
   const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string }) => {
     if (!reviewDialogKind) return;
@@ -969,6 +981,34 @@ export function Editor() {
                 <span className="hidden md:inline">{counselReview ? "Reviewed" : "Needs review"}</span>
               </button>
             )}
+            {/* Review-rail toggle — the collaborative-review dock (reviewers,
+             * suggestions, comments, approval). Count badge = open items. */}
+            <button
+              type="button"
+              onClick={() => (pinnedDock === "review" ? unpinAll() : pinReview())}
+              className={
+                "hidden lg:inline-flex items-center gap-1 ml-1 text-[11px] px-1.5 sm:px-2 py-0.5 rounded-full border shrink-0 transition hover:brightness-95 cursor-pointer " +
+                (pinnedDock === "review"
+                  ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
+                  : "bg-[var(--ds-surface)] text-[var(--ds-muted)] border-[var(--ds-line)] hover:text-[var(--ds-ink)]")
+              }
+              title={pinnedDock === "review" ? "Close the review rail" : "Open the review rail — reviewers, suggestions, comments, approval"}
+            >
+              <ClipboardCheck className="size-3" />
+              <span className="hidden md:inline">Review</span>
+              {openReviewCount > 0 && (
+                <span
+                  className={
+                    "min-w-[16px] rounded-full px-1 text-center text-[9.5px] font-bold " +
+                    (pinnedDock === "review"
+                      ? "bg-white/25 text-white"
+                      : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]")
+                  }
+                >
+                  {openReviewCount}
+                </span>
+              )}
+            </button>
           </div>
 
           {/* Column 2 — over the canvas. Tone (left), Edit/Preview
@@ -1606,6 +1646,22 @@ export function Editor() {
          * the unpinned case at all viewports. Resizing
          * across the breakpoint unmounts one and mounts the other;
          * conversation persists via draft.aiChat. */}
+        {/* Desktop pinned REVIEW rail — the collaborative-review dock
+         * (reviewers, suggestions, comments, approval footer). Same 360px
+         * slot as evidence/AI; exactly one dock mounts at a time. */}
+        {isLargeViewport && pinnedDock === "review" && !focusMode && (
+          <aside className="flex flex-col min-h-0 overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)]">
+            <CollabReviewRail
+              draft={draft}
+              role={role}
+              canResolve={canvasEditable}
+              onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
+              onWithdraw={onWithdrawForReview}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+            />
+          </aside>
+        )}
         {isLargeViewport && evidencePinned && (
           <aside
             data-evidence-rail
