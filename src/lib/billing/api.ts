@@ -3,6 +3,10 @@ import type { PriceKey } from "./catalog";
 
 export type BillingStatus = {
   configured: boolean;
+  /** Whether the hard paywall is enforced server-side (DRAFTHR_ENFORCE_PAYWALL). */
+  enforced: boolean;
+  /** Whether the caller may create a new letter right now (mirrors the server gate). */
+  canCreateLetter: boolean;
   plan: string | null;
   status: string | null;
   active: boolean;

@@ -27,6 +27,7 @@ import { DirectorySync as SettingsDirectorySync } from "@/routes/settings/Direct
 import { Privacy } from "@/routes/Privacy";
 import { Terms } from "@/routes/Terms";
 import { BrowseLetters } from "@/routes/BrowseLetters";
+import { PaywallGate } from "@/components/billing/PaywallGate";
 import { ReviewStep } from "@/routes/ReviewStep";
 import { MattersIndex } from "@/routes/MattersIndex";
 import { EmployeesIndex } from "@/routes/EmployeesIndex";
@@ -260,11 +261,11 @@ export function App() {
 
         <Route path="/hr" element={<Protected roles={["employer"]}><Home mode="employer" /></Protected>} />
         <Route path="/hr/new" element={<Protected roles={["employer"]}><BrowseLetters mode="employer" /></Protected>} />
-        <Route path="/hr/new/:letterType" element={<Protected roles={["employer"]}><Wizard mode="employer" /></Protected>} />
+        <Route path="/hr/new/:letterType" element={<Protected roles={["employer"]}><PaywallGate><Wizard mode="employer" /></PaywallGate></Protected>} />
 
         <Route path="/me" element={<Protected roles={["employee"]}><Home mode="employee" /></Protected>} />
         <Route path="/me/new" element={<Protected roles={["employee"]}><BrowseLetters mode="employee" /></Protected>} />
-        <Route path="/me/new/:letterType" element={<Protected roles={["employee"]}><Wizard mode="employee" /></Protected>} />
+        <Route path="/me/new/:letterType" element={<Protected roles={["employee"]}><PaywallGate><Wizard mode="employee" /></PaywallGate></Protected>} />
 
         <Route
           path="/editor/:draftId"
@@ -296,7 +297,7 @@ export function App() {
         <Route path="/matters/:matterId" element={<Protected roles={["employer"]}><MatterDetail /></Protected>} />
         <Route path="/employees" element={<Protected roles={["employer"]}><EmployeesIndex /></Protected>} />
         <Route path="/employees/:employeeId" element={<Protected roles={["employer"]}><EmployeeDetail /></Protected>} />
-        <Route path="/bulk" element={<Protected roles={["employer"]}><BulkOperations /></Protected>} />
+        <Route path="/bulk" element={<Protected roles={["employer"]}><PaywallGate><BulkOperations /></PaywallGate></Protected>} />
         <Route path="/approvals" element={<Protected roles={["employer"]}><Approvals /></Protected>} />
         <Route path="/reports" element={<Protected roles={["employer"]}><Reports /></Protected>} />
         <Route path="/reports/matters/:matterId" element={<Protected roles={["employer"]}><MatterDrillDown /></Protected>} />

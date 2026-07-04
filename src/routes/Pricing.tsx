@@ -57,6 +57,10 @@ export function Pricing() {
   const [interval, setInterval] = useState<"monthly" | "annual">("monthly");
   const [busy, setBusy] = useState<PriceKey | null>(null);
   const [status, setStatus] = useState<BillingStatus | null>(null);
+  // True when the user was redirected here by the paywall gate (?gate=1).
+  const [gated] = useState(
+    () => new URLSearchParams(window.location.search).get("gate") === "1",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -68,7 +72,10 @@ export function Pricing() {
     } else if (outcome === "cancelled") {
       toast("Checkout cancelled — no charge was made.");
     }
-    if (outcome) {
+    if (params.get("gate") === "1") {
+      toast("Choose a plan to start creating letters.");
+    }
+    if (outcome || params.get("gate")) {
       window.history.replaceState(null, "", window.location.pathname);
     }
     // The subscription mirror lands via webhook shortly after redirect, so
@@ -114,6 +121,11 @@ export function Pricing() {
             <Check className="size-3.5" aria-hidden />
             You're on {status.plan}
             {typeof status.credits === "number" ? ` · ${status.credits} credits` : ""}
+          </p>
+        )}
+        {gated && !status?.active && (
+          <p className="mt-3 text-[13px] font-semibold text-[var(--ds-amber-fg)]">
+            You'll need a plan (or a single letter) to start drafting.
           </p>
         )}
       </header>

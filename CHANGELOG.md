@@ -2,6 +2,20 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.2 — 2026-07-04
+
+**Client-side paywall — the hard paywall is now airtight.** The server gate
+already blocked a non-payer's *save*; because the app is local-first, a fully
+hard paywall also needs the UI to refuse *before* drafting. This wires that in.
+- `billing-status` now returns `enforced` (is `DRAFTHR_ENFORCE_PAYWALL` on) +
+  `canCreateLetter` (mirrors the server create-gate, non-consuming).
+- New `<PaywallGate>` wraps the new-letter surfaces (`/hr/new/:letterType`,
+  `/me/new/:letterType`, `/bulk`): when enforcement is on and the user isn't
+  entitled, it redirects to `/pricing?gate=1` with a prompt. **Fails OPEN** — no
+  delay when the paywall is off (the default), and a status-fetch hiccup never
+  locks anyone out (the server stays authoritative). The letter *browser* stays
+  open so users can still see what's on offer.
+
 ## 0.20.1 — 2026-07-04
 
 **Billing metering — one-off consumption + credit-spend primitive.**
