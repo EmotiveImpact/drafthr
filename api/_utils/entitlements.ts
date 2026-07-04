@@ -97,7 +97,15 @@ async function countLettersThisCycle(tenantId: string, periodStartMs: number | n
   const rows = await db
     .select({ id: drafts.id })
     .from(drafts)
-    .where(and(eq(drafts.tenantId, tenantId), gte(drafts.createdAt, since)));
+    // Real letters only — template-source drafts aren't letters and shouldn't
+    // burn a Starter allowance slot.
+    .where(
+      and(
+        eq(drafts.tenantId, tenantId),
+        gte(drafts.createdAt, since),
+        eq(drafts.isTemplateSource, false),
+      ),
+    );
   return rows.length;
 }
 

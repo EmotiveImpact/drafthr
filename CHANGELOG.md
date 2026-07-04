@@ -2,6 +2,16 @@
 
 All notable changes to DRAFTHR. Newest first. Dates are commit dates.
 
+## 0.20.4 — 2026-07-04
+
+**Billing hardening (review loop, pass 1).**
+- **Double-subscribe → double-billing prevented (HIGH).** `billing-checkout`
+  refused a second subscription Checkout when the subject already has an active
+  plan (409) — starting one would create a second Stripe subscription and charge
+  twice. One-off purchases are still always allowed.
+- **Starter cap no longer counts templates.** `countLettersThisCycle` excludes
+  `isTemplateSource` drafts, so saving a template doesn't burn a Starter letter.
+
 ## 0.20.3 — 2026-07-04
 
 **Billing — adversarial-review bug fixes (4 real bugs in the payment path).** An
