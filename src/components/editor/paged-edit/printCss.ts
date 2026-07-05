@@ -107,6 +107,16 @@ export const LETTER_PRINT_CSS = `
   .pagedjs_page .letter-body > h4,
   .pagedjs_page .letter-body > div:not([data-section-anchor]),
   .pagedjs_page .letter-body > blockquote,
+  /* Sections are wrapped in [data-section-anchor] divs (the wrapper itself
+   * must stay splittable — a whole section can span pages), so mirror the
+   * block-level avoid rules one level down for the wrapped children. */
+  .pagedjs_page .letter-body > [data-section-anchor] > p,
+  .pagedjs_page .letter-body > [data-section-anchor] > h1,
+  .pagedjs_page .letter-body > [data-section-anchor] > h2,
+  .pagedjs_page .letter-body > [data-section-anchor] > h3,
+  .pagedjs_page .letter-body > [data-section-anchor] > h4,
+  .pagedjs_page .letter-body > [data-section-anchor] > div,
+  .pagedjs_page .letter-body > [data-section-anchor] > blockquote,
   .pagedjs_page .letter-body table,
   .pagedjs_page .letter-body figure,
   .pagedjs_page .letter-body img,

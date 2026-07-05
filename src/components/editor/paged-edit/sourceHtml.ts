@@ -29,11 +29,18 @@ export function buildPreviewSourceHtml(
 function buildStoredSectionsBodyHtml(draft: Draft): string {
   const signature = signatureImageHtml(draft);
   return draft.sections
-    .map((s) =>
-      s.sectionId === "signature" && signature
-        ? signature + sanitizeLetterHtml(s.html)
-        : sanitizeLetterHtml(s.html),
-    )
+    .map((s) => {
+      const inner =
+        s.sectionId === "signature" && signature
+          ? signature + sanitizeLetterHtml(s.html)
+          : sanitizeLetterHtml(s.html);
+      // Per-section anchor wrapper. PaginatedLetter's selection-bubble and
+      // comment-focus logic, the Review rail's jump-to-section, and
+      // printCss's `div:not([data-section-anchor])` exemption all expect this
+      // marker — without it, "+ Comment" mis-anchored every selection to the
+      // FIRST section and jump-to-section silently no-oped on the Review step.
+      return `<div data-section-anchor="${escAttr(s.id)}">${inner}</div>`;
+    })
     .join("\n");
 }
 
