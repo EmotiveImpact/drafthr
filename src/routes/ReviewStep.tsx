@@ -6,7 +6,7 @@ import { BrandMark } from "@/components/ds";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { LetterPreview } from "@/components/editor/LetterPreview";
+import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
 import { ReviewRail } from "@/components/editor/ReviewRail";
 import { CollabReviewRail } from "@/components/editor/CollabReviewRail";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
@@ -20,6 +20,8 @@ type PendingComment = {
   sectionId: string;
   quote?: string;
   applyMark?: (commentId: string) => void;
+  /** Pre-assigned id when pagedly already wrote the highlight span. */
+  commentId?: string;
 };
 
 /**
@@ -146,13 +148,34 @@ export function ReviewStep() {
           />
         </aside>
 
-        <main className="min-h-0 overflow-y-auto bg-[var(--ds-canvas)] p-4 sm:p-6">
-          <LetterPreview
+        <main className="min-h-0 overflow-hidden bg-[var(--ds-canvas)]">
+          {/* The review surface is the PAGEDLY editor (not the read-only
+           * preview): comments + track-change suggestions happen ON the page.
+           * A reviewer (canResolve=false) suggests (tracked <ins>/<del>); the
+           * author edits directly. Both persist their marks. */}
+          <PagedlyDocEditor
             draft={draft}
-            onAddComment={(sectionId, opts) =>
-              setPendingComment({ sectionId, quote: opts?.quote, applyMark: opts?.applyMark })
-            }
-            onFocusComment={(commentId) => setFocusCommentId(commentId)}
+            reviewMode
+            // Respect the review-lock: a reviewer/approved draft is read-only
+            // on the page (they comment + suggest via the rail); the author
+            // (canResolve) gets on-page comments + direct editing of their draft.
+            readOnly={!canResolve}
+            onCommentAdd={(commentId, quotedText) => {
+              // Pagedly wrote the highlight span synchronously; find which
+              // section it landed in, then open the rail composer for it,
+              // sharing pagedly's id so the thread and highlight line up.
+              const span = document.querySelector<HTMLElement>(
+                `[data-comment-id="${commentId}"]`,
+              );
+              const anchor = span?.closest<HTMLElement>("[data-section-anchor],[data-section-id]");
+              const sectionId =
+                anchor?.getAttribute("data-section-anchor") ??
+                anchor?.getAttribute("data-section-id") ??
+                draft.sections[0]?.id ??
+                "";
+              setPendingComment({ sectionId, quote: quotedText, commentId });
+            }}
+            onCommentClick={(commentId) => setFocusCommentId(commentId)}
           />
         </main>
 

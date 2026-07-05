@@ -54,6 +54,32 @@ describe("decideSectionWrite", () => {
     ).toBe("marked");
   });
 
+  it("allowMarks:true PERSISTS a marked section (review surface owns the marks)", () => {
+    const marked = {
+      incomingHtml: '<p>Hi <span data-comment-id="c1">flagged edited</span></p>',
+      currentHtml: '<p>Hi <span data-comment-id="c1">flagged</span></p>',
+      baselineHtml: '<p>Hi <span data-comment-id="c1">flagged</span></p>',
+    };
+    expect(decideSectionWrite(marked)).toBe("marked"); // default: refuse
+    expect(decideSectionWrite({ ...marked, allowMarks: true })).toBe("write"); // review: keep
+  });
+
+  it("allowMarks:true STILL yields to streaming / external / blank guards", () => {
+    const marked = '<p>Hi <span data-comment-id="c1">x</span></p>';
+    // streaming wins over allowMarks
+    expect(
+      decideSectionWrite({ incomingHtml: "<p>new</p>", currentHtml: marked, baselineHtml: marked, currentStatus: "streaming", allowMarks: true }),
+    ).toBe("streaming");
+    // external (store moved since mount) wins over allowMarks
+    expect(
+      decideSectionWrite({ incomingHtml: "<p>page</p>", currentHtml: marked, baselineHtml: "<p>old</p>", allowMarks: true }),
+    ).toBe("external");
+    // blank-over-nonempty still refused
+    expect(
+      decideSectionWrite({ incomingHtml: "", currentHtml: marked, baselineHtml: marked, allowMarks: true }),
+    ).toBe("blank");
+  });
+
   it("never blank-overwrites non-empty stored content (reflow artifact)", () => {
     expect(decideSectionWrite({ incomingHtml: "", currentHtml: "<p>real content</p>", baselineHtml: "<p>real content</p>" })).toBe("blank");
   });

@@ -120,13 +120,16 @@ export function decideSectionWrite(args: {
   currentHtml: string;
   currentStatus?: string;
   baselineHtml: string | undefined;
+  /** Review mode: pagedly OWNS the comment/track-change marks on the page, so a
+   *  marked section is exactly what we want to persist — don't refuse it. */
+  allowMarks?: boolean;
 }): SectionWriteDecision {
-  const { incomingHtml, currentHtml, currentStatus, baselineHtml } = args;
+  const { incomingHtml, currentHtml, currentStatus, baselineHtml, allowMarks } = args;
   if (currentHtml === incomingHtml) return "noop";
   if (currentStatus === "streaming") return "streaming";
   // External change since our last write (AI / other tab / Accept-all) → store wins.
   if ((baselineHtml ?? currentHtml) !== currentHtml) return "external";
-  if (hasAppMarks(currentHtml)) return "marked";
+  if (!allowMarks && hasAppMarks(currentHtml)) return "marked";
   if (incomingHtml === "" && currentHtml.trim() !== "") return "blank";
   return "write";
 }
@@ -135,6 +138,10 @@ export function PagedlyDocEditor({
   draft,
   readOnly,
   actionsRef,
+  reviewMode = false,
+  suggesting = false,
+  onCommentAdd,
+  onCommentClick,
 }: {
   draft: Draft;
   /** Render non-editable (e.g. while a draft is locked for review). Pagination
@@ -144,6 +151,17 @@ export function PagedlyDocEditor({
    *  in-surface "done" affordance — the parent toggle owns exit. */
   onDone?: () => void;
   actionsRef?: MutableRefObject<PagedEditorActions | null>;
+  /** Review surface: turn on pagedly's native comments + track-changes so the
+   *  collaboration happens ON the page. Marks are then intended, so persist
+   *  writes them back (allowMarks) instead of refusing marked sections. */
+  reviewMode?: boolean;
+  /** Track-changes recording — reviewer edits become <ins>/<del> instead of
+   *  overwriting. Only meaningful with reviewMode. */
+  suggesting?: boolean;
+  /** Pagedly wrapped a selection in a comment highlight (id + quoted text). */
+  onCommentAdd?: (commentId: string, quotedText: string) => void;
+  /** An existing comment highlight was clicked. */
+  onCommentClick?: (commentId: string) => void;
 }) {
   const updateSection = useDraftStore((s) => s.updateSection);
   const editorRef = useRef<EditorHandle | null>(null);
@@ -203,6 +221,7 @@ export function PagedlyDocEditor({
         currentHtml: cur.html,
         currentStatus: cur.status,
         baselineHtml: baselineRef.current[cur.id],
+        allowMarks: reviewMode,
       });
       if (decision === "marked" && !markedToastShown.current) {
         // Refuse rather than silently strip comment/figure/suggestion markup —
@@ -218,16 +237,28 @@ export function PagedlyDocEditor({
     }
   };
 
+  // Review surface turns on pagedly's native COMMENTS only, and only when the
+  // surface is editable (a comment-write needs contentEditable + a live
+  // onChange to persist the span). Track-changes is deliberately OFF: pagedly's
+  // raw <ins>/<del> carry no id/author, don't surface in the rail, and are
+  // stripped wholesale on export — so suggestions stay in the rail's attributed,
+  // export-safe pendingChange system, the app's single suggestion path.
+  const enableComments = reviewMode && !readOnly;
+  const features = enableComments ? { ...FEATURES, comments: true } : FEATURES;
+  void suggesting; // reserved; app owns suggestions in the rail (see above)
+
   return (
     <LetterEditor
       key={draftId}
       draft={mapped}
       editorRef={editorRef}
       readOnly={readOnly}
+      onCommentAdd={enableComments ? onCommentAdd : undefined}
+      onCommentClick={reviewMode ? onCommentClick : undefined}
       toolbar
       toolbarPosition="sticky"
       toolbarLayout="compact"
-      features={FEATURES}
+      features={features}
       showPageNumbers
       pageSize="A4"
       // No write-back when read-only (review-locked): guarantees the surface
