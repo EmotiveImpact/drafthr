@@ -12,8 +12,6 @@
   data-url scheme test; letter/sourceHtml.ts isSafeImageRef) so this rebuild
   keeps it. Source + vendor are now in sync at 1.1.0.
 
-## HRLETTER vendor patches (re-apply on upstream refresh)
-
 - **2026-07-03 — base64 image-validator hardening (audit FQ-03).** Both dist
   bundles patched in-place: the whitespace-tolerant data-URL payload class
   `[a-z0-9+/=\s]+` now requires a leading real base64 char
