@@ -188,7 +188,9 @@ type Store = {
   inviteCollaborator: (id: string, email: string, role: CollaboratorRole, name?: string) => void;
   removeCollaborator: (id: string, collaboratorId: string) => void;
   updateCollaboratorRole: (id: string, collaboratorId: string, role: CollaboratorRole) => void;
-  addComment: (id: string, comment: Omit<Comment, "id" | "createdAt">) => string;
+  /** explicitId: use a caller-supplied comment id (pagedly already wrote the
+   *  <span data-comment-id> on the page, so the thread must share its id). */
+  addComment: (id: string, comment: Omit<Comment, "id" | "createdAt">, explicitId?: string) => string;
   deleteComment: (id: string, commentId: string) => void;
   resolveComment: (id: string, commentId: string, resolved: boolean) => void;
   /** Append an AI chat message and return its id. */
@@ -1345,8 +1347,8 @@ export const useDraftStore = create<Store>()(
           };
         }),
 
-      addComment: (id, c) => {
-        const newId = uid("cmt");
+      addComment: (id, c, explicitId) => {
+        const newId = explicitId ?? uid("cmt");
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;

@@ -16,6 +16,9 @@ type PendingComment = {
   sectionId: string;
   quote?: string;
   applyMark?: (commentId: string) => void;
+  /** Pre-assigned id when the highlight span already exists on the page
+   *  (pagedly wrote it + fired onCommentAdd). The thread must share this id. */
+  commentId?: string;
 };
 
 type SectionGroup = {
@@ -50,6 +53,8 @@ export function CommentsPanel({
   const [composerBody, setComposerBody] = useState("");
   const [composerQuote, setComposerQuote] = useState<string | undefined>();
   const [composerApplyMark, setComposerApplyMark] = useState<((id: string) => void) | undefined>();
+  // Pre-assigned id when the highlight already exists (pagedly review surface).
+  const [composerCommentId, setComposerCommentId] = useState<string | undefined>();
 
   // When the parent hands us a pending comment (e.g. user clicked + Comment on
   // a text selection in the editor), auto-open the composer for that section.
@@ -59,6 +64,7 @@ export function CommentsPanel({
     setComposerBody("");
     setComposerQuote(pendingComment.quote);
     setComposerApplyMark(() => pendingComment.applyMark);
+    setComposerCommentId(pendingComment.commentId);
     onPendingCommentConsumed?.();
   }, [pendingComment, onPendingCommentConsumed]);
 
@@ -83,16 +89,25 @@ export function CommentsPanel({
   const post = (sectionId: string, parentId?: string, body?: string) => {
     const text = (body ?? composerBody).trim();
     if (!text || !me) return;
-    const newId = addComment(draft.id, {
-      sectionId,
-      parentId,
-      authorId: me.id,
-      authorName: me.name,
-      authorEmail: me.email,
-      body: text,
-      quote: parentId ? undefined : composerQuote,
-    });
-    if (!parentId && composerApplyMark && newId) {
+    // Root comments from the pagedly review surface carry a pre-assigned id
+    // (the highlight span already exists on the page); reuse it so the thread
+    // and the on-page highlight share one id, and skip applyMark (no span to
+    // write — pagedly already did).
+    const explicitId = parentId ? undefined : composerCommentId;
+    const newId = addComment(
+      draft.id,
+      {
+        sectionId,
+        parentId,
+        authorId: me.id,
+        authorName: me.name,
+        authorEmail: me.email,
+        body: text,
+        quote: parentId ? undefined : composerQuote,
+      },
+      explicitId,
+    );
+    if (!parentId && !explicitId && composerApplyMark && newId) {
       composerApplyMark(newId);
     }
     // Best-effort: email the draft author that a comment landed (server skips
@@ -103,6 +118,7 @@ export function CommentsPanel({
     setComposerSection(null);
     setComposerQuote(undefined);
     setComposerApplyMark(undefined);
+    setComposerCommentId(undefined);
   };
 
   return (
@@ -150,6 +166,7 @@ export function CommentsPanel({
                 // and apply a highlight mark to unrelated text.
                 setComposerQuote(undefined);
                 setComposerApplyMark(undefined);
+    setComposerCommentId(undefined);
               }}
             >
               + Comment
@@ -167,6 +184,7 @@ export function CommentsPanel({
                 setComposerBody("");
                 setComposerQuote(undefined);
                 setComposerApplyMark(undefined);
+    setComposerCommentId(undefined);
               }}
               onPost={() => post(g.sectionId)}
             />
