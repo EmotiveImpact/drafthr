@@ -237,9 +237,15 @@ export function PagedlyDocEditor({
     }
   };
 
-  // Review surface turns on pagedly's native comments + track-changes; the base
-  // editor keeps them off (app owns those in the Sections view).
-  const features = reviewMode ? { ...FEATURES, comments: true, trackChanges: true } : FEATURES;
+  // Review surface turns on pagedly's native COMMENTS only, and only when the
+  // surface is editable (a comment-write needs contentEditable + a live
+  // onChange to persist the span). Track-changes is deliberately OFF: pagedly's
+  // raw <ins>/<del> carry no id/author, don't surface in the rail, and are
+  // stripped wholesale on export — so suggestions stay in the rail's attributed,
+  // export-safe pendingChange system, the app's single suggestion path.
+  const enableComments = reviewMode && !readOnly;
+  const features = enableComments ? { ...FEATURES, comments: true } : FEATURES;
+  void suggesting; // reserved; app owns suggestions in the rail (see above)
 
   return (
     <LetterEditor
@@ -247,8 +253,7 @@ export function PagedlyDocEditor({
       draft={mapped}
       editorRef={editorRef}
       readOnly={readOnly}
-      suggesting={reviewMode ? suggesting : undefined}
-      onCommentAdd={reviewMode ? onCommentAdd : undefined}
+      onCommentAdd={enableComments ? onCommentAdd : undefined}
       onCommentClick={reviewMode ? onCommentClick : undefined}
       toolbar
       toolbarPosition="sticky"

@@ -156,7 +156,10 @@ export function ReviewStep() {
           <PagedlyDocEditor
             draft={draft}
             reviewMode
-            suggesting={!canResolve}
+            // Respect the review-lock: a reviewer/approved draft is read-only
+            // on the page (they comment + suggest via the rail); the author
+            // (canResolve) gets on-page comments + direct editing of their draft.
+            readOnly={!canResolve}
             onCommentAdd={(commentId, quotedText) => {
               // Pagedly wrote the highlight span synchronously; find which
               // section it landed in, then open the rail composer for it,

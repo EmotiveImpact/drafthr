@@ -166,7 +166,7 @@ export function CommentsPanel({
                 // and apply a highlight mark to unrelated text.
                 setComposerQuote(undefined);
                 setComposerApplyMark(undefined);
-    setComposerCommentId(undefined);
+                setComposerCommentId(undefined);
               }}
             >
               + Comment
@@ -184,7 +184,7 @@ export function CommentsPanel({
                 setComposerBody("");
                 setComposerQuote(undefined);
                 setComposerApplyMark(undefined);
-    setComposerCommentId(undefined);
+                setComposerCommentId(undefined);
               }}
               onPost={() => post(g.sectionId)}
             />
