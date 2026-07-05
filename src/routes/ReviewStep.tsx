@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, MessageSquarePlus, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/ds";
 import { Wordmark } from "@/components/ds/Wordmark";
@@ -46,6 +46,96 @@ export function ReviewStep() {
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
   const [focusCommentId, setFocusCommentId] = useState<string | null>(null);
+  // "Suggest edit" chosen from an on-page selection → the rail opens its dialog.
+  const [suggestSectionId, setSuggestSectionId] = useState<string | null>(null);
+
+  // On-page selection popover: select any text in the letter → Comment / Suggest.
+  // This is the app's own affordance (not pagedly's toolbar) so it is discoverable
+  // and works for EVERYONE — a reviewer on a read-only page can still select text
+  // and comment/suggest, and the author gets the same one-click bubble.
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [selBubble, setSelBubble] = useState<{
+    top: number;
+    left: number;
+    sectionId: string;
+    quote: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+        setSelBubble(null);
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const node = range.commonAncestorContainer;
+      const el = (node.nodeType === 3 ? node.parentElement : node) as HTMLElement | null;
+      // Selection must sit inside the letter canvas — ignore stray page selections.
+      if (!el || !canvas.contains(el)) {
+        setSelBubble(null);
+        return;
+      }
+      // pagedly stamps data-section-id on each block; the read-only preview uses
+      // data-section-anchor. Anchor the new comment/suggestion to whichever we hit.
+      const sectionEl = el.closest<HTMLElement>("[data-section-id],[data-section-anchor]");
+      const sectionId =
+        sectionEl?.getAttribute("data-section-id") ??
+        sectionEl?.getAttribute("data-section-anchor") ??
+        "";
+      // No single owning section — a selection spanning two sections resolves to
+      // the shared ancestor above both wrappers. Don't guess a fallback: it would
+      // silently anchor the comment/suggestion to the wrong section. Dismiss.
+      if (!sectionId) {
+        setSelBubble(null);
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        setSelBubble(null);
+        return;
+      }
+      // Fixed-position (viewport) coords — the pagedly canvas scrolls internally,
+      // so a container-relative bubble wouldn't track. We dismiss on scroll below.
+      // Flip below the selection when it sits too close to the top to fit above.
+      setSelBubble({
+        top: rect.top < 52 ? rect.bottom + 8 : rect.top - 44,
+        left: rect.left + rect.width / 2,
+        sectionId,
+        quote: sel.toString().trim().slice(0, 240),
+      });
+    };
+    const dismiss = () => setSelBubble(null);
+    document.addEventListener("selectionchange", onSelectionChange);
+    window.addEventListener("scroll", dismiss, true);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      window.removeEventListener("scroll", dismiss, true);
+    };
+  }, [draft]);
+
+  const commentOnSelection = () => {
+    if (!selBubble) return;
+    setPendingComment({ sectionId: selBubble.sectionId, quote: selBubble.quote });
+    setSelBubble(null);
+    window.getSelection()?.removeAllRanges();
+  };
+  const suggestOnSelection = () => {
+    if (!selBubble) return;
+    // Mirror the rail's picker: don't stack a second suggestion on a section
+    // that already has an open pending change (it would silently replace it).
+    const section = draft?.sections.find((s) => s.id === selBubble.sectionId);
+    if (section?.pendingChange) {
+      toast("This section already has a pending suggestion — resolve it first.");
+      setSelBubble(null);
+      return;
+    }
+    setSuggestSectionId(selBubble.sectionId);
+    setSelBubble(null);
+    window.getSelection()?.removeAllRanges();
+  };
 
   if (!draft || !draftId) {
     return (
@@ -148,11 +238,12 @@ export function ReviewStep() {
           />
         </aside>
 
-        <main className="min-h-0 overflow-hidden bg-[var(--ds-canvas)]">
+        <main ref={canvasRef} className="relative min-h-0 overflow-hidden bg-[var(--ds-canvas)]">
           {/* The review surface is the PAGEDLY editor (not the read-only
            * preview): comments + track-change suggestions happen ON the page.
            * A reviewer (canResolve=false) suggests (tracked <ins>/<del>); the
-           * author edits directly. Both persist their marks. */}
+           * author edits directly. Both persist their marks. Select any text to
+           * get the Comment / Suggest bubble (see selBubble below). */}
           <PagedlyDocEditor
             draft={draft}
             reviewMode
@@ -190,9 +281,45 @@ export function ReviewStep() {
             onPendingCommentConsumed={() => setPendingComment(null)}
             focusCommentId={focusCommentId}
             onFocusCommentConsumed={() => setFocusCommentId(null)}
+            openSuggestSectionId={suggestSectionId}
+            onOpenSuggestConsumed={() => setSuggestSectionId(null)}
           />
         </aside>
       </div>
+
+      {/* On-page selection popover — the discoverable Comment / Suggest bubble.
+       * Fixed to the viewport at the selection; onMouseDown preventDefault keeps
+       * the selection alive long enough for the click to read it. */}
+      {selBubble && (
+        <div
+          role="toolbar"
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: "fixed",
+            top: selBubble.top,
+            left: selBubble.left,
+            transform: "translateX(-50%)",
+            zIndex: 50,
+          }}
+          className="flex items-center gap-0.5 rounded-lg bg-[var(--ds-ink)] p-0.5 text-white shadow-[0_6px_20px_rgba(0,0,0,0.22)]"
+        >
+          <button
+            type="button"
+            onClick={commentOnSelection}
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium hover:bg-white/15"
+          >
+            <MessageSquarePlus className="size-3.5" /> Comment
+          </button>
+          <div className="h-4 w-px bg-white/20" />
+          <button
+            type="button"
+            onClick={suggestOnSelection}
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium hover:bg-white/15"
+          >
+            <PenLine className="size-3.5" /> Suggest edit
+          </button>
+        </div>
+      )}
 
       {reviewDialogKind && (
         <ReviewDialog

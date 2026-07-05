@@ -55,6 +55,8 @@ export function CollabReviewRail({
   onPendingCommentConsumed,
   focusCommentId,
   onFocusCommentConsumed,
+  openSuggestSectionId,
+  onOpenSuggestConsumed,
 }: {
   draft: Draft;
   role: WorkspaceRole | undefined;
@@ -68,6 +70,10 @@ export function CollabReviewRail({
    *  switches to the Comments tab and scrolls that thread into view. */
   focusCommentId?: string | null;
   onFocusCommentConsumed?: () => void;
+  /** Set when the user picks "Suggest edit" from an on-page text selection — the
+   *  rail opens the SuggestEditDialog for that section, pre-scoped. */
+  openSuggestSectionId?: string | null;
+  onOpenSuggestConsumed?: () => void;
 }) {
   const profile = useProfileStore((s) => s.profile);
   const me = meIdentity(profile);
@@ -113,6 +119,24 @@ export function CollabReviewRail({
       document.querySelector<HTMLElement>(`[data-section-id="${sectionId}"]`);
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
+
+  // A comment staged from an on-page text selection arrives as pendingComment;
+  // the composer lives in CommentsPanel, which only mounts on the Comments tab,
+  // so flip to it (the panel's own effect then opens the composer for the quote).
+  useEffect(() => {
+    if (pendingComment) setTab("comments");
+  }, [pendingComment]);
+
+  // "Suggest edit" from an on-page selection: open the dialog for that section.
+  useEffect(() => {
+    if (!openSuggestSectionId) return;
+    const section = draft.sections.find((s) => s.id === openSuggestSectionId);
+    if (section) {
+      setSuggestPickerOpen(false);
+      setSuggestSection(section);
+    }
+    onOpenSuggestConsumed?.();
+  }, [openSuggestSectionId, draft.sections, onOpenSuggestConsumed]);
 
   // Clicking a comment highlight in the letter focuses that thread here.
   useEffect(() => {
