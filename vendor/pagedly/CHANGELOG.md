@@ -2,6 +2,18 @@
 
 ## HRLETTER vendor patches (re-apply on upstream refresh)
 
+- **2026-07-05 — inline suggestion marks preserved (invest).** Rebuilt from
+  pagedly source (v1.1.0, ~/pagedly-codebase) with `data-suggestion-id`,
+  `data-suggestion-kind`, `data-status`, `data-author` added to the sanitizer's
+  EDITOR_DATA_ATTRS allowlist, so the HOST app's `<ins>/<del>` review redlines
+  round-trip through paginate/reconstruct + render on the page (styled by the
+  app's global `ins[data-suggestion-id]` CSS). The 2026-07-03 base64 hardening
+  (FQ-03) was re-applied IN THE SOURCE (sanitize.ts EDITOR_URI_REGEXP + the
+  data-url scheme test; letter/sourceHtml.ts isSafeImageRef) so this rebuild
+  keeps it. Source + vendor are now in sync at 1.1.0.
+
+## HRLETTER vendor patches (re-apply on upstream refresh)
+
 - **2026-07-03 — base64 image-validator hardening (audit FQ-03).** Both dist
   bundles patched in-place: the whitespace-tolerant data-URL payload class
   `[a-z0-9+/=\s]+` now requires a leading real base64 char

@@ -5653,7 +5653,15 @@ const Lg = [
   "data-fn-note",
   "data-section-id",
   "data-section-anchor",
-  "data-generated-letter-chrome"
+  "data-generated-letter-chrome",
+  // Host-supplied inline suggestion / track-change marks: <ins>/<del> carrying
+  // a stable id + author + status so a HOST review system (not pagedly's own
+  // suggesting mode) can render its redlines on the page and round-trip them
+  // through paginate/reconstruct without them being stripped.
+  "data-suggestion-id",
+  "data-suggestion-kind",
+  "data-status",
+  "data-author"
 ], Pg = [
   "href",
   "target",
@@ -10982,7 +10990,7 @@ function oa(e) {
     ],
     ALLOW_DATA_ATTR: !1,
     KEEP_CONTENT: !0,
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=])/i
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i
   });
   return _b(t);
 }
@@ -11690,7 +11698,7 @@ function Zb(e) {
     ],
     ALLOW_DATA_ATTR: !1,
     KEEP_CONTENT: !0,
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|blob:|data:image\/(?:png|jpeg|jpg|gif|webp);base64,[a-z0-9+/=])/i
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/(?!\/)|blob:|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i
   });
 }
 function Jb(e) {

@@ -137,7 +137,11 @@ export function CollabReviewRail({
       source: "review",
       authorId: me.email || me.name,
       authorName: me.name,
-      diffViewMode: "card",
+      // Inline: stage the change as <ins>/<del data-suggestion-id> marks in
+      // section.html so it renders as a redline ON the pagedly page (now that
+      // pagedly preserves our suggestion marks), not just as a rail card. The
+      // rail card still shows for accept/reject; both read the same pendingChange.
+      diffViewMode: "inline",
     });
     toast.success("Suggestion sent to the author");
   };

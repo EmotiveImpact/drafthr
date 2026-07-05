@@ -940,7 +940,9 @@ export const useDraftStore = create<Store>()(
               // even when re-proposing over an unresolved pending change.
               const diffed = sanitizeLetterHtml(
                 diffHtmlAsSuggestion(canonicalHtml, change.proposedHtml, {
-                  author: "Claude AI",
+                  // Human reviewer suggestions carry their name (set by the
+                  // review rail); AI proposals fall back to "Claude AI".
+                  author: change.authorName ?? "Claude AI",
                   body: change.instruction,
                 }),
               );
