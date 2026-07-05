@@ -47,7 +47,9 @@ export function ReviewStep() {
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
   const [focusCommentId, setFocusCommentId] = useState<string | null>(null);
   // "Suggest edit" chosen from an on-page selection → the rail opens its dialog.
-  const [suggestSectionId, setSuggestSectionId] = useState<string | null>(null);
+  const [suggestFor, setSuggestFor] = useState<{ sectionId: string; quote?: string } | null>(
+    null,
+  );
 
   // On-page selection popover: select any text in the letter → Comment / Suggest.
   // This is the app's own affordance (not pagedly's toolbar) so it is discoverable
@@ -97,6 +99,15 @@ export function ReviewStep() {
         setSelBubble(null);
         return;
       }
+      // A selection with no actual text (element-boundary artifacts) is not
+      // commentable/suggestable — don't offer the bubble for it. Selection
+      // .toString() is layout-dependent (returns "" in unrendered/background
+      // tabs); Range.toString() is DOM-based and always reflects the text.
+      const quote = (sel.toString() || range.toString()).trim().slice(0, 240);
+      if (!quote) {
+        setSelBubble(null);
+        return;
+      }
       // Fixed-position (viewport) coords — the pagedly canvas scrolls internally,
       // so a container-relative bubble wouldn't track. We dismiss on scroll below.
       // Flip below the selection when it sits too close to the top to fit above.
@@ -104,7 +115,7 @@ export function ReviewStep() {
         top: rect.top < 52 ? rect.bottom + 8 : rect.top - 44,
         left: rect.left + rect.width / 2,
         sectionId,
-        quote: sel.toString().trim().slice(0, 240),
+        quote,
       });
     };
     const dismiss = () => setSelBubble(null);
@@ -116,9 +127,20 @@ export function ReviewStep() {
     };
   }, [draft]);
 
+  // The bubble's onMouseDown preventDefault keeps the selection alive through
+  // the click, so the LIVE selection is the most trustworthy source for the
+  // quoted text; the bubble state is the fallback (a stray selectionchange —
+  // e.g. from pagedly's own selection handling — can overwrite it late).
+  const readQuote = () => {
+    const s = window.getSelection();
+    const live =
+      s && s.rangeCount > 0 ? s.toString() || s.getRangeAt(0).toString() : "";
+    return live.trim().slice(0, 240) || selBubble?.quote || "";
+  };
+
   const commentOnSelection = () => {
     if (!selBubble) return;
-    setPendingComment({ sectionId: selBubble.sectionId, quote: selBubble.quote });
+    setPendingComment({ sectionId: selBubble.sectionId, quote: readQuote() || undefined });
     setSelBubble(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -132,7 +154,7 @@ export function ReviewStep() {
       setSelBubble(null);
       return;
     }
-    setSuggestSectionId(selBubble.sectionId);
+    setSuggestFor({ sectionId: selBubble.sectionId, quote: readQuote() || undefined });
     setSelBubble(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -238,7 +260,10 @@ export function ReviewStep() {
           />
         </aside>
 
-        <main ref={canvasRef} className="relative min-h-0 overflow-hidden bg-[var(--ds-canvas)]">
+        <main
+          ref={canvasRef}
+          className="review-canvas relative min-h-0 overflow-hidden bg-[var(--ds-canvas)]"
+        >
           {/* The review surface is the PAGEDLY editor (not the read-only
            * preview): comments + track-change suggestions happen ON the page.
            * A reviewer (canResolve=false) suggests (tracked <ins>/<del>); the
@@ -281,8 +306,8 @@ export function ReviewStep() {
             onPendingCommentConsumed={() => setPendingComment(null)}
             focusCommentId={focusCommentId}
             onFocusCommentConsumed={() => setFocusCommentId(null)}
-            openSuggestSectionId={suggestSectionId}
-            onOpenSuggestConsumed={() => setSuggestSectionId(null)}
+            openSuggest={suggestFor}
+            onOpenSuggestConsumed={() => setSuggestFor(null)}
           />
         </aside>
       </div>

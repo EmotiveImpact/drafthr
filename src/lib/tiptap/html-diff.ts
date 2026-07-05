@@ -1,29 +1,25 @@
-import { diffArrays } from "diff";
+import { diffWordsWithSpace } from "diff";
 import { uid } from "@/lib/utils";
 import type { SuggestionAttrs } from "./suggestion-mark";
 
 /**
- * Inline track-changes diff. Walks oldHtml + newHtml at sentence granularity
- * (period / question / exclamation / semicolon / line break) and emits a
- * single HTML blob where:
- *   - Common sentences appear as-is (wrapped in <p> for readability — we
- *     don't try to preserve original inline formatting because that would
- *     require running the diff on a fully tokenised mark tree, and the
- *     readability win is what matters for AI proposals).
- *   - Removed sentences are wrapped in <del data-suggestion-id …>
- *   - Added sentences are wrapped in <ins data-suggestion-id …>
+ * Inline track-changes diff at WORD granularity — Google-Docs/Word style.
+ * Walks oldHtml + newHtml as flattened prose (block boundaries become
+ * paragraph breaks) and emits a single HTML blob where:
+ *   - Common prose flows as-is inside <p> blocks (paragraph structure kept).
+ *   - Removed words are wrapped INLINE in <del data-suggestion-id …>
+ *   - Added words are wrapped INLINE in <ins data-suggestion-id …>
  *
- * Each changed sentence gets a fresh uuid so per-suggestion accept/reject
- * can target it. Inserted runs and deleted runs that sit next to each
- * other (i.e. a "replacement") share neither id nor body — the existing
- * track-changes UI surfaces them as adjacent <ins>/<del> pills which the
- * user can act on independently.
+ * Changing "31 August" to "29 August" therefore redlines ONLY "31"/"29" —
+ * not the whole sentence — and the marks sit inside the sentence's own <p>,
+ * so the letter reads as a real redline (strike-through old, underline new
+ * mid-sentence), not as chopped-out paragraphs. Each changed run gets a
+ * fresh uuid so per-suggestion accept/reject can target it.
  *
- * Implementation note: we use `diffArrays` (not `diffSentences`) because
- * the npm `diff` package's sentence tokeniser regexes are tuned for prose
- * and miss our common HR-letter punctuation patterns (e.g. "12 December
- * 2025." followed by a heading). Sentence-splitting locally lets us keep
- * the regex tight to the patterns we actually see in the editor.
+ * We flatten to text before diffing (same trade-off as before): original
+ * inline formatting inside changed regions isn't preserved, because that
+ * would require diffing a fully tokenised mark tree. Callers guard the
+ * non-text cases (images/tables) into card mode already.
  */
 export type DiffSuggestionAttrs = Omit<
   SuggestionAttrs,
@@ -41,43 +37,57 @@ export function diffHtmlAsSuggestion(
 
   // Edge cases — if either side is empty, the diff is trivial: the entire
   // other side is the change. Wrapping the whole blob in one mark gives
-  // the user a single accept/reject target instead of N per-sentence ones.
-  const oldSentences = splitSentences(oldText);
-  const newSentences = splitSentences(newText);
+  // the user a single accept/reject target instead of N word-level ones.
+  if (!oldText && !newText) return "";
+  if (!oldText) return wrapWhole(newText, "insertion", attrs, createdAt);
+  if (!newText) return wrapWhole(oldText, "deletion", attrs, createdAt);
 
-  if (oldSentences.length === 0 && newSentences.length === 0) return "";
-  if (oldSentences.length === 0) {
-    return wrapWhole(newText, "insertion", attrs, createdAt);
-  }
-  if (newSentences.length === 0) {
-    return wrapWhole(oldText, "deletion", attrs, createdAt);
-  }
+  // Word-level Myers diff (whitespace-preserving variant so runs of spaces
+  // don't register as phantom changes). Newlines ride along inside common
+  // runs and become paragraph breaks when we rebuild below.
+  const runs = diffWordsWithSpace(oldText, newText);
 
-  // Sentence-level Myers diff via the diff package's array variant. The
-  // comparator normalises whitespace so trivial reflowing doesn't show up
-  // as a change — we only care about meaningful prose differences.
-  const changes = diffArrays(oldSentences, newSentences, {
-    comparator: (a, b) => normalise(a) === normalise(b),
-  });
+  const paragraphs: string[] = [];
+  let cur = "";
+  const flush = () => {
+    if (cur.trim()) paragraphs.push(`<p>${cur.trim()}</p>`);
+    cur = "";
+  };
 
-  const parts: string[] = [];
-  for (const change of changes) {
-    const sentences = change.value;
-    if (sentences.length === 0) continue;
-    const text = sentences.join(" ");
-    if (change.added) {
-      parts.push(renderMark("insertion", text, attrs, createdAt));
-    } else if (change.removed) {
-      parts.push(renderMark("deletion", text, attrs, createdAt));
+  for (const run of runs) {
+    if (run.added || run.removed) {
+      // A changed run spanning a paragraph break is rare — flatten the break
+      // to a space so the mark stays a single inline element.
+      const text = run.value.replace(/\n+/g, " ");
+      if (!text.trim()) {
+        // Whitespace-only churn is not representable as a suggestion mark.
+        // REMOVED whitespace must be kept as-is (paragraph structure etc.
+        // stays until someone actually accepts a real change — dropping it
+        // here would apply a join unmarked, before any accept). ADDED
+        // whitespace is simply not proposed.
+        if (run.removed) {
+          run.value.split("\n").forEach((seg, i) => {
+            if (i > 0) flush();
+            cur += escapeHtml(seg);
+          });
+        }
+        continue;
+      }
+      cur += renderMark(run.removed ? "deletion" : "insertion", text, attrs, createdAt);
     } else {
-      parts.push(renderCommon(text));
+      // Common prose — paragraph breaks close the current <p>.
+      const segments = run.value.split("\n");
+      segments.forEach((seg, i) => {
+        if (i > 0) flush();
+        cur += escapeHtml(seg);
+      });
     }
   }
+  flush();
 
-  // Identical inputs → diffArrays returns one common chunk; we still
-  // re-emit as plain <p>. The caller treats "no <ins> / <del>" as a
-  // signal that there was nothing to propose.
-  return parts.join("");
+  // Identical inputs → no <ins>/<del> emitted; we still re-emit the prose as
+  // <p> blocks. The caller treats "no marks" as "nothing to propose".
+  return paragraphs.join("");
 }
 
 /* ----------------------------------------------------------------------------
@@ -99,21 +109,14 @@ function renderMark(
     "ds-suggestion " +
     (kind === "deletion" ? "ds-suggestion-del" : "ds-suggestion-ins") +
     " ds-suggestion-pending";
-  // Wrap each marked run in a <p> — Tiptap's schema requires inline content
-  // to live inside a block, and the section editor expects paragraph-level
-  // structure. Empty runs (whitespace-only) are skipped above already.
+  // INLINE mark — no block wrapper. The caller composes these into the
+  // surrounding paragraph so the redline flows mid-sentence.
   return (
-    `<p><${tag} data-suggestion-id="${id}" data-suggestion-kind="${kind}" ` +
+    `<${tag} data-suggestion-id="${id}" data-suggestion-kind="${kind}" ` +
     `data-author="${author}"${authorId}${body} ` +
     `data-created-at="${createdAt}" data-status="pending" data-suggestion="" ` +
-    `class="${cls}">${escapeHtml(text)}</${tag}></p>`
+    `class="${cls}">${escapeHtml(text)}</${tag}>`
   );
-}
-
-function renderCommon(text: string): string {
-  // Common sentences always get wrapped in <p>. We escape any HTML
-  // metacharacters since we're rebuilding from plain text.
-  return `<p>${escapeHtml(text)}</p>`;
 }
 
 function wrapWhole(
@@ -122,13 +125,20 @@ function wrapWhole(
   attrs: DiffSuggestionAttrs,
   createdAt: number,
 ): string {
-  return renderMark(kind, text, attrs, createdAt);
+  // One mark PER PARAGRAPH so a multi-paragraph proposal keeps its breaks
+  // through accept (a single flattened <p> would lose them permanently).
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => `<p>${renderMark(kind, line, attrs, createdAt)}</p>`)
+    .join("");
 }
 
 /**
  * Strip tags + collapse entities to plain text. Block-level tags become
- * sentence boundaries (newline) so a `<p>foo</p><p>bar</p>` blob splits
- * into two sentences instead of "foobar".
+ * paragraph boundaries (newline) so a `<p>foo</p><p>bar</p>` blob splits
+ * into two paragraphs instead of "foobar".
  */
 function htmlToText(html: string): string {
   if (!html) return "";
@@ -148,46 +158,20 @@ function htmlToText(html: string): string {
   }
   const root = document.createElement("div");
   root.innerHTML = html;
-  // Insert a sentence break after each block-level close so multi-paragraph
+  // Insert a paragraph break after each block-level close so multi-paragraph
   // input doesn't smush together when textContent flattens it.
   root.querySelectorAll("p, div, h1, h2, h3, h4, h5, h6, li, tr, blockquote, figure, figcaption, br")
     .forEach((el) => {
       el.appendChild(document.createTextNode("\n"));
     });
-  return (root.textContent ?? "").trim();
-}
-
-/**
- * Tokenise prose into sentences. Splits on terminal punctuation followed
- * by whitespace OR newline. Keeps the trailing punctuation attached so
- * the rendered diff reads naturally ("Hello." not "Hello"). Multi-line
- * input (paragraph breaks) is treated as an implicit sentence boundary.
- */
-function splitSentences(text: string): string[] {
-  if (!text) return [];
-  // Normalise newlines into a sentinel space + period when missing one,
-  // so paragraph breaks become clean splits even if the prose lacked
-  // terminal punctuation (HR letters often have lists / one-liners).
-  const normalised = text.replace(/\n+/g, "\n");
-  const lines = normalised.split("\n");
-  const out: string[] = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    // Greedy split on .!?; followed by whitespace or end-of-line. The
-    // capturing group keeps the terminator attached to the preceding
-    // sentence (look-behind would also work but is less portable).
-    const parts = trimmed.split(/(?<=[.!?;])\s+/);
-    for (const p of parts) {
-      const s = p.trim();
-      if (s) out.push(s);
-    }
-  }
-  return out;
-}
-
-function normalise(s: string): string {
-  return s.replace(/\s+/g, " ").trim().toLowerCase();
+  // Collapse intra-line whitespace so incidental indentation in source HTML
+  // doesn't surface as phantom word-diff churn.
+  return (root.textContent ?? "")
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l, i, arr) => l !== "" || (i > 0 && arr[i - 1] !== ""))
+    .join("\n")
+    .trim();
 }
 
 function escapeHtml(s: string): string {

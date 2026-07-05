@@ -38,6 +38,7 @@ import {
 import { sanitizeLetterHtml } from "./sanitize";
 import { isSafeImageRef } from "./safe-data-url";
 import {
+  acceptPendingSuggestionsHtml,
   hasPendingSuggestions,
   mergeAcceptedSuggestionsHtml,
 } from "./tiptap/suggestion-merge";
@@ -930,22 +931,34 @@ export const useDraftStore = create<Store>()(
             mode = "card";
           }
 
+          // Inline mode rebuilds the section from flattened text — compute the
+          // diff FIRST and refuse to stage when it produced no marks (proposal
+          // textually identical to the canonical content). Staging a markless
+          // diff would silently replace the section with its flattened-plain
+          // rebuild (headings/lists/bold gone), which Accept makes permanent,
+          // and leave a phantom card with nothing to accept.
+          let inlineDiffed: string | null = null;
+          if (mode === "inline") {
+            inlineDiffed = sanitizeLetterHtml(
+              diffHtmlAsSuggestion(canonicalHtml, change.proposedHtml, {
+                // Human reviewer suggestions carry their name (set by the
+                // review rail); AI proposals fall back to "Claude AI".
+                author: change.authorName ?? "Claude AI",
+                body: change.instruction,
+              }),
+            );
+            if (!inlineDiffed.includes("data-suggestion-id")) return s;
+          }
+
           const sections = d.sections.map((sec) => {
             if (sec.id !== sectionId) return sec;
-            if (mode === "inline") {
+            if (mode === "inline" && inlineDiffed != null) {
               // Stage the diff as section.html so the editor renders the
               // proposal as track-changes marks the user can accept /
               // reject one-at-a-time. prevHtml is the canonical text
               // we'll restore on reject-all — always the CLEAN original,
               // even when re-proposing over an unresolved pending change.
-              const diffed = sanitizeLetterHtml(
-                diffHtmlAsSuggestion(canonicalHtml, change.proposedHtml, {
-                  // Human reviewer suggestions carry their name (set by the
-                  // review rail); AI proposals fall back to "Claude AI".
-                  author: change.authorName ?? "Claude AI",
-                  body: change.instruction,
-                }),
-              );
+              const diffed = inlineDiffed;
               return {
                 ...sec,
                 html: diffed,
@@ -987,16 +1000,10 @@ export const useDraftStore = create<Store>()(
             modelName: pending.modelName,
           };
           const acceptedHtml = isInline
-            ? // Flip every pending suggestion to accepted, then merge to fold
-              // the additions in / drop the removals.
-              sanitizeLetterHtml(
-                mergeAcceptedSuggestionsHtml(
-                  target.html.replace(
-                    /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
-                    `$1data-status="accepted"`,
-                  ),
-                ),
-              )
+            ? // Flip every pending suggestion to accepted (DOM-based — attr
+              // order after a pagedly round-trip is not ours to rely on),
+              // then merge to fold the additions in / drop the removals.
+              sanitizeLetterHtml(acceptPendingSuggestionsHtml(target.html))
             : sanitizeLetterHtml(pending.proposedHtml);
           const sections = d.sections.map((sec) =>
             sec.id === sectionId
@@ -1022,9 +1029,14 @@ export const useDraftStore = create<Store>()(
             const isInline = (pending.diffViewMode ?? "inline") === "inline";
             return {
               ...sec,
-              // Inline mode mutated section.html — restore the snapshot.
-              // Card mode never touched section.html.
-              html: isInline && pending.prevHtml != null ? pending.prevHtml : sec.html,
+              // Inline mode mutated section.html. Rebuild the rejected text
+              // FROM THE LIVE html (drop pending <ins>, unwrap pending <del>)
+              // rather than restoring the prevHtml snapshot wholesale — the
+              // author may have edited prose AROUND the pending marks on the
+              // review page, and a snapshot restore would destroy those
+              // edits. Falls back to the snapshot when the live html has no
+              // marks left to strip. Card mode never touched section.html.
+              html: rejectedInlineHtml(sec.html, pending.prevHtml, isInline),
               pendingChange: undefined,
             };
           });
@@ -1047,14 +1059,7 @@ export const useDraftStore = create<Store>()(
               modelName: pending.modelName,
             };
             const acceptedHtml = isInline
-              ? sanitizeLetterHtml(
-                  mergeAcceptedSuggestionsHtml(
-                    sec.html.replace(
-                      /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
-                      `$1data-status="accepted"`,
-                    ),
-                  ),
-                )
+              ? sanitizeLetterHtml(acceptPendingSuggestionsHtml(sec.html))
               : sanitizeLetterHtml(pending.proposedHtml);
             return {
               ...sec,
@@ -1077,7 +1082,9 @@ export const useDraftStore = create<Store>()(
             const isInline = (pending.diffViewMode ?? "inline") === "inline";
             return {
               ...sec,
-              html: isInline && pending.prevHtml != null ? pending.prevHtml : sec.html,
+              // See rejectSectionPending: rebuild from the live html so the
+              // author's around-the-marks edits survive the rejection.
+              html: rejectedInlineHtml(sec.html, pending.prevHtml, isInline),
               pendingChange: undefined,
             };
           });
@@ -1936,6 +1943,28 @@ function hasNonTextContent(html: string): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * The rejected form of an inline-diffed section: drop pending <ins> (with
+ * text — it was never canonical), unwrap pending <del> (the original text
+ * stays). Built FROM THE LIVE html so prose the author edited around the
+ * pending marks on the review page survives the rejection; the prevHtml
+ * snapshot is only the fallback for html that carries no marks (or card
+ * mode, where isInline is false and section.html was never touched).
+ */
+function rejectedInlineHtml(
+  liveHtml: string,
+  prevHtml: string | undefined,
+  isInline: boolean,
+): string {
+  if (!isInline) return liveHtml;
+  if (liveHtml.includes("data-suggestion-id")) {
+    // Authoring-mode merge: pending insertions removed, pending deletions
+    // unwrapped (kept) — exactly "reject everything pending".
+    return sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(liveHtml));
+  }
+  return prevHtml ?? liveHtml;
 }
 
 function stripMark(

@@ -168,6 +168,26 @@ export function mergeAcceptedSuggestionsHtml(
   return root.innerHTML;
 }
 
+/**
+ * Accept every PENDING suggestion in an HTML string and fold it in:
+ * flip pending → accepted at the DOM level, then merge destructively.
+ * DOM-based on purpose — the previous regex flip required
+ * data-suggestion-id to precede data-status inside the tag, which silently
+ * broke if any round-trip (pagedly's serializer) reordered attributes.
+ */
+export function acceptPendingSuggestionsHtml(html: string): string {
+  if (!html || typeof window === "undefined") return html;
+  const root = document.createElement("div");
+  root.innerHTML = html;
+  root.querySelectorAll<HTMLElement>(SUGGESTION_SELECTOR).forEach((el) => {
+    if ((el.getAttribute("data-status") ?? "pending") === "pending") {
+      el.setAttribute("data-status", "accepted");
+    }
+  });
+  applyMergeToDom(root, false);
+  return root.innerHTML;
+}
+
 /** List every suggestion in an HTML string (deduped by id, text concatenated). */
 export function listSuggestionsHtml(html: string): SuggestionSummary[] {
   if (!html || typeof window === "undefined") return [];

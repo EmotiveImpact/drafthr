@@ -84,6 +84,86 @@ describe("proposeSectionChange", () => {
     // nested/double-marked artifact (no <ins> inside <del> or vice-versa).
     expect(afterSecond.html).not.toMatch(/<(ins|del)[^>]*>[^<]*<(ins|del)/i);
   });
+  it("refuses to stage a proposal that is textually identical (no marks → no flattening)", async () => {
+    const { useDraftStore } = await import("./store");
+    const rich = "<p>Same <strong>rich</strong> text.</p>";
+    useDraftStore.setState({ drafts: { draft_1: baseDraft(rich) }, matters: {} });
+
+    // Textually identical proposal (formatting differs, words don't) — the
+    // word diff yields no marks; staging it anyway would silently replace the
+    // section with a flattened-plain rebuild and leave a phantom card.
+    useDraftStore.getState().proposeSectionChange("draft_1", "section_1", change("<p>Same rich text.</p>"));
+
+    const sec = useDraftStore.getState().drafts.draft_1.sections[0];
+    expect(sec.pendingChange).toBeUndefined();
+    expect(sec.html).toBe(rich); // untouched — <strong> intact
+  });
+
+  it("accept folds the inline diff in regardless of mark attribute order", async () => {
+    const { useDraftStore } = await import("./store");
+    useDraftStore.setState({ drafts: { draft_1: baseDraft("<p>Pay is 100.</p>") }, matters: {} });
+    const store = useDraftStore.getState();
+    store.proposeSectionChange("draft_1", "section_1", change("<p>Pay is 200.</p>"));
+
+    // Simulate a round-trip (pagedly serializer) REORDERING attributes so
+    // data-status precedes data-suggestion-id — the old regex flip required
+    // the opposite order and silently degraded accept to a discard.
+    const staged = useDraftStore.getState().drafts.draft_1.sections[0].html;
+    const reordered = staged.replace(
+      /<(ins|del)([^>]*?)\sdata-suggestion-id="([^"]+)"([^>]*?)\sdata-status="pending"/g,
+      '<$1 data-status="pending"$2 data-suggestion-id="$3"$4',
+    );
+    useDraftStore.setState((s) => ({
+      drafts: {
+        ...s.drafts,
+        draft_1: {
+          ...s.drafts.draft_1,
+          sections: s.drafts.draft_1.sections.map((sec) => ({ ...sec, html: reordered })),
+        },
+      },
+    }));
+
+    useDraftStore.getState().acceptSectionPending("draft_1", "section_1");
+    const sec = useDraftStore.getState().drafts.draft_1.sections[0];
+    expect(sec.html).toContain("200");
+    expect(sec.html).not.toContain("100");
+    expect(sec.html).not.toContain("data-suggestion-id");
+    expect(sec.pendingChange).toBeUndefined();
+  });
+
+  it("reject preserves author edits made AROUND the pending marks", async () => {
+    const { useDraftStore } = await import("./store");
+    useDraftStore.setState(
+      { drafts: { draft_1: baseDraft("<p>Salary is 100 per week.</p>") }, matters: {} },
+    );
+    const store = useDraftStore.getState();
+    store.proposeSectionChange("draft_1", "section_1", change("<p>Salary is 200 per week.</p>"));
+
+    // The author edits prose AROUND the pending marks on the review page
+    // (pagedly persists the whole marked section in review mode).
+    const staged = useDraftStore.getState().drafts.draft_1.sections[0].html;
+    const edited = staged.replace("per week", "per calendar week");
+    expect(edited).not.toBe(staged);
+    useDraftStore.setState((s) => ({
+      drafts: {
+        ...s.drafts,
+        draft_1: {
+          ...s.drafts.draft_1,
+          sections: s.drafts.draft_1.sections.map((sec) => ({ ...sec, html: edited })),
+        },
+      },
+    }));
+
+    useDraftStore.getState().rejectSectionPending("draft_1", "section_1");
+    const sec = useDraftStore.getState().drafts.draft_1.sections[0];
+    // Rejected: the suggested "200" is gone, the original "100" restored…
+    expect(sec.html).toContain("100");
+    expect(sec.html).not.toContain("200");
+    // …and the author's own edit SURVIVES (a wholesale prevHtml restore
+    // would have destroyed it).
+    expect(sec.html).toContain("per calendar week");
+    expect(sec.html).not.toContain("data-suggestion-id");
+  });
 });
 
 function change(proposedHtml: string): PendingChange {

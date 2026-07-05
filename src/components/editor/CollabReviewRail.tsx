@@ -55,7 +55,7 @@ export function CollabReviewRail({
   onPendingCommentConsumed,
   focusCommentId,
   onFocusCommentConsumed,
-  openSuggestSectionId,
+  openSuggest,
   onOpenSuggestConsumed,
 }: {
   draft: Draft;
@@ -70,9 +70,10 @@ export function CollabReviewRail({
    *  switches to the Comments tab and scrolls that thread into view. */
   focusCommentId?: string | null;
   onFocusCommentConsumed?: () => void;
-  /** Set when the user picks "Suggest edit" from an on-page text selection — the
-   *  rail opens the SuggestEditDialog for that section, pre-scoped. */
-  openSuggestSectionId?: string | null;
+  /** Set when the user picks "Suggest edit" from an on-page text selection —
+   *  the rail opens the SuggestEditDialog for that section with the selected
+   *  text pre-highlighted, so the edit is scoped to the selection. */
+  openSuggest?: { sectionId: string; quote?: string } | null;
   onOpenSuggestConsumed?: () => void;
 }) {
   const profile = useProfileStore((s) => s.profile);
@@ -83,6 +84,8 @@ export function CollabReviewRail({
   // proposal lands as an attributed pendingChange the author accepts/rejects.
   const [suggestPickerOpen, setSuggestPickerOpen] = useState(false);
   const [suggestSection, setSuggestSection] = useState<Section | null>(null);
+  // Selected text carried from the on-page bubble into the dialog (pre-select).
+  const [suggestQuote, setSuggestQuote] = useState<string | undefined>();
 
   const reviewStatus = draft.reviewStatus ?? "draft";
   const suggestions = useMemo(
@@ -127,16 +130,18 @@ export function CollabReviewRail({
     if (pendingComment) setTab("comments");
   }, [pendingComment]);
 
-  // "Suggest edit" from an on-page selection: open the dialog for that section.
+  // "Suggest edit" from an on-page selection: open the dialog for that section
+  // with the selected text pre-highlighted.
   useEffect(() => {
-    if (!openSuggestSectionId) return;
-    const section = draft.sections.find((s) => s.id === openSuggestSectionId);
+    if (!openSuggest) return;
+    const section = draft.sections.find((s) => s.id === openSuggest.sectionId);
     if (section) {
       setSuggestPickerOpen(false);
+      setSuggestQuote(openSuggest.quote);
       setSuggestSection(section);
     }
     onOpenSuggestConsumed?.();
-  }, [openSuggestSectionId, draft.sections, onOpenSuggestConsumed]);
+  }, [openSuggest, draft.sections, onOpenSuggestConsumed]);
 
   // Clicking a comment highlight in the letter focuses that thread here.
   useEffect(() => {
@@ -152,12 +157,12 @@ export function CollabReviewRail({
     return () => clearTimeout(t);
   }, [focusCommentId, onFocusCommentConsumed]);
 
-  const submitSuggestion = (section: Section, proposedHtml: string) => {
+  const submitSuggestion = (section: Section, proposedHtml: string, note?: string) => {
     useDraftStore.getState().proposeSectionChange(draft.id, section.id, {
       id: uid("sug"),
       createdAt: Date.now(),
       proposedHtml,
-      instruction: "Suggested edit",
+      instruction: note || "Suggested edit",
       source: "review",
       authorId: me.email || me.name,
       authorName: me.name,
@@ -260,6 +265,7 @@ export function CollabReviewRail({
                           key={s.id}
                           type="button"
                           onClick={() => {
+                            setSuggestQuote(undefined);
                             setSuggestSection(s);
                             setSuggestPickerOpen(false);
                           }}
@@ -411,9 +417,15 @@ export function CollabReviewRail({
       {suggestSection && (
         <SuggestEditDialog
           open
-          onOpenChange={(next) => !next && setSuggestSection(null)}
+          onOpenChange={(next) => {
+            if (!next) {
+              setSuggestSection(null);
+              setSuggestQuote(undefined);
+            }
+          }}
           section={suggestSection}
-          onSubmit={(proposedHtml) => submitSuggestion(suggestSection, proposedHtml)}
+          quote={suggestQuote}
+          onSubmit={(proposedHtml, note) => submitSuggestion(suggestSection, proposedHtml, note)}
         />
       )}
     </div>
@@ -513,6 +525,11 @@ function SuggestionCard({
   const human = Boolean(pending.authorName);
   const seed = pending.authorId ?? pending.authorName ?? "";
   const accent = human ? avatarColor(seed) : "var(--ds-amber-fg)";
+  const isInline = (pending.diffViewMode ?? "inline") === "inline";
+  // Inline mode: section.html carries the word-level <ins>/<del> marks — show
+  // JUST the changed words as a compact redline (reference design), not two
+  // full Before/After blocks. Card mode (images/tables) keeps the panes.
+  const fragments = isInline ? extractInlineDiff(section.html) : [];
   // "Before" prefers the pre-diff snapshot (inline mode stashes the diffed
   // HTML into section.html, so raw section.html would show ins/del noise).
   const beforeHtml = pending.prevHtml ?? section.html;
@@ -538,15 +555,34 @@ function SuggestionCard({
           <span className="ml-1 font-normal text-[var(--ds-subtle)]">· {section.title}</span>
         </span>
       </button>
+      {fragments.length > 0 ? (
+        <p className="mx-3 mb-1 font-serif text-[12px] leading-relaxed text-[var(--ds-body)]">
+          {fragments.map((f, i) =>
+            f.kind === "del" ? (
+              <del
+                key={i}
+                className="mr-1 text-[var(--ds-red-fg)] line-through decoration-[var(--ds-red-fg)]/40"
+              >
+                {f.text}
+              </del>
+            ) : (
+              <ins key={i} className="mr-1 font-medium text-[var(--ds-green-fg)] no-underline">
+                {f.text}
+              </ins>
+            ),
+          )}
+        </p>
+      ) : (
+        <div className="mx-3 mb-2 flex flex-col gap-1">
+          <DiffPane label="Before" tone="rem" html={beforeHtml} />
+          <DiffPane label="After" tone="add" html={pending.proposedHtml} />
+        </div>
+      )}
       {pending.instruction && pending.instruction !== "Suggested edit" && (
-        <p className="px-3 pb-1 text-[11.5px] leading-snug text-[var(--ds-muted)]">
+        <p className="px-3 pb-1 pt-0.5 text-[11px] leading-snug text-[var(--ds-muted)]">
           <span className="font-semibold">Why:</span> {pending.instruction}
         </p>
       )}
-      <div className="mx-3 mb-2 flex flex-col gap-1">
-        <DiffPane label="Before" tone="rem" html={beforeHtml} />
-        <DiffPane label="After" tone="add" html={pending.proposedHtml} />
-      </div>
       {canResolve ? (
         <div className="flex gap-2 px-3 pb-2.5">
           <button
@@ -569,6 +605,24 @@ function SuggestionCard({
       )}
     </div>
   );
+}
+
+/** Pull the changed runs out of an inline-diffed section: the compact
+ *  "old → new" line the card renders (word-level marks, document order).
+ *  Long runs are clipped — the full change is visible on the page itself. */
+function extractInlineDiff(html: string): { kind: "del" | "ins"; text: string }[] {
+  if (typeof window === "undefined" || !html) return [];
+  const root = document.createElement("div");
+  root.innerHTML = sanitizeLetterHtml(html);
+  return [...root.querySelectorAll("ins[data-suggestion-id], del[data-suggestion-id]")]
+    .map((el) => {
+      const text = (el.textContent ?? "").trim();
+      return {
+        kind: el.tagName === "DEL" ? ("del" as const) : ("ins" as const),
+        text: text.length > 120 ? text.slice(0, 117) + "…" : text,
+      };
+    })
+    .filter((f) => f.text);
 }
 
 function DiffPane({ label, tone, html }: { label: string; tone: "rem" | "add"; html: string }) {

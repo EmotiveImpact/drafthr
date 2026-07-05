@@ -96,10 +96,39 @@ describe("diffHtmlAsSuggestion", () => {
       "<p>Paragraph one stays the same.</p><p>Paragraph two is rewritten.</p>";
     const out = diffHtmlAsSuggestion(oldHtml, newHtml, ATTRS);
     const summaries = listSuggestionsHtml(out);
-    // Replacement = one removed + one inserted sentence.
-    expect(summaries.filter((s) => s.kind === "deletion")).toHaveLength(1);
-    expect(summaries.filter((s) => s.kind === "insertion")).toHaveLength(1);
-    expect(out).toContain("Paragraph one stays the same.");
+    // Word-level replacement: "will/change." → "is/rewritten." = paired marks.
+    const dels = summaries.filter((s) => s.kind === "deletion").map((s) => s.text.trim());
+    const inss = summaries.filter((s) => s.kind === "insertion").map((s) => s.text.trim());
+    expect(dels.join(" ")).toBe("will change");
+    expect(inss.join(" ")).toBe("is rewritten");
+    // Paragraph structure preserved: two <p> blocks, marks only in the second.
+    expect(out.match(/<p>/g)).toHaveLength(2);
+    expect(out).toMatch(/<p>Paragraph one stays the same\.<\/p>/);
+  });
+
+  it("WORD granularity: a one-word change marks only that word, not the sentence", () => {
+    const out = diffHtmlAsSuggestion(
+      "<p>Your last day of service will be 31 August 2026.</p>",
+      "<p>Your last day of service will be 29 August 2026.</p>",
+      ATTRS,
+    );
+    const summaries = listSuggestionsHtml(out);
+    expect(summaries.filter((s) => s.kind === "deletion").map((s) => s.text.trim())).toEqual(["31"]);
+    expect(summaries.filter((s) => s.kind === "insertion").map((s) => s.text.trim())).toEqual(["29"]);
+    // The unchanged tail must NOT sit inside a mark.
+    expect(out).not.toMatch(/<(ins|del)[^>]*>[^<]*August 2026/);
+  });
+
+  it("marks flow INLINE inside the sentence's <p> (no block-per-mark chopping)", () => {
+    const out = diffHtmlAsSuggestion(
+      "<p>Payment of £6,480 follows your notice period.</p>",
+      "<p>Payment of £6,930 follows your notice period.</p>",
+      ATTRS,
+    );
+    // One paragraph containing plain text AND the marks — a real redline.
+    expect(out.match(/<p>/g)).toHaveLength(1);
+    expect(out).toMatch(/<p>Payment of £6,<del/);
+    expect(out).toMatch(/follows your notice period\.<\/p>/);
   });
 
   it("HTML-escapes user-controlled text + author so injected angles don't break the markup", () => {

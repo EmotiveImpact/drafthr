@@ -311,6 +311,39 @@
     background: transparent;
   }
 
+  /* Review page only: attribute the redline to its author with a small tag
+   * chip, Word/Google-Docs style ("Marcus" next to the change). Insertions
+   * carry the chip; a pure deletion (no paired insertion after it) carries
+   * its own so lone removals stay attributed. */
+  .review-canvas ins[data-suggestion-id][data-status="pending"][data-author]::after,
+  .review-canvas
+    del[data-suggestion-id][data-status="pending"][data-author]:not(
+      :has(+ ins[data-suggestion-id])
+    )::after {
+    content: attr(data-author);
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 8.5px;
+    font-weight: 700;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    color: #fff;
+    background: var(--ds-green-fg);
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-left: 3px;
+    vertical-align: 2px;
+    white-space: nowrap;
+    text-decoration: none;
+    user-select: none;
+  }
+  .review-canvas
+    del[data-suggestion-id][data-status="pending"][data-author]:not(
+      :has(+ ins[data-suggestion-id])
+    )::after {
+    background: var(--ds-red-fg);
+  }
+
   /* Cards: subtle, warm shadow rather than the default Tailwind stack */
   [data-slot="card"] {
     box-shadow: var(--shadow-2xs);

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -30,14 +30,24 @@ export function SuggestEditDialog({
   open,
   onOpenChange,
   section,
+  quote,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
   section: Section;
-  /** Called with the reviewer's sanitised proposed HTML. */
-  onSubmit: (proposedHtml: string) => void;
+  /** Text the reviewer had selected on the page. When present, the composer
+   *  pre-selects exactly this run inside the section copy, so typing replaces
+   *  JUST the selected words — not the whole block. */
+  quote?: string;
+  /** Called with the reviewer's sanitised proposed HTML + optional rationale. */
+  onSubmit: (proposedHtml: string, note?: string) => void;
 }) {
+  const [note, setNote] = useState("");
+  // Whether the quoted text really is pre-selected in the composer — drives
+  // the "type to replace just that part" hint so it never lies (ambiguous /
+  // unfound quotes fall back to a plain cursor at the end).
+  const [quoteSelected, setQuoteSelected] = useState(false);
   // Schema MUST be a superset of what SectionEditor can hold, or Tiptap drops
   // unknown nodes/marks (tables, images, figure refs, comment/suggestion marks)
   // when it parses the seed HTML — and the no-op guard would then let a reviewer
@@ -73,13 +83,57 @@ export function SuggestEditDialog({
   });
 
   // Re-seed when the dialog (re)opens for a section so a stale buffer from a
-  // previous open never leaks into a different section's suggestion.
+  // previous open never leaks into a different section's suggestion. When the
+  // reviewer arrived via an on-page text selection, pre-select that exact run
+  // in the copy so typing replaces just it (the word-level diff then redlines
+  // only what actually changed).
   useEffect(() => {
     if (open && editor) {
       editor.commands.setContent(section.html || "");
-      // Defer focus so the dialog is mounted first.
-      const t = setTimeout(() => editor.commands.focus("end"), 30);
-      return () => clearTimeout(t);
+      setNote("");
+      setQuoteSelected(false);
+      // The dialog opens with Radix focus management + an animating overlay,
+      // and Tiptap attaches its view a beat after mount — a single early
+      // focus/select attempt can silently no-op. Verify and retry briefly.
+      const timers: ReturnType<typeof setTimeout>[] = [];
+      const trySelect = (attempt: number) => {
+        if (editor.isDestroyed) return;
+        // Only pre-select when the quote appears EXACTLY ONCE — HR letters
+        // repeat short phrases (names, dates), and pre-selecting the wrong
+        // occurrence while telling the user "type to replace it" would have
+        // them overwrite the wrong text.
+        const range = quote ? findTextRange(editor.state.doc, quote, { requireUnique: true }) : null;
+        if (!range) {
+          editor.commands.focus("end");
+          return;
+        }
+        // Set the ProseMirror STATE selection (typing semantics), then mirror
+        // it at the DOM level — tiptap's own focus() is unreliable inside the
+        // just-opened Radix dialog, but a direct element focus + DOM Range
+        // sticks, and PM adopts the DOM selection once the view has focus.
+        editor.commands.setTextSelection(range);
+        const dom = editor.view.dom as HTMLElement;
+        dom.focus();
+        try {
+          const domSel = window.getSelection();
+          const domRange = document.createRange();
+          domRange.setStart(editor.view.domAtPos(range.from).node, editor.view.domAtPos(range.from).offset);
+          domRange.setEnd(editor.view.domAtPos(range.to).node, editor.view.domAtPos(range.to).offset);
+          domSel?.removeAllRanges();
+          domSel?.addRange(domRange);
+        } catch {
+          /* domAtPos can throw during pagination churn — retry below */
+        }
+        const applied =
+          dom.contains(document.activeElement) || document.activeElement === dom;
+        if (applied) {
+          setQuoteSelected(true);
+        } else if (attempt < 4) {
+          timers.push(setTimeout(() => trySelect(attempt + 1), 120 * (attempt + 1)));
+        }
+      };
+      timers.push(setTimeout(() => trySelect(0), 60));
+      return () => timers.forEach(clearTimeout);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, section.id, editor]);
@@ -93,7 +147,7 @@ export function SuggestEditDialog({
       onOpenChange(false);
       return;
     }
-    onSubmit(html);
+    onSubmit(html, note.trim() || undefined);
     onOpenChange(false);
   };
 
@@ -101,7 +155,12 @@ export function SuggestEditDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-        <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-4">
+        <Dialog.Content
+          // We place focus ourselves (into the editor, selecting the quoted
+          // text) — Radix's default autofocus would land elsewhere and
+          // collapse that selection.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <Lightbulb className="size-4 text-[var(--ds-muted)]" />
@@ -120,11 +179,20 @@ export function SuggestEditDialog({
             </Dialog.Close>
           </div>
           <Dialog.Description className="text-[12.5px] text-[var(--ds-muted)] mb-3 leading-snug">
-            Edit the text below. Your version is proposed to the author as a
-            suggestion — it doesn't change the letter until they accept it.
+            {quote && quoteSelected
+              ? "Your selected text is highlighted below — type to replace just that part. Only what you change becomes a redline."
+              : "Edit the text below. Only the words you change become a redline; the proposal doesn't touch the letter until the author accepts it."}
           </Dialog.Description>
 
           <EditorContent editor={editor} />
+
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Why? (optional) — e.g. 12 weeks from the outcome date lands on the 29th"
+            className="mt-2.5 h-8 w-full rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none"
+          />
 
           <div className="mt-4 flex items-center justify-end gap-2">
             <Dialog.Close asChild>
@@ -140,4 +208,60 @@ export function SuggestEditDialog({
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+/**
+ * Locate `quote` inside a ProseMirror doc and return its absolute positions.
+ * Searches each textblock's flattened text — a quote from a single on-page
+ * selection normally lives within one paragraph. Returns null when not found
+ * (e.g. quote spanned paragraphs, or the text changed since selection); the
+ * caller then falls back to focusing the end.
+ */
+function findTextRange(
+  doc: import("@tiptap/pm/model").Node,
+  quote: string,
+  opts?: { requireUnique?: boolean },
+): { from: number; to: number } | null {
+  const needle = quote.replace(/\s+/g, " ").trim();
+  if (!needle) return null;
+  // Whitespace-tolerant match: the on-page selection may normalise spaces
+  // differently than the stored HTML, so spaces in the needle match any
+  // whitespace run in the block text.
+  const pattern = needle
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/ /g, "\\s+");
+  const matches: { from: number; to: number }[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isTextblock) return true;
+    // Build the block's text alongside a position map so whitespace
+    // normalisation doesn't break the offset arithmetic.
+    let text = "";
+    const posMap: number[] = [];
+    node.forEach((child, offset) => {
+      if (child.isText && child.text) {
+        for (let i = 0; i < child.text.length; i++) {
+          text += child.text[i];
+          posMap.push(pos + 1 + offset + i);
+        }
+      }
+    });
+    // Collect ALL occurrences (uniqueness gate below) — a duplicated phrase
+    // pre-selected at the wrong occurrence would make the reviewer overwrite
+    // the wrong text.
+    const re = new RegExp(pattern, "g");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const start = m.index;
+      const end = m.index + m[0].length;
+      if (posMap[start] != null && posMap[end - 1] != null) {
+        matches.push({ from: posMap[start], to: posMap[end - 1] + 1 });
+      }
+      if (matches.length > 1) return false; // enough to know it's ambiguous
+      if (m.index === re.lastIndex) re.lastIndex++; // zero-width safety
+    }
+    return matches.length <= 1;
+  });
+  if (matches.length === 0) return null;
+  if (opts?.requireUnique && matches.length > 1) return null;
+  return matches[0];
 }

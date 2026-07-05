@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { toast } from "sonner";
 import {
   LetterEditor,
@@ -165,12 +165,27 @@ export function PagedlyDocEditor({
 }) {
   const updateSection = useDraftStore((s) => s.updateSection);
   const editorRef = useRef<EditorHandle | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const draftId = draft.id;
 
-  // Map once per draft — re-mapping on every store change would fight pagedly's
-  // internal live copy and clobber in-progress edits.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const mapped = useMemo(() => toLetterDraft(draft), [draftId]);
+  // REVIEW-MODE LIVE REFRESH — pagedly maps the draft once at mount, so store
+  // changes made OUTSIDE pagedly (a suggestion staged from the rail, an
+  // accept/reject folding a redline in) wouldn't paint until a reload. In
+  // review mode we detect those external writes (section html differing from
+  // our baseline, which pagedly's own persist advances first) and remount the
+  // editor with a fresh mapping, restoring the scroll position. The main
+  // editor's Page view keeps the mount-once behaviour untouched.
+  const [mountVersion, setMountVersion] = useState(0);
+  const savedScrollRef = useRef<number | null>(null);
+
+  // Map once per draft (or per detected external change in review mode) —
+  // re-mapping on every store change would fight pagedly's internal live copy
+  // and clobber in-progress edits.
+  const mapped = useMemo(
+    () => toLetterDraft(useDraftStore.getState().drafts[draftId] ?? draft),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draftId, mountVersion],
+  );
 
   // Baseline of each section's stored HTML, captured at mount and advanced after
   // each successful write. Lets persist tell "the user edited this on the page"
@@ -184,6 +199,70 @@ export function PagedlyDocEditor({
   }, [draftId]);
 
   const markedToastShown = useRef(false);
+
+  // Signature of the store's section HTML — the subscription that lets review
+  // mode notice external writes. pagedly's OWN writes advance baselineRef
+  // before this effect runs, so they never trigger a remount.
+  // Gated on reviewMode so the main editor's Page view doesn't pay an
+  // O(letter-html) string build + re-render on every store write.
+  const sectionsSig = useDraftStore((s) => {
+    if (!reviewMode) return "";
+    const d = s.drafts[draftId];
+    return d ? d.sections.map((x) => x.id + " " + x.html).join("") : "";
+  });
+  const refreshingRef = useRef(false);
+  useEffect(() => {
+    if (!reviewMode || refreshingRef.current) return;
+    const d = useDraftStore.getState().drafts[draftId];
+    if (!d) return;
+    // A streaming section's html churns token-by-token — never remount for
+    // those (and a stale stuck "streaming" flag must not veto refreshes for
+    // the whole draft, so the check is per-section, not draft-wide).
+    const changed = d.sections.some(
+      (x) => x.status !== "streaming" && (baselineRef.current[x.id] ?? x.html) !== x.html,
+    );
+    if (!changed) return;
+    // FLUSH FIRST, then advance baselines. The outgoing pagedly instance may
+    // hold a debounced user edit; flushing it now makes that write land
+    // against the OLD baselines, where the "external change wins -> skip"
+    // guard applies to the changed sections. If we advanced baselines first,
+    // the stale flush would look like a fresh page edit and overwrite the
+    // just-staged / just-accepted html (data loss).
+    refreshingRef.current = true;
+    const editor = editorRef.current;
+    void (async () => {
+      try {
+        await Promise.race([
+          editor?.flush(),
+          new Promise((resolve) => setTimeout(resolve, 500)),
+        ]);
+      } catch {
+        /* a failed flush must not block the refresh */
+      }
+      refreshingRef.current = false;
+      const fresh = useDraftStore.getState().drafts[draftId];
+      if (!fresh) return;
+      savedScrollRef.current = findScroller(wrapRef.current)?.scrollTop ?? null;
+      baselineRef.current = Object.fromEntries(fresh.sections.map((x) => [x.id, x.html]));
+      setMountVersion((v) => v + 1);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionsSig, reviewMode, draftId]);
+
+  // After a live-refresh remount, put the scroll back where the user was.
+  // Pagedly paginates asynchronously, so retry over a short window.
+  useEffect(() => {
+    if (mountVersion === 0 || savedScrollRef.current == null) return;
+    const target = savedScrollRef.current;
+    savedScrollRef.current = null;
+    const timers = [60, 300, 800].map((ms) =>
+      setTimeout(() => {
+        const sc = findScroller(wrapRef.current);
+        if (sc && Math.abs(sc.scrollTop - target) > 4) sc.scrollTop = target;
+      }, ms),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [mountVersion]);
 
   // Bridge pagedly's imperative handle to the app's PagedEditorActions contract
   // so the top menubar's Edit menu (Undo / Redo / Select all / Find) keeps
@@ -248,24 +327,39 @@ export function PagedlyDocEditor({
   void suggesting; // reserved; app owns suggestions in the rail (see above)
 
   return (
-    <LetterEditor
-      key={draftId}
-      draft={mapped}
-      editorRef={editorRef}
-      readOnly={readOnly}
-      onCommentAdd={enableComments ? onCommentAdd : undefined}
-      onCommentClick={reviewMode ? onCommentClick : undefined}
-      toolbar
-      toolbarPosition="sticky"
-      toolbarLayout="compact"
-      features={features}
-      showPageNumbers
-      pageSize="A4"
-      // No write-back when read-only (review-locked): guarantees the surface
-      // can never mutate the store even if pagedly emits an initial change.
-      onChange={readOnly ? undefined : persist}
-      className="h-full"
-      canvasClassName="bg-[var(--ds-canvas)]"
-    />
+    <div ref={wrapRef} className="h-full min-h-0">
+      <LetterEditor
+        key={`${draftId}:${mountVersion}`}
+        draft={mapped}
+        editorRef={editorRef}
+        readOnly={readOnly}
+        onCommentAdd={enableComments ? onCommentAdd : undefined}
+        onCommentClick={reviewMode ? onCommentClick : undefined}
+        toolbar
+        toolbarPosition="sticky"
+        toolbarLayout="compact"
+        features={features}
+        showPageNumbers
+        pageSize="A4"
+        // No write-back when read-only (review-locked): guarantees the surface
+        // can never mutate the store even if pagedly emits an initial change.
+        onChange={readOnly ? undefined : persist}
+        className="h-full"
+        canvasClassName="bg-[var(--ds-canvas)]"
+      />
+    </div>
   );
+}
+
+/** First scrollable descendant — pagedly's internal canvas scroller. Used to
+ *  save/restore the reading position across a live-refresh remount. */
+function findScroller(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null;
+  for (const el of root.querySelectorAll<HTMLElement>("*")) {
+    if (el.scrollHeight > el.clientHeight + 20) {
+      const oy = getComputedStyle(el).overflowY;
+      if (oy === "auto" || oy === "scroll") return el;
+    }
+  }
+  return null;
 }

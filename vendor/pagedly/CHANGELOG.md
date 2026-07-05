@@ -2,6 +2,23 @@
 
 ## HRLETTER vendor patches (re-apply on upstream refresh)
 
+- **2026-07-05 (c) — full suggestion-mark metadata round-trips.** Added
+  `data-author-id`, `data-body`, `data-created-at`, `data-suggestion` to the
+  same four allowlists so the reviewer's identity, rationale note and
+  timestamp survive an author page-edit (previously the first review-mode
+  persist silently dropped them from the marks).
+
+- **2026-07-05 (b) — suggestion marks survive the LETTER pipeline too.** The
+  2026-07-05 patch covered sanitize.ts only; the letter build path has its own
+  allowlists in `letter/sourceHtml.ts` (`SAVED_DATA_ATTRS` + the
+  `sanitizePagedLetterHtml` ALLOWED_ATTR/ADD_ATTR/ADD_URI_SAFE_ATTR trio) whose
+  post-sanitize `stripDisallowedDataAttributes` pass was still removing
+  `data-suggestion-id/-kind/data-status/data-author` from `<ins>/<del>` —
+  leaving a bare `<ins class>` on the page (tag kept, identity lost, so the
+  host's redline CSS/author chip never applied). Added the four attrs to all
+  four lists in the SOURCE and rebuilt. This was the actual "no visual redline
+  on the review page" root cause.
+
 - **2026-07-05 — inline suggestion marks preserved (invest).** Rebuilt from
   pagedly source (v1.1.0, ~/pagedly-codebase) with `data-suggestion-id`,
   `data-suggestion-kind`, `data-status`, `data-author` added to the sanitizer's
