@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   Check,
   CheckCircle2,
@@ -17,8 +18,10 @@ import { useProfileStore } from "@/lib/profile";
 import { canApprove, canSubmitForReview } from "@/lib/permissions";
 import { meIdentity } from "@/lib/comments/identity";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { uid } from "@/lib/utils";
 import { Avatar, avatarColor } from "@/components/ds";
 import { CommentsPanel } from "./CommentsPanel";
+import { SuggestEditDialog } from "./SuggestEditDialog";
 import type { ReviewDialogKind } from "./ReviewDialog";
 import { Button } from "@/components/ui/button";
 
@@ -50,6 +53,8 @@ export function CollabReviewRail({
   onWithdraw,
   pendingComment,
   onPendingCommentConsumed,
+  focusCommentId,
+  onFocusCommentConsumed,
 }: {
   draft: Draft;
   role: WorkspaceRole | undefined;
@@ -59,10 +64,19 @@ export function CollabReviewRail({
   onWithdraw: () => void;
   pendingComment?: PendingComment | null;
   onPendingCommentConsumed?: () => void;
+  /** Set when the user clicks a comment highlight in the letter — the rail
+   *  switches to the Comments tab and scrolls that thread into view. */
+  focusCommentId?: string | null;
+  onFocusCommentConsumed?: () => void;
 }) {
   const profile = useProfileStore((s) => s.profile);
   const me = meIdentity(profile);
   const [tab, setTab] = useState<"suggestions" | "comments">("suggestions");
+  // The reviewer-side "Suggest an edit" flow, owned by the rail so the Review
+  // step needs no extra wiring: pick a section → SuggestEditDialog → the
+  // proposal lands as an attributed pendingChange the author accepts/rejects.
+  const [suggestPickerOpen, setSuggestPickerOpen] = useState(false);
+  const [suggestSection, setSuggestSection] = useState<Section | null>(null);
 
   const reviewStatus = draft.reviewStatus ?? "draft";
   const suggestions = useMemo(
@@ -92,9 +106,40 @@ export function CollabReviewRail({
   );
 
   const scrollToSection = (sectionId: string) => {
-    document
-      .querySelector<HTMLElement>(`[data-section-id="${sectionId}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // The paged letter (Review step) marks sections with data-section-anchor;
+    // the sections canvas uses data-section-id. Try both.
+    const el =
+      document.querySelector<HTMLElement>(`[data-section-anchor="${sectionId}"]`) ??
+      document.querySelector<HTMLElement>(`[data-section-id="${sectionId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  // Clicking a comment highlight in the letter focuses that thread here.
+  useEffect(() => {
+    if (!focusCommentId) return;
+    setTab("comments");
+    // Defer so the Comments tab has mounted before we look for the thread.
+    const t = setTimeout(() => {
+      document
+        .querySelector<HTMLElement>(`[data-comment-id="${focusCommentId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      onFocusCommentConsumed?.();
+    }, 60);
+    return () => clearTimeout(t);
+  }, [focusCommentId, onFocusCommentConsumed]);
+
+  const submitSuggestion = (section: Section, proposedHtml: string) => {
+    useDraftStore.getState().proposeSectionChange(draft.id, section.id, {
+      id: uid("sug"),
+      createdAt: Date.now(),
+      proposedHtml,
+      instruction: "Suggested edit",
+      source: "review",
+      authorId: me.email || me.name,
+      authorName: me.name,
+      diffViewMode: "card",
+    });
+    toast.success("Suggestion sent to the author");
   };
 
   return (
@@ -164,29 +209,65 @@ export function CollabReviewRail({
       {/* ── feed ── */}
       <div className="min-h-0 flex-1 overflow-auto">
         {tab === "suggestions" ? (
-          suggestions.length === 0 ? (
-            <p className="px-4 py-8 text-center text-[12px] italic text-[var(--ds-muted)]">
-              No open suggestions. Reviewer edits and AI proposals land here for
-              accept / reject.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2.5 p-3">
-              {suggestions.map((section) => (
-                <SuggestionCard
-                  key={section.id}
-                  section={section}
-                  canResolve={canResolve}
-                  onJump={() => scrollToSection(section.id)}
-                  onAccept={() =>
-                    useDraftStore.getState().acceptSectionPending(draft.id, section.id)
-                  }
-                  onReject={() =>
-                    useDraftStore.getState().rejectSectionPending(draft.id, section.id)
-                  }
-                />
-              ))}
-            </div>
-          )
+          <>
+            {/* Propose an edit from HERE — the review surface — instead of
+             * having to go back to Edit. Pick a section, edit a copy, and the
+             * author gets the attributed accept/reject card. Hidden once the
+             * draft is approved (canvas is locked, review is over). */}
+            {reviewStatus !== "approved" && (
+              <div className="px-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setSuggestPickerOpen((v) => !v)}
+                  className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--ds-line)] text-[12px] font-semibold text-[var(--ds-muted)] hover:border-[var(--ds-ink)] hover:text-[var(--ds-ink)]"
+                >
+                  <Lightbulb className="size-3.5" /> Suggest an edit…
+                </button>
+                {suggestPickerOpen && (
+                  <div className="mt-1.5 overflow-hidden rounded-md border border-[var(--ds-line)]">
+                    {draft.sections
+                      .filter((s) => s.status !== "streaming" && !s.pendingChange)
+                      .map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSuggestSection(s);
+                            setSuggestPickerOpen(false);
+                          }}
+                          className="block w-full border-b border-[var(--ds-line-2)] px-3 py-1.5 text-left text-[12px] text-[var(--ds-body)] last:border-b-0 hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                        >
+                          {s.title}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {suggestions.length === 0 ? (
+              <p className="px-4 py-8 text-center text-[12px] italic text-[var(--ds-muted)]">
+                No open suggestions. Reviewer edits and AI proposals land here for
+                accept / reject.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2.5 p-3">
+                {suggestions.map((section) => (
+                  <SuggestionCard
+                    key={section.id}
+                    section={section}
+                    canResolve={canResolve}
+                    onJump={() => scrollToSection(section.id)}
+                    onAccept={() =>
+                      useDraftStore.getState().acceptSectionPending(draft.id, section.id)
+                    }
+                    onReject={() =>
+                      useDraftStore.getState().rejectSectionPending(draft.id, section.id)
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </>
         ) : (
           <CommentsPanel
             draft={draft}
@@ -298,6 +379,15 @@ export function CollabReviewRail({
           </div>
         )}
       </div>
+
+      {suggestSection && (
+        <SuggestEditDialog
+          open
+          onOpenChange={(next) => !next && setSuggestSection(null)}
+          section={suggestSection}
+          onSubmit={(proposedHtml) => submitSuggestion(suggestSection, proposedHtml)}
+        />
+      )}
     </div>
   );
 }

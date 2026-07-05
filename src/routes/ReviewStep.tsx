@@ -43,6 +43,7 @@ export function ReviewStep() {
 
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
+  const [focusCommentId, setFocusCommentId] = useState<string | null>(null);
 
   if (!draft || !draftId) {
     return (
@@ -151,6 +152,7 @@ export function ReviewStep() {
             onAddComment={(sectionId, opts) =>
               setPendingComment({ sectionId, quote: opts?.quote, applyMark: opts?.applyMark })
             }
+            onFocusComment={(commentId) => setFocusCommentId(commentId)}
           />
         </main>
 
@@ -163,6 +165,8 @@ export function ReviewStep() {
             onWithdraw={onWithdraw}
             pendingComment={pendingComment}
             onPendingCommentConsumed={() => setPendingComment(null)}
+            focusCommentId={focusCommentId}
+            onFocusCommentConsumed={() => setFocusCommentId(null)}
           />
         </aside>
       </div>
