@@ -12,7 +12,7 @@
 import { eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { requireMarketplaceSession as requireSessionAndTenant } from "../../_utils/marketplace-session.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantProfiles, stripeConnectAccounts } from "../../../src/db/schema.js";
 import { getStripe, stripeConfigured, appBaseUrl } from "../../_utils/stripe.js";
@@ -57,7 +57,7 @@ export async function GET(req: Request): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "stripe-connect", max: 20, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "stripe-connect", max: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const stripe = getStripe();

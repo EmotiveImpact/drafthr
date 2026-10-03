@@ -34,6 +34,7 @@ import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { isDatabaseWorkspaceEnabled } from "@/lib/workspace-flags";
 import type { ArtifactFormat } from "@/lib/storage/workspace-file-types";
+import type { PackIntegrityOutcome } from "@/lib/export/pack-integrity";
 const LetterPreview = lazy(() => import("@/components/editor/LetterPreview").then(module => ({ default: module.LetterPreview })));
 
 /**
@@ -58,6 +59,7 @@ export function Finalize() {
 
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [packNotice, setPackNotice] = useState<{ draftId: string; message: string } | null>(null);
 
   if (!draft || !draftId) {
     return (
@@ -207,11 +209,23 @@ export function Finalize() {
   const onExportZip = async () => {
     if (!guardReadiness()) return;
     setBusyFormat("zip");
+    setPackNotice(null);
     try {
       const { renderLetterPackBlob, filenameForPack } = await import("@/lib/export/pack");
       const attestation = exportAttestation();
-      const blob = await renderLetterPackBlob(await renderableDraft(), attestation);
+      let integrity: PackIntegrityOutcome | undefined;
+      const blob = await renderLetterPackBlob(await renderableDraft(), attestation, {
+        sourceDraft: draft,
+        onIntegrity: result => { integrity = result; },
+      });
       await saveAndDownload(blob, filenameForPack(draft), "pack");
+      if (integrity) {
+        const result = integrity as PackIntegrityOutcome;
+        const location = isDatabaseWorkspaceEnabled() ? "Pack saved" : "Pack prepared for download";
+        setPackNotice({ draftId: draft.id, message: result.status === "signed"
+          ? `${location} with file checksums and a digital signature. No independent timestamp or legal validation is claimed; verification instructions are included.`
+          : `${location} with file checksums. Digital signing is not configured for this export; this pack is unsigned.` });
+      }
     } catch (err) {
       alert(`ZIP export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -351,10 +365,13 @@ export function Finalize() {
              * (/consultants) owns listing, loading, and empty states. */}
             <DocumentHero
               letterTitle={draft.title ?? meta.title}
+              jurisdiction={draft.context.jurisdiction}
               draftedBy={draftedBy}
               recipient={recipientNameFor(draft) ?? "HR Officer"}
               onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)}
             />
+
+            {packNotice?.draftId === draft.id && <p role="status" className="mt-3 text-sm text-muted-foreground">{packNotice.message}</p>}
 
             <div className="mt-4 flex flex-col gap-3">
               <Button variant="outline" aria-expanded={showPreview} aria-controls="finalise-preview" onClick={() => setShowPreview(value => !value)}>
@@ -464,32 +481,16 @@ export function Finalize() {
  * Subcomponents
  * ==========================================================================*/
 
-/**
- * Document hero + social-proof upsell.
- *
- * Three vertically stacked sections inside one bordered card:
- *   1. Letter title (Playfair display serif) + "drafted by X · ready for Y"
- *      subtitle, with a Fluent Emoji 3D page icon on the left.
- *   2. Violet-tinted social-proof block: avatar stack (4 recent bookers) +
- *      "412 people had a specialist review..." sentence + "See specialists ↓"
- *      CTA that smooth-scrolls to the consultant grid below.
- *   3. Italic testimonial quote with the customer's name + resolution date.
- *
- * The 412 number and testimonial are placeholder copy — wire to a real
- * bookings API + permissioned customer testimonials before promoting this
- * to production marketing channels.
- *
- * Icons use Microsoft Fluent Emoji 3D (open source, CDN-hosted) so the
- * page/paperclip/etc render identically across macOS, Windows, Linux,
- * iOS, and Android — instead of falling back to the platform emoji font.
- */
+/** Saved letter identity and a link to the real specialist marketplace. */
 function DocumentHero({
   letterTitle,
+  jurisdiction,
   draftedBy,
   recipient,
   onSeeSpecialists,
 }: {
   letterTitle: string;
+  jurisdiction: string;
   draftedBy: string;
   recipient: string;
   onSeeSpecialists: () => void;
@@ -526,7 +527,7 @@ function DocumentHero({
             {letterTitle}
           </h2>
           <p className="text-[12.5px] text-[var(--ds-muted)] mt-1 m-0">
-            UK · drafted by {draftedBy} · ready for {recipient}
+            {jurisdiction} · drafted by {draftedBy} · ready for {recipient}
           </p>
         </div>
       </div>
@@ -539,8 +540,8 @@ function DocumentHero({
           <strong className="text-[var(--ds-ink)] font-semibold">
             Want a second opinion before you send?
           </strong>{" "}
-          Book a qualified employment-law specialist to review this letter — most
-          reviews come back within 24 hours.
+          Find an employment-law specialist to review this letter. Check their
+          qualifications, jurisdiction, availability and turnaround before booking.
         </div>
 
         <button

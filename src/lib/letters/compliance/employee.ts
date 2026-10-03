@@ -231,10 +231,10 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     letterType: "acas_ec_notification",
     jurisdiction: "UK",
     severity: "required",
-    label: "Limitation period referenced",
-    description: "Reference s.111 ERA 1996 / 3-month tribunal limitation so it's clear you're acting in time.",
-    match: { kind: "regex", value: "section\\s*111|s\\.\\s*111|limitation period|three[- ]month|3[- ]month", flags: "i" },
+    label: "Filing rights reserved",
+    description: "Reserve rights without asserting that a claim is in time. The applicable filing deadline needs separate confirmation.",
+    match: { kind: "regex", value: "reserve.{0,40}rights|subject to.{0,40}(?:time limits|limitation)", flags: "i" },
     recommendation:
-      "Add: 'I am notifying ACAS of a prospective claim within the s.111 ERA 1996 limitation period (3 months less one day).'",
+      "Add: 'I reserve all rights to pursue any available claims, subject to the applicable time limits.' Do not assert that a filing deadline has been verified.",
   },
 ];

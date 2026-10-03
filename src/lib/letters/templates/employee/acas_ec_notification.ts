@@ -6,7 +6,7 @@ export const ACAS_EC_NOTIFICATION_UK: LetterTemplate = {
   evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK ACAS Early Conciliation Cover — EMPLOYEE MODE):
 - ACAS Early Conciliation is mandatory before presenting an ET1 in most tribunal claims (Employment Tribunals Act 1996 s.18A; Employment Tribunals (Early Conciliation: Exemptions and Rules of Procedure) Regulations 2014 (as amended)).
-- Limitation: s.111 ERA 1996 — an unfair dismissal claim must be presented within 3 months less one day from the effective date of termination (subject to the EC stop-the-clock under s.207B). Discrimination claims under EqA 2010 — 3 months less one day from the act complained of (s.123 EqA).
+- Filing time limits require case-specific confirmation, including claim type, region, relevant dates and any applicable early conciliation rules. Do not derive a deadline or fixed extension from an incident date. Do not assert that the claim is in time.
 - This letter is the cover note to ACAS or the prospective respondent (where notifying the respondent in parallel) confirming the Early Conciliation notification has been made.
 - Strictly procedural — do NOT set out the full claim. The substance belongs in the ET1.
 - Tribunal-bound. British English.
@@ -63,16 +63,15 @@ export const ACAS_EC_NOTIFICATION_UK: LetterTemplate = {
     },
     {
       sectionId: "deadline",
-      title: "Limitation deadline reference",
+      title: "Rights and time limits",
       instruction:
-        "Reference the s.111 ERA / s.123 EqA limitation, the s.207B stop-the-clock, and that the writer reserves the right to present an ET1 within the limitation period as extended by EC.",
-      scaffold: `<p>The Company will be aware of the statutory limitation periods under section 111 of the Employment Rights Act 1996 and section 123 of the Equality Act 2010 (3 months less one day from the relevant act), as extended by the ACAS Early Conciliation provisions in section 207B of the 1996 Act. I reserve the right to present a Form ET1 to the Employment Tribunal within the relevant limitation period.</p>`,
+        "Reserve the right to present an ET1, subject to the applicable time limits and procedural requirements. Do not state a filing date or duration, assert timeliness, or assume early conciliation has extended the deadline.",
+      scaffold: `<p>I reserve all rights to pursue any available claims in the Employment Tribunal, subject to the applicable time limits and procedural requirements, including any relevant early conciliation rules. Nothing in this letter waives those rights.</p>`,
       constraints: [
-        "MUST cite s.111 ERA 1996 and s.123 EqA 2010 (where relevant).",
-        "MUST cite s.207B ERA 1996 (EC stop-the-clock).",
-        "MUST reserve the right to present the ET1.",
+        "MUST reserve rights subject to the applicable time limits and procedural requirements.",
+        "MUST NOT insert an unverified reminder date, a blanket filing window or an assumed extension.",
       ],
-      example: `<p>The Company will be aware of the statutory limitation periods under section 111 of the Employment Rights Act 1996 and section 123 of the Equality Act 2010 (3 months less one day from the relevant act), as extended by the ACAS Early Conciliation provisions in section 207B of the 1996 Act. I reserve the right to present a Form ET1 to the Employment Tribunal within the relevant limitation period.</p>`,
+      example: `<p>I reserve all rights to pursue any available claims in the Employment Tribunal, subject to the applicable time limits and procedural requirements, including any relevant early conciliation rules. Nothing in this letter waives those rights.</p>`,
     },
     {
       sectionId: "closing",
@@ -104,7 +103,7 @@ export const ACAS_EC_NOTIFICATION_US: LetterTemplate = {
   evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (US EEOC Charge Cover — EMPLOYEE MODE):
 - Cover for an EEOC charge of discrimination under Title VII / ADA / ADEA / GINA / PWFA. Note: the EEOC charge itself is the operative document; this letter is a cover or notice to the prospective respondent.
-- Filing windows: 180 days from the alleged discriminatory act (extended to 300 days where a state or local FEPA also processes the charge).
+- Filing rules require case-specific confirmation, including the applicable law, agency, employment category, location and relevant dates. Do not derive a deadline from an incident date or assume a single filing window for every claim.
 - Some state agencies operate worksharing with the EEOC (CA CRD, NY DHR, TX TWC) — a charge filed with one is generally deemed filed with the other.
 - Strictly procedural. The substance is in the charge.
 - American English. Counsel review strongly recommended.`,
@@ -155,15 +154,15 @@ export const ACAS_EC_NOTIFICATION_US: LetterTemplate = {
     },
     {
       sectionId: "deadline",
-      title: "Limitation / filing window reference",
+      title: "Rights and time limits",
       instruction:
-        "Reference the 180/300-day filing window and the right to receive a Notice of Right to Sue.",
-      scaffold: `<p>The Company will be aware of the statutory filing window (180 days from the alleged act, extended to 300 days where the charge is processed by a state or local FEPA), and that I will be entitled to a Notice of Right to Sue from the EEOC at the conclusion of the EEOC's process or after 180 days under 29 C.F.R. §1601.28. I reserve all of my rights, including the right to commence civil proceedings within the 90-day window following issue of the right-to-sue notice.</p>`,
+        "Reserve rights to pursue any available agency or court remedies, subject to the applicable filing rules and procedural requirements. Do not state a deadline or duration, assert that a charge is timely, or assume a right-to-sue entitlement.",
+      scaffold: `<p>I reserve all of my rights to pursue any available remedies through the appropriate agency or court, subject to the applicable filing time limits and procedural requirements. Nothing in this letter waives those rights.</p>`,
       constraints: [
-        "MUST reference 180/300-day window.",
-        "MUST reference the right to a Notice of Right to Sue and the 90-day post-issue window.",
+        "MUST reserve rights subject to the applicable filing rules and procedural requirements.",
+        "MUST NOT insert an unverified reminder date, a blanket filing window or an assumed entitlement to sue.",
       ],
-      example: `<p>The Company will be aware of the statutory filing window (180 days from the alleged act, extended to 300 days where the charge is processed by a state or local FEPA), and that I will be entitled to a Notice of Right to Sue from the EEOC at the conclusion of the EEOC's process or after 180 days under 29 C.F.R. §1601.28. I reserve all of my rights, including the right to commence civil proceedings within the 90-day window following issue of the right-to-sue notice.</p>`,
+      example: `<p>I reserve all of my rights to pursue any available remedies through the appropriate agency or court, subject to the applicable filing time limits and procedural requirements. Nothing in this letter waives those rights.</p>`,
     },
     {
       sectionId: "closing",

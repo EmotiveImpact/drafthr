@@ -6,10 +6,10 @@
  * POST — create a new booking. Body: { consultantProfileId, draftId?,
  *        matterTitle?, message?, expectedDeliveryAt? }.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { requireMarketplaceSession as requireSessionAndTenant, withMarketplaceWriteScope, canWriteMarketplaceBookings } from "../../_utils/marketplace-session.js";
 import { getDb } from "../../../src/db/index.js";
 import {
   consultantBookings,
@@ -22,6 +22,8 @@ import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 export const config = { runtime: "nodejs" };
 
 type CreateBookingInput = {
+  /** Stable identifier for retries of one booking intent. */
+  requestId?: string;
   consultantProfileId: string;
   draftId?: string | null;
   matterTitle?: string;
@@ -97,7 +99,7 @@ export async function GET(req: Request): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   const originRes = enforceSameOrigin(req);
   if (originRes) return originRes;
-  const limited = rateLimit(req, { name: "booking-create", max: 30, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "booking-create", max: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
@@ -114,35 +116,52 @@ export async function POST(req: Request): Promise<Response> {
   // Guard the uuid column: a non-UUID id would make Postgres raise 22P02 →
   // generic 500 (bug #19). Treat it as a missing profile (same as a real
   // not-found), which is the honest outcome.
-  if (!serverUuidOrNull(body.consultantProfileId)) {
+  const consultantProfileId = serverUuidOrNull(body.consultantProfileId);
+  if (!consultantProfileId) {
     return jsonError("Consultant profile not found", 404);
   }
+  const requestId = body.requestId === undefined ? crypto.randomUUID() : serverUuidOrNull(body.requestId);
+  if (!requestId) return jsonError("Invalid requestId", 400);
+  if (body.message !== undefined && typeof body.message !== "string" || body.matterTitle !== undefined && typeof body.matterTitle !== "string") {
+    return jsonError("message and matterTitle must be text", 400);
+  }
 
-  const db = getDb();
+  let createdBookingId: string | undefined;
+  const response = await withMarketplaceWriteScope(auth, async (db, currentAuth) => {
+  if (!canWriteMarketplaceBookings(currentAuth)) return jsonError("Your workspace role cannot create bookings", 403);
+  const [existing] = await db.select().from(consultantBookings).where(eq(consultantBookings.id, requestId)).limit(1);
+  if (existing) {
+    // A guessed ID must never return another participant's record. Reusing
+    // an intent ID with changed contents also fails rather than creating two.
+    if (existing.requesterUserId !== auth.userRow.id || existing.tenantId !== auth.activeTenant!.id ||
+        existing.consultantProfileId !== consultantProfileId || existing.draftId !== serverUuidOrNull(body.draftId ?? null) ||
+        existing.message !== (body.message?.slice(0, 4000) ?? null) || existing.matterTitle !== (body.matterTitle?.slice(0, 280) ?? null) ||
+        (body.expectedDeliveryAt && existing.expectedDeliveryAt?.getTime() !== new Date(body.expectedDeliveryAt).getTime())) {
+      return jsonError("Booking request identifier was already used", 409);
+    }
+    return Response.json({ booking: toClient(existing) }, { headers: { "Cache-Control": "no-store" } });
+  }
   const [profile] = await db
     .select()
     .from(consultantProfiles)
-    .where(eq(consultantProfiles.id, body.consultantProfileId))
+    .where(eq(consultantProfiles.id, consultantProfileId))
     .limit(1);
 
   if (!profile) return jsonError("Consultant profile not found", 404);
   if (profile.status !== "published")
     return jsonError("Consultant is not currently accepting bookings", 412);
 
-  // SECURITY: verify the attached draft belongs to the caller's tenant BEFORE
-  // binding it to the booking. The share-review read path (shared.ts) fetches
-  // the draft by id alone — deliberately, trusting that creation authorised it.
-  // Without this check an HR user could pass ANY draft UUID (incl. another
-  // tenant's) and, once a consultant accepts, leak that draft's full letter +
-  // PII via the 30-day share token. Coerce non-UUID ids to a draftless booking
-  // (as before); reject a valid-format id that isn't in this tenant.
+  // Bind only a live draft owned by this workspace. Hold its share lock until
+  // insertion commits so deletion cannot pass this check and revoke existing
+  // shares before a new booking appears. Accept and delete use the same draft
+  // before booking lock order. Preserve draftless legacy identifiers.
   let boundDraftId: string | null = serverUuidOrNull(body.draftId ?? null);
   if (boundDraftId) {
     const [ownedDraft] = await db
       .select({ id: drafts.id })
       .from(drafts)
-      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant.id)))
-      .limit(1);
+      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant!.id), isNull(drafts.deletedAt)))
+      .limit(1).for("share");
     if (!ownedDraft) return jsonError("Draft not found in this workspace", 404);
     boundDraftId = ownedDraft.id;
   }
@@ -162,7 +181,8 @@ export async function POST(req: Request): Promise<Response> {
   const [row] = await db
     .insert(consultantBookings)
     .values({
-      tenantId: auth.activeTenant.id,
+      id: requestId,
+      tenantId: auth.activeTenant!.id,
       requesterUserId: auth.userRow.id,
       consultantUserId: profile.userId,
       consultantProfileId: profile.id,
@@ -174,18 +194,23 @@ export async function POST(req: Request): Promise<Response> {
       expectedDeliveryAt: expected,
       bookedAt: new Date(),
     })
+    .onConflictDoNothing({ target: consultantBookings.id })
     .returning();
 
-  // Fire-and-forget — don't block the response on email delivery; surfacing
-  // a 200 with a booking the consultant can see is the success signal.
-  void sendBookingRequestEmail(row.id).catch((err) => {
-    console.error("[bookings] email send failed", err);
-  });
+  if (!row) return jsonError("Booking request identifier was already used", 409);
+
+  createdBookingId = row.id;
 
   return new Response(JSON.stringify({ booking: toClient(row) }), {
     status: 201,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
+  });
+  // Run notifications only after the booking transaction commits.
+  if (createdBookingId) void sendBookingRequestEmail(createdBookingId).catch((err) => {
+    console.error("[bookings] email send failed", err);
+  });
+  return response;
 }
 
 function parseSlaMs(sla: string): number {

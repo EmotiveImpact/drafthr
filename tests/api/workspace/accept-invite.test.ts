@@ -53,7 +53,8 @@ function makeRequest(body: Record<string, unknown>): Request {
 }
 
 beforeEach(() => {
-  process.env.NODE_ENV = "development"; // preserve local requests that omit Origin
+  // Keep Vitest's test environment: requests already supply an allowed Origin.
+  // Database-backed rate protection is exercised in its separate integration suite.
   mockInvite = { ...inviteFixture };
   mockExistingMember = false;
   companyOrg = null;

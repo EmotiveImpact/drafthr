@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MessageSquare, Send } from "lucide-react";
-import { useBookingsStore, type Booking, type BookingMessage } from "@/lib/bookings";
+import { type Booking, type BookingMessage } from "@/lib/bookings";
 import { pushBookingMessage } from "@/lib/marketplaceSync";
 
 /**
@@ -8,9 +8,7 @@ import { pushBookingMessage } from "@/lib/marketplaceSync";
  *   - ConsultantInbox (perspective: 'consultant' — sends as the consultant)
  *   - MyBookings (perspective: 'requester' — sends as HR)
  *
- * Local-only for now (writes to useBookingsStore). When the server-side
- * thread API lands, perspective stays as the only prop and the store
- * call gets swapped for an API call.
+ * Shows only the accepted server thread. Failed sends retain the text for retry.
  */
 export function BookingThread({
   booking,
@@ -19,37 +17,28 @@ export function BookingThread({
   booking: Booking;
   perspective: "requester" | "consultant";
 }) {
-  const appendMessage = useBookingsStore((s) => s.appendMessage);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
+  const messageRef = useRef<{ text: string; id: string } | null>(null);
   const messages = booking.messages ?? [];
 
   // The other party gets the "From them" treatment.
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
-    // Optimistic: append locally for instant feedback. Keep the minted id so
-    // a failure removes exactly THIS bubble — a whole-thread snapshot restore
-    // would clobber a second message sent while this one was in flight, and
-    // would race the failure path's re-pull (server truth must win).
-    const optimisticId = appendMessage(booking.id, perspective, text);
-    setDraft("");
-    // Dual-write: mirror to the server. On success, the server returns
-    // the canonical thread which replaces our local copy (picking up
-    // anything the other party sent in the meantime). On failure the sync
-    // layer already toasts + re-pulls; remove the optimistic bubble so the
-    // UI stops claiming a message was delivered that the counterpart (who
-    // only sees the server thread) never received.
-    const ok = await pushBookingMessage(booking.id, perspective, text);
-    if (!ok && optimisticId) {
-      useBookingsStore.setState((state) => ({
-        bookings: state.bookings.map((b) =>
-          b.id === booking.id
-            ? { ...b, messages: (b.messages ?? []).filter((m) => m.id !== optimisticId) }
-            : b,
-        ),
-      }));
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    if (messageRef.current?.text !== text) messageRef.current = { text, id: crypto.randomUUID() };
+    let ok: boolean;
+    try {
+      ok = await pushBookingMessage(booking.id, perspective, text, messageRef.current.id);
+    } finally {
+      sendingRef.current = false;
+      setSending(false);
     }
+    if (ok) { setDraft(""); messageRef.current = null; }
   };
 
   return (
@@ -80,6 +69,7 @@ export function BookingThread({
         <form onSubmit={onSubmit} className="mt-2 flex gap-2">
           <input
             type="text"
+            disabled={sending}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={
@@ -93,11 +83,11 @@ export function BookingThread({
           />
           <button
             type="submit"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || sending}
             className="inline-flex h-9 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-60"
           >
             <Send className="size-3.5" aria-hidden />
-            Send
+            {sending ? "Sending…" : "Send"}
           </button>
         </form>
       </div>

@@ -1,5 +1,7 @@
+import { LEGACY_MARKETPLACE_KEYS, quarantineLegacyMarketplaceData } from "../marketplace-scope";
+
 /**
- * Wipe all tenant-scoped client state from localStorage.
+ * Remove active tenant-scoped caches from localStorage.
  *
  * Called on sign-out AND on a successful workspace switch so a shared / kiosk
  * browser never carries one tenant's drafts, matters, employees, profile,
@@ -14,7 +16,11 @@
  * the app / devtools) read the previous tenant's PII straight out of
  * localStorage. Cross-tenant *writes* were already blocked server-side (403),
  * so this was a confidentiality leak, not escalation — but it's real, so we
- * wipe the local cache at both trust-boundary transitions.
+ * wipe the active local cache at both trust-boundary transitions. The sole
+ * migration exception is old marketplace data that was never confirmed by
+ * the server: retain an inactive owner-unknown recovery copy, never hydrate it.
+ * Quarantine is not encryption or protection from someone inspecting browser
+ * storage; an owner must reconcile/remove that legacy data before kiosk use.
  *
  * Theme and the public branding-flag cache are intentionally PRESERVED — they
  * hold no tenant data, and resetting a user's theme on every logout would be a
@@ -36,8 +42,8 @@ export const TENANT_SCOPED_PERSIST_KEYS = [
  * `window`), and in private-mode where storage access throws.
  *
  * Callers hard-navigate immediately afterwards, so the in-memory zustand
- * state is torn down by the reload; this function only has to guarantee the
- * on-disk copy is gone before the next user's session initialises.
+ * state is torn down by the reload; inactive marketplace quarantine is never
+ * loaded by the next user's session and is not treated as a saved record.
  *
  * `keepProfile` is set on a WORKSPACE SWITCH (board JA-03): a switch is the
  * SAME user moving between their own tenants, so their profile (the
@@ -48,10 +54,17 @@ export const TENANT_SCOPED_PERSIST_KEYS = [
  */
 export function clearTenantScopedLocalData(opts?: { keepProfile?: boolean }): void {
   if (typeof window === "undefined") return;
+  // The former marketplace stores may contain requests never accepted by the
+  // server. Keep a verified, inactive recovery copy before clearing their old
+  // keys. Their owner is unknown, so nothing automatically imports or shows it.
+  quarantineLegacyMarketplaceData();
   const keys = opts?.keepProfile
     ? TENANT_SCOPED_PERSIST_KEYS.filter((k) => k !== "scribehr-profile-v1")
     : TENANT_SCOPED_PERSIST_KEYS;
   for (const key of keys) {
+    // Quarantine failure must not turn logout into silent data loss. These
+    // keys are no longer read by either marketplace store.
+    if ((LEGACY_MARKETPLACE_KEYS as readonly string[]).includes(key)) continue;
     try {
       window.localStorage.removeItem(key);
     } catch {

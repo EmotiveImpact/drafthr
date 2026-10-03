@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Star } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -11,8 +11,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { Consultant } from "@/components/consultants/types";
-import { useBookingsStore, slaMs, type Booking } from "@/lib/bookings";
+import { slaMs, type Booking } from "@/lib/bookings";
 import { pushBookingCreate } from "@/lib/marketplaceSync";
+import { captureMarketplaceScope, isMarketplaceScopeCurrent } from "@/lib/marketplace-scope";
 import { toServerUuid } from "@/lib/remote-ids";
 import { cn } from "@/lib/utils";
 
@@ -35,65 +36,49 @@ export function BookingDialog({
 }: BookingDialogProps) {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const recordBooking = useBookingsStore((s) => s.recordBooking);
+  const submittingRef = useRef(false);
+  const requestRef = useRef<{ fingerprint: string; id: string; expectedDeliveryAt: string } | null>(null);
 
   const open = !!consultant;
 
   function close() {
     setNote("");
+    requestRef.current = null;
     onClose();
   }
 
   async function handleConfirm() {
-    if (!consultant || submitting) return;
+    if (!consultant || submittingRef.current) return;
+    if (!consultant.profileId) {
+      toast.error("This consultant is not available for database-backed bookings.");
+      return;
+    }
+    const scope = captureMarketplaceScope();
+    if (!scope) return;
+    submittingRef.current = true;
+    setSubmitting(true);
     const message = note.trim() || undefined;
-    const booking = recordBooking({
-      consultantInitials: consultant.initials,
-      // Carry the stable profile id so the HR-side bookings list can match
-      // this booking back to the consultant card (name, photo) reliably —
-      // initials aren't unique. Undefined for seed consultants.
-      consultantProfileId: consultant.profileId,
-      draftId,
-      // Pass the optional note through to the booking record so the
-      // consultant inbox can show "HR: ..." context on the request card.
-      message,
-      expectedDeliveryAt: Date.now() + slaMs(consultant.sla),
-    });
-    // Dual-write: mirror the booking to the server, but only when the
-    // consultant is a real server-side record (has profileId). The 14
-    // hardcoded seed consultants don't exist server-side, so a POST
-    // would 404 — we skip the call and keep the booking local-only for
-    // them, which is the only honest thing to do.
-    if (consultant.profileId) {
-      setSubmitting(true);
-      // AWAIT the create: the consultant's inbox is server-driven, so a failed
-      // POST means they never see the request. Firing this and-forgetting would
-      // show a false "Booking confirmed" toast over a booking that never landed.
-      const ok = await pushBookingCreate(
-        {
-          consultantProfileId: consultant.profileId,
-          // The draft_id column is a Postgres uuid. Local draft ids are
-          // readable strings ("draft_x7k2…"), so map through the same
-          // deterministic bridge the dual-write layer uses to write the
-          // draft row — otherwise the INSERT 500s (the flagship "book a
-          // specialist on this letter" flow silently dead-ended), and the
-          // consultant's share-token review couldn't find the draft.
-          draftId: draftId ? toServerUuid(draftId) : null,
-          message,
-          expectedDeliveryAt: new Date(Date.now() + slaMs(consultant.sla)).toISOString(),
-        },
-        // Pass the optimistic local id so the sync layer can swap it
-        // out for the server's UUID once the API responds. Prevents the
-        // "same booking shows up twice" duplicate on next hydrate.
-        booking.id,
-        consultant.initials,
-      );
+    const fingerprint = JSON.stringify([consultant.profileId, draftId, message ?? ""]);
+    if (requestRef.current?.fingerprint !== fingerprint) requestRef.current = {
+      fingerprint, id: crypto.randomUUID(), expectedDeliveryAt: new Date(Date.now() + slaMs(consultant.sla)).toISOString(),
+    };
+    let booking: Booking | null;
+    try {
+      booking = await pushBookingCreate({
+        requestId: requestRef.current.id,
+        consultantProfileId: consultant.profileId,
+        draftId: draftId ? toServerUuid(draftId) : null,
+        message,
+        expectedDeliveryAt: requestRef.current.expectedDeliveryAt,
+      }, consultant.initials, draftId || undefined);
+    } finally {
+      submittingRef.current = false;
       setSubmitting(false);
-      if (!ok) {
-        // pushBookingCreate already rolled back the optimistic local row.
-        toast.error("Couldn't send your booking request — please try again.");
-        return;
-      }
+    }
+    if (!isMarketplaceScopeCurrent(scope)) return;
+    if (!booking) {
+      toast.error("Your request wasn't confirmed. Check My bookings before sending it again.");
+      return;
     }
     close();
     onBooked?.(booking);
@@ -201,7 +186,7 @@ export function BookingDialog({
               </Button>
               <Button
                 onClick={handleConfirm}
-                disabled={submitting}
+                disabled={submitting || !consultant.profileId}
                 className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:-translate-y-px hover:shadow-md text-[13px] font-semibold disabled:opacity-60"
               >
                 {submitting ? "Sending…" : "Send booking request"}

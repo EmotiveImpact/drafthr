@@ -2,6 +2,7 @@ import type { Draft, Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { getSectionTemplate } from "@/lib/letters/templates";
 import { evidencePromptBlock } from "@/lib/evidence";
+import { FILING_DEADLINE_SAFETY } from "./employee/rights-preservation";
 import {
   isQuestionVisible,
   letterStepsFor,
@@ -37,6 +38,7 @@ export function buildSectionPrompt(
   const lengthHint = LENGTH_HINTS_BY_SECTION[section.sectionId] ?? "Use the natural length for this section.";
   const dataDump = relevantData(draft);
   const evidenceDump = evidencePromptBlock(draft, section.id);
+  const deadlineSafety = draft.mode === "employee" ? FILING_DEADLINE_SAFETY : "";
 
   const refineBlock = refineInstruction?.trim()
     ? `\n\nUSER REFINEMENT (highest priority — apply on top of everything below; if it conflicts with HARD CONSTRAINTS, explain in [TBD] rather than break a constraint):\n${refineInstruction.trim()}\n`
@@ -64,6 +66,7 @@ ${tpl.scaffold}
 
 HARD CONSTRAINTS:
 ${constraints}
+${deadlineSafety}
 
 GOLD-STANDARD EXAMPLE (for register/length calibration only — do NOT lift verbatim):
 ${tpl.example}
@@ -90,6 +93,8 @@ POSITION: section comes after these prior sections (titles only, do not repeat t
 
 SECTION INSTRUCTION:
 ${sectionInstr}
+
+${deadlineSafety}
 
 LENGTH BUDGET: ${lengthHint}
 
@@ -169,7 +174,7 @@ const SECTION_INSTRUCTIONS: Record<string, string> = {
     "Render the reservation paragraph. Open with 'I reserve all my rights…' Include statutory, contractual, and common-law remedies. For tribunal-bound letters, reference the right to bring an Employment Tribunal / EEOC / state-agency claim.",
 
   deadline:
-    "Render a short paragraph noting the limitation deadline by which the employee must lodge proceedings (3 months less one day for UK ERA s.111; 180/300 days for EEOC). Reference the statutory basis. Do not invent figures — use [TBD] if uncertain.",
+    "Reserve the employee's rights subject to the applicable time limits. No filing deadline has been verified. Do not calculate or state a filing date, duration or extension from an incident date or reminder, and do not assert that a claim is in time.",
 
   header:
     "If this is a Without-Prejudice draft, render exactly one <p><strong>Without Prejudice and Subject to Contract</strong></p> as the header. Otherwise render an empty string.",
@@ -336,7 +341,7 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- ADA interactive process — the employee triggers it; employer must engage in good-faith dialogue. Request the meeting. Cite the ADA / PWFA / state law. Do NOT admit inability to perform the role.",
   },
   pay_dispute: {
-    UK: "- s.13 ERA 1996 unauthorised deduction from wages. Limitation 3 months less one day per deduction (Bear Scotland v Fulton series cap). Itemise underpayment, calculation, contractual / statutory basis. Demand payment by reasonable deadline. Reserve rights including ACAS / tribunal.",
+    UK: "- s.13 ERA 1996 unauthorised deduction from wages. Itemise underpayment, calculation, contractual / statutory basis. A requested payment date is not a legal filing deadline. Reserve rights including ACAS / tribunal without asserting a filing window or implying that waiting for payment pauses it.",
     US: "- FLSA + state wage payment laws (Cal. Lab. Code §201–204; NY Labor Law §198). Itemise. Demand payment. Reserve rights including DOL complaint and state wage claim.",
   },
   settlement_counter_offer: {
@@ -352,8 +357,8 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- Document the PIP engagement. ADA: if disability is implicated, document the interactive process. Reserve rights.",
   },
   acas_ec_notification: {
-    UK: "- Procedural cover for ACAS Early Conciliation. State intended claim type (unfair dismissal, discrimination, etc.), brief basis. Reference s.111 ERA limitation period (3 months less one day). Counsel review strongly recommended.",
-    US: "- EEOC charge cover. State protected characteristic, date(s) of act, brief factual basis. Reference 180/300-day filing window.",
+    UK: "- Procedural cover for ACAS Early Conciliation. State intended claim type (unfair dismissal, discrimination, etc.) and brief basis. Filing rules depend on the claim, region, relevant dates and applicable early conciliation rules. Do not calculate a deadline, assert timeliness or assume a fixed extension. Counsel review strongly recommended.",
+    US: "- EEOC charge cover. State protected characteristic, date(s) of act and brief factual basis. Applicable filing rules require case-specific confirmation. Do not infer a filing window from the incident date or assume every claim has the same deadline.",
   },
   tribunal_cover: {
     UK: "- ET1 cover. Reference ACAS Early Conciliation certificate number. Brief statement of attached claim. Strictly procedural — substance is in the form.",
@@ -382,6 +387,8 @@ function relevantData(draft: Draft): string {
   const gates = { ...a, jurisdiction: draft.context.jurisdiction };
   const lines: string[] = [];
   for (const [k, v] of Object.entries(a)) {
+    // Imported legacy reminder metadata is not letter evidence.
+    if (k === "protectedDeadline") continue;
     if (v == null || v === "") continue;
     const q = questions.get(k);
     if (q && !isQuestionVisible(q, gates)) continue;

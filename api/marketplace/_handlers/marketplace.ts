@@ -25,7 +25,7 @@ export const config = { runtime: "nodejs" };
 export async function GET(req: Request): Promise<Response> {
   // No session required — public marketplace. Tight IP-keyed rate
   // limit is the only gate.
-  const limited = rateLimit(req, { name: "consultant-marketplace", max: 120, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "consultant-marketplace", max: 120, windowMs: 60_000 });
   if (limited) return limited;
 
   const url = new URL(req.url);

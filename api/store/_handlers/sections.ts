@@ -36,7 +36,7 @@ export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
   if (process.env.DRAFTHR_DUAL_WRITE !== "true") return jsonError("Dual-write disabled", 503);
-  const limited = rateLimit(req, { name: "store-sections", max: 120, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "store-sections", max: 120, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<Body>(req, 8_000_000);

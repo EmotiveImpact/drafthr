@@ -25,7 +25,7 @@ const ADMIN_ROLES = new Set(["owner", "admin"]);
 export async function GET(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "workos-directory-info", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workos-directory-info", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);

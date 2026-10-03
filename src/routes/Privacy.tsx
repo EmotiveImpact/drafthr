@@ -1,5 +1,4 @@
 import { Card, Box, Text } from "@radix-ui/themes";
-import { todayDateOnly } from "@/lib/date-only";
 import { PublicLegalShell } from "@/components/PublicLegalShell";
 
 /**
@@ -20,12 +19,13 @@ export function Privacy() {
       title="Privacy Policy"
       subtitle={
         <>
-          Effective date:{" "}
+          Pre-launch draft · Last reviewed in code:{" "}
           <Text weight="medium" highContrast>
-            {todayDateOnly()}
+            3 October 2026
           </Text>
-          . This policy explains how DraftHR collects, processes, and stores
-          personal data in connection with drafting HR correspondence.
+          . Not approved for production. Provider configuration, retention,
+          business details and legal bases require owner and professional review
+          before real HR data is accepted.
         </>
       }
     >
@@ -43,9 +43,9 @@ export function Privacy() {
             address: <em>Address available on request — contact privacy@drafthr.io</em>.
           </p>
           <p>
-            This policy is effective from the date shown above and replaces any
-            prior version. It applies to all visitors to the site, signed-up
-            users, and trial users.
+            The date above identifies this draft revision, not an effective
+            production policy or confirmation that its operational commitments
+            have been implemented.
           </p>
 
           <h2>2. What we collect</h2>
@@ -128,14 +128,12 @@ export function Privacy() {
 
           <h2>5. AI processing</h2>
           <p>
-            DraftHR is AI-assisted. Letter content you enter is sent to{" "}
-            <strong>Anthropic Claude</strong> for drafting and critique. We use
-            Sonnet 4.6 by default; Opus 4.7 and Haiku 4.5 are selectable in
-            Settings → Generation model. Anthropic operates a zero-retention
-            policy for API traffic — your prompts and completions are not used
-            to train Anthropic models. Prompt caching is enabled with a 5-minute
-            time-to-live to reduce cost and latency; cached content lives on
-            Anthropic's infrastructure only for that window.
+            DraftHR is AI-assisted. When you request AI drafting, critique or
+            extraction, relevant content is sent to the configured model
+            provider. Provider retention, training restrictions and caching
+            depend on the enabled service and applicable agreement; this draft
+            does not confirm zero retention. The operator must verify and
+            disclose the actual production configuration before launch.
           </p>
           <p>
             You can opt out of AI features for your account by selecting "None"
@@ -146,9 +144,10 @@ export function Privacy() {
 
           <h2>6. Sub-processors</h2>
           <p>
-            We use the following sub-processors to deliver the service. A Data
-            Processing Addendum (DPA) is in place with each provider that
-            processes personal data on our behalf:
+            The current integrations reference the providers below. Before
+            production, the operator must confirm which are enabled, the data
+            they receive, their locations and applicable processing agreements.
+            This list does not establish that a DPA has been executed.
           </p>
           <ul>
             <li>
@@ -172,13 +171,10 @@ export function Privacy() {
               delivery (verification codes, password resets, notifications).
             </li>
             <li>
-              <strong>AWS KMS</strong> (Amazon Web Services, eu-west-2 region) —
-              cryptographic signing keys backing PAdES-B-T style export-pack
-              manifests.
-            </li>
-            <li>
-              <strong>FreeTSA</strong> — RFC 3161 timestamp authority for
-              export-pack timestamps.
+              <strong>AWS KMS</strong> (Amazon Web Services) — optional
+              cryptographic signing of ZIP-pack manifests when configured.
+              The production key and region still require verification.
+              Current ZIP packs do not request an external timestamp.
             </li>
             <li>
               <strong>Sentry / Functional Software Inc.</strong> (United States)
@@ -204,29 +200,15 @@ export function Privacy() {
           </p>
 
           <h2>8. Retention</h2>
-          <ul>
-            <li>
-              <strong>Drafts</strong> — 90 days after the draft was last edited,
-              then auto-purged from active storage.
-            </li>
-            <li>
-              <strong>Audit metadata</strong> — 24 months from the relevant
-              event (export, share, signature).
-            </li>
-            <li>
-              <strong>Account data</strong> — for as long as you have an active
-              account, then deleted on request or within 90 days of account
-              closure.
-            </li>
-            <li>
-              <strong>Support tickets and correspondence</strong> — 24 months.
-            </li>
-            <li>
-              <strong>Billing and tax records</strong> (when paid plans launch)
-              — retained for the period required by UK / US tax law (typically
-              6 / 7 years).
-            </li>
-          </ul>
+          <p>
+            A production retention and deletion schedule has not been approved
+            in this draft. It must cover business records, private files, audit
+            history, account data, backups and applicable legal holds. Do not
+            rely on automatic expiry after a fixed period. Browser clearing,
+            archiving and deleting a visible item are not confirmation that
+            every server or backup copy has been erased. These processes must
+            be implemented, tested and disclosed before launch.
+          </p>
 
           <h2>9. Your rights (UK and EU)</h2>
           <p>
@@ -273,16 +255,21 @@ export function Privacy() {
 
           <h2>11. Cookies and storage</h2>
           <p>
-            We use a single first-party session cookie (iron-session, HttpOnly,
-            Secure, SameSite=Lax) to keep you signed in. We use browser
-            <code>localStorage</code> to persist drafts in progress, UI
-            preferences, and onboarding state. <strong>We do not run marketing
+            We use first-party session and sign-in security cookies to keep you
+            signed in and protect the authentication flow. In database-backed
+            workspaces, saved business records are held on the server. Browser
+            storage may retain unsaved recovery copies, legacy records awaiting
+            import, interface preferences and onboarding state. Recovery copies
+            are not confirmation that a change has been saved to the server.
+            <strong>We do not run marketing
             cookies, advertising pixels, or third-party trackers.</strong>
           </p>
 
           <h2>12. Security</h2>
           <p>
-            We implement appropriate technical and organisational measures,
+            The implementation includes workspace access checks, private-file
+            authorization and a hash-chained database audit history. Hosted
+            configuration and operational controls still require verification,
             including:
           </p>
           <ul>
@@ -293,8 +280,7 @@ export function Privacy() {
               <code>pg_advisory_xact_lock</code> to prevent reordering;
             </li>
             <li>
-              KMS-backed signing keys for export-pack manifests (the private
-              key never leaves AWS KMS);
+              KMS-backed signing, key custody and rotation when enabled;
             </li>
             <li>least-privilege access controls and audited admin actions;</li>
             <li>mandatory MFA for staff with production-data access.</li>
@@ -314,8 +300,9 @@ export function Privacy() {
           <h2>14. Changes to this policy</h2>
           <p>
             We will post any material changes to this policy on this page and,
-            where appropriate, notify registered users by email. The effective
-            date at the top of this page reflects the most recent revision.
+            where appropriate, notify registered users by email. The
+            revision date at the top of this page is fixed for this draft; an
+            approved effective date must be set before publication.
           </p>
 
           <h2>15. Contact</h2>

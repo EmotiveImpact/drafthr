@@ -19,6 +19,8 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { isWorkOSAuditLogsEnabled } from "../../../src/lib/audit/workos-sink.js";
+import { dispatchWorkOSAuditOutbox, getAuditDeliveryState } from "../../../src/lib/audit/workos-outbox.js";
+import { enforceWorkspacePin } from "../../_utils/workspace-pin.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -27,12 +29,14 @@ const ADMIN_ROLES = new Set(["owner", "admin"]);
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "workos-audit-test", max: 10, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workos-audit-test", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const changed = enforceWorkspacePin(req, auth.activeTenant.id, auth.session.user.id);
+  if (changed) return changed;
   const memberRole = auth.activeMember?.role ?? "drafter";
   if (!ADMIN_ROLES.has(memberRole)) return jsonError("Admin role required", 403);
 
@@ -70,20 +74,26 @@ export async function POST(req: Request): Promise<Response> {
       },
     });
 
+    // Report actual acceptance, not a fire-and-forget promise.
+    await dispatchWorkOSAuditOutbox({ tenantId: auth.activeTenant.id, auditEventId: row.id, maxJobs: 1 });
+    const delivery = await getAuditDeliveryState(auth.activeTenant.id, row.id);
+    const delivered = delivery?.status === "delivered";
     return new Response(
       JSON.stringify({
         ok: true,
         auditEventId: row.id,
-        message:
-          "Test event written to the local chain and mirrored to WorkOS. Check your SIEM for action 'app.audit.test_event'.",
+        deliveryStatus: delivery?.status ?? "not_queued",
+        message: delivered
+          ? "Test event accepted by WorkOS. Check your configured log stream for action 'app.audit.test_event'."
+          : "Test event saved locally. WorkOS delivery has not been confirmed; inspect Audit Logs status for pending or failed delivery.",
       }),
       {
-        status: 200,
+        status: delivered ? 200 : 202,
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
       },
     );
-  } catch (err) {
-    console.error("[workos/audit-logs-test] failed", err);
+  } catch {
+    console.error("[workos/audit-logs-test] failed");
     return jsonError("Failed to emit test event", 500);
   }
 }

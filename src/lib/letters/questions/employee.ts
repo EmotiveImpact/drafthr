@@ -135,14 +135,14 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
     id: "deadlines",
     title: "Dates that matter",
     description:
-      "Most claims have strict limitation periods. We use these to surface deadlines and remind you when the letter needs to go out.",
+      "Record the chronology and your target sending date. DraftHR does not calculate legal filing deadlines. Confirm applicable time limits promptly with a qualified adviser; some can be very short.",
     questions: [
       {
         id: "actDate",
         type: "date",
         label: "When did the conduct or decision happen?",
         help:
-          "If it's a continuing course of conduct, pick the most recent incident. UK tribunal limitation is 3 months less one day from this date.",
+          "Use this for the chronology, and record other incidents separately. Multiple incidents can have different time limits; this date alone does not determine a filing deadline.",
       },
       {
         id: "sendBy",
@@ -842,4 +842,3 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
     },
   ],
 };
-

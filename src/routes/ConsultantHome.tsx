@@ -1,51 +1,24 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
-import { Briefcase, CheckCircle2, ExternalLink, Inbox, Sparkles, TrendingUp, UserCog } from "lucide-react";
+import { Briefcase, CheckCircle2, ExternalLink, Inbox, TrendingUp, UserCog } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
-import { useBookingsStore, parseSlaHours, type Booking } from "@/lib/bookings";
+import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
 import { pullInbox, pullProfile } from "@/lib/marketplaceSync";
+import { AppLoadingScreen } from "@/components/AppLoadingScreen";
+import { Button } from "@/components/ui/button";
 
 /** Stable empty ref — see ConsultantInbox for the zustand-v5 rationale. */
 const EMPTY_BOOKINGS: Booking[] = [];
 
-/**
- * Naïve earnings calculation — rate × estimated hours per completed
- * booking, using SLA as a proxy for hours. Real implementation will read
- * actual hours logged + Stripe transfer amounts once payouts land.
- */
-function computeEarnings(
-  bookings: Array<{ status: string }>,
-  ratePerHour: number,
-  slaString: string,
-): { completed: number; pending: number; lifetime: number } {
-  const hoursPerBooking = parseSlaHours(slaString);
-  const completed = bookings.filter((b) => b.status === "completed").length;
-  const pending = bookings.filter((b) => ["accepted", "delivered"].includes(b.status)).length;
-  const lifetime = completed * ratePerHour * hoursPerBooking;
-  return { completed, pending, lifetime };
-}
-
-/**
- * /c — Consultant home dashboard.
- *
- * Two-card shell:
- *  1. Profile completeness banner (calls out to /c/profile if incomplete).
- *  2. Inbound bookings inbox — empty state for now since the backend booking
- *     pipeline isn't wired up yet. The empty state explicitly tells the
- *     consultant their card is live in the marketplace, so they understand
- *     what's happening behind the scenes.
- *
- * Future work — wire to a real bookings table when the marketplace
- * server-side lands. The component is structured so the only thing
- * that changes is the source of `bookings` (today: empty array; later:
- * fetch from /api/bookings).
- */
+/** Consultant dashboard using the accepted profile and inbox read models. */
 export function ConsultantHome() {
   const nav = useNavigate();
   const profile = useConsultantStore((s) => s.profile);
   const enrolled = useConsultantStore((s) => s.enrolled);
+  const profileState = useConsultantStore((s) => s.lastSync.state);
+  const inboxState = useBookingsStore((s) => s.inboxState);
   const complete = isProfileComplete(profile);
   // Server moderation status — only "published" profiles actually appear in the
   // marketplace. New sign-ups are "pending_review" until an admin vets them, so
@@ -63,8 +36,7 @@ export function ConsultantHome() {
         if (cancelled) return;
         await pullInbox();
       } catch (err) {
-        // Best-effort hydration — a network failure must not wedge the page;
-        // the local store still drives the UI.
+        // Transport errors are reflected in the profile/inbox error states.
         if (!cancelled) console.warn("[ConsultantHome] hydrate failed", err);
       }
     })();
@@ -77,12 +49,17 @@ export function ConsultantHome() {
       profile ? s.bookingsForConsultant(profile.initials, profile.id) : EMPTY_BOOKINGS,
     ),
   );
-  const seedSampleBooking = useSeedSampleBooking();
   const pendingCount = allBookings.filter((b) => b.status === "requested").length;
   const activeCount = allBookings.filter((b) => b.status === "accepted").length;
-  const earnings = profile
-    ? computeEarnings(allBookings, profile.price, profile.sla)
-    : { completed: 0, pending: 0, lifetime: 0 };
+  const completedCount = allBookings.filter((b) => b.status === "completed").length;
+  const deliveredCount = allBookings.filter((b) => b.status === "delivered").length;
+  const activityReady = inboxState === "ready";
+
+  if (!profile && (profileState === "idle" || profileState === "pending")) return <AppLoadingScreen />;
+  if (profileState === "error") return <section role="alert" className="mx-auto max-w-5xl px-4 py-10">
+    <p>Your consultant profile could not be loaded.</p>
+    <Button variant="outline" className="mt-3" onClick={() => void pullProfile().then((ok) => ok && pullInbox())}>Retry</Button>
+  </section>;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
@@ -134,7 +111,7 @@ export function ConsultantHome() {
                     : "Set up your marketplace card so HR teams can find and book you."
                   : published
                     ? "HR teams can find and book you. Edit anytime to change rate, specialties, or bio."
-                    : "Thanks for completing your profile — our team is reviewing it. You'll be listed in the marketplace once it's approved, usually within one business day."}
+                    : "Your profile is saved. It will appear in the marketplace only while its review status is published."}
               </p>
             </div>
           </div>
@@ -170,22 +147,7 @@ export function ConsultantHome() {
               Inbox
             </h2>
             <div className="flex items-center gap-3 text-[11.5px] text-[var(--ds-muted)]">
-              {allBookings.length === 0 ? (
-                // Dev-only affordance to seed a sample booking while building
-                // the inbox. Never shown to real consultants in production.
-                import.meta.env.DEV ? (
-                  <button
-                    type="button"
-                    onClick={seedSampleBooking}
-                    disabled={!complete}
-                    title={complete ? undefined : "Complete your profile first"}
-                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-[var(--ds-line)] px-2 py-1 text-[11px] font-semibold text-[var(--ds-muted)] transition hover:border-[var(--ds-subtle)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Sparkles className="size-3" aria-hidden />
-                    Add a demo request
-                  </button>
-                ) : null
-              ) : (
+              {activityReady && allBookings.length > 0 && (
                 <>
                   {pendingCount > 0 && <span>{pendingCount} new</span>}
                   {activeCount > 0 && <span>{activeCount} in progress</span>}
@@ -215,48 +177,45 @@ export function ConsultantHome() {
             </Row>
             <Row label="Reviews">
               {profile?.reviews ?? 0}
-              <span className="ml-1 text-[var(--ds-muted)]">(new)</span>
             </Row>
           </dl>
         </section>
       </div>
 
-      {/* ─── Earnings card ──────────────────────────────────────── */}
-      <section className="mt-4 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
+      {/* ─── Review activity ────────────────────────────────────── */}
+      <section aria-labelledby="review-activity-heading" className="mt-4 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="inline-flex items-center gap-2 text-[14px] font-semibold text-[var(--ds-ink)]">
+          <h2 id="review-activity-heading" className="inline-flex items-center gap-2 text-[14px] font-semibold text-[var(--ds-ink)]">
             <TrendingUp className="size-4 text-[var(--ds-muted)]" aria-hidden />
-            Earnings
+            Review activity
           </h2>
           <span className="text-[11px] italic text-[var(--ds-muted)]">
-            Indicative · real payouts arrive with Stripe Connect
+            {activityReady ? "From saved booking statuses" : inboxState === "error" ? "Activity unavailable · retry the inbox" : "Loading activity…"}
           </span>
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <Stat
             label="Completed reviews"
-            value={String(earnings.completed)}
-            sub={earnings.pending > 0 ? `${earnings.pending} in flight` : "No work in flight"}
+            value={activityReady ? String(completedCount) : "—"}
+            sub="Acknowledged by the requester"
           />
           <Stat
-            label="Potential value"
-            value={
-              profile && earnings.completed > 0
-                ? `~${profile.currency}${earnings.lifetime.toLocaleString()}`
-                : "—"
-            }
-            sub={
-              profile && earnings.completed > 0
-                ? `indicative: ${profile.currency}${profile.price}/hr × est. hours`
-                : "Tracked once payouts go live"
-            }
+            label="In progress"
+            value={activityReady ? String(activeCount) : "—"}
+            sub="Accepted and not yet delivered"
           />
           <Stat
-            label="Platform fee"
-            value="12%"
-            sub="Planned — applies once payouts launch"
+            label="Awaiting acknowledgement"
+            value={activityReady ? String(deliveredCount) : "—"}
+            sub="Delivered to the requester"
           />
         </div>
+        <p className="mt-4 text-[11.5px] text-[var(--ds-muted)]">
+          Review counts are not earnings or payout totals.{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => nav("/c/profile")}>
+            Check payout setup in your profile.
+          </button>
+        </p>
       </section>
     </div>
   );
@@ -274,30 +233,6 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       {sub && <p className="mt-0.5 text-[11.5px] text-[var(--ds-muted)]">{sub}</p>}
     </div>
   );
-}
-
-/**
- * Quality-of-life affordance — drops a sample 'requested' booking into
- * the consultant's inbox so they can exercise the accept / decline /
- * deliver flow before any real HR team has booked them. Only available
- * when the consultant's profile is complete (so the booking carries
- * matching initials).
- */
-function useSeedSampleBooking() {
-  const profile = useConsultantStore((s) => s.profile);
-  const record = useBookingsStore((s) => s.recordBooking);
-  return () => {
-    if (!profile) return;
-    record({
-      consultantInitials: profile.initials,
-      consultantProfileId: profile.id,
-      draftId: "demo-" + Math.random().toString(36).slice(2, 8),
-      matterTitle: "Settlement letter — senior engineer, voluntary exit",
-      message:
-        "Could you review the settlement clauses? Specifically the without-prejudice wording and the s.111A position. Aiming to send Friday.",
-      expectedDeliveryAt: Date.now() + 24 * 60 * 60 * 1000,
-    });
-  };
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {

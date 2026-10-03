@@ -6,7 +6,7 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Pay Dispute / Unauthorised Deductions — EMPLOYEE MODE):
 - Statutory basis: s.13 Employment Rights Act 1996 — an employer must not make any deduction from a worker's wages unless authorised by statute, an express contractual provision, or written consent given before the deduction.
-- Limitation: 3 months less one day from the date of payment of the underpaid wages (s.23 ERA), subject to ACAS Early Conciliation extension. Bear Scotland Ltd v Fulton [2014] UKEAT 0047/13/0411 — a "series of deductions" can extend back, but Deduction from Wages (Limitation) Regulations 2014 cap the look-back at 2 years for claims presented on or after 1 July 2015.
+- Filing time limits and any recoverable look-back period require case-specific confirmation. Do not infer them from one deduction date, assume a fixed early conciliation extension, or imply that a requested payment date postpones a filing deadline.
 - Holiday pay underpayment claims: Working Time Regulations 1998 reg.13 / 13A; or as unauthorised deduction under s.13 ERA.
 - National Minimum Wage Act 1998 / National Living Wage where the dispute concerns the legal floor.
 - Tone: assertive, forensic. Itemise the underpayment with calculation. British English.
@@ -80,13 +80,13 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
       sectionId: "next_steps",
       title: "Demand for payment within reasonable period",
       instruction:
-        "Demand payment by a reasonable but specific deadline (typically 14 or 21 calendar days from the date of the letter). Refer to the limitation period (3 months less one day per s.23 ERA) and the ACAS EC route as the next procedural step.",
-      scaffold: `<p>I ask that the sum of £{{totalShortfall}} be paid into my nominated account by {{paymentDeadlineUK}}. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
+        "Request payment by the supplied target date. Separately reserve any available ACAS / tribunal rights, subject to applicable procedural requirements and time limits. Do not imply the employee must wait until the payment target to act or that it pauses a legal deadline.",
+      scaffold: `<p>I ask that the sum of £{{totalShortfall}} be paid into my nominated account by {{paymentDeadlineUK}}. Separately from this payment request, I reserve all rights to notify ACAS under the Early Conciliation procedure and to pursue any available claim in the Employment Tribunal, subject to the applicable time limits and procedural requirements.</p>`,
       constraints: [
         "MUST demand payment by a specific date.",
-        "MUST reference ACAS EC and s.23 ERA limitation.",
+        "MUST NOT treat the requested payment date as a legal filing deadline or advise waiting until it to preserve a claim.",
       ],
-      example: `<p>I ask that the sum of £14,832 be paid into my nominated account by 26 May 2026. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
+      example: `<p>I ask that the sum of £14,832 be paid into my nominated account by 26 May 2026. Separately from this payment request, I reserve all rights to notify ACAS under the Early Conciliation procedure and to pursue any available claim in the Employment Tribunal, subject to the applicable time limits and procedural requirements.</p>`,
     },
     {
       sectionId: "reservation_of_rights",

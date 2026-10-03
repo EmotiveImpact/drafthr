@@ -1,29 +1,26 @@
-/**
- * computeRowHash is the load-bearing primitive for the audit chain. This
- * test reproduces the chain algorithm in-process (no DB) — append events,
- * pass each prev_hash forward, then re-walk the chain and verify each row's
- * row_hash matches its inputs. Mirrors the SQL-side `verifyAuditChain`.
- *
- * Also asserts the WorkOS Audit Logs sink is fire-and-forget AFTER the
- * transaction commits — the local chain insert must succeed (and the row
- * must be queryable from a fresh tx) before the WorkOS mirror runs.
- */
+/** Hash integrity, deterministic sequence order and transactional delivery. */
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { appendAuditEvent, computeRowHash, GENESIS_PREV_HASH } from "./audit.js";
 import { verifyAuditChain } from "./audit-verify.js";
 import { closeDb, getDb } from "./index.js";
-import { auditEvents, tenants } from "./schema.js";
+import { auditEvents, auditLogDeliveries, tenants } from "./schema.js";
 import {
   setWorkosAuditLogsClient,
-  type WorkosAuditLogsClient,
 } from "../lib/audit/workos-sink.js";
 
-const itIfDb = process.env.DATABASE_URL ? it : it.skip;
+import { AUDIT_MAX_ATTEMPTS, AUDIT_RETRY_WINDOW_MS, dispatchWorkOSAuditOutbox } from "../lib/audit/workos-outbox.js";
+
+const localUrl = process.env.DRAFTHR_LOCAL_DATABASE_URL;
+const localTestDatabase = process.env.DRAFTHR_LOCAL_WORKOS_EMULATOR === "1" && Boolean(localUrl && (() => {
+  const url = new URL(localUrl);
+  return ["localhost", "127.0.0.1"].includes(url.hostname) && url.port === "55432" && url.pathname.endsWith("_test");
+})());
+const itIfDb = localTestDatabase ? it : it.skip;
 
 afterAll(async () => {
-  if (process.env.DATABASE_URL) await closeDb();
+  if (localTestDatabase) await closeDb();
 });
 
 describe("audit chain", () => {
@@ -143,164 +140,178 @@ describe("audit chain", () => {
   });
 });
 
-describe("WorkOS mirror integration", () => {
-  const ORIGINAL_FLAG = process.env.WORKOS_AUDIT_LOGS_ENABLED;
+describe("transactional WorkOS audit outbox", () => {
   afterEach(() => {
-    if (ORIGINAL_FLAG === undefined) delete process.env.WORKOS_AUDIT_LOGS_ENABLED;
-    else process.env.WORKOS_AUDIT_LOGS_ENABLED = ORIGINAL_FLAG;
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
     setWorkosAuditLogsClient(null);
   });
 
-  itIfDb(
-    "fires the WorkOS sink AFTER the chain row is persisted, with the row id as idempotency key",
-    async () => {
-      process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
-      const db = getDb();
-      const tenantId = randomUUID();
-      const workosOrgId = `org_test_${randomUUID().slice(0, 8)}`;
-      await db.insert(tenants).values({
-        id: tenantId,
-        name: "workos mirror test",
-        workosOrgId,
-      });
-
-      const createEvent = vi.fn(async (organization: string, _event: unknown, _options?: unknown) => {
-        // Critical assertion: the local row must already exist when the
-        // mirror runs. If the mirror were called inside the transaction,
-        // this query (running in the test's connection, not the writer's
-        // tx) would see zero rows.
-        const rows = await db
-          .select()
-          .from(auditEvents)
-          .where(eq(auditEvents.tenantId, tenantId));
-        expect(rows.length).toBe(1);
-        expect(organization).toBe(workosOrgId);
-      });
-      const fakeClient = { createEvent } as unknown as WorkosAuditLogsClient;
-      setWorkosAuditLogsClient(fakeClient);
-
-      try {
-        const result = await appendAuditEvent({
-          tenantId,
-          kind: "draft.exported",
-          subjectType: "draft",
-          subjectId: randomUUID(),
-          payload: { format: "pdf" },
-        });
-
-        // appendAuditEvent doesn't await the mirror; wait for the microtask
-        // queue to drain so the fire-and-forget completes before assertions.
-        await new Promise((r) => setTimeout(r, 50));
-
-        expect(createEvent).toHaveBeenCalledTimes(1);
-        const [, event, options] = createEvent.mock.calls[0] as [
-          string,
-          { action: string },
-          { idempotencyKey?: string },
-        ];
-        expect(options).toEqual({ idempotencyKey: result.id });
-        expect(event.action).toBe("letters.draft.exported");
-      } finally {
-        await db.delete(tenants).where(eq(tenants.id, tenantId));
-      }
-    },
-  );
-
-  itIfDb("does NOT call the WorkOS sink when the tenant has no workos_org_id", async () => {
-    process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
-    const db = getDb();
+  async function fixture(run: (tenantId: string, createEvent: ReturnType<typeof vi.fn>) => Promise<void>) {
+    vi.stubEnv("WORKOS_AUDIT_LOGS_ENABLED", "true");
     const tenantId = randomUUID();
-    await db.insert(tenants).values({ id: tenantId, name: "no-org tenant" });
-
+    await getDb().insert(tenants).values({ id: tenantId, name: "fictional audit test", workosOrgId: `org_test_${tenantId}` });
     const createEvent = vi.fn(async () => undefined);
     setWorkosAuditLogsClient({ createEvent });
+    try { await run(tenantId, createEvent); }
+    finally { await getDb().delete(tenants).where(eq(tenants.id, tenantId)); }
+  }
+  function append(tenantId: string) {
+    return appendAuditEvent({ tenantId, kind: "draft.updated", subjectType: "draft", subjectId: randomUUID(), payload: { title: "fictional test" } });
+  }
+  async function queued(tenantId: string) {
+    return getDb().select().from(auditLogDeliveries).where(eq(auditLogDeliveries.tenantId, tenantId));
+  }
+  async function due(tenantId: string) {
+    await getDb().update(auditLogDeliveries).set({ nextAttemptAt: new Date(0) }).where(eq(auditLogDeliveries.tenantId, tenantId));
+  }
 
-    try {
-      await appendAuditEvent({
-        tenantId,
-        kind: "draft.created",
-        subjectType: "draft",
-        subjectId: randomUUID(),
-        payload: {},
+  itIfDb("commits audit + job together and never sends from the business transaction", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      const db = getDb();
+      const row = await db.transaction(async (tx) => {
+        const result = await appendAuditEvent({ tenantId, kind: "draft.exported", subjectType: "draft", subjectId: randomUUID(), payload: { format: "pdf" } }, tx);
+        expect(createEvent).not.toHaveBeenCalled();
+        const uncommitted = await tx.select().from(auditLogDeliveries).where(eq(auditLogDeliveries.auditEventId, result.id));
+        expect(uncommitted).toHaveLength(1);
+        expect(await queued(tenantId)).toHaveLength(0);
+        return result;
       });
-      await new Promise((r) => setTimeout(r, 50));
+      expect(await queued(tenantId)).toHaveLength(1);
       expect(createEvent).not.toHaveBeenCalled();
-    } finally {
-      await db.delete(tenants).where(eq(tenants.id, tenantId));
-    }
+      createEvent.mockImplementation(async () => {
+        expect(await queued(tenantId)).toHaveLength(1);
+      });
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ delivered: 1 });
+      expect(createEvent).toHaveBeenCalledTimes(1);
+      expect(createEvent.mock.calls[0][2]).toEqual({ idempotencyKey: row.id });
+      expect((await queued(tenantId))[0].status).toBe("delivered");
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ processed: 0 });
+    });
   });
 
-  itIfDb(
-    "does NOT call the WorkOS sink when the env flag is off, even with workos_org_id set",
-    async () => {
-      delete process.env.WORKOS_AUDIT_LOGS_ENABLED;
-      const db = getDb();
-      const tenantId = randomUUID();
-      const workosOrgId = `org_off_${randomUUID().slice(0, 8)}`;
-      await db.insert(tenants).values({
-        id: tenantId,
-        name: "flag off tenant",
-        workosOrgId,
-      });
+  itIfDb("rolls back delivery jobs with their business transaction", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      await expect(getDb().transaction(async (tx) => {
+        await appendAuditEvent({ tenantId, kind: "draft.updated", subjectType: "draft", subjectId: randomUUID(), payload: {} }, tx);
+        throw new Error("business failure");
+      })).rejects.toThrow("business failure");
+      expect(await queued(tenantId)).toHaveLength(0);
+      expect(await verifyAuditChain(tenantId)).toEqual({ ok: true, rowCount: 0 });
+      await dispatchWorkOSAuditOutbox({ tenantId });
+      expect(createEvent).not.toHaveBeenCalled();
+    });
+  });
 
-      const createEvent = vi.fn(async () => undefined);
-      setWorkosAuditLogsClient({ createEvent });
+  itIfDb("uses sequence order for same-millisecond appends and a backwards clock", async () => {
+    await fixture(async (tenantId) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-10-03T10:00:00Z"));
+      const rows = [];
+      for (let n = 0; n < 12; n++) rows.push(await append(tenantId));
+      vi.setSystemTime(new Date("2026-10-03T09:00:00Z"));
+      rows.push(await append(tenantId));
+      expect(rows.map(row => row.sequence)).toEqual(Array.from({ length: 13 }, (_, n) => n + 1));
+      expect(await verifyAuditChain(tenantId)).toEqual({ ok: true, rowCount: 13 });
+    });
+  });
 
-      try {
-        await appendAuditEvent({
-          tenantId,
-          kind: "draft.created",
-          subjectType: "draft",
-          subjectId: randomUUID(),
-          payload: {},
-        });
-        await new Promise((r) => setTimeout(r, 50));
-        expect(createEvent).not.toHaveBeenCalled();
-      } finally {
-        await db.delete(tenants).where(eq(tenants.id, tenantId));
-      }
-    },
-  );
+  itIfDb("retains the local event and retries a downstream failure with an identical snapshot", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      createEvent.mockRejectedValueOnce(Object.assign(new Error("private provider details"), { status: 503 }));
+      const row = await append(tenantId);
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ retried: 1 });
+      expect((await queued(tenantId))[0]).toMatchObject({ status: "pending", attempts: 1, lastError: "workos_http_503" });
+      expect(await verifyAuditChain(tenantId)).toEqual({ ok: true, rowCount: 1 });
+      await due(tenantId);
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ delivered: 1 });
+      expect(createEvent.mock.calls[1]).toEqual(createEvent.mock.calls[0]);
+      expect(createEvent.mock.calls[1][2]).toEqual({ idempotencyKey: row.id });
+    });
+  });
 
-  itIfDb(
-    "does NOT throw when the WorkOS sink errors — the local row is still persisted",
-    async () => {
-      process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
-      const db = getDb();
-      const tenantId = randomUUID();
-      const workosOrgId = `org_err_${randomUUID().slice(0, 8)}`;
-      await db.insert(tenants).values({
-        id: tenantId,
-        name: "sink errors tenant",
-        workosOrgId,
-      });
+  itIfDb("does not claim an unexpired lease twice across concurrent workers", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      await append(tenantId);
+      const results = await Promise.all([dispatchWorkOSAuditOutbox({ tenantId }), dispatchWorkOSAuditOutbox({ tenantId })]);
+      expect(results.reduce((n, item) => n + item.delivered, 0)).toBe(1);
+      expect(createEvent).toHaveBeenCalledTimes(1);
+    });
+  });
 
-      setWorkosAuditLogsClient({
-        createEvent: vi.fn(async () => {
-          throw new Error("simulated workos outage");
-        }),
-      });
+  itIfDb("recovers a crashed worker using the same idempotency key and frozen body", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      const row = await append(tenantId);
+      await getDb().update(auditLogDeliveries).set({
+        status: "delivering", attempts: 1, firstAttemptAt: new Date(), leaseToken: randomUUID(), leaseExpiresAt: new Date(0),
+      }).where(eq(auditLogDeliveries.auditEventId, row.id));
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ delivered: 1 });
+      expect(createEvent.mock.calls[0][2]).toEqual({ idempotencyKey: row.id });
+      expect((await queued(tenantId))[0].attempts).toBe(2);
+    });
+  });
 
-      try {
-        const result = await appendAuditEvent({
-          tenantId,
-          kind: "draft.created",
-          subjectType: "draft",
-          subjectId: randomUUID(),
-          payload: { title: "still works" },
-        });
-        await new Promise((r) => setTimeout(r, 50));
+  itIfDb("retains expired ambiguous deliveries for reconciliation rather than duplicating them", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      const row = await append(tenantId);
+      await getDb().update(auditLogDeliveries).set({
+        status: "delivering", attempts: 1, firstAttemptAt: new Date(Date.now() - AUDIT_RETRY_WINDOW_MS - 1000), leaseToken: randomUUID(), leaseExpiresAt: new Date(0),
+      }).where(eq(auditLogDeliveries.auditEventId, row.id));
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ failed: 1 });
+      expect(createEvent).not.toHaveBeenCalled();
+      expect((await queued(tenantId))[0]).toMatchObject({ status: "failed", lastError: "idempotency_window_expired" });
+    });
+  });
 
-        expect(result.id).toBeTruthy();
-        const rows = await db
-          .select()
-          .from(auditEvents)
-          .where(eq(auditEvents.tenantId, tenantId));
-        expect(rows.length).toBe(1);
-        expect(rows[0].id).toBe(result.id);
-      } finally {
-        await db.delete(tenants).where(eq(tenants.id, tenantId));
-      }
-    },
-  );
+  itIfDb("dead-letters permanent errors without blocking unrelated events", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      await append(tenantId); await append(tenantId);
+      createEvent.mockRejectedValueOnce(Object.assign(new Error("invalid schema containing private values"), { status: 422 }));
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ failed: 1, delivered: 1 });
+      const failures = (await queued(tenantId)).filter(row => row.status === "failed");
+      expect(failures[0].lastError).toBe("workos_http_422");
+      expect(await verifyAuditChain(tenantId)).toEqual({ ok: true, rowCount: 2 });
+    });
+  });
+
+  itIfDb("bounds retry attempts and leaves the failed job available for review", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      await append(tenantId);
+      createEvent.mockRejectedValue(new Error("connection failed"));
+      for (let n = 0; n < AUDIT_MAX_ATTEMPTS; n++) { await due(tenantId); await dispatchWorkOSAuditOutbox({ tenantId }); }
+      expect(createEvent).toHaveBeenCalledTimes(AUDIT_MAX_ATTEMPTS);
+      expect((await queued(tenantId))[0]).toMatchObject({ status: "failed", attempts: AUDIT_MAX_ATTEMPTS });
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ processed: 0 });
+    });
+  });
+
+  itIfDb("never sends a queued event to a reassigned organization", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      await append(tenantId);
+      await getDb().update(tenants).set({ workosOrgId: `org_reassigned_${tenantId}` }).where(eq(tenants.id, tenantId));
+      expect(await dispatchWorkOSAuditOutbox({ tenantId })).toMatchObject({ failed: 1 });
+      expect(createEvent).not.toHaveBeenCalled();
+      expect((await queued(tenantId))[0].lastError).toBe("workos_org_changed");
+    });
+  });
+
+  itIfDb("does not enqueue when the opt-in flag or tenant organization is absent", async () => {
+    await fixture(async (tenantId, createEvent) => {
+      vi.stubEnv("WORKOS_AUDIT_LOGS_ENABLED", "false");
+      await append(tenantId);
+      vi.stubEnv("WORKOS_AUDIT_LOGS_ENABLED", "true");
+      await getDb().update(tenants).set({ workosOrgId: null }).where(eq(tenants.id, tenantId));
+      await append(tenantId);
+      expect(await queued(tenantId)).toHaveLength(0);
+      expect(createEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  itIfDb("reports payload corruption instead of treating sequence order as integrity proof", async () => {
+    await fixture(async (tenantId) => {
+      const row = await append(tenantId);
+      await getDb().update(auditEvents).set({ payloadJson: { title: "tampered" } }).where(eq(auditEvents.id, row.id));
+      expect(await verifyAuditChain(tenantId)).toMatchObject({ ok: false, reason: "row_hash_mismatch", brokenAtId: row.id });
+    });
+  });
 });

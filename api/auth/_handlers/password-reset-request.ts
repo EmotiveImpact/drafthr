@@ -35,7 +35,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // 5/min/IP — same class of mailbomb risk as resend-verification, slightly
   // looser because real users sometimes legitimately retry across devices.
-  const limited = rateLimit(req, {
+  const limited = await rateLimit(req, {
     name: "auth-password-reset-request",
     max: 5,
     windowMs: 60_000,

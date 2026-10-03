@@ -8,7 +8,7 @@
 import { desc, eq } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { requireMarketplaceSession as requireSessionAndTenant } from "../../_utils/marketplace-session.js";
 import { getDb } from "../../../src/db/index.js";
 import {
   consultantBookings,
@@ -19,7 +19,7 @@ import {
 export const config = { runtime: "nodejs" };
 
 export async function GET(req: Request): Promise<Response> {
-  const limited = rateLimit(req, { name: "marketplace-inbox", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "marketplace-inbox", max: 60, windowMs: 60_000 });
   if (limited) return limited;
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;

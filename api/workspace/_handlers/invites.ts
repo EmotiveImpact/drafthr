@@ -14,7 +14,7 @@ export const config = { runtime: "nodejs" };
 const ADMIN_ROLES = new Set(["owner", "admin"]);
 
 export async function GET(req: Request): Promise<Response> {
-  const limited = rateLimit(req, { name: "workspace-invites", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workspace-invites", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);

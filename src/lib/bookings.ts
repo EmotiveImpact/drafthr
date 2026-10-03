@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
 /**
  * Booking lifecycle states. Forward-only — once a booking lands in a
@@ -82,140 +81,30 @@ export type Booking = {
   consultantPrice?: number;
 };
 
-type RecordBookingInput = Omit<
-  Booking,
-  "id" | "bookedAt" | "status" | "acceptedAt" | "deliveredAt" | "completedAt" | "responseNote" | "deliveryNote" | "rating"
->;
-
 type Store = {
+  /** Requester's bookings in the active workspace, as returned by the API. */
   bookings: Booking[];
-  recordBooking: (input: RecordBookingInput) => Booking;
+  /** Consultant's inbox is a separate read model, never mixed into HR's list. */
+  inbox: Booking[];
+  inboxState: "idle" | "loading" | "ready" | "error";
   bookingsForDraft: (draftId: string) => Booking[];
-  /** Inbox view for a consultant — all bookings addressed to them.
-   *  Matches on profileId (stable) when available, falling back to
-   *  initials for local-only demo bookings that have no profileId. */
+  /** Initials are display-only; only the stable server profile ID matches. */
   bookingsForConsultant: (initials: string, profileId?: string) => Booking[];
-  acceptBooking: (id: string, responseNote?: string) => void;
-  declineBooking: (id: string, responseNote?: string) => void;
-  deliverBooking: (id: string, deliveryNote?: string) => void;
-  completeBooking: (id: string, rating?: number) => void;
-  /** Append a chat message to a booking. Returns the minted message id (null
-   *  when the text was blank) so an optimistic sender can remove exactly its
-   *  own bubble on failure instead of restoring a whole-thread snapshot. */
-  appendMessage: (id: string, from: BookingMessage["from"], text: string) => string | null;
+  reset: () => void;
 };
 
-/** Migrate persisted bookings from older lifecycle vocab to the new one. */
-function normaliseBooking(b: Booking): Booking {
-  const legacyMap: Record<string, BookingStatus> = {
-    pending: "requested",
-    in_review: "accepted",
-  };
-  if (b.status in legacyMap) {
-    return { ...b, status: legacyMap[b.status as string] };
-  }
-  return b;
-}
-
-export const useBookingsStore = create<Store>()(
-  persist(
-    (set, get) => ({
-      bookings: [],
-      recordBooking: (input) => {
-        const booking: Booking = {
-          id: crypto.randomUUID(),
-          bookedAt: Date.now(),
-          status: "requested",
-          ...input,
-        };
-        set((state) => ({ bookings: [...state.bookings, booking] }));
-        return booking;
-      },
-      bookingsForDraft: (draftId) =>
-        get().bookings.map(normaliseBooking).filter((b) => b.draftId === draftId),
-      bookingsForConsultant: (initials, profileId) =>
-        get()
-          .bookings.map(normaliseBooking)
-          .filter((b) =>
-            // Prefer the stable profileId match. Fall back to initials for
-            // demo / pre-profileId bookings. A booking that has its own
-            // profileId set only matches when it equals the caller's.
-            profileId && b.consultantProfileId
-              ? b.consultantProfileId === profileId
-              : b.consultantInitials === initials,
-          )
-          .sort((a, b) => b.bookedAt - a.bookedAt),
-      acceptBooking: (id, responseNote) =>
-        set((state) => ({
-          bookings: state.bookings.map((b) =>
-            b.id === id
-              ? { ...b, status: "accepted", acceptedAt: Date.now(), responseNote: responseNote ?? b.responseNote }
-              : b,
-          ),
-        })),
-      declineBooking: (id, responseNote) =>
-        set((state) => ({
-          bookings: state.bookings.map((b) =>
-            b.id === id
-              ? { ...b, status: "declined", responseNote: responseNote ?? b.responseNote }
-              : b,
-          ),
-        })),
-      deliverBooking: (id, deliveryNote) =>
-        set((state) => ({
-          bookings: state.bookings.map((b) =>
-            b.id === id
-              ? { ...b, status: "delivered", deliveredAt: Date.now(), deliveryNote: deliveryNote ?? b.deliveryNote }
-              : b,
-          ),
-        })),
-      completeBooking: (id, rating) =>
-        set((state) => ({
-          bookings: state.bookings.map((b) =>
-            b.id === id
-              ? { ...b, status: "completed", completedAt: Date.now(), rating: rating ?? b.rating }
-              : b,
-          ),
-        })),
-      appendMessage: (id, from, text) => {
-        const trimmed = text.trim();
-        if (!trimmed) return null;
-        const msg: BookingMessage = {
-          id: crypto.randomUUID(),
-          from,
-          text: trimmed.slice(0, 4000),
-          ts: Date.now(),
-        };
-        set((state) => ({
-          bookings: state.bookings.map((b) =>
-            b.id === id ? { ...b, messages: [...(b.messages ?? []), msg] } : b,
-          ),
-        }));
-        return msg.id;
-      },
-    }),
-    {
-      name: "drafthr.bookings.v1",
-      // v1 (first versioned): the Booking shape changed repeatedly without a
-      // version (status vocab pending/in_review → requested/accepted, then
-      // messages / shareToken / consultantProfileId added). An un-normalised
-      // legacy row reaches MyBookings' grouped[b.status].push() with a status
-      // key that doesn't exist → throw → white screen. Normalise + backfill
-      // on rehydrate so every persisted booking matches the current shape.
-      version: 1,
-      migrate: (persisted) => {
-        const state = persisted as { bookings?: Booking[] } | undefined;
-        if (state?.bookings) {
-          state.bookings = state.bookings.map((b) => ({
-            ...normaliseBooking(b),
-            messages: b.messages ?? [],
-          }));
-        }
-        return state as unknown as Store;
-      },
-    },
-  ),
-);
+/** Memory cache only. The transport is the sole writer of accepted records;
+ * UI commands never manufacture local bookings or delivered messages. */
+export const useBookingsStore = create<Store>((set, get) => ({
+  bookings: [],
+  inbox: [],
+  inboxState: "idle",
+  bookingsForDraft: (draftId) => get().bookings.filter((b) => b.draftId === draftId || b.localDraftId === draftId),
+  bookingsForConsultant: (_initials, profileId) => get().inbox
+    .filter((b) => Boolean(profileId) && b.consultantProfileId === profileId)
+    .sort((a, b) => b.bookedAt - a.bookedAt),
+  reset: () => set({ bookings: [], inbox: [], inboxState: "idle" }),
+}));
 
 /** Parse SLA string like "18h", "26h", "24-48h" → hours (takes low end of range). */
 export function parseSlaHours(sla: string): number {

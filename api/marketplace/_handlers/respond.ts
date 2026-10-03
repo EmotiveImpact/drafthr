@@ -13,12 +13,11 @@
  *
  * Request body: { bookingId, action, note?, rating? }
  */
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
-import { getDb } from "../../../src/db/index.js";
-import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
+import { requireMarketplaceSession as requireSessionAndTenant, withMarketplaceWriteScope, canAccessMarketplaceBooking, canWriteMarketplaceBookings } from "../../_utils/marketplace-session.js";
+import { consultantBookings, consultantProfiles, drafts } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import {
   sendBookingAcceptedEmail,
@@ -40,7 +39,7 @@ type RespondInput = {
 export async function POST(req: Request): Promise<Response> {
   const originRes = enforceSameOrigin(req);
   if (originRes) return originRes;
-  const limited = rateLimit(req, { name: "booking-respond", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "booking-respond", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
@@ -58,7 +57,8 @@ export async function POST(req: Request): Promise<Response> {
   const bookingId = serverUuidOrNull(body.bookingId);
   if (!bookingId) return jsonError("Booking not found", 404);
 
-  const db = getDb();
+  let updatedBookingId: string | undefined;
+  const response = await withMarketplaceWriteScope(auth, async (db, currentAuth) => {
   const [booking] = await db
     .select()
     .from(consultantBookings)
@@ -70,7 +70,15 @@ export async function POST(req: Request): Promise<Response> {
   // ACL — only the two parties can act on a booking.
   const isConsultant = booking.consultantUserId === auth.userRow.id;
   const isRequester = booking.requesterUserId === auth.userRow.id;
-  if (!isConsultant && !isRequester) return jsonError("Not your booking", 403);
+  if (!canAccessMarketplaceBooking(currentAuth, booking)) return jsonError("Not your booking in this workspace", 403);
+  if (body.action === "complete") {
+    if (!isRequester || !canWriteMarketplaceBookings(currentAuth)) {
+      return jsonError("Your workspace role cannot complete bookings", 403);
+    }
+    // Concurrent completions must not publish an aggregate missing the other
+    // transaction's review. Serialize by consultant before changing status.
+    await db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`consultant-rating:${booking.consultantProfileId}`}, 0))`);
+  }
 
   const update: Partial<typeof consultantBookings.$inferInsert> = {};
   const now = new Date();
@@ -94,6 +102,13 @@ export async function POST(req: Request): Promise<Response> {
       // consultant uses it on /shared/:token to fetch the specific draft
       // without joining the HR tenant. Expires 30 days after acceptance.
       if (booking.draftId) {
+        // Deletion locks this draft before revoking booking tokens. Holding a
+        // share lock through the booking update makes acceptance and deletion
+        // serialize, so an acceptance can never recreate a revoked token.
+        const [draft] = await db.select({ id: drafts.id }).from(drafts)
+          .where(and(eq(drafts.id, booking.draftId), eq(drafts.tenantId, booking.tenantId), isNull(drafts.deletedAt)))
+          .limit(1).for("share");
+        if (!draft) return jsonError("The attached draft is no longer available", 409);
         update.shareToken = generateShareToken();
         update.shareTokenExpiresAt = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
       }
@@ -148,7 +163,6 @@ export async function POST(req: Request): Promise<Response> {
   // Without this, consultant_profiles.rating_x10 stays at the seed 50
   // (5.0) forever and the marketplace's core trust signal is dead.
   if (body.action === "complete" && typeof update.rating === "number") {
-    try {
       const rated = await db
         .select({ rating: consultantBookings.rating })
         .from(consultantBookings)
@@ -169,22 +183,19 @@ export async function POST(req: Request): Promise<Response> {
           .set({ rating: Math.round(avg * 10), reviews: values.length })
           .where(eq(consultantProfiles.id, booking.consultantProfileId));
       }
-    } catch (err) {
-      // Aggregation failure must not fail the completion response.
-      console.error("[bookings] rating aggregation failed", err);
-    }
   }
 
-  // Email side-effects, fire-and-forget — never block the API response on
-  // mail delivery. Logged on failure.
-  void notifyTransition(body.action, next.id).catch((err) => {
-    console.error("[bookings] notify failed", body.action, err);
-  });
+  updatedBookingId = next.id;
 
   return new Response(JSON.stringify({ booking: toClient(next) }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
+  });
+  if (updatedBookingId) void notifyTransition(body.action, updatedBookingId).catch((err) => {
+    console.error("[bookings] notify failed", body.action, err);
+  });
+  return response;
 }
 
 async function notifyTransition(action: Action, bookingId: string) {

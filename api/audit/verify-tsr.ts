@@ -13,6 +13,7 @@
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
 import { parseTsr } from "../_utils/tsa.js";
+import { withRequestObservability } from "../_utils/observability.js";
 
 type VerifyRequest = {
   tsr_base64?: unknown;
@@ -20,9 +21,13 @@ type VerifyRequest = {
 };
 
 export async function POST(req: Request): Promise<Response> {
+  return withRequestObservability(req, () => verifyTimestamp(req));
+}
+
+async function verifyTimestamp(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
-  const rateLimitError = rateLimit(req, { name: "verify-tsr", max: 30, windowMs: 60_000 });
+  const rateLimitError = await rateLimit(req, { name: "verify-tsr", max: 30, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
 
   const parsed = await readJsonRequest<VerifyRequest>(req, 200_000);

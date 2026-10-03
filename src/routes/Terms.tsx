@@ -1,5 +1,4 @@
 import { Card, Box, Text } from "@radix-ui/themes";
-import { todayDateOnly } from "@/lib/date-only";
 import { PublicLegalShell } from "@/components/PublicLegalShell";
 
 /**
@@ -20,12 +19,12 @@ export function Terms() {
       title="Terms of Service"
       subtitle={
         <>
-          Effective date:{" "}
+          Pre-launch draft · Last reviewed in code:{" "}
           <Text weight="medium" highContrast>
-            {todayDateOnly()}
+            3 October 2026
           </Text>
-          . These Terms govern your access to and use of the DraftHR
-          AI-assisted HR letter drafting platform.
+          . Not approved for production. Business details, operational
+          commitments and legal terms require owner and professional review.
         </>
       }
     >
@@ -192,26 +191,28 @@ export function Terms() {
 
           <h2>11. Export integrity</h2>
           <p>
-            Letters exported from DraftHR as PDF, DOCX, or ZIP include a
-            cryptographically signed manifest using Ed25519 signatures, an
-            RFC 3161 timestamp from a third-party timestamp authority, and a
-            PAdES-B-T-style CMS structure for PDF exports. Tampering with an
-            exported file — including any modification of the file bytes
-            after export — invalidates the signature and is detectable on
-            re-verification. You agree not to misrepresent a modified document
-            as a DraftHR-signed export.
+            ZIP export packs include a manifest with file sizes and SHA-256
+            checksums. When signing is configured, the pack also includes an
+            Ed25519 CMS signature over the manifest. Otherwise it is explicitly
+            marked unsigned; checksums alone do not establish its origin.
+            Verification of a signed pack requires an independently trusted
+            public key and the included verification instructions. Standalone
+            PDF and DOCX exports do not carry this pack signature. The current
+            pack format provides no independently trusted timestamp, embedded
+            PDF signature, legal validation or immutable-storage guarantee.
+            Do not represent a modified or unsigned pack as a verified signed
+            export.
           </p>
 
           <h2>12. Termination</h2>
           <p>
-            You may terminate your account at any time via Settings → Delete
-            account. We may suspend or terminate your access for material
+            The account-closure process and retention schedule must be
+            approved and verified before production. Clearing browser data
+            does not delete server records or close your account. We may
+            suspend or terminate your access for material
             breach of these Terms, suspected unlawful use, non-payment (once
             paid plans launch), or as required by law, in each case with
-            reasonable notice where practicable. On termination: drafts remain
-            in active storage for a 90-day grace period before automatic
-            purge, audit-chain entries are retained for the period stated in
-            the Privacy Policy, and any sections of these Terms that by their
+            reasonable notice where practicable. Any sections of these Terms that by their
             nature should survive termination will do so (including sections
             on Your Content licence-to-process, disclaimers, limitation of
             liability, indemnification, and governing law).

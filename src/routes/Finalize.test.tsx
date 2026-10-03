@@ -1,9 +1,21 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { Finalize } from "./Finalize";
+import * as workspaceFlags from "@/lib/workspace-flags";
+import type { PackIntegrityOutcome } from "@/lib/export/pack-integrity";
+const packMocks = vi.hoisted(() => ({ render: vi.fn(), download: vi.fn(), save: vi.fn(), saved: vi.fn() }));
 vi.mock("@/components/editor/LetterPreview", () => ({ LetterPreview: ({ exportMode }: { exportMode: boolean }) => <p>{exportMode ? "Export-mode letter preview" : "Editor preview"}</p> }));
+vi.mock("@/lib/export/pack", () => ({ renderLetterPackBlob: packMocks.render, filenameForPack: () => "letter.zip" }));
+vi.mock("@/lib/storage/download", () => ({ downloadBlob: packMocks.download, downloadUrl: packMocks.download }));
+vi.mock("@/lib/storage/workspace-files", () => ({
+  resolveEvidenceFiles: async (draft: unknown) => draft, saveWorkspaceFile: packMocks.save,
+}));
+vi.mock("@/lib/database-workspace", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/database-workspace")>(),
+  savedWorkspaceDraft: packMocks.saved, workspaceIdentityMatches: () => true,
+}));
 
 beforeEach(() => {
   const memory = new Map<string, string>();
@@ -14,6 +26,10 @@ beforeEach(() => {
     clear: () => memory.clear(),
   } });
   useDraftStore.setState({ drafts: {}, employees: {}, matters: {} });
+  packMocks.render.mockReset();
+  packMocks.download.mockReset();
+  packMocks.save.mockReset();
+  packMocks.saved.mockReset().mockResolvedValue({ tenantId: "workspace", identity: {} });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -38,6 +54,17 @@ function finalActions() {
   return screen.getAllByRole("button").filter((button) =>
     /^(PDF|DOCX|TXT|ZIP|Mark as sent)/.test(button.textContent?.trim() ?? ""));
 }
+
+it("shows the draft's actual jurisdiction and makes no fixed review-turnaround promise", () => {
+  const id = create();
+  useDraftStore.setState(state => ({ drafts: { ...state.drafts, [id]: {
+    ...state.drafts[id], context: { ...state.drafts[id].context, jurisdiction: "US" },
+  } } }));
+  open(id);
+  expect(screen.getByText(/US · drafted by/)).toBeInTheDocument();
+  expect(screen.queryByText(/UK · drafted by/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/reviews come back within 24 hours/)).not.toBeInTheDocument();
+});
 
 it("exposes the export-mode preview on demand without inventing a page count", async () => {
   open(create());
@@ -115,4 +142,53 @@ it("goes to Activity immediately after marking a ready letter as sent", () => {
 
   expect(screen.getByText("Activity destination")).toBeInTheDocument();
   expect(useDraftStore.getState().drafts[id].exports?.at(-1)?.format).toBe("marked-sent");
+});
+
+function renderPackWith(outcome: PackIntegrityOutcome) {
+  packMocks.render.mockImplementation(async (_draft, _attestation, options) => {
+    options.onIntegrity(outcome);
+    return new Blob(["verified fixture"]);
+  });
+}
+
+it.each([
+  [{ status: "unsigned", reason: "local_only" }, /this pack is unsigned/],
+  [{ status: "signed", keyId: "test-key", publicKeyFingerprint: "test-fingerprint", timestamp: "none" }, /No independent timestamp or legal validation is claimed/],
+] as const)("shows truthful pack status in the shared desktop/mobile canvas: %j", async (outcome, message) => {
+  const id = create();
+  vi.spyOn(workspaceFlags, "isDatabaseWorkspaceEnabled").mockReturnValue(false);
+  renderPackWith(outcome);
+  open(id);
+  fireEvent.click(screen.getAllByRole("button", { name: /^ZIP/ })[0]);
+  const notice = await screen.findByRole("status");
+  expect(notice).toHaveTextContent(message);
+  expect(notice.closest("main")).not.toBeNull();
+  expect(packMocks.download).toHaveBeenCalledTimes(1);
+  expect(useDraftStore.getState().drafts[id].exports?.at(-1)?.format).toBe("pack");
+});
+
+it("does not show signed success, record an export or download when the private save fails", async () => {
+  const id = create();
+  vi.spyOn(workspaceFlags, "isDatabaseWorkspaceEnabled").mockReturnValue(true);
+  const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+  renderPackWith({ status: "signed", keyId: "test-key", publicKeyFingerprint: "test-fingerprint", timestamp: "none" });
+  packMocks.save.mockRejectedValue(new Error("Private storage unavailable"));
+  open(id);
+  fireEvent.click(screen.getAllByRole("button", { name: /^ZIP/ })[0]);
+  await waitFor(() => expect(alert).toHaveBeenCalledWith("ZIP export failed: Private storage unavailable"));
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(packMocks.download).not.toHaveBeenCalled();
+  expect(useDraftStore.getState().drafts[id].exports).toBeUndefined();
+});
+
+it("does not downgrade a signing failure into an unsigned export", async () => {
+  const id = create();
+  const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+  packMocks.render.mockRejectedValue(new Error("Signing unavailable"));
+  open(id);
+  fireEvent.click(screen.getAllByRole("button", { name: /^ZIP/ })[0]);
+  await waitFor(() => expect(alert).toHaveBeenCalledWith("ZIP export failed: Signing unavailable"));
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(packMocks.download).not.toHaveBeenCalled();
+  expect(useDraftStore.getState().drafts[id].exports).toBeUndefined();
 });

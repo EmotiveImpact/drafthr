@@ -176,6 +176,27 @@
       "when": 1790493734817,
       "tag": "0024_workspace_assets",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790988470933,
+      "tag": "0025_audit_order_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790988942741,
+      "tag": "0026_shared_rate_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790995389784,
+      "tag": "0027_booking_checkout_attempts",
+      "breakpoints": true
     }
   ]
 }

@@ -52,7 +52,7 @@ export async function POST(req: Request): Promise<Response> {
   // Tight limit — password endpoints are the classic credential-stuffing
   // target. 10/min per IP is generous for a real user fat-fingering, harsh
   // for a script. WorkOS adds its own server-side throttling on top.
-  const limited = rateLimit(req, { name: "auth-password", max: 10, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-password", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<PasswordBody>(req);

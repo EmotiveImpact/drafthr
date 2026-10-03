@@ -29,7 +29,7 @@ type Body = { inviteCode?: string };
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "workspace-accept", max: 20, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workspace-accept", max: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<Body>(req);

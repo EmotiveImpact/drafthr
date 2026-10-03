@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
   pull_request:
     branches: [main]
 
@@ -28,10 +28,42 @@ jobs:
         run: npx tsc -b --noEmit
 
       - name: Test
-        run: npm run test -- --run
+        run: npm run test -- --run --maxWorkers=2
 
       - name: Build
         run: npm run build
         env:
           # Build doesn't need real keys, but needs the variables to exist for client-bundling.
           QWEN_API_KEY: build-only-placeholder
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: drafthr_test
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: drafthr_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U drafthr_test -d drafthr_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Migrate disposable database and test real persistence
+        run: npm run test:database -- --maxWorkers=2
+        env:
+          DRAFTHR_ALLOW_TEST_DATABASE_MIGRATIONS: '1'
+          DRAFTHR_LOCAL_WORKOS_EMULATOR: '1'
+          DRAFTHR_LOCAL_DATABASE_URL: postgres://drafthr_test:disposable_ci_only@127.0.0.1:55432/drafthr_test
+          WORKOS_AUDIT_LOGS_ENABLED: 'false'

@@ -258,9 +258,8 @@ export function ConsultantsIndex() {
               Employment-law specialists
             </h1>
             <p className="text-[14px] text-[var(--ds-body)] mt-2 max-w-prose leading-relaxed">
-              Get a qualified specialist on your letter. Most reviews come back
-              within 24 hours, at a fraction of what a formal legal instruction
-              costs.
+              Find a specialist to review your letter. Check their qualifications,
+              jurisdiction, availability, fees and agreed turnaround before booking.
             </p>
           </div>
 

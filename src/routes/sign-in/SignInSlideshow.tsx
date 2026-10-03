@@ -31,8 +31,8 @@ const SLIDES: readonly Slide[] = [
   },
   {
     src: "/auth/slide-2.jpg",
-    headline: "Tribunal-grade. Audit-defensible.",
-    subline: "Cited clauses, signed exports, full audit chain.",
+    headline: "Clear drafts. Traceable work.",
+    subline: "Review your letters, keep records, export with integrity checks.",
   },
   {
     src: "/auth/slide-3.jpg",
@@ -126,7 +126,7 @@ export function SignInSlideshow() {
           <div className="absolute bottom-[88px] left-9 right-9 z-10 text-white">
             {/* Single-line headline at lg:, allowed to wrap on extreme
              * narrow column widths. 26px keeps the longest tagline
-             * ("Tribunal-grade. Audit-defensible.") on one row at the
+             * ("Clear drafts. Traceable work.") on one row at the
              * 50/50 split. */}
             <h2 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.02em] whitespace-nowrap">
               {slide.headline}

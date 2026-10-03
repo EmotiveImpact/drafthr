@@ -51,7 +51,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // 3/min/IP — sign-up is the highest-leverage abuse target (creates an
   // identity, ships an email). Keep it tight; real humans never hit this.
-  const limited = rateLimit(req, { name: "auth-sign-up", max: 3, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-sign-up", max: 3, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<SignUpBody>(req);

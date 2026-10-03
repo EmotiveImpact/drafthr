@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useConsultantStore, type ConsultantProfile } from "@/lib/consultantProfile";
 
-// status is server-owned moderation state ("published" etc.) set only by
-// hydrateFromServer. A local edit via saveProfile must preserve it — otherwise
-// on a failed push the marketplace card silently reverts to "not published".
+// The accepted profile stays unchanged while a form save is pending or fails.
 function serverProfile(overrides: Partial<ConsultantProfile> = {}): ConsultantProfile {
   return {
     id: "prof_1",
@@ -29,26 +27,26 @@ function serverProfile(overrides: Partial<ConsultantProfile> = {}): ConsultantPr
   };
 }
 
-describe("consultant saveProfile — preserves server-owned status", () => {
+describe("consultant cache — preserves server-owned status", () => {
   beforeEach(() => {
     useConsultantStore.getState().reset();
   });
 
-  it("keeps the published status through a local field edit", () => {
+  it("keeps accepted content and published status while a save is pending", () => {
     useConsultantStore.getState().hydrateFromServer(serverProfile());
     expect(useConsultantStore.getState().profile?.status).toBe("published");
 
-    // The edit form sends content fields only, never status.
-    useConsultantStore.getState().saveProfile({ bio: "Updated bio" });
+    useConsultantStore.getState().setSync("pending");
 
     const after = useConsultantStore.getState().profile;
-    expect(after?.bio).toBe("Updated bio");
+    expect(after?.bio).toBe("Bio");
     expect(after?.status).toBe("published");
   });
 
-  it("keeps a non-published status too (does not silently 'promote' to undefined)", () => {
+  it("keeps accepted content and non-published status after a failed save", () => {
     useConsultantStore.getState().hydrateFromServer(serverProfile({ status: "pending_review" }));
-    useConsultantStore.getState().saveProfile({ price: 200 });
+    useConsultantStore.getState().setSync("error", "request failed");
+    expect(useConsultantStore.getState().profile?.price).toBe(150);
     expect(useConsultantStore.getState().profile?.status).toBe("pending_review");
   });
 });

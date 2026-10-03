@@ -200,7 +200,7 @@ async function guardWrite(req: Request): Promise<GuardResult> {
   if (process.env.DRAFTHR_DUAL_WRITE !== "true") {
     return { ok: false, response: jsonError("Dual-write disabled", 503) };
   }
-  const limited = rateLimit(req, { name: "store-matters", max: 120, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "store-matters", max: 120, windowMs: 60_000 });
   if (limited) return { ok: false, response: limited };
 
   const auth = await requireSessionAndTenant(req);

@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { Check, Clock, FileText, MessageSquareReply, X } from "lucide-react";
 import { BookingThread } from "@/components/consultants/BookingThread";
 import { StatusBadge } from "@/components/consultants/StatusBadge";
-import { pushBookingRespond } from "@/lib/marketplaceSync";
+import { pullInbox, pushBookingRespond } from "@/lib/marketplaceSync";
+import { Button } from "@/components/ui/button";
 
 /** Stable empty-array reference. bookingsForConsultant builds a fresh
  *  array every call; returning a new `[]` literal from the selector's
@@ -16,8 +17,7 @@ const EMPTY_BOOKINGS: Booking[] = [];
 
 /**
  * Consultant-side bookings inbox. Reads everything addressed to the
- * signed-in consultant (matched by initials — the only stable id we
- * have on a localStorage booking), groups by status, and surfaces the
+ * signed-in consultant (matched by stable server profile ID), groups by status, and surfaces the
  * accept / decline / mark-delivered actions inline.
  *
  * Empty state explains discovery is automatic so the consultant
@@ -42,6 +42,7 @@ const STATUS_ORDER: Booking["status"][] = [
 
 export function ConsultantInbox() {
   const profile = useConsultantStore((s) => s.profile);
+  const inboxState = useBookingsStore((s) => s.inboxState);
   const bookings = useBookingsStore(
     useShallow((s) =>
       profile ? s.bookingsForConsultant(profile.initials, profile.id) : EMPTY_BOOKINGS,
@@ -60,6 +61,12 @@ export function ConsultantInbox() {
     return g;
   }, [bookings]);
 
+  if (inboxState === "idle" || inboxState === "loading") return <p role="status">Loading your inbox…</p>;
+  if (inboxState === "error") return <section role="alert">
+    <p>Your inbox could not be loaded. Your bookings have not been removed.</p>
+    <Button variant="outline" className="mt-3" onClick={() => void pullInbox()}>Retry inbox</Button>
+  </section>;
+
   if (bookings.length === 0) {
     return (
       <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-10 text-center">
@@ -68,9 +75,9 @@ export function ConsultantInbox() {
           it'll land here with the full letter, evidence pack, and timer.
         </p>
         <p className="mt-2 text-[11.5px] text-[var(--ds-muted)]">
-          {profile
+          {profile?.status === "published"
             ? "Your card is live now — discovery is automatic."
-            : "Complete your profile to start showing up in search."}
+            : "Your card appears in search only after your profile is approved."}
         </p>
       </div>
     );
@@ -99,13 +106,23 @@ export function ConsultantInbox() {
 }
 
 function BookingRow({ booking }: { booking: Booking }) {
-  const accept = useBookingsStore((s) => s.acceptBooking);
-  const decline = useBookingsStore((s) => s.declineBooking);
-  const deliver = useBookingsStore((s) => s.deliverBooking);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [showDecline, setShowDecline] = useState(false);
   const [declineNote, setDeclineNote] = useState("");
   const [showDeliver, setShowDeliver] = useState(false);
   const [deliveryNote, setDeliveryNote] = useState("");
+  const respond = async (action: "accept" | "decline" | "deliver", note?: string) => {
+    if (savingRef.current) return false;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      return await pushBookingRespond(booking.id, action, { note });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
 
   const matterTitle = booking.matterTitle ?? `Draft #${booking.draftId.slice(0, 8)}`;
   const requestedAgo = relativeTime(booking.bookedAt);
@@ -153,18 +170,17 @@ function BookingRow({ booking }: { booking: Booking }) {
         <div className="mt-3 flex gap-2">
           <button
             type="button"
-            onClick={() => {
-              accept(booking.id);
-              void pushBookingRespond(booking.id, "accept");
-            }}
+            onClick={() => void respond("accept")}
+            disabled={saving}
             className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:-translate-y-px hover:shadow-md"
           >
             <Check className="size-3.5" aria-hidden />
-            Accept
+            {saving ? "Saving…" : "Accept"}
           </button>
           <button
             type="button"
             onClick={() => setShowDecline(true)}
+            disabled={saving}
             className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-[var(--ds-line)] bg-white px-3 text-[12px] font-semibold text-[var(--ds-ink)] transition hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)]"
           >
             <X className="size-3.5" aria-hidden />
@@ -191,12 +207,11 @@ function BookingRow({ booking }: { booking: Booking }) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 const note = declineNote.trim() || undefined;
-                decline(booking.id, note);
-                void pushBookingRespond(booking.id, "decline", { note });
-                setShowDecline(false);
+                if (await respond("decline", note)) setShowDecline(false);
               }}
+              disabled={saving}
               className="inline-flex h-7 items-center rounded-[6px] bg-[var(--ds-red-fg)] px-2.5 text-[11.5px] font-semibold text-white"
             >
               Confirm decline
@@ -204,6 +219,7 @@ function BookingRow({ booking }: { booking: Booking }) {
             <button
               type="button"
               onClick={() => setShowDecline(false)}
+              disabled={saving}
               className="inline-flex h-7 items-center rounded-[6px] border border-[var(--ds-line)] bg-white px-2.5 text-[11.5px] font-semibold text-[var(--ds-ink)]"
             >
               Cancel
@@ -247,13 +263,11 @@ function BookingRow({ booking }: { booking: Booking }) {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 const note = deliveryNote.trim() || undefined;
-                deliver(booking.id, note);
-                void pushBookingRespond(booking.id, "deliver", { note });
-                setShowDeliver(false);
+                if (await respond("deliver", note)) setShowDeliver(false);
               }}
-              disabled={deliveryNote.trim().length < 10}
+              disabled={saving || deliveryNote.trim().length < 10}
               className="inline-flex h-7 items-center rounded-[6px] bg-[var(--ds-ink)] px-2.5 text-[11.5px] font-semibold text-white disabled:opacity-60"
             >
               Send delivery
@@ -261,6 +275,7 @@ function BookingRow({ booking }: { booking: Booking }) {
             <button
               type="button"
               onClick={() => setShowDeliver(false)}
+              disabled={saving}
               className="inline-flex h-7 items-center rounded-[6px] border border-[var(--ds-line)] bg-white px-2.5 text-[11.5px] font-semibold text-[var(--ds-ink)]"
             >
               Cancel

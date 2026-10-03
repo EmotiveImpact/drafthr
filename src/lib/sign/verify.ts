@@ -79,6 +79,9 @@ export type VerifyNewInput = {
   tsaTrustPins?: readonly string[];
   /** Human label for the trusted TSA. Defaults to "FreeTSA". */
   tsaName?: string;
+  /** A CMS sidecar without a trusted timestamp still verifies its bytes/key.
+   * Defaults to true for compatibility with callers requiring timestamp proof. */
+  requireTimestamp?: boolean;
 };
 
 export async function verifyPadesCms(input: VerifyNewInput): Promise<VerifyResult> {
@@ -146,9 +149,15 @@ export async function verifyPadesCms(input: VerifyNewInput): Promise<VerifyResul
     if (!tsrResult.ok) {
       return { ok: false, reason: "tsa_invalid", detail: tsrResult.reason };
     }
+    // Historical DraftHR sidecars timestamped the content digest, not the
+    // Ed25519 signature. Verify that exact binding; do not accept a valid but
+    // unrelated timestamp token as evidence for this manifest.
+    if (tsrResult.sha256Hex !== expectedDigest.toString("hex")) {
+      return { ok: false, reason: "tsa_invalid", detail: "Timestamp does not cover this manifest" };
+    }
     signedAt = tsrResult.signedAtUtc;
     tsa = tsrResult.tsaName;
-  } else {
+  } else if (input.requireTimestamp !== false) {
     return { ok: false, reason: "tsa_missing" };
   }
 

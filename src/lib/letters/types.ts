@@ -253,9 +253,9 @@ export type EvidenceItem = {
 };
 
 export type ProtectedDeadline = {
-  /** ISO date — the calculated tribunal/EEOC limitation deadline. */
+  /** Historical recorded date only; unverified, not a legal filing deadline. */
   iso: string;
-  /** Human-readable basis (e.g. "ERA s.111: 3 months less one day from act on 14 March 2026"). */
+  /** Preserved legacy explanation. Do not display as advice or use in generation. */
   basis: string;
 };
 
@@ -282,7 +282,7 @@ export type LetterContext = {
   withoutPrejudice?: boolean;
   /** Employee mode — protected characteristics implicated. */
   protectedCharacteristics?: ProtectedCharacteristic[];
-  /** Employee mode — calculated tribunal/EEOC limitation deadline. */
+  /** Legacy reminder, retained without endorsing its calculation. No new automatic values. */
   protectedDeadline?: ProtectedDeadline;
   counselReviewRequired: boolean;
   riskFlags: {

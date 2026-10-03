@@ -3,8 +3,8 @@ import { getLetterMeta } from "./letters/catalog";
 import { rulesFor, ruleMatches } from "./letters/compliance";
 import { getDraftReadiness } from "./finalize/readiness";
 import type { Profile } from "./profile";
+import { getUnverifiedDeadlineReminder, UNVERIFIED_DEADLINE_NOTICE } from "./deadline-reminders";
 import {
-  addDaysToDateOnly,
   daysUntilDateOnly,
   formatDateOnly,
 } from "./date-only";
@@ -65,8 +65,8 @@ export function deriveNotifications(
     const label = meta?.shortTitle ?? d.letterType.replace(/_/g, " ");
     const fullText = d.sections.map((s) => s.html).join("\n");
 
-    // 1) Tribunal deadline approaching
-    const dl = d.context.protectedDeadline;
+    // 1) Historical recorded reminder approaching, not a verified legal deadline.
+    const dl = getUnverifiedDeadlineReminder(d);
     if (dl) {
       const days = daysUntilDateOnly(dl.iso, new Date(now));
       if (days >= 0 && days <= 21) {
@@ -74,26 +74,27 @@ export function deriveNotifications(
           id: `tribunal-${d.id}`,
           severity: days < 7 ? "urgent" : days < 14 ? "warn" : "info",
           kind: "tribunal_deadline",
-          title: `Tribunal deadline in ${days} day${days === 1 ? "" : "s"}`,
-          description: `${label}: limitation expires ${formatDate(dl.iso)}. ${dl.basis}`,
+          title: `Recorded deadline in ${days} day${days === 1 ? "" : "s"}`,
+          description: `${label}: recorded date ${formatDate(dl.iso)}. ${UNVERIFIED_DEADLINE_NOTICE}`,
           weight: 1000 - days,
           draftId: d.id,
           actionLabel: "Open draft",
           actionHref: `/editor/${d.id}`,
         });
       }
-      // 2) ACAS EC clock — for UK only, deadline = tribunal - 42 days
+      // Acas notification is not a fixed number of days before a claim deadline.
+      // The claim, notification and certificate dates determine the applicable
+      // rules. Do not invent a second legal deadline from a stored reminder.
+      // Source: https://www.acas.org.uk/early-conciliation/how-early-conciliation-works
       if (d.context.jurisdiction === "UK") {
-        const ecIso = subtractDays(dl.iso, 42);
-        const ecDays = daysUntilDateOnly(ecIso, new Date(now));
-        if (ecDays >= 0 && ecDays <= 14) {
+        if (days >= 0 && days <= 21) {
           out.push({
             id: `acas-${d.id}`,
-            severity: ecDays < 5 ? "urgent" : "warn",
+            severity: days < 7 ? "urgent" : "warn",
             kind: "acas_ec_deadline",
-            title: `ACAS Early Conciliation in ${ecDays} day${ecDays === 1 ? "" : "s"}`,
-            description: `${label}: lodge ACAS EC by ${formatDate(ecIso)} to preserve the limitation pause (up to 6 weeks).`,
-            weight: 950 - ecDays,
+            title: "Check Acas notification requirements",
+            description: `${label}: check whether early conciliation applies and when you must notify Acas. Notification and certificate dates can affect the claim deadline; do not calculate it by subtracting a fixed number of weeks. Check current Acas guidance or obtain legal advice.`,
+            weight: 950 - days,
             draftId: d.id,
             actionLabel: "Open draft",
             actionHref: `/editor/${d.id}`,
@@ -182,10 +183,6 @@ function safeMeta(id: string) {
   } catch {
     return null;
   }
-}
-
-function subtractDays(iso: string, days: number): string {
-  return addDaysToDateOnly(iso, -days);
 }
 
 function formatDate(iso: string): string {

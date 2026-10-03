@@ -16,7 +16,7 @@ export const config = { runtime: "nodejs" };
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "auth-callback", max: 20, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-callback", max: 20, windowMs: 60_000 });
   if (limited) return limited;
   const parsed = await readJsonRequest<{ code?: string; state?: string }>(req);
   if (!parsed.ok) return parsed.response;

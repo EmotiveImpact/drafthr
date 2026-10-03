@@ -1,247 +1,104 @@
-/**
- * POST /api/sign/manifest
- *
- * Sign an export-pack manifest with the active Ed25519 signer (AWS KMS when
- * SIGNING_KMS_KEY_ID is configured, the in-process local signer otherwise),
- * stamp it with a fresh RFC 3161 TimeStampToken from FreeTSA, and return a
- * PAdES-B-T-style CMS SignedData blob ready to be written into the export
- * ZIP as `manifest.sig`.
- *
- * The pack builder (src/lib/export/pack.ts) is browser-side; it calls this
- * endpoint with the canonical manifest JSON it just built, then drops the
- * returned CMS bytes into the ZIP alongside `manifest.json`.
- *
- * Audit: every successful signing emits a `draft.signed_with_kms` audit
- * event (or `draft.signed_local` for the dev path). The WorkOS Audit Logs
- * sink that sibling task 2B is wiring up will pick the same kind up for
- * free.
+/** Sign the exact canonical pack manifest for an authenticated saved draft.
+ * A CMS sidecar is not an embedded PDF signature, legal review or trusted time.
+ * Unconfigured signing is explicit. Configured signer failures fail the export.
  */
 import { createHash } from "node:crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
 import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
-import { parseTsr, requestTsr } from "../_utils/tsa.js";
 import { appendAuditEvent } from "../../src/db/audit.js";
 import { getDb } from "../../src/db/index.js";
 import { drafts } from "../../src/db/schema.js";
 import { buildPadesCms } from "../../src/lib/sign/pades.js";
 import { getActiveSigner } from "../../src/lib/sign/types.js";
-
+import { verifyPadesCms } from "../../src/lib/sign/verify.js";
 import { withSessionResponse } from "../_utils/workos.js";
+import {
+  decodeBase64, MAX_MANIFEST_BYTES, parsePackManifest, type PackSigningResponse,
+} from "../../src/lib/export/pack-integrity.js";
+import { serverUuidOrNull } from "../../src/lib/remote-ids.js";
 
-export const config = {
-  runtime: "nodejs",
-  maxDuration: 30,
-};
-
-type SignManifestRequest = {
-  /** Canonical-JSON-encoded manifest bytes, base64-encoded. The pack
-   *  builder is responsible for canonicalising — we sign exactly the
-   *  bytes we are handed, byte-for-byte, so the verifier can recompute
-   *  the same hash. */
-  manifest_b64?: unknown;
-  draftId?: unknown;
-};
-
-type SignManifestResponse = {
-  /** DER-encoded CMS SignedData, base64. Write this to manifest.sig. */
-  cms_b64: string;
-  /** Raw 32-byte Ed25519 public key, base64. For verifiers that don't yet
-   *  have access to the signer registry. */
-  public_key_b64: string;
-  /** Stable identifier — KMS key ARN/alias for the KMS signer, a
-   *  fingerprint for the local signer. */
-  key_id: string;
-  algorithm: "Ed25519";
-  /** SHA-256 hex of the manifest bytes — also recorded in the CMS
-   *  message-digest signed attribute. */
-  content_sha256: string;
-  /** ISO8601 UTC. Either the TSA-signed time (when FreeTSA was reachable)
-   *  or the local signing-time signed attr (when it wasn't). */
-  signed_at: string | null;
-  /** "freetsa" | null. null means the TSR fetch failed; the CMS is then
-   *  PAdES-B-B and the export is downgraded from B-T to B-B. */
-  tsa: string | null;
-};
-
-const MAX_MANIFEST_BYTES = 200_000;
+export const config = { runtime: "nodejs", maxDuration: 30 };
 
 export async function POST(req: Request): Promise<Response> {
   return withSessionResponse(req, handlePost);
 }
 
+const json = (body: PackSigningResponse) => new Response(JSON.stringify(body), {
+  status: 200,
+  headers: { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" },
+});
+
 async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
-  const rateLimitError = rateLimit(req, { name: "sign-manifest", max: 30, windowMs: 60_000 });
+  const rateLimitError = await rateLimit(req, { name: "sign-manifest", max: 30, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
-
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
-  if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  if (!auth.activeTenant || !auth.activeMember || serverUuidOrNull(req.headers.get("X-Workspace-ID")) !== auth.activeTenant.id) {
+    return jsonError("The active workspace changed. Reload before signing.", 409);
+  }
+  if (!["owner", "admin", "drafter", "reviewer"].includes(auth.activeMember.role)) {
+    return jsonError("This workspace role is read-only", 403);
+  }
   const tenantId = auth.activeTenant.id;
-  const actorUserId = auth.userRow.id;
-
-  const parsed = await readJsonRequest<SignManifestRequest>(req, MAX_MANIFEST_BYTES * 2);
+  const parsed = await readJsonRequest<{ manifest_b64?: unknown; draftId?: unknown }>(req, MAX_MANIFEST_BYTES * 2);
   if (!parsed.ok) return parsed.response;
-  const body = parsed.body;
-
-  if (typeof body.manifest_b64 !== "string" || body.manifest_b64.length === 0) {
-    return jsonError("manifest_b64 required", 400);
+  if (!parsed.body || typeof parsed.body.manifest_b64 !== "string" || !serverUuidOrNull(parsed.body.draftId as string)) {
+    return jsonError("A draft ID and base64 manifest are required", 400);
   }
-  if (typeof body.draftId !== "string" || body.draftId.length === 0) {
-    return jsonError("draftId required", 400);
-  }
-
-  let manifestBytes: Buffer;
+  let manifestBytes: Uint8Array;
+  let manifest: ReturnType<typeof parsePackManifest>;
   try {
-    manifestBytes = Buffer.from(body.manifest_b64, "base64");
+    manifestBytes = decodeBase64(parsed.body.manifest_b64);
+    manifest = parsePackManifest(manifestBytes);
   } catch {
-    return jsonError("manifest_b64 must be valid base64", 400);
+    return jsonError("Invalid canonical export-pack manifest", 400);
   }
-  if (manifestBytes.byteLength === 0) {
-    return jsonError("manifest_b64 decoded to 0 bytes", 400);
+  if (manifest.draftId !== parsed.body.draftId || manifest.workspaceId !== tenantId || !manifest.draftRevision) {
+    return jsonError("Manifest does not match the active workspace and draft", 409);
   }
-  if (manifestBytes.byteLength > MAX_MANIFEST_BYTES) {
-    return jsonError(`manifest too large (>${MAX_MANIFEST_BYTES} bytes)`, 413);
-  }
-
-  if (!isUuid(body.draftId)) {
-    return jsonError("draftId must be a UUID", 400);
-  }
-
-  const owns = await draftBelongsToTenant(body.draftId, tenantId);
-  if (!owns) {
-    return jsonError("draft not found in active tenant", 404);
-  }
-
-  // ---- KMS / local signer + RFC 3161 timestamp -------------------------
-  //
-  // Both runs concurrently to hide the FreeTSA latency behind the KMS
-  // round-trip. If KMS itself fails we surface the error — no silent
-  // fallback to the local signer when SIGNING_KMS_KEY_ID was set, per
-  // SUNDAY.md Section C.
-  let signerName: "kms" | "local";
-  let publicKey: Uint8Array;
-  let cmsDer: Uint8Array;
-  let contentSha256: string;
-  let signedAtIso: string | null = null;
-  let tsa: string | null = null;
-  let tsrParseError: string | null = null;
 
   try {
+    const [draft] = await getDb().select({ revision: drafts.revision }).from(drafts)
+      .where(and(eq(drafts.id, manifest.draftId), eq(drafts.tenantId, tenantId), isNull(drafts.deletedAt))).limit(1);
+    if (!draft) return jsonError("Draft not found in the active workspace", 404);
+    if (draft.revision !== manifest.draftRevision) return jsonError("This draft changed. Reload and export the saved version again.", 409);
+
+    // No ephemeral/dev key is ever substituted for a production signing key.
+    // This response is the ONLY condition under which the client emits an
+    // unsigned workspace pack. Missing auth, 404s and outages are not opt-outs.
+    if (!process.env.SIGNING_KMS_KEY_ID?.trim()) return json({ status: "unsigned", reason: "not_configured" });
+
     const signer = await getActiveSigner();
-    signerName = signer.keyId.startsWith("local:") ? "local" : "kms";
-
-    const manifestSha256 = createHash("sha256").update(manifestBytes).digest("hex");
-    const [pk, tsr] = await Promise.all([
-      signer.publicKey(),
-      requestTsr(manifestSha256).catch(() => null),
-    ]);
-    publicKey = pk;
-
-    const built = await buildPadesCms({
-      content: manifestBytes,
-      signer,
-      tsr: tsr ?? undefined,
+    const publicKey = await signer.publicKey();
+    const signingTime = new Date();
+    const built = await buildPadesCms({ content: manifestBytes, signer, signingTime });
+    const verified = await verifyPadesCms({
+      cms: built.cmsDer, expectedContent: manifestBytes, expectedPublicKey: publicKey, requireTimestamp: false,
     });
-    cmsDer = built.cmsDer;
-    contentSha256 = built.contentSha256Hex;
+    if (!verified.ok) throw new Error(`Signer produced an unverifiable manifest: ${verified.reason}`);
 
-    if (tsr) {
-      const parsedTsr = parseTsr(tsr);
-      if (parsedTsr.ok) {
-        signedAtIso = parsedTsr.signedAtUtc.toISOString();
-        tsa = parsedTsr.tsaName;
-      } else {
-        tsrParseError = parsedTsr.reason;
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return jsonError(`signing failed: ${message}`, 500);
+    // A signing record must be durable before reporting success. A later retry
+    // may create another signature; it can never report an unsigned success.
+    await appendAuditEvent({
+      tenantId, kind: "draft.signed_with_kms", subjectType: "draft", subjectId: manifest.draftId,
+      actorUserId: auth.userRow.id,
+      payload: { algorithm: "Ed25519", sha256: built.contentSha256Hex, draftRevision: manifest.draftRevision,
+        keyId: signer.keyId, publicKeySha256: createHash("sha256").update(publicKey).digest("hex"),
+        signed_at: signingTime.toISOString(), timestamp: "none" },
+    });
+    return json({
+      status: "signed", cms_b64: Buffer.from(built.cmsDer).toString("base64"),
+      public_key_b64: Buffer.from(publicKey).toString("base64"),
+      public_key_sha256: createHash("sha256").update(publicKey).digest("hex"),
+      key_id: signer.keyId, algorithm: "Ed25519", content_sha256: built.contentSha256Hex,
+      signed_at: signingTime.toISOString(), timestamp: "none",
+    });
+  } catch (error) {
+    console.error("[sign-manifest] signing or audit persistence failed", error instanceof Error ? error.name : "UnknownError");
+    return jsonError("Pack signing is temporarily unavailable. No signed pack has been confirmed; please retry.", 503);
   }
-
-  // ---- Audit ------------------------------------------------------------
-  //
-  // Best-effort: never block a successful signature on the audit write,
-  // but log loudly if it fails.
-  await tryAppendSigningAudit({
-    tenantId,
-    draftId: body.draftId,
-    actorUserId,
-    signerName,
-    contentSha256,
-    signedAtIso,
-    tsa,
-    tsrParseError,
-  }).catch((err) => {
-    console.error("[audit] sign-manifest append failed", err);
-  });
-
-  const response: SignManifestResponse = {
-    cms_b64: Buffer.from(cmsDer).toString("base64"),
-    public_key_b64: Buffer.from(publicKey).toString("base64"),
-    key_id: signerName === "kms"
-      ? (process.env.SIGNING_KMS_KEY_ID ?? "(unknown)")
-      : `local:ed25519:${createHash("sha256").update(publicKey).digest("hex").slice(0, 16)}`,
-    algorithm: "Ed25519",
-    content_sha256: contentSha256,
-    signed_at: signedAtIso,
-    tsa,
-  };
-
-  return new Response(JSON.stringify(response), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
-}
-
-type AuditInput = {
-  tenantId: string;
-  draftId: string;
-  actorUserId: string;
-  signerName: "kms" | "local";
-  contentSha256: string;
-  signedAtIso: string | null;
-  tsa: string | null;
-  tsrParseError: string | null;
-};
-
-async function tryAppendSigningAudit(input: AuditInput): Promise<void> {
-  if (!process.env.DATABASE_URL) return;
-  await appendAuditEvent({
-    tenantId: input.tenantId,
-    kind: input.signerName === "kms" ? "draft.signed_with_kms" : "draft.signed_local",
-    subjectType: "draft",
-    subjectId: input.draftId,
-    actorUserId: input.actorUserId,
-    payload: {
-      algorithm: "Ed25519",
-      sha256: input.contentSha256,
-      signed_at: input.signedAtIso,
-      tsa: input.tsa,
-      tsa_status: input.tsa ? "granted" : input.tsrParseError ? "invalid" : "unavailable",
-      tsa_reason: input.tsrParseError,
-    },
-  });
-}
-
-async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<boolean> {
-  const db = getDb();
-  const [draft] = await db
-    .select({ id: drafts.id })
-    .from(drafts)
-    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)))
-    .limit(1);
-  return Boolean(draft);
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

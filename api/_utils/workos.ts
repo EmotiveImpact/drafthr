@@ -51,6 +51,8 @@ export type SessionPayload = {
   sessionId?: string;
 };
 
+import { withRequestObservability } from "./observability.js";
+
 type RequestSession = { promise?: Promise<SessionPayload | null>; cookie?: string };
 const requestSessions = new WeakMap<Request, RequestSession>();
 
@@ -66,6 +68,10 @@ function requestSession(req: Request): RequestSession {
 
 /** Every HTTP entry point must deliver rotated cookies, including streaming responses. */
 export async function withSessionResponse(req: Request, handler: (req: Request) => Promise<Response>): Promise<Response> {
+  return withRequestObservability(req, () => sessionResponse(req, handler));
+}
+
+async function sessionResponse(req: Request, handler: (req: Request) => Promise<Response>): Promise<Response> {
   let response: Response;
   try { response = await handler(req); }
   catch (error) {

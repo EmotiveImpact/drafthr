@@ -15,7 +15,7 @@ async function access(req: Request) {
   if (process.env.DRAFTHR_DATABASE_WORKSPACE !== "true") return { ok: false as const, response: jsonError("Workspace storage disabled", 503) };
   const origin = req.method === "GET" ? null : enforceSameOrigin(req);
   if (origin) return { ok: false as const, response: origin };
-  const limited = rateLimit(req, { name: "workspace-preferences", max: 120, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workspace-preferences", max: 120, windowMs: 60_000 });
   if (limited) return { ok: false as const, response: limited };
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth;

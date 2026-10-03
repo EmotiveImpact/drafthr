@@ -12,6 +12,9 @@ const TONE_GUIDANCE: Record<string, string> = {
     "Tribunal-ready: strictly procedural and declaratory. Reference statute and form. Minimal narrative.",
 };
 
+export const FILING_DEADLINE_SAFETY =
+  "FILING-DEADLINE SAFETY — HARD CONSTRAINT: No legal filing deadline has been verified by this app. Never derive a filing deadline or a fixed extension from an incident date, sending target, template example or previous draft. Never include an unverified reminder date in a generated letter, including ACAS notifications, EEOC covers and tribunal correspondence. Do not assert that a claim is in time, late or automatically extended. Reserve rights subject to applicable time limits without inventing a date or duration. Internal response or payment targets do not establish or pause a legal filing deadline.";
+
 /**
  * Build the EMPLOYEE-mode rights-preservation system-prompt block. Sits
  * alongside the universal system prompt; injected only when draft.mode === "employee".
@@ -21,7 +24,6 @@ export function buildEmployeeRightsBlock(draft: Draft): string {
   const j = draft.context.jurisdiction;
   const tone = draft.context.employeeTone ?? "assertive";
   const wp = draft.context.withoutPrejudice;
-  const deadline = draft.context.protectedDeadline;
   const characteristics = draft.context.protectedCharacteristics ?? [];
 
   const lines: string[] = [];
@@ -65,12 +67,8 @@ export function buildEmployeeRightsBlock(draft: Draft): string {
     );
   }
 
-  if (deadline) {
-    lines.push("");
-    lines.push(
-      `LIMITATION DEADLINE: ${deadline.iso} (${deadline.basis}). Do not put this date inside the body of the letter unless the letter is an ACAS EC notification or tribunal cover. The deadline is for the user's awareness in editing.`
-    );
-  }
+  lines.push("");
+  lines.push(FILING_DEADLINE_SAFETY);
 
   if (meta.tribunalBound) {
     lines.push("");

@@ -18,6 +18,12 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { pushBookingRespond } from "@/lib/marketplaceSync";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
+import { setMarketplaceScope } from "@/lib/marketplace-scope";
+
+beforeEach(() => {
+  setMarketplaceScope(null, null);
+  setMarketplaceScope("user_1", "tenant_1");
+});
 
 function seedBooking(overrides: Partial<Booking> = {}): Booking {
   return {

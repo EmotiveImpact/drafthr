@@ -3,7 +3,8 @@ import { Tabs as TabsPrimitive } from "radix-ui";
 import { ArrowRight, Pin, PinOff, X } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
-import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
+import { formatDateOnly } from "@/lib/date-only";
+import { getUnverifiedDeadlineReminder, needsFilingDeadlineWarning } from "@/lib/deadline-reminders";
 import { getDraftReadiness } from "@/lib/finalize/readiness";
 import { cn } from "@/lib/utils";
 import { CheckIcons, type RailCheckRow } from "./review/AllChecks";
@@ -225,7 +226,7 @@ function RailTab({
  * Pulled out of the component so the tab + the issue-count badge can both
  * consume it without re-running the work.
  */
-function buildRailRows({
+export function buildRailRows({
   draft,
   counselReviewedBy,
   unresolvedComments,
@@ -248,10 +249,7 @@ function buildRailRows({
     (e) => e.kind === "screenshot" || e.mimeType?.startsWith("image/"),
   ).length;
 
-  const deadline = draft.context.protectedDeadline;
-  const deadlineDays = deadline?.iso
-    ? daysUntilDateOnly(deadline.iso)
-    : undefined;
+  const deadline = getUnverifiedDeadlineReminder(draft);
 
   const rows: RailCheckRow[] = [];
 
@@ -348,24 +346,14 @@ function buildRailRows({
     });
   }
 
-  if (deadline?.iso) {
+  if (needsFilingDeadlineWarning(draft) || deadline) {
     rows.push({
       id: "deadline",
-      label: "Statutory deadline",
-      detail:
-        deadlineDays === undefined
-          ? formatDateOnly(deadline.iso, { dateStyle: "medium" })
-          : deadlineDays < 0
-            ? `Past due by ${Math.abs(deadlineDays)} day${Math.abs(deadlineDays) === 1 ? "" : "s"}`
-            : deadlineDays === 0
-              ? "Due today"
-              : `${deadlineDays} day${deadlineDays === 1 ? "" : "s"} until deadline`,
-      status:
-        deadlineDays !== undefined && deadlineDays < 0
-          ? "missing"
-          : deadlineDays !== undefined && deadlineDays <= 7
-            ? "warn"
-            : "ok",
+      label: "Filing deadline not verified",
+      detail: deadline
+        ? `Unverified reminder: ${formatDateOnly(deadline.iso, { dateStyle: "medium" })}. Confirm the actual time limit with a qualified adviser.`
+        : "No legal deadline calculated. Confirm the applicable time limits promptly with a qualified adviser.",
+      status: "warn",
       icon: CheckIcons.CalendarClock,
     });
   }

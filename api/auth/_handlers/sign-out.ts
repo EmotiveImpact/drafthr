@@ -27,7 +27,7 @@ export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
 
-  const limited = rateLimit(req, { name: "auth-signout", max: 30, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-signout", max: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   // Revoke this user's other sessions. Read the session for the user id, bump,

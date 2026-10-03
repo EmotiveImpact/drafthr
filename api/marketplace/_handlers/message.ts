@@ -14,14 +14,13 @@
 import { eq, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
-import { getDb } from "../../../src/db/index.js";
+import { requireMarketplaceSession as requireSessionAndTenant, withMarketplaceWriteScope, canAccessMarketplaceBooking, canWriteMarketplaceBookings } from "../../_utils/marketplace-session.js";
 import { consultantBookings } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
-type MessageInput = { bookingId: string; text: string };
+type MessageInput = { bookingId: string; text: string; messageId?: string };
 
 type BookingMessage = {
   id: string;
@@ -33,7 +32,7 @@ type BookingMessage = {
 export async function POST(req: Request): Promise<Response> {
   const originRes = enforceSameOrigin(req);
   if (originRes) return originRes;
-  const limited = rateLimit(req, { name: "booking-message", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "booking-message", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
@@ -50,14 +49,21 @@ export async function POST(req: Request): Promise<Response> {
   if (!bookingId) return jsonError("Booking not found", 404);
   const text = body.text.trim().slice(0, 4000);
   if (!text) return jsonError("Empty message", 400);
+  const messageId = body.messageId === undefined ? crypto.randomUUID() : serverUuidOrNull(body.messageId);
+  if (!messageId) return jsonError("Invalid messageId", 400);
 
-  const db = getDb();
+  return withMarketplaceWriteScope(auth, async (db, currentAuth) => {
   const [booking] = await db
     .select()
     .from(consultantBookings)
     .where(eq(consultantBookings.id, bookingId))
-    .limit(1);
+    .limit(1)
+    .for("update");
   if (!booking) return jsonError("Booking not found", 404);
+  if (!canAccessMarketplaceBooking(currentAuth, booking)) return jsonError("Not your booking in this workspace", 403);
+  if (booking.consultantUserId !== auth.userRow.id && !canWriteMarketplaceBookings(currentAuth)) {
+    return jsonError("Your workspace role cannot send booking messages", 403);
+  }
 
   // Derive 'from' from the booking's roles — never trust the client.
   let from: BookingMessage["from"];
@@ -68,8 +74,13 @@ export async function POST(req: Request): Promise<Response> {
   const existing = Array.isArray(booking.messages)
     ? (booking.messages as BookingMessage[])
     : [];
+  const duplicate = existing.find((message) => message.id === messageId);
+  if (duplicate) {
+    if (duplicate.from !== from || duplicate.text !== text) return jsonError("Message identifier was already used", 409);
+    return Response.json({ messages: existing, message: duplicate }, { headers: { "Cache-Control": "no-store" } });
+  }
   const msg: BookingMessage = {
-    id: crypto.randomUUID(),
+    id: messageId,
     from,
     text,
     ts: Date.now(),
@@ -101,5 +112,6 @@ export async function POST(req: Request): Promise<Response> {
   return new Response(JSON.stringify({ messages, message: msg }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
   });
 }

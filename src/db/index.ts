@@ -13,6 +13,10 @@ export * from "./schema.js";
 
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 
+// Driver-owned timeouts cancel connection/pool waiters instead of leaving a
+// Promise.race loser alive to acquire a connection or execute a late write.
+export const DATABASE_CONNECTION_TIMEOUT_MS = 3_000;
+
 let _pool: Pool | null = null;
 let _localSql: ReturnType<typeof postgres> | null = null;
 let _db: Db | null = null;
@@ -28,11 +32,11 @@ export function getDb(): Db {
     throw new Error("DATABASE_URL is not configured");
   }
   if (process.env.DRAFTHR_LOCAL_WORKOS_EMULATOR === "1") {
-    _localSql = postgres(url, { max: 5 });
+    _localSql = postgres(url, { max: 5, connect_timeout: DATABASE_CONNECTION_TIMEOUT_MS / 1000 });
     _db = drizzlePostgres(_localSql, { schema }) as unknown as Db;
     return _db;
   }
-  _pool = new Pool({ connectionString: url });
+  _pool = new Pool({ connectionString: url, connectionTimeoutMillis: DATABASE_CONNECTION_TIMEOUT_MS });
   _db = drizzle(_pool, { schema });
   return _db;
 }

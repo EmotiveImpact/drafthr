@@ -15,6 +15,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getWorkos } from "../../_utils/workos.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
+import { enforceWorkspacePin } from "../../_utils/workspace-pin.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -35,7 +36,7 @@ type Body = { intent?: string; returnUrl?: string };
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "workos-portal-link", max: 20, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workos-portal-link", max: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<Body>(req);
@@ -54,6 +55,8 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const changed = enforceWorkspacePin(req, auth.activeTenant.id, auth.session.user.id);
+  if (changed) return changed;
   const memberRole = auth.activeMember?.role ?? "drafter";
   if (!ADMIN_ROLES.has(memberRole)) return jsonError("Admin role required", 403);
 

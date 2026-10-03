@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { suspendDatabaseWorkspaceForTransition, stopDatabaseWorkspace } from "@/lib/database-workspace";
 import { beginSessionTransition, useSessionTransition } from "@/lib/session/transition";
 import { SessionTransitionBoundary } from "@/components/SessionTransitionBoundary";
+import { quarantineLegacyMarketplaceData, setMarketplaceScope } from "@/lib/marketplace-scope";
 
 /**
  * AuthProvider — WorkOS AuthKit, SPA-shaped.
@@ -133,6 +134,8 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
           organizationSignInUrl?: string | null;
         };
         if (generation !== refreshGeneration.current || useSessionTransition.getState().label || useSessionTransition.getState().epoch !== transition.epoch) return;
+        quarantineLegacyMarketplaceData();
+        setMarketplaceScope(data.user?.id ?? null, data.activeTenant?.id ?? null);
         setLoadError(false);
         setOrganizationSignInUrl(data.organizationSignInUrl ?? null);
         setUser(data.user);
@@ -200,6 +203,7 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
       if (!response.ok) { requestStarted = false; throw new Error("Could not sign out. Check your connection and try again."); }
       const data = await response.json() as { logoutUrl?: string | null };
       stopDatabaseWorkspace();
+      setMarketplaceScope(null, null);
       ++refreshGeneration.current;
       setUser(null);
       setActiveTenant(null);
@@ -218,6 +222,7 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
         // resume editing under an assumed identity or erase recovery buffers.
         departing = true;
         stopDatabaseWorkspace();
+        setMarketplaceScope(null, null);
         window.location.assign("/");
       } else toast.error("Cannot sign out yet", { description: error instanceof Error ? error.message : "Please try again." });
     } finally {
@@ -239,7 +244,7 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
       </section>
     </main>
   );
-  return <AuthContext.Provider value={value}><SessionTransitionBoundary>{children}</SessionTransitionBoundary></AuthContext.Provider>;
+  return <AuthContext.Provider value={value}><SessionTransitionBoundary key={`${user?.id ?? "signed-out"}:${activeTenant?.id ?? "no-workspace"}`}>{children}</SessionTransitionBoundary></AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

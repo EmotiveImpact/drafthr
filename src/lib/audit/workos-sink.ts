@@ -3,8 +3,8 @@
  * hash-chained `audit_events` table.
  *
  * Design rules:
- *   - The local chain is the source of truth. This module is best-effort:
- *     it never throws to the caller and never blocks the local insert.
+ *   - The local chain is the source of truth. The transactional outbox owns
+ *     retries; this module only makes one awaited, time-bounded delivery.
  *   - Gated by the `WORKOS_AUDIT_LOGS_ENABLED=true` env flag so we can ship
  *     dark and flip on per-environment.
  *   - Gated again by the per-tenant `workos_org_id` — a tenant without a
@@ -19,9 +19,6 @@
  *     workosOrgId that matches `tenantId`. Wrong org → silent cross-tenant
  *     leak, which would be a security bug.
  */
-import { eq } from "drizzle-orm";
-import { getDb } from "../../db/index.js";
-import { tenants } from "../../db/schema.js";
 
 // Soft dependency — the WorkOS client is created lazily so this module can
 // be imported by tests that don't set env vars. The actual `@workos-inc/node`
@@ -46,6 +43,10 @@ type CreateAuditLogEventOptions = {
   targets: AuditLogTarget[];
   context: { location: string; userAgent?: string };
   metadata?: Record<string, string | number | boolean>;
+};
+
+export type WorkOSAuditEventSnapshot = Omit<CreateAuditLogEventOptions, "occurredAt"> & {
+  occurredAt: string;
 };
 
 export type WorkosAuditLogsClient = {
@@ -80,7 +81,7 @@ export type SendToWorkOSAuditLogsInput = {
 
 export type SendToWorkOSAuditLogsResult =
   | { ok: true }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; retryable?: boolean; retryAfterMs?: number };
 
 const ENV_FLAG = "WORKOS_AUDIT_LOGS_ENABLED";
 
@@ -175,16 +176,20 @@ async function getWorkosAuditLogsClient(): Promise<WorkosAuditLogsClient | null>
     const { WorkOS } = await import("@workos-inc/node");
     const workos = new WorkOS(process.env.WORKOS_API_KEY, {
       clientId: process.env.WORKOS_CLIENT_ID,
+      timeout: 10_000,
     });
     return workos.auditLogs as unknown as WorkosAuditLogsClient;
-  } catch (err) {
-    console.warn("[audit/workos-sink] failed to construct WorkOS client", err);
+  } catch {
     return null;
   }
 }
 
 export function isWorkOSAuditLogsEnabled(): boolean {
   return process.env[ENV_FLAG] === "true";
+}
+
+export async function isWorkOSAuditLogsReady(): Promise<boolean> {
+  return isWorkOSAuditLogsEnabled() && Boolean(await getWorkosAuditLogsClient());
 }
 
 /**
@@ -199,8 +204,11 @@ export async function sendToWorkOSAuditLogs(
   if (!input.workosOrgId) return { ok: false, reason: "tenant_not_configured" };
   if (!input.idempotencyKey) return { ok: false, reason: "missing_idempotency_key" };
 
-  const client = await getWorkosAuditLogsClient();
-  if (!client) return { ok: false, reason: "workos_client_unavailable" };
+  return sendWorkOSAuditSnapshot(input.workosOrgId, buildWorkOSAuditSnapshot(input), input.idempotencyKey);
+}
+
+/** Freeze the exact provider body before the first delivery attempt. */
+export function buildWorkOSAuditSnapshot(input: SendToWorkOSAuditLogsInput): WorkOSAuditEventSnapshot {
 
   // Build the actor. We always need *some* id — WorkOS rejects empty strings.
   // For system-driven events (no actor_user_id), fall back to a stable
@@ -225,9 +233,9 @@ export async function sendToWorkOSAuditLogs(
     id: input.targetId,
   };
 
-  const event: CreateAuditLogEventOptions = {
+  return {
     action: mapKindToWorkOSAction(input.action),
-    occurredAt: input.occurredAt,
+    occurredAt: input.occurredAt.toISOString(),
     actor,
     targets: [target],
     context: {
@@ -236,41 +244,36 @@ export async function sendToWorkOSAuditLogs(
     },
     ...(input.metadata ? { metadata: shapeMetadata(input.metadata) } : {}),
   };
+}
+
+export async function sendWorkOSAuditSnapshot(
+  workosOrgId: string,
+  snapshot: WorkOSAuditEventSnapshot,
+  idempotencyKey: string,
+): Promise<SendToWorkOSAuditLogsResult> {
+  if (!isWorkOSAuditLogsEnabled()) return { ok: false, reason: "feature_flag_off" };
+  if (!workosOrgId) return { ok: false, reason: "tenant_not_configured" };
+  if (!idempotencyKey) return { ok: false, reason: "missing_idempotency_key" };
+  const client = await getWorkosAuditLogsClient();
+  if (!client) return { ok: false, reason: "workos_client_unavailable", retryable: true };
 
   try {
-    await client.createEvent(input.workosOrgId, event, {
-      idempotencyKey: input.idempotencyKey,
-    });
-
-    // Bump the last-sent timestamp. Best-effort: if it fails, the WorkOS
-    // event still landed — the timestamp is for UI freshness only.
-    void updateLastSentAt(input.tenantId).catch((err) => {
-      console.warn(
-        "[audit/workos-sink] failed to bump workos_audit_logs_last_sent_at",
-        err,
-      );
+    await client.createEvent(workosOrgId, { ...snapshot, occurredAt: new Date(snapshot.occurredAt) }, {
+      idempotencyKey,
     });
     return { ok: true };
   } catch (err) {
-    console.warn(
-      "[audit/workos-sink] createEvent failed",
-      {
-        tenantId: input.tenantId,
-        workosOrgId: input.workosOrgId,
-        action: event.action,
-        idempotencyKey: input.idempotencyKey,
-      },
-      err,
-    );
-    return { ok: false, reason: err instanceof Error ? err.message : "createEvent_failed" };
+    // Provider exception messages/bodies may echo private event data. Persist
+    // only a stable code; never log the payload, names, emails or raw errors.
+    const status = Number((err as { status?: unknown; statusCode?: unknown } | null)?.status
+      ?? (err as { statusCode?: unknown } | null)?.statusCode);
+    const reason = Number.isInteger(status) && status >= 400 && status <= 599
+      ? `workos_http_${status}` : "workos_transport_error";
+    const retryAfter = Number((err as { retryAfter?: unknown } | null)?.retryAfter);
+    return {
+      ok: false, reason,
+      retryable: !Number.isFinite(status) || status >= 500 || status === 429 || status === 408,
+      ...(status === 429 && Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfterMs: retryAfter * 1000 } : {}),
+    };
   }
-}
-
-async function updateLastSentAt(tenantId: string): Promise<void> {
-  if (!process.env.DATABASE_URL) return;
-  const db = getDb();
-  await db
-    .update(tenants)
-    .set({ workosAuditLogsLastSentAt: new Date() })
-    .where(eq(tenants.id, tenantId));
 }

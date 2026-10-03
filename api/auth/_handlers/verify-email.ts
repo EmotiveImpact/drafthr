@@ -37,7 +37,7 @@ export async function POST(req: Request): Promise<Response> {
   // 10/min/IP — generous enough that a user fat-fingering the code a few
   // times isn't locked out, harsh enough that brute-forcing a 6-digit
   // code from a single IP is impractical.
-  const limited = rateLimit(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<VerifyEmailBody>(req);

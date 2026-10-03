@@ -135,10 +135,10 @@ base draft sync still works — the extras write/read just no-op (best-effort).
 
 ## 🟡 Marketplace payments (Stripe Connect) — BUILT, needs your Stripe account to activate
 
-Now code-complete: consultant payout onboarding (Connect Express), HR Checkout
+Implemented locally: consultant payout onboarding (Connect Express), HR Checkout
 at booking time (destination charge to the consultant + optional platform fee),
 and a signature-verified webhook. Decoupled tables (`stripe_connect_accounts`,
-`booking_payments`, migration 0012) so it never affects the live marketplace,
+`booking_payments`, migrations 0012 and 0027) keep payment state separate,
 and it's **off when keys are unset** (endpoints return 503; the booking flow
 stays request-based). Code: `api/_utils/stripe.ts`,
 `api/marketplace/_handlers/stripe-{connect,checkout,webhook}.ts`.
@@ -147,17 +147,23 @@ stays request-based). Code: `api/_utils/stripe.ts`,
 1. Set env (server-only secret; never commit): `STRIPE_SECRET_KEY`,
    `VITE_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, optional
    `STRIPE_PLATFORM_FEE_BPS` (basis points, default 0), `APP_BASE_URL`.
-2. `npm run db:migrate` (applies 0012 — payments tables).
+2. Review and apply the migration history, including 0012 (payment tables) and
+   0027 (durable Checkout requests), before deploying the new payment code.
 3. In Stripe → Developers → Webhooks, add an endpoint
    `https://<your-domain>/api/marketplace/stripe-webhook` for events
-   `account.updated` and `checkout.session.completed`; copy its signing secret
-   into `STRIPE_WEBHOOK_SECRET`.
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and
+   `checkout.session.async_payment_failed` on the platform endpoint; save its
+   signing secret in `STRIPE_WEBHOOK_SECRET`. Configure `account.updated` on the
+   Connect endpoint and save that secret in `STRIPE_WEBHOOK_SECRET_CONNECT`.
 4. `vercel --prod`, then test in **Stripe test mode**: a consultant connects
    payouts (Profile → Connect Stripe), an HR user pays an accepted booking
    (My bookings → Pay for review).
 
 ⚠️ Test it in Stripe test mode before going live — this is real payment code I
 could not exercise without your keys.
+
+See [Marketplace payment retries](MARKETPLACE-PAYMENTS.md) for saved checkout
+attempts, callback recovery and the unresolved-payment reconciliation procedure.
 
 ---
 

@@ -18,7 +18,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { pushProfile } from "@/lib/marketplaceSync";
+import { pullProfile, pushProfile } from "@/lib/marketplaceSync";
+import { captureMarketplaceScope, isMarketplaceScopeCurrent } from "@/lib/marketplace-scope";
+import { AppLoadingScreen } from "@/components/AppLoadingScreen";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 const AVAILABILITY_LABEL: Record<Availability, string> = {
@@ -32,14 +35,8 @@ const AVAILABILITY_LABEL: Record<Availability, string> = {
  * /c/profile — consultant profile setup / edit form.
  *
  * Single-page form (no wizard) — the field count is small enough that
- * paginating would feel patronising. On submit, saves to the
- * localStorage-backed consultant store and routes back to /c with the
- * profile-completion banner now green.
- *
- * Future work — when the backend lands, this component should POST to
- * /api/consultant/profile and the store's saveProfile() call gets
- * replaced or supplemented by the network round-trip. The form copy
- * stays the same.
+ * paginating would feel patronising. Load the server profile before mounting
+ * editable fields; keep unsaved changes in the form until the API accepts them.
  */
 
 // A curated suggestion list — the consultant can add their own free-text
@@ -62,9 +59,30 @@ const SUGGESTED_SPECIALTIES = [
 ];
 
 export function ConsultantProfile() {
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void pullProfile().then((ok) => {
+      if (!cancelled) { setFailed(!ok); setLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [attempt]);
+  if (loading) return <AppLoadingScreen />;
+  if (failed) return <section role="alert" className="mx-auto max-w-3xl px-4 py-8">
+    <p>Your profile could not be loaded. Retry before making changes.</p>
+    <Button variant="outline" className="mt-4" onClick={() => setAttempt((n) => n + 1)}>Retry</Button>
+  </section>;
+  return <ConsultantProfileForm />;
+}
+
+function ConsultantProfileForm() {
   const nav = useNavigate();
   const profile = useConsultantStore((s) => s.profile);
-  const saveProfile = useConsultantStore((s) => s.saveProfile);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const [fullName, setFullName] = useState(profile?.fullName ?? "");
   const [role, setRole] = useState(profile?.role ?? "");
@@ -82,11 +100,8 @@ export function ConsultantProfile() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   /**
-   * Photo upload — base64-into-localStorage for now. Vercel Blob is the
-   * production swap (set BLOB_READ_WRITE_TOKEN, POST to /api/upload/image
-   * which exists for letterheads already) but base64 is fine while the
-   * marketplace is local-cache-first; the consultant API server-side
-   * validates the URL.
+   * The image stays in this unsaved form until the profile API accepts it.
+   * The API validates the data URL; no copy is written to localStorage.
    */
   const onPickPhoto = () => fileRef.current?.click();
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,33 +140,39 @@ export function ConsultantProfile() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveProfile({
-      fullName: fullName.trim(),
-      role: role.trim(),
-      bio: bio.trim(),
-      specialty: specialty.trim(),
-      specialties,
-      price: Math.max(0, parseInt(price, 10) || 0),
-      currency,
-      sla: sla.trim(),
-      photoUrl,
-      availability,
-    });
-    // Publish to the cross-tenant marketplace and only claim success once the
-    // SERVER accepts it. Previously this was fire-and-forget + an immediate
-    // "Saved", so a failed push left the consultant believing they were listed
-    // when HR could never find them (board CPO-06).
-    const published = await pushProfile();
-    if (!published) {
+    if (savingRef.current) return;
+    const scope = captureMarketplaceScope();
+    if (!scope) return;
+    savingRef.current = true;
+    setSaving(true);
+    let saved: boolean;
+    try {
+      saved = await pushProfile({
+        fullName: fullName.trim(),
+        role: role.trim(),
+        bio: bio.trim(),
+        specialty: specialty.trim(),
+        specialties,
+        price: Math.max(0, parseInt(price, 10) || 0),
+        currency,
+        sla: sla.trim(),
+        photoUrl,
+        availability,
+      });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+    if (!isMarketplaceScopeCurrent(scope)) return;
+    if (!saved) {
       toast.error(
-        "Saved on this device, but we couldn't publish your profile to the marketplace yet. Check your connection and press Save to retry.",
+        "Your save wasn't confirmed. Your edits are still in this form — check your connection and retry.",
       );
       return; // stay on the form so they can retry — don't show "Saved" or redirect
     }
     setSubmitted(true);
-    // Brief affordance, then bounce back to /c — feels less abrupt than
-    // an immediate redirect and lets the user see their save landed.
-    setTimeout(() => nav("/c"), 800);
+    toast.success("Profile saved. Publication follows its review status.");
+    nav("/c");
   };
 
   const candidate = {
@@ -173,6 +194,7 @@ export function ConsultantProfile() {
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <button
         type="button"
+        disabled={saving}
         onClick={() => nav("/c")}
         className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
       >
@@ -195,6 +217,7 @@ export function ConsultantProfile() {
       </header>
 
       <form onSubmit={onSubmit} className="space-y-6">
+        <fieldset disabled={saving} className="contents">
         <Fieldset legend="Who you are">
           {/* Photo — first thing buyers see on the card. Optional but
            * we strongly nudge with the "Add a photo" CTA. */}
@@ -448,12 +471,13 @@ export function ConsultantProfile() {
         <div className="flex items-center justify-between gap-3 border-t border-[var(--ds-line)] pt-6">
           <p className="text-[12px] text-[var(--ds-muted)]">
             {ready
-              ? "Looks good — save to publish your card."
+              ? "Looks good — save your card for review."
               : "Fill in name, title, bio (20+ chars), at least one tag, and a rate."}
           </p>
           <div className="flex gap-2">
             <button
               type="button"
+              disabled={saving}
               onClick={() => nav("/c")}
               className="inline-flex h-10 items-center rounded-[8px] border border-[var(--ds-line)] bg-white px-4 text-[13px] font-semibold text-[var(--ds-ink)] transition hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)]"
             >
@@ -461,7 +485,7 @@ export function ConsultantProfile() {
             </button>
             <button
               type="submit"
-              disabled={!ready || submitted}
+              disabled={!ready || submitted || saving}
               className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
             >
               {submitted ? (
@@ -470,11 +494,12 @@ export function ConsultantProfile() {
                   Saved
                 </>
               ) : (
-                <>Save and publish</>
+                <>{saving ? "Saving…" : "Save profile"}</>
               )}
             </button>
           </div>
         </div>
+        </fieldset>
       </form>
     </div>
   );
@@ -538,6 +563,7 @@ function Field({
 function PayoutConnect({ enabledFromProfile }: { enabledFromProfile: boolean }) {
   const [status, setStatus] = useState<StripeConnectStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
@@ -589,21 +615,36 @@ function PayoutConnect({ enabledFromProfile }: { enabledFromProfile: boolean }) 
   // otherwise leaving the button stuck on "Starting…" with no way to retry.
   useEffect(() => {
     const onShow = (e: PageTransitionEvent) => {
-      if (e.persisted) setBusy(false);
+      if (e.persisted) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     };
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
 
   const connect = async () => {
+    const scope = captureMarketplaceScope();
+    if (!scope || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    const r = await startStripeConnect();
-    if (r.ok) {
-      window.location.assign(r.data.url);
-      return;
+    let departing = false;
+    try {
+      const r = await startStripeConnect();
+      if (!isMarketplaceScopeCurrent(scope)) return;
+      if (r.ok) {
+        window.location.assign(r.data.url);
+        departing = true;
+        return;
+      }
+      toast.error(r.error || "Could not start payout onboarding");
+    } finally {
+      if (!departing) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
-    toast.error(r.error || "Could not start payout onboarding");
-    setBusy(false);
   };
 
   const configured = status?.configured ?? true; // assume configured until told otherwise

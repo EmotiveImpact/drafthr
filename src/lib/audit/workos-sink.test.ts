@@ -144,7 +144,7 @@ describe("workos-sink: createEvent invocation", () => {
 
     // Required WorkOS shape.
     expect(event.action).toBe("letters.draft.exported");
-    expect(event.occurredAt).toBe(occurredAt);
+    expect(event.occurredAt).toEqual(occurredAt);
     expect(event.actor).toEqual({
       type: "user",
       id: "user_42",
@@ -206,7 +206,7 @@ describe("workos-sink: createEvent invocation", () => {
 
   it("returns { ok: false } without throwing when the SDK rejects", async () => {
     const createEvent = vi.fn(async () => {
-      throw new Error("workos 422 unprocessable");
+      throw Object.assign(new Error("private provider error body"), { status: 422 });
     });
     setWorkosAuditLogsClient({ createEvent });
 
@@ -224,7 +224,7 @@ describe("workos-sink: createEvent invocation", () => {
     });
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain("workos 422");
+    expect(result).toEqual({ ok: false, reason: "workos_http_422", retryable: false });
   });
 
   it("rejects empty idempotencyKey to avoid duplicate WorkOS events on retries", async () => {
@@ -246,6 +246,14 @@ describe("workos-sink: createEvent invocation", () => {
 
     expect(result).toEqual({ ok: false, reason: "missing_idempotency_key" });
     expect(createEvent).not.toHaveBeenCalled();
+  });
+
+  it("honors WorkOS rate-limit retryAfter seconds without storing provider messages", async () => {
+    setWorkosAuditLogsClient({ createEvent: vi.fn().mockRejectedValue({ status: 429, retryAfter: 300, message: "private values" }) });
+    expect(await sendToWorkOSAuditLogs({
+      tenantId: "t", workosOrgId: "org_t", actorId: null, actorEmail: null, actorName: null,
+      action: "draft.created", targetType: "draft", targetId: "d", occurredAt: new Date(), idempotencyKey: "key",
+    })).toEqual({ ok: false, reason: "workos_http_429", retryable: true, retryAfterMs: 300_000 });
   });
 });
 

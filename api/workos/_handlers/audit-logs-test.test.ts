@@ -27,8 +27,12 @@ function makeRequest(): Request {
 }
 
 beforeEach(() => {
-  process.env.NODE_ENV = "development";
   process.env.WORKOS_AUDIT_LOGS_ENABLED = "true";
+  vi.doMock("../../_utils/rate-limit", () => ({ rateLimit: vi.fn().mockResolvedValue(null) }));
+  vi.doMock("../../../src/lib/audit/workos-outbox", () => ({
+    dispatchWorkOSAuditOutbox: vi.fn().mockResolvedValue({ delivered: 1 }),
+    getAuditDeliveryState: vi.fn().mockResolvedValue({ status: "delivered", lastError: null }),
+  }));
 });
 
 afterEach(() => {
@@ -52,6 +56,18 @@ function mockSessionAs(role: string, workosOrgId: string | null = "org_test_123"
 }
 
 describe("POST /api/workos/audit-logs-test", () => {
+  it("reports queued rather than mirrored when provider delivery is not confirmed", async () => {
+    mockSessionAs("admin");
+    vi.doMock("../../../src/db/audit", () => ({ appendAuditEvent: vi.fn().mockResolvedValue({ id: "audit_evt_pending" }) }));
+    vi.doMock("../../../src/lib/audit/workos-outbox", () => ({
+      dispatchWorkOSAuditOutbox: vi.fn().mockResolvedValue({ delivered: 0 }),
+      getAuditDeliveryState: vi.fn().mockResolvedValue({ status: "pending", lastError: "workos_transport_error" }),
+    }));
+    const { POST } = await import("./audit-logs-test");
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ deliveryStatus: "pending", message: expect.stringContaining("has not been confirmed") });
+  });
   it("returns 200 + writes a chain row + reports the audit_event id (admin)", async () => {
     mockSessionAs("admin");
     const append = vi.fn().mockResolvedValue({

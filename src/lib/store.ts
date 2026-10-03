@@ -33,12 +33,7 @@ import type {
 import { uid } from "./utils";
 import { getLetterMeta } from "./letters/catalog";
 import { answersFromEmployee } from "./employees";
-import {
-  addDaysToDateOnly,
-  addMonthsToDateOnly,
-  parseDateOnly,
-  todayDateOnly,
-} from "./date-only";
+import { parseDateOnly, todayDateOnly } from "./date-only";
 import { sanitizeLetterHtml } from "./sanitize";
 import { isSafeImageRef } from "./safe-data-url";
 import {
@@ -229,11 +224,6 @@ type Store = {
   withdrawForReview: (id: string) => void;
   deleteDraft: (id: string) => void;
 };
-
-const PROTECTED_DEADLINE_BASIS_UK =
-  "ERA s.111(2): tribunal claim must be presented within 3 months less one day of the act complained of (subject to ACAS Early Conciliation extension).";
-const PROTECTED_DEADLINE_BASIS_US =
-  "EEOC: 180 days from the act complained of (extended to 300 days in deferral states). State agency windows may differ.";
 
 export const useDraftStore = create<Store>()(
   persist(
@@ -689,7 +679,9 @@ export const useDraftStore = create<Store>()(
         }));
 
         const a = answers as Record<string, string | boolean | number | string[] | undefined>;
-        const protectedDeadline = computeProtectedDeadline(a);
+        // An incident date alone cannot establish a legal filing deadline.
+        // Historical protectedDeadline values remain on existing drafts only;
+        // consumers display them as unverified reminders, not legal conclusions.
 
         // Resolve the normalized records up front so the draft, employee and
         // matter land in one Zustand transaction. A directory selection is
@@ -787,7 +779,6 @@ export const useDraftStore = create<Store>()(
             protectedCharacteristics: Array.isArray(a.protectedCharacteristics)
               ? (a.protectedCharacteristics as Draft["context"]["protectedCharacteristics"])
               : undefined,
-            protectedDeadline,
             counselReviewRequired: meta.legalReviewRequired,
             riskFlags: {
               protectedStatus: Boolean(a.protectedStatus),
@@ -2030,29 +2021,6 @@ export function monthsBetween(isoDate?: string): number {
   const anniversaryDay = Math.min(start.getDate(), lastDayOfNowMonth);
   if (now.getDate() < anniversaryDay) months -= 1;
   return Math.max(0, months);
-}
-
-function computeProtectedDeadline(
-  a: Record<string, string | boolean | number | string[] | undefined>
-): Draft["context"]["protectedDeadline"] | undefined {
-  const actDate = a.actDate as string | undefined;
-  if (!actDate) return undefined;
-  if (!parseDateOnly(actDate)) return undefined;
-
-  const jurisdiction = a.jurisdiction as "UK" | "US" | undefined;
-  if (jurisdiction === "UK") {
-    return {
-      iso: addDaysToDateOnly(addMonthsToDateOnly(actDate, 3), -1),
-      basis: PROTECTED_DEADLINE_BASIS_UK,
-    };
-  }
-  if (jurisdiction === "US") {
-    return {
-      iso: addDaysToDateOnly(actDate, 300),
-      basis: PROTECTED_DEADLINE_BASIS_US,
-    };
-  }
-  return undefined;
 }
 
 /**

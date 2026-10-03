@@ -7,6 +7,7 @@ import {
   jsonb,
   uuid,
   integer,
+  bigint,
   boolean,
   date,
   index,
@@ -14,6 +15,7 @@ import {
   check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { WorkOSAuditEventSnapshot } from "../lib/audit/workos-sink.js";
 
 // Each workspace aggregate has its own revision and retained deletion marker.
 // Indexed columns are projections; the snapshot preserves the complete UI record.
@@ -548,11 +550,16 @@ export const auditEvents = pgTable(
     payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull(),
     prevHash: text("prev_hash").notNull(),
     rowHash: text("row_hash").notNull(),
+    // Monotonic within this tenant. Never use UUID/timestamp ordering for a chain.
+    sequence: bigint("sequence", { mode: "number" }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
     index("audit_events_tenant_created_idx").on(t.tenantId, t.createdAt.desc()),
     uniqueIndex("audit_events_tenant_rowhash_uniq").on(t.tenantId, t.rowHash),
+    uniqueIndex("audit_events_tenant_sequence_uniq").on(t.tenantId, t.sequence),
+    uniqueIndex("audit_events_tenant_prevhash_uniq").on(t.tenantId, t.prevHash),
+    check("audit_events_sequence_positive", sql`${t.sequence} > 0`),
     check(
       "audit_events_row_hash_hex64",
       sql`char_length(${t.rowHash}) = 64 AND ${t.rowHash} ~ '^[0-9a-f]{64}$'`,
@@ -563,6 +570,45 @@ export const auditEvents = pgTable(
     ),
   ],
 );
+
+// A delivery is committed with its audit row, including inside a caller's
+// business transaction. The snapshot MUST remain unchanged on retry: WorkOS
+// deduplication depends on both the event body and the idempotency key.
+export const auditLogDeliveries = pgTable(
+  "audit_log_deliveries",
+  {
+    auditEventId: uuid("audit_event_id").primaryKey().references(() => auditEvents.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    workosOrgId: text("workos_org_id").notNull(),
+    eventJson: jsonb("event_json").$type<WorkOSAuditEventSnapshot>().notNull(),
+    status: text("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    firstAttemptAt: timestamp("first_attempt_at", { withTimezone: true }),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("audit_log_deliveries_due_idx").on(t.status, t.nextAttemptAt),
+    index("audit_log_deliveries_tenant_idx").on(t.tenantId, t.status),
+    check("audit_log_deliveries_status_check", sql`${t.status} in ('pending', 'delivering', 'delivered', 'failed')`),
+    check("audit_log_deliveries_attempts_check", sql`${t.attempts} >= 0`),
+  ],
+);
+
+// Shared counters contain only hashed request buckets, not raw IP addresses.
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  key: text("key").primaryKey(),
+  hits: integer("hits").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [
+  index("rate_limit_buckets_expiry_idx").on(t.expiresAt),
+  check("rate_limit_buckets_hits_check", sql`${t.hits} > 0`),
+]);
 
 // --- consultant marketplace -------------------------------------------------
 
@@ -729,8 +775,13 @@ export const bookingPayments = pgTable(
       .primaryKey()
       .references(() => consultantBookings.id, { onDelete: "cascade" }),
     checkoutSessionId: text("checkout_session_id"),
+    // Persist the exact provider request before contacting Stripe so retries
+    // across workers reuse one attempt and never pick up changed prices.
+    checkoutAttemptId: uuid("checkout_attempt_id"),
+    checkoutParams: jsonb("checkout_params"),
+    checkoutRequestedAt: timestamp("checkout_requested_at", { withTimezone: true }),
     paymentIntentId: text("payment_intent_id"),
-    status: text("status").notNull().default("unpaid"), // unpaid | paid | refunded
+    status: text("status").notNull().default("unpaid"), // unpaid | paid | failed | refunded
     amount: integer("amount"), // minor units (pence/cents)
     currency: text("currency"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

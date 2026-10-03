@@ -1,51 +1,34 @@
 import type { Draft } from "@/lib/letters/types";
-import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
+import { formatDateOnly } from "@/lib/date-only";
+import { getUnverifiedDeadlineReminder, needsFilingDeadlineWarning, UNVERIFIED_DEADLINE_NOTICE } from "@/lib/deadline-reminders";
 import { CalendarClock } from "lucide-react";
 
 /**
- * Sticky deadline banner shown in employee-mode editors when the user has
- * supplied a date-of-act. Calculates and displays the tribunal/EEOC limitation
- * deadline computed at draft creation time.
+ * Filing-time warning remains visible even when no date has been calculated.
+ * A historical date is a reminder only, never evidence that a claim is in time.
  */
 export function DeadlineBanner({ draft }: { draft: Draft }) {
-  const deadline = draft.context.protectedDeadline;
-  if (draft.mode !== "employee" || !deadline) return null;
-
-  const days = daysUntil(deadline.iso);
-  const tone =
-    days < 0
-      ? "border-rose-300 bg-rose-50 text-rose-900"
-      : days < 14
-      ? "border-rose-200 bg-rose-50 text-rose-900"
-      : days < 30
-      ? "border-amber-200 bg-amber-50 text-amber-900"
-      : "border-letter-rule bg-muted/40 text-foreground";
+  const deadline = getUnverifiedDeadlineReminder(draft);
+  if (!needsFilingDeadlineWarning(draft)) return null;
 
   return (
-    <div className={`flex items-start gap-3 rounded-md border p-3 text-xs ${tone}`}>
+    <div className="flex items-start gap-3 rounded-md border border-[var(--ds-line)] bg-[var(--ds-amber-bg)] p-3 text-xs text-[var(--ds-amber-fg)]" role="note">
       <CalendarClock className="size-4 mt-0.5 shrink-0" />
       <div className="leading-relaxed">
         <strong>
-          {days < 0
-            ? "Tribunal limitation has passed."
-            : days < 14
-            ? `Tribunal deadline in ${days} days.`
-            : days < 30
-            ? `Tribunal deadline in ${days} days.`
-            : `Tribunal deadline: ${formatDate(deadline.iso)} (${days} days away).`}
+          {deadline ? `Unverified reminder: ${formatDate(deadline.iso)}.` : "Check your filing deadline."}
         </strong>{" "}
-        {deadline.basis}{" "}
+        {deadline ? UNVERIFIED_DEADLINE_NOTICE : "DraftHR does not calculate legal filing deadlines from an incident date. Confirm the applicable time limits promptly with a qualified adviser; some can be very short."}{" "}
         <span className="opacity-75">
-          ACAS Early Conciliation must be lodged before this date — the EC clock can extend the
-          limitation by up to 6 weeks.
+          {draft.context.jurisdiction === "UK" ? (
+            <>Check whether Acas early conciliation applies using <a className="underline" href="https://www.acas.org.uk/employment-tribunal-time-limits" target="_blank" rel="noreferrer">current Acas guidance</a>. Do not assume an internal grievance or appeal pauses a filing time limit.</>
+          ) : (
+            <>Check the applicable agency or court rules, including <a className="underline" href="https://www.eeoc.gov/time-limits-filing-charge" target="_blank" rel="noreferrer">EEOC requirements</a> where relevant. Do not assume an internal grievance or appeal pauses a filing time limit.</>
+          )}
         </span>
       </div>
     </div>
   );
-}
-
-function daysUntil(iso: string): number {
-  return daysUntilDateOnly(iso);
 }
 
 function formatDate(iso: string): string {

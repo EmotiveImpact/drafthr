@@ -27,7 +27,7 @@ type Body = { profileId?: string; action?: string };
 export async function POST(req: Request): Promise<Response> {
   const originRes = enforceSameOrigin(req);
   if (originRes) return originRes;
-  const limited = rateLimit(req, { name: "admin-review", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "admin-review", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
   const admin = await requireAdmin(req);

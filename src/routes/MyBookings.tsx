@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { pullMyBookings, pushBookingRespond } from "@/lib/marketplaceSync";
 import { getStripeConnectStatus, startBookingCheckout } from "@/lib/consultantApi";
 import { toast } from "sonner";
+import { captureMarketplaceScope, isMarketplaceScopeCurrent } from "@/lib/marketplace-scope";
 
 /**
  * /bookings — HR-side bookings list.
@@ -18,9 +19,7 @@ import { toast } from "sonner";
  * status. Delivered bookings surface a rating widget so the buyer can
  * close the loop on the consultant.
  *
- * The localStorage store still drives this — the server-side switch
- * will plug into useBookingsStore later (likely via a useBookingsQuery
- * hook) without changing this component's API.
+ * Uses the requester-only memory cache populated by the server list endpoint.
  */
 
 const STATUS_LABEL: Record<Booking["status"], string> = {
@@ -244,43 +243,59 @@ function BookingRow({
   paymentsOn: boolean;
 }) {
   const [paying, setPaying] = useState(false);
+  const payingRef = useRef(false);
   const payForReview = async () => {
+    const scope = captureMarketplaceScope();
+    if (!scope || payingRef.current) return;
+    payingRef.current = true;
     setPaying(true);
-    const r = await startBookingCheckout(booking.id);
-    if (r.ok) {
-      window.location.assign(r.data.url);
-      return;
+    let departing = false;
+    try {
+      const r = await startBookingCheckout(booking.id);
+      if (!isMarketplaceScopeCurrent(scope)) return;
+      if (r.ok) {
+        window.location.assign(r.data.url);
+        departing = true;
+        return;
+      }
+      toast.error(r.error || "Couldn't start checkout");
+    } finally {
+      if (!departing) {
+        payingRef.current = false;
+        setPaying(false);
+      }
     }
-    toast.error(r.error || "Couldn't start checkout");
-    setPaying(false);
   };
   // If the user hits Back from Stripe, the page is restored from the bfcache
   // with paying=true and the button stuck on "Starting…". Reset it on restore.
   useEffect(() => {
     const onShow = (e: PageTransitionEvent) => {
-      if (e.persisted) setPaying(false);
+      if (e.persisted) {
+        payingRef.current = false;
+        setPaying(false);
+      }
     };
     window.addEventListener("pageshow", onShow);
     return () => window.removeEventListener("pageshow", onShow);
   }, []);
-  const complete = useBookingsStore((s) => s.completeBooking);
   const [rating, setRating] = useState(booking.rating ?? 0);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   // Hover preview is separate from the committed rating, so mousing over
   // stars doesn't silently change the value the user actually picked.
   const [hoverRating, setHoverRating] = useState(0);
-  const [submitted, setSubmitted] = useState(booking.status === "completed");
+  const submitted = booking.status === "completed";
 
   const submit = async () => {
-    if (rating === 0) return;
-    complete(booking.id, rating);
-    setSubmitted(true);
-    // Dual-write: mirror the complete + rating to the server. On failure
-    // pushBookingRespond already toasts + re-pulls (reverting the store booking
-    // to "delivered"), so roll the optimistic `submitted` flag back too —
-    // otherwise the rating widget stays permanently hidden and the user can't
-    // retry without navigating away.
-    const ok = await pushBookingRespond(booking.id, "complete", { rating });
-    if (!ok) setSubmitted(false);
+    if (rating === 0 || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await pushBookingRespond(booking.id, "complete", { rating });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   // Prefer the server-joined display fields (reliable cross-device), then
@@ -370,6 +385,7 @@ function BookingRow({
                   type="button"
                   role="radio"
                   aria-checked={rating === n}
+                  disabled={saving}
                   onClick={() => setRating(n)}
                   onMouseEnter={() => setHoverRating(n)}
                   className={`grid size-7 place-items-center rounded-full transition ${
@@ -389,10 +405,10 @@ function BookingRow({
           <button
             type="button"
             onClick={submit}
-            disabled={rating === 0}
+            disabled={rating === 0 || saving}
             className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-60"
           >
-            Submit
+            {saving ? "Saving…" : "Submit"}
           </button>
         </div>
       )}
@@ -435,4 +451,3 @@ function BookingRow({
     </article>
   );
 }
-

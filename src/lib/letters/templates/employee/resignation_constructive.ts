@@ -12,7 +12,7 @@ export const RESIGNATION_CONSTRUCTIVE_UK: LetterTemplate = {
 - Recite the breach particulars with strict factual chronology — dates, named individuals, named witnesses. Identify the "last straw" if relying on a course of conduct.
 - Identify the contractual term breached (express clauses by number; or the implied term of mutual trust and confidence at common law).
 - This is OPEN correspondence and tribunal-bound. No intensifiers, no admissions, no settlement language, no threats.
-- Reserve all rights expressly including unfair dismissal proceedings under Part X ERA 1996, with the s.111 limitation period of 3 months less one day from the effective date of termination (subject to ACAS EC).
+- Reserve all rights expressly including any available unfair dismissal proceedings under Part X ERA 1996. Applicable filing rules require case-specific confirmation; do not derive a deadline or fixed extension from a termination date.
 - For protected-characteristic angles, frame as belief and cite the Equality Act 2010 — but note that automatic unfair dismissal claims (e.g. s.103A whistleblowing, s.99 pregnancy/maternity, s.104 assertion of statutory right) should be flagged where relevant.
 - DO NOT give long notice. The resignation should ordinarily be effective immediately or on a short timeframe — a long notice period weakens the "in response" element. Where the user gives notice, the letter must state it is given without prejudice to the constructive dismissal position.
 - British English throughout. Counsel review is strongly recommended; this template is a defensible first draft, not a substitute for legal advice.`,
@@ -124,16 +124,16 @@ export const RESIGNATION_CONSTRUCTIVE_UK: LetterTemplate = {
       sectionId: "reservation_of_rights",
       title: "Reservation of all rights including unfair dismissal",
       instruction:
-        "Reserve all rights expressly, including the right to bring proceedings in the Employment Tribunal for constructive unfair dismissal under Part X ERA 1996. Reference the s.111 limitation period briefly. Reference any Equality Act claim if applicable. Confirm the writer is treating the contract as discharged.",
-      scaffold: `<p>I reserve all my rights, including the right to bring proceedings in the Employment Tribunal for constructive unfair dismissal under Part X of the Employment Rights Act 1996, for breach of contract, and for any claim under the Equality Act 2010 to which I may be entitled. I will, in due course and within the relevant limitation periods, notify ACAS of the prospective claim under the Early Conciliation procedure. Nothing in this letter should be construed as a waiver of any right or as an admission on my part, and any continued attendance at work during a notice period (if any) is without prejudice to my position that the contract has been discharged by the Company's breach.</p>`,
+        "Reserve all rights expressly, including any available Employment Tribunal claim for constructive unfair dismissal under Part X ERA 1996, subject to applicable time limits and procedural requirements. Do not state a filing window, an unverified reminder date or an assumed extension. Reference any Equality Act claim if applicable. Confirm the writer is treating the contract as discharged.",
+      scaffold: `<p>I reserve all my rights, including any available proceedings in the Employment Tribunal for constructive unfair dismissal under Part X of the Employment Rights Act 1996, for breach of contract, and for any claim under the Equality Act 2010 to which I may be entitled. These rights remain subject to the applicable time limits and procedural requirements, including any relevant ACAS Early Conciliation rules. Nothing in this letter should be construed as a waiver of any right or as an admission on my part, and any continued attendance at work during a notice period (if any) is without prejudice to my position that the contract has been discharged by the Company's breach.</p>`,
       constraints: [
         "MUST reserve the right to claim constructive unfair dismissal under Part X ERA 1996.",
-        "MUST reference ACAS Early Conciliation as the next procedural step.",
+        "MUST make any ACAS Early Conciliation reference conditional on the applicable procedural requirements.",
         "MUST state continued attendance (if any) is without prejudice.",
         "MUST NOT enumerate every potential claim by name.",
         "MUST NOT include settlement-position language.",
       ],
-      example: `<p>I reserve all my rights, including the right to bring proceedings in the Employment Tribunal for constructive unfair dismissal under Part X of the Employment Rights Act 1996, for breach of contract, and for any claim under the Equality Act 2010 to which I may be entitled. I will, in due course and within the relevant limitation periods, notify ACAS of the prospective claim under the Early Conciliation procedure. Nothing in this letter should be construed as a waiver of any right or as an admission on my part, and any continued attendance at work during a notice period (if any) is without prejudice to my position that the contract has been discharged by the Company's breach.</p>`,
+      example: `<p>I reserve all my rights, including any available proceedings in the Employment Tribunal for constructive unfair dismissal under Part X of the Employment Rights Act 1996, for breach of contract, and for any claim under the Equality Act 2010 to which I may be entitled. These rights remain subject to the applicable time limits and procedural requirements, including any relevant ACAS Early Conciliation rules. Nothing in this letter should be construed as a waiver of any right or as an admission on my part, and any continued attendance at work during a notice period (if any) is without prejudice to my position that the contract has been discharged by the Company's breach.</p>`,
     },
     {
       sectionId: "closing",
@@ -176,7 +176,7 @@ export const RESIGNATION_CONSTRUCTIVE_US: LetterTemplate = {
 - The resignation should ordinarily be effective immediately or with very short notice. A long notice period weakens the intolerability element.
 - Recite the conduct factually: dates, named individuals, witnesses. Reference any prior internal complaints and the employer's response (or lack thereof).
 - Cite Title VII / ADA / ADEA / PWFA / state law (FEHA, NYSHRL, etc.) where applicable. For whistleblower-related discharges cite SOX §806, NLRA §7, Cal. Lab. Code §1102.5 as relevant.
-- Reserve all rights including the right to file a charge with the EEOC or state agency. Reference the 180/300-day filing window.
+- Reserve all rights including any available charge with the EEOC or state agency, subject to applicable filing rules and procedural requirements. Do not assume every claim has the same filing window or derive one from an incident date.
 - This is OPEN correspondence — no intensifiers, no admissions, no settlement language.
 - American English throughout. Counsel review is strongly recommended.`,
   sections: [
@@ -280,14 +280,14 @@ export const RESIGNATION_CONSTRUCTIVE_US: LetterTemplate = {
       sectionId: "reservation_of_rights",
       title: "Reservation of all rights including constructive discharge / EEOC",
       instruction:
-        "Reserve all rights expressly. Reference the right to file a charge with the EEOC and any state agency, with the 180/300-day filing window. State that any continued attendance during notice (if any) is without prejudice.",
-      scaffold: `<p>I reserve all of my rights, including the right to file a charge with the U.S. Equal Employment Opportunity Commission and {{stateAgency}} within the applicable filing window (180 days for federal claims, extended to 300 days where a state agency processes the charge), the right to bring suit in federal or state court following receipt of a right-to-sue notice, and any other statutory, contractual, or common-law remedy. Nothing in this letter should be construed as a waiver of any right or as an admission on my part. Any continued attendance at work during a notice period (if any) is without prejudice to my position that I have been constructively discharged.</p>`,
+        "Reserve all rights expressly, including any available EEOC, state agency or court remedies, subject to applicable filing rules and procedural requirements. Do not state a filing window or an unverified reminder date. State that any continued attendance during notice (if any) is without prejudice.",
+      scaffold: `<p>I reserve all of my rights, including any available charge with the U.S. Equal Employment Opportunity Commission or {{stateAgency}}, any available court proceedings, and any other statutory, contractual, or common-law remedy, subject to the applicable time limits and procedural requirements. Nothing in this letter should be construed as a waiver of any right or as an admission on my part. Any continued attendance at work during a notice period (if any) is without prejudice to my position that I have been constructively discharged.</p>`,
       constraints: [
-        "MUST reserve EEOC rights expressly with the filing window.",
+        "MUST reserve any available EEOC rights subject to applicable filing rules, without asserting a filing window.",
         "MUST reserve state agency rights where applicable.",
         "MUST state continued attendance (if any) is without prejudice.",
       ],
-      example: `<p>I reserve all of my rights, including the right to file a charge with the U.S. Equal Employment Opportunity Commission and the California Civil Rights Department within the applicable filing window (180 days for federal claims, extended to 300 days where a state agency processes the charge), the right to bring suit in federal or state court following receipt of a right-to-sue notice, and any other statutory, contractual, or common-law remedy. Nothing in this letter should be construed as a waiver of any right or as an admission on my part. Any continued attendance at work during a notice period (if any) is without prejudice to my position that I have been constructively discharged.</p>`,
+      example: `<p>I reserve all of my rights, including any available charge with the U.S. Equal Employment Opportunity Commission or the California Civil Rights Department, any available court proceedings, and any other statutory, contractual, or common-law remedy, subject to the applicable time limits and procedural requirements. Nothing in this letter should be construed as a waiver of any right or as an admission on my part. Any continued attendance at work during a notice period (if any) is without prejudice to my position that I have been constructively discharged.</p>`,
     },
     {
       sectionId: "closing",

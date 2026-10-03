@@ -27,7 +27,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // 3/min/IP — verification emails are the kind of thing abusers love to
   // weaponise into mailbomb attacks. Tight cap, generic 429 response.
-  const limited = rateLimit(req, { name: "auth-resend-verification", max: 3, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-resend-verification", max: 3, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<ResendBody>(req);

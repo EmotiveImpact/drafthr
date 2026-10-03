@@ -9,7 +9,7 @@ import { tenants } from "../../../src/db/schema.js";
 export const config = { runtime: "nodejs" };
 
 export async function GET(req: Request): Promise<Response> {
-  const limited = rateLimit(req, { name: "auth-url", max: 30, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "auth-url", max: 30, windowMs: 60_000 });
   if (limited) return limited;
   const redirectUri = process.env.WORKOS_REDIRECT_URI;
   if (!redirectUri) return jsonError("Sign-in is not configured", 503);

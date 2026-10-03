@@ -1,43 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/**
- * saveProfile must keep `initials` in sync with `fullName` — including when
- * the name is CLEARED to "". The earlier `if (patch.fullName)` guard skipped
- * the recompute on an empty string, leaving stale initials on the card.
- */
-describe("consultant saveProfile — initials stay in sync with fullName", () => {
-  beforeEach(() => window.localStorage.clear());
-  afterEach(() => {
-    window.localStorage.clear();
-    vi.resetModules();
+describe("consultant memory cache", () => {
+  beforeEach(() => { window.localStorage.clear(); vi.resetModules(); });
+  afterEach(() => { window.localStorage.clear(); });
+
+  it("never hydrates an unscoped legacy profile into the signed-in account", async () => {
+    const raw = JSON.stringify({ state: { enrolled: true, profile: { fullName: "Another person" } }, version: 2 });
+    localStorage.setItem("drafthr.consultant", raw);
+    const { useConsultantStore } = await import("./consultantProfile");
+    expect(useConsultantStore.getState().profile).toBeNull();
+    expect(useConsultantStore.getState().enrolled).toBe(false);
+    expect(localStorage.getItem("drafthr.consultant")).toBe(raw);
   });
 
-  it("derives initials when a name is set", async () => {
+  it("keeps enrollment as an in-memory onboarding choice, not a persisted profile", async () => {
     const { useConsultantStore } = await import("./consultantProfile");
-    useConsultantStore.getState().saveProfile({ fullName: "Jane Doe" });
-    expect(useConsultantStore.getState().profile?.initials).toBe("JD");
+    useConsultantStore.getState().enrol();
+    expect(useConsultantStore.getState().enrolled).toBe(true);
+    expect(useConsultantStore.getState().profile).toBeNull();
+    expect(localStorage.getItem("drafthr.consultant")).toBeNull();
   });
 
-  it("resets initials to '??' when the name is cleared to an empty string", async () => {
+  it("clears identity and save status on reset", async () => {
     const { useConsultantStore } = await import("./consultantProfile");
-    const store = useConsultantStore.getState();
-
-    store.saveProfile({ fullName: "Jane Doe" });
-    expect(useConsultantStore.getState().profile?.initials).toBe("JD");
-
-    // The regression: clearing the name used to leave initials as "JD".
-    store.saveProfile({ fullName: "" });
-    expect(useConsultantStore.getState().profile?.fullName).toBe("");
-    expect(useConsultantStore.getState().profile?.initials).toBe("??");
-  });
-
-  it("leaves initials untouched when fullName is not part of the patch", async () => {
-    const { useConsultantStore } = await import("./consultantProfile");
-    const store = useConsultantStore.getState();
-
-    store.saveProfile({ fullName: "Jane Doe" });
-    store.saveProfile({ role: "Advisor" });
-    expect(useConsultantStore.getState().profile?.initials).toBe("JD");
-    expect(useConsultantStore.getState().profile?.role).toBe("Advisor");
+    useConsultantStore.getState().enrol();
+    useConsultantStore.getState().setSync("error", "not saved");
+    useConsultantStore.getState().reset();
+    expect(useConsultantStore.getState()).toMatchObject({ profile: null, enrolled: false, lastSync: { at: null, state: "idle", error: null } });
   });
 });

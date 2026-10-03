@@ -4,7 +4,8 @@
  * - POST: upsert the draft (insert on first sync, update on subsequent).
  *   We use the SPA's draft.id as the row PK rather than minting our own —
  *   keeps localStorage and Postgres aligned by id without a join table.
- * - DELETE: hard-delete to match the in-store deleteDraft semantics.
+ * - DELETE: retain a workspace tombstone, or hard-delete in the legacy rollout;
+ *   both revoke consultant sharing in the same transaction.
  *
  * Every mutation appends an audit event under the active tenant. Returns
  * 503 when DRAFTHR_DUAL_WRITE !== 'true' so a misbehaving client can't
@@ -17,7 +18,7 @@ import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/requ
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { customTemplates, drafts, employees, matters, sections, entitlementPurchases, workspaceFiles } from "../../../src/db/schema.js";
+import { customTemplates, drafts, employees, matters, sections, entitlementPurchases, workspaceFiles, consultantBookings } from "../../../src/db/schema.js";
 import { serverUuidOrNull, toServerUuid } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { assertCanCreateLetter, type ConsumeTarget } from "../../_utils/entitlements.js";
@@ -71,7 +72,7 @@ export async function GET(req: Request): Promise<Response> {
   if (documents ? process.env.DRAFTHR_DATABASE_DRAFTS !== "true" : process.env.DRAFTHR_DUAL_WRITE !== "true") {
     return jsonError("Draft storage disabled", 503);
   }
-  const limited = rateLimit(req, { name: documents ? "store-draft-documents-get" : "store-drafts-get", max: documents ? 600 : 120, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: documents ? "store-draft-documents-get" : "store-drafts-get", max: documents ? 600 : 120, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
@@ -551,10 +552,14 @@ export async function DELETE(req: Request): Promise<Response> {
     try {
       return await getDb().transaction(async tx => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`workspace-records:${tenantId}`}, 0))`);
-        const [row] = await tx.select().from(drafts).where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId))).limit(1);
+        const [row] = await tx.select().from(drafts).where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId))).limit(1).for("update");
         if (!row) return jsonError("Draft not found", 404);
-        if (row.deletedAt) return Response.json({ ok: true, id, revision: row.revision, deletedAt: row.deletedAt.getTime() });
-        if (row.revision !== parsed.body.baseRevision || (!row.snapshotJson && parsed.body.legacyUpdatedAt !== row.updatedAt.getTime())) return staleRevisionResponse();
+        if (!row.deletedAt && (row.revision !== parsed.body.baseRevision || (!row.snapshotJson && parsed.body.legacyUpdatedAt !== row.updatedAt.getTime()))) return staleRevisionResponse();
+        // Lock draft before bookings, matching create/accept. Also repair old
+        // tombstones on an idempotent retry so previously issued tokens expire.
+        await tx.update(consultantBookings).set({ shareToken: null, shareTokenExpiresAt: null })
+          .where(and(eq(consultantBookings.draftId, id), eq(consultantBookings.tenantId, tenantId)));
+        if (row.deletedAt) return Response.json({ ok: true, id, revision: row.revision, deletedAt: row.deletedAt.getTime() }, { headers: { "Cache-Control": "no-store" } });
         const now = new Date();
         await tx.update(drafts).set({ deletedAt: now, updatedAt: now, revision: row.revision + 1 })
           .where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
@@ -566,32 +571,38 @@ export async function DELETE(req: Request): Promise<Response> {
   }
 
   try {
-    const db = getDb();
-    const [existing] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, letterType: drafts.letterType, title: drafts.title })
-      .from(drafts)
-      .where(eq(drafts.id, id))
-      .limit(1);
-    if (!existing) return new Response(JSON.stringify({ ok: true, idempotent: true }), { status: 200 });
-    if (existing.tenantId !== tenantId) {
-      return jsonError("Draft belongs to a different workspace", 403);
-    }
+    let auditDraft: { letterType: string; title: string | null } | undefined;
+    const result = await getDb().transaction(async db => {
+      const [existing] = await db
+        .select({ id: drafts.id, tenantId: drafts.tenantId, letterType: drafts.letterType, title: drafts.title })
+        .from(drafts)
+        .where(eq(drafts.id, id))
+        .limit(1).for("update");
+      if (!existing) return new Response(JSON.stringify({ ok: true, idempotent: true }), { status: 200 });
+      if (existing.tenantId !== tenantId) {
+        return jsonError("Draft belongs to a different workspace", 403);
+      }
 
-    await db.delete(drafts).where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
+      await db.update(consultantBookings).set({ shareToken: null, shareTokenExpiresAt: null })
+        .where(and(eq(consultantBookings.draftId, id), eq(consultantBookings.tenantId, tenantId)));
+      await db.delete(drafts).where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
+      auditDraft = existing;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    });
 
-    await safelyAppendAudit({
+    if (auditDraft) await safelyAppendAudit({
       tenantId,
       kind: "draft.deleted",
       subjectType: "draft",
       subjectId: id,
       actorUserId: auth.userRow.id,
-      payload: { letterType: existing.letterType, title: existing.title ?? null },
+      payload: { letterType: auditDraft.letterType, title: auditDraft.title ?? null },
     });
 
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return result;
   } catch (err) {
     console.error("[store/drafts DELETE] failed", err);
     return jsonError("Draft delete failed", 500);
@@ -608,7 +619,7 @@ async function guardWrite(req: Request): Promise<GuardResult> {
   if (process.env.DRAFTHR_DUAL_WRITE !== "true" && process.env.DRAFTHR_DATABASE_DRAFTS !== "true") {
     return { ok: false, response: jsonError("Draft storage disabled", 503) };
   }
-  const limited = rateLimit(req, { name: "store-drafts", max: 120, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "store-drafts", max: 120, windowMs: 60_000 });
   if (limited) return { ok: false, response: limited };
 
   const auth = await requireSessionAndTenant(req);

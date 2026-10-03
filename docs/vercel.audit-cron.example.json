@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/workos/audit-logs-dispatch",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

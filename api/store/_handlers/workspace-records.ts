@@ -38,7 +38,7 @@ async function guard(req: Request, write: boolean) {
     if (rejected) return { ok: false as const, response: rejected };
   }
   if (process.env.DRAFTHR_DATABASE_WORKSPACE !== "true") return { ok: false as const, response: jsonError("Database workspace storage is not enabled", 503) };
-  const limited = rateLimit(req, { name: "workspace-records", max: 240, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workspace-records", max: 240, windowMs: 60_000 });
   if (limited) return { ok: false as const, response: limited };
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth;

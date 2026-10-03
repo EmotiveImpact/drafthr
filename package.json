@@ -10,6 +10,7 @@
     "typecheck": "tsc -b",
     "lint": "tsc -b",
     "test": "vitest",
+    "test:database": "node scripts/prepare-test-database.mjs && vitest run .database.test.ts src/db/audit.test.ts",
     "verify": "tsc -b && vite build && vitest run",
     "db:generate": "dotenv -e .env.local -- drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",

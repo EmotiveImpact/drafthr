@@ -11,10 +11,10 @@
  * holder — even if a token leaks, only the assigned consultant's
  * session unlocks it. Token expiry is enforced server-side.
  */
-import { and, eq, gt, isNotNull } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { requireMarketplaceSession as requireSessionAndTenant } from "../../_utils/marketplace-session.js";
 import { getDb } from "../../../src/db/index.js";
 import {
   consultantBookings,
@@ -28,7 +28,7 @@ export const config = { runtime: "nodejs" };
 export async function GET(req: Request): Promise<Response> {
   // Rate-limit token resolution — the token is 128-bit and unguessable, but a
   // limit removes any brute-force surface and matches the other GETs.
-  const limited = rateLimit(req, { name: "marketplace-shared", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "marketplace-shared", max: 60, windowMs: 60_000 });
   if (limited) return limited;
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
@@ -72,20 +72,14 @@ export async function GET(req: Request): Promise<Response> {
   // review, but we deliberately strip notes-on-employee / private
   // metadata that the HR-side editor would otherwise expose.
   //
-  // The draft is fetched by id: booking creation (list-and-create.ts) verifies
-  // the draftId belongs to the booker's tenant before binding it. We ALSO
-  // re-assert draftRow.tenantId === booking.tenantId here so this read carries
-  // its own independent defense instead of relying solely on the creation-time
-  // check never being relaxed (removes the cross-file single-point-of-failure).
+  // Independently check ownership and deletion at read time. Older tombstones
+  // may still have a token issued before transactional revocation was added.
   const [draftRow] = await db
     .select()
     .from(drafts)
-    .where(eq(drafts.id, booking.draftId))
+    .where(and(eq(drafts.id, booking.draftId), eq(drafts.tenantId, booking.tenantId), isNull(drafts.deletedAt)))
     .limit(1);
   if (!draftRow) return jsonError("Draft not found", 404);
-  if (draftRow.tenantId !== booking.tenantId) {
-    return jsonError("Draft not found", 404);
-  }
 
   const sectionRows = await db
     .select()

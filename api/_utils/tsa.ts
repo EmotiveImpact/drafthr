@@ -112,7 +112,7 @@ export async function requestTsr(
         "Content-Type": "application/timestamp-query",
         Accept: "application/timestamp-reply",
       },
-      body: tsq,
+      body: Uint8Array.from(tsq).buffer,
       signal: controller.signal,
     });
     if (!res.ok) return null;

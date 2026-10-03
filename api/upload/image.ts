@@ -50,7 +50,7 @@ export async function POST(req: Request): Promise<Response> {
 async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
-  const rateLimitError = rateLimit(req, { name: "upload", max: 20, windowMs: 60_000 });
+  const rateLimitError = await rateLimit(req, { name: "upload", max: 20, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
 
   // Authenticate before probing storage, and bind every image to this tenant.

@@ -4,6 +4,9 @@ import { ArrowLeft, FileText, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { useBookingsStore } from "@/lib/bookings";
 import { getSharedDraft, type SharedDraftDTO } from "@/lib/consultantApi";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { pullInbox } from "@/lib/marketplaceSync";
+import { AppLoadingScreen } from "@/components/AppLoadingScreen";
+import { Button } from "@/components/ui/button";
 
 /**
  * /c/review/:bookingId — read-only draft view for a consultant who has
@@ -14,27 +17,45 @@ import { sanitizeLetterHtml } from "@/lib/sanitize";
  *   - the caller's session matches the booking's assigned consultant,
  *   - the token hasn't expired (30-day window from acceptance).
  *
- * Falls back to the local draft store ONLY when the booking has no
- * share token yet (e.g. local-only demo bookings that never got an
- * API accept transition). That fallback path runs only for the booker's
- * own device — cross-device sharing requires the API + token.
+ * Reloads the server inbox on direct entry / refresh. Draft access always
+ * requires the server's accepted booking and share token, never browser data.
  */
 export function SharedDraftReview() {
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void pullInbox().then((ok) => {
+      if (!cancelled) { setFailed(!ok); setLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [attempt]);
+  if (loading) return <AppLoadingScreen />;
+  if (failed) return <section role="alert" className="mx-auto max-w-4xl px-4 py-10">
+    <p>Your booking could not be loaded.</p>
+    <Button variant="outline" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>Retry</Button>
+  </section>;
+  return <LoadedSharedDraftReview />;
+}
+
+function LoadedSharedDraftReview() {
   const nav = useNavigate();
   const { bookingId } = useParams<{ bookingId: string }>();
-  const bookings = useBookingsStore((s) => s.bookings);
+  const bookings = useBookingsStore((s) => s.inbox);
   const booking = bookings.find((b) => b.id === bookingId);
 
   const [shared, setShared] = useState<SharedDraftDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch via the share-token endpoint when the booking has one. Try
-  // every accepted booking with a stored shareToken first; fall through
-  // to a local-render path if the token isn't present (demo / pre-API
-  // bookings).
+  // Fetch only through the server-authorized share token.
   useEffect(() => {
     let cancelled = false;
+    setShared(null);
+    setError(null);
+    setLoading(true);
     if (!booking) {
       setLoading(false);
       return;
@@ -53,7 +74,7 @@ export function SharedDraftReview() {
     return () => {
       cancelled = true;
     };
-  }, [booking?.id]);
+  }, [booking?.id, booking?.shareToken]);
 
   if (!booking) {
     return (

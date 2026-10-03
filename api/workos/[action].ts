@@ -33,6 +33,8 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/audit-logs-test.js");
     case "audit-logs-status":
       return import("./_handlers/audit-logs-status.js");
+    case "audit-logs-dispatch":
+      return import("./_handlers/audit-logs-dispatch.js");
     default:
       return null;
   }

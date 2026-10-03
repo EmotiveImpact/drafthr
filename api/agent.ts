@@ -26,6 +26,7 @@ import { z } from "zod";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
 import { enforceProductionSession } from "./_utils/production-auth.js";
+import { markRequestStreaming, reportStreamFailure } from "./_utils/observability.js";
 
 /* ============================================================================
  * Inlined from server/llm-model.ts — Anthropic only.
@@ -172,7 +173,7 @@ export async function POST(req: Request): Promise<Response> {
 async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
-  const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
+  const rateLimitError = await rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
   const sessionError = await enforceProductionSession(req);
   if (sessionError) return sessionError;
@@ -208,6 +209,7 @@ async function handlePost(req: Request): Promise<Response> {
         }
       : undefined;
 
+  markRequestStreaming(req);
   const result = streamText({
     model: buildModel(body.model),
     system,
@@ -215,9 +217,8 @@ async function handlePost(req: Request): Promise<Response> {
     tools: agentTools,
     temperature: 0.4,
     maxOutputTokens: 1100,
-    onError: (err) => {
-      // eslint-disable-next-line no-console
-      console.error("[api/agent] streamText error:", err);
+    onError: async () => {
+      if (!req.signal.aborted) await reportStreamFailure(req);
     },
   });
 

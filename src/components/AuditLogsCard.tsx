@@ -1,8 +1,8 @@
 /**
  * Settings → Audit Logs (WorkOS) card. Admin-only.
  *
- * Surfaces the dual-chain status:
- *   - "Streaming to WorkOS Audit Logs" pill when enabled + configured
+ * Surfaces delivery configuration and confirmed queue state:
+ *   - Pending and failed deliveries are visible instead of assumed successful
  *   - "Not configured" otherwise
  *   - Last successful event timestamp
  *   - "Open Admin Portal" button (POST /api/workos/portal-link with
@@ -13,7 +13,7 @@
  *
  * Non-admin members never see this card — gated by activeTenant.role.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Box, Button, Card, Flex, Heading, Separator, Text } from "@radix-ui/themes";
 import { ExternalLink, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -26,39 +26,52 @@ type Status = {
   configured: boolean;
   workosOrgId: string | null;
   lastSentAt: string | null;
+  deliveries: { pending: number; delivering: number; delivered: number; failed: number };
 };
 
 export function AuditLogsCard() {
-  const { activeTenant } = useAuth();
+  const { activeTenant, user } = useAuth();
+  const tenantId = activeTenant?.id;
+  const accountId = user?.id;
+  const scopeKey = `${accountId ?? ""}:${tenantId ?? ""}`;
+  const currentScope = useRef(scopeKey);
+  currentScope.current = scopeKey;
+  const refreshGeneration = useRef(0);
   const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? "");
-  const [status, setStatus] = useState<Status | null>(null);
+  const [snapshot, setSnapshot] = useState<(Status & { scopeKey: string }) | null>(null);
+  const status = snapshot?.scopeKey === scopeKey ? snapshot : null;
   const [loading, setLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !tenantId) return;
+    const generation = ++refreshGeneration.current;
+    const isCurrent = () => currentScope.current === scopeKey && refreshGeneration.current === generation;
     setLoading(true);
     try {
       const res = await fetch("/api/workos/audit-logs-status", {
         credentials: "same-origin",
+        headers: { "X-Workspace-ID": tenantId, ...(accountId ? { "X-Account-ID": accountId } : {}) },
       });
       if (!res.ok) {
-        setStatus(null);
+        if (isCurrent()) setSnapshot(null);
         return;
       }
       const json = (await res.json()) as Status;
-      setStatus(json);
-    } catch (err) {
-      console.warn("[audit-logs] status fetch failed", err);
-      setStatus(null);
+      if (isCurrent()) setSnapshot({ ...json, scopeKey });
+    } catch {
+      if (isCurrent()) setSnapshot(null);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, tenantId, accountId, scopeKey]);
 
   useEffect(() => {
+    setPortalLoading(false);
+    setTestLoading(false);
     void refresh();
+    return () => { refreshGeneration.current++; };
   }, [refresh]);
 
   const onOpenPortal = useCallback(async () => {
@@ -66,50 +79,54 @@ export function AuditLogsCard() {
     try {
       const res = await fetch("/api/workos/portal-link", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Workspace-ID": tenantId ?? "", ...(accountId ? { "X-Account-ID": accountId } : {}) },
         credentials: "same-origin",
         body: JSON.stringify({ intent: "audit_logs", returnUrl: "/settings" }),
       });
       const json = (await res.json()) as { link?: string; error?: string };
+      if (currentScope.current !== scopeKey) return;
       if (!res.ok || !json.link) {
         toast.error(json.error ?? "Failed to open WorkOS Admin Portal");
         return;
       }
       window.open(json.link, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      console.warn("[audit-logs] portal-link failed", err);
-      toast.error("Failed to open WorkOS Admin Portal");
+    } catch {
+      if (currentScope.current === scopeKey) toast.error("Failed to open WorkOS Admin Portal");
     } finally {
-      setPortalLoading(false);
+      if (currentScope.current === scopeKey) setPortalLoading(false);
     }
-  }, []);
+  }, [tenantId, accountId, scopeKey]);
 
   const onSendTest = useCallback(async () => {
     setTestLoading(true);
     try {
       const res = await fetch("/api/workos/audit-logs-test", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Workspace-ID": tenantId ?? "", ...(accountId ? { "X-Account-ID": accountId } : {}) },
         credentials: "same-origin",
       });
-      const json = (await res.json()) as { ok?: boolean; message?: string; error?: string };
+      const json = (await res.json()) as { ok?: boolean; deliveryStatus?: string; message?: string; error?: string };
+      if (currentScope.current !== scopeKey) return;
       if (!res.ok || !json.ok) {
         toast.error(json.error ?? "Failed to send test event");
         return;
       }
-      toast.success(json.message ?? "Test event sent — check your SIEM.");
+      if (json.deliveryStatus === "delivered") toast.success(json.message ?? "Test event accepted by WorkOS.");
+      else if (json.deliveryStatus === "failed") toast.error(json.message ?? "Test event saved; WorkOS delivery needs review.");
+      else toast.info(json.message ?? "Test event saved; WorkOS delivery is pending.");
       void refresh();
-    } catch (err) {
-      console.warn("[audit-logs] test event failed", err);
-      toast.error("Failed to send test event");
+    } catch {
+      if (currentScope.current === scopeKey) toast.error("Failed to send test event");
     } finally {
-      setTestLoading(false);
+      if (currentScope.current === scopeKey) setTestLoading(false);
     }
-  }, [refresh]);
+  }, [refresh, tenantId, accountId, scopeKey]);
 
   if (!isAdmin) return null;
 
-  const streaming = Boolean(status?.enabled && status?.configured);
+  const deliveryEnabled = Boolean(status?.enabled && status?.configured);
+  const pending = (status?.deliveries?.pending ?? 0) + (status?.deliveries?.delivering ?? 0);
+  const failed = status?.deliveries?.failed ?? 0;
 
   return (
     <Card size="3">
@@ -118,8 +135,14 @@ export function AuditLogsCard() {
           <Heading size="3">Audit Logs (WorkOS)</Heading>
           {loading ? (
             <Badge color="gray" variant="soft">Loading…</Badge>
-          ) : streaming ? (
-            <Badge color="green" variant="soft">Streaming to WorkOS</Badge>
+          ) : !status ? (
+            <Badge color="amber" variant="soft">Status unavailable</Badge>
+          ) : failed > 0 ? (
+            <Badge color="red" variant="soft">Delivery needs review</Badge>
+          ) : pending > 0 ? (
+            <Badge color="amber" variant="soft">Delivery pending</Badge>
+          ) : deliveryEnabled ? (
+            <Badge color="green" variant="soft">Delivery enabled</Badge>
           ) : status?.configured ? (
             <Badge color="amber" variant="soft">Configured, mirror disabled</Badge>
           ) : (
@@ -127,9 +150,9 @@ export function AuditLogsCard() {
           )}
         </Flex>
         <Text size="2" color="gray" as="p">
-          Every audit event written to the local tamper-evident chain is also mirrored to
-          WorkOS Audit Logs, so your SOC team can subscribe a SIEM feed. The local chain
-          remains the source of truth.
+          When enabled, new workspace audit events are queued for WorkOS Audit Logs.
+          Failed delivery stays visible for review; your database audit history remains
+          the source of truth. WorkOS acceptance does not confirm receipt by your SIEM.
         </Text>
       </Box>
 
@@ -147,9 +170,13 @@ export function AuditLogsCard() {
           </Text>
         </Flex>
         <Flex justify="between" align="center" wrap="wrap" gap="2">
-          <Text size="2" color="gray">Last successful mirror</Text>
+          <Text size="2" color="gray">Last WorkOS acceptance</Text>
           <Text size="2">{formatLastSent(status?.lastSentAt ?? null)}</Text>
         </Flex>
+        {status && <Flex justify="between" align="center" wrap="wrap" gap="2">
+          <Text size="2" color="gray">Delivery queue</Text>
+          <Text size="2">{pending} pending · {failed} need review · {status.deliveries?.delivered ?? 0} accepted</Text>
+        </Flex>}
       </Flex>
 
       <Separator size="4" my="3" />
@@ -166,7 +193,7 @@ export function AuditLogsCard() {
         </Button>
         <Button
           variant="soft"
-          disabled={!streaming || testLoading}
+          disabled={!deliveryEnabled || testLoading}
           onClick={onSendTest}
         >
           <Send className="size-4" />

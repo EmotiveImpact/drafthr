@@ -15,6 +15,16 @@ from a handler JSON 401/403 (enforced).
 
 ## Open / queued
 
+**3 October 2026 update:** this older queue is retained as history, not a
+current release verdict. The user-authorized coordinated fix pass implemented
+canonical per-file pack integrity/signing (X1/X3), shared database request
+limits, deterministic audit order and a durable WorkOS outbox, marketplace
+database authority, redacted server/stream failure reporting, and real
+PostgreSQL CI coverage. See [the current release gates](../RELEASE-GATES.md)
+for verification and remaining launch work, and [signing guarantees](../signing.md)
+for the precise boundary: CMS pack signatures are not PAdES, legal validation,
+trusted timestamps or immutable storage. No merge or deployment is implied.
+
 | # | Severity | Area | Summary | Status |
 |---|----------|------|---------|--------|
 | **X1** | **CRITICAL (feature gap)** | `src/lib/export/pack.ts` | **The "tribunal-grade" evidence pack is NOT signed and carries NO per-file hashes.** The crypto infra is fully built and sound (`src/lib/sign/pades.ts` PAdES-B-T signer, `api/sign/manifest.ts`, canonical-JSON + audit hash-chain — all verified clean) but has ZERO callers in the pack path. `buildManifest` records no SHA-256 for the PDF/DOCX/evidence files, and `exportLetterPack` never calls `/api/sign/manifest` or writes `manifest.sig`. A recipient can swap any file and nothing detects it — the core differentiator is unbacked today. **Also X3**: `manifest.json` uses pretty-printed/insertion-order JSON + a volatile `generatedAt`, so it's non-reproducible — must switch to `canonicalJson` before/when signing is wired. | **Needs the user.** This changes the export artifact's structure and is the product's headline claim — wants a deliberate design pass + the user's awareness, not an autonomous-loop change. Scoped & ready to build on green-light. |

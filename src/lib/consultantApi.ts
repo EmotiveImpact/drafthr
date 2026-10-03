@@ -9,13 +9,16 @@
  * envelope, and gives us a single chokepoint to inject auth headers or
  * retry behaviour when the platform layer needs it.
  */
+import { captureMarketplaceScope } from "./marketplace-scope";
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
 async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
+  const scope = captureMarketplaceScope();
   try {
     const res = await fetch(path, {
       credentials: "same-origin",
+      signal: AbortSignal.timeout(30_000),
       // Spread `init` BEFORE headers so method/body override the baseline but
       // the merged headers object always wins. (Previously `...init` came last,
       // so a caller passing `init.headers` would clobber the merged object and
@@ -25,6 +28,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> 
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        ...(scope ? { "X-Account-ID": scope.userId!, "X-Workspace-ID": scope.tenantId ?? "none" } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -189,6 +193,7 @@ export function getInbox() {
 }
 
 export function createBooking(input: {
+  requestId?: string;
   consultantProfileId: string;
   draftId?: string | null;
   matterTitle?: string;
@@ -248,12 +253,12 @@ export function getSharedDraft(token: string) {
 /** Append a chat message to a booking thread. Server derives the 'from'
  *  field from the caller's role on the booking — never trusted from the
  *  body — so the consultant can't impersonate HR or vice versa. */
-export function sendBookingMessage(bookingId: string, text: string) {
+export function sendBookingMessage(bookingId: string, text: string, messageId?: string) {
   return call<{ messages: BookingMessageDTO[]; message: BookingMessageDTO }>(
     "/api/marketplace/bookings-message",
     {
       method: "POST",
-      body: JSON.stringify({ bookingId, text }),
+      body: JSON.stringify({ bookingId, text, messageId }),
     },
   );
 }

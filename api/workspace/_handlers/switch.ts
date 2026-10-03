@@ -18,7 +18,7 @@ type Body = { tenantId?: string };
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "workspace-switch", max: 30, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workspace-switch", max: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<Body>(req);

@@ -134,6 +134,21 @@ describe("verifyPadesCms — new scheme", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("tsa_missing");
   });
+
+  it("verifies an explicitly timestamp-free sidecar without claiming TSA proof", async () => {
+    const signer = createLocalSigner();
+    const built = await buildPadesCms({ content: MANIFEST, signer, signingTime: SIGNING_TIME });
+    expect(await verifyPadesCms({ cms: built.cmsDer, expectedContent: MANIFEST, expectedPublicKey: await signer.publicKey(),
+      requireTimestamp: false })).toMatchObject({ ok: true, tsa: null });
+  });
+
+  it("rejects an otherwise valid timestamp for different content", async () => {
+    const signer = createLocalSigner();
+    const { tsr, parseOptions } = buildTestTsr({ sha256Hex: "0".repeat(64), genTime: SIGNING_TIME });
+    const built = await buildPadesCms({ content: MANIFEST, signer, tsr, signingTime: SIGNING_TIME });
+    expect(await verifyPadesCms({ cms: built.cmsDer, expectedContent: MANIFEST, expectedPublicKey: await signer.publicKey(),
+      tsaTrustPins: parseOptions.trustedTsaKeyPins, requireTimestamp: false })).toMatchObject({ ok: false, reason: "tsa_invalid" });
+  });
 });
 
 describe("verifyLegacy — pre-PAdES exports", () => {

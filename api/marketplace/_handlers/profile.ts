@@ -17,7 +17,7 @@
 import { eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
-import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { requireMarketplaceSession as requireSessionAndTenant, withMarketplaceWriteScope } from "../../_utils/marketplace-session.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
 import { isSafeImageDataUrl } from "../../../src/lib/safe-data-url.js";
@@ -126,7 +126,7 @@ export async function PATCH(req: Request): Promise<Response> {
 async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Response> {
   const originRes = enforceSameOrigin(req);
   if (originRes) return originRes;
-  const limited = rateLimit(req, { name: "consultant-profile", max: 30, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "consultant-profile", max: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);
@@ -142,7 +142,7 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     return jsonError("currency must be GBP, USD or EUR", 400);
   }
 
-  const db = getDb();
+  return withMarketplaceWriteScope(auth, async (db) => {
   const [existing] = await db
     .select()
     .from(consultantProfiles)
@@ -232,6 +232,7 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   return new Response(JSON.stringify({ profile: toClient(row), created: false }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
   });
 }
 

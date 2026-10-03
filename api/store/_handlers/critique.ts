@@ -67,7 +67,7 @@ type CritiqueRequest = {
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
-  const limited = rateLimit(req, { name: "ai-critique", max: 20, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "ai-critique", max: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();

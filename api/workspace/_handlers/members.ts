@@ -13,7 +13,7 @@ import { users, tenantMembers } from "../../../src/db/schema.js";
 export const config = { runtime: "nodejs" };
 
 export async function GET(req: Request): Promise<Response> {
-  const limited = rateLimit(req, { name: "workspace-members", max: 60, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "workspace-members", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
   const auth = await requireSessionAndTenant(req);

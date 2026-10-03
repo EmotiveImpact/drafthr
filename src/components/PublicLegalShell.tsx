@@ -83,7 +83,7 @@ export function PublicLegalShell({
               </Link>
               <p className="text-[12px] leading-relaxed text-[var(--ds-muted)] max-w-[260px]">
                 AI-assisted HR letter drafting for the UK and US.
-                Tribunal-grade, legally aware, audit-defensible.
+                Draft, review and keep a record of your correspondence.
               </p>
             </div>
 

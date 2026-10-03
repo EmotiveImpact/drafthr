@@ -10,6 +10,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
 import { enforceProductionSession } from "./_utils/production-auth.js";
+import { markRequestStreaming, reportStreamFailure } from "./_utils/observability.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -93,7 +94,7 @@ export async function POST(req: Request): Promise<Response> {
 async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
-  const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
+  const rateLimitError = await rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
   const sessionError = await enforceProductionSession(req);
   if (sessionError) return sessionError;
@@ -132,6 +133,7 @@ async function handlePost(req: Request): Promise<Response> {
   // aborted request stops consuming (and billing) tokens instead of running to
   // completion in the background.
   const controllerAbort = new AbortController();
+  markRequestStreaming(req);
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const enc = new TextEncoder();
@@ -149,7 +151,7 @@ async function handlePost(req: Request): Promise<Response> {
       };
 
       let totalTokens = 0;
-      let realError: string | null = null;
+      let hadError = false;
       try {
         const result = streamText({
           model: buildModel(body.model),
@@ -157,16 +159,10 @@ async function handlePost(req: Request): Promise<Response> {
           temperature: clampTemperature(body.temperature),
           maxOutputTokens: clampMaxTokens(body.maxTokens),
           abortSignal: controllerAbort.signal,
-          onError: (err) => {
-            const msg =
-              err instanceof Error
-                ? err.message
-                : typeof err === "object" && err && "error" in err
-                ? String((err as { error: unknown }).error)
-                : String(err);
-            realError = msg;
-            // eslint-disable-next-line no-console
-            console.error("[api/draft] streamText error:", err);
+          onError: async () => {
+            if (cancelled) return;
+            hadError = true;
+            await reportStreamFailure(req);
           },
         });
 
@@ -176,26 +172,25 @@ async function handlePost(req: Request): Promise<Response> {
           totalTokens += 1;
           writeEvent({ delta: chunk });
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "unknown error";
-        realError = msg;
-        // eslint-disable-next-line no-console
-        console.error("[api/draft] error:", err);
+      } catch {
+        hadError = true;
+        if (!cancelled) await reportStreamFailure(req);
         // No writeEvent here — the post-loop branch below is the single
         // emitter (emitting in both places doubled the error event).
       }
 
-      if (totalTokens === 0 && !realError) {
+      if (totalTokens === 0 && !hadError && !cancelled) {
+        await reportStreamFailure(req);
         writeEvent({
           error:
             "Model returned no tokens. Check the API key and that the prompt is valid.",
         });
-      } else if (realError) {
+      } else if (hadError) {
         // Emit the error even when tokens already flowed: the AI SDK's
         // non-throwing onError can fire mid-stream (upstream drop, overload)
         // and without this event the client would see a clean [DONE] and
         // store the truncated section as complete.
-        writeEvent({ error: realError });
+        writeEvent({ error: "Letter generation was interrupted. Please retry." });
       }
 
       if (!cancelled) {

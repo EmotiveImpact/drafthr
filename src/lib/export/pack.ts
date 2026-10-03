@@ -12,6 +12,12 @@ import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 import { isSafeImageDataUrl, isSafeImageRef } from "@/lib/safe-data-url";
 import { getDraftReadiness } from "@/lib/finalize/readiness";
 import { inlineImagesForExport } from "@/lib/storage/inlineImagesForExport";
+import { isDatabaseWorkspaceEnabled } from "@/lib/workspace-flags";
+import { toServerUuid } from "@/lib/remote-ids";
+import {
+  PACK_FORMAT, PACK_VERIFICATION_INSTRUCTIONS, decodeBase64, encodePackManifest,
+  requestPackSignature, sha256Hex, type PackManifest, type PackIntegrityOutcome,
+} from "./pack-integrity";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -48,7 +54,17 @@ export async function exportLetterPack(
   triggerDownload(await renderLetterPackBlob(draft, attestation), filenameForPack(draft));
 }
 
-export async function renderLetterPackBlob(draft: Draft, attestation?: ExportAttestation): Promise<Blob> {
+export type PackRenderOptions = {
+  /** Original saved draft, before private URLs are replaced with renderable bytes. */
+  sourceDraft?: Draft;
+  /** Only report success to the user after the returned Blob is durably saved. */
+  onIntegrity?: (result: PackIntegrityOutcome) => void;
+};
+
+export async function renderLetterPackBlob(draft: Draft, attestation?: ExportAttestation, options: PackRenderOptions = {}): Promise<Blob> {
+  if (options.sourceDraft && toServerUuid(options.sourceDraft.id) !== toServerUuid(draft.id)) {
+    throw new Error("The rendered draft does not match the saved export source.");
+  }
   for (const item of draft.evidence ?? []) {
     if (item.fileId && !item.fileDataUrl) {
       throw new Error(`Evidence has not been loaded for this pack: ${item.filename || item.id}`);
@@ -56,9 +72,25 @@ export async function renderLetterPackBlob(draft: Draft, attestation?: ExportAtt
     if (item.fileDataUrl && !parseDataUrl(item.fileDataUrl)) {
       throw new Error(`Evidence could not be read for this pack: ${item.filename || item.id}`);
     }
+    if (item.fileId && item.fileDataUrl) {
+      const bytes = parseDataUrl(item.fileDataUrl)!.bytes;
+      if ((item.fileSize !== undefined && item.fileSize !== bytes.byteLength) ||
+          (item.fileSha256 && item.fileSha256 !== await sha256Hex(bytes))) {
+        throw new Error(`Evidence does not match the saved private file: ${item.filename || item.id}`);
+      }
+    }
   }
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
+  let signingContext: { tenantId: string; revision: number; isCurrent: () => boolean } | null = null;
+  if (isDatabaseWorkspaceEnabled()) {
+    const { savedWorkspaceDraft, workspaceFileContext } = await import("@/lib/database-workspace");
+    const scope = workspaceFileContext();
+    const saved = await savedWorkspaceDraft(options.sourceDraft ?? draft);
+    if (!scope.isCurrent() || scope.tenantId !== saved.tenantId) throw new Error("Workspace changed. Please export again.");
+    signingContext = { ...saved, isCurrent: scope.isCurrent };
+  }
+  const generatedAt = new Date().toISOString();
 
   // Render the letter to both formats in parallel.
   const [pdfBlob, docxBlob] = await Promise.all([
@@ -98,25 +130,56 @@ export async function renderLetterPackBlob(draft: Draft, attestation?: ExportAtt
     evidenceFolder.file("index.html", buildEvidenceIndexHtml(draft));
   }
 
-  // Machine-readable manifest + audit so the pack is reproducible.
-  zip.file("manifest.json", JSON.stringify(buildManifest(draft, attestation, evidence), null, 2));
   zip.file("audit.json", JSON.stringify(buildAudit(draft), null, 2));
-  zip.file("README.txt", buildReadme(draft, attestation, evidence));
+  zip.file("README.txt", buildReadme(draft, attestation, evidence, generatedAt));
 
-  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  // Hash the exact bytes JSZip will write, not a re-render or an HTML source.
+  // Directories are structural entries, not payload files. Manifest/signature
+  // control files are added afterwards to avoid circular self-hashes.
+  const files: PackManifest["files"] = [];
+  for (const path of Object.keys(zip.files).sort()) {
+    const entry = zip.files[path];
+    if (entry.dir) continue;
+    const bytes = await entry.async("uint8array");
+    files.push({ path, bytes: bytes.byteLength, sha256: await sha256Hex(bytes) });
+  }
+  const manifest: PackManifest = {
+    format: PACK_FORMAT, hashAlgorithm: "SHA-256", draftId: toServerUuid(draft.id),
+    workspaceId: signingContext?.tenantId ?? null, draftRevision: signingContext?.revision ?? null,
+    generatedAt, metadata: buildManifestMetadata(draft, attestation, evidence), files,
+  };
+  const manifestBytes = encodePackManifest(manifest);
+  zip.file("manifest.json", manifestBytes);
+  const signature = signingContext
+    ? await requestPackSignature(manifest, manifestBytes, signingContext.isCurrent)
+    : { status: "unsigned" as const, reason: "local_only" as const };
+  let outcome: PackIntegrityOutcome;
+  if (signature.status === "signed") {
+    const { cms_b64, ...descriptor } = signature;
+    zip.file("manifest.sig", decodeBase64(cms_b64));
+    zip.file("signature.json", JSON.stringify(descriptor, null, 2));
+    outcome = { status: "signed", keyId: signature.key_id, publicKeyFingerprint: signature.public_key_sha256, timestamp: "none" };
+  } else {
+    zip.file("signature.json", JSON.stringify(signature, null, 2));
+    outcome = signature;
+  }
+
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  if (signingContext && !signingContext.isCurrent()) throw new Error("Workspace changed. Please export again.");
+  options.onIntegrity?.(outcome);
+  return blob;
 }
 
 /* ============================================================================
  * Pack contents builders
  * ==========================================================================*/
 
-function buildManifest(
+function buildManifestMetadata(
   draft: Draft,
   attestation: ExportAttestation | undefined,
   evidence: EvidenceItem[]
 ): Record<string, unknown> {
   return {
-    draftId: draft.id,
     letterType: draft.letterType,
     mode: draft.mode,
     jurisdiction: draft.context.jurisdiction,
@@ -141,8 +204,6 @@ function buildManifest(
       includeVerbatim: e.includeVerbatim,
       uploadedAt: e.uploadedAt,
     })),
-    generatedAt: new Date().toISOString(),
-    appVersion: "0.3.0",
   };
 }
 
@@ -173,7 +234,8 @@ function buildAudit(draft: Draft): Record<string, unknown> {
 function buildReadme(
   draft: Draft,
   attestation: ExportAttestation | undefined,
-  evidence: EvidenceItem[]
+  evidence: EvidenceItem[],
+  generatedAt: string
 ): string {
   const lines: string[] = [];
   lines.push(`DRAFTHR EXPORT PACK`);
@@ -183,7 +245,7 @@ function buildReadme(
   lines.push(`Mode:           ${draft.mode}`);
   lines.push(`Jurisdiction:   ${draft.context.jurisdiction}`);
   lines.push(`Issue date:     ${draft.context.issueDate}`);
-  lines.push(`Generated:      ${new Date().toISOString()}`);
+  lines.push(`Generated:      ${generatedAt}`);
   lines.push("");
   if (attestation) {
     lines.push(`Counsel review: ${attestation.reviewedBy} on ${attestation.reviewedOn}`);
@@ -193,11 +255,13 @@ function buildReadme(
   lines.push("");
   lines.push(`CONTENTS`);
   lines.push(`--------`);
-  lines.push(`  letter.pdf            Print-ready PDF of the letter.`);
-  lines.push(`  letter.docx           Editable Word version.`);
+  lines.push(`  ${pdfFilenameFor(draft)}    Print-ready PDF of the letter.`);
+  lines.push(`  ${docxFilenameFor(draft)}    Editable Word version.`);
   lines.push(`  pack-summary.html     One-page summary: review checklist, quality`);
   lines.push(`                        report, change timeline. Open in any browser.`);
   lines.push(`  manifest.json         Machine-readable index of the pack.`);
+  lines.push(`  signature.json        Explicit signing status and key information.`);
+  lines.push(`  manifest.sig          Ed25519 CMS signature, only when signing is configured.`);
   lines.push(`  audit.json            Version history, comments, prior exports.`);
   if (evidence.length > 0) {
     lines.push(`  evidence/             ${evidence.length} item${evidence.length === 1 ? "" : "s"} of evidence at original quality.`);
@@ -208,8 +272,10 @@ function buildReadme(
   lines.push(`---`);
   lines.push(`This pack is self-contained. Send the ZIP, the recipient gets:`);
   lines.push(`the letter in two formats, every piece of evidence at full quality,`);
-  lines.push(`and a tribunal-grade index for navigation. The audit.json + manifest.json`);
-  lines.push(`make the pack reproducible from a clean DRAFTHR install.`);
+  lines.push(`and an evidence index for navigation. audit.json records selected history;`);
+  lines.push(`it is not a complete reconstruction or independent proof of events.`);
+  lines.push("");
+  lines.push(PACK_VERIFICATION_INSTRUCTIONS);
   lines.push("");
   lines.push(`Questions? Reply to the email this pack was attached to.`);
   return lines.join("\n");
@@ -387,7 +453,7 @@ function extFromFilename(name?: string): string | null {
 }
 
 function sanitizeFilename(name: string): string {
-  return name.replace(/[/\\?%*:|"<>]/g, "-").slice(0, 80);
+  return name.replace(/[/\\?%*:|"<>\x00-\x1f\x7f]/g, "-").slice(0, 80).replace(/[. ]+$/, "") || "evidence";
 }
 
 function stripHtml(html: string): string {

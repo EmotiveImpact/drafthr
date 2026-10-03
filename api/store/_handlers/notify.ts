@@ -49,7 +49,7 @@ export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
   // Email-sending is a spendy side effect — keep it modestly rate-limited.
-  const limited = rateLimit(req, { name: "store-notify", max: 30, windowMs: 60_000 });
+  const limited = await rateLimit(req, { name: "store-notify", max: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<Body>(req);

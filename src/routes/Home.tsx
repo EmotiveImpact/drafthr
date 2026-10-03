@@ -34,6 +34,7 @@ import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
+import { getUnverifiedDeadlineReminder } from "@/lib/deadline-reminders";
 import { EmptyState } from "@/components/ds";
 import { getDraftReadiness } from "@/lib/finalize/readiness";
 import { deriveEmployeesFromDrafts } from "@/lib/employees";
@@ -1127,7 +1128,7 @@ function ContinueAndDeadlines({
           </h3>
           {deadlines.length > 0 && (
             <span className="text-[11px] text-[var(--ds-muted)] font-semibold tracking-wide bg-[var(--ds-surface-2)] px-2 py-0.5 rounded-full">
-              {deadlines.length} deadline{deadlines.length === 1 ? "" : "s"}
+              {deadlines.length} reminder{deadlines.length === 1 ? "" : "s"}
             </span>
           )}
         </header>
@@ -1135,8 +1136,8 @@ function ContinueAndDeadlines({
           <EmptyState
             size="sm"
             icon={CalendarClock}
-            title="No deadlines yet"
-            body="Deadlines appear here when you start a tribunal-bound letter — appeals, grievances, dismissal responses."
+            title="No recorded claim dates"
+            body="DraftHR does not calculate legal deadlines. Confirm the applicable time limits promptly with a qualified adviser; do not wait for a reminder."
             primary={{ label: "Start a letter", onClick: onOpenNew }}
           />
         ) : (
@@ -1169,7 +1170,7 @@ function ContinueAndDeadlines({
                   <div className="text-[12.5px] font-semibold text-[var(--ds-ink)] truncate">
                     {d.label}
                   </div>
-                  <div className="text-[11px] text-[var(--ds-muted)]">{formatDate(d.iso)}</div>
+                  <div className="text-[11px] text-[var(--ds-muted)]">{formatDate(d.iso)} · Unverified reminder — confirm with an adviser</div>
                 </div>
                 {urgent && <AlertCircle className="size-3.5 text-[var(--ds-amber-fg)] shrink-0" />}
               </div>
@@ -1226,16 +1227,17 @@ function deriveDeadlines(
   drafts: ReturnType<typeof useDraftStore.getState>["drafts"][string][]
 ) {
   return drafts
-    .filter((d) => d.context.protectedDeadline)
-    .map((d) => {
-      const iso = d.context.protectedDeadline!.iso;
+    .flatMap((d) => {
+      const reminder = getUnverifiedDeadlineReminder(d);
+      if (!reminder) return [];
+      const iso = reminder.iso;
       const daysAway = daysUntilDateOnly(iso);
-      return {
+      return [{
         id: d.id,
         label: safeMeta(d.letterType)?.shortTitle ?? d.letterType,
         iso,
         daysAway,
-      };
+      }];
     })
     .sort((a, b) => a.daysAway - b.daysAway)
     .slice(0, 5);

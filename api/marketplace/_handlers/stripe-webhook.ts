@@ -15,8 +15,9 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { getDb } from "../../../src/db/index.js";
-import { bookingPayments, stripeConnectAccounts } from "../../../src/db/schema.js";
+import { stripeConnectAccounts } from "../../../src/db/schema.js";
 import { getStripe } from "../../_utils/stripe.js";
+import { recordBookingPayment } from "../../_utils/marketplace-payments.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -64,45 +65,33 @@ export async function POST(req: Request): Promise<Response> {
         // redelivered after a newer one would otherwise flip a live consultant
         // back to un-payable — and account.updated may not fire again for
         // months, so the stale false would stick. accounts.retrieve always
-        // reflects current truth. Fall back to the payload if the fetch fails.
-        let payoutsEnabled = Boolean(account.payouts_enabled);
-        let detailsSubmitted = Boolean(account.details_submitted);
-        try {
-          const fresh = await stripe.accounts.retrieve(account.id);
-          payoutsEnabled = Boolean(fresh.payouts_enabled);
-          detailsSubmitted = Boolean(fresh.details_submitted);
-        } catch (err) {
-          console.warn("[stripe-webhook] account retrieve failed, using event payload", err);
-        }
+        // reflects current truth. Failed reads must retry instead of applying
+        // an old event payload and acknowledging it as current state.
+        const fresh = await stripe.accounts.retrieve(account.id);
+        const payoutsEnabled = Boolean(fresh.payouts_enabled);
+        const detailsSubmitted = Boolean(fresh.details_submitted);
         await db
           .update(stripeConnectAccounts)
           .set({ payoutsEnabled, detailsSubmitted, updatedAt: new Date() })
           .where(eq(stripeConnectAccounts.accountId, account.id));
         break;
       }
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded":
+      case "checkout.session.async_payment_failed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const bookingId = session.metadata?.bookingId ?? session.client_reference_id ?? "";
-        if (bookingId && session.payment_status === "paid") {
-          const paymentIntentId =
-            typeof session.payment_intent === "string"
-              ? session.payment_intent
-              : session.payment_intent?.id ?? null;
-          await db
-            .update(bookingPayments)
-            .set({ status: "paid", paymentIntentId, updatedAt: new Date() })
-            .where(eq(bookingPayments.bookingId, bookingId));
-        }
+        await recordBookingPayment(session, { id: event.id, failed: event.type === "checkout.session.async_payment_failed" });
         break;
       }
       default:
         // Unhandled event types are acknowledged so Stripe doesn't retry.
         break;
     }
-  } catch (err) {
-    // Log but still 200 — a DB hiccup shouldn't make Stripe retry-storm; the
-    // next account.updated / a manual reconcile will catch up.
-    console.error("[stripe-webhook] handler error", event.type, err);
+  } catch {
+    // No success acknowledgement until the database commit succeeds. The
+    // operations above are safe to repeat when Stripe redelivers the event.
+    console.error(JSON.stringify({ event: "marketplace_webhook_failed", type: event.type }));
+    return jsonError("Payment update could not be saved. Retry this event.", 503);
   }
 
   return new Response(JSON.stringify({ received: true }), {

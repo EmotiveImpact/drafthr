@@ -13,6 +13,8 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { tenants } from "../../../src/db/schema.js";
 import { isWorkOSAuditLogsEnabled } from "../../../src/lib/audit/workos-sink.js";
+import { getAuditDeliveryCounts } from "../../../src/lib/audit/workos-outbox.js";
+import { enforceWorkspacePin } from "../../_utils/workspace-pin.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -22,6 +24,8 @@ export async function GET(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const changed = enforceWorkspacePin(req, auth.activeTenant.id, auth.session.user.id);
+  if (changed) return changed;
   const memberRole = auth.activeMember?.role ?? "drafter";
   if (!ADMIN_ROLES.has(memberRole)) return jsonError("Admin role required", 403);
 
@@ -47,16 +51,20 @@ export async function GET(req: Request): Promise<Response> {
           : null;
       }
     }
-  } catch (err) {
-    console.warn("[workos/audit-logs-status] tenant lookup failed", err);
+  } catch {
+    return jsonError("Audit delivery status is temporarily unavailable", 503);
   }
 
+  let deliveries;
+  try { deliveries = await getAuditDeliveryCounts(auth.activeTenant.id); }
+  catch { return jsonError("Audit delivery status is temporarily unavailable", 503); }
   return new Response(
     JSON.stringify({
       enabled: isWorkOSAuditLogsEnabled(),
       configured: Boolean(workosOrgId),
       workosOrgId,
       lastSentAt,
+      deliveries,
     }),
     {
       status: 200,

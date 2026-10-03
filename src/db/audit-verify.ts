@@ -3,8 +3,8 @@
 // ':' || canonical(payload) || ':' || kind || ':' || subject_id || ':' ||
 // created_at_epoch_ms), or the first mismatch.
 //
-// This is the tribunal-defensibility demo: any retroactive edit breaks the
-// chain at the edit point and every row after it.
+// Hash verification detects payload/link edits against the recorded chain.
+// It is not an external timestamp, signature, or immutable/WORM guarantee.
 import { asc, eq } from "drizzle-orm";
 import { auditEvents } from "./schema.js";
 import { getDb } from "./index.js";
@@ -17,7 +17,7 @@ export type VerifyAuditChainResult =
       brokenAtId: string;
       expected: string;
       actual: string;
-      reason: "row_hash_mismatch" | "prev_hash_mismatch";
+      reason: "row_hash_mismatch" | "prev_hash_mismatch" | "sequence_mismatch";
     };
 
 export async function verifyAuditChain(tenantId: string): Promise<VerifyAuditChainResult> {
@@ -26,10 +26,14 @@ export async function verifyAuditChain(tenantId: string): Promise<VerifyAuditCha
     .select()
     .from(auditEvents)
     .where(eq(auditEvents.tenantId, tenantId))
-    .orderBy(asc(auditEvents.createdAt), asc(auditEvents.id));
+    .orderBy(asc(auditEvents.sequence));
 
   let expectedPrev = GENESIS_PREV_HASH;
+  let expectedSequence = 1;
   for (const row of rows) {
+    if (row.sequence !== expectedSequence) {
+      return { ok: false, brokenAtId: row.id, expected: String(expectedSequence), actual: String(row.sequence), reason: "sequence_mismatch" };
+    }
     if (row.prevHash !== expectedPrev) {
       return {
         ok: false,
@@ -56,6 +60,7 @@ export async function verifyAuditChain(tenantId: string): Promise<VerifyAuditCha
       };
     }
     expectedPrev = row.rowHash;
+    expectedSequence++;
   }
   return { ok: true, rowCount: rows.length };
 }
