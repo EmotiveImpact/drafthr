@@ -10,6 +10,11 @@ import {
 } from "react";
 import { AUTH_ENABLED, AUTH_MISCONFIGURED } from "./index";
 import { clearTenantScopedLocalData } from "@/lib/session/clearLocalData";
+import { flushDatabaseDrafts, isDatabaseDraftsEnabled } from "@/lib/database-drafts";
+import { toast } from "sonner";
+import { suspendDatabaseWorkspaceForTransition, stopDatabaseWorkspace } from "@/lib/database-workspace";
+import { beginSessionTransition, useSessionTransition } from "@/lib/session/transition";
+import { SessionTransitionBoundary } from "@/components/SessionTransitionBoundary";
 
 /**
  * AuthProvider — WorkOS AuthKit, SPA-shaped.
@@ -50,6 +55,7 @@ export type AuthContextValue = {
    *  cross-device consultant routing without trusting localStorage (PM-03). */
   isConsultant: boolean;
   isLoaded: boolean;
+  organizationSignInUrl?: string | null;
   /**
    * Navigates the browser to the in-app /sign-in page. The page itself
    * owns the branded form + the "Continue with Google / Microsoft"
@@ -92,10 +98,15 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
   const [hasAnyTenant, setHasAnyTenant] = useState(false);
   const [isConsultant, setIsConsultant] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [organizationSignInUrl, setOrganizationSignInUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const refreshGeneration = useRef(0);
   // Avoid concurrent /session fetches stomping each other on rapid focus events.
   const inflight = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(async (opts?: { force?: boolean }) => {
+    const transition = useSessionTransition.getState();
+    if (transition.label) return;
     // Coalesce concurrent callers onto the in-flight fetch — EXCEPT a forced
     // refresh. A background focus/visibility refresh may already be in flight
     // reading the OLD cookie; a post-mutation caller (just created a workspace,
@@ -103,6 +114,7 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
     // it observes pre-mutation state (user/tenant null) and bounces the user
     // backward. force:true always starts a fresh fetch against the new cookie.
     if (inflight.current && !opts?.force) return inflight.current;
+    const generation = ++refreshGeneration.current;
     const p = (async () => {
       try {
         const res = await fetch("/api/auth/session", {
@@ -110,10 +122,7 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
           headers: { Accept: "application/json" },
         });
         if (!res.ok) {
-          setUser(null);
-          setActiveTenant(null);
-          setHasAnyTenant(false);
-          setIsConsultant(false);
+          if (generation === refreshGeneration.current && useSessionTransition.getState().epoch === transition.epoch && !useSessionTransition.getState().label) setLoadError(true);
           return;
         }
         const data = (await res.json()) as {
@@ -121,15 +130,19 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
           activeTenant?: ActiveTenant | null;
           hasAnyTenant?: boolean;
           isConsultant?: boolean;
+          organizationSignInUrl?: string | null;
         };
+        if (generation !== refreshGeneration.current || useSessionTransition.getState().label || useSessionTransition.getState().epoch !== transition.epoch) return;
+        setLoadError(false);
+        setOrganizationSignInUrl(data.organizationSignInUrl ?? null);
         setUser(data.user);
         setActiveTenant(data.activeTenant ?? null);
         setHasAnyTenant(Boolean(data.hasAnyTenant));
         setIsConsultant(Boolean(data.isConsultant));
       } catch {
-        // Network error — keep prior state. The next focus event will retry.
+        if (generation === refreshGeneration.current && useSessionTransition.getState().epoch === transition.epoch && !useSessionTransition.getState().label) setLoadError(true);
       } finally {
-        setIsLoaded(true);
+        if (generation === refreshGeneration.current) setIsLoaded(true);
       }
     })();
     inflight.current = p;
@@ -165,26 +178,29 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const signIn = useCallback(async () => {
-    // Tier-2 sign-in: keep the user on our origin and let /sign-in own
-    // the form + branding. The legacy hosted-page path (POST-fetching
-    // /api/auth/url) still works and is reachable from /sign-in for
-    // operators who want to fall back to the WorkOS-hosted experience.
-    //
-    // We deliberately use window.location.assign instead of useNavigate
-    // so callers in non-router contexts (e.g. RootRedirect's effect, or
-    // a signOut→signIn chain) still work without depending on the
-    // router being in scope.
+    // The entry route starts hosted AuthKit sign-in.
     window.location.assign("/sign-in");
   }, []);
 
   const signOut = useCallback(async () => {
+    const transition = beginSessionTransition("Saving changes and signing out…");
+    if (!transition) return;
+    let resume: (() => void) | undefined;
+    let departing = false, requestStarted = false;
     try {
-      await fetch("/api/auth/sign-out", {
+      if (isDatabaseDraftsEnabled() && !(await flushDatabaseDrafts())) throw new Error("Some draft changes are only on this device. Retry the save or resolve the conflict first.");
+      resume = await suspendDatabaseWorkspaceForTransition();
+      requestStarted = true;
+      const response = await fetch("/api/auth/sign-out", {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-    } finally {
+      if (!response.ok) { requestStarted = false; throw new Error("Could not sign out. Check your connection and try again."); }
+      const data = await response.json() as { logoutUrl?: string | null };
+      stopDatabaseWorkspace();
+      ++refreshGeneration.current;
       setUser(null);
       setActiveTenant(null);
       setHasAnyTenant(false);
@@ -194,16 +210,36 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
       // matters, employees, profile, or bookings (security board SA-01/SE-02).
       clearTenantScopedLocalData();
       // Hard navigation so any in-memory route guards re-evaluate cleanly.
-      window.location.assign("/");
+      departing = true;
+      window.location.assign(data.logoutUrl || "/sign-in?signed_out=1");
+    } catch (error) {
+      if (requestStarted) {
+        // A lost acknowledgement may still have cleared the cookie. Do not
+        // resume editing under an assumed identity or erase recovery buffers.
+        departing = true;
+        stopDatabaseWorkspace();
+        window.location.assign("/");
+      } else toast.error("Cannot sign out yet", { description: error instanceof Error ? error.message : "Please try again." });
+    } finally {
+      if (!departing) { resume?.(); transition.release(); }
     }
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, activeTenant, hasAnyTenant, isConsultant, isLoaded, signIn, signOut, refresh }),
-    [user, activeTenant, hasAnyTenant, isConsultant, isLoaded, signIn, signOut, refresh]
+    () => ({ user, activeTenant, hasAnyTenant, isConsultant, isLoaded, organizationSignInUrl, signIn, signOut, refresh }),
+    [user, activeTenant, hasAnyTenant, isConsultant, isLoaded, organizationSignInUrl, signIn, signOut, refresh]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  if (loadError) return (
+    <main className="min-h-screen grid place-items-center px-6">
+      <section className="max-w-sm text-center" role="alert">
+        <h1 className="text-xl font-semibold">Your workspace is temporarily unavailable</h1>
+        <p className="mt-3 text-sm">We couldn’t verify your session. Please retry; you don’t need to create another account.</p>
+        <button type="button" onClick={() => void refresh({ force: true })} className="mt-6 rounded-md border px-4 py-2">Try again</button>
+      </section>
+    </main>
+  );
+  return <AuthContext.Provider value={value}><SessionTransitionBoundary>{children}</SessionTransitionBoundary></AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

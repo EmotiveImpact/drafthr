@@ -5,6 +5,8 @@ import { uid } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FileText, Paperclip, Image as ImageIcon, Mail, NotebookText, CalendarDays, Plus, ExternalLink, X } from "lucide-react";
 import { Link } from "react-router-dom";
+import { storeEvidenceFile } from "@/lib/storage/workspace-files";
+import { toast } from "sonner";
 
 const KIND_ICON: Record<EvidenceItem["kind"], typeof FileText> = {
   email: Mail,
@@ -30,14 +32,6 @@ function kindFromMime(mime?: string): EvidenceItem["kind"] {
   return "document";
 }
 
-async function readAsDataUrl(file: File): Promise<string | null> {
-  return new Promise<string | null>((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
-}
 
 /**
  * Inline evidence affordance per section. Replaces the previous "click 📎 →
@@ -76,19 +70,22 @@ export function EvidencePopover({
       window.alert(`${file.name} is larger than 10 MB. Use the Evidence step to summarize it instead.`);
       return;
     }
-    const dataUrl = (await readAsDataUrl(file)) ?? undefined;
+    try {
+    const stored = await storeEvidenceFile(draft.id, file);
     const item: EvidenceItem = {
       id: uid(),
       kind: kindFromMime(file.type),
       filename: file.name,
-      mimeType: file.type || undefined,
-      fileDataUrl: dataUrl,
+      ...stored,
       sectionIds: [section.id],
       content: "",
       uploadedAt: Date.now(),
       includeVerbatim: false,
     };
-    setEvidence(draft.id, [...(draft.evidence ?? []), item]);
+    const latest = useDraftStore.getState().drafts[draft.id];
+    if (!latest) throw new Error("The draft is no longer available");
+    setEvidence(draft.id, [...(latest.evidence ?? []), item]);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Evidence upload failed"); }
   };
 
   const addNote = () => {

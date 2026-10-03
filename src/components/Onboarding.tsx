@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Briefcase, UserRound, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 
 import { useProfileStore } from "@/lib/profile";
@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * First-run onboarding modal. Renders only when `profile.setupComplete`
- * is false. Three steps: role → jurisdiction → personal/employer
+ * is false. ModePicker owns role selection, so setup has two steps:
+ * jurisdiction → personal/employer
  * essentials. On completion the wizard's auto-fill will pre-populate
  * every letter so the user doesn't have to retype identity data.
  *
@@ -29,7 +30,6 @@ import { cn } from "@/lib/utils";
 export function Onboarding() {
   const nav = useNavigate();
   const profile = useProfileStore((s) => s.profile);
-  const setRole = useProfileStore((s) => s.setRole);
   const patchPersonal = useProfileStore((s) => s.patchPersonal);
   const patchEmployer = useProfileStore((s) => s.patchEmployer);
   const patchDefaults = useProfileStore((s) => s.patchDefaults);
@@ -39,14 +39,16 @@ export function Onboarding() {
 
   // Local form state seeded from any existing profile values so re-entry
   // (we never hide the modal mid-flow) doesn't drop user input.
-  const [role, setRoleLocal] = useState(profile.role ?? "employer");
+  const role = profile.role ?? "employer";
   const [jurisdiction, setJurisdiction] = useState<"UK" | "US">(profile.defaults.jurisdiction);
   const [ukRegion, setUkRegion] = useState(profile.defaults.ukRegion ?? "England & Wales");
   const [usState, setUsState] = useState(profile.defaults.usState ?? "");
   const [legalName, setLegalName] = useState(profile.personal.legalName ?? "");
   const [jobTitle, setJobTitle] = useState(profile.personal.jobTitle ?? "");
   const [employerName, setEmployerName] = useState(profile.employer.legalName ?? "");
-  const [address, setAddress] = useState(profile.personal.address ?? "");
+  const [address, setAddress] = useState(
+    role === "employer" ? profile.employer.address ?? "" : profile.personal.address ?? "",
+  );
 
   const open = !profile.setupComplete;
 
@@ -56,29 +58,38 @@ export function Onboarding() {
     if (open) setStep(0);
   }, [open]);
 
-  const totalSteps = 3;
+  const totalSteps = 2;
   const canAdvance = useMemo(() => {
-    if (step === 0) return !!role;
-    if (step === 1) {
+    if (step === 0) {
       if (jurisdiction === "UK") return !!ukRegion;
       if (jurisdiction === "US") return !!usState;
       return false;
     }
-    if (step === 2) return legalName.trim().length > 0;
+    if (step === 1) return legalName.trim().length > 0;
     return false;
-  }, [step, role, jurisdiction, ukRegion, usState, legalName]);
+  }, [step, jurisdiction, ukRegion, usState, legalName]);
 
   const persistAll = () => {
-    setRole(role as "employer" | "employee");
     patchDefaults({
       jurisdiction,
       ukRegion: jurisdiction === "UK" ? (ukRegion as Parameters<typeof patchDefaults>[0]["ukRegion"]) : undefined,
       usState: jurisdiction === "US" ? (usState as Parameters<typeof patchDefaults>[0]["usState"]) : undefined,
     });
-    if (legalName.trim()) patchPersonal({ legalName: legalName.trim() });
-    if (jobTitle.trim()) patchPersonal({ jobTitle: jobTitle.trim() });
-    if (address.trim()) patchPersonal({ address: address.trim() });
-    if (employerName.trim()) patchEmployer({ legalName: employerName.trim() });
+    if (legalName.trim() || jobTitle.trim() || (role === "employee" && address.trim())) {
+      patchPersonal({
+        legalName: legalName.trim() || undefined,
+        jobTitle: jobTitle.trim() || undefined,
+        ...(role === "employee" && address.trim() ? { address: address.trim() } : {}),
+      });
+    }
+    if (employerName.trim() || (role === "employer" && address.trim())) {
+      patchEmployer({
+        legalName: employerName.trim() || undefined,
+        ...(role === "employer" && address.trim() ? { address: address.trim() } : {}),
+        ...(role === "employer" && legalName.trim() ? { signatoryName: legalName.trim() } : {}),
+        ...(role === "employer" && jobTitle.trim() ? { signatoryTitle: jobTitle.trim() } : {}),
+      });
+    }
   };
 
   const finish = () => {
@@ -107,19 +118,25 @@ export function Onboarding() {
               Welcome to DraftHR
             </div>
             <Dialog.Title className="m-0 mt-1 text-[22px] font-semibold text-[var(--ds-ink)]">
-              {step === 0 && "Which side are you on?"}
-              {step === 1 && "Where do you operate?"}
-              {step === 2 && "A few essentials"}
+              {step === 0 && "Where do you operate?"}
+              {step === 1 && "A few essentials"}
             </Dialog.Title>
             <Dialog.Description className="text-[13px] text-[var(--ds-muted)] mt-1">
-              {step === 0 && "We tailor every letter, wizard, and disclaimer to your perspective."}
-              {step === 1 && "Drives jurisdiction-specific clauses, limitation periods, and language."}
-              {step === 2 && "Pre-fills every wizard so you don't retype identity data."}
+              {step === 0 && "Drives jurisdiction-specific clauses, limitation periods, and language."}
+              {step === 1 && "Pre-fills every wizard so you don't retype identity data."}
             </Dialog.Description>
           </header>
 
           {/* Progress dots */}
-          <div className="flex items-center gap-1.5 mb-5">
+          <div
+            className="flex items-center gap-1.5 mb-5"
+            role="progressbar"
+            aria-label="Workspace setup progress"
+            aria-valuemin={1}
+            aria-valuemax={totalSteps}
+            aria-valuenow={step + 1}
+            aria-valuetext={`Step ${step + 1} of ${totalSteps}`}
+          >
             {Array.from({ length: totalSteps }).map((_, i) => (
               <span
                 key={i}
@@ -132,25 +149,6 @@ export function Onboarding() {
           </div>
 
           {step === 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <RoleCard
-                icon={<Briefcase className="size-5" />}
-                title="HR / Management"
-                lede="Issuing letters on behalf of the company — offers, warnings, terminations, settlements."
-                active={role === "employer"}
-                onClick={() => setRoleLocal("employer")}
-              />
-              <RoleCard
-                icon={<UserRound className="size-5" />}
-                title="Employee"
-                lede="Writing letters to your employer — grievance, resignation, accommodation, pay dispute."
-                active={role === "employee"}
-                onClick={() => setRoleLocal("employee")}
-              />
-            </div>
-          )}
-
-          {step === 1 && (
             <div className="space-y-3">
               <div>
                 <Label>Country</Label>
@@ -222,7 +220,7 @@ export function Onboarding() {
             </div>
           )}
 
-          {step === 2 && (
+          {step === 1 && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="ob-legal-name">
@@ -258,7 +256,11 @@ export function Onboarding() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ob-address">Your address (for the letter)</Label>
+                <Label htmlFor="ob-address">
+                  {role === "employer"
+                    ? "Company registered address"
+                    : "Your address (for the letter)"}
+                </Label>
                 <Textarea
                   id="ob-address"
                   value={address}
@@ -307,38 +309,5 @@ export function Onboarding() {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-function RoleCard({
-  icon,
-  title,
-  lede,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  lede: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "text-left rounded-md border px-4 py-4 transition",
-        active
-          ? "border-[var(--ds-ink)] bg-[var(--ds-line-2)] shadow-sm"
-          : "border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]/40"
-      )}
-    >
-      <div className="flex items-center gap-2 text-[var(--ds-ink)]">
-        {icon}
-        <span className="text-[14px] font-semibold">{title}</span>
-      </div>
-      <p className="text-[12px] text-[var(--ds-muted)] mt-1.5 leading-relaxed">{lede}</p>
-    </button>
   );
 }

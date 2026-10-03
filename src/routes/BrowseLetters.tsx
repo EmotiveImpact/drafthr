@@ -549,30 +549,37 @@ function TemplateCard({
       {/* Action row */}
       <div className="flex items-center gap-2 px-4 pb-4 pt-1 mt-auto">
         <Button
-          variant="outline"
+          variant={letter.riskClass === "high" ? "default" : "outline"}
           size="sm"
           onClick={onWizard}
           className="flex-1 text-[12px]"
           title="Step through the wizard to capture every detail"
         >
-          Use wizard
+          {letter.riskClass === "high" ? "Guided wizard" : "Use wizard"}
         </Button>
         <Button
+          variant={letter.riskClass === "high" ? "outline" : "default"}
           size="sm"
           onClick={onStart}
           disabled={!templateReady}
           className="flex-1 text-[12px]"
           title={
             templateReady
-              ? `Skip the wizard — use your profile defaults and start drafting on the ${jurisdiction} template now`
+              ? `Quick draft skips the guided questions and uses your profile defaults. Evidence and counsel gates still apply.`
               : `Template not yet available for ${jurisdiction}`
           }
         >
           <Sparkles className="size-3" />
-          Start drafting
+          Quick draft
           <ArrowRight className="size-3" />
         </Button>
       </div>
+
+      {letter.riskClass === "high" && (
+        <p className="px-4 pb-3 -mt-1 text-[10px] leading-relaxed text-[var(--ds-muted)]">
+          Guided is recommended. Quick draft skips questions, never evidence or counsel checks.
+        </p>
+      )}
 
       {/* Profile-prefill hint — small footer when the user has set
        * defaults so they know clicking Start uses them. */}

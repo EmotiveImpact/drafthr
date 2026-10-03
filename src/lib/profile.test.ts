@@ -72,6 +72,8 @@ describe("prefillsFromProfile (employer)", () => {
     const out = prefillsFromProfile(profile, "employer");
     expect(out.signatoryName).toBe("Jane Patel");
     expect(out.signatoryTitle).toBe("Senior Engineer");
+    expect(out.employerAddress).toBe("1 Acme Way, London EC2 2BB");
+    expect(out.employerAddress).not.toBe(baseProfile.personal.address);
     expect(out.tone).toBe("formal");
   });
 

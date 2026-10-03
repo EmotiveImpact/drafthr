@@ -1,0 +1,4 @@
+ALTER TABLE "workspace_files" ALTER COLUMN "draft_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspace_files" ADD COLUMN "import_token" uuid;--> statement-breakpoint
+ALTER TABLE "workspace_files" ADD COLUMN "import_draft_id" uuid;--> statement-breakpoint
+ALTER TABLE "workspace_files" ADD CONSTRAINT "workspace_files_import_check" CHECK (("workspace_files"."import_token" is null and "workspace_files"."import_draft_id" is null and "workspace_files"."draft_id" is not null) or ("workspace_files"."import_token" is not null and "workspace_files"."import_draft_id" is not null and "workspace_files"."purpose" = 'evidence' and "workspace_files"."draft_revision" = 0 and ("workspace_files"."draft_id" is null or "workspace_files"."draft_id" = "workspace_files"."import_draft_id")));

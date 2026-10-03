@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { decideSectionWrite, hasAppMarks } from "./PagedlyDocEditor";
+import {
+  countDraftWords,
+  decideSectionWrite,
+  hasAppMarks,
+  hasExternalSectionChanges,
+} from "./PagedlyDocEditor";
 
 /**
  * Locks the Page-view (pagedly) persist guards — the fix for the cross-section
@@ -89,5 +94,27 @@ describe("decideSectionWrite", () => {
     // edit off that baseline is still a clean write (not flagged 'external').
     const afterFirst = "<p>new</p>";
     expect(decideSectionWrite({ incomingHtml: "<p>newer</p>", currentHtml: afterFirst, baselineHtml: afterFirst })).toBe("write");
+  });
+});
+
+describe("Pagedly store synchronisation helpers", () => {
+  it("shows the actual initial word count before the first keystroke", () => {
+    expect(countDraftWords({
+      sections: [
+        { html: "<p>One two three.</p>" },
+        { html: "<p>Four <strong>five</strong>.</p>" },
+      ],
+    } as never)).toBe(5);
+  });
+
+  it("detects Section and AI writes for refresh but ignores streaming churn", () => {
+    const baseline = { one: "<p>Old</p>", two: "<p>Streaming old</p>" };
+    expect(hasExternalSectionChanges([
+      { id: "one", html: "<p>AI update</p>", status: "edited" },
+    ] as never, baseline)).toBe(true);
+    expect(hasExternalSectionChanges([
+      { id: "one", html: "<p>Old</p>", status: "edited" },
+      { id: "two", html: "<p>Streaming new token</p>", status: "streaming" },
+    ] as never, baseline)).toBe(false);
   });
 });

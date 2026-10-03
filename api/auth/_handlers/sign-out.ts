@@ -15,6 +15,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import {
   buildClearCookie,
   getSessionFromRequest,
+  getWorkos,
   SESSION_COOKIE,
   STATE_COOKIE,
 } from "../../_utils/workos.js";
@@ -31,9 +32,16 @@ export async function POST(req: Request): Promise<Response> {
 
   // Revoke this user's other sessions. Read the session for the user id, bump,
   // and swallow any failure so sign-out always succeeds.
+  let logoutUrl: string | null = null;
   try {
     const session = await getSessionFromRequest(req);
-    if (session) await bumpUserSessionEpoch(session.user.id);
+    if (session) {
+      await bumpUserSessionEpoch(session.user.id);
+      if (session.sessionId) logoutUrl = getWorkos().userManagement.getLogoutUrl({
+        sessionId: session.sessionId,
+        returnTo: new URL("/sign-in?signed_out=1", process.env.APP_BASE_URL || req.url).toString(),
+      });
+    }
   } catch {
     /* never block sign-out on the revocation bump */
   }
@@ -46,5 +54,5 @@ export async function POST(req: Request): Promise<Response> {
   headers.append("Set-Cookie", buildClearCookie(SESSION_COOKIE));
   headers.append("Set-Cookie", buildClearCookie(STATE_COOKIE));
 
-  return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+  return new Response(JSON.stringify({ ok: true, logoutUrl }), { status: 200, headers });
 }

@@ -7,6 +7,7 @@ import {
   pagedPreviewStylesheet,
 } from "./paged-edit/printCss";
 import { buildPreviewSourceHtml } from "./paged-edit/sourceHtml";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 type PreviewerInstance = {
   preview: (
@@ -42,8 +43,10 @@ export function PaginatedLetter({
   draft,
   onAddComment,
   onFocusComment,
+  exportMode = false,
 }: {
   draft: Draft;
+  exportMode?: boolean;
   /** Open the new-comment panel for a section, optionally seeded with the
    * selected quote. Called when the user clicks the floating "+ Comment"
    * bubble that appears next to a text selection inside a paged page. */
@@ -52,6 +55,8 @@ export function PaginatedLetter({
    * `<mark data-comment-id>` highlight in the paged render. */
   onFocusComment?: (commentId: string) => void;
 }) {
+  const { activeTenant } = useAuth();
+  const tenantId = activeTenant?.id;
   const containerRef = useRef<HTMLDivElement>(null);
   const previewerRef = useRef<PreviewerInstance | null>(null);
   const [busy, setBusy] = useState(true);
@@ -69,7 +74,12 @@ export function PaginatedLetter({
   // resolved figure references (so [See Fig N] reflects current numbering),
   // signature embedded into the signature section, an auto-Attachments
   // block when there are attached evidence items, and the disclaimer.
-  const sourceHtml = buildPreviewSourceHtml(draft);
+  const sourceHtml = buildPreviewSourceHtml(draft, { forExport: exportMode });
+  const privateImagesKey = JSON.stringify((draft.evidence ?? [])
+    .filter(item => item.fileId && item.mimeType?.startsWith("image/"))
+    .map(item => [item.id, item.fileId, item.mimeType]));
+  const hasInlineImages = draft.sections.some(section => /\/api\/(?:store\/files|upload\/image)\?/.test(section.html || "")) ||
+    [draft.employer?.letterheadDataUrl, draft.employer?.signatureDataUrl].some(src => src?.startsWith("/api/upload/image?"));
 
   useEffect(() => {
     const container = containerRef.current;
@@ -81,6 +91,7 @@ export function PaginatedLetter({
     const container = containerRef.current;
     if (!container) return;
     let cancelled = false;
+    const abort = new AbortController();
     let previewer: PreviewerInstance | null = null;
     destroyPreviewer(previewerRef.current);
     previewerRef.current = null;
@@ -92,9 +103,16 @@ export function PaginatedLetter({
       try {
         // Lazy import — pagedjs is ~150 KB and only needed in preview.
         const { Previewer } = await import("pagedjs");
+        let resolvedHtml = sourceHtml;
+        if (privateImagesKey !== "[]" || hasInlineImages) {
+          if (!tenantId) throw new Error("Select a workspace to preview private evidence.");
+          const { resolveEvidenceFiles } = await import("@/lib/storage/workspace-files");
+          const resolvedDraft = await resolveEvidenceFiles(draft, tenantId, { imagesOnly: true, signal: abort.signal });
+          resolvedHtml = buildPreviewSourceHtml(resolvedDraft, { forExport: exportMode });
+        }
         if (cancelled) return;
         previewer = new Previewer() as PreviewerInstance;
-        const flow = await previewer.preview(sourceHtml, [pagedPreviewStylesheet()], container);
+        const flow = await previewer.preview(resolvedHtml, [pagedPreviewStylesheet()], container);
         if (cancelled) {
           destroyPreviewer(previewer);
           return;
@@ -113,12 +131,13 @@ export function PaginatedLetter({
 
     return () => {
       cancelled = true;
+      abort.abort();
       destroyPreviewer(previewer);
       if (previewerRef.current === previewer) {
         previewerRef.current = null;
       }
     };
-  }, [sourceHtml]);
+  }, [sourceHtml, privateImagesKey, hasInlineImages, tenantId, exportMode]);
 
   // Comment-mark click + selection bubble. Wires up once per paginate
   // cycle because paged.js replaces the DOM under .pagedjs_pages each

@@ -96,7 +96,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
           </div>
           <SearchPalette open={open} onOpenChange={setOpen} />
-          <Onboarding />
+          {!onConsultantSurface && <Onboarding />}
         </SearchPaletteContext.Provider>
       </TooltipProvider>
     );
@@ -114,7 +114,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </SidebarInset>
         </SidebarProvider>
         <SearchPalette open={open} onOpenChange={setOpen} />
-        <Onboarding />
+        {!onConsultantSurface && <Onboarding />}
       </SearchPaletteContext.Provider>
     </TooltipProvider>
   );

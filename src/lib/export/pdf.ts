@@ -4,6 +4,7 @@ import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize"
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
+import { attachmentsHtml, figuresHtml } from "@/lib/evidence-html";
 import {
   brandedExportFooterHtml,
   resolveClientEnvFlag,
@@ -101,11 +102,13 @@ export function letterBodyHtml(draft: Draft): string {
   const resolved = evidence.length > 0
     ? resolveFigureRefsInHtml(sectionsHtml, evidence)
     : sectionsHtml;
-  const attachments = buildAttachmentsListHtml(draft);
+  const attachments = attachmentsHtml(evidence);
+  const figures = figuresHtml(evidence, { requireResolvedImages: true });
   return (
     letterhead +
     resolved +
     attachments +
+    figures +
     "<hr />" +
     sanitizeLetterHtml(disclaimerHtmlFor(draft)) +
     // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands
@@ -113,32 +116,6 @@ export function letterBodyHtml(draft: Draft): string {
     // unless VITE_DRAFTHR_EXPORT_FOOTER=false. See src/lib/branding/export-footer.ts.
     brandedExportFooterHtml({ envEnabled: resolveClientEnvFlag() })
   );
-}
-
-/** Auto-generated "Attachments" block — only rendered when there are
- * evidence items in displayMode=attached. Lists them numbered. */
-function buildAttachmentsListHtml(draft: Draft): string {
-  const attached = (draft.evidence ?? []).filter(
-    (e) => (e.displayMode ?? "figure") === "attached"
-  );
-  if (attached.length === 0) return "";
-  const items = attached
-    .map((e) => {
-      // No literal "N." prefix — the <ol> numbers the items. Prefixing here
-      // AND using a decimal <ol> double-numbered ("1. 1.") on PDF surfaces,
-      // which (unlike the mobile view) have no Tailwind Preflight to strip the
-      // marker (bug #9). Matches the DOCX exporter, which never prefixes.
-      const name = e.filename || `${e.kind} item`;
-      const note = e.content ? ` — ${e.content}` : "";
-      return `<li><strong>${escapeHtml(name)}</strong>${escapeHtml(note)}</li>`;
-    })
-    .join("\n");
-  // Explicit list-style:decimal so the numbering survives on surfaces with no
-  // Tailwind Preflight (server Puppeteer PDF + client iframe fallback).
-  return `<div class="attachments-block">
-    <h3 style="margin-top:24px;font-size:13pt;">Attachments</h3>
-    <ol style="list-style:decimal;padding-left:1.2em;margin:6pt 0;">${items}</ol>
-  </div>`;
 }
 
 function escapeHtml(s: string): string {
@@ -235,7 +212,7 @@ async function renderClientSidePdf(doc: HTMLElement): Promise<Blob> {
   return canvasToA4PdfBlob(canvas, JsPDF);
 }
 
-function canvasToA4PdfBlob(canvas: HTMLCanvasElement, JsPDF: JsPdfConstructor): Blob {
+export function canvasToA4PdfBlob(canvas: HTMLCanvasElement, JsPDF: JsPdfConstructor): Blob {
   const pageWidth = 8.27;
   const pageHeight = 11.69;
   // Guard a zero-width canvas (e.g. html2canvas rendering a display:none host):
@@ -246,14 +223,40 @@ function canvasToA4PdfBlob(canvas: HTMLCanvasElement, JsPDF: JsPdfConstructor): 
   const imageData = canvas.toDataURL("image/jpeg", 0.98);
   const pdf = new JsPDF({ unit: "in", format: "a4", orientation: "portrait" });
 
-  let pageTop = 0;
-  while (pageTop < imageHeight) {
-    if (pageTop > 0) pdf.addPage("a4", "portrait");
+  // html2canvas rounds CSS dimensions before applying our 2x render scale.
+  // A CSS A4 minimum height can therefore gain two canvas pixels; do not
+  // turn that rounding remainder into a blank trailing page.
+  const roundingAllowance = canvas.width > 0 ? 2 * pageWidth / canvas.width : 0;
+  const contentHeight = canvas.width > 0 ? canvasContentHeight(canvas) * pageWidth / canvas.width : pageHeight;
+  const pageCount = Math.max(1, Math.ceil((contentHeight - roundingAllowance) / pageHeight));
+  for (let page = 0; page < pageCount; page++) {
+    const pageTop = page * pageHeight;
+    if (page > 0) pdf.addPage("a4", "portrait");
     pdf.addImage(imageData, "JPEG", 0, -pageTop, pageWidth, imageHeight);
-    pageTop += pageHeight;
   }
 
   return pdf.output("blob");
+}
+
+/** Ignore only genuinely blank trailing pixels (including CSS bottom padding),
+ * never a page containing letter text or evidence. Read small strips so this
+ * does not allocate a second full-size copy of a long document canvas. */
+export function canvasContentHeight(canvas: HTMLCanvasElement): number {
+  try {
+    const context = canvas.getContext?.("2d");
+    if (!context || !canvas.width) return canvas.height;
+    for (let end = canvas.height; end > 0;) {
+      const start = Math.max(0, end - 32);
+      const pixels = context.getImageData(0, start, canvas.width, end - start).data;
+      for (let index = pixels.length - 4; index >= 0; index -= 4) {
+        if (pixels[index + 3] && (pixels[index] < 255 || pixels[index + 1] < 255 || pixels[index + 2] < 255)) {
+          return start + Math.floor(index / 4 / canvas.width) + 1;
+        }
+      }
+      end = start;
+    }
+    return 0;
+  } catch { return canvas.height; }
 }
 
 async function createPdfHost(
@@ -286,6 +289,18 @@ async function createPdfHost(
   const doc = buildPdfDoc(bodyHtml, frameDocument);
   frameDocument.body.appendChild(doc);
   await waitForImages(doc);
+  // html2canvas captures a continuous screen layout, so CSS print breaks do
+  // not apply. Place shared appendices at the next A4 page's content margin
+  // before capturing; server PDF and DOCX use their native page breaks.
+  const pageHeightPx = doc.getBoundingClientRect().width * 11.69 / 8.27;
+  const paddingTop = parseFloat(frameDocument.defaultView!.getComputedStyle(doc).paddingTop);
+  if (pageHeightPx > 0) {
+    for (const appendix of doc.querySelectorAll<HTMLElement>(".page-break-before")) {
+      const top = appendix.getBoundingClientRect().top - doc.getBoundingClientRect().top;
+      const nextContentTop = Math.ceil((top - paddingTop) / pageHeightPx) * pageHeightPx + paddingTop;
+      appendix.style.paddingTop = `${Math.max(0, nextContentTop - top)}px`;
+    }
+  }
 
   return {
     doc,
@@ -341,6 +356,12 @@ function applyPdfExportStyles(root: HTMLElement): void {
   root.querySelectorAll<HTMLImageElement>("img").forEach((el) => {
     el.style.maxWidth = "100%";
     el.style.height = "auto";
+  });
+  root.querySelectorAll<HTMLElement>(".figure-item").forEach(el => { el.style.margin = "0 0 14pt"; });
+  root.querySelectorAll<HTMLElement>(".figure-item img").forEach(el => {
+    el.style.display = "block";
+    el.style.marginTop = "6pt";
+    el.style.maxHeight = "5in";
   });
   root.querySelectorAll<HTMLElement>("a").forEach((el) => {
     el.style.color = "inherit";

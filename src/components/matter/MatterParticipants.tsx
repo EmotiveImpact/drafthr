@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { UserPlus, Users, X } from "lucide-react";
 import type { MatterParticipant, MatterParticipantRole } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -103,10 +102,7 @@ export function MatterParticipants({
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut", delay: 0.05 }}
+    <section
       className="mb-5"
     >
       <div className="flex items-center justify-between mb-2">
@@ -221,6 +217,6 @@ export function MatterParticipants({
           </button>
         </div>
       )}
-    </motion.section>
+    </section>
   );
 }

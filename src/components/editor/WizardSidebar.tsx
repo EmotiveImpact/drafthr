@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WizardChrome } from "@/components/editor/WizardChrome";
 import { sidebarLabelFor } from "@/components/editor/SectionsList";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 
 /**
  * Shared inner contents for the left rail across all three wizard pages
@@ -68,8 +69,9 @@ export function WizardSidebar({
   secondaryTabLabel = "More",
   secondaryTabBadge,
 }: Props) {
-  const total = draft.sections.length;
-  const ready = draft.sections.filter((s) => s.status === "ready").length;
+  const { sections } = getDraftReadiness(draft);
+  const total = sections.total;
+  const written = sections.written;
 
   type Tab = "sections" | "secondary";
   const [tab, setTab] = useState<Tab>("sections");
@@ -101,7 +103,7 @@ export function WizardSidebar({
             active={activeTab === "sections"}
             onClick={() => setTab("sections")}
             label="Sections"
-            badge={`${ready}/${total}`}
+            badge={`${written}/${total}`}
           />
           <TabButton
             active={activeTab === "secondary"}
@@ -124,9 +126,9 @@ export function WizardSidebar({
               </h2>
               <span
                 className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums"
-                title={`${ready} of ${total} sections marked ready`}
+                title={`${written} of ${total} sections written`}
               >
-                {ready}/{total}
+                {written}/{total}
               </span>
             </div>
           )}

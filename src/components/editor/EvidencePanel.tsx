@@ -23,6 +23,8 @@ import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 import { uid } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { storeEvidenceFile } from "@/lib/storage/workspace-files";
+import { StoredEvidenceFile } from "./StoredEvidenceFile";
 
 /* ---------------------------------------------------------------------------
  * Evidence side panel — the permanent right-rail counterpart of the modal
@@ -320,8 +322,12 @@ function AddEvidenceForm({
   const [fileData, setFileData] = useState<{
     dataUrl?: string;
     mimeType?: string;
+    fileId?: string;
+    fileSize?: number;
+    fileSha256?: string;
   }>({});
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Keep section-id selection in sync with the active section when the form
   // is still pristine — once the user picks something, we leave it alone.
@@ -348,10 +354,12 @@ function AddEvidenceForm({
       return;
     }
     setError(null);
+    setUploading(true);
+    try {
     setFilename(file.name);
     setKind(file.type.startsWith("image/") ? "screenshot" : "document");
-    const dataUrl = await readAsDataUrl(file);
-    setFileData({ dataUrl, mimeType: file.type });
+    const { fileDataUrl, ...stored } = await storeEvidenceFile(draft.id, file);
+    setFileData({ ...stored, dataUrl: fileDataUrl });
     if (
       file.size <= MAX_TEXT_PREVIEW_BYTES &&
       (file.type.startsWith("text/") ||
@@ -362,6 +370,8 @@ function AddEvidenceForm({
     } else if (!content.trim()) {
       setContent(`Uploaded file: ${file.name}`);
     }
+    } catch (error) { setError(error instanceof Error ? error.message : "Evidence upload failed"); }
+    finally { setUploading(false); }
   };
 
   const canSubmit =
@@ -370,7 +380,7 @@ function AddEvidenceForm({
     Boolean(fileData.dataUrl);
 
   const submit = () => {
-    if (!canSubmit) return;
+    if (!canSubmit || uploading || error) return;
     const text = content.trim();
     const name = filename.trim();
     const item: EvidenceItem = {
@@ -383,6 +393,9 @@ function AddEvidenceForm({
       sectionIds,
       fileDataUrl: fileData.dataUrl,
       mimeType: fileData.mimeType,
+      fileId: fileData.fileId,
+      fileSize: fileData.fileSize,
+      fileSha256: fileData.fileSha256,
     };
     onSubmit(item);
   };
@@ -417,7 +430,7 @@ function AddEvidenceForm({
 
       <label className="flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--ds-line)] bg-white text-[11px] text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] transition">
         <Upload className="size-3" />
-        {fileData.dataUrl ? "Replace file" : "Upload file"}
+        {uploading ? "Uploading…" : fileData.dataUrl || fileData.fileId ? "Replace file" : "Upload file"}
         <input
           type="file"
           className="hidden"
@@ -477,7 +490,7 @@ function AddEvidenceForm({
         <Button
           size="xs"
           onClick={submit}
-          disabled={!canSubmit}
+          disabled={!canSubmit || uploading || Boolean(error)}
           className="flex-1"
         >
           Add evidence
@@ -594,6 +607,7 @@ function EvidenceCard({
             </p>
           )}
 
+          {!isEditing && item.fileId && <StoredEvidenceFile item={item} />}
           {!isEditing &&
             isSafeImageDataUrl(item.fileDataUrl) &&
             item.mimeType?.startsWith("image/") && (
@@ -878,14 +892,6 @@ function labelFor(kind: Kind): string {
   return KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind;
 }
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
 
 /* ===========================================================================
  * HTML helpers — used by the parent route when wiring onInsertAtSection. We

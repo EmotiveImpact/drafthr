@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -6,7 +6,8 @@ import {
   isSafeImageDataUrl,
   SAFE_IMAGE_ACCEPT,
 } from "@/lib/safe-data-url";
-import { uploadImage } from "@/lib/storage/uploadImage";
+import { imageUploadScope, uploadImage } from "@/lib/storage/uploadImage";
+import { toast } from "sonner";
 
 const MAX_BYTES = 1024 * 1024; // 1 MB
 
@@ -18,12 +19,9 @@ const ASPECT: Record<"banner" | "signature" | "square", { className: string; hin
 
 /**
  * Uploads a small image (letterhead / signature). Reads the file as a
- * base64 data URL, then POSTs to /api/upload/image to swap it for a Vercel
- * Blob URL before persisting. The Blob URL keeps localStorage and the
- * (planned) Postgres dual-write rows small — base64 letterheads were the
- * #1 quota burner. If the upload endpoint isn't configured (local dev),
- * `uploadImage` falls back to the original data URL so behavior is
- * unchanged.
+ * transient data URL, then stores private bytes before persisting a short
+ * authenticated URL. Neither leaving this form nor switching workspaces can
+ * apply a stale upload to a different record.
  */
 export function ImageUploader({
   value,
@@ -37,6 +35,8 @@ export function ImageUploader({
   helpText?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const operation = useRef(0);
+  useEffect(() => () => { operation.current += 1; }, []);
   const [busy, setBusy] = useState(false);
   const a = ASPECT[aspect];
 
@@ -49,22 +49,29 @@ export function ImageUploader({
       alert(`That file is ${(file.size / 1024 / 1024).toFixed(1)} MB — please use one under 1 MB.`);
       return;
     }
+    let scope: ReturnType<typeof imageUploadScope>;
+    try { scope = imageUploadScope(); }
+    catch { toast.error("Wait for your workspace to finish loading before uploading."); return; }
+    const attempt = ++operation.current;
+    const active = () => attempt === operation.current;
+    setBusy(true);
     const reader = new FileReader();
     reader.onload = async () => {
-      const url = typeof reader.result === "string" ? reader.result : undefined;
-      if (!isSafeImageDataUrl(url)) {
-        alert("That image format is not supported.");
-        return;
-      }
-      setBusy(true);
       try {
-        const stored = await uploadImage({ dataUrl: url, filename: file.name });
-        onChange(stored);
+        if (!active()) return;
+        const url = typeof reader.result === "string" ? reader.result : undefined;
+        if (!isSafeImageDataUrl(url)) throw new Error("Unsupported image");
+        const stored = await uploadImage({ dataUrl: url, filename: file.name }, scope);
+        if (active() && (!scope || scope.isCurrent())) onChange(stored);
+      } catch {
+        if (active()) toast.error("Image upload failed. Your existing image was not changed.");
       } finally {
-        setBusy(false);
+        if (active()) setBusy(false);
       }
     };
-    reader.onerror = () => alert("Couldn't read that file.");
+    reader.onerror = () => {
+      if (active()) { setBusy(false); toast.error("Couldn't read that file. Your existing image was not changed."); }
+    };
     reader.readAsDataURL(file);
   };
 
@@ -89,8 +96,7 @@ export function ImageUploader({
               a.className
             }
           >
-            {/* eslint-disable-next-line jsx-a11y/alt-text */}
-            <img src={value} className="max-h-full max-w-full object-contain" />
+            <img src={value} alt="Uploaded branding image" className="max-h-full max-w-full object-contain" />
           </div>
           <div className="flex flex-col gap-1.5">
             <Button

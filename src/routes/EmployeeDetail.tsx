@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { motion } from "framer-motion";
 import {
   AlertTriangle,
   Archive,
@@ -11,7 +10,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { matchEmployeeForDraft } from "@/lib/employees";
+import { matchEmployeeForDraft, matterInvolvesEmployee } from "@/lib/employees";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { formatDateOnly, toDateOnly } from "@/lib/date-only";
@@ -29,7 +28,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type {
   Draft,
-  Employee,
   EmploymentStatus,
   Matter,
 } from "@/lib/letters/types";
@@ -64,6 +62,7 @@ function EmployeeDetailBody() {
     employeeId ? s.employees[employeeId] : undefined
   );
   const drafts = useDraftStore((s) => s.drafts);
+  const employees = useDraftStore((s) => s.employees);
   const matters = useDraftStore((s) => s.matters);
   const updateEmployee = useDraftStore((s) => s.updateEmployee);
   const archiveEmployee = useDraftStore((s) => s.archiveEmployee);
@@ -81,23 +80,15 @@ function EmployeeDetailBody() {
 
   const matchingDrafts = useMemo(() => {
     if (!employee) return [] as Draft[];
-    const empMap: Record<string, Employee> = { [employee.id]: employee };
     return allDrafts
-      .filter((d) => matchEmployeeForDraft(d, empMap) === employee.id)
+      .filter((d) => matchEmployeeForDraft(d, employees) === employee.id)
       .sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [employee, allDrafts]);
+  }, [employee, allDrafts, employees]);
 
   const linkedMatters = useMemo(() => {
     if (!employee) return [] as Matter[];
-    return allMatters.filter((m) => {
-      // Prefer the explicit participants link, with a backwards-compat
-      // fallback to legacy matters that only set parties.primaryName.
-      if (m.participants?.some((p) => p.employeeId === employee.id)) return true;
-      const primary = m.parties?.primaryName?.trim().toLowerCase();
-      if (primary && primary === employee.legalName.trim().toLowerCase()) return true;
-      return false;
-    });
-  }, [employee, allMatters]);
+    return allMatters.filter((m) => matterInvolvesEmployee(m, employee.id, employees));
+  }, [employee, allMatters, employees]);
 
   const activeMatters = useMemo(
     () => linkedMatters.filter((m) => m.status === "active"),
@@ -169,10 +160,7 @@ function EmployeeDetailBody() {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+    <div
       className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8"
     >
       <div className="mb-4">
@@ -335,7 +323,7 @@ function EmployeeDetailBody() {
           setEditOpen(false);
         }}
       />
-    </motion.div>
+    </div>
   );
 }
 

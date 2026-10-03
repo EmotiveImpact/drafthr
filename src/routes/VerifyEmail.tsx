@@ -81,7 +81,7 @@ export function VerifyEmail() {
         // Brief pause so the user sees the success state, then route on.
         // RootRedirect picks the right next destination based on tenant
         // and onboarding state.
-        setTimeout(() => navigate("/", { replace: true }), 800);
+        navigate("/sign-in", { replace: true });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Verification failed.");
         setStage("failed");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { deriveEmployeesFromDrafts, matchEmployeeForDraft } from "./employees";
-import type { Draft, Employee } from "./letters/types";
+import { answersFromEmployee, deriveEmployeesFromDrafts, matchEmployeeForDraft, matterInvolvesEmployee } from "./employees";
+import type { Draft, Employee, Matter } from "./letters/types";
 
 /* ----------------------------------------------------------------------------
  * Test fixtures
@@ -150,6 +150,37 @@ describe("deriveEmployeesFromDrafts", () => {
 });
 
 describe("matchEmployeeForDraft", () => {
+  it("keeps same-name people separate and follows an explicit ID after renaming", () => {
+    const draft = mockDraft({ id: "d1", mode: "employer", legalName: "Jane Patel", updatedAt: 100 });
+    const first = makeEmployee("Jane Patel", "a");
+    const second = makeEmployee("Jane Patel", "b");
+    const employees = { [first.id]: first, [second.id]: second };
+    draft.employeeId = second.id;
+    expect(matchEmployeeForDraft(draft, employees)).toBe(second.id);
+    expect(matchEmployeeForDraft(draft, { [first.id]: first })).toBeNull();
+    second.legalName = "Jane Smith";
+    expect(matchEmployeeForDraft(draft, employees)).toBe(second.id);
+    delete employees[second.id];
+    expect(matchEmployeeForDraft(draft, employees)).toBeNull();
+  });
+
+  it("leaves ambiguous legacy drafts unmatched rather than assigning them to both people", () => {
+    const draft = mockDraft({ id: "d1", mode: "employer", legalName: "Jane Patel", updatedAt: 100 });
+    const a = makeEmployee("Jane Patel", "a");
+    const b = makeEmployee("Jane Patel", "b");
+    expect(matchEmployeeForDraft(draft, { [a.id]: a, [b.id]: b })).toBeNull();
+    draft.answers = { linkedEmployeeId: b.id };
+    expect(matchEmployeeForDraft(draft, { [a.id]: a, [b.id]: b })).toBe(b.id);
+  });
+
+  it("does not include employee-mode letters or template sources in HR histories", () => {
+    const draft = mockDraft({ id: "d1", mode: "employee", legalName: "Jane Patel", updatedAt: 100 });
+    const employee = makeEmployee("Jane Patel", "a");
+    expect(matchEmployeeForDraft(draft, { [employee.id]: employee })).toBeNull();
+    draft.mode = "employer";
+    draft.isTemplateSource = true;
+    expect(matchEmployeeForDraft(draft, { [employee.id]: employee })).toBeNull();
+  });
   it("returns null when no employees exist", () => {
     const draft = mockDraft({ id: "d1", mode: "employer", legalName: "Jane Patel", updatedAt: 100 });
     expect(matchEmployeeForDraft(draft, {})).toBeNull();
@@ -170,5 +201,30 @@ describe("matchEmployeeForDraft", () => {
       a: makeEmployee("Jane Patel", "a"),
     };
     expect(matchEmployeeForDraft(draft, employees)).toBeNull();
+  });
+});
+
+describe("matter employee linkage", () => {
+  it("clears the previous person's optional details when picking a different employee", () => {
+    const previous = { employeeAddress: "Previous address", employeeEmail: "previous@example.test" };
+    const next: Record<string, unknown> = { ...previous, ...answersFromEmployee(makeEmployee("New Person", "new")) };
+    expect(next.employeeAddress).toBeUndefined();
+    expect(next.employeeEmail).toBeUndefined();
+    expect(next.employeeLegalName).toBe("New Person");
+  });
+  it("does not override explicit participants with a same-name match", () => {
+    const a = makeEmployee("Jane Patel", "a");
+    const b = makeEmployee("Jane Patel", "b");
+    const employees = { [a.id]: a, [b.id]: b };
+    const matter = { mode: "employer", parties: { primaryName: "Jane Patel" },
+      participants: [{ employeeId: a.id, name: a.legalName, role: "subject" }] } as Matter;
+    expect(matterInvolvesEmployee(matter, a.id, employees)).toBe(true);
+    expect(matterInvolvesEmployee(matter, b.id, employees)).toBe(false);
+    a.legalName = "Jane Smith";
+    expect(matterInvolvesEmployee(matter, a.id, employees)).toBe(true);
+    matter.participants = [];
+    expect(matterInvolvesEmployee(matter, b.id, employees)).toBe(true);
+    a.legalName = "Jane Patel";
+    expect(matterInvolvesEmployee(matter, b.id, employees)).toBe(false);
   });
 });

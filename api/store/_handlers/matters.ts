@@ -194,6 +194,9 @@ type GuardResult =
 async function guardWrite(req: Request): Promise<GuardResult> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return { ok: false, response: sameOrigin };
+  if (process.env.DRAFTHR_DATABASE_WORKSPACE === "true") {
+    return { ok: false, response: jsonError("Reload to use database-backed workspace records", 409) };
+  }
   if (process.env.DRAFTHR_DUAL_WRITE !== "true") {
     return { ok: false, response: jsonError("Dual-write disabled", 503) };
   }

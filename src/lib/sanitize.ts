@@ -1,5 +1,7 @@
 import DOMPurify from "dompurify";
 import { isSafeImageDataUrl } from "./safe-data-url";
+import { parseWorkspaceFileUrl } from "./storage/workspace-file-types";
+import { parsePrivateImageUrl } from "./storage/privateImageUrl";
 
 let hooksRegistered = false;
 function registerSanitizeHooks() {
@@ -17,7 +19,7 @@ function registerSanitizeHooks() {
       // Canonical check (shared with the export/profile/upload paths): the old
       // prefix-only regex accepted `data:image/png;base64,` with an empty or
       // whitespace-only payload; isSafeImageDataUrl requires real base64.
-      const isImageData = isSafeImageDataUrl(src);
+      const isImageData = isSafeImageDataUrl(src) || !!parseWorkspaceFileUrl(src) || !!parsePrivateImageUrl(src);
       if (!isImageData) {
         data.keepAttr = false;
         // Drop the whole <img> when src is unsafe — an <img> without src is
@@ -54,10 +56,10 @@ export function isSafeLinkHref(href: string): boolean {
 }
 
 function collectBlankLinkHrefs(html: string): Map<string, number> {
-  const root = document.createElement("div");
+  const root = document.createElement("template");
   root.innerHTML = html;
   const counts = new Map<string, number>();
-  root.querySelectorAll("a[target]").forEach((anchor) => {
+  root.content.querySelectorAll("a[target]").forEach((anchor) => {
     const href = anchor.getAttribute("href")?.trim() ?? "";
     const target = anchor.getAttribute("target")?.trim().toLowerCase();
     if (target === "_blank" && href && isSafeLinkHref(href)) {

@@ -15,6 +15,16 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+// Each workspace aggregate has its own revision and retained deletion marker.
+// Indexed columns are projections; the snapshot preserves the complete UI record.
+function workspaceRecordColumns() {
+  return {
+    snapshotJson: jsonb("snapshot_json").$type<Record<string, unknown>>(),
+    revision: integer("revision").notNull().default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  };
+}
+
 // --- workspace ---------------------------------------------------------------
 
 // workos_org_id — when populated, audit_events for this tenant are mirrored
@@ -150,6 +160,7 @@ export const employees = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     legalName: text("legal_name").notNull(),
+    address: text("address"),
     preferredName: text("preferred_name"),
     jobTitle: text("job_title"),
     department: text("department"),
@@ -161,6 +172,7 @@ export const employees = pgTable(
     workerClass: text("worker_class"),
     status: text("status").notNull().default("active"),
     notes: text("notes"),
+    ...workspaceRecordColumns(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -191,6 +203,7 @@ export const matters = pgTable(
     ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
     nextAction: text("next_action"),
     exposureGbp: integer("exposure_gbp"),
+    ...workspaceRecordColumns(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -214,6 +227,35 @@ export const matterParticipants = pgTable(
   (t) => [index("matter_participants_matter_idx").on(t.matterId)],
 );
 
+export const matterTasks = pgTable("matter_tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  matterId: uuid("matter_id").notNull().references(() => matters.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  dueIso: date("due_iso"),
+  status: text("status").notNull().default("open"),
+  assignee: text("assignee"),
+  doneAt: timestamp("done_at", { withTimezone: true }),
+  ...workspaceRecordColumns(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("matter_tasks_tenant_idx").on(t.tenantId), index("matter_tasks_matter_idx").on(t.matterId)]);
+
+export const matterEvents = pgTable("matter_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  matterId: uuid("matter_id").notNull().references(() => matters.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  label: text("label").notNull(),
+  // Preserve date-only and explicitly zoned date-time values without silently
+  // converting an all-day deadline to a different local date.
+  whenIso: text("when_iso").notNull(),
+  detail: text("detail"),
+  ...workspaceRecordColumns(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => [index("matter_events_tenant_idx").on(t.tenantId), index("matter_events_matter_idx").on(t.matterId)]);
+
 // --- drafts ------------------------------------------------------------------
 
 // custom_templates declared first so drafts.template_source_id FK resolves.
@@ -235,6 +277,7 @@ export const customTemplates = pgTable(
     sectionHtmlJson: jsonb("section_html_json").$type<Record<string, string>>().notNull(),
     answersJson: jsonb("answers_json").$type<Record<string, unknown>>(),
     emoji: text("emoji"),
+    ...workspaceRecordColumns(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -252,6 +295,7 @@ export const drafts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     matterId: uuid("matter_id").references(() => matters.id, { onDelete: "set null" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
     letterType: text("letter_type").notNull(),
     mode: text("mode").notNull(),
     title: text("title"),
@@ -267,6 +311,14 @@ export const drafts = pgTable(
     employerJson: jsonb("employer_json").$type<Record<string, unknown>>(),
     employeeJson: jsonb("employee_json").$type<Record<string, unknown>>(),
     answersJson: jsonb("answers_json").$type<Record<string, unknown>>(),
+    // Complete editor aggregate. The older columns/sections remain indexed
+    // projections for existing APIs; snapshot_json is the authoritative
+    // document for database-first reads. Nullable for pre-migration rows.
+    snapshotJson: jsonb("snapshot_json").$type<Record<string, unknown>>(),
+    // Monotonic compare-and-swap token; never use browser clocks to decide
+    // whether one teammate's write may replace another's.
+    revision: integer("revision").notNull().default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -274,8 +326,26 @@ export const drafts = pgTable(
     index("drafts_tenant_idx").on(t.tenantId),
     index("drafts_author_idx").on(t.authorUserId),
     index("drafts_matter_idx").on(t.matterId),
+    index("drafts_employee_idx").on(t.employeeId),
   ],
 );
+
+// Company details are shared; personal details and wizard preferences are
+// isolated by both user and tenant. Neither table grants permissions or credits.
+export const workspaceCompanySettings = pgTable("workspace_company_settings", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  employerJson: jsonb("employer_json").$type<Record<string, unknown>>().notNull(),
+  revision: integer("revision").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const workspaceUserPreferences = pgTable("workspace_user_preferences", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  snapshotJson: jsonb("snapshot_json").$type<Record<string, unknown>>().notNull(),
+  revision: integer("revision").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, t => [uniqueIndex("workspace_user_preferences_user_tenant_idx").on(t.tenantId, t.userId)]);
 
 export const sections = pgTable(
   "sections",
@@ -387,6 +457,61 @@ export const evidence = pgTable(
   },
   (t) => [index("evidence_draft_idx").on(t.draftId)],
 );
+
+// File bytes live in private object storage, never in workspace JSON. Pending
+// uploads are not downloadable; completion verifies size and SHA-256 first.
+// Export snapshots and files are append-only through the application API.
+export const workspaceFiles = pgTable("workspace_files", {
+  id: uuid("id").primaryKey(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  draftId: uuid("draft_id").references(() => drafts.id, { onDelete: "cascade" }),
+  // Legacy imports stage bytes before the destination draft exists. Only its
+  // creator can verify staged bytes; draft attachment finalizes ownership.
+  importToken: uuid("import_token"),
+  importDraftId: uuid("import_draft_id"),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  purpose: text("purpose").notNull(),
+  format: text("format"),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  sha256: text("sha256").notNull(),
+  pathname: text("pathname").notNull().unique(),
+  provider: text("provider").notNull(),
+  status: text("status").notNull().default("pending"),
+  draftRevision: integer("draft_revision").notNull(),
+  snapshotJson: jsonb("snapshot_json").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (t) => [
+  index("workspace_files_tenant_draft_idx").on(t.tenantId, t.draftId),
+  index("workspace_files_tenant_status_idx").on(t.tenantId, t.status),
+  check("workspace_files_purpose_check", sql`${t.purpose} in ('evidence', 'export')`),
+  check("workspace_files_status_check", sql`${t.status} in ('pending', 'ready')`),
+  check("workspace_files_size_check", sql`${t.size} > 0 and ${t.size} <= 26214400`),
+  check("workspace_files_import_check", sql`(${t.importToken} is null and ${t.importDraftId} is null and ${t.draftId} is not null) or (${t.importToken} is not null and ${t.importDraftId} is not null and ${t.purpose} = 'evidence' and ${t.draftRevision} = 0 and (${t.draftId} is null or ${t.draftId} = ${t.importDraftId}))`),
+]);
+
+// Reusable branding/template images belong to the workspace, not a draft.
+// Readiness and its audit event commit together after verifying private bytes.
+export const workspaceAssets = pgTable("workspace_assets", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  pathname: text("pathname").notNull().unique(),
+  provider: text("provider").notNull(),
+  contentType: text("content_type").notNull(),
+  size: integer("size").notNull(),
+  sha256: text("sha256").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, t => [
+  index("workspace_assets_tenant_idx").on(t.tenantId),
+  check("workspace_assets_status_check", sql`${t.status} in ('pending', 'ready')`),
+  check("workspace_assets_size_check", sql`${t.size} > 0 and ${t.size} <= 2097152`),
+  check("workspace_assets_mime_check", sql`${t.contentType} in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')`),
+]);
 
 export const approvals = pgTable(
   "approvals",

@@ -72,21 +72,17 @@ npm install
 # LLM key — copy and fill in ANTHROPIC_API_KEY
 cp .env.example .env.local
 
-# Dev server (Vite on port 5273 by default)
-npm run dev
+# Full local app, including /api/auth/* and the other Vercel API routes
+npx --yes vercel@59.25.4 dev --listen 127.0.0.1:5273
 ```
 
 Open <http://localhost:5273>.
 
-> **Heads-up — `npm run dev` does NOT serve `/api/auth/*`.** The Vite dev
-> plugin only mounts `/api/draft` and `/api/agent` (see
-> `dev/qwen-proxy-plugin.ts`). Every other `/api/*` route — auth,
-> workspace, sign-up, password reset, verify-email — only runs under the
-> real Vercel runtime. If you need to test those locally, install the
-> Vercel CLI and run `vercel dev` instead. Symptom of using the wrong
-> dev server: the SPA's sign-in form throws "Sign-in API didn't respond
-> with JSON" because the auth endpoint fell through to the SPA's 404
-> HTML.
+`npm run dev` starts Vite alone and is useful for UI work, but it does not
+serve `/api/auth/*` or the workspace, billing, and other Vercel API routes.
+Use the full command above when testing sign-in or an end-to-end flow. With
+`VITE_WORKOS_CLIENT_ID` set, sign-in requires a WorkOS account; the local
+server does not create a test session automatically.
 
 ### Environment
 
@@ -102,14 +98,14 @@ WORKOS_CLIENT_ID=
 WORKOS_REDIRECT_URI=http://localhost:5273/auth/callback
 WORKOS_COOKIE_PASSWORD=<32+ chars>
 VITE_ALLOW_PUBLIC_APP=false
-BLOB_READ_WRITE_TOKEN=                    # Vercel Blob — letterhead/signature/photo uploads
+BLOB_READ_WRITE_TOKEN=                    # private Vercel Blob store — letterhead/signature uploads
 DRAFTHR_DUAL_WRITE=false                 # mirror drafts to Postgres (server side)
 VITE_DRAFTHR_DUAL_WRITE=false            # client twin — Vite inlines VITE_ vars only; both must match
 DATABASE_URL=                            # Neon — enables dual-write + workspaces + marketplace
 WORKOS_WEBHOOK_SECRET=                   # verifies WorkOS Directory Sync webhook signatures
 VETTING_AUTO_PUBLISH=                    # '1' auto-publishes consultant profiles; leave UNSET in prod once admin vetting exists
 VITE_ADMIN_EMAILS=                       # comma-list allowlist for /admin/consultants client gate (cosmetic until a server admin role lands)
-# DRAFTHR_DEV_NO_AUTH=1                   # LOCAL DEV ONLY — bypasses session on /api/draft,/api/agent,/api/upload. NEVER set on Vercel.
+# DRAFTHR_DEV_NO_AUTH=1                   # LOCAL DEV ONLY — bypasses session on /api/draft and /api/agent. NEVER set on Vercel.
 ```
 
 A user can also pick the model at runtime via Settings → "Generation model". The choice is sent in the request body, validated by the server allow-list, and takes precedence over the env default. `ANTHROPIC_API_KEY` is required server-side for AI generation; do not commit provider keys or expose them through `VITE_*` variables.

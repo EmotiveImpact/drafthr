@@ -8,6 +8,7 @@ import { effectiveRiskBand } from "@/lib/matters/risk";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
+import { countDraftWords } from "@/lib/letters/wordCount";
 import type { Draft, LetterTypeId, MatterType } from "@/lib/letters/types";
 import { PageHeader } from "@/components/ds";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 
 /**
  * /matters/:matterId — single matter detail. Hero with parties +
@@ -97,9 +99,15 @@ export function MatterDetail() {
   const prefix = matter.mode === "employer" ? "/hr" : "/me";
 
   const onNewLetter = (letterType: LetterTypeId) => {
-    const answers = prefillsFromProfile(profile, matter.mode);
+    const subjectEmployeeId = matter.participants?.find(
+      (participant) => participant.role === "subject" && participant.employeeId,
+    )?.employeeId;
+    const answers = {
+      ...prefillsFromProfile(profile, matter.mode),
+      linkedMatterId: matter.id,
+      ...(subjectEmployeeId ? { linkedEmployeeId: subjectEmployeeId } : {}),
+    };
     const id = createDraft(letterType, answers, matter.mode);
-    assignDraftToMatter(id, matter.id);
     setShowAddLetter(false);
     nav(`/editor/${id}`);
   };
@@ -365,13 +373,11 @@ function LetterRow({
   onRemove: () => void;
 }) {
   const meta = getLetterMeta(draft.letterType);
-  const wordCount = draft.sections
-    .map((s) => s.html.replace(/<[^>]+>/g, " ").trim())
-    .join(" ")
-    .split(/\s+/)
-    .filter(Boolean).length;
+  const wordCount = countDraftWords(draft);
   const hasUnresolvedComments = (draft.comments ?? []).some((c) => !c.resolved);
-  const isExported = (draft.exports ?? []).length > 0;
+  const readiness = getDraftReadiness(draft);
+  const isExported = readiness.status === "sent";
+  const evidenceCount = draft.evidence?.length ?? 0;
 
   return (
     <div
@@ -399,18 +405,18 @@ function LetterRow({
           )}
         </div>
         <div className="text-[11px] text-[var(--ds-muted)] mt-0.5">
-          {draft.sections.length} sections · {wordCount} words · {timeAgoShort(draft.updatedAt)}
+          {readiness.sections.written}/{readiness.sections.total} sections written · {wordCount} words · {evidenceCount} evidence · {timeAgoShort(draft.updatedAt)}
         </div>
       </div>
       <Pill
         tone={
           isExported
             ? "green"
-            : draft.sections.some((s) => s.status === "ready")
+            : readiness.status === "ready_to_send"
             ? "blue"
             : "amber"
         }
-        label={isExported ? "Sent" : draft.sections.some((s) => s.status === "ready") ? "Ready" : "Draft"}
+        label={isExported ? "Sent" : readiness.statusLabel}
       />
       <button
         type="button"

@@ -11,6 +11,7 @@
  * just call into it.
  */
 import { jsonError } from "../_utils/request.js";
+import { withSessionResponse } from "../_utils/workos.js";
 
 type Handler = (req: Request) => Promise<Response>;
 
@@ -64,7 +65,7 @@ async function dispatch(req: Request, method: "GET" | "POST"): Promise<Response>
   if (!mod) return jsonError(`Unknown auth action: ${action}`, 404);
   const handler = mod[method];
   if (!handler) return jsonError("Method Not Allowed", 405);
-  return handler(req);
+  return withSessionResponse(req, handler);
 }
 
 export async function GET(req: Request): Promise<Response> {

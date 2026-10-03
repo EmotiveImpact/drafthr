@@ -1,276 +1,50 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { SignUp } from "./SignUp";
-
-/**
- * SignUp page tests — lock down the contract that:
- *
- *  1. The form renders the required fields.
- *  2. Mismatched passwords + un-checked Terms disable the submit button.
- *  3. A successful POST switches to the "check your email" stage.
- *  4. The successful POST does NOT set a session cookie / does NOT route
- *     the user into the app — the email-verification step is the gate.
- *  5. Resend verification posts to the right endpoint.
- *  6. Server errors are surfaced verbatim to the user.
- */
-
-const authMock = vi.hoisted(() => ({
-  enabled: true,
-  user: null as null | { id: string; email: string },
-  isLoaded: true,
-}));
-
-vi.mock("@/lib/auth", () => ({
-  get AUTH_ENABLED() {
-    return authMock.enabled;
-  },
-  useAuth: () => ({
-    user: authMock.user,
-    isLoaded: authMock.isLoaded,
-    activeTenant: null,
-    hasAnyTenant: false,
-    isConsultant: false,
-    signIn: vi.fn(),
-    signOut: vi.fn(),
-    refresh: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-beforeEach(() => {
-  authMock.enabled = true;
-  authMock.user = null;
-  authMock.isLoaded = true;
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
-
-describe("SignUp", () => {
-  it("renders the form fields and terms checkbox", () => {
-    render(
-      <MemoryRouter initialEntries={["/sign-in/signup"]}>
-        <SignUp />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByLabelText("Email")).toBeInTheDocument();
-    expect(screen.getByLabelText("First name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Last name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Password")).toBeInTheDocument();
-    expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /create account/i })).toBeDisabled();
-  });
-
-  it("keeps submit disabled when passwords don't match", () => {
-    render(
-      <MemoryRouter initialEntries={["/sign-in/signup"]}>
-        <SignUp />
-      </MemoryRouter>,
-    );
-
-    fillForm({ password: "abcdefgh", confirm: "abcdefgZZZ" });
-
-    expect(screen.getByRole("button", { name: /create account/i })).toBeDisabled();
-    expect(screen.getByText("Passwords don’t match.")).toBeInTheDocument();
-  });
-
-  it("switches to the check-your-email view on successful sign-up", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ ok: true, requiresVerification: true, userId: "user_01" }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    );
-
-    render(
-      <MemoryRouter initialEntries={["/sign-in/signup"]}>
-        <SignUp />
-      </MemoryRouter>,
-    );
-
-    fillForm({ password: "longenough123", confirm: "longenough123", agree: true });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /create account/i }));
-    });
-
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-    const [url, init] = fetchSpy.mock.calls[0]!;
-    expect(url).toBe("/api/auth/sign-up");
-    const body = JSON.parse(((init as RequestInit).body as string) ?? "{}");
-    expect(body).toMatchObject({
-      email: "user@example.com",
-      firstName: "Ada",
-      lastName: "Lovelace",
-      password: "longenough123",
-    });
-
-    // The CheckYourEmail view shows the "Verify your email." heading
-    // plus a 6-digit code input (the OTP form added in 0.16.x).
-    expect(await screen.findByText(/^verify your email\.?$/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument();
-    // Crucially: no session was minted on sign-up — the user is NOT routed
-    // into the app yet. The only cookie-mutating call happens on
-    // /api/auth/verify-email after they enter the code.
-    expect(document.cookie).toBe("");
-  });
-
-  it("surfaces a server validation error to the user", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: "Password must contain a digit and a symbol." }),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    render(
-      <MemoryRouter initialEntries={["/sign-in/signup"]}>
-        <SignUp />
-      </MemoryRouter>,
-    );
-
-    fillForm({ password: "longenough123", confirm: "longenough123", agree: true });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /create account/i }));
-    });
-
-    expect(
-      await screen.findByText("Password must contain a digit and a symbol."),
-    ).toBeInTheDocument();
-  });
-
-  it("calls /api/auth/resend-verification on the confirmation screen", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ ok: true, requiresVerification: true, userId: "user_01" }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    );
-
-    render(
-      <MemoryRouter initialEntries={["/sign-in/signup"]}>
-        <SignUp />
-      </MemoryRouter>,
-    );
-
-    fillForm({ password: "longenough123", confirm: "longenough123", agree: true });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /create account/i }));
-    });
-    await screen.findByText(/^verify your email\.?$/i);
-
-    // Switch the mock for the resend call so we can verify the second
-    // POST hits the right endpoint.
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-
-    // Button label changed from "Resend verification email" to
-    // "Didn't get a code? Resend" when the OTP form was added.
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /didn't get a code/i }));
-    });
-
-    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
-    const resendCall = fetchSpy.mock.calls[1]!;
-    expect(resendCall[0]).toBe("/api/auth/resend-verification");
-    const body = JSON.parse(((resendCall[1] as RequestInit).body as string) ?? "{}");
-    expect(body).toMatchObject({ email: "user@example.com" });
-  });
-
-  it("POSTs to /api/auth/verify-email when the user enters a 6-digit code", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    // First fetch: the sign-up POST itself.
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ ok: true, requiresVerification: true, userId: "user_01" }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-    // Second fetch: the verify-email POST.
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ ok: true, user: { id: "user_01", email: "user@example.com" } }),
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Set-Cookie": "drafthr_session=fake; HttpOnly; Path=/; SameSite=Lax",
-          },
-        },
-      ),
-    );
-    // Third fetch: AuthProvider's refresh() → /api/auth/session call.
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ user: null, activeTenant: null, hasAnyTenant: false }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
-
-    render(
-      <MemoryRouter initialEntries={["/sign-in/signup"]}>
-        <SignUp />
-      </MemoryRouter>,
-    );
-
-    fillForm({ password: "longenough123", confirm: "longenough123", agree: true });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /create account/i }));
-    });
-    await screen.findByLabelText(/verification code/i);
-
-    fireEvent.change(screen.getByLabelText(/verification code/i), {
-      target: { value: "477205" },
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /verify and sign in/i }));
-    });
-
-    await waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2));
-    const verifyCall = fetchSpy.mock.calls[1]!;
-    expect(verifyCall[0]).toBe("/api/auth/verify-email");
-    const body = JSON.parse(((verifyCall[1] as RequestInit).body as string) ?? "{}");
-    expect(body).toEqual({ code: "477205", userId: "user_01" });
-  });
-});
-
-function fillForm(opts: {
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  password?: string;
-  confirm?: string;
-  agree?: boolean;
-}) {
-  fireEvent.change(screen.getByLabelText("Email"), {
-    target: { value: opts.email ?? "user@example.com" },
-  });
-  fireEvent.change(screen.getByLabelText("First name"), {
-    target: { value: opts.firstName ?? "Ada" },
-  });
-  fireEvent.change(screen.getByLabelText("Last name"), {
-    target: { value: opts.lastName ?? "Lovelace" },
-  });
-  fireEvent.change(screen.getByLabelText("Password"), {
-    target: { value: opts.password ?? "" },
-  });
-  fireEvent.change(screen.getByLabelText("Confirm password"), {
-    target: { value: opts.confirm ?? "" },
-  });
-  if (opts.agree) {
-    fireEvent.click(screen.getByRole("checkbox"));
-  }
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { CheckYourEmail, SignUp } from "./SignUp";
+vi.mock("./SignIn", () => ({ SignIn: ({ screenHint }: { screenHint: string }) => <div>Hosted {screenHint}</div> }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ refresh: vi.fn() }) }));
+afterEach(() => vi.restoreAllMocks());
+function Location() { const l = useLocation(); return <div data-testid="location">{l.pathname + l.search}</div>; }
+function show() {
+  render(<MemoryRouter initialEntries={["/verify"]}><Routes>
+    <Route path="/verify" element={<CheckYourEmail email="person@example.test" userId="user_1" />} />
+    <Route path="*" element={<Location />} />
+  </Routes></MemoryRouter>);
 }
+describe("registration and legacy verification", () => {
+  it("uses the same hosted flow for registration", () => {
+    render(<SignUp />);
+    expect(screen.getByText("Hosted sign-up")).toBeInTheDocument();
+  });
+  it("keeps incomplete verification codes disabled", () => {
+    show();
+    expect(screen.getByRole("button", { name: "Verify email" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123" } });
+    expect(screen.getByRole("button", { name: "Verify email" })).toBeDisabled();
+  });
+  it("returns a verified address through WorkOS instead of assuming authentication", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true, requiresSignIn: true })));
+    show();
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/sign-in?redirect=%2F"));
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/verify-email", expect.objectContaining({
+      body: JSON.stringify({ code: "123456", userId: "user_1" }),
+    }));
+  });
+  it("still resends codes for outstanding verification links", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Didn't get a code? Resend" }));
+    await screen.findByRole("button", { name: "Sent — check your inbox" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/resend-verification", expect.objectContaining({ body: JSON.stringify({ email: "person@example.test" }) }));
+  });
+  it("shows an invalid-code error without treating it as a session", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: "Code expired" }), { status: 400 }));
+    show();
+    fireEvent.change(screen.getByLabelText("Verification code"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify email" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Code expired");
+  });
+});

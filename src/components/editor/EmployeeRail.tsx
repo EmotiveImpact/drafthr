@@ -7,6 +7,7 @@ import {
 import { rulesFor, ruleMatches } from "@/lib/letters/compliance";
 import { AlertTriangle, AlertCircle, ShieldX, CheckCircle2, ShieldCheck } from "lucide-react";
 import { TemplateQualityInspector } from "./TemplateQualityInspector";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 
 const SEVERITY_COLOR: Record<string, string> = {
   block: "text-rose-900 bg-rose-50 border-rose-300",
@@ -21,6 +22,7 @@ const SEVERITY_ICON: Record<string, typeof AlertCircle> = {
 };
 
 export function EmployeeRail({ draft }: { draft: Draft }) {
+  const readiness = useMemo(() => getDraftReadiness(draft), [draft]);
   const fullText = useMemo(
     () => stripHtml(draft.sections.map((s) => s.html).join("\n")),
     [draft.sections]
@@ -166,10 +168,10 @@ export function EmployeeRail({ draft }: { draft: Draft }) {
 
         {/* Footer note */}
         <section className="rounded-md border border-letter-rule bg-muted/30 p-2.5 text-[10.5px] leading-relaxed text-muted-foreground break-words">
-          {draft.context.counselReviewRequired ? (
+          {readiness.counsel.required ? (
             <>
-              <strong>Counsel review recommended.</strong> Consider speaking to a
-              qualified solicitor (UK) or attorney (US) before sending.
+              <strong>Counsel review required.</strong> A named solicitor (UK) or
+              attorney (US) must be recorded before export or send.
             </>
           ) : (
             <>Free advice: ACAS 0300 123 1100 (UK) · EEOC 1-800-669-4000 (US).</>

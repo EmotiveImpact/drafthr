@@ -29,7 +29,6 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <ErrorBoundary>
-      <AuthProvider>
         <Theme
           accentColor="gray"
           grayColor="slate"
@@ -37,24 +36,25 @@ createRoot(document.getElementById("root")!).render(
           scaling="100%"
           appearance="inherit"
         >
-          <App />
-          {/* Global toast surface — top-right, theme-aware, swipe-dismiss.
-           * Used for accept/reject pending, regen done, comment resolved,
-           * export complete, etc. Single mount keeps the stack consistent. */}
-          <Toaster
-            position="top-right"
-            theme="system"
-            richColors
-            closeButton
-            toastOptions={{
-              classNames: {
-                toast:
-                  "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] shadow-lg",
-              },
-            }}
-          />
+          <AuthProvider>
+            <App />
+            {/* Global toast surface — top-right, theme-aware, swipe-dismiss.
+             * Used for accept/reject pending, regen done, comment resolved,
+             * export complete, etc. Single mount keeps the stack consistent. */}
+            <Toaster
+              position="top-right"
+              theme="system"
+              richColors
+              closeButton
+              toastOptions={{
+                classNames: {
+                  toast:
+                    "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] shadow-lg",
+                },
+              }}
+            />
+          </AuthProvider>
         </Theme>
-      </AuthProvider>
       </ErrorBoundary>
     </BrowserRouter>
   </StrictMode>

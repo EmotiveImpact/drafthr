@@ -159,6 +159,36 @@ export const TERMINATION_UK: LetterTemplate = {
       example: `<p>Priya Sharma<br>HR Director<br>Acme Holdings Limited</p>`,
     },
   ],
+  expectedEvidence: [
+    {
+      key: "hearing_minutes",
+      label: "Hearing minutes",
+      required: true,
+      description: "Notes from the dismissal hearing — attendees, allegations put, responses given.",
+      expectedKinds: ["document", "note"],
+    },
+    {
+      key: "allegation_evidence",
+      label: "Allegation evidence",
+      required: true,
+      description: "The evidence relied on by the panel, such as emails, witness statements, reports, or records.",
+      expectedKinds: ["email", "document", "screenshot"],
+    },
+    {
+      key: "prior_warnings",
+      label: "Prior warnings on file",
+      required: false,
+      description: "Any active warnings relevant to sanction proportionality and the dismissal decision.",
+      expectedKinds: ["document"],
+    },
+    {
+      key: "policy_excerpts",
+      label: "Policy excerpts",
+      required: false,
+      description: "The conduct or capability policy sections applied to the decision.",
+      expectedKinds: ["document"],
+    },
+  ],
 };
 
 /**

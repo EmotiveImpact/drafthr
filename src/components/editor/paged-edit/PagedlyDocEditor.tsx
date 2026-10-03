@@ -9,9 +9,11 @@ import {
 import "pagedly/styles.css";
 
 import type { Draft } from "@/lib/letters/types";
+import { countDraftWords } from "@/lib/letters/wordCount";
 import { useDraftStore } from "@/lib/store";
 import { toLetterDraft } from "@/lib/letters/toLetterDraft";
 import type { PagedEditorActions } from "./types";
+import { handlePagedImagePaste } from "@/lib/storage/paged-paste";
 
 /**
  * Edit-on-page engine, backed by the vendored **pagedly** library. This is the
@@ -21,12 +23,10 @@ import type { PagedEditorActions } from "./types";
  * File/Edit/Tools menubar drive it directly. Toggling the "Page" view mounts THIS.
  *
  * SOURCE OF TRUTH stays the app store: user edits flow back per-section through
- * updateSection. The draft is mapped to pagedly's LetterDraft ONCE per mount —
- * pagedly then keeps its own live copy. That mount-once design means the store
- * can legitimately move ahead of pagedly while this is open (an AI rewrite from
- * the still-reachable AI rail, an Accept-all, a streaming generation, another
- * browser tab), so persist() is written to WRITE ONLY sections the user actually
- * changed on the page and NEVER to clobber content that moved on underneath it:
+ * updateSection. The draft is mapped to pagedly's LetterDraft once per editor
+ * mount; safe external Section/AI changes trigger a guarded remount with scroll
+ * restoration. persist() writes ONLY sections the user actually changed on the
+ * page and NEVER clobbers content that moved underneath it:
  *
  *   - baseline guard: a section whose STORE copy changed since we mounted (or
  *     since our last write) was edited elsewhere → the external edit wins, skip.
@@ -60,7 +60,10 @@ const FEATURES: EditorFeatures = {
   // — Quality-of-life behaviours (little/no toolbar footprint) —
   find: true,
   paste: true,
-  wordCount: true,
+  // Pagedly's toolbar subscribes before its imperative editor ref is ready,
+  // so existing content can display as "0 words" until the first keystroke.
+  // The app renders the store-backed count below instead.
+  wordCount: false,
   markdownShortcuts: true,
   smartTypography: true,
   autoLink: true,
@@ -108,6 +111,18 @@ const FEATURES: EditorFeatures = {
  *  any of these must be edited in the Sections view, not on the page. */
 export function hasAppMarks(html: string): boolean {
   return /data-comment-id|data-fig-id|data-suggestion-id|<mark[\s>/]/i.test(html);
+}
+
+export { countDraftWords };
+
+export function hasExternalSectionChanges(
+  sections: Draft["sections"],
+  baseline: Record<string, string>,
+): boolean {
+  return Object.keys(baseline).some((id) => !sections.some((section) => section.id === id)) || sections.some(
+    (section) =>
+      section.status !== "streaming" && baseline[section.id] !== section.html,
+  );
 }
 
 /** Pure decision for whether a pagedly-emitted section edit is safe to write
@@ -167,14 +182,21 @@ export function PagedlyDocEditor({
   const editorRef = useRef<EditorHandle | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const draftId = draft.id;
+  const activeDraftIdRef = useRef(draftId);
+  activeDraftIdRef.current = draftId;
+  // Ignore delayed emissions from an editor replaced by an external refresh.
+  const editorEpochRef = useRef(0);
+  const editorEpoch = editorEpochRef.current;
+  const mountedRef = useRef(true);
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
 
-  // REVIEW-MODE LIVE REFRESH — pagedly maps the draft once at mount, so store
+  // LIVE REFRESH — pagedly maps the draft once at mount, so store
   // changes made OUTSIDE pagedly (a suggestion staged from the rail, an
   // accept/reject folding a redline in) wouldn't paint until a reload. In
-  // review mode we detect those external writes (section html differing from
+  // both Page and Review modes detect those external writes (section html differing from
   // our baseline, which pagedly's own persist advances first) and remount the
-  // editor with a fresh mapping, restoring the scroll position. The main
-  // editor's Page view keeps the mount-once behaviour untouched.
+  // editor with a fresh mapping, restoring the scroll position.
   const [mountVersion, setMountVersion] = useState(0);
   const savedScrollRef = useRef<number | null>(null);
 
@@ -200,27 +222,23 @@ export function PagedlyDocEditor({
 
   const markedToastShown = useRef(false);
 
-  // Signature of the store's section HTML — the subscription that lets review
-  // mode notice external writes. pagedly's OWN writes advance baselineRef
-  // before this effect runs, so they never trigger a remount.
-  // Gated on reviewMode so the main editor's Page view doesn't pay an
-  // O(letter-html) string build + re-render on every store write.
+  // Completion is a state transition, not necessarily a text change: the last
+  // streamed HTML can be identical to the final saved HTML. Include status and
+  // structure so a completed stream, added section, or deletion refreshes Page.
+  // Pagedly's own writes advance baselineRef before this effect runs.
   const sectionsSig = useDraftStore((s) => {
-    if (!reviewMode) return "";
     const d = s.drafts[draftId];
-    return d ? d.sections.map((x) => x.id + " " + x.html).join("") : "";
+    return d ? JSON.stringify(d.sections.map((x) => [x.id, x.status, x.html])) : "";
   });
   const refreshingRef = useRef(false);
   useEffect(() => {
-    if (!reviewMode || refreshingRef.current) return;
+    if (refreshingRef.current) return;
     const d = useDraftStore.getState().drafts[draftId];
     if (!d) return;
     // A streaming section's html churns token-by-token — never remount for
     // those (and a stale stuck "streaming" flag must not veto refreshes for
     // the whole draft, so the check is per-section, not draft-wide).
-    const changed = d.sections.some(
-      (x) => x.status !== "streaming" && (baselineRef.current[x.id] ?? x.html) !== x.html,
-    );
+    const changed = hasExternalSectionChanges(d.sections, baselineRef.current);
     if (!changed) return;
     // FLUSH FIRST, then advance baselines. The outgoing pagedly instance may
     // hold a debounced user edit; flushing it now makes that write land
@@ -240,14 +258,16 @@ export function PagedlyDocEditor({
         /* a failed flush must not block the refresh */
       }
       refreshingRef.current = false;
+      if (!mountedRef.current || activeDraftIdRef.current !== draftId) return;
       const fresh = useDraftStore.getState().drafts[draftId];
       if (!fresh) return;
       savedScrollRef.current = findScroller(wrapRef.current)?.scrollTop ?? null;
+      editorEpochRef.current++;
       baselineRef.current = Object.fromEntries(fresh.sections.map((x) => [x.id, x.html]));
       setMountVersion((v) => v + 1);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectionsSig, reviewMode, draftId]);
+  }, [sectionsSig, draftId]);
 
   // After a live-refresh remount, put the scroll back where the user was.
   // Pagedly paginates asynchronously, so retry over a short window.
@@ -283,13 +303,16 @@ export function PagedlyDocEditor({
   // Flush pagedly's debounced pending edit on unmount so a fast Page→Sections
   // toggle (or navigate-away) doesn't drop the last burst of typing.
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       void editorRef.current?.flush();
+      mountedRef.current = false;
     };
   }, []);
 
   // The single write path — safe by construction (see the component doc).
   const persist = (change: LetterEditorChange) => {
+    if (editorEpochRef.current !== editorEpoch || activeDraftIdRef.current !== draftId) return;
     const d = useDraftStore.getState().drafts[draftId];
     if (!d) return;
     for (const [key, html] of Object.entries(change.sections)) {
@@ -325,9 +348,30 @@ export function PagedlyDocEditor({
   const enableComments = reviewMode && !readOnly;
   const features = enableComments ? { ...FEATURES, comments: true } : FEATURES;
   void suggesting; // reserved; app owns suggestions in the rail (see above)
+  const wordCount = countDraftWords(draft);
 
   return (
-    <div ref={wrapRef} className="h-full min-h-0">
+    <div ref={wrapRef} className="relative h-full min-h-0" onPasteCapture={event => {
+      if (!wrapRef.current) return;
+      const handle = editorRef.current;
+      handlePagedImagePaste(event.nativeEvent, {
+        wrapper: wrapRef.current, editor: handle,
+        isCurrent: () => mountedRef.current && !readOnlyRef.current && editorRef.current === handle && activeDraftIdRef.current === draftId && editorEpochRef.current === editorEpoch,
+      }, pending => {
+        const notification = toast.loading("Storing pasted images privately…");
+        void pending.then(() => toast.dismiss(notification), error => {
+          toast.dismiss(notification);
+          toast.error(error instanceof Error ? error.message : "Paste failed. Existing content is unchanged.");
+        });
+      });
+    }}>
+      <div
+        className="pointer-events-none absolute right-4 top-2 z-20 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)]/95 px-2 py-1 text-[11px] tabular-nums text-[var(--ds-muted)] shadow-sm"
+        role="status"
+        aria-label={`${wordCount} words in letter`}
+      >
+        {wordCount.toLocaleString()} words
+      </div>
       <LetterEditor
         key={`${draftId}:${mountVersion}`}
         draft={mapped}

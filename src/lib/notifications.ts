@@ -1,7 +1,7 @@
 import type { Draft } from "./letters/types";
 import { getLetterMeta } from "./letters/catalog";
 import { rulesFor, ruleMatches } from "./letters/compliance";
-import { exportRequiresCounselGate } from "./letters/disclaimers";
+import { getDraftReadiness } from "./finalize/readiness";
 import type { Profile } from "./profile";
 import {
   addDaysToDateOnly,
@@ -103,15 +103,12 @@ export function deriveNotifications(
     }
 
     // 3) Counsel review pending — high-risk draft, content drafted, no review yet
-    const sectionsReady = d.sections.length > 0 && d.sections.every((s) => (s.html ?? "").length > 0);
-    const review = (d.answers as Record<string, unknown>)._counselReview as
-      | { reviewedBy?: string; reviewedOn?: string }
-      | undefined;
+    const readiness = getDraftReadiness(d);
+    const sectionsReady = readiness.editingComplete;
     if (
-      exportRequiresCounselGate(d) &&
+      readiness.counsel.required &&
       sectionsReady &&
-      !review?.reviewedBy &&
-      (d.exports?.length ?? 0) === 0
+      !readiness.counsel.attested
     ) {
       out.push({
         id: `review-${d.id}`,

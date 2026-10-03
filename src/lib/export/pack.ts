@@ -10,6 +10,8 @@ import {
 import { renderLetterPdfBlob, filenameFor as pdfFilenameFor } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 import { isSafeImageDataUrl, isSafeImageRef } from "@/lib/safe-data-url";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
+import { inlineImagesForExport } from "@/lib/storage/inlineImagesForExport";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -43,21 +45,40 @@ export async function exportLetterPack(
   draft: Draft,
   attestation?: ExportAttestation
 ): Promise<void> {
+  triggerDownload(await renderLetterPackBlob(draft, attestation), filenameForPack(draft));
+}
+
+export async function renderLetterPackBlob(draft: Draft, attestation?: ExportAttestation): Promise<Blob> {
+  for (const item of draft.evidence ?? []) {
+    if (item.fileId && !item.fileDataUrl) {
+      throw new Error(`Evidence has not been loaded for this pack: ${item.filename || item.id}`);
+    }
+    if (item.fileDataUrl && !parseDataUrl(item.fileDataUrl)) {
+      throw new Error(`Evidence could not be read for this pack: ${item.filename || item.id}`);
+    }
+  }
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
 
   // Render the letter to both formats in parallel.
   const [pdfBlob, docxBlob] = await Promise.all([
-    renderLetterPdfBlob(draft).catch(() => null),
-    renderLetterDocxBlob(draft).catch(() => null),
+    renderLetterPdfBlob(draft),
+    renderLetterDocxBlob(draft),
   ]);
 
-  if (pdfBlob) zip.file(pdfFilenameFor(draft), pdfBlob);
-  if (docxBlob) zip.file(docxFilenameFor(draft), docxBlob);
+  if (!pdfBlob?.size || !docxBlob?.size) throw new Error("Both PDF and DOCX must render successfully before the pack can be saved.");
+  zip.file(pdfFilenameFor(draft), pdfBlob);
+  zip.file(docxFilenameFor(draft), docxBlob);
 
   // Rich HTML summary (the old single-file pack format), retained as a
   // human-readable index inside the ZIP.
-  zip.file("pack-summary.html", buildExportPackHtml(draft, attestation));
+  const packHtml = await inlineImagesForExport(buildExportPackHtml(draft, attestation));
+  // The ZIP is shared offline. Never leave a private, login-gated image URL
+  // dangling in a document advertised as self-contained.
+  if (packHtml.includes('src="/api/upload/image?path=')) {
+    throw new Error("A private image could not be included in the export pack. Please retry.");
+  }
+  zip.file("pack-summary.html", packHtml);
 
   // Evidence — original files at full quality + a paginated index.
   const evidence = draft.evidence ?? [];
@@ -82,8 +103,7 @@ export async function exportLetterPack(
   zip.file("audit.json", JSON.stringify(buildAudit(draft), null, 2));
   zip.file("README.txt", buildReadme(draft, attestation, evidence));
 
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  triggerDownload(blob, filenameForPack(draft));
+  return zip.generateAsync({ type: "blob", compression: "DEFLATE" });
 }
 
 /* ============================================================================
@@ -541,10 +561,10 @@ function buildReviewChecklist(
   const quality = buildTemplateQualityReport(draft);
   const requiredSections = draft.sections.filter((section) => section.required);
   const emptyRequiredSections = requiredSections.filter((section) => !stripHtml(section.html));
-  const placeholderCount = (draft.sections.map((section) => section.html).join("\n").match(/\[TBD\]/gi) ?? []).length;
   const evidence = draft.evidence ?? [];
   const linkedEvidence = evidence.filter((item) => item.sectionIds?.length).length;
   const complianceMissing = quality.compliance.filter((item) => !item.present);
+  const readiness = getDraftReadiness(draft, { counselAttestation: attestation });
 
   return [
     {
@@ -557,11 +577,11 @@ function buildReviewChecklist(
     },
     {
       label: "Placeholders",
-      status: placeholderCount === 0 ? "ok" : "check",
+      status: readiness.placeholders.count === 0 ? "ok" : "missing",
       detail:
-        placeholderCount === 0
-          ? "No [TBD] placeholders detected."
-          : `${placeholderCount} [TBD] placeholder${placeholderCount === 1 ? "" : "s"} remain.`,
+        readiness.placeholders.count === 0
+          ? "No unresolved placeholders detected."
+          : `${readiness.placeholders.count} unresolved placeholder${readiness.placeholders.count === 1 ? "" : "s"} remain.`,
     },
     {
       label: "Rights and compliance checks",
@@ -573,31 +593,26 @@ function buildReviewChecklist(
     },
     {
       label: "Evidence and attachments",
-      status: evidence.length === 0 ? "check" : "ok",
+      status: readiness.evidence.requiredMissing > 0
+        ? "missing"
+        : readiness.evidence.optionalMissing > 0
+          ? "check"
+          : "ok",
       detail:
-        evidence.length === 0
-          ? "No evidence items have been attached."
+        readiness.evidence.requiredMissing > 0
+          ? `${readiness.evidence.requiredMissing} required evidence item${readiness.evidence.requiredMissing === 1 ? "" : "s"} missing.`
           : `${evidence.length} item${evidence.length === 1 ? "" : "s"} attached; ${linkedEvidence} linked to sections.`,
     },
     {
       label: "Counsel review",
-      status:
-        draft.context.counselReviewRequired && !attestation && !latestReview(draft)
-          ? "check"
-          : "ok",
-      detail: attestation
-        ? `Current export attested by ${attestation.reviewedBy} on ${attestation.reviewedOn}.`
-        : latestReview(draft) ?? (draft.context.counselReviewRequired ? "Counsel review is required before issuance." : "No counsel-review gate required for this draft."),
+      status: readiness.counsel.required && !readiness.counsel.attested ? "missing" : "ok",
+      detail: readiness.counsel.attestation
+        ? `Reviewed by ${readiness.counsel.attestation.reviewedBy} on ${readiness.counsel.attestation.reviewedOn}.`
+        : readiness.counsel.required
+          ? "Counsel review is required before issuance."
+          : "No counsel-review gate required for this draft.",
     },
   ];
-}
-
-function latestReview(draft: Draft): string | undefined {
-  const reviewed = (draft.exports ?? [])
-    .filter((event) => event.reviewedBy)
-    .sort((a, b) => b.exportedAt - a.exportedAt)[0];
-  if (!reviewed?.reviewedBy) return undefined;
-  return `Prior export attested by ${reviewed.reviewedBy}${reviewed.reviewedOn ? ` on ${reviewed.reviewedOn}` : ""}.`;
 }
 
 function renderChecklistItem(item: ChecklistItem): string {
@@ -645,7 +660,7 @@ function packTitle(draft: Draft): string {
   return `${draft.letterType} export pack${party ? ` - ${party}` : ""}`;
 }
 
-function filenameForPack(draft: Draft): string {
+export function filenameForPack(draft: Draft): string {
   const safe = (draft.employee.legalName || draft.employer.legalName || "letter")
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "");

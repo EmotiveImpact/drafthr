@@ -4,12 +4,12 @@
  * active (and inactivates any other active membership). Appends a
  * `tenant.created` audit event under the new tenant.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { tenants, tenantMembers, auditEvents } from "../../../src/db/schema.js";
+import { tenants, tenantMembers } from "../../../src/db/schema.js";
 import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 
@@ -35,7 +35,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!name) return jsonError("Workspace name required", 400);
   if (name.length > MAX_NAME) return jsonError("Workspace name too long", 400);
 
-  const auth = await requireSessionAndTenant(req);
+  const auth = await requireSessionAndTenant(req, { allowUnscoped: true });
   if (!auth.ok) return auth.response;
   if (!auth.canCreateTenant) return jsonError("Cannot create more workspaces", 403);
 
@@ -45,57 +45,7 @@ export async function POST(req: Request): Promise<Response> {
       // Serialize this user's active-tenant writes against a concurrent
       // switch/accept-invite so we can't leave two active rows. (Released at commit.)
       await lockUserActiveTenant(tx, auth.userRow.id);
-      // Repurpose-not-recreate: requireSessionAndTenant (which ran a few
-      // lines above when we called it) mints a bootstrap tenant on first
-      // sign-in so audit events have a tenant_id. If the user's ONLY
-      // existing tenant is that bootstrap (we detect this by checking it
-      // has zero audit events — every "real" tenant has at least the
-      // tenant.created event we'd write below), we rename it in-place
-      // instead of orphaning it and creating a second one. Without this
-      // every brand-new user ended up with TWO workspaces after their
-      // first /workspace/create call (#double-workspace-bug).
-      const memberships = await tx
-        .select({
-          tenantId: tenantMembers.tenantId,
-          isActive: tenantMembers.isActiveTenant,
-        })
-        .from(tenantMembers)
-        .where(eq(tenantMembers.userId, auth.userRow.id));
-
-      if (memberships.length === 1) {
-        const [only] = memberships;
-        const [auditCount] = await tx
-          .select({ n: sql<number>`count(*)::int` })
-          .from(auditEvents)
-          .where(eq(auditEvents.tenantId, only.tenantId));
-        const isBootstrap = !auditCount || Number(auditCount.n) === 0;
-        if (isBootstrap) {
-          const [renamed] = await tx
-            .update(tenants)
-            .set({ name, updatedAt: new Date() })
-            .where(eq(tenants.id, only.tenantId))
-            .returning();
-          // tenant_members has a composite unique on (user_id, tenant_id);
-          // ensure the bootstrap row is flagged active in case
-          // requireSessionAndTenant minted it inactive for any reason.
-          if (!only.isActive) {
-            await tx
-              .update(tenantMembers)
-              .set({ isActiveTenant: true })
-              .where(
-                and(
-                  eq(tenantMembers.userId, auth.userRow.id),
-                  eq(tenantMembers.tenantId, only.tenantId),
-                ),
-              );
-          }
-          return renamed;
-        }
-      }
-
-      // Otherwise: user is creating an additional workspace alongside
-      // existing real ones. Create a new tenant + new active membership,
-      // inactivate any prior active membership.
+      // Creating a workspace never renames a directory-managed or invited workspace.
       const [newTenant] = await tx.insert(tenants).values({ name }).returning();
       await tx
         .update(tenantMembers)

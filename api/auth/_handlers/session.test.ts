@@ -84,7 +84,7 @@ describe("GET /api/auth/session", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
-  it("returns the user payload when a session exists but DB is disabled", async () => {
+  it("fails closed when workspace data cannot be loaded", async () => {
     vi.mocked(getSessionFromRequest).mockResolvedValueOnce({
       user: {
         id: "user_123",
@@ -100,15 +100,7 @@ describe("GET /api/auth/session", () => {
     const { GET } = await import("./session.js");
     const res = await GET(makeRequest());
 
-    expect(res.status).toBe(200);
-    const json = (await res.json()) as {
-      user: { email: string } | null;
-      activeTenant: unknown;
-      hasAnyTenant: boolean;
-    };
-    expect(json.user?.email).toBe("alice@example.com");
-    // DB disabled → no tenant lookup → null + false
-    expect(json.activeTenant).toBeNull();
-    expect(json.hasAnyTenant).toBe(false);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toHaveProperty("error");
   });
 });

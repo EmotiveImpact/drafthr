@@ -77,6 +77,18 @@ const ONE_BY_ONE_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
 describe("renderLetterDocxBlob", () => {
+  it("includes the same numbered exhibits as the preview, with an appendix page break", async () => {
+    const draft = makeDraft();
+    draft.evidence = [{ id: "exhibit", kind: "screenshot", filename: "Fictional image.png",
+      content: "Fictional exhibit caption", fileDataUrl: ONE_BY_ONE_PNG, mimeType: "image/png",
+      uploadedAt: 1, includeVerbatim: false, displayMode: "figure" }];
+    const zip = await JSZip.loadAsync(await renderLetterDocxBlob(draft));
+    const xml = await zip.file("word/document.xml")!.async("string");
+    expect(xml).toContain("Exhibits"); expect(xml).toContain("Fig 1");
+    expect(xml).toContain("Fictional image.png"); expect(xml).toContain("Fictional exhibit caption");
+    expect(xml).toContain('<w:br w:type="page"/>');
+    expect(xml).toContain("<w:drawing>");
+  });
   it("creates a valid DOCX package with rich text, lists, tables, and images", async () => {
     const blob = await renderLetterDocxBlob(makeDraft());
     const zip = await JSZip.loadAsync(blob);

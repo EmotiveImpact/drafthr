@@ -57,14 +57,14 @@ vi.mock("@/lib/consultantProfile", () => ({
 
 const CHILD = "PROTECTED_CHILD_CONTENT";
 
-function renderAt(path: string, roles?: ("employer" | "employee" | "consultant")[]) {
+function renderAt(path: string, roles?: ("employer" | "employee" | "consultant")[], allowRoleSetup = false) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path={path}
           element={
-            <Protected roles={roles}>
+            <Protected roles={roles} allowRoleSetup={allowRoleSetup}>
               <div>{CHILD}</div>
             </Protected>
           }
@@ -100,6 +100,20 @@ describe("Protected — auth gating (no app content before auth)", () => {
     expect(screen.queryByText(CHILD)).not.toBeInTheDocument();
     // Still loading → not yet redirected anywhere either.
     expect(screen.queryByTestId("probe")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading workspace" })).toHaveClass("app-loading-screen");
+  });
+
+  it("lets a fresh authenticated consultant reach profile setup without a browser enrolment flag", () => {
+    authMock.value.user = { id: "u1" } as AuthContextValue["user"];
+    renderAt("/c/profile", ["consultant"], true);
+    expect(screen.getByText(CHILD)).toBeInTheDocument();
+  });
+
+  it("recognizes an existing consultant from the database on a fresh device", () => {
+    authMock.value.user = { id: "u1" } as AuthContextValue["user"];
+    authMock.value.isConsultant = true;
+    renderAt("/c", ["consultant"]);
+    expect(screen.getByText(CHILD)).toBeInTheDocument();
   });
 
   it("redirects a signed-out visitor to /sign-in without rendering the child", () => {

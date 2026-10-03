@@ -17,9 +17,10 @@ type Props = {
   q: Question;
   value: unknown;
   onChange: (v: unknown) => void;
+  error?: string;
 };
 
-export function QuestionField({ q, value, onChange }: Props) {
+export function QuestionField({ q, value, onChange, error }: Props) {
   const id = `q-${q.id}`;
   return (
     <div className="space-y-2">
@@ -28,9 +29,14 @@ export function QuestionField({ q, value, onChange }: Props) {
         {q.required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
       {q.help && (
-        <p className="text-xs text-muted-foreground leading-relaxed -mt-1">{q.help}</p>
+        <p id={`${id}-help`} className="text-xs text-muted-foreground leading-relaxed -mt-1">{q.help}</p>
       )}
-      {renderControl(q, id, value, onChange)}
+      {renderControl(q, id, value, onChange, error)}
+      {error && (
+        <p id={`${id}-error`} role="alert" className="text-xs font-medium text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -39,8 +45,10 @@ function renderControl(
   q: Question,
   id: string,
   value: unknown,
-  onChange: (v: unknown) => void
+  onChange: (v: unknown) => void,
+  error?: string,
 ) {
+  const describedBy = error ? `${id}-error` : q.help ? `${id}-help` : undefined;
   switch (q.type) {
     case "repeater":
       return <RepeaterField q={q} value={value} onChange={onChange} />;
@@ -57,6 +65,8 @@ function renderControl(
           role="group"
           aria-labelledby={`${id}-label`}
           aria-required={q.required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-md border border-letter-rule p-3"
         >
           {q.options?.map((opt) => {
@@ -82,6 +92,8 @@ function renderControl(
         <Textarea
           id={id}
           aria-required={q.required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder={q.placeholder}
@@ -96,7 +108,7 @@ function renderControl(
           value={(value as string) ?? ""}
           onValueChange={(v) => onChange(v)}
         >
-          <SelectTrigger id={id} aria-required={q.required}>
+          <SelectTrigger id={id} aria-required={q.required} aria-invalid={Boolean(error)} aria-describedby={describedBy}>
             <SelectValue placeholder="Select…" />
           </SelectTrigger>
           <SelectContent>
@@ -115,6 +127,8 @@ function renderControl(
           <Switch
             id={id}
             aria-required={q.required}
+            aria-invalid={Boolean(error)}
+            aria-describedby={describedBy}
             checked={Boolean(value)}
             onCheckedChange={(v) => onChange(v)}
           />
@@ -129,6 +143,8 @@ function renderControl(
         <Input
           id={id}
           aria-required={q.required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           type="date"
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
@@ -140,6 +156,8 @@ function renderControl(
         <Input
           id={id}
           aria-required={q.required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           type="number"
           value={(value as number | string | undefined) ?? ""}
           onChange={(e) =>
@@ -154,6 +172,8 @@ function renderControl(
         <Input
           id={id}
           aria-required={q.required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           type="number"
           inputMode="decimal"
           step="0.01"
@@ -171,6 +191,8 @@ function renderControl(
         <Input
           id={id}
           aria-required={q.required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           type="text"
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}

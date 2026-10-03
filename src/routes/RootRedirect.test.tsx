@@ -53,6 +53,13 @@ describe("RootRedirect", () => {
     };
   });
 
+  it("uses the stable viewport loading surface before authentication is known", () => {
+    authMock.value.isLoaded = false;
+    render(<MemoryRouter><RootRedirect /></MemoryRouter>);
+    expect(screen.getByRole("status", { name: "Loading workspace" })).toHaveClass("app-loading-screen");
+    expect(screen.queryByText("Mode picker")).not.toBeInTheDocument();
+  });
+
   it("redirects signed-out users straight to /sign-in", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>

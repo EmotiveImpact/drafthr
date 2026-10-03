@@ -773,9 +773,12 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
   const nav = useNavigate();
   const isCollapsed = state === "collapsed" && !isMobile;
 
-  const display = profile.personal.preferredName ?? profile.personal.legalName ?? "Set up profile";
-  const email = profile.personal.email ?? (profile.role ? "Local profile" : "");
-  const initials = (profile.personal.preferredName ?? profile.personal.legalName ?? "??")
+  const accountName = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+  const display = profile.personal.preferredName || profile.personal.legalName || accountName || "Set up profile";
+  // The footer identifies the signed-in account, not the editable contact
+  // address in a letter profile. Database users must not be labelled local.
+  const email = user?.email || profile.personal.email || "";
+  const initials = (profile.personal.preferredName || profile.personal.legalName || accountName || "??")
     .split(/\s+/)
     .map((s) => s[0])
     .filter(Boolean)

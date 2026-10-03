@@ -1,5 +1,8 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { isDatabaseWorkspaceEnabled } from "./workspace-flags";
+import type { WorkspaceRole } from "./workspace-role";
+export type { WorkspaceRole } from "./workspace-role";
 import type { Mode, Tone, EmployeeTone, UkRegion, UsState, WorkerClass } from "./letters/types";
 import { DEFAULT_MODEL } from "./llm/default-model";
 import { isSafeImageRef } from "./safe-data-url";
@@ -51,12 +54,6 @@ export const QWEN_MODEL_OPTIONS = MODEL_OPTIONS;
  * - reviewer: drafter + can approve / request changes
  * - viewer:   read-only
  */
-export type WorkspaceRole =
-  | "owner"
-  | "admin"
-  | "drafter"
-  | "reviewer"
-  | "viewer";
 
 /**
  * Single source of truth for "who the user is". Persisted to localStorage now;
@@ -202,6 +199,8 @@ export const useProfileStore = create<Store>()(
     }),
     {
       name: "scribehr-profile-v1",
+      storage: createJSONStorage(() => typeof window !== "undefined" && !isDatabaseWorkspaceEnabled()
+        ? window.localStorage : { getItem: () => null, setItem: () => {}, removeItem: () => {} }),
       // Backfill the default model on existing localStorage profiles.
       // Before this fix, a fresh profile had qwenModel undefined, which
       // made Settings' dropdown display the `??` fallback but never

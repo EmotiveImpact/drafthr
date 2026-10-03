@@ -10,9 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // --- WorkOS SDK mock ---------------------------------------------------------
 const constructEventMock = vi.fn();
+const listUsersMock = vi.fn(async () => ({ data: [] as Array<{ id: string; email: string; emailVerified: boolean }> }));
+const membershipsMock = vi.fn();
 vi.mock("../../_utils/workos.js", () => ({
   getWorkos: () => ({
     webhooks: { constructEvent: constructEventMock },
+    userManagement: { listUsers: listUsersMock, listOrganizationMemberships: membershipsMock },
   }),
 }));
 
@@ -78,6 +81,8 @@ const state: FakeState = {
 };
 
 function resetState() {
+  listUsersMock.mockReset().mockResolvedValue({ data: [] });
+  membershipsMock.mockReset().mockResolvedValue({ data: [] });
   state.tenants = [];
   state.users = [];
   state.members = [];
@@ -105,6 +110,10 @@ vi.mock("../../../src/db/index.js", () => {
             if (table === "users") {
               if (predicate.__col === "workos_directory_user_id") {
                 const found = state.users.find((u) => u.workosDirectoryUserId === predicate.__val);
+                return Promise.resolve(found ? [found] : []);
+              }
+              if (predicate.__col === "external_id") {
+                const found = state.users.find((u) => u.externalId === predicate.__val);
                 return Promise.resolve(found ? [found] : []);
               }
               if (predicate.__col === "email") {
@@ -441,7 +450,9 @@ describe("POST /api/workos/directory-webhook", () => {
     });
   });
 
-  it("joins as INACTIVE when an email-matched user is already active in another tenant", async () => {
+  it("joins as INACTIVE when the verified provider identity is already active in another tenant", async () => {
+    listUsersMock.mockResolvedValue({ data: [{ id: "authkit:jane", email: "jane@acme.com", emailVerified: true }] });
+    membershipsMock.mockResolvedValue({ data: [{ userId: "authkit:jane", organizationId: "org_globex", status: "active" }] });
     // Existing user (matched by email, no directory id yet) active in tenant_1.
     state.tenants.push({ id: "tenant_1", name: "Acme", workosOrgId: "org_acme" });
     state.tenants.push({ id: "tenant_2", name: "Globex", workosOrgId: "org_globex" });

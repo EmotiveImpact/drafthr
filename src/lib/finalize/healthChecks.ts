@@ -1,5 +1,7 @@
 import type { Draft } from "@/lib/letters/types";
-import { validFigureNumbers } from "@/lib/evidence";
+import { countDraftWords } from "@/lib/letters/wordCount";
+import { evidenceReferenceStatus } from "@/lib/evidence";
+import { countUnresolvedPlaceholders } from "@/lib/finalize/readiness";
 
 /**
  * Letter health — deterministic static checks that run against a Draft to
@@ -120,7 +122,6 @@ export const DIMENSION_DESCRIPTIONS: Record<HealthDimension, string> = {
   risk: "Liability exposure and data hygiene",
 };
 
-const PLACEHOLDER_RE = /\[([a-z][a-z0-9_]*)\]/gi;
 const PII_PATTERNS: { id: string; re: RegExp; label: string }[] = [
   {
     id: "ni-number",
@@ -170,10 +171,10 @@ function bodyText(draft: Draft): string {
 
 function checkSections(draft: Draft): HealthCheck {
   const total = draft.sections.length;
-  const ready = draft.sections.filter(
-    (s) => s.status === "ready" || s.status === "edited",
+  const written = draft.sections.filter(
+    (s) => stripHtml(s.html ?? "").trim().length > 0,
   ).length;
-  if (ready === total) {
+  if (written === total) {
     return {
       id: "sections-filled",
       dimension: "compliance",
@@ -184,9 +185,9 @@ function checkSections(draft: Draft): HealthCheck {
   return {
     id: "sections-filled",
     dimension: "compliance",
-    label: `${ready} of ${total} sections filled`,
-    severity: ready === 0 ? "fail" : "warn",
-    detail: `${total - ready} section${total - ready === 1 ? "" : "s"} still empty`,
+    label: `${written} of ${total} sections filled`,
+    severity: written === 0 ? "fail" : "warn",
+    detail: `${total - written} section${total - written === 1 ? "" : "s"} still empty`,
     actionLabel: "Open editor",
     actionRoute: "editor",
   };
@@ -222,12 +223,11 @@ function checkRecipientAndSender(draft: Draft): HealthCheck {
 }
 
 function checkPlaceholders(draft: Draft): HealthCheck {
-  const text = bodyText(draft);
-  const found = new Set<string>();
-  for (const m of text.matchAll(PLACEHOLDER_RE)) {
-    found.add(m[1]);
-  }
-  if (found.size === 0) {
+  const count = draft.sections.reduce(
+    (total, section) => total + countUnresolvedPlaceholders(section.html ?? ""),
+    0,
+  );
+  if (count === 0) {
     return {
       id: "placeholders",
       dimension: "compliance",
@@ -235,14 +235,12 @@ function checkPlaceholders(draft: Draft): HealthCheck {
       severity: "pass",
     };
   }
-  const list = [...found].slice(0, 3).join(", ");
-  const more = found.size > 3 ? ` (+${found.size - 3} more)` : "";
   return {
     id: "placeholders",
     dimension: "compliance",
-    label: `${found.size} placeholder${found.size === 1 ? "" : "s"} unresolved`,
-    severity: "warn",
-    detail: `Still in body: ${list}${more}`,
+    label: `${count} placeholder${count === 1 ? "" : "s"} unresolved`,
+    severity: "fail",
+    detail: "Replace every placeholder before exporting or sending",
     actionLabel: "Open editor",
     actionRoute: "editor",
   };
@@ -274,8 +272,7 @@ function checkPII(draft: Draft): HealthCheck {
 }
 
 function checkWordCount(draft: Draft): HealthCheck {
-  const text = bodyText(draft).trim();
-  const words = text ? text.split(/\s+/).length : 0;
+  const words = countDraftWords(draft);
   const range = expectedWordRange(draft.letterType);
   if (words >= range.min && words <= range.max) {
     return {
@@ -328,11 +325,8 @@ function checkSignature(draft: Draft): HealthCheck {
 }
 
 function checkEvidenceRefs(draft: Draft): HealthCheck {
-  const text = bodyText(draft);
-  const refs = [...text.matchAll(/\[See Fig\.?\s*(\d+)\]/gi)].map((m) =>
-    Number(m[1]),
-  );
-  if (refs.length === 0) {
+  const refs = evidenceReferenceStatus(draft);
+  if (refs.total === 0) {
     return {
       id: "evidence",
       dimension: "compliance",
@@ -340,22 +334,20 @@ function checkEvidenceRefs(draft: Draft): HealthCheck {
       severity: "pass",
     };
   }
-  const validFigures = validFigureNumbers(draft.evidence ?? []);
-  const broken = refs.filter((n) => !validFigures.has(n));
-  if (broken.length === 0) {
+  if (refs.broken.length === 0) {
     return {
       id: "evidence",
       dimension: "compliance",
-      label: `${refs.length} evidence reference${refs.length === 1 ? "" : "s"} resolve`,
+      label: `${refs.total} evidence reference${refs.total === 1 ? "" : "s"} resolve`,
       severity: "pass",
     };
   }
   return {
     id: "evidence",
     dimension: "compliance",
-    label: `${broken.length} broken evidence reference${broken.length === 1 ? "" : "s"}`,
+    label: `${refs.broken.length} broken evidence reference${refs.broken.length === 1 ? "" : "s"}`,
     severity: "fail",
-    detail: `[See Fig ${broken.join(", ")}] — no matching attachment`,
+    detail: `${refs.broken.map((ref) => ref.label).join(", ")} — no matching attachment`,
     actionLabel: "Edit evidence",
     actionRoute: "evidence",
   };
@@ -583,7 +575,7 @@ function oneLinerFor(
     return "Send-ready. Every check passed.";
   }
   if (band === "strong") {
-    return `Send-ready with ${warn} minor polish suggestion${warn === 1 ? "" : "s"}.`;
+    return `Strong draft with ${warn} warning${warn === 1 ? "" : "s"} to review before sending.`;
   }
   if (band === "adequate") {
     return `${pass} of ${total} checks pass — review the warnings before sending.`;

@@ -1,21 +1,22 @@
 /**
- * Replace every https://... image src in `html` with a base64 data URL by
- * fetching the bytes. Used by export paths whose downstream renderer can't
+ * Replace approved HTTPS and authenticated same-origin image sources in `html`
+ * with base64 data URLs. Used by export paths whose downstream renderer can't
  * (or shouldn't) hit the network:
  *
  *  - Server-side PDF (api/export/pdf.ts) blocks all non-data:/about: network
  *    requests during Puppeteer render — a security guarantee from 0.6.0. We
  *    preserve that guarantee by inlining before the render starts.
- *  - Client-side DOCX (lib/export/docx.ts) parses data: URLs into image
+ *  - Client-side DOCX and offline export packs parse data: URLs into image
  *    bytes; https URLs would degrade to "[Image: alt]". Inlining keeps the
  *    letterhead + signature in the doc.
  *
- * Failures inline-skip: if a fetch returns non-2xx or non-image, we leave
- * the original src in place so the render path can decide (alt fallback or
- * just drop the tag). Better than throwing and losing the whole export.
+ * Legacy remote images keep their existing skip behaviour. Private workspace
+ * assets fail visibly: a successful export must not silently omit branding.
  */
 
-const IMG_TAG_RE = /<img\s+[^>]*src="(https:\/\/[^"]+)"[^>]*>/gi;
+import { parsePrivateImageUrl } from "./privateImageUrl";
+
+const IMG_TAG_RE = /<img\s+[^>]*src="((?:https:\/\/|\/api\/upload\/image\?path=)[^"]+)"[^>]*>/gi;
 const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 // ~10 MB ceiling on a single inlined image (defends the SSRF timing/size oracle
 // and keeps the export payload sane).
@@ -70,6 +71,7 @@ export async function inlineImagesForExport(
   await Promise.all(
     uniqueUrls.map(async (url) => {
       const dataUrl = await tryFetchAsDataUrl(url, fetcher);
+      if (!dataUrl && parsePrivateImageUrl(url)) throw new Error("A private image could not be loaded. Please retry the export; no complete document was produced.");
       if (dataUrl) resolved.set(url, dataUrl);
     }),
   );
@@ -88,7 +90,7 @@ async function tryFetchAsDataUrl(
 ): Promise<string | null> {
   // SSRF guard: refuse anything not on the image-host allowlist BEFORE any
   // network call. (Senior sweep B3.)
-  if (!isAllowedImageHost(url)) return null;
+  if (!isAllowedImageHost(url) && !parsePrivateImageUrl(url)) return null;
   try {
     // redirect:"manual" so an allowlisted host can't 30x us onto an internal
     // target — a redirect yields an opaqueredirect/non-2xx we simply skip.

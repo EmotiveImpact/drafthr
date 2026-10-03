@@ -102,7 +102,11 @@ export function SignupWorkspace() {
         body: JSON.stringify({ inviteCode: code }),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; signInUrl?: string };
+        if (data.code === "organization_authentication_required" && data.signInUrl?.startsWith("/sign-in?")) {
+          window.location.assign(data.signInUrl + "&redirect=" + encodeURIComponent("/signup/workspace?invite=" + encodeURIComponent(code)));
+          return;
+        }
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
       // Clear sessionStorage stash if we came via /join/:code.

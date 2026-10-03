@@ -18,6 +18,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../_utils/session-epoch.js", () => ({ getUserSessionEpoch: vi.fn(async () => 0) }));
 
 const authenticateWithPassword = vi.fn();
 
@@ -60,6 +61,7 @@ describe("POST /api/auth/password", () => {
       user: {
         id: "user_123",
         email: "alice@example.com",
+        emailVerified: true,
         firstName: "Alice",
         lastName: "Smith",
         profilePictureUrl: null,

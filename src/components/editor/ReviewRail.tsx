@@ -3,9 +3,8 @@ import { Tabs as TabsPrimitive } from "radix-ui";
 import { ArrowRight, Pin, PinOff, X } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
-import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
-import { buildExpectedEvidenceStatus } from "@/lib/evidence";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 import { cn } from "@/lib/utils";
 import { CheckIcons, type RailCheckRow } from "./review/AllChecks";
 import { HealthTab } from "./review/HealthTab";
@@ -240,15 +239,9 @@ function buildRailRows({
   onJumpToEvidence: () => void;
 }): RailCheckRow[] {
   const quality = buildTemplateQualityReport(draft);
-  const requiresCounsel = exportRequiresCounselGate(draft);
-
-  const sections = draft.sections;
-  const ready = sections.filter((s) => s.status === "ready").length;
-  const edited = sections.filter((s) => s.status === "edited").length;
-  const empty = sections.filter((s) => s.status === "empty").length;
-  const requiredEmpty = sections.filter(
-    (s) => s.required && s.status === "empty",
-  );
+  const readiness = getDraftReadiness(draft, {
+    counselAttestation: counselReviewedBy,
+  });
 
   const evidence = draft.evidence ?? [];
   const evidenceImages = evidence.filter(
@@ -266,13 +259,19 @@ function buildRailRows({
     id: "completeness",
     label: "Section completeness",
     detail:
-      requiredEmpty.length > 0
-        ? `${requiredEmpty.length} required section${requiredEmpty.length === 1 ? "" : "s"} still empty`
-        : `${ready} ready · ${edited} edited · ${empty} not started`,
-    status: requiredEmpty.length > 0 ? "missing" : empty > 0 ? "warn" : "ok",
+      readiness.blockers.some((issue) => issue.id === "generation-active")
+        ? "Generation in progress"
+        : readiness.sections.requiredEmpty > 0
+        ? `${readiness.sections.requiredEmpty} required section${readiness.sections.requiredEmpty === 1 ? "" : "s"} still empty`
+        : `${readiness.sections.written} of ${readiness.sections.total} written${readiness.placeholders.count ? ` · ${readiness.placeholders.count} placeholders` : ""}`,
+    status: readiness.sections.requiredEmpty > 0 || readiness.placeholders.count > 0 || readiness.blockers.some((issue) => issue.id === "generation-active" || issue.id === "no-sections")
+      ? "missing"
+      : readiness.sections.written < readiness.sections.total
+        ? "warn"
+        : "ok",
     icon: CheckIcons.FileEdit,
-    jumpTo: requiredEmpty[0]
-      ? () => onJumpToSection(requiredEmpty[0].id)
+    jumpTo: readiness.blockers.find((issue) => issue.action === "editor")?.sectionIds?.[0]
+      ? () => onJumpToSection(readiness.blockers.find((issue) => issue.action === "editor")!.sectionIds![0])
       : undefined,
   });
 
@@ -317,28 +316,31 @@ function buildRailRows({
     });
   }
 
-  const expected = buildExpectedEvidenceStatus(draft);
-  if (expected.length > 0) {
-    const requiredMissing = expected.filter(
-      (e) => e.expectation.required && !e.ok,
-    );
-    const optionalMissing = expected.filter(
-      (e) => !e.expectation.required && !e.ok,
-    );
-    const ok = expected.filter((e) => e.ok).length;
+  if (readiness.evidence.brokenReferences > 0) {
+    rows.push({
+      id: "evidence-references",
+      label: "Evidence references",
+      detail: `${readiness.evidence.brokenReferences} reference${readiness.evidence.brokenReferences === 1 ? " has" : "s have"} no matching figure`,
+      status: "missing",
+      icon: CheckIcons.Paperclip,
+      jumpTo: onJumpToEvidence,
+    });
+  }
+
+  if (readiness.evidence.expected > 0) {
     rows.push({
       id: "expected-evidence",
       label: "Expected evidence",
       detail:
-        requiredMissing.length > 0
-          ? `Missing: ${requiredMissing.map((e) => e.expectation.label).join(", ")}`
-          : optionalMissing.length > 0
-            ? `${ok} of ${expected.length} added`
-            : `All ${expected.length} expectations met`,
+        readiness.evidence.requiredMissing > 0
+          ? `${readiness.evidence.requiredMissing} required item${readiness.evidence.requiredMissing === 1 ? "" : "s"} missing`
+          : readiness.evidence.optionalMissing > 0
+            ? `${readiness.evidence.satisfied} of ${readiness.evidence.expected} added`
+            : `All ${readiness.evidence.expected} expectations met`,
       status:
-        requiredMissing.length > 0
+        readiness.evidence.requiredMissing > 0
           ? "missing"
-          : optionalMissing.length > 0
+          : readiness.evidence.optionalMissing > 0
             ? "warn"
             : "ok",
       icon: CheckIcons.Paperclip,
@@ -368,14 +370,14 @@ function buildRailRows({
     });
   }
 
-  if (requiresCounsel) {
+  if (readiness.counsel.required) {
     rows.push({
       id: "counsel",
       label: "Counsel review",
-      detail: counselReviewedBy
-        ? `Reviewed by ${counselReviewedBy.reviewedBy} on ${counselReviewedBy.reviewedOn}`
+      detail: readiness.counsel.attestation
+        ? `Reviewed by ${readiness.counsel.attestation.reviewedBy} on ${readiness.counsel.attestation.reviewedOn}`
         : "Required before export",
-      status: counselReviewedBy ? "ok" : "missing",
+      status: readiness.counsel.attested ? "ok" : "missing",
       icon: CheckIcons.ShieldCheck,
     });
   }

@@ -1,16 +1,15 @@
 import { Navigate } from "react-router-dom";
-import { Box, Flex } from "@radix-ui/themes";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { ModePicker } from "./ModePicker";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingScreen } from "@/components/AppLoadingScreen";
 
 /**
  * Smart-routes the root path based on the current auth + onboarding state.
  *
  * State machine:
- *   loading                       → centered skeleton
+ *   loading                       → stable viewport loading screen
  *   signed out                    → redirect to the in-app /sign-in page
  *   signed in, consultant         → /c  (BEFORE the tenant/role checks —
  *                                   consultants don't create HR workspaces
@@ -24,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  * previous state's UI paints before the redirect fires.
  */
 export function RootRedirect() {
-  const { user, isLoaded, activeTenant, isConsultant: serverIsConsultant } = useAuth();
+  const { user, isLoaded, activeTenant, organizationSignInUrl, isConsultant: serverIsConsultant } = useAuth();
   const profile = useProfileStore((s) => s.profile);
   const consultantEnrolled = useConsultantStore((s) => s.enrolled);
 
@@ -47,7 +46,8 @@ export function RootRedirect() {
     return <Navigate to={profile.role === "employer" ? "/hr" : "/me"} replace />;
   }
 
-  if (!isLoaded) return <CenteredLoadingScreen />;
+  if (!isLoaded) return <AppLoadingScreen />;
+  if (organizationSignInUrl) return <Navigate to={organizationSignInUrl} replace />;
 
   // 1. Not signed in → bounce to the in-app /sign-in page.
   if (!user) return <Navigate to="/sign-in" replace />;
@@ -67,16 +67,4 @@ export function RootRedirect() {
 
   // 5. Fully onboarded → route to their home
   return <Navigate to={profile.role === "employer" ? "/hr" : "/me"} replace />;
-}
-
-function CenteredLoadingScreen() {
-  return (
-    <Box className="min-h-screen grid place-items-center px-6">
-      <Flex direction="column" gap="3" className="w-full max-w-md">
-        <Skeleton className="h-8 w-1/2" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-      </Flex>
-    </Box>
-  );
 }

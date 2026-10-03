@@ -33,6 +33,13 @@ import {
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { PageHeader, ImageUploader } from "@/components/ds";
 import { useDraftStore } from "@/lib/store";
+import { isDatabaseDraftsEnabled } from "@/lib/database-drafts";
+import { isDatabaseWorkspaceEnabled } from "@/lib/workspace-flags";
+import { flushDatabaseWorkspace, workspaceFileContext } from "@/lib/database-workspace";
+import { preferencesFromProfile, workspacePreferencesSchema } from "@/lib/workspace-preferences";
+import { toServerUuid } from "@/lib/remote-ids";
+import { recordsEqual } from "@/lib/record-equality";
+import { toast } from "sonner";
 import { todayDateOnly } from "@/lib/date-only";
 import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 import { AuditLogsCard } from "@/components/AuditLogsCard";
@@ -41,6 +48,8 @@ import { SecurityCard } from "@/components/SecurityCard";
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
 export function Settings() {
+  const databaseWorkspace = isDatabaseWorkspaceEnabled();
+  const databaseOwned = databaseWorkspace || isDatabaseDraftsEnabled();
   const nav = useNavigate();
   const profile = useProfileStore((s) => s.profile);
   const setRole = useProfileStore((s) => s.setRole);
@@ -55,12 +64,19 @@ export function Settings() {
   const deleteDraft = useDraftStore((s) => s.deleteDraft);
 
   const [savedFlash, setSavedFlash] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const onSave = () => {
-    markSetupComplete();
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1500);
+  const onSave = async () => {
+    setSavedFlash(false); setSaving(true);
+    try {
+      const scope = databaseWorkspace ? workspaceFileContext() : undefined;
+      markSetupComplete();
+      if (scope && (!await flushDatabaseWorkspace() || !scope.isCurrent())) throw new Error("Settings are not confirmed saved. Resolve the workspace save warning and retry.");
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1500);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Settings could not be saved."); }
+    finally { setSaving(false); }
   };
 
   const onExport = () => {
@@ -75,15 +91,22 @@ export function Settings() {
     URL.revokeObjectURL(url);
   };
 
-  const onImport = (file: File) => {
+  const onImport = async (file: File) => {
     if (file.size > MAX_PROFILE_IMPORT_BYTES) {
       alert("Import failed: profile JSON must be 256 KB or smaller.");
       return;
     }
-    file.text().then((text) => {
-      try {
+    setSavedFlash(false); setSaving(true);
+    try {
+        const scope = databaseWorkspace ? workspaceFileContext() : undefined;
+        const before = useProfileStore.getState().profile;
+        const assertCurrent = () => {
+          if (scope && !scope.isCurrent()) throw new Error("Workspace changed. Import the file again in your current workspace.");
+          if (!recordsEqual(before, useProfileStore.getState().profile)) throw new Error("Your profile changed during import. Review it before trying again.");
+        };
+        const text = await file.text(); assertCurrent();
         const parsed = JSON.parse(text) as Partial<typeof profile>;
-        if (!parsed || typeof parsed !== "object") throw new Error("Not a profile JSON.");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Not a profile JSON.");
         if (
           !confirm(
             "Importing will replace your current profile. Drafts are unaffected. Continue?"
@@ -91,23 +114,32 @@ export function Settings() {
         ) {
           return;
         }
-        if (parsed.role === "employer" || parsed.role === "employee") setRole(parsed.role);
-        if (parsed.personal) patchPersonal(parsed.personal);
-        if (parsed.employer) patchEmployer(parsed.employer);
-        if (parsed.defaults) patchDefaults(parsed.defaults);
-        if (typeof parsed.autoFill === "boolean") setAutoFill(parsed.autoFill);
-        markSetupComplete();
+        const candidate = { ...before, setupComplete: true,
+          role: parsed.role ?? before.role, personal: { ...before.personal, ...parsed.personal },
+          employer: { ...before.employer, ...parsed.employer }, defaults: { ...before.defaults, ...parsed.defaults },
+          autoFill: parsed.autoFill ?? before.autoFill };
+        if (scope) {
+          const { importEmployerAssets, legacyAssetUploader } = await import("@/lib/storage/legacy-asset-import");
+          candidate.employer = await importEmployerAssets(candidate.employer, legacyAssetUploader({ tenantId: scope.tenantId, isCurrent: () => { assertCurrent(); return true; } }));
+        }
+        const { id: _id, ...validated } = workspacePreferencesSchema.parse(preferencesFromProfile(toServerUuid("profile-import-validation"), candidate));
+        assertCurrent();
+        useProfileStore.getState().patch(validated); // One update; imported permissions/credits are never trusted.
+        if (scope && (!await flushDatabaseWorkspace() || !scope.isCurrent())) throw new Error("Imported settings are pending, not confirmed saved. Keep the original file and resolve the workspace save warning.");
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 1500);
       } catch (err) {
         alert(
           "Import failed: " + (err instanceof Error ? err.message : "Invalid file")
         );
-      }
-    });
+      } finally { setSaving(false); }
   };
 
   const onClearAllData = () => {
+    // This legacy action calls deleteDraft for every row. Once drafts are
+    // database-owned, that means a workspace-wide server deletion, not a
+    // device-cache clear. Sign-out clears the device cache after a safe flush.
+    if (databaseOwned) return;
     if (
       confirm(
         "This will erase your profile and all drafts from this device. Cloud-stored data is unaffected. Continue?"
@@ -279,7 +311,7 @@ export function Settings() {
                     value={profile.employer.letterheadDataUrl}
                     onChange={(dataUrl) => patchEmployer({ letterheadDataUrl: dataUrl })}
                     aspect="banner"
-                    helpText="Renders at the top of every exported letter. PNG / JPG / SVG, max 1 MB."
+                    helpText="Renders at the top of every exported letter. PNG, JPEG, WebP or GIF, max 1 MB."
                   />
                 </Field>
                 <Field label="Signature image (optional)" full>
@@ -409,8 +441,8 @@ export function Settings() {
         {/* WorkOS Audit Logs mirror status (admin-only) — null for non-admins. */}
         <AuditLogsCard />
 
-        {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
-        <Card size="3">
+        {/* Simulation is never offered as a database-workspace permission control. */}
+        {!databaseWorkspace && <Card size="3">
           <Box mb="3">
             <Heading size="3" mb="1">Role (local simulation)</Heading>
             <Text size="2" color="gray" as="p">
@@ -436,7 +468,7 @@ export function Settings() {
               </Select.Root>
             </Field>
           </Grid>
-        </Card>
+        </Card>}
 
         {/* Auto-fill */}
         <Card size="3">
@@ -458,10 +490,11 @@ export function Settings() {
 
         {/* Save / import-export / clear */}
         <Flex direction={{ initial: "column", sm: "row" }} justify="between" gap="3">
-          <Button variant="ghost" color="red" onClick={onClearAllData}>
+          <Button variant="ghost" color="red" onClick={onClearAllData} disabled={databaseOwned}>
             <Trash2 className="size-4" />
             Clear all my data on this device
           </Button>
+          {databaseOwned && <Text size="1" color="gray">Sign out to leave this workspace without deleting its records.</Text>}
           <Flex align="center" gap="2" wrap="wrap">
             <input
               ref={fileInputRef}
@@ -474,7 +507,7 @@ export function Settings() {
                 e.target.value = "";
               }}
             />
-            <Button variant="soft" color="gray" onClick={() => fileInputRef.current?.click()}>
+            <Button variant="soft" color="gray" onClick={() => fileInputRef.current?.click()} disabled={saving}>
               <Upload className="size-4" />
               Import
             </Button>
@@ -483,9 +516,9 @@ export function Settings() {
               Export
             </Button>
             {savedFlash && <Badge color="green" variant="soft">Saved</Badge>}
-            <Button onClick={onSave}>
+            <Button onClick={onSave} disabled={saving}>
               <Save className="size-4" />
-              Save
+              {saving ? "Saving…" : "Save"}
             </Button>
           </Flex>
         </Flex>
@@ -494,9 +527,9 @@ export function Settings() {
           <Flex align="start" gap="2">
             <Box mt="1"><AlertTriangle className="size-4 text-[var(--amber-11)]" /></Box>
             <Text size="1" color="gray" className="leading-relaxed">
-              Profile data lives in your browser's local storage. When we wire authentication and
-              server-side persistence (planned), it will move to an encrypted database and become
-              available across devices.
+              {databaseWorkspace
+                ? "Your profile and company settings are saved to your workspace database. Images are stored privately. Pending edits remain recoverable on this device until the server confirms the save."
+                : "This profile is stored on this device. Export a recovery copy before clearing browser data or moving to another device."}
             </Text>
           </Flex>
         </Card>

@@ -4,7 +4,7 @@ import { AUTH_ENABLED, AUTH_MISCONFIGURED } from "./index";
 import { useAuth } from "./AuthProvider";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AppLoadingScreen } from "@/components/AppLoadingScreen";
 
 /** Roles a route can be restricted to. Omit `roles` to allow any
  *  authenticated user (the default — shared routes like /editor,
@@ -29,13 +29,15 @@ export type GateRole = "employer" | "employee" | "consultant";
 export function Protected({
   children,
   roles,
+  allowRoleSetup = false,
 }: {
   children: ReactNode;
   roles?: GateRole[];
+  allowRoleSetup?: boolean;
 }) {
   if (AUTH_MISCONFIGURED) return null;
   if (!AUTH_ENABLED) return <>{children}</>;
-  return <ProtectedGate roles={roles}>{children}</ProtectedGate>;
+  return <ProtectedGate roles={roles} allowRoleSetup={allowRoleSetup}>{children}</ProtectedGate>;
 }
 
 /**
@@ -57,7 +59,7 @@ function isOnboardingPath(pathname: string): boolean {
 /**
  * Branches SYNCHRONOUSLY during render — no useEffect. Every non-authorized
  * state returns a <Navigate replace/> (which renders nothing and commits no
- * children) or a skeleton, so the gated child can NEVER mount/paint or fire
+ * children) or a loading screen, so the gated child can NEVER mount/paint or fire
  * its mount-effects before the redirect lands. (The previous useEffect-based
  * redirect let children flash for a frame whenever the render guard and the
  * effect's predicate diverged — see RootRedirect's header comment for the
@@ -66,11 +68,13 @@ function isOnboardingPath(pathname: string): boolean {
 function ProtectedGate({
   children,
   roles,
+  allowRoleSetup,
 }: {
   children: ReactNode;
   roles?: GateRole[];
+  allowRoleSetup: boolean;
 }) {
-  const { user, activeTenant, isLoaded } = useAuth();
+  const { user, activeTenant, isLoaded, organizationSignInUrl, isConsultant } = useAuth();
   const location = useLocation();
   const profileRole = useProfileStore((s) => s.profile.role);
   const consultantEnrolled = useConsultantStore((s) => s.enrolled);
@@ -78,10 +82,13 @@ function ProtectedGate({
   // Effective role: explicit employer/employee profile role wins; otherwise
   // a consultant-enrolled user with no profile role is a consultant.
   const effectiveRole: GateRole | null =
-    profileRole ?? (consultantEnrolled ? "consultant" : null);
+    profileRole ?? (isConsultant || consultantEnrolled ? "consultant" : null);
 
-  // 1. Still resolving the session → skeleton, never the child.
-  if (!isLoaded) return <LoadingSkeleton />;
+  // 1. Still resolving the session → stable loading screen, never the child.
+  if (!isLoaded) return <AppLoadingScreen />;
+  if (organizationSignInUrl && !isOnboardingPath(location.pathname)) {
+    return <Navigate to={organizationSignInUrl + "&redirect=" + encodeURIComponent(location.pathname + location.search)} replace />;
+  }
 
   // 2. Signed out → sign-in, preserving the intended destination.
   if (!user) {
@@ -99,21 +106,9 @@ function ProtectedGate({
   //    RootRedirect resolves to the user's correct home / role picker.
   //    Guarding on `!effectiveRole` too (not just a mismatch) closes the
   //    fresh-login / cleared-localStorage window where the role is still null.
-  if (roles && (!effectiveRole || !roles.includes(effectiveRole))) {
+  if (roles && (effectiveRole ? !roles.includes(effectiveRole) : !allowRoleSetup)) {
     return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="min-h-screen grid place-items-center px-6">
-      <div className="w-full max-w-md space-y-3">
-        <Skeleton className="h-8 w-2/3" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-      </div>
-    </div>
-  );
 }

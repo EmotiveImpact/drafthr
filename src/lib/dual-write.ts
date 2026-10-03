@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import type { Draft, Matter } from "./letters/types";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
 import { extractExtras } from "./remote-pull";
+import { isDatabaseWorkspaceEnabled } from "./workspace-flags";
 
 const DEBOUNCE_MS = 400;
 const ENABLED = readFlag();
@@ -468,7 +469,7 @@ export function undeleteDraft(draftId: string): void {
 
 function readFlag(): boolean {
   try {
-    return (import.meta.env?.VITE_DRAFTHR_DUAL_WRITE as string | undefined) === "true";
+    return !isDatabaseWorkspaceEnabled() && (import.meta.env?.VITE_DRAFTHR_DUAL_WRITE as string | undefined) === "true";
   } catch {
     return false;
   }

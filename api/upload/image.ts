@@ -1,24 +1,27 @@
 /**
  * Image upload endpoint — replaces base64-in-localStorage for letterhead /
- * signature images. Writes to Vercel Blob (S3-equivalent for this wave;
- * TODO: swap to S3 KMS-backed bucket when SOC 2 work picks up) and returns
- * a public URL the client persists on the profile/draft instead of the
- * data URL.
+ * signature images. Writes to a PRIVATE Vercel Blob store and returns a
+ * same-origin, authenticated image URL instead of a public Blob URL.
  *
  * Accepts either multipart/form-data (file field) or application/json
  * with { dataUrl, filename } — the JSON path is the path of least
  * resistance for the existing FileReader-based client code.
  *
- * SOFT failure mode: if BLOB_READ_WRITE_TOKEN is not configured, we
- * return { ok: false, error: "blob-not-configured" } so local dev keeps
- * working without Vercel Blob set up. The client helper falls back to
- * persisting the original data URL in that case.
+ * Database mode owns asset metadata and readiness in Postgres. Its guarded
+ * local adapter is private filesystem storage, never a data-URL fallback.
+ * The flag-off compatibility path still requires private Vercel Blob.
  */
 import { createHash } from "node:crypto";
 import { put } from "@vercel/blob";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError } from "../_utils/request.js";
-import { enforceProductionSession } from "../_utils/production-auth.js";
+import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
+import { readPrivateImage } from "../_utils/private-image.js";
+import { privateImageUrl } from "../../src/lib/storage/privateImageUrl.js";
+import { storeWorkspaceAsset } from "../_utils/workspace-assets.js";
+import { serverUuidOrNull } from "../../src/lib/remote-ids.js";
+
+import { withSessionResponse } from "../_utils/workos.js";
 
 export const config = {
   runtime: "nodejs",
@@ -41,22 +44,29 @@ const EXT_FOR_MIME: Record<string, string> = {
 const DATA_URL_RE = /^data:(image\/(?:png|jpeg|jpg|webp|gif));base64,([a-z0-9+/=][a-z0-9+/=\s]*)$/i;
 
 export async function POST(req: Request): Promise<Response> {
+  return withSessionResponse(req, handlePost);
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "upload", max: 20, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
 
-  // Authenticate BEFORE any environment probe: checking the Blob token first
-  // let an unauthenticated caller (past same-origin + rate-limit) distinguish
-  // "blob configured" from "not configured" by the response shape. Gate on the
-  // session first so the deployment's config posture isn't observable to anon.
-  const sessionError = await enforceProductionSession(req);
-  if (sessionError) return sessionError;
+  // Authenticate before probing storage, and bind every image to this tenant.
+  const auth = await requireSessionAndTenant(req);
+  if (!auth.ok) return auth.response;
+  if (!auth.activeTenant) return jsonError("No active workspace", 400);
 
-  // Soft-fail so local dev without a configured Blob store still works —
-  // the client falls back to the original data URL.
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return jsonResponse({ ok: false, error: "blob-not-configured" }, 200);
+  const databaseMode = process.env.DRAFTHR_DATABASE_WORKSPACE === "true";
+  if (databaseMode) {
+    if (serverUuidOrNull(req.headers.get("X-Workspace-ID")) !== auth.activeTenant.id || !auth.activeMember) {
+      return jsonError("The active workspace changed. Reload before continuing.", 409);
+    }
+    if (!["owner", "admin", "drafter", "reviewer"].includes(auth.activeMember.role)) return jsonError("This workspace role is read-only", 403);
+  }
+  if (!databaseMode && !process.env.BLOB_READ_WRITE_TOKEN) {
+    return jsonResponse({ ok: false, error: "blob-not-configured" }, 503);
   }
 
   const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
@@ -88,13 +98,17 @@ export async function POST(req: Request): Promise<Response> {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const ext = EXT_FOR_MIME[mime] ?? "bin";
   // Content-addressed path — uploading the same image twice dedups.
-  const pathname = `letterheads/${sha256}.${ext}`;
+  const pathname = `letterheads/${auth.activeTenant.id}/${sha256}.${ext}`;
 
   try {
+    if (databaseMode) {
+      await storeWorkspaceAsset({ tenantId: auth.activeTenant.id, userId: auth.userRow.id, pathname, contentType: mime, sha256, bytes });
+      return jsonResponse({ ok: true, url: privateImageUrl(pathname) }, 200);
+    }
     // @vercel/blob's PutBody type accepts Buffer (Node) — wrap so TS is happy
     // without changing the on-disk bytes.
-    const blob = await put(pathname, Buffer.from(bytes), {
-      access: "public",
+    await put(pathname, Buffer.from(bytes), {
+      access: "private",
       contentType: mime,
       // addRandomSuffix off → stable content-addressed URL across uploads.
       addRandomSuffix: false,
@@ -104,11 +118,23 @@ export async function POST(req: Request): Promise<Response> {
       allowOverwrite: true,
       token: process.env.BLOB_READ_WRITE_TOKEN,
     });
-    return jsonResponse({ ok: true, url: blob.url }, 200);
+    return jsonResponse({ ok: true, url: privateImageUrl(pathname) }, 200);
   } catch (err) {
     console.error("[upload/image] blob put failed", err);
     return jsonResponse({ ok: false, error: "upload-failed" }, 502);
   }
+}
+
+export async function GET(req: Request): Promise<Response> {
+  return withSessionResponse(req, handleGet);
+}
+
+async function handleGet(req: Request): Promise<Response> {
+  const auth = await requireSessionAndTenant(req);
+  if (!auth.ok) return auth.response;
+  if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const pathname = new URL(req.url).searchParams.get("path") ?? "";
+  return readPrivateImage(pathname, auth.activeTenant.id);
 }
 
 type ParseOk = { ok: true; bytes: Uint8Array; mime: string };

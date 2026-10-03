@@ -28,35 +28,8 @@ import { cn } from "@/lib/utils";
 import type { Draft } from "@/lib/letters/types";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
 import { EvidenceDrawer } from "./EvidenceDrawer";
-import {
-  isAllowedEmbeddedImageFile,
-  isSafeImageDataUrl,
-  SAFE_IMAGE_ACCEPT,
-} from "@/lib/safe-data-url";
-
-const MAX_EMBED_BYTES = 5 * 1024 * 1024;
-
-async function fileToDataUrl(file: File): Promise<string | null> {
-  if (!isAllowedEmbeddedImageFile(file)) {
-    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
-    return null;
-  }
-  if (file.size > MAX_EMBED_BYTES) {
-    alert(
-      `${file.name} is larger than 5 MB. Use the Evidence step instead — that path keeps the original file at full quality.`
-    );
-    return null;
-  }
-  return new Promise<string | null>((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : null;
-      resolve(isSafeImageDataUrl(result) ? result : null);
-    };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
-}
+import { SAFE_IMAGE_ACCEPT } from "@/lib/safe-data-url";
+import { insertInlineEvidenceImage } from "@/lib/storage/inline-evidence";
 
 export function EditorToolbar({
   editor,
@@ -78,10 +51,9 @@ export function EditorToolbar({
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file
     if (!file) return;
-    const src = await fileToDataUrl(file);
-    if (src) {
-      editor.chain().focus().setImage({ src, alt: file.name }).run();
-    }
+    if (!draft) { alert("Open a draft before inserting an image."); return; }
+    try { await insertInlineEvidenceImage(editor.view, draft.id, file); }
+    catch (error) { alert(error instanceof Error ? error.message : "Image upload failed."); }
   };
 
   return (

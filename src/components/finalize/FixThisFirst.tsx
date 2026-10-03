@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { AlertTriangle, XCircle, Zap, ArrowRight } from "lucide-react";
 import type { Fix } from "@/lib/finalize/healthChecks";
 import { cn } from "@/lib/utils";
@@ -28,10 +27,7 @@ export function FixThisFirst({ fixes, onAction }: Props) {
   if (fixes.length === 0) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, delay: 0.08, ease: [0.32, 0.72, 0, 1] }}
+    <div
       className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden mt-3.5"
       style={{ borderTop: "2px solid var(--ds-amber-fg)" }}
     >
@@ -51,21 +47,19 @@ export function FixThisFirst({ fixes, onAction }: Props) {
       </div>
 
       <ul className="m-0 p-0 list-none divide-y divide-[var(--ds-line-2)]">
-        {fixes.map((fix, i) => (
-          <FixRow key={fix.check.id} fix={fix} index={i} onAction={onAction} />
+        {fixes.map((fix) => (
+          <FixRow key={fix.check.id} fix={fix} onAction={onAction} />
         ))}
       </ul>
-    </motion.div>
+    </div>
   );
 }
 
 function FixRow({
   fix,
-  index,
   onAction,
 }: {
   fix: Fix;
-  index: number;
   onAction: (fix: Fix) => void;
 }) {
   const isFail = fix.check.severity === "fail";
@@ -75,14 +69,7 @@ function FixRow({
     : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]";
 
   return (
-    <motion.li
-      initial={{ opacity: 0, x: -3 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{
-        duration: 0.22,
-        delay: 0.15 + index * 0.06,
-        ease: [0.32, 0.72, 0, 1],
-      }}
+    <li
       className="flex flex-col gap-2 px-4 sm:px-5 py-3"
     >
       {/* Severity icon + content row — title, chip, detail. */}
@@ -124,18 +111,15 @@ function FixRow({
           </span>
         )}
 
-        <motion.button
+        <button
           type="button"
           onClick={() => onAction(fix)}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.12 }}
           className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition whitespace-nowrap"
         >
           {fix.check.actionLabel ?? "Fix"}
           <ArrowRight className="size-3.5" />
-        </motion.button>
+        </button>
       </div>
-    </motion.li>
+    </li>
   );
 }

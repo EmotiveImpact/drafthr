@@ -17,7 +17,8 @@ import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/requ
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { invites, tenantMembers } from "../../../src/db/schema.js";
+import { invites, tenantMembers, tenants } from "../../../src/db/schema.js";
+import { ensureOrganizationSession, getWorkos } from "../../_utils/workos.js";
 import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 
@@ -37,7 +38,7 @@ export async function POST(req: Request): Promise<Response> {
     typeof parsed.body.inviteCode === "string" ? parsed.body.inviteCode.trim() : "";
   if (!inviteCode) return jsonError("inviteCode required", 400);
 
-  const auth = await requireSessionAndTenant(req);
+  const auth = await requireSessionAndTenant(req, { allowUnscoped: true });
   if (!auth.ok) return auth.response;
 
   try {
@@ -56,6 +57,22 @@ export async function POST(req: Request): Promise<Response> {
     if (sessionEmail !== invite.email.toLowerCase()) {
       return jsonError("Invite email does not match your account", 403);
     }
+
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, invite.tenantId)).limit(1);
+    if (!tenant) return jsonError("Workspace not found", 404);
+    if (tenant.workosOrgId) {
+      const companyMemberships = await getWorkos().userManagement.listOrganizationMemberships({
+        userId: auth.session.user.id, organizationId: tenant.workosOrgId, statuses: ["active"],
+      });
+      if (!companyMemberships.data.some((m) =>
+        m.userId === auth.session.user.id && m.organizationId === tenant.workosOrgId && m.status === "active")) {
+        // A local invitation cannot create/bypass access in a managed identity
+        // directory. Keep it unconsumed so it works after the admin provisions access.
+        return jsonError("Your company needs to enable your account before you can join. Contact your workspace administrator.", 403);
+      }
+    }
+    const denied = await ensureOrganizationSession(req, auth.session, tenant.workosOrgId, tenant.id);
+    if (denied) return denied;
 
     // Already a member? Idempotent return.
     const [existing] = await db

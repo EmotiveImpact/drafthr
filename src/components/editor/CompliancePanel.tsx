@@ -2,7 +2,9 @@ import type { Draft } from "@/lib/letters/types";
 import { rulesFor, ruleSatisfied } from "@/lib/letters/compliance";
 import { CheckCircle2, AlertTriangle, AlertCircle } from "lucide-react";
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { TemplateQualityInspector } from "./TemplateQualityInspector";
+import { getDraftReadiness, type ReadinessAction } from "@/lib/finalize/readiness";
 
 const SEVERITY_LABEL = {
   required: "Required",
@@ -40,6 +42,14 @@ const SEVERITY_TONE = {
  *  - Footer: counsel-review reminder if applicable
  */
 export function CompliancePanel({ draft }: { draft: Draft }) {
+  const nav = useNavigate();
+  const readiness = useMemo(() => getDraftReadiness(draft), [draft]);
+  const goToFix = (action: ReadinessAction, sectionId?: string) => {
+    if (action === "evidence") nav(`/editor/${draft.id}/evidence`);
+    else if (action === "review") nav(`/editor/${draft.id}/review`);
+    else if (action === "settings") nav("/settings");
+    else nav(`/editor/${draft.id}${sectionId ? `?section=${sectionId}` : ""}`);
+  };
   const fullText = useMemo(
     () => draft.sections.map((s) => s.html).join("\n"),
     [draft.sections]
@@ -106,6 +116,42 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
           )}
         </div>
 
+        <section className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-[11px] font-semibold text-[var(--ds-ink)]">Send readiness</h4>
+            <span className={
+              "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider " +
+              (readiness.blockers.length
+                ? "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]"
+                : "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]")
+            }>
+              {readiness.statusLabel}
+            </span>
+          </div>
+          {readiness.blockers.length > 0 ? (
+            <ul className="mt-2 space-y-1.5">
+              {readiness.blockers.map((issue) => (
+                <li key={issue.id}>
+                  <button
+                    type="button"
+                    onClick={() => goToFix(
+                      issue.id === "counsel-review" ? "editor" : issue.action,
+                      issue.sectionIds?.[0],
+                    )}
+                    className="w-full rounded px-1.5 py-1 text-left text-[10.5px] text-[var(--ds-red-fg)] hover:bg-[var(--ds-red-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-red-fg)]/30"
+                  >
+                    {issue.label} <span aria-hidden>→</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1.5 text-[10.5px] text-[var(--ds-green-fg)]">
+              No mandatory blockers remain.
+            </p>
+          )}
+        </section>
+
         <TemplateQualityInspector draft={draft} />
 
         {missingRequired.length > 0 && (
@@ -151,12 +197,12 @@ export function CompliancePanel({ draft }: { draft: Draft }) {
         <section
           className="rounded-md border p-2.5 text-[10.5px] leading-relaxed break-words"
           style={{
-            background: draft.context.counselReviewRequired ? "var(--ds-amber-bg)" : "var(--ds-line-2)",
-            borderColor: draft.context.counselReviewRequired ? "var(--ds-amber-bg)" : "var(--ds-line)",
-            color: draft.context.counselReviewRequired ? "var(--ds-amber-fg)" : "var(--ds-muted)",
+            background: readiness.counsel.required ? "var(--ds-amber-bg)" : "var(--ds-line-2)",
+            borderColor: readiness.counsel.required ? "var(--ds-amber-bg)" : "var(--ds-line)",
+            color: readiness.counsel.required ? "var(--ds-amber-fg)" : "var(--ds-muted)",
           }}
         >
-          {draft.context.counselReviewRequired ? (
+          {readiness.counsel.required ? (
             <>
               <strong>Counsel review required.</strong> This letter type carries
               elevated legal risk. The export will include a Tier 3 disclaimer

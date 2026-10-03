@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import {
   BarChart3,
   ShieldCheck,
@@ -34,6 +33,7 @@ import {
   type HealthDimension,
   type HealthScore,
 } from "@/lib/finalize/healthChecks";
+import { getDraftReadiness, type DraftReadiness } from "@/lib/finalize/readiness";
 import { effectiveRiskBand } from "@/lib/matters/risk";
 import { draftsInMatter } from "@/lib/matters";
 import { briefTitleFor } from "@/lib/letters/display";
@@ -115,36 +115,22 @@ export function Reports() {
     );
   }
 
-  const fade = {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.35, ease: [0.32, 0.72, 0, 1] as const },
-  };
-
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <Breadcrumb mode="employer" />
       <PageTitle />
 
-      <motion.div {...fade} className="mb-5">
+      <div className="mb-5">
         <ComplianceHealthCard drafts={realDrafts} />
-      </motion.div>
+      </div>
 
-      <motion.div
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.06 }}
-        className="mb-5"
-      >
+      <div className="mb-5">
         <RiskExposureCard matters={activeMatters} drafts={realDrafts} />
-      </motion.div>
+      </div>
 
-      <motion.div
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.12 }}
-        className="mb-5"
-      >
+      <div className="mb-5">
         <OperationsCard drafts={realDrafts} matters={allMatters} />
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -220,6 +206,7 @@ type DraftHealth = {
   draft: Draft;
   score: HealthScore;
   checks: HealthCheck[];
+  readiness: DraftReadiness;
 };
 
 function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
@@ -230,7 +217,12 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
     for (const d of drafts) {
       try {
         const checks = runHealthChecks(d);
-        out.push({ draft: d, checks, score: computeHealthScore(checks) });
+        out.push({
+          draft: d,
+          checks,
+          score: computeHealthScore(checks),
+          readiness: getDraftReadiness(d),
+        });
       } catch {
         // skip drafts the scorer can't process
       }
@@ -251,10 +243,10 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
     );
   }
 
-  // Strong = passes every check AND lands in the strong band. Mirrors the
-  // Home dashboard so the two surfaces agree on what "send-ready" means.
+  // Send-ready comes from the same lifecycle rules used by Home, Review,
+  // and Finalise; the health score remains a quality signal, not a gate.
   const strong = scored.filter(
-    (s) => s.score.band === "strong" && s.score.failCount === 0
+    (s) => s.readiness.status === "ready_to_send" || s.readiness.status === "sent"
   ).length;
   const percent = Math.round((strong / scored.length) * 100);
 
@@ -1023,4 +1015,3 @@ function formatGBP(n: number): string {
     return `£${Math.round(n).toLocaleString()}`;
   }
 }
-

@@ -15,6 +15,7 @@ import { notifyReviewRequested } from "@/lib/collab-notify";
 import { Button } from "@/components/ui/button";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { WizardChrome } from "@/components/editor/WizardChrome";
+import { counselAttestationForDraft } from "@/lib/finalize/readiness";
 
 type PendingComment = {
   sectionId: string;
@@ -177,22 +178,7 @@ export function ReviewStep() {
   // Counsel-review status surfaced in ReviewRail. The actual export gate
   // moved to Finalize, but the rail still wants to know whether a review
   // has been attached so it can render the green tick.
-  const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
-    const last = (draft.exports ?? [])
-      .slice()
-      .sort((a, b) => b.exportedAt - a.exportedAt)
-      .find((e) => e.reviewedBy);
-    if (last?.reviewedBy && last.reviewedOn) {
-      return { reviewedBy: last.reviewedBy, reviewedOn: last.reviewedOn };
-    }
-    const manual = (draft.answers as Record<string, unknown>)._counselReview as
-      | { reviewedBy?: string; reviewedOn?: string }
-      | undefined;
-    if (manual?.reviewedBy && manual.reviewedOn) {
-      return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
-    }
-    return null;
-  })();
+  const counselReview = counselAttestationForDraft(draft) ?? null;
 
   const unresolvedCommentCount = (draft.comments ?? []).filter((c) => !c.resolved).length;
 

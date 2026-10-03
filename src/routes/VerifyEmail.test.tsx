@@ -56,10 +56,10 @@ describe("VerifyEmail", () => {
     ).toBeInTheDocument();
   });
 
-  it("posts the code + user_id and routes home on success", async () => {
+  it("posts the code + user_id and returns to WorkOS sign-in on success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
-        JSON.stringify({ ok: true, user: { id: "u_1", email: "a@b.co" } }),
+        JSON.stringify({ ok: true, requiresSignIn: true }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
@@ -70,7 +70,7 @@ describe("VerifyEmail", () => {
       >
         <Routes>
           <Route path="/sign-in/verify-email" element={<VerifyEmail />} />
-          <Route path="/" element={<LocationProbe />} />
+          <Route path="/sign-in" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -83,10 +83,9 @@ describe("VerifyEmail", () => {
 
     // Success branch shows "verified" then auto-routes after a beat
     // (~800ms in the component). We just wait for the route change.
-    await screen.findByText(/your email is confirmed/i);
     expect(authMock.refresh).toHaveBeenCalled();
     await waitFor(
-      () => expect(screen.getByTestId("location")).toHaveTextContent("/"),
+      () => expect(screen.getByTestId("location")).toHaveTextContent("/sign-in"),
       { timeout: 2_000 },
     );
   });

@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const verifyEmail = vi.fn();
 const authenticateWithEmailVerification = vi.fn();
+vi.mock("../../_utils/session-epoch.js", () => ({ getUserSessionEpoch: vi.fn(async () => 0) }));
 
 vi.mock("../../_utils/workos.js", () => ({
   getWorkos: () => ({
@@ -40,7 +41,7 @@ function makeRequest(body: unknown, ipSuffix = "1") {
 }
 
 describe("POST /api/auth/verify-email", () => {
-  it("post-sign-up: verifies + mints a session", async () => {
+  it("post-sign-up: verifies without bypassing WorkOS authentication", async () => {
     verifyEmail.mockResolvedValueOnce({
       user: {
         id: "user_1",
@@ -55,8 +56,8 @@ describe("POST /api/auth/verify-email", () => {
     const res = await POST(makeRequest({ code: "123456", userId: "user_1" }));
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, user: { id: "user_1" } });
-    expect(res.headers.get("set-cookie")).toContain("drafthr_session=");
+    expect(await res.json()).toEqual({ ok: true, requiresSignIn: true });
+    expect(res.headers.get("set-cookie")).toBeNull();
     expect(verifyEmail).toHaveBeenCalledWith({ code: "123456", userId: "user_1" });
     expect(authenticateWithEmailVerification).not.toHaveBeenCalled();
   });

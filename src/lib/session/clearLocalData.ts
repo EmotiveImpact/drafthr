@@ -58,4 +58,20 @@ export function clearTenantScopedLocalData(opts?: { keepProfile?: boolean }): vo
       /* storage disabled / private mode — nothing to clear */
     }
   }
+  // Database-first draft metadata is per-tenant. It contains revisions,
+  // hashes and pending-delete ids; after a confirmed flush it must not leak
+  // the previous workspace's record inventory on a shared browser.
+  let itemCount = 0;
+  try { itemCount = window.localStorage.length; } catch { return; }
+  for (let i = itemCount - 1; i >= 0; i--) {
+    try {
+      const key = window.localStorage.key(i);
+      if (key?.startsWith("drafthr.db-draft-baselines.v1:") ||
+          key?.startsWith("drafthr.db-draft-deletes.v1:")) {
+        window.localStorage.removeItem(key);
+      }
+    } catch {
+      break;
+    }
+  }
 }

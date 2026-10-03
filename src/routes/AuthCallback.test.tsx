@@ -38,7 +38,7 @@ describe("AuthCallback", () => {
   });
 
   it("navigates to a validated internal redirect after sign-in", async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }));
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true, returnTo: "/hr?tab=drafts" }));
     vi.stubGlobal("fetch", fetchMock);
 
     renderCallback("/auth/callback?code=abc&state=state&redirect=%2Fhr%3Ftab%3Ddrafts");
@@ -47,7 +47,7 @@ describe("AuthCallback", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("ignores a malformed redirect and falls back to the tenant route", async () => {
+  it("ignores browser-supplied destinations and follows the callback response", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url === "/api/auth/session") return jsonResponse({ activeTenant: { id: "tenant_1" } });
@@ -58,10 +58,7 @@ describe("AuthCallback", () => {
     renderCallback("/auth/callback?code=abc&state=state&redirect=%2F%2Fevil.example%2Fhr");
 
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/"));
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/auth/session",
-      expect.objectContaining({ credentials: "same-origin" }),
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

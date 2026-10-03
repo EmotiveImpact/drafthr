@@ -17,7 +17,14 @@ import {
 } from "@/lib/remote-pull";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  importBrowserDrafts,
+  initializeDatabaseDrafts,
+  isDatabaseDraftsEnabled,
+  recoverConflictedDraftsAsCopies,
+  retryFailedDatabaseDrafts,
+  useDatabaseDraftStatus,
+} from "@/lib/database-drafts";
 import { Home } from "@/routes/Home";
 import { Wizard } from "@/routes/Wizard";
 import { RootRedirect } from "@/routes/RootRedirect";
@@ -63,9 +70,10 @@ import { MyBookings } from "@/routes/MyBookings";
 import { ConsultantAdminReview } from "@/routes/ConsultantAdminReview";
 import { SharedDraftReview } from "@/routes/SharedDraftReview";
 import { Layout } from "@/components/Layout";
+import { AppLoadingScreen } from "@/components/AppLoadingScreen";
+import { DatabaseWorkspaceBoundary } from "@/components/DatabaseWorkspaceBoundary";
 import { NotFound } from "@/routes/NotFound";
 import { Protected } from "@/lib/auth/Protected";
-import { Skeleton } from "@/components/ui/skeleton";
 // Lazy — react-joyride is a one-time first-run tour; keep it out of the main
 // chunk so it loads only when the tour actually shows. (Senior sweep I-PERF-2.)
 const OnboardingTour = lazy(() =>
@@ -101,19 +109,19 @@ const MobileReadView = lazy(() =>
   import("@/routes/MobileReadView").then((m) => ({ default: m.MobileReadView }))
 );
 
-function EditorFallback() {
-  return (
-    <div className="flex flex-col flex-1 min-h-0 p-6 gap-3">
-      <Skeleton className="h-11 w-full" />
-      <Skeleton className="h-[400px] w-full" />
-      <Skeleton className="h-[200px] w-full" />
-    </div>
-  );
+export function App() {
+  return <DatabaseWorkspaceBoundary><AppContent /></DatabaseWorkspaceBoundary>;
 }
 
-export function App() {
+function AppContent() {
   const location = useLocation();
   const { activeTenant, isLoaded, user } = useAuth();
+  const setupComplete = useProfileStore((s) => s.profile.setupComplete);
+  const databaseDraftStatus = useDatabaseDraftStatus();
+  useEffect(() => {
+    if (!isDatabaseDraftsEnabled() || !isLoaded || !user || !activeTenant) return;
+    void initializeDatabaseDrafts(activeTenant.id);
+  }, [isLoaded, user?.id, activeTenant?.id]);
   // One-shot migration for existing base64 letterhead/signature → Blob URL.
   // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
   // swaps them out lazily so the dual-write rollout doesn't carry those blobs
@@ -214,43 +222,76 @@ export function App() {
     const { profile, setWorkspaceRole } = useProfileStore.getState();
     if (profile.workspaceRole !== role) setWorkspaceRole(role as WorkspaceRole);
   }, [activeTenant]);
-  // Editor routes are exempted from the page transition. The editor has
-  // its own internal animations (rails, sheet, streaming) and a fade on
-  // top of that double-animates and looks busy.
-  const skipTransition = location.pathname.startsWith("/editor/");
+  // Preserve the existing route reset behaviour without animating the page.
+  // Editor subroutes remain mounted as a group so its in-progress UI stays put.
+  const routeKey = location.pathname.startsWith("/editor/") ? "editor" : location.pathname;
   // Onboarding tour gate — only on the first signed-in landing inside the
-  // app (/hr or /me). Skip until the user has a workspace AND a role so the
-  // sidebar anchors actually exist.
+  // app (/hr or /me). Wait until workspace setup is dismissed/completed:
+  // otherwise two focus-trapping overlays compete and the tour repositions
+  // over the setup dialog while the page is still settling.
   const onTourSurface =
     location.pathname.startsWith("/hr") || location.pathname.startsWith("/me");
   const showTour =
     isLoaded &&
     !!user &&
     !!activeTenant &&
+    setupComplete &&
     onTourSurface &&
     !hasSeenTour();
+  if (isDatabaseDraftsEnabled() && isLoaded && user && activeTenant &&
+      (databaseDraftStatus.phase !== "ready" || databaseDraftStatus.tenantId !== activeTenant.id)) {
+    if (databaseDraftStatus.phase === "needs-import" && databaseDraftStatus.tenantId === activeTenant.id) {
+      return (
+        <main className="min-h-screen grid place-items-center bg-[var(--ds-canvas)] px-6">
+          <section className="max-w-lg rounded-xl border bg-[var(--ds-surface)] p-8 shadow-sm">
+            <h1 className="text-xl font-semibold">Import drafts from this browser?</h1>
+            <p className="mt-3 text-sm leading-6 text-[var(--ds-body)]">
+              {databaseDraftStatus.importCount} draft{databaseDraftStatus.importCount === 1 ? "" : "s"} on this device have not been verified against your workspace database. Import only if they belong to <strong>{activeTenant.name}</strong>. A different database version is kept; your browser version becomes a separate recovered copy.
+            </p>
+            {databaseDraftStatus.message && <p role="alert" className="mt-3 text-sm text-red-700">{databaseDraftStatus.message}</p>}
+            <button type="button" className="mt-5 rounded-md bg-[var(--ds-ink)] px-4 py-2 text-sm text-white" onClick={() => void importBrowserDrafts()}>
+              Import safely into this workspace
+            </button>
+          </section>
+        </main>
+      );
+    }
+    if (databaseDraftStatus.phase === "error" && databaseDraftStatus.tenantId === activeTenant.id) {
+      return (
+        <main className="min-h-screen grid place-items-center bg-[var(--ds-canvas)] px-6">
+          <section className="max-w-lg rounded-xl border bg-[var(--ds-surface)] p-8 shadow-sm">
+            <h1 className="text-xl font-semibold">Could not load workspace drafts</h1>
+            <p role="alert" className="mt-3 text-sm">{databaseDraftStatus.message ?? "Please check your connection and try again."} Your browser recovery copy has not been changed.</p>
+            <button type="button" className="mt-5 rounded-md border px-4 py-2 text-sm" onClick={() => void initializeDatabaseDrafts(activeTenant.id)}>Retry</button>
+          </section>
+        </main>
+      );
+    }
+    return <AppLoadingScreen />;
+  }
   return (
     <Layout>
+      {isDatabaseDraftsEnabled() && databaseDraftStatus.phase === "ready" &&
+        (databaseDraftStatus.saving > 0 || databaseDraftStatus.failed > 0) && (
+          <div role="status" className="flex items-center gap-3 border-b bg-amber-50 px-5 py-2 text-xs text-amber-950">
+            {databaseDraftStatus.failed > 0
+              ? `${databaseDraftStatus.failed} draft change${databaseDraftStatus.failed === 1 ? " is" : "s are"} still on this device, not saved to the database.`
+              : `Saving ${databaseDraftStatus.saving} draft change${databaseDraftStatus.saving === 1 ? "" : "s"}…`}
+            {databaseDraftStatus.failed > 0 && databaseDraftStatus.conflicts === 0 &&
+              <button type="button" className="underline" onClick={retryFailedDatabaseDrafts}>Retry save</button>}
+            {databaseDraftStatus.conflicts > 0 &&
+              <button type="button" className="underline" onClick={() => void recoverConflictedDraftsAsCopies()}>Save conflicts as separate copies</button>}
+          </div>
+        )}
       {showTour && (
         <Suspense fallback={null}>
           <OnboardingTour />
         </Suspense>
       )}
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={skipTransition ? "editor" : location.pathname}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{
-            duration: 0.18,
-            ease: [0.32, 0.72, 0, 1],
-          }}
-          className="h-full flex flex-col flex-1 min-h-0"
-        >
+      <div key={routeKey} className="h-full flex flex-col flex-1 min-h-0">
           {/* One Suspense boundary for all lazy routes (I-PERF-1). Inner
            * per-route boundaries (editor/evidence/etc.) still apply too. */}
-          <Suspense fallback={<EditorFallback />}>
+          <Suspense fallback={<AppLoadingScreen scope="page" />}>
           <Routes location={location}>
             {/* / handles its own auth-state branching (signed-out landing,
              * tenant-less redirect, role-less ModePicker, fully-onboarded
@@ -271,7 +312,7 @@ export function App() {
           path="/editor/:draftId"
           element={
             <Protected>
-              <Suspense fallback={<EditorFallback />}>
+              <Suspense fallback={<AppLoadingScreen scope="page" />}>
                 <Editor />
               </Suspense>
             </Protected>
@@ -281,7 +322,7 @@ export function App() {
           path="/editor/:draftId/evidence"
           element={
             <Protected>
-              <Suspense fallback={<EditorFallback />}>
+              <Suspense fallback={<AppLoadingScreen scope="page" />}>
                 <EvidenceStep />
               </Suspense>
             </Protected>
@@ -322,7 +363,7 @@ export function App() {
         {/* Consultant onboarding + dashboard. localStorage-backed for now;
          * server-side bookings inbox will plug into ConsultantHome later. */}
         <Route path="/c" element={<Protected roles={["consultant"]}><ConsultantHome /></Protected>} />
-        <Route path="/c/profile" element={<Protected roles={["consultant"]}><ConsultantProfile /></Protected>} />
+        <Route path="/c/profile" element={<Protected roles={["consultant"]} allowRoleSetup><ConsultantProfile /></Protected>} />
         {/* HR-side bookings list — employer only (it's the "reviews I
          * commissioned" surface). */}
         <Route path="/bookings" element={<Protected roles={["employer"]}><MyBookings /></Protected>} />
@@ -350,7 +391,7 @@ export function App() {
           path="/consultants"
           element={
             <Protected roles={["employer", "consultant"]}>
-              <Suspense fallback={<EditorFallback />}>
+              <Suspense fallback={<AppLoadingScreen scope="page" />}>
                 <ConsultantsIndex />
               </Suspense>
             </Protected>
@@ -361,7 +402,7 @@ export function App() {
           path="/pricing"
           element={
             <Protected>
-              <Suspense fallback={<EditorFallback />}>
+              <Suspense fallback={<AppLoadingScreen scope="page" />}>
                 <Pricing />
               </Suspense>
             </Protected>
@@ -375,7 +416,7 @@ export function App() {
           path="/m/:draftId"
           element={
             <Protected>
-              <Suspense fallback={<EditorFallback />}>
+              <Suspense fallback={<AppLoadingScreen scope="page" />}>
                 <MobileReadView />
               </Suspense>
             </Protected>
@@ -384,8 +425,7 @@ export function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
-        </motion.div>
-      </AnimatePresence>
+      </div>
     </Layout>
   );
 }

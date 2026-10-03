@@ -5,7 +5,7 @@ import { displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FileText, Mail, NotebookText, Image as ImageIcon, CalendarDays, Plus, ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router-dom";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { evidenceInsertionHtml } from "@/lib/storage/inline-evidence";
 
 /** Format bytes as a compact "x KB" / "x MB" string. */
 function formatBytes(bytes: number | undefined): string | null {
@@ -91,6 +91,7 @@ export function EvidencePickerPopover({
   }, [draft.sections]);
 
   const insert = (item: EvidenceItem) => {
+    if (editor.isDestroyed || !editor.isEditable) return;
     const mode = displayModeOf(item);
     if (mode === "figure") {
       const label = figureLabelFor(item, items) || "Fig";
@@ -102,7 +103,8 @@ export function EvidencePickerPopover({
         )
         .run();
     } else if (mode === "inline") {
-      editor.chain().focus().insertContent(buildInlineHtml(item)).run();
+      try { editor.chain().focus().insertContent(evidenceInsertionHtml(item)).run(); }
+      catch (error) { alert(error instanceof Error ? error.message : "Image insertion failed."); return; }
     } else if (mode === "attached") {
       editor
         .chain()
@@ -239,31 +241,6 @@ export function EvidencePickerPopover({
  * stub sentence since we can't render binary docs inline — the actual
  * file is in the ZIP.
  */
-function buildInlineHtml(item: EvidenceItem): string {
-  const caption = item.filename
-    ? ` (${escHtml(item.filename)})`
-    : "";
-  if (item.kind === "screenshot" && isSafeImageDataUrl(item.fileDataUrl)) {
-    return `<figure><img src="${escAttr(item.fileDataUrl)}" alt="${escAttr(item.filename || "screenshot")}" />${
-      item.content
-        ? `<figcaption>${escHtml(item.content)}</figcaption>`
-        : item.filename
-        ? `<figcaption>${escHtml(item.filename)}</figcaption>`
-        : ""
-    }</figure>`;
-  }
-  if (item.kind === "note" || item.kind === "email" || item.kind === "calendar") {
-    const text = item.content || item.filename || "Evidence";
-    const kindLabel =
-      item.kind === "email" ? "Email" : item.kind === "calendar" ? "Calendar entry" : "Note";
-    return `<blockquote>${escHtml(text)}<br/><em>— ${kindLabel}${caption}</em></blockquote>`;
-  }
-  // Documents (no inline render possible)
-  return `<p>I refer to the document <em>${escHtml(item.filename || "(unnamed)")}</em>${
-    item.content ? `, summarised: ${escHtml(item.content)}` : ""
-  }.</p>`;
-}
-
 function escHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

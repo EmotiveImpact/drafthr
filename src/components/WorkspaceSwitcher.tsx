@@ -13,6 +13,9 @@ import {
 import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { clearTenantScopedLocalData } from "@/lib/session/clearLocalData";
+import { flushDatabaseDrafts, isDatabaseDraftsEnabled } from "@/lib/database-drafts";
+import { suspendDatabaseWorkspaceForTransition, stopDatabaseWorkspace } from "@/lib/database-workspace";
+import { beginSessionTransition } from "@/lib/session/transition";
 
 /**
  * Sidebar workspace switcher. Renders nothing when the user has <=1 workspace
@@ -56,15 +59,30 @@ export function WorkspaceSwitcher() {
   const onSwitch = async (tenantId: string) => {
     if (switching) return;
     if (tenantId === activeTenant?.id) return;
+    const transition = beginSessionTransition("Saving changes and switching workspace…");
+    if (!transition) return;
+    let resume: (() => void) | undefined;
+    let departing = false, requestStarted = false;
     setSwitching(true);
     try {
+      if (isDatabaseDraftsEnabled() && !(await flushDatabaseDrafts())) {
+        toast.error("Cannot switch workspaces yet", {
+          description: "Some draft changes are not saved to the database. Retry or resolve them first.",
+        });
+        return;
+      }
+      resume = await suspendDatabaseWorkspaceForTransition();
+      requestStarted = true;
       const res = await fetch("/api/workspace/switch", {
         method: "POST",
+        signal: AbortSignal.timeout(30_000),
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ tenantId }),
       });
       if (res.ok) {
+        departing = true;
+        stopDatabaseWorkspace();
         // Wipe the previous tenant's persisted PII before reloading so a
         // workspace switch never surfaces tenant A's drafts/matters/employees
         // in tenant B's session on a shared browser (security board SA-01).
@@ -79,17 +97,31 @@ export function WorkspaceSwitcher() {
       // Surface the failure instead of silently no-op'ing (bug #20). A
       // deprovisioned seat still appears in the list and returns 403 here;
       // tell the user and refresh the list so the dead entry drops out.
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string; signInUrl?: string };
+      if (data.code === "organization_authentication_required" && data.signInUrl?.startsWith("/sign-in?")) {
+        departing = true;
+        stopDatabaseWorkspace();
+        clearTenantScopedLocalData({ keepProfile: true });
+        window.location.assign(data.signInUrl);
+        return;
+      }
+      requestStarted = false;
       toast.error(
         res.status === 403
           ? "You no longer have access to that workspace."
           : data.error ?? "Couldn't switch workspace. Please try again.",
       );
       void load();
-    } catch {
-      toast.error("Couldn't switch workspace — you appear to be offline.");
+    } catch (error) {
+      if (requestStarted) {
+        // The transaction may have committed even when its response was lost.
+        // Re-read the session through a reload without clearing pending work.
+        departing = true;
+        stopDatabaseWorkspace();
+        window.location.assign("/");
+      } else toast.error("Cannot switch workspaces yet", { description: error instanceof Error ? error.message : "Please try again." });
     } finally {
-      setSwitching(false);
+      if (!departing) { resume?.(); transition.release(); setSwitching(false); }
     }
   };
 

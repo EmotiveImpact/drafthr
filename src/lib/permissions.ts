@@ -1,5 +1,5 @@
 import type { ReviewStatus } from "./letters/types";
-import type { WorkspaceRole } from "./profile";
+import type { WorkspaceRole } from "./workspace-role";
 
 /** Reviewers + admins/owners can decide a submission. */
 export function canApprove(role: WorkspaceRole | undefined): boolean {

@@ -1,10 +1,73 @@
 # Production activation runbook
 
-This app is production-ready and deployed. A few capabilities are **built and
-tested but gated off by default** because turning them on writes to your
-production database / money rails — deliberate owner decisions that an automated
-agent is (correctly) not allowed to take. This is the checklist to switch them
-on.
+This is a historical activation checklist, not a production-readiness sign-off.
+The statuses below describe the July 2026 implementation and have not all been
+revalidated against the current deployment.
+
+## Current cutover gate — 2026-09-27
+
+**Do not execute the historical dual-write activation or rollback commands below
+as the launch procedure for this checkout.** The current implementation uses the
+coordinated database-first workspace, not the older optional browser mirror.
+The current evidence and open requirements are in
+[WORKSPACE-COMPLETION-PLAN.md](WORKSPACE-COMPLETION-PLAN.md),
+[DATABASE-FIRST-MIGRATION.md](DATABASE-FIRST-MIGRATION.md), and
+[PRIVATE-FILES.md](PRIVATE-FILES.md).
+
+- Workspace records, settings, private files/assets and explicit recovery are
+  implemented locally. Hosted cutover has not been verified. Migrations through
+  0024 were applied to the isolated local database only; inspect the intended
+  hosted database's migration history before planning any deployment.
+- Do not simply enable `DRAFTHR_DUAL_WRITE` or disable the database flags to
+  roll back. Once Postgres owns the records, the old browser store is not a
+  complete fallback. A rollback must preserve the authoritative database and
+  private objects, retain unsaved recovery, and use a verified compatible
+  application version. Do not remove migrated data or repopulate it from a stale
+  browser copy.
+- Before customer cutover, verify independent-session workflows, imports and
+  recovery; real hosted WorkOS sessions; tenant-isolated private storage; actual
+  PDF/Word/ZIP outputs; email and billing; and a backup restore. Owner decisions
+  on deployment targets, retention and UK/US operating requirements remain gates.
+- Local acceptance was interrupted by disk exhaustion. At 10:11 BST
+  on 2026-09-27, Postgres logged ENOSPC, an autovacuum panic, and failed WAL
+  recovery. With 15 GiB free, the existing cluster restarted at 14:33 BST;
+  normal WAL recovery completed, `pg_amcheck` passed all 450 relations, and
+  all 19 ready local private files/assets matched their stored sizes and hashes.
+  The signed-in workspace and local acceptance tests work again. See the
+  workspace plan for recovery evidence and the browser-found navigation fix.
+  This incident was local; these checks do not certify a hosted deployment.
+
+## Launch gate review — 2026-09-23
+
+The linked Vercel project has a ready production deployment, but its latest
+deployment is about 80 days old. The current checkout has uncommitted changes.
+Before inviting customers to enter real employment records, close and verify
+these gaps:
+
+1. **Central records:** the employee directory is local-only; matters are
+   pushed but not pulled; draft evidence, exports, and some version history
+   remain local-only. The existing draft dual-write flags do not make the
+   complete workspace available on another device. Implement server-owned
+   records, deletion reconciliation, and a migration path for browser data.
+2. **Private files:** the production environment variable list does not include
+   `BLOB_READ_WRITE_TOKEN`. Image upload/read now targets a private Blob store
+   through tenant-authenticated routes, but without a provisioned private store
+   production uploads fail visibly (local development retains data URLs).
+   Provision and end-to-end test private storage before uploading signatures or
+   letterheads. Evidence blobs still need a durable private-storage path.
+3. **Customer communications:** `RESEND_API_KEY` is absent from the production
+   variable list. Verify invitation and review-notification delivery before
+   promising collaboration by email.
+4. **Payments:** `DRAFTHR_ENFORCE_PAYWALL` is absent from the production variable
+   list. The presence of Stripe keys does not establish that they are live
+   keys or that live checkout and webhooks have been tested. Complete the
+   test-to-live checklist below with the business owner.
+5. **Runtime and operating checks:** test signed-out and wrong-tenant access on
+   the actual deployment; restore a database backup; check incident response,
+   retention/deletion, supplier agreements, and UK/US launch scope.
+
+The local application can be run for testing. A passing build and unit tests
+do not close the launch gates above.
 
 Status legend: ✅ live · 🟡 built, owner-activation required · 🔭 needs your
 external provisioning before it can be built.

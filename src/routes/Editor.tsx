@@ -60,12 +60,15 @@ import {
 import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { counselAttestationForDraft, getDraftReadiness } from "@/lib/finalize/readiness";
 import { BrandMark, AvatarStack } from "@/components/ds";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { useProfileStore } from "@/lib/profile";
 import { listIdentities, meIdentity } from "@/lib/comments/identity";
 import { SuggestEditDialog } from "@/components/editor/SuggestEditDialog";
 import { uid } from "@/lib/utils";
+import { saveDraftAsTemplate } from "@/lib/save-draft-template";
+import { toServerUuid } from "@/lib/remote-ids";
 import { InvitePopover } from "@/components/editor/InvitePopover";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
@@ -159,6 +162,12 @@ export function Editor() {
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const templateSaveGeneration = useRef(0);
+  useEffect(() => {
+    setTemplateSaving(false);
+    return () => { templateSaveGeneration.current += 1; };
+  }, [draftId]);
   // "Open on mobile" share dialog — shows the `/m/:draftId` link with
   // copy / open affordances. Surfaced from the File menu.
   const [mobileShareOpen, setMobileShareOpen] = useState(false);
@@ -537,8 +546,8 @@ export function Editor() {
   // the current draft's section html + answers into a CustomTemplate.
   // First save creates the row; subsequent saves update in place via
   // templateSourceId so we never duplicate.
-  const saveTemplateSource = () => {
-    if (!draft.isTemplateSource) return;
+  const saveTemplateSource = async () => {
+    if (!draft.isTemplateSource || templateSaving) return;
     const answersRec = draft.answers as Record<string, unknown>;
     const templateName =
       (answersRec._templateName as string | undefined)?.trim() ||
@@ -546,40 +555,20 @@ export function Editor() {
       meta?.shortTitle ||
       "Untitled template";
     const templateDescription = answersRec._templateDescription as string | undefined;
-    const sectionHtml: Partial<Record<import("@/lib/letters/types").SectionId, string>> = {};
-    for (const sec of draft.sections) {
-      if (sec.html.trim().length === 0) continue;
-      sectionHtml[sec.sectionId] = sec.html;
-    }
-    const store = useDraftStore.getState();
     const myTemplatesUrl =
       (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
-    if (draft.templateSourceId && store.customTemplates[draft.templateSourceId]) {
-      store.updateCustomTemplate(draft.templateSourceId, {
-        name: templateName,
-        description: templateDescription,
-        baseLetterType: draft.letterType,
-        mode: draft.mode,
-        jurisdiction: draft.context.jurisdiction,
-        sectionHtml,
-        answers: draft.answers,
+    const attempt = templateSaveGeneration.current;
+    setTemplateSaving(true);
+    try {
+      await saveDraftAsTemplate({ draft, templateId: draft.templateSourceId ?? toServerUuid(`template-source:${draft.id}`),
+        name: templateName, description: templateDescription, linkSource: true,
+        isCurrent: () => templateSaveGeneration.current === attempt });
+      if (templateSaveGeneration.current === attempt) toast.success("Template saved", {
+        action: { label: "Open My Templates", onClick: () => nav(myTemplatesUrl) },
       });
-    } else {
-      const newId = store.createCustomTemplate({
-        name: templateName,
-        description: templateDescription,
-        baseLetterType: draft.letterType,
-        mode: draft.mode,
-        jurisdiction: draft.context.jurisdiction,
-        sectionHtml,
-        answers: draft.answers,
-      });
-      const next = { ...store.drafts[draft.id], templateSourceId: newId, updatedAt: Date.now() };
-      useDraftStore.setState({ drafts: { ...store.drafts, [draft.id]: next } });
-    }
-    toast.success("Template saved", {
-      action: { label: "Open My Templates", onClick: () => nav(myTemplatesUrl) },
-    });
+    } catch (error) {
+      if (templateSaveGeneration.current === attempt) toast.error(error instanceof Error ? error.message : "Template could not be saved.");
+    } finally { if (templateSaveGeneration.current === attempt) setTemplateSaving(false); }
   };
 
   const discardTemplateSource = () => {
@@ -633,28 +622,20 @@ export function Editor() {
     toast("Withdrawn from review");
   };
 
-  // Counsel-review status — derived from the most recent export attestation
-  // OR from a manual attestation in answers._counselReview. High-risk
+  // Current counsel-review decision lives in answers._counselReview. High-risk
   // letters that haven't been reviewed show an amber "needs review" pill.
-  const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
-    const lastExport = (draft.exports ?? [])
-      .slice()
-      .sort((a, b) => b.exportedAt - a.exportedAt)
-      .find((e) => e.reviewedBy);
-    if (lastExport?.reviewedBy && lastExport.reviewedOn) {
-      return { reviewedBy: lastExport.reviewedBy, reviewedOn: lastExport.reviewedOn };
-    }
-    const manual = (draft.answers as Record<string, unknown>)._counselReview as
-      | { reviewedBy?: string; reviewedOn?: string }
-      | undefined;
-    if (manual?.reviewedBy && manual.reviewedOn) {
-      return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
-    }
-    return null;
-  })();
+  const counselReview = counselAttestationForDraft(draft) ?? null;
+  const readiness = getDraftReadiness(draft);
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
+      <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {globallyStreaming
+          ? `Generating letter. ${readiness.sections.written} of ${readiness.sections.total} sections written.`
+          : readiness.sections.written === readiness.sections.total && readiness.sections.total > 0
+            ? `Letter generation complete. ${readiness.sections.written} sections written.`
+            : `${readiness.sections.written} of ${readiness.sections.total} sections written.`}
+      </p>
       {/* Single canonical header — replaces the old EditorTopbar + action row.
        * Layout: [brand · ← Letters · counsel pill] [TITLE centred + submeta]
        * [avatars · actions]. Edit/Preview moved to the secondary toolbar so
@@ -1302,14 +1283,14 @@ export function Editor() {
             {draft.isTemplateSource ? (
               <Button
                 size="sm"
-                disabled={globallyStreaming}
+                disabled={globallyStreaming || templateSaving}
                 onClick={saveTemplateSource}
                 aria-label="Save template"
                 title="Save template"
                 className="px-2 sm:px-3"
               >
                 <BookmarkPlus className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">Save template</span>
+                <span className="hidden sm:inline">{templateSaving ? "Saving template…" : "Save template"}</span>
               </Button>
             ) : (
               <Button

@@ -9,36 +9,9 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
-import { isAllowedEmbeddedImageFile, isSafeImageDataUrl } from "@/lib/safe-data-url";
-
-/**
- * Read an image file into a base64 data URL. Bounded at ~5MB raw to stop
- * users blowing the localStorage budget on a single huge screenshot. Above
- * that, the export pack should carry the original file in /evidence/ and the
- * letter body should reference it instead of embedding.
- */
-const MAX_EMBED_BYTES = 5 * 1024 * 1024;
-async function readImageAsDataUrl(file: File): Promise<string | null> {
-  if (!isAllowedEmbeddedImageFile(file)) {
-    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
-    return null;
-  }
-  if (file.size > MAX_EMBED_BYTES) {
-    alert(
-      `${file.name} is larger than 5 MB. Add it as evidence via the 📎 button instead — that path stores the original file at full quality and references it from the section.`
-    );
-    return null;
-  }
-  return new Promise<string | null>((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : null;
-      resolve(isSafeImageDataUrl(result) ? result : null);
-    };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
-}
+import { insertInlineEvidenceImage } from "@/lib/storage/inline-evidence";
+import { handleDatabaseImagePaste } from "@/lib/storage/pasted-images";
+import { toast } from "sonner";
 import { useEffect, useRef, useState } from "react";
 import type { Draft, Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
@@ -152,8 +125,8 @@ export function SectionEditor({
         getItems: () => draftRef.current.evidence ?? [],
       }),
       // Inline images — paste/drop a screenshot or click the toolbar 🖼 button
-      // to embed it directly into the section. Stored as base64 in the section
-      // HTML so it travels through PDF + DOCX export untouched. Best-fit for
+      // to insert a private file reference into the section. Legacy base64
+      // remains readable; new uploads resolve only while exporting. Best-fit for
       // evidence sections (witnesses, evidence_attached, chronology) where you
       // need a screenshot or page-clip inline rather than as a separate file.
       Image.configure({
@@ -224,8 +197,15 @@ export function SectionEditor({
       },
       // Paste an image straight from the clipboard (cmd+V after a screenshot)
       // or drop an image file onto the section. Both flow into the same
-      // base64-embed path that the toolbar button uses.
+      // private-file path that the toolbar button uses.
       handlePaste(view, event) {
+        if (handleDatabaseImagePaste(view, event, pending => {
+          const notification = toast.loading("Storing pasted images privately…");
+          void pending.then(() => toast.dismiss(notification), error => {
+            toast.dismiss(notification);
+            toast.error(error instanceof Error ? error.message : "Paste failed. Your existing text is unchanged.");
+          });
+        })) return true;
         const items = event.clipboardData?.items;
         if (!items) return false;
         for (const item of items) {
@@ -233,11 +213,8 @@ export function SectionEditor({
             const file = item.getAsFile();
             if (!file) continue;
             event.preventDefault();
-            void readImageAsDataUrl(file).then((src) => {
-              if (src) view.dispatch(view.state.tr.replaceSelectionWith(
-                view.state.schema.nodes.image.create({ src, alt: file.name })
-              ));
-            });
+            void insertInlineEvidenceImage(view, draftRef.current.id, file)
+              .catch(error => alert(error instanceof Error ? error.message : "Image upload failed."));
             return true;
           }
         }
@@ -251,14 +228,8 @@ export function SectionEditor({
         event.preventDefault();
         const coords = { left: event.clientX, top: event.clientY };
         const pos = view.posAtCoords(coords);
-        void readImageAsDataUrl(file).then((src) => {
-          if (!src) return;
-          const node = view.state.schema.nodes.image.create({ src, alt: file.name });
-          const tr = pos
-            ? view.state.tr.insert(pos.pos, node)
-            : view.state.tr.replaceSelectionWith(node);
-          view.dispatch(tr);
-        });
+        void insertInlineEvidenceImage(view, draftRef.current.id, file, pos?.pos)
+          .catch(error => alert(error instanceof Error ? error.message : "Image upload failed."));
         return true;
       },
     },

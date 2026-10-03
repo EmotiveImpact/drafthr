@@ -55,4 +55,14 @@ describe("toLetterDraft (app Draft → pagedly LetterDraft)", () => {
     const ld = toLetterDraft({ ...base, evidence: undefined } as unknown as Draft);
     expect(ld.evidence).toEqual([]);
   });
+
+  it("preserves comment, figure and suggestion markup when Page remaps", () => {
+    const html = '<p><mark data-comment-id="c1">Commented</mark> <span data-fig-id="e1">[See Fig 1]</span> <ins data-suggestion-id="s1">suggested</ins></p>';
+    const mapped = toLetterDraft({
+      ...base,
+      sections: [{ ...base.sections[0], html }],
+    } as unknown as Draft);
+
+    expect(mapped.sections[0].html).toBe(html);
+  });
 });

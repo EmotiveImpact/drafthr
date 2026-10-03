@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isSafeImageDataUrl, isSafeImageRef } from "./safe-data-url";
+import { privateImageUrl } from "./storage/privateImageUrl";
 
 /* ============================================================================
  * isSafeImageDataUrl / isSafeImageRef — the image-safety gate used by export
@@ -39,6 +40,12 @@ describe("isSafeImageDataUrl", () => {
 });
 
 describe("isSafeImageRef", () => {
+  it("accepts only the tenant-scoped private image route among relative URLs", () => {
+    const path = `letterheads/12345678-1234-1234-1234-123456789abc/${"a".repeat(64)}.png`;
+    expect(isSafeImageRef(privateImageUrl(path))).toBe(true);
+    expect(isSafeImageRef("/api/upload/image?path=../../secrets")).toBe(false);
+    expect(isSafeImageRef("//evil.example/image.png")).toBe(false);
+  });
   it("accepts https URLs and safe data URLs, rejects other schemes", () => {
     expect(isSafeImageRef("https://x.public.blob.vercel-storage.com/a.png")).toBe(true);
     expect(isSafeImageRef("data:image/png;base64,iVBORw0KGgo=")).toBe(true);

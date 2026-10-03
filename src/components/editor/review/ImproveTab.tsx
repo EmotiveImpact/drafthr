@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight, Coins, Loader2, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,10 +34,7 @@ export function ImproveTab() {
     navigate(draftId ? `/consultants?draft=${encodeURIComponent(draftId)}` : "/consultants");
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+    <div
       className="space-y-3"
     >
       <p className="text-[12px] text-[var(--ds-muted)] px-1">
@@ -70,7 +66,7 @@ export function ImproveTab() {
         onClick={browseConsultants}
         primary
       />
-    </motion.div>
+    </div>
   );
 }
 
@@ -327,12 +323,9 @@ function ReviewLane({
           Coming soon
         </div>
       ) : (
-        <motion.button
+        <button
           type="button"
           onClick={onClick}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.12 }}
           className={cn(
             "mt-2.5 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition",
             primary
@@ -342,7 +335,7 @@ function ReviewLane({
         >
           {cta}
           <ArrowRight className="size-3.5" />
-        </motion.button>
+        </button>
       )}
     </div>
   );

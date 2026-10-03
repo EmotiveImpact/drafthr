@@ -61,6 +61,12 @@ describe("sanitizeLetterHtmlForExport — track-changes never reach a file (bug 
 });
 
 describe("sanitizeLetterHtml", () => {
+  it("retains strict private workspace assets but rejects malformed image routes", () => {
+    const url = `/api/upload/image?path=letterheads%2F12345678-1234-1234-1234-123456789abc%2F${"a".repeat(64)}.png`;
+    expect(sanitizeLetterHtml(`<img src="${url}">`)).toContain(url);
+    expect(sanitizeLetterHtmlForExport(`<img src="${url}">`)).toContain(url);
+    expect(sanitizeLetterHtml(`<img src="${url}&redirect=evil">`)).not.toContain("<img");
+  });
   it("strips script tags", () => {
     const out = sanitizeLetterHtml("<p>Hello</p><script>alert(1)</script>");
     expect(out).not.toContain("<script");

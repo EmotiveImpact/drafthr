@@ -19,6 +19,8 @@ import {
 } from "./workos.js";
 import { jsonError } from "./request.js";
 import { getUserSessionEpoch, isCookieEpochStale } from "./session-epoch.js";
+import { ensureLocalUser } from "./local-identity.js";
+import { ensureOrganizationSession, AuthUnavailableError } from "./workos.js";
 
 export type RequireSessionAndTenantResult =
   | {
@@ -34,6 +36,7 @@ export type RequireSessionAndTenantResult =
 
 export async function requireSessionAndTenant(
   req: Request,
+  options: { allowUnscoped?: boolean } = {},
 ): Promise<RequireSessionAndTenantResult> {
   const sessionResult = await requireSession(req);
   if (!sessionResult.ok) return sessionResult;
@@ -41,40 +44,11 @@ export async function requireSessionAndTenant(
 
   try {
     const db = getDb();
-    const externalId = session.user.id;
-
-    // Upsert: try to find by externalId, else mint a tenant + user row.
+    // Preserve the local primary key when linking a provisioned company identity.
     // Even users without an active workspace need a `users` row so that
     // tenant_members joins can target them when invites resolve.
-    let [userRow] = await db.select().from(users).where(eq(users.externalId, externalId)).limit(1);
-    if (!userRow) {
-      // Bootstrap tenant — every user gets a personal tenant on mint, so audit
-      // chains for first-run actions have a home. They can switch to a shared
-      // workspace later (or stay on this one if they're a solo HR user).
-      const [bootTenant] = await db
-        .insert(tenants)
-        .values({
-          name: deriveBootstrapTenantName(session.user.email, session.user.firstName),
-        })
-        .returning();
-      [userRow] = await db
-        .insert(users)
-        .values({
-          tenantId: bootTenant.id,
-          externalId,
-          email: session.user.email,
-          legalName: deriveLegalName(session.user.firstName, session.user.lastName),
-          workspaceRole: "owner",
-          userType: "customer",
-        })
-        .returning();
-      await db.insert(tenantMembers).values({
-        userId: userRow.id,
-        tenantId: bootTenant.id,
-        role: "owner",
-        isActiveTenant: true,
-      });
-    } else if (
+    let userRow = await ensureLocalUser(session, { reconcileDirectory: false });
+    if (
       session.user.email &&
       session.user.email.toLowerCase() !== (userRow.email ?? "").toLowerCase()
     ) {
@@ -90,9 +64,8 @@ export async function requireSessionAndTenant(
     // Server-side session revocation (SE-03): reject a cookie whose epoch is
     // behind the user's stored epoch. Bumped on sign-out / password reset, so a
     // stolen cookie dies immediately instead of surviving its 7-day TTL.
-    // Fails OPEN (no enforcement) if the epoch can't be read — pre-migration or
-    // a transient DB blip must never log a valid user out.
-    const dbEpoch = await getUserSessionEpoch(session.user.id);
+    // Fail closed on a DB error; never turn an outage into authorization.
+    const dbEpoch = await getUserSessionEpoch(session.user.id, { strict: true });
     if (isCookieEpochStale(session.epoch, dbEpoch)) {
       return { ok: false, response: jsonError("Session expired — please sign in again.", 401) };
     }
@@ -123,6 +96,11 @@ export async function requireSessionAndTenant(
       activeTenant = t ?? null;
     }
 
+    if (activeTenant && !options.allowUnscoped) {
+      const denied = await ensureOrganizationSession(req, session, activeTenant.workosOrgId, activeTenant.id);
+      if (denied) return { ok: false, response: denied };
+    }
+
     return {
       ok: true,
       session,
@@ -133,18 +111,8 @@ export async function requireSessionAndTenant(
       canCreateTenant: true,
     };
   } catch (err) {
+    if (err instanceof AuthUnavailableError) return { ok: false, response: jsonError(err.message, 503) };
     console.error("[requireSessionAndTenant] db error", err);
     return { ok: false, response: jsonError("Workspace lookup failed", 500) };
   }
-}
-
-function deriveBootstrapTenantName(email: string, firstName: string | null): string {
-  if (firstName && firstName.trim()) return `${firstName.trim()}'s workspace`;
-  const local = email.split("@")[0] ?? "Personal";
-  return `${local}'s workspace`;
-}
-
-function deriveLegalName(firstName: string | null, lastName: string | null): string | null {
-  const parts = [firstName, lastName].filter((p): p is string => Boolean(p && p.trim()));
-  return parts.length ? parts.join(" ") : null;
 }

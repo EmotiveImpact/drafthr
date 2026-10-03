@@ -19,20 +19,15 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayModeOf, figureLabelFor } from "@/lib/evidence";
-import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { evidenceInsertionHtml } from "@/lib/storage/inline-evidence";
 import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { uid } from "@/lib/utils";
+import { storeEvidenceFile } from "@/lib/storage/workspace-files";
+import { StoredEvidenceFile } from "./StoredEvidenceFile";
+import { EvidenceUploadRecovery } from "./EvidenceUploadRecovery";
+import { isDatabaseWorkspaceEnabled } from "@/lib/workspace-flags";
 
-/** Read a File as a base64 data URL. Same pattern as EvidencePanel. */
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
 
 /** Map a file's MIME type to an EvidenceItem kind. */
 function kindFromFile(file: File): EvidenceItem["kind"] {
@@ -109,10 +104,9 @@ export function EvidenceDrawer({
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
 
   // Inline file upload — the old "Upload new" link navigated to the
-  // /editor/:id/evidence route which 302's back to Edit, causing a
-  // visible page flash. Now we just open a native file picker, read
-  // each chosen file as a base64 data URL, and append to the draft's
-  // evidence array via setEvidence. No navigation, no flash.
+  // /editor/:id/evidence route which 302's back to Edit. Each completed
+  // private upload is attached separately so a later failed file cannot
+  // hide the successful earlier files in the same selection.
   const setEvidence = useDraftStore((s) => s.setEvidence);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
@@ -122,20 +116,22 @@ export function EvidenceDrawer({
     try {
       const items: EvidenceItem[] = [];
       for (const file of Array.from(files)) {
-        const dataUrl = await readAsDataUrl(file);
-        items.push({
+        const stored = await storeEvidenceFile(draft.id, file);
+        const item: EvidenceItem = {
           id: uid("ev"),
           kind: kindFromFile(file),
           filename: file.name,
           content: "",
-          fileDataUrl: dataUrl,
-          mimeType: file.type || undefined,
+          ...stored,
           sectionIds: [],
           uploadedAt: Date.now(),
           includeVerbatim: false,
-        });
+        };
+        const latest = useDraftStore.getState().drafts[draft.id];
+        if (!latest) throw new Error("The draft is no longer available");
+        setEvidence(draft.id, [...(latest.evidence ?? []), item]);
+        items.push(item);
       }
-      setEvidence(draft.id, [...allItems, ...items]);
       setUploadStatus(`Added ${items.length} item${items.length > 1 ? "s" : ""}`);
       // Clear the status banner after a moment.
       window.setTimeout(() => setUploadStatus(null), 2400);
@@ -213,6 +209,7 @@ export function EvidenceDrawer({
   const totalBytes = useMemo(() => {
     let sum = 0;
     for (const item of allItems) {
+      if (item.fileSize) { sum += item.fileSize; continue; }
       if (!item.fileDataUrl) continue;
       // Rough base64 size: payload chars × 0.75
       const idx = item.fileDataUrl.indexOf(",");
@@ -236,7 +233,7 @@ export function EvidenceDrawer({
   }, [editor, draft.sections, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insert = (item: EvidenceItem) => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed || !editor.isEditable) return;
     const mode = displayModeOf(item);
     if (mode === "figure") {
       const label = figureLabelFor(item, allItems) || "Fig";
@@ -248,7 +245,8 @@ export function EvidenceDrawer({
         )
         .run();
     } else if (mode === "inline") {
-      editor.chain().focus().insertContent(buildInlineHtml(item)).run();
+      try { editor.chain().focus().insertContent(evidenceInsertionHtml(item)).run(); }
+      catch (error) { setUploadStatus(error instanceof Error ? error.message : "Image insertion failed."); return; }
     } else if (mode === "attached") {
       editor
         .chain()
@@ -488,12 +486,15 @@ export function EvidenceDrawer({
                         </button>
                       </div>
                     </div>
+                    {item.fileId && <StoredEvidenceFile item={item} />}
                   </li>
                 );
               })}
             </ul>
           )}
         </div>
+
+        {visible && isDatabaseWorkspaceEnabled() ? <EvidenceUploadRecovery key={draft.id} draftId={draft.id} /> : null}
 
         {/* Footer — Upload-new opens a native file picker (inline, no navigation).
          * Manage evidence link returned per UX request — affordance for
@@ -637,37 +638,7 @@ function EmptyState({
 
 /* ---------------------------------------------------------------------------
  * Helpers — kept local to keep the file self-contained.
- * The insertion HTML mirrors EvidencePickerPopover.buildInlineHtml.
  * ------------------------------------------------------------------------ */
-function buildInlineHtml(item: EvidenceItem): string {
-  const caption = item.filename ? ` (${escHtml(item.filename)})` : "";
-  if (item.kind === "screenshot" && isSafeImageDataUrl(item.fileDataUrl)) {
-    return `<figure><img src="${escAttr(item.fileDataUrl)}" alt="${escAttr(
-      item.filename || "screenshot"
-    )}" />${
-      item.content
-        ? `<figcaption>${escHtml(item.content)}</figcaption>`
-        : item.filename
-        ? `<figcaption>${escHtml(item.filename)}</figcaption>`
-        : ""
-    }</figure>`;
-  }
-  if (item.kind === "note" || item.kind === "email" || item.kind === "calendar") {
-    const text = item.content || item.filename || "Evidence";
-    const kindLabel =
-      item.kind === "email"
-        ? "Email"
-        : item.kind === "calendar"
-        ? "Calendar entry"
-        : "Note";
-    return `<blockquote>${escHtml(text)}<br/><em>— ${kindLabel}${caption}</em></blockquote>`;
-  }
-  // Documents
-  return `<p>I refer to the document <em>${escHtml(item.filename || "(unnamed)")}</em>${
-    item.content ? `, summarised: ${escHtml(item.content)}` : ""
-  }.</p>`;
-}
-
 function labelFor(kind: Kind): string {
   switch (kind) {
     case "email":
@@ -703,4 +674,3 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-

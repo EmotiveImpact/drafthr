@@ -1,4 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
+import { attachmentsHtml, figuresHtml } from "@/lib/evidence-html";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import {
   brandedExportFooterHtml,
@@ -152,23 +153,12 @@ function buildDocxBodyHtml(draft: Draft): string {
     .join("\n");
   const resolved =
     evidence.length > 0 ? resolveFigureRefsInHtml(sectionsHtml, evidence) : sectionsHtml;
-  const attached = evidence.filter((e) => (e.displayMode ?? "figure") === "attached");
-  const attachmentsBlock =
-    attached.length === 0
-      ? ""
-      : `<div><h3>Attachments</h3><ol>${attached
-          .map(
-            (e) =>
-              `<li><strong>${escapeHtmlD(e.filename || `${e.kind} item`)}</strong>${
-                e.content ? ` - ${escapeHtmlD(e.content)}` : ""
-              }</li>`
-          )
-          .join("")}</ol></div>`;
 
   return [
     letterheadHtml(draft),
     resolved,
-    attachmentsBlock,
+    attachmentsHtml(evidence),
+    figuresHtml(evidence, { requireResolvedImages: true }),
     "<hr />",
     sanitizeLetterHtml(disclaimerHtmlFor(draft)),
     // Branded export footer — same toggle as PDF. See src/lib/branding/export-footer.ts.
@@ -217,6 +207,9 @@ function renderNodesAsBlocks(
 
     if (isBlockElement(node)) {
       flushInline();
+      if (node.classList.contains("page-break-before")) {
+        blocks.push(paragraph('<w:r><w:br w:type="page"/></w:r>'));
+      }
       blocks.push(renderBlockElement(node, ctx, baseInlineStyle));
     } else {
       inlineBuffer.push(node);

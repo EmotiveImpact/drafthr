@@ -15,7 +15,7 @@ export async function GET(req: Request): Promise<Response> {
   const limited = rateLimit(req, { name: "workspace-list", max: 60, windowMs: 60_000 });
   if (limited) return limited;
 
-  const auth = await requireSessionAndTenant(req);
+  const auth = await requireSessionAndTenant(req, { allowUnscoped: true });
   if (!auth.ok) return auth.response;
 
   try {

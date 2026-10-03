@@ -39,6 +39,9 @@ const inviteFixture: Invite = {
 
 let mockInvite: Invite = inviteFixture;
 let mockExistingMember: boolean = false;
+let companyOrg: string | null = null;
+let companyEnabled = false;
+const organizationGate = vi.fn();
 type DbWrite = { kind: "insert" | "update"; values: Record<string, unknown> };
 
 function makeRequest(body: Record<string, unknown>): Request {
@@ -53,11 +56,18 @@ beforeEach(() => {
   process.env.NODE_ENV = "development"; // preserve local requests that omit Origin
   mockInvite = { ...inviteFixture };
   mockExistingMember = false;
+  companyOrg = null;
+  companyEnabled = false;
+  organizationGate.mockReset().mockResolvedValue(null);
 
   vi.doMock("../../../api/_utils/workos", async () => {
     const actual = await vi.importActual<typeof import("../../../api/_utils/workos")>("../../../api/_utils/workos");
     return {
       ...actual,
+      ensureOrganizationSession: organizationGate,
+      getWorkos: () => ({ userManagement: { listOrganizationMemberships: async () => ({
+        data: companyEnabled ? [{ userId: session.user.id, organizationId: companyOrg, status: "active" }] : [],
+      }) } }),
       requireSession: vi.fn().mockResolvedValue({ ok: true, session }),
     };
   });
@@ -177,6 +187,31 @@ describe("POST /api/workspace/accept-invite", () => {
     );
   });
 
+  it("keeps a managed-company invite unconsumed until company access is provisioned", async () => {
+    companyOrg = "org_company";
+    const writes: DbWrite[] = [];
+    vi.doMock("../../../src/db", () => buildDbMock([inviteFixture], [], writes));
+    const { POST } = await import("../../../api/workspace/_handlers/accept-invite");
+    const res = await POST(makeRequest({ inviteCode: "abc123" }));
+    expect(res.status).toBe(403);
+    expect(await res.json()).toHaveProperty("error", expect.stringContaining("enable your account"));
+    expect(writes).toEqual([]);
+    expect(organizationGate).not.toHaveBeenCalled();
+  });
+
+  it("does not consume an invite or switch a workspace before required company authentication", async () => {
+    companyOrg = "org_company";
+    companyEnabled = true;
+    organizationGate.mockResolvedValue(new Response(JSON.stringify({
+      code: "organization_authentication_required", signInUrl: "/sign-in?workspace=tenant_1",
+    }), { status: 409 }));
+    const writes: DbWrite[] = [];
+    vi.doMock("../../../src/db", () => buildDbMock([inviteFixture], [], writes));
+    const { POST } = await import("../../../api/workspace/_handlers/accept-invite");
+    expect((await POST(makeRequest({ inviteCode: "abc123" }))).status).toBe(409);
+    expect(writes).toEqual([]);
+  });
+
   it("switches an existing membership active when accepting its invite", async () => {
     const writes: DbWrite[] = [];
     vi.doMock("../../../src/db", () =>
@@ -238,6 +273,7 @@ function buildDbMock(
             limit: () => {
               call += 1;
               if (call === 1) return Promise.resolve(inviteRows);
+              if (call === 2) return Promise.resolve([{ id: "tenant_1", workosOrgId: companyOrg }]);
               return Promise.resolve(existingMemberRows);
             },
           }),

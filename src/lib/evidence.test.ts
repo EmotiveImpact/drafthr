@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { figureLabelFor, validFigureNumbers } from "@/lib/evidence";
-import type { EvidenceItem } from "@/lib/letters/types";
+import { evidenceReferenceStatus, figureLabelFor, validFigureNumbers } from "@/lib/evidence";
+import type { Draft, EvidenceItem } from "@/lib/letters/types";
 
 function ev(partial: Partial<EvidenceItem> & { id: string }): EvidenceItem {
   return {
@@ -11,6 +11,34 @@ function ev(partial: Partial<EvidenceItem> & { id: string }): EvidenceItem {
     ...partial,
   };
 }
+
+describe("evidence references shared by Review and export readiness", () => {
+  function check(html: string, evidence: EvidenceItem[] = []) {
+    return evidenceReferenceStatus({ sections: [{ id: "section1", html }] as Draft["sections"], evidence });
+  }
+
+  it("counts each broken reference, including repeated references", () => {
+    expect(check("<p>[See Fig 99] [See Fig 99]</p>")).toMatchObject({ total: 2, broken: [{ sectionId: "section1" }, { sectionId: "section1" }] });
+  });
+
+  it("resolves ID-backed references after renumbering and custom labels", () => {
+    expect(check('<span data-fig-id="record">[See Fig 99]</span>', [ev({ id: "record", figureLabel: "Exhibit A" })]))
+      .toEqual({ total: 1, broken: [] });
+  });
+
+  it("does not let another figure with the same number mask a deleted attachment", () => {
+    expect(check('<span data-fig-id="deleted">[See Fig 1]</span>', [ev({ id: "other" })]).broken).toHaveLength(1);
+  });
+
+  it("flags references to items changed from figure to pack-only", () => {
+    expect(check('<span data-fig-id="record">[See Fig 1]</span>', [ev({ id: "record", displayMode: "pack_only" })]).broken).toHaveLength(1);
+  });
+
+  it("ignores proposed references which are excluded from export", () => {
+    const html = '<p>Original text <ins data-suggestion-id="s1" data-kind="insertion" data-status="pending">[See Fig 99]</ins></p>';
+    expect(check(html)).toEqual({ total: 0, broken: [] });
+  });
+});
 
 describe("validFigureNumbers", () => {
   it("numbers figures among figure-mode items only, not all evidence", () => {

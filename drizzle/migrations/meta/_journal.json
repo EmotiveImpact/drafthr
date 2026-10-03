@@ -127,6 +127,55 @@
       "when": 1783184132963,
       "tag": "0017_slippery_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790163679752,
+      "tag": "0018_eminent_roughhouse",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790483890630,
+      "tag": "0019_workspace_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790484914844,
+      "tag": "0020_draft_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790485716054,
+      "tag": "0021_workspace_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790488012559,
+      "tag": "0022_workspace_files",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790492392252,
+      "tag": "0023_staged_file_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790493734817,
+      "tag": "0024_workspace_assets",
+      "breakpoints": true
     }
   ]
 }

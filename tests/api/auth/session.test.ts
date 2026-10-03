@@ -73,7 +73,7 @@ function buildDbMock(opts: {
               limit: () =>
                 Promise.resolve(call === 1 ? (opts.userRow ? [opts.userRow] : []) : []),
             }),
-            leftJoin: () => ({
+            innerJoin: () => ({
               where: () => Promise.resolve(opts.memberships),
             }),
           }),
@@ -124,6 +124,7 @@ beforeEach(() => {
     );
     return {
       ...actual,
+      ensureOrganizationSession: vi.fn().mockResolvedValue(null),
       getSessionFromRequest: vi.fn().mockResolvedValue({
         user: sessionUser,
         workosSession: "",

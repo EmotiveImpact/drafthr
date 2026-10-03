@@ -1,3 +1,5 @@
+import { parsePrivateImageUrl } from "./storage/privateImageUrl";
+
 export const SAFE_IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
 const SAFE_IMAGE_MIME_TYPES = new Set([
@@ -23,14 +25,14 @@ export function isSafeImageDataUrl(value: unknown): value is string {
 }
 
 /**
- * Either a safe data URL (legacy / pre-migration) or an https URL from
- * the image-upload service. https is the new default — see
- * `src/lib/storage/uploadImage.ts`. Stays narrow on purpose so we can't
- * accidentally accept javascript:, blob: from arbitrary origins, etc.
+ * A safe data URL (legacy / local), an authenticated same-origin private
+ * image URL, or a legacy https image URL. Never accept arbitrary relative
+ * paths, javascript:, or blob: references.
  */
 export function isSafeImageRef(value: unknown): value is string {
   if (typeof value !== "string") return false;
   if (isSafeImageDataUrl(value)) return true;
+  if (parsePrivateImageUrl(value)) return true;
   if (!/^https:\/\//i.test(value)) return false;
   try {
     new URL(value);

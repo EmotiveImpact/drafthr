@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { CalendarDays, Plus, Trash2 } from "lucide-react";
 import type { EventKind, MatterEvent } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -99,10 +98,7 @@ export function MatterCalendar({
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut", delay: 0.15 }}
+    <section
       className="mb-5"
     >
       <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
@@ -234,6 +230,6 @@ export function MatterCalendar({
           </div>
         )}
       </div>
-    </motion.section>
+    </section>
   );
 }

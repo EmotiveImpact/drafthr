@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -350,14 +349,7 @@ export default function BulkOperations() {
         </ol>
       )}
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 24 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
-        >
+      <div>
           {step === 1 && (
             <StepOperation operation={operation} setOperation={setOperation} />
           )}
@@ -398,8 +390,7 @@ export default function BulkOperations() {
               onRetry={() => void handleGenerate()}
             />
           )}
-        </motion.div>
-      </AnimatePresence>
+      </div>
 
       {step < 5 && (
         <div className="mt-10 flex items-center justify-between">

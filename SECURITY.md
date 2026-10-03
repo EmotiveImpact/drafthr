@@ -4,8 +4,15 @@ Maintained from the `security-board` review. Update when routes, endpoints,
 roles, or the auth model change.
 
 ## Auth model
-- Identity: WorkOS (SSO + password). Session = iron-session cookie
-  (HttpOnly, Secure, SameSite=Lax). Verified in `api/_utils/workos.ts`.
+- Identity: WorkOS hosted AuthKit (including organization SSO/MFA policy).
+  The HttpOnly, Secure, SameSite=Lax app cookie contains a sealed WorkOS
+  session. `api/_utils/workos.ts` validates the provider session and database
+  revocation epoch on each request, refreshes expired tokens, and delivers
+  rotated cookies through every protected HTTP entry point.
+- Organization-backed workspaces require a WorkOS session authorized for
+  that organization, in addition to an active local membership. Local invitations
+  do not bypass company provisioning. Recovery/address verification alone never
+  issues an authenticated app session.
 - Chokepoint: `requireSessionAndTenant` (`api/_utils/session-with-tenant.ts`)
   validates the session, upserts the local `users` row, resolves the active
   tenant, and **fails closed** (returns 500, never data) on error.
@@ -55,7 +62,8 @@ nav — direct URL navigation to another role's surface redirects to `/`.
 - `directory-webhook`: WorkOS signature verified over the raw body before the
   payload is trusted; resolves org→tenant (no cross-tenant write).
 - `accept-invite`: session email must match the invite email.
-- OAuth callback: `state` cookie CSRF check; provider allowlist.
+- OAuth callback: sealed `state`, PKCE, verified identity and same-origin
+  return destination; the provider is hosted AuthKit.
 - Marketplace tag filter uses bound params (`sql.join`), not `sql.raw`. Only
   `sql.execute` in the codebase is the parameterised advisory-lock in audit.
 
@@ -112,10 +120,11 @@ nav — direct URL navigation to another role's surface redirects to `/`.
    carries the epoch it was minted with, `requireSessionAndTenant` rejects any
    cookie behind the user's stored epoch, and the epoch is bumped on **sign-out**
    and **password-reset-confirm** — so a stolen/extra cookie dies immediately
-   instead of surviving its 7-day TTL. Managed via defensive raw SQL
-   (`api/_utils/session-epoch.ts`) so it's safe in either deploy order: until the
-   migration is applied it fails open (no enforcement, no outage). **Apply
-   migration `0010` to activate.**
+   instead of surviving its 7-day TTL. Authentication uses strict epoch reads:
+   a database/schema error denies the request. **Apply migration `0010`
+   before deploying.** WorkOS remote revocation is recognized when its access
+   token needs refreshing, not necessarily immediately; configure an appropriate
+   access-token lifetime. Directory removal also disables the local membership.
 8. ~~**`VETTING_AUTO_PUBLISH=1`** self-publishes consultant cards~~ **HARDENED.**
    Now hard-disabled whenever `VERCEL_ENV === "production"`, so a misconfigured
    prod env can never ship unvetted cards regardless of the flag (PM-05,

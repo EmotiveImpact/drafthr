@@ -144,6 +144,8 @@ const agentTools = {
  * Request handler
  * ==========================================================================*/
 
+import { withSessionResponse } from "./_utils/workos.js";
+
 export const config = {
   runtime: "nodejs",
   maxDuration: 60,
@@ -164,6 +166,10 @@ type AgentRequest = {
 const MAX_SYSTEM_CHARS = 100_000;
 
 export async function POST(req: Request): Promise<Response> {
+  return withSessionResponse(req, handlePost);
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });

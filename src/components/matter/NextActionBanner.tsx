@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { Zap, FileText } from "lucide-react";
 import type { Matter, Task } from "@/lib/letters/types";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
@@ -48,10 +47,7 @@ export function NextActionBanner({
   const urgent = days !== undefined && days <= 3;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+    <div
       className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4 mb-5 flex items-center gap-3 relative overflow-hidden"
     >
       <div
@@ -95,6 +91,6 @@ export function NextActionBanner({
           <span className="sm:hidden">Generate</span>
         </Button>
       )}
-    </motion.div>
+    </div>
   );
 }

@@ -8,6 +8,7 @@
  * URLs are unchanged: /api/store/drafts and /api/store/sections.
  */
 import { jsonError } from "../_utils/request.js";
+import { withSessionResponse } from "../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -22,6 +23,12 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/sections.js");
     case "matters":
       return import("./_handlers/matters.js");
+    case "workspace-records":
+      return import("./_handlers/workspace-records.js");
+    case "preferences":
+      return import("./_handlers/preferences.js");
+    case "files":
+      return import("./_handlers/files.js");
     case "draft-extras":
       return import("./_handlers/draft-extras.js");
     case "critique":
@@ -45,7 +52,7 @@ async function dispatch(
   if (!mod) return jsonError(`Unknown store path: ${action}`, 404);
   const handler = mod[method];
   if (!handler) return jsonError("Method Not Allowed", 405);
-  return handler(req);
+  return withSessionResponse(req, handler);
 }
 
 export async function GET(req: Request): Promise<Response> {

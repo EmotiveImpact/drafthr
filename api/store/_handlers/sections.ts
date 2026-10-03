@@ -32,6 +32,7 @@ type Body = {
 };
 
 export async function POST(req: Request): Promise<Response> {
+  if (process.env.DRAFTHR_DATABASE_WORKSPACE === "true") return jsonError("Reload to save a complete draft document", 409);
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
   if (process.env.DRAFTHR_DUAL_WRITE !== "true") return jsonError("Dual-write disabled", 503);

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { CheckCircle2, Circle, Plus, Trash2, ListChecks } from "lucide-react";
 import type { Task } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
@@ -57,10 +56,7 @@ export function MatterTasks({
   };
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: "easeOut", delay: 0.1 }}
+    <section
       className="mb-5"
     >
       <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
@@ -150,7 +146,7 @@ export function MatterTasks({
           </div>
         )}
       </div>
-    </motion.section>
+    </section>
   );
 }
 

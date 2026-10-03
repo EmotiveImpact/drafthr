@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { inlineImagesForExport, isAllowedImageHost } from "./inlineImagesForExport";
+import { privateImageUrl } from "./privateImageUrl";
 
 // A 1x1 transparent PNG — used as the fetched blob payload.
 const PNG_BYTES = new Uint8Array([
@@ -32,10 +33,23 @@ describe("isAllowedImageHost — SSRF guard (senior sweep B3)", () => {
 });
 
 describe("inlineImagesForExport", () => {
+  it("fails rather than producing a document missing a private branding image", async () => {
+    const url = privateImageUrl(`letterheads/12345678-1234-1234-1234-123456789abc/${"a".repeat(64)}.png`);
+    await expect(inlineImagesForExport(`<img src="${url}">`, vi.fn(async () => new Response("Unavailable", { status: 503 })))).rejects.toThrow("private image could not be loaded");
+  });
   // The existing tests use https://blob.example/* — allowlist it so the
   // inlining behaviour is exercised; the SSRF rejection is covered separately.
   beforeEach(() => vi.stubEnv("IMAGE_INLINE_ALLOWED_HOSTS", "blob.example"));
   afterEach(() => vi.unstubAllEnvs());
+  it("inlines the authenticated same-origin private image route", async () => {
+    const path = `letterheads/12345678-1234-1234-1234-123456789abc/${"a".repeat(64)}.png`;
+    const url = privateImageUrl(path);
+    const fetcher = makeFetcher({ [url]: { bytes: PNG_BYTES, contentType: "image/png" } });
+    const out = await inlineImagesForExport(`<img src="${url}" alt="signature" />`, fetcher);
+    expect(out).toContain('src="data:image/png;base64,');
+    expect(out).toContain('alt="signature"');
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
   it("leaves html unchanged when there are no https images", async () => {
     const html = `<p>Hello</p><img src="data:image/png;base64,AAAA" />`;
     const out = await inlineImagesForExport(html, makeFetcher());

@@ -1,6 +1,7 @@
 import type { Draft, EvidenceDisplayMode, EvidenceItem } from "@/lib/letters/types";
 import type { ExpectedEvidence } from "@/lib/letters/templates/types";
 import { getTemplate } from "@/lib/letters/templates";
+import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 
 /**
  * Compute checklist status for each ExpectedEvidence row declared by the
@@ -84,6 +85,37 @@ export function validFigureNumbers(allEvidence: EvidenceItem[]): Set<number> {
     if (match) nums.add(Number(match[1]));
   }
   return nums;
+}
+
+/** Validate exported references. ID-backed references follow their attachment
+ * even after renumbering; plain references use the current figure numbers. */
+export function evidenceReferenceStatus(draft: Pick<Draft, "sections" | "evidence">) {
+  const evidence = draft.evidence ?? [];
+  const validNumbers = validFigureNumbers(evidence);
+  const broken: { sectionId: string; label: string }[] = [];
+  let total = 0;
+  for (const section of draft.sections) {
+    const html = mergeAcceptedSuggestionsHtml(section.html ?? "", { forExport: true });
+    const unlinked = html.replace(
+      /<span\b[^>]*\bdata-fig-id=["']([^"']+)["'][^>]*>([\s\S]*?)<\/span>/gi,
+      (_match, id: string, content: string) => {
+        total++;
+        const item = evidence.find((candidate) => candidate.id === id);
+        if (!item || displayModeOf(item) !== "figure") {
+          broken.push({ sectionId: section.id, label: content.replace(/<[^>]+>/g, "").trim() || id });
+        }
+        return "";
+      },
+    );
+    const text = unlinked.replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/gi, " ");
+    for (const match of text.matchAll(/\[See\s+Fig\.?\s*(\d+)\]/gi)) {
+      total++;
+      if (!validNumbers.has(Number(match[1]))) {
+        broken.push({ sectionId: section.id, label: match[0] });
+      }
+    }
+  }
+  return { total, broken };
 }
 
 // Per-item ceiling on verbatim evidence embedded in prompts. The evidence

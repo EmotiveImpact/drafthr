@@ -218,9 +218,16 @@ async function provisionUser(tenantId: string, user: DirectoryUserLike): Promise
     .from(users)
     .where(eq(users.workosDirectoryUserId, user.id))
     .limit(1);
-  if (!existing && email) {
-    const [byEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (byEmail) existing = byEmail;
+  let verifiedAuthId: string | undefined;
+  if (!existing && email && user.organizationId) {
+    verifiedAuthId = await findVerifiedCompanyUserId(email, user.organizationId);
+    if (verifiedAuthId) {
+      const [linked] = await db.select().from(users).where(eq(users.externalId, verifiedAuthId)).limit(1);
+      if (linked) existing = linked;
+    }
+    if (existing?.workosDirectoryUserId && existing.workosDirectoryUserId !== user.id) {
+      throw new Error("Directory identity change requires administrator reconciliation");
+    }
   }
 
   let userId: string;
@@ -249,7 +256,7 @@ async function provisionUser(tenantId: string, user: DirectoryUserLike): Promise
       .insert(users)
       .values({
         tenantId,
-        externalId: `dsync:${user.id}`,
+        externalId: verifiedAuthId ?? `dsync:${user.id}`,
         email,
         legalName,
         workspaceRole: role,
@@ -336,10 +343,8 @@ async function deprovisionUser(
     .from(users)
     .where(eq(users.workosDirectoryUserId, user.id))
     .limit(1);
-  if (!existing && email) {
-    const [byEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (byEmail) existing = byEmail;
-  }
+  // Never deprovision by email. Only a previously bound, stable directory ID
+  // may revoke a seat; addresses can be renamed, reused or shared across orgs.
   if (!existing) {
     // Already gone or never provisioned — webhook is still idempotent,
     // just nothing to do. Skip the audit row too (no subject).
@@ -391,6 +396,23 @@ async function deprovisionUser(
       email,
     },
   });
+}
+
+async function findVerifiedCompanyUserId(email: string, organizationId: string) {
+  // AuthKit, not a global local-email match, establishes the provider identity.
+  const provider = getWorkos().userManagement;
+  const matches = await provider.listUsers({ email, organizationId });
+  const verified = matches.data.filter((u) => u.emailVerified && u.email.toLowerCase() === email.toLowerCase());
+  if (verified.length > 1) throw new Error("Ambiguous company identity");
+  const identity = verified[0];
+  if (!identity) return undefined;
+  const memberships = await provider.listOrganizationMemberships({
+    userId: identity.id, organizationId, statuses: ["active"],
+  });
+  if (!memberships.data.some((m) => m.userId === identity.id && m.organizationId === organizationId && m.status === "active")) {
+    return undefined;
+  }
+  return identity.id;
 }
 
 async function safelyAppendAudit(input: Parameters<typeof appendAuditEvent>[0]): Promise<void> {

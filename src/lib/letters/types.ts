@@ -233,6 +233,10 @@ export type EvidenceItem = {
   filename?: string;
   mimeType?: string;
   fileDataUrl?: string;
+  /** Authenticated private storage. Inline data URLs are legacy imports only. */
+  fileId?: string;
+  fileSize?: number;
+  fileSha256?: string;
   /** Section ids this evidence supports. Empty/undefined means general draft evidence. */
   sectionIds?: string[];
   /** Free-text summary or key text supplied by the user. Sent to the LLM as evidence context; includeVerbatim controls exact-content labelling. */
@@ -302,6 +306,8 @@ export type ExportEvent = {
   exportedAt: number;
   reviewedBy?: string;
   reviewedOn?: string;
+  /** Exact immutable exported bytes, not a regenerated copy of the draft. */
+  artifactId?: string;
 };
 
 export type CollaboratorRole = "owner" | "editor" | "reviewer" | "viewer";
@@ -451,7 +457,7 @@ export type Draft = {
   employee: EmployeeDetails;
   answers: LetterAnswers;
   sections: Section[];
-  /** Employee-mode supporting evidence. */
+  /** Supporting evidence connected to this letter in either mode. */
   evidence?: EvidenceItem[];
   /** Outcome the employee wants. Surfaced explicitly in closing. */
   outcomeSought?: string;
@@ -468,6 +474,10 @@ export type Draft = {
   /** Optional named Matter (case / project / hiring round) this draft belongs to.
    * undefined = unaffiliated; appears in auto-groups on Home until promoted. */
   matterId?: string;
+  /** Canonical HR-directory person this letter concerns. Older persisted
+   * drafts may omit it; their denormalised employee block remains readable and
+   * can be linked explicitly through the existing import flow. */
+  employeeId?: string;
   /** User-editable display title shown above the canvas on the editor.
    * Falls back to the letter-type meta title when unset. Persists with
    * the draft so renames survive reloads + show in sidebars / lists. */
@@ -581,6 +591,7 @@ export type EmploymentStatus = "active" | "notice" | "left" | "on-leave";
 export type Employee = {
   id: string;
   legalName: string;
+  address?: string;
   preferredName?: string;
   jobTitle?: string;
   department?: string;

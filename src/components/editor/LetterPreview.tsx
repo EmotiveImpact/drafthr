@@ -8,6 +8,7 @@ type AddCommentOpts = {
 
 export type LetterPreviewProps = {
   draft: Draft;
+  exportMode?: boolean;
   /** Currently focused section id (so we can highlight its hover overlay). */
   activeSectionId?: string | null;
   /** Click anywhere inside a section pings the parent so it can update activeSectionId. */
@@ -31,7 +32,7 @@ export type LetterPreviewProps = {
  * own PagedlyDocEditor mount. Page editing lives in Editor.tsx only, where the
  * lock, streaming read-only, and persist guards are all wired. (Audit IMP-01.)
  */
-export function LetterPreview({ draft, onAddComment, onFocusComment }: LetterPreviewProps) {
+export function LetterPreview({ draft, onAddComment, onFocusComment, exportMode }: LetterPreviewProps) {
   const empty = draft.sections.every((s) => !s.html?.trim());
 
   if (empty) {
@@ -47,7 +48,7 @@ export function LetterPreview({ draft, onAddComment, onFocusComment }: LetterPre
   // "+ Comment" affordance and route mark clicks back to the parent's panel.
   return (
     <div className="letter-preview-shell">
-      <PaginatedLetter draft={draft} onAddComment={onAddComment} onFocusComment={onFocusComment} />
+      <PaginatedLetter draft={draft} onAddComment={onAddComment} onFocusComment={onFocusComment} exportMode={exportMode} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { tenants, tenantMembers } from "../../../src/db/schema.js";
 import { lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
+import { ensureOrganizationSession } from "../../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -25,7 +26,7 @@ export async function POST(req: Request): Promise<Response> {
   const tenantId = typeof parsed.body.tenantId === "string" ? parsed.body.tenantId.trim() : "";
   if (!tenantId) return jsonError("tenantId required", 400);
 
-  const auth = await requireSessionAndTenant(req);
+  const auth = await requireSessionAndTenant(req, { allowUnscoped: true });
   if (!auth.ok) return auth.response;
 
   try {
@@ -46,6 +47,11 @@ export async function POST(req: Request): Promise<Response> {
       .limit(1);
     if (!member) return jsonError("Not a member of that workspace", 403);
 
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    if (!tenant) return jsonError("Workspace not found", 404);
+    const denied = await ensureOrganizationSession(req, auth.session, tenant.workosOrgId, tenantId);
+    if (denied) return denied;
+
     await db.transaction(async (tx) => {
       // Serialize against concurrent accept-invite/create so we can't end up
       // with two active rows (the UPDATE below can't see a row another txn is
@@ -59,11 +65,9 @@ export async function POST(req: Request): Promise<Response> {
         .update(tenantMembers)
         .set({ isActiveTenant: true })
         .where(
-          and(eq(tenantMembers.userId, auth.userRow.id), eq(tenantMembers.tenantId, tenantId)),
+          and(eq(tenantMembers.userId, auth.userRow.id), eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.status, "active")),
         );
     });
-
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
 
     return new Response(
       JSON.stringify({

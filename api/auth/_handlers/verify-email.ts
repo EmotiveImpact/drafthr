@@ -1,28 +1,4 @@
-/**
- * Email verification confirmation.
- *
- * Two entry points, both POST here:
- *
- *  A) Post-sign-up flow — the user lands at /sign-in/verify-email from
- *     their inbox link. The link carries { code, userId } (we configure
- *     the WorkOS email template to include both placeholders). After we
- *     call verifyEmail, we DO mint an iron-session cookie — they just
- *     proved control of the inbox, no reason to make them re-enter their
- *     password to be admitted.
- *
- *  B) Sign-in-while-unverified flow — the user attempted to sign in with
- *     a valid password but unverified email; authenticateWithPassword
- *     returned email_verification_required + a pending_authentication_token.
- *     The /sign-in page can paste that token here along with the code from
- *     the email; we call authenticateWithEmailVerification which atomically
- *     verifies + mints a session.
- *
- * In flow A we lack the access/refresh tokens, so we manually mint the
- * iron-session payload using the verified user record (workosSession="" —
- * the sealed WorkOS session is only used for future refresh-against-WorkOS
- * paths, which we don't exercise in this codebase yet).
- */
-
+/** Legacy verification links: address verification alone never grants a session. */
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
 import {
@@ -116,17 +92,10 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // Flow A: post-sign-up. verifyEmail confirms the address; we then
-    // mint a session manually because no auth-with-credentials happened.
-    const { user } = await workos.userManagement.verifyEmail({ code, userId });
-
-    return await respondWithSession({
-      id: user.id,
-      email: user.email,
-      firstName: user.firstName ?? null,
-      lastName: user.lastName ?? null,
-      profilePictureUrl: user.profilePictureUrl ?? null,
-      sealedSession: "",
+    // Verifying an address is not authentication and must not bypass MFA/SSO.
+    await workos.userManagement.verifyEmail({ code, userId });
+    return new Response(JSON.stringify({ ok: true, requiresSignIn: true }), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   } catch (err) {
     console.warn("[auth/verify-email] failed", err);
@@ -159,7 +128,7 @@ async function respondWithSession(input: {
     workosSession: input.sealedSession,
     iat: Date.now(),
     // Current revocation epoch — see session-epoch.ts (SE-03).
-    epoch: (await getUserSessionEpoch(input.id)) ?? 0,
+    epoch: (await getUserSessionEpoch(input.id, { strict: true })) ?? 0,
   };
 
   const sessionCookie = await buildSessionCookie(payload);

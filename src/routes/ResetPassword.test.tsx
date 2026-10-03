@@ -56,10 +56,10 @@ describe("ResetPassword", () => {
     ).toHaveAttribute("href", "/sign-in/forgot-password");
   });
 
-  it("posts token + password and navigates home on success", async () => {
+  it("posts token + password and returns to WorkOS sign-in on success", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
-        JSON.stringify({ ok: true, user: { id: "u_1", email: "a@b.co" } }),
+        JSON.stringify({ ok: true, requiresSignIn: true }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
@@ -68,7 +68,7 @@ describe("ResetPassword", () => {
       <MemoryRouter initialEntries={["/sign-in/reset-password?token=tok_abc"]}>
         <Routes>
           <Route path="/sign-in/reset-password" element={<ResetPassword />} />
-          <Route path="/" element={<LocationProbe />} />
+          <Route path="/sign-in" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -81,7 +81,7 @@ describe("ResetPassword", () => {
     });
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("button", { name: /update password and sign in/i }),
+        screen.getByRole("button", { name: /update password/i }),
       );
     });
 
@@ -91,7 +91,7 @@ describe("ResetPassword", () => {
     const body = JSON.parse(((init as RequestInit).body as string) ?? "{}");
     expect(body).toMatchObject({ token: "tok_abc", password: "newpassword123" });
 
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/"));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/sign-in"));
     expect(authMock.refresh).toHaveBeenCalled();
   });
 
@@ -119,7 +119,7 @@ describe("ResetPassword", () => {
     });
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("button", { name: /update password and sign in/i }),
+        screen.getByRole("button", { name: /update password/i }),
       );
     });
 
@@ -143,7 +143,7 @@ describe("ResetPassword", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: /update password and sign in/i }),
+      screen.getByRole("button", { name: /update password/i }),
     ).toBeDisabled();
     expect(screen.getByText("Passwords don’t match.")).toBeInTheDocument();
   });

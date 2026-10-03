@@ -1,16 +1,23 @@
 /**
  * Client-side image uploader — posts a base64 data URL to /api/upload/image
- * and returns the resulting Blob URL.
+ * and returns the authenticated same-origin image URL.
  *
- * Falls back to returning the original data URL unchanged when:
- *   - the endpoint reports `blob-not-configured` (local dev without Vercel
- *     Blob set up — see api/upload/image.ts soft-fail path)
- *   - the network call fails after one retry
- *
- * Fall-back preserves the existing behavior so the app keeps working before
- * the user has wired Vercel Blob; production with the env var set fails hard
- * via the toast / error log if the upload still doesn't go through.
+ * Database workspaces never fall back to embedded browser-only data, including
+ * local development. Scope guards discard completions after a workspace switch.
  */
+import { isDatabaseWorkspaceEnabled } from "../workspace-flags";
+import { isTenantPrivateImagePath, parsePrivateImageUrl } from "./privateImageUrl";
+import { workspaceFileContext } from "../database-workspace";
+import { rateLimitedRequest } from "./rate-limited-request";
+
+export type ImageUploadScope = { tenantId: string; isCurrent: () => boolean };
+export function imageUploadScope(): ImageUploadScope | undefined {
+  if (!isDatabaseWorkspaceEnabled()) return undefined;
+  return workspaceFileContext();
+}
+function assertCurrent(scope?: ImageUploadScope) {
+  if (scope && !scope.isCurrent()) throw new Error("Workspace changed. Select the image again in your current workspace.");
+}
 
 type UploadResponse = { ok: true; url: string } | { ok: false; error: string };
 
@@ -19,32 +26,46 @@ const ENDPOINT = "/api/upload/image";
 export async function uploadImage(input: {
   dataUrl: string;
   filename: string;
-}): Promise<string> {
+}, suppliedScope?: ImageUploadScope): Promise<string> {
+  const scope = suppliedScope ?? imageUploadScope();
+  const mayFallback = import.meta.env.DEV && !isDatabaseWorkspaceEnabled() && !scope;
+  assertCurrent(scope);
   // No network call for non-data URLs — they're already remote, return as-is.
-  if (!input.dataUrl.startsWith("data:")) return input.dataUrl;
+  if (!input.dataUrl.startsWith("data:")) {
+    if (scope && !isTenantPrivateImagePath(parsePrivateImageUrl(input.dataUrl) ?? "", scope.tenantId)) throw new Error("This image does not belong to the current workspace.");
+    return input.dataUrl;
+  }
 
   try {
-    const result = await postWithRetry(input);
-    if (result.ok) return result.url;
-    // Soft failure: keep working in dev / when ops hasn't provisioned Blob yet.
-    if (result.error === "blob-not-configured") return input.dataUrl;
-    console.warn("[uploadImage] upload failed, falling back to data URL", result.error);
-    return input.dataUrl;
+    const result = await postWithRetry(input, scope);
+    assertCurrent(scope);
+    if (result.ok) {
+      if (scope && (typeof result.url !== "string" || !isTenantPrivateImagePath(parsePrivateImageUrl(result.url) ?? "", scope.tenantId))) throw new Error("Image storage returned an invalid workspace image.");
+      return result.url;
+    }
+    if (mayFallback) {
+      console.warn("[uploadImage] upload failed, falling back to data URL", result.error);
+      return input.dataUrl;
+    }
+    throw new Error("Image storage is unavailable. Please try again later.");
   } catch (err) {
-    console.warn("[uploadImage] network error, falling back to data URL", err);
-    return input.dataUrl;
+    if (mayFallback) {
+      console.warn("[uploadImage] network error, falling back to data URL", err);
+      return input.dataUrl;
+    }
+    throw err;
   }
 }
 
 async function postWithRetry(input: {
   dataUrl: string;
   filename: string;
-}): Promise<UploadResponse> {
-  const first = await postOnce(input);
+}, scope?: ImageUploadScope): Promise<UploadResponse> {
+  const first = await postOnce(input, scope);
   if (first.kind === "ok") return first.body;
   // Retry once on 5xx — transient blob hiccups are common, 4xx is deterministic.
   if (first.kind === "retry") {
-    const second = await postOnce(input);
+    const second = await postOnce(input, scope);
     if (second.kind === "ok") return second.body;
     if (second.kind === "retry") return { ok: false, error: "upload-failed" };
     return second.body;
@@ -60,12 +81,15 @@ type PostResult =
 async function postOnce(input: {
   dataUrl: string;
   filename: string;
-}): Promise<PostResult> {
-  const response = await fetch(ENDPOINT, {
+}, scope?: ImageUploadScope): Promise<PostResult> {
+  assertCurrent(scope);
+  const response = await rateLimitedRequest(() => fetch(ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(scope ? { "X-Workspace-ID": scope.tenantId } : {}) },
     body: JSON.stringify(input),
-  });
+  }), () => assertCurrent(scope));
+  assertCurrent(scope);
   let body: UploadResponse;
   try {
     body = (await response.json()) as UploadResponse;

@@ -91,7 +91,7 @@ export function ResetPassword() {
       // Session minted server-side; pull it into the provider before
       // navigating so RootRedirect sees the user and routes correctly.
       await refresh({ force: true });
-      navigate("/", { replace: true });
+      navigate("/sign-in", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not reset your password.");
       setSubmitting(false);
@@ -136,7 +136,7 @@ export function ResetPassword() {
               Updating password…
             </>
           ) : (
-            "Update password and sign in"
+            "Update password"
           )}
         </PrimaryButton>
       </form>

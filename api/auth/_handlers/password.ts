@@ -68,7 +68,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   try {
-    const { user, sealedSession } = await getWorkos().userManagement.authenticateWithPassword({
+    const { user, sealedSession, organizationId } = await getWorkos().userManagement.authenticateWithPassword({
       clientId: process.env.WORKOS_CLIENT_ID!,
       email,
       password,
@@ -80,6 +80,7 @@ export async function POST(req: Request): Promise<Response> {
       },
     });
 
+    if (!sealedSession || !user.emailVerified) return jsonError("Complete sign-in through the secure login page.", 401);
     const payload: SessionPayload = {
       user: {
         id: user.id,
@@ -87,12 +88,14 @@ export async function POST(req: Request): Promise<Response> {
         firstName: user.firstName ?? null,
         lastName: user.lastName ?? null,
         profilePictureUrl: user.profilePictureUrl ?? null,
+        emailVerified: user.emailVerified,
       },
-      workosSession: sealedSession ?? "",
+      workosSession: sealedSession,
+      organizationId,
       iat: Date.now(),
       // Embed the user's current revocation epoch so the cookie stays valid
       // until their epoch is next bumped (sign-out / password reset). (SE-03.)
-      epoch: (await getUserSessionEpoch(user.id)) ?? 0,
+      epoch: (await getUserSessionEpoch(user.id, { strict: true })) ?? 0,
     };
 
     const sessionCookie = await buildSessionCookie(payload);
@@ -108,6 +111,13 @@ export async function POST(req: Request): Promise<Response> {
       headers,
     });
   } catch (err) {
+    const challenge = (err as { code?: string })?.code;
+    if (challenge && /mfa|sso|organization|authentication_method/.test(challenge)) {
+      return new Response(JSON.stringify({
+        error: "Continue through secure sign-in to complete your company’s requirements.",
+        code: "organization_authentication_required", signInUrl: "/sign-in",
+      }), { status: 409, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+    }
     // Sign-in-while-unverified: WorkOS throws an AuthenticationException with
     // code "email_verification_required" and a single-use pending token. The
     // credentials were CORRECT — the inbox just isn't confirmed yet. Surface

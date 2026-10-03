@@ -1,6 +1,5 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Check,
@@ -18,8 +17,6 @@ import {
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
-import { toDateOnly } from "@/lib/date-only";
 import type { Draft } from "@/lib/letters/types";
 import { recipientNameFor } from "@/lib/letters/display";
 import { Button } from "@/components/ui/button";
@@ -27,14 +24,17 @@ import { BrandMark } from "@/components/ds/BrandMark";
 import { Wordmark } from "@/components/ds/Wordmark";
 import { cn } from "@/lib/utils";
 import {
-  runHealthChecks,
-  computeHealthScore,
-  type HealthCheck,
-} from "@/lib/finalize/healthChecks";
-import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
+  counselAttestationForDraft,
+  getDraftReadiness,
+  type DraftReadiness,
+  type ReadinessAction,
+} from "@/lib/finalize/readiness";
 import { WizardChrome } from "@/components/editor/WizardChrome";
 import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
+import { isDatabaseWorkspaceEnabled } from "@/lib/workspace-flags";
+import type { ArtifactFormat } from "@/lib/storage/workspace-file-types";
+const LetterPreview = lazy(() => import("@/components/editor/LetterPreview").then(module => ({ default: module.LetterPreview })));
 
 /**
  * Finalise — Option H layout.
@@ -42,12 +42,6 @@ import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
  * Sidebar: WizardChrome + thumbnail + ship checklist + export 2×2 + sticky Mark-as-sent CTA.
  * Canvas: CounselAttestation (if required) + 3-card consultant marketplace + trust line + skip row.
  */
-
-const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
-  strong: "Strong",
-  adequate: "Adequate",
-  weak: "Weak",
-};
 
 export function Finalize() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -63,14 +57,7 @@ export function Finalize() {
     "you";
 
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [counselConfirmed, setCounselConfirmed] = useState(false);
-
-  const checks = useMemo<HealthCheck[]>(
-    () => (draft ? runHealthChecks(draft) : []),
-    [draft],
-  );
-  const scoreData = useMemo(() => computeHealthScore(checks), [checks]);
+  const [showPreview, setShowPreview] = useState(false);
 
   if (!draft || !draftId) {
     return (
@@ -85,28 +72,27 @@ export function Finalize() {
 
   const meta = getLetterMeta(draft.letterType);
 
-  const counselGateRequired = exportRequiresCounselGate(draft);
-  const counselAttested = !counselGateRequired || counselConfirmed;
+  const storedAttestation = counselAttestationForDraft(draft);
+  const effectiveAttestation = storedAttestation;
+  const readiness = getDraftReadiness(draft, {
+    counselAttestation: effectiveAttestation,
+  });
+  const counselGateRequired = readiness.counsel.required;
+  const shipBlocked = !readiness.canMarkSent;
 
-  const readyToShip = scoreData.failCount === 0 && scoreData.band === "strong";
-  const shipBlocked = scoreData.failCount > 0 || !counselAttested;
+  const goToAction = (action: ReadinessAction) => {
+    if (action === "settings") nav("/settings");
+    else if (action === "evidence") nav(`/editor/${draft.id}/evidence`);
+    else if (action === "review") nav(`/editor/${draft.id}/review`);
+    else nav(`/editor/${draft.id}`);
+  };
 
   /* ---------------------------- Exports ---------------------------- */
 
-  const downloadBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const guardCounsel = (): boolean => {
-    if (counselGateRequired && !counselConfirmed) {
-      alert("Please confirm counsel review before exporting this letter.");
+  const guardReadiness = (): boolean => {
+    if (!readiness.canExport) {
+      const first = readiness.blockers[0];
+      alert(first?.detail ? `${first.label}. ${first.detail}` : first?.label ?? "This letter is not ready to export.");
       return false;
     }
     return true;
@@ -119,19 +105,44 @@ export function Finalize() {
   const exportAttestation = ():
     | { reviewedBy: string; reviewedOn: string }
     | undefined => {
-    if (!counselGateRequired || !counselConfirmed) return undefined;
-    return { reviewedBy: draftedBy, reviewedOn: toDateOnly(new Date()) };
+    if (!counselGateRequired) return undefined;
+    return effectiveAttestation;
+  };
+
+  const renderableDraft = async () => {
+    if (!isDatabaseWorkspaceEnabled()) return draft;
+    const { savedWorkspaceDraft } = await import("@/lib/database-workspace");
+    const { resolveEvidenceFiles } = await import("@/lib/storage/workspace-files");
+    const saved = await savedWorkspaceDraft(draft);
+    return resolveEvidenceFiles(draft, saved.tenantId);
+  };
+  const saveAndDownload = async (blob: Blob, filename: string, format: ArtifactFormat) => {
+    let artifactId: string | undefined;
+    let savedUrl: string | undefined;
+    if (isDatabaseWorkspaceEnabled()) {
+      const { saveWorkspaceFile } = await import("@/lib/storage/workspace-files");
+      const { savedWorkspaceDraft, workspaceIdentityMatches } = await import("@/lib/database-workspace");
+      const { workspaceFileUrl } = await import("@/lib/storage/workspace-file-types");
+      const context = await savedWorkspaceDraft(draft);
+      artifactId = (await saveWorkspaceFile(draft, blob, filename, "export", format)).id;
+      if (!workspaceIdentityMatches(context.identity)) throw new Error("Workspace changed. Open Exported letters in the original workspace to download the saved file.");
+      savedUrl = workspaceFileUrl(artifactId, context.tenantId);
+    }
+    // Never claim an export succeeded until the private artifact is confirmed.
+    const att = exportAttestation();
+    recordExport(draft.id, { format, artifactId, reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
+    const { downloadBlob, downloadUrl } = await import("@/lib/storage/download");
+    if (savedUrl) downloadUrl(savedUrl, filename);
+    else downloadBlob(blob, filename);
   };
 
   const onExportPdf = async () => {
-    if (!guardCounsel()) return;
+    if (!guardReadiness()) return;
     setBusyFormat("pdf");
     try {
       const { renderLetterPdfBlob, filenameFor } = await import("@/lib/export/pdf");
-      const blob = await renderLetterPdfBlob(draft);
-      downloadBlob(blob, filenameFor(draft));
-      const att = exportAttestation();
-      recordExport(draft.id, { format: "pdf", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
+      const blob = await renderLetterPdfBlob(await renderableDraft());
+      await saveAndDownload(blob, filenameFor(draft), "pdf");
     } catch (err) {
       alert(`PDF export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -140,14 +151,12 @@ export function Finalize() {
   };
 
   const onExportDocx = async () => {
-    if (!guardCounsel()) return;
+    if (!guardReadiness()) return;
     setBusyFormat("docx");
     try {
       const { renderLetterDocxBlob, docxFilenameFor } = await import("@/lib/export/docx");
-      const blob = await renderLetterDocxBlob(draft);
-      downloadBlob(blob, docxFilenameFor(draft));
-      const att = exportAttestation();
-      recordExport(draft.id, { format: "docx", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
+      const blob = await renderLetterDocxBlob(await renderableDraft());
+      await saveAndDownload(blob, docxFilenameFor(draft), "docx");
     } catch (err) {
       alert(`DOCX export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -155,8 +164,8 @@ export function Finalize() {
     }
   };
 
-  const onExportTxt = () => {
-    if (!guardCounsel()) return;
+  const onExportTxt = async () => {
+    if (!guardReadiness()) return;
     setBusyFormat("txt");
     try {
       // Route through the DOM so HTML entities are DECODED, not left as raw
@@ -187,9 +196,7 @@ export function Finalize() {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
-      downloadBlob(blob, `${slug || "letter"}.txt`);
-      const att = exportAttestation();
-      recordExport(draft.id, { format: "txt", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
+      await saveAndDownload(blob, `${slug || "letter"}.txt`, "txt");
     } catch (err) {
       alert(`TXT export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -198,17 +205,13 @@ export function Finalize() {
   };
 
   const onExportZip = async () => {
-    if (!guardCounsel()) return;
+    if (!guardReadiness()) return;
     setBusyFormat("zip");
     try {
-      const { exportLetterPack } = await import("@/lib/export/pack");
+      const { renderLetterPackBlob, filenameForPack } = await import("@/lib/export/pack");
       const attestation = exportAttestation();
-      await exportLetterPack(draft, attestation);
-      recordExport(draft.id, {
-        format: "pack",
-        reviewedBy: attestation?.reviewedBy,
-        reviewedOn: attestation?.reviewedOn,
-      });
+      const blob = await renderLetterPackBlob(await renderableDraft(), attestation);
+      await saveAndDownload(blob, filenameForPack(draft), "pack");
     } catch (err) {
       alert(`ZIP export failed: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -216,22 +219,19 @@ export function Finalize() {
     }
   };
 
-  /* --------------------- Mark as sent + confetti -------------------- */
+  /* -------------------------- Mark as sent ------------------------- */
 
   const onMarkAsSent = () => {
-    if (!guardCounsel()) return;
-    if (scoreData.failCount > 0) return;
-    setShowConfetti(true);
+    if (!guardReadiness()) return;
     const att = exportAttestation();
     recordExport(draft.id, { format: "marked-sent", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
-    setTimeout(() => nav("/activity"), 1600);
+    nav("/activity");
   };
 
   /* -------------------------- Render -------------------------- */
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      {showConfetti && <ConfettiBurst onDone={() => setShowConfetti(false)} />}
 
       {/* Branded sticky header */}
       <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
@@ -272,13 +272,12 @@ export function Finalize() {
             <ThumbnailBlock draft={draft} />
 
             {/* Ready to ship checklist */}
-            <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
+            <SectionLabel right={readiness.statusLabel}>
               Ready to ship
             </SectionLabel>
             <ShipChecklist
-              draft={draft}
-              counselAttested={counselAttested}
-              onFixClick={() => nav(`/editor/${draft.id}/review`)}
+              readiness={readiness}
+              onFixClick={goToAction}
             />
 
             {/* Export 2×2 grid */}
@@ -291,7 +290,7 @@ export function Finalize() {
                 primary
                 busy={busyFormat === "pdf"}
                 onClick={onExportPdf}
-                disabled={!counselAttested}
+                disabled={!readiness.canExport}
                 icon={<FileText className="size-3.5" />}
               />
               <FormatTile
@@ -300,7 +299,7 @@ export function Finalize() {
                 desc="Editable"
                 busy={busyFormat === "docx"}
                 onClick={onExportDocx}
-                disabled={!counselAttested}
+                disabled={!readiness.canExport}
                 icon={<FileText className="size-3.5" />}
               />
               <FormatTile
@@ -309,7 +308,7 @@ export function Finalize() {
                 desc="Plain"
                 busy={busyFormat === "txt"}
                 onClick={onExportTxt}
-                disabled={!counselAttested}
+                disabled={!readiness.canExport}
                 icon={<FileType2 className="size-3.5" />}
               />
               <FormatTile
@@ -318,7 +317,7 @@ export function Finalize() {
                 desc="Pack"
                 busy={busyFormat === "zip"}
                 onClick={onExportZip}
-                disabled={!counselAttested}
+                disabled={!readiness.canExport}
                 icon={<Package className="size-3.5" />}
               />
             </div>
@@ -342,8 +341,8 @@ export function Finalize() {
             {/* Counsel attestation gate — only for high-risk letters */}
             {counselGateRequired && (
               <CounselAttestation
-                confirmed={counselConfirmed}
-                onToggle={() => setCounselConfirmed((v) => !v)}
+                attestation={readiness.counsel.attestation}
+                onAction={() => nav(`/editor/${draft.id}`)}
               />
             )}
 
@@ -357,19 +356,33 @@ export function Finalize() {
               onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)}
             />
 
-            {/* Skip row */}
-            <div className="mt-3 text-center text-[11.5px] text-[var(--ds-muted)] p-3 border border-dashed border-[var(--ds-line)] rounded-lg">
-              Or skip —{" "}
-              <button
-                type="button"
-                onClick={onMarkAsSent}
-                disabled={!readyToShip}
-                className="text-[var(--ds-ink)] font-semibold underline disabled:no-underline disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed"
-              >
-                mark as sent
-              </button>{" "}
-              without a second opinion
+            <div className="mt-4 flex flex-col gap-3">
+              <Button variant="outline" aria-expanded={showPreview} aria-controls="finalise-preview" onClick={() => setShowPreview(value => !value)}>
+                {showPreview ? "Hide letter preview" : "Preview letter and exhibits"}
+              </Button>
+              {showPreview && <section id="finalise-preview" aria-label="Letter and exhibits preview">
+                <p className="text-sm text-muted-foreground">Check the letter and exhibits below. Download the PDF or Word file to confirm its final pagination.</p>
+                <Suspense fallback={<p role="status">Loading letter preview…</p>}>
+                  <LetterPreview draft={draft} exportMode />
+                </Suspense>
+              </section>}
             </div>
+
+            {/* Skip row */}
+            {!counselGateRequired && (
+              <div className="mt-3 text-center text-[11.5px] text-[var(--ds-muted)] p-3 border border-dashed border-[var(--ds-line)] rounded-lg">
+                No counsel review is required for this letter. You can{" "}
+                <button
+                  type="button"
+                  onClick={onMarkAsSent}
+                  disabled={!readiness.canMarkSent}
+                  className="text-[var(--ds-ink)] font-semibold underline disabled:no-underline disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed"
+                >
+                  mark it as sent
+                </button>{" "}
+                when the checklist is complete.
+              </div>
+            )}
 
             {/* MOBILE-ONLY ship surface — the desktop sidebar (checklist +
              * export + Mark-as-sent) is hidden below lg, so mirror those
@@ -377,13 +390,12 @@ export function Finalize() {
              * fixed Mark-as-sent button outside the main element handles
              * thumb-reach for the primary action. */}
             <div className="lg:hidden mt-8 pt-6 border-t border-[var(--ds-line)] flex flex-col gap-3">
-              <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
+              <SectionLabel right={readiness.statusLabel}>
                 Ready to ship
               </SectionLabel>
               <ShipChecklist
-                draft={draft}
-                counselAttested={counselAttested}
-                onFixClick={() => nav(`/editor/${draft.id}/review`)}
+                readiness={readiness}
+                onFixClick={goToAction}
               />
 
               <SectionLabel>Export</SectionLabel>
@@ -395,7 +407,7 @@ export function Finalize() {
                   primary
                   busy={busyFormat === "pdf"}
                   onClick={onExportPdf}
-                  disabled={!counselAttested}
+                  disabled={!readiness.canExport}
                   icon={<FileText className="size-3.5" />}
                 />
                 <FormatTile
@@ -404,7 +416,7 @@ export function Finalize() {
                   desc="Editable"
                   busy={busyFormat === "docx"}
                   onClick={onExportDocx}
-                  disabled={!counselAttested}
+                  disabled={!readiness.canExport}
                   icon={<FileText className="size-3.5" />}
                 />
                 <FormatTile
@@ -413,7 +425,7 @@ export function Finalize() {
                   desc="Plain"
                   busy={busyFormat === "txt"}
                   onClick={onExportTxt}
-                  disabled={!counselAttested}
+                  disabled={!readiness.canExport}
                   icon={<FileType2 className="size-3.5" />}
                 />
                 <FormatTile
@@ -422,7 +434,7 @@ export function Finalize() {
                   desc="Pack"
                   busy={busyFormat === "zip"}
                   onClick={onExportZip}
-                  disabled={!counselAttested}
+                  disabled={!readiness.canExport}
                   icon={<Package className="size-3.5" />}
                 />
               </div>
@@ -483,10 +495,7 @@ function DocumentHero({
   onSeeSpecialists: () => void;
 }) {
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+    <section
       className="mt-2 rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6 flex flex-col gap-3"
       aria-labelledby="finalise-hero-title"
     >
@@ -543,7 +552,7 @@ function DocumentHero({
           <ArrowRight className="size-3.5" />
         </button>
       </div>
-    </motion.section>
+    </section>
   );
 }
 
@@ -600,7 +609,7 @@ function ThumbnailBlock({ draft }: { draft: Draft }) {
         <div className="text-[11.5px] font-semibold text-[var(--ds-ink)] mb-1 truncate">
           {draft.title ?? "Letter"}
         </div>
-        <MetaRow label="Pages" value="2 · A4" />
+        <MetaRow label="Paper" value="A4" />
         <MetaRow label="To" value={recipient} />
         <MetaRow
           label="Evidence"
@@ -627,59 +636,61 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 /** 5-item ship checklist with ✓ / ✗ / ○ visual states. */
 function ShipChecklist({
-  draft,
-  counselAttested,
+  readiness,
   onFixClick,
 }: {
-  draft: Draft;
-  counselAttested: boolean;
-  onFixClick: () => void;
+  readiness: DraftReadiness;
+  onFixClick: (action: ReadinessAction) => void;
 }) {
-  const evidenceCount = draft.evidence?.length ?? 0;
-  const recipient = recipientNameFor(draft);
-
-  const allSectionsReady = draft.sections.every(
-    (s) => (s.html ?? "").replace(/<[^>]+>/g, "").trim().length > 0,
-  );
-
   type CheckState = "ok" | "fail" | "warn" | "pending";
 
   const items: Array<{
     state: CheckState;
     title: string;
     sub?: string;
-    fixable?: boolean;
+    action?: ReadinessAction;
   }> = [
     {
-      state: allSectionsReady ? "ok" : "warn",
+      state: readiness.editingComplete ? "ok" : "fail",
       title: "All sections written",
-      sub: allSectionsReady
-        ? `${draft.sections.length} of ${draft.sections.length} ready`
-        : "Some sections still empty",
-      fixable: !allSectionsReady,
+      sub: `${readiness.sections.written} of ${readiness.sections.total} written${readiness.placeholders.count ? ` · ${readiness.placeholders.count} placeholder${readiness.placeholders.count === 1 ? "" : "s"}` : ""}`,
+      action: readiness.editingComplete ? undefined : "editor",
     },
     {
-      state: evidenceCount > 0 ? "ok" : "warn",
+      state: readiness.evidence.requiredMissing > 0 || readiness.evidence.brokenReferences > 0 ? "fail" : readiness.evidence.optionalMissing > 0 ? "warn" : "ok",
       title: "Evidence linked",
-      sub:
-        evidenceCount > 0
-          ? `${evidenceCount} file${evidenceCount === 1 ? "" : "s"}`
-          : "No evidence attached",
+      sub: readiness.evidence.brokenReferences > 0
+        ? `${readiness.evidence.brokenReferences} broken evidence reference${readiness.evidence.brokenReferences === 1 ? "" : "s"}`
+        : readiness.evidence.expected > 0
+        ? `${readiness.evidence.satisfied} of ${readiness.evidence.expected} expected item${readiness.evidence.expected === 1 ? "" : "s"}`
+        : `${readiness.evidence.attached} file${readiness.evidence.attached === 1 ? "" : "s"} attached`,
+      action: readiness.evidence.requiredMissing || readiness.evidence.optionalMissing || readiness.evidence.brokenReferences ? "evidence" : undefined,
     },
     {
-      state: "ok",
+      state: readiness.letterheadAttached || readiness.usesExternalLetterhead ? "ok" : "warn",
       title: "Letterhead attached",
+      sub: readiness.letterheadAttached
+        ? "Company letterhead included"
+        : readiness.usesExternalLetterhead
+          ? "Export will be placed on external letterhead"
+          : "No letterhead configured",
+      action: readiness.letterheadAttached || readiness.usesExternalLetterhead ? undefined : "settings",
     },
     {
-      state: recipient ? "ok" : "fail",
-      title: "Recipient details",
-      sub: recipient ? undefined : "Missing — required",
-      fixable: !recipient,
+      state: readiness.recipientComplete && readiness.senderComplete ? "ok" : "fail",
+      title: "Party details",
+      sub: readiness.recipientComplete && readiness.senderComplete ? "Sender and recipient identified" : "Missing sender or recipient details",
+      action: readiness.recipientComplete && readiness.senderComplete ? undefined : "editor",
     },
     {
-      state: counselAttested ? "ok" : "pending",
+      state: !readiness.counsel.required || readiness.counsel.attested ? "ok" : "fail",
       title: "Counsel review",
-      sub: counselAttested ? undefined : "Optional · see canvas",
+      sub: !readiness.counsel.required
+        ? "Not required for this letter"
+        : readiness.counsel.attested
+          ? `Confirmed by ${readiness.counsel.attestation?.reviewedBy ?? "reviewer"}`
+          : "Required before export or send",
+      action: readiness.counsel.required && !readiness.counsel.attested ? "editor" : undefined,
     },
   ];
 
@@ -705,10 +716,14 @@ function ShipChecklist({
           className={cn(
             "flex items-start gap-2.5 px-2.5 py-2 text-[11.5px] text-[var(--ds-body,var(--ds-ink))]",
             i < items.length - 1 && "border-b border-[var(--ds-line-2)]",
-            item.fixable && "cursor-pointer hover:bg-[var(--ds-canvas)]",
+            item.action && "cursor-pointer hover:bg-[var(--ds-canvas)]",
           )}
-          onClick={item.fixable ? onFixClick : undefined}
-          role={item.fixable ? "button" : undefined}
+          onClick={item.action ? () => onFixClick(item.action!) : undefined}
+          role={item.action ? "button" : undefined}
+          tabIndex={item.action ? 0 : undefined}
+          onKeyDown={item.action ? (event) => {
+            if (event.key === "Enter" || event.key === " ") onFixClick(item.action!);
+          } : undefined}
         >
           <span
             className={cn(
@@ -733,7 +748,7 @@ function ShipChecklist({
               </div>
             )}
           </div>
-          {item.fixable && (
+          {item.action && (
             <span className="text-[10px] font-semibold text-[var(--ds-ink)] bg-[var(--ds-line-2)] px-1.5 py-0.5 rounded self-center shrink-0">
               Fix →
             </span>
@@ -769,13 +784,10 @@ function FormatTile({
 }) {
   if (compact) {
     return (
-      <motion.button
+      <button
         type="button"
         onClick={onClick}
         disabled={busy || disabled}
-        whileHover={{ scale: disabled ? 1 : 1.02 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
-        transition={{ duration: 0.12 }}
         className={cn(
           "flex flex-col gap-0.5 p-2 rounded-md text-left transition disabled:opacity-50 disabled:cursor-not-allowed",
           primary
@@ -785,13 +797,9 @@ function FormatTile({
       >
         <div className="flex items-center gap-1">
           {busy ? (
-            <motion.span
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-              className="inline-flex"
-            >
+            <span className="inline-flex animate-spin">
               <FileDown className="size-3" />
-            </motion.span>
+            </span>
           ) : (
             <span className={primary ? "text-white/80" : "text-[var(--ds-muted)]"}>
               {icon}
@@ -809,7 +817,7 @@ function FormatTile({
         >
           {desc}
         </span>
-      </motion.button>
+      </button>
     );
   }
 
@@ -823,13 +831,10 @@ function FormatTile({
         <h4 className="text-[13px] font-semibold m-0 leading-tight">{title}</h4>
         <p className="text-[11.5px] text-[var(--ds-muted)] m-0 mt-0.5 leading-snug">{desc}</p>
       </div>
-      <motion.button
+      <button
         type="button"
         onClick={onClick}
         disabled={busy || disabled}
-        whileHover={{ scale: disabled ? 1 : 1.02 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
-        transition={{ duration: 0.12 }}
         className={cn(
           "mt-1 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed",
           primary
@@ -838,18 +843,14 @@ function FormatTile({
         )}
       >
         {busy ? (
-          <motion.span
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-            className="inline-flex"
-          >
+          <span className="inline-flex animate-spin">
             <FileDown className="size-3.5" />
-          </motion.span>
+          </span>
         ) : (
           <FileDown className="size-3.5" />
         )}
         {busy ? "…" : "Download"}
-      </motion.button>
+      </button>
     </div>
   );
 }
@@ -858,32 +859,22 @@ function FormatTile({
  * Counsel-review attestation gate. Only renders for high-risk letter types.
  */
 function CounselAttestation({
-  confirmed,
-  onToggle,
+  attestation,
+  onAction,
 }: {
-  confirmed: boolean;
-  onToggle: () => void;
+  attestation?: { reviewedBy: string; reviewedOn: string };
+  onAction: () => void;
 }) {
+  const confirmed = Boolean(attestation);
   return (
-    <motion.label
-      htmlFor="counsel-attestation"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.26, delay: 0.04, ease: [0.32, 0.72, 0, 1] }}
+    <section
       className={cn(
-        "rounded-xl border px-4 py-3 mb-5 flex items-center gap-3 cursor-pointer select-none transition",
+        "rounded-xl border px-4 py-3 mb-5 flex items-center gap-3 transition",
         confirmed
           ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
           : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
       )}
     >
-      <input
-        id="counsel-attestation"
-        type="checkbox"
-        checked={confirmed}
-        onChange={onToggle}
-        className="size-4 rounded border-[var(--ds-line)] accent-[var(--ds-ink)] shrink-0"
-      />
       <span
         className={cn(
           "inline-flex items-center justify-center size-7 rounded-full shrink-0",
@@ -896,13 +887,19 @@ function CounselAttestation({
       </span>
       <div className="flex-1 min-w-0">
         <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
-          I confirm this has been reviewed by counsel
+          {confirmed ? "Counsel review recorded" : "Counsel review required"}
         </div>
         <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
-          Required for this letter type before export or send.
+          {attestation
+            ? `Reviewed by ${attestation.reviewedBy} on ${attestation.reviewedOn}.`
+            : "Record the reviewer's name and review date before export or send."}
         </div>
       </div>
-    </motion.label>
+      {!confirmed && (
+        <Button type="button" size="sm" variant="outline" onClick={onAction}>
+          Record review details
+        </Button>
+      )}
+    </section>
   );
 }
-

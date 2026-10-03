@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box } from "@radix-ui/themes";
 import { FileDown, FileText } from "lucide-react";
@@ -7,6 +7,11 @@ import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { useProfileStore } from "@/lib/profile";
 import type { Draft, ExportEvent } from "@/lib/letters/types";
+import { isDatabaseWorkspaceEnabled } from "@/lib/workspace-flags";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { listWorkspaceFiles } from "@/lib/storage/workspace-files";
+import { workspaceFileUrl, type WorkspaceFile } from "@/lib/storage/workspace-file-types";
+import { Button } from "@/components/ui/button";
 
 const RISK_TONE: Record<string, StatusTone> = {
   low: "green",
@@ -15,6 +20,50 @@ const RISK_TONE: Record<string, StatusTone> = {
 };
 
 export function Exported() {
+  return isDatabaseWorkspaceEnabled() ? <DatabaseExports /> : <LegacyExports />;
+}
+
+function DatabaseExports() {
+  const { activeTenant } = useAuth();
+  const tenantId = activeTenant?.id;
+  const nav = useNavigate();
+  const [state, setState] = useState<{ tenantId?: string; files: WorkspaceFile[]; error?: string; loading: boolean }>({ files: [], loading: true });
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setState({ tenantId, files: [], loading: true });
+    if (tenantId) void listWorkspaceFiles(tenantId).then(files => {
+      if (!cancelled) setState({ tenantId, files: files.sort((a, b) => b.completedAt - a.completedAt), loading: false });
+    }).catch(error => {
+      if (!cancelled) setState({ tenantId, files: [], loading: false, error: error instanceof Error ? error.message : "Could not load exports" });
+    });
+    return () => { cancelled = true; };
+  }, [tenantId, retry]);
+  const loading = state.loading || state.tenantId !== tenantId;
+  return <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <PageHeader crumbs={[{ label: "Exported" }]} title="Exported letters"
+      lede="Download the exact files saved at export time. Editing a draft does not change an earlier export. Exporting does not send a letter." />
+    {loading ? <p role="status">Loading saved exports…</p> : state.error ? <>
+      <p role="alert">{state.error}</p>
+      <Button variant="outline" onClick={() => setRetry(value => value + 1)}>Retry</Button>
+    </> : <DataTable rows={state.files} rowKey={file => file.id}
+      empty={<EmptyState icon={FileDown} title="No saved export files yet"
+        body="Create an export from Finalise to save a private, downloadable copy. Older export-history entries do not contain the original files."
+        primary={{ label: "Browse drafts", to: "/" }} />}
+      columns={[
+        { key: "file", header: "File", cell: file => file.filename },
+        { key: "recipient", header: "To", hideOn: "sm", cell: file => file.recipient || "—" },
+        { key: "revision", header: "Draft version", hideOn: "md", cell: file => String(file.draftRevision) },
+        { key: "when", header: "Exported", cell: file => formatRel(file.completedAt) },
+        { key: "download", header: "Actions", cell: file => <div className="flex gap-2">
+          <Button size="sm" variant="outline" asChild><a href={workspaceFileUrl(file.id, tenantId!)} download={file.filename}>Download</a></Button>
+          <Button size="sm" variant="ghost" onClick={() => nav(`/editor/${file.draftId}`)}>Open draft</Button>
+        </div> },
+      ]} />}
+  </Box>;
+}
+
+function LegacyExports() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const role = useProfileStore((s) => s.profile.role);
@@ -23,7 +72,7 @@ export function Exported() {
     return Object.values(drafts)
       .filter((d) => !d.isTemplateSource)
       .filter((d) => (role ? d.mode === role : true))
-      .filter((d) => (d.exports?.length ?? 0) > 0)
+      .filter((d) => d.exports?.some(event => event.format !== "marked-sent"))
       .map((d) => ({
         draft: d,
         latest: latestExport(d),
@@ -36,8 +85,8 @@ export function Exported() {
     <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
       <PageHeader
         crumbs={[{ label: "Exported" }]}
-        title="Sent letters"
-        lede="Letters you've finalised and exported as PDF, DOCX, or an evidence pack. Re-open any draft to issue a new export — each one is logged."
+        title="Exported letters"
+        lede="Export history for your letters. Exporting does not send a letter. Re-open a draft to create a new export; older entries do not retain the original file."
       />
 
       <DataTable
@@ -123,7 +172,7 @@ export function Exported() {
 
 function latestExport(d: Draft): ExportEvent | undefined {
   if (!d.exports || d.exports.length === 0) return undefined;
-  return [...d.exports].sort((a, b) => b.exportedAt - a.exportedAt)[0];
+  return d.exports.filter(event => event.format !== "marked-sent").sort((a, b) => b.exportedAt - a.exportedAt)[0];
 }
 
 function safeMeta(id: string) {

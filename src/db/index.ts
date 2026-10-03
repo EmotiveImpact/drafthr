@@ -3,7 +3,9 @@
 // module is safe to import in environments without DATABASE_URL (tests,
 // preview deployments before Marketplace provisioning).
 import { drizzle } from "drizzle-orm/neon-serverless";
+import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import { Pool } from "@neondatabase/serverless";
+import postgres from "postgres";
 import * as schema from "./schema.js";
 
 export { schema };
@@ -12,24 +14,47 @@ export * from "./schema.js";
 type Db = ReturnType<typeof drizzle<typeof schema>>;
 
 let _pool: Pool | null = null;
+let _localSql: ReturnType<typeof postgres> | null = null;
 let _db: Db | null = null;
 
 export function dbEnabled(): boolean {
-  return typeof process.env.DATABASE_URL === "string" && process.env.DATABASE_URL.length > 0;
+  return Boolean(databaseUrl());
 }
 
 export function getDb(): Db {
   if (_db) return _db;
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (!url) {
     throw new Error("DATABASE_URL is not configured");
+  }
+  if (process.env.DRAFTHR_LOCAL_WORKOS_EMULATOR === "1") {
+    _localSql = postgres(url, { max: 5 });
+    _db = drizzlePostgres(_localSql, { schema }) as unknown as Db;
+    return _db;
   }
   _pool = new Pool({ connectionString: url });
   _db = drizzle(_pool, { schema });
   return _db;
 }
 
+/** Vercel dev can inject cloud DATABASE_URL values over shell env overrides. */
+export function databaseUrl(): string | undefined {
+  if (process.env.DRAFTHR_LOCAL_WORKOS_EMULATOR !== "1") return process.env.DATABASE_URL;
+  const url = process.env.DRAFTHR_LOCAL_DATABASE_URL;
+  if (!url) throw new Error("Local demo auth requires DRAFTHR_LOCAL_DATABASE_URL");
+  const parsed = new URL(url);
+  if (!(["127.0.0.1", "localhost"].includes(parsed.hostname) && parsed.port === "55432")) {
+    throw new Error("Local demo auth requires the disposable localhost database");
+  }
+  return url;
+}
+
 export async function closeDb(): Promise<void> {
+  if (_localSql) {
+    await _localSql.end();
+    _localSql = null;
+    _db = null;
+  }
   if (_pool) {
     await _pool.end();
     _pool = null;

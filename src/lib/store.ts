@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { toast } from "sonner";
 import { createQuotaSafeStorage } from "./storage/quota-safe-storage";
+import { isDatabaseWorkspaceEnabled } from "./workspace-flags";
 import { TENANT_SCOPED_PERSIST_KEYS } from "./session/clearLocalData";
 import type {
   AIAction,
@@ -22,13 +23,16 @@ import type {
   MatterColor,
   MatterEvent,
   MatterParticipant,
+  MatterType,
   Mode,
+  RiskBand,
   Section,
   SectionVersion,
   Task,
 } from "./letters/types";
 import { uid } from "./utils";
 import { getLetterMeta } from "./letters/catalog";
+import { answersFromEmployee } from "./employees";
 import {
   addDaysToDateOnly,
   addMonthsToDateOnly,
@@ -122,7 +126,12 @@ type Store = {
     deadlineLabel?: string;
     draftIds: string[];
   }) => string;
-  createDraft: (letterType: LetterTypeId, answers: LetterAnswers, mode?: Mode) => string;
+  createDraft: (
+    letterType: LetterTypeId,
+    answers: LetterAnswers,
+    mode?: Mode,
+    options?: { templateSource: { templateName: string; templateDescription?: string } },
+  ) => string;
   /** Spawn a draft flagged as a template authoring surface. The returned
    * draft has `isTemplateSource: true` set so the editor swaps Export
    * → Save template. `templateName` / `templateDescription` are stashed
@@ -272,7 +281,12 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           if (!s.customTemplates[id]) return s;
           const { [id]: _removed, ...remaining } = s.customTemplates;
-          return { customTemplates: remaining };
+          const drafts = { ...s.drafts };
+          for (const [draftId, draft] of Object.entries(drafts)) if (draft.templateSourceId === id) {
+            const { templateSourceId: _source, ...unlinked } = draft;
+            drafts[draftId] = { ...unlinked, updatedAt: Date.now() };
+          }
+          return { customTemplates: remaining, drafts };
         }),
 
       createDraftFromCustomTemplate: (templateId, modeOverride) => {
@@ -639,11 +653,30 @@ export const useDraftStore = create<Store>()(
         return id;
       },
 
-      createDraft: (letterType, answers, mode) => {
+      createDraft: (letterType, answers, mode, options) => {
         const id = uid("draft");
         const now = Date.now();
         const meta = getLetterMeta(letterType);
         const resolvedMode: Mode = mode ?? meta.mode;
+        const templateSource = options?.templateSource;
+        const snapshot = get();
+        const linkedEmployee =
+          !templateSource && resolvedMode === "employer" && typeof answers.linkedEmployeeId === "string"
+            ? snapshot.employees[answers.linkedEmployeeId]
+            : undefined;
+        // Fill omitted fields from the selected directory record before both
+        // the AI answers and the rendered party snapshot are constructed.
+        // Explicit wizard edits (including clearing a field) win.
+        answers = {
+          ...(linkedEmployee ? answersFromEmployee(linkedEmployee) : {}),
+          ...Object.fromEntries(Object.entries(answers).filter(([, value]) => value !== undefined)),
+        };
+        if (templateSource) {
+          delete answers.linkedEmployeeId;
+          delete answers.linkedMatterId;
+          answers._templateName = templateSource.templateName;
+          answers._templateDescription = templateSource.templateDescription;
+        }
 
         const sections: Section[] = meta.defaultSections.map((s) => ({
           id: uid("sec"),
@@ -657,6 +690,75 @@ export const useDraftStore = create<Store>()(
 
         const a = answers as Record<string, string | boolean | number | string[] | undefined>;
         const protectedDeadline = computeProtectedDeadline(a);
+
+        // Resolve the normalized records up front so the draft, employee and
+        // matter land in one Zustand transaction. A directory selection is
+        // explicit (`linkedEmployeeId`); otherwise a completed HR wizard gets
+        // a new employee record. We deliberately never merge on name alone.
+        const requestedEmployeeId =
+          typeof a.linkedEmployeeId === "string" && snapshot.employees[a.linkedEmployeeId]
+            ? a.linkedEmployeeId
+            : undefined;
+        const employeeName = ((a.employeeLegalName as string) ?? "").trim();
+        let employeeId = resolvedMode === "employer" ? requestedEmployeeId : undefined;
+        let employeeToCreate: Employee | undefined;
+        if (!templateSource && resolvedMode === "employer" && !employeeId && employeeName) {
+          employeeId = uid("emp");
+          employeeToCreate = {
+            id: employeeId,
+            legalName: employeeName,
+            address: (a.employeeAddress as string) || undefined,
+            preferredName: (a.employeePreferredName as string) || undefined,
+            jobTitle: (a.employeeJobTitle as string) || undefined,
+            department: (a.employeeDepartment as string) || undefined,
+            email: (a.employeeEmail as string) || undefined,
+            startDate: (a.employeeStartDate as string) || undefined,
+            workerClass: (a.workerClass as Employee["workerClass"]) ?? "employee",
+            status: "active",
+            createdAt: now,
+            updatedAt: now,
+          };
+        }
+
+        const requestedMatterId =
+          typeof a.linkedMatterId === "string" && snapshot.matters[a.linkedMatterId]
+            ? a.linkedMatterId
+            : undefined;
+        const requiresMatter =
+          meta.riskClass === "high" || meta.legalReviewRequired || Boolean(meta.tribunalBound);
+        let matterId = requestedMatterId;
+        let matterToCreate: Matter | undefined;
+        if (!templateSource && !matterId && requiresMatter) {
+          matterId = uid("matter");
+          const primaryName =
+            resolvedMode === "employer"
+              ? employeeName || "Employee not yet linked"
+              : ((a.employerLegalName as string) ?? "").trim() || "Employer not yet linked";
+          matterToCreate = {
+            id: matterId,
+            name: `${primaryName} · ${meta.shortTitle}`,
+            mode: resolvedMode,
+            status: "active",
+            color: "red",
+            description: `Created with ${meta.title}`,
+            parties: {
+              primaryName,
+              primaryContext:
+                resolvedMode === "employer"
+                  ? ((a.employeeJobTitle as string) || undefined)
+                  : ((a.jurisdiction as string) || undefined),
+            },
+            type: matterTypeForLetter(letterType),
+            riskBand: riskBandForLetter(meta.riskClass),
+            participants:
+              resolvedMode === "employer" && employeeId && employeeName
+                ? [{ employeeId, name: employeeName, role: "subject" }]
+                : undefined,
+            nextAction: "Complete and review the draft letter",
+            createdAt: now,
+            updatedAt: now,
+          };
+        }
 
         const draft: Draft = {
           id,
@@ -731,7 +833,7 @@ export const useDraftStore = create<Store>()(
           },
           answers,
           sections,
-          evidence: resolvedMode === "employee" ? [] : undefined,
+          evidence: [],
           outcomeSought: a.outcomeSought as string | undefined,
           timeline: [
             timelineEvent("created", `Created ${meta.shortTitle}`, {
@@ -743,36 +845,54 @@ export const useDraftStore = create<Store>()(
               )}`,
             }),
           ],
+          employeeId,
+          matterId,
+          ...(templateSource ? { isTemplateSource: true } : {}),
           createdAt: now,
           updatedAt: now,
         };
-        set((s) => ({ drafts: { ...s.drafts, [id]: draft } }));
+        set((s) => {
+          const employees = employeeToCreate
+            ? { ...s.employees, [employeeToCreate.id]: employeeToCreate }
+            : s.employees;
+          let matters = matterToCreate
+            ? { ...s.matters, [matterToCreate.id]: matterToCreate }
+            : s.matters;
+
+          // A letter created from an existing matter still needs the selected
+          // employee represented in that matter's participants. De-dupe only
+          // by the explicit stable id, never by display name.
+          if (matterId && !matterToCreate && employeeId && employeeName) {
+            const matter = matters[matterId];
+            if (
+              matter &&
+              !(matter.participants ?? []).some((p) => p.employeeId === employeeId)
+            ) {
+              matters = {
+                ...matters,
+                [matterId]: {
+                  ...matter,
+                  participants: [
+                    ...(matter.participants ?? []),
+                    { employeeId, name: employeeName, role: "subject" },
+                  ],
+                  updatedAt: now,
+                },
+              };
+            }
+          }
+
+          return {
+            drafts: { ...s.drafts, [id]: draft },
+            employees,
+            matters,
+          };
+        });
         return id;
       },
 
       createTemplateSourceDraft: (letterType, answers, mode, metaInput) => {
-        const id = get().createDraft(letterType, answers, mode);
-        set((s) => {
-          const d = s.drafts[id];
-          if (!d) return s;
-          const nextAnswers: LetterAnswers = {
-            ...d.answers,
-            _templateName: metaInput.templateName,
-            _templateDescription: metaInput.templateDescription,
-          };
-          return {
-            drafts: {
-              ...s.drafts,
-              [id]: {
-                ...d,
-                isTemplateSource: true,
-                answers: nextAnswers,
-                updatedAt: Date.now(),
-              },
-            },
-          };
-        });
-        return id;
+        return get().createDraft(letterType, answers, mode, { templateSource: metaInput });
       },
 
       updateAnswers: (id, answers) =>
@@ -1223,6 +1343,7 @@ export const useDraftStore = create<Store>()(
             id: uid("ex"),
             exportedAt: event.exportedAt ?? Date.now(),
             format: event.format,
+            artifactId: event.artifactId,
             reviewedBy: event.reviewedBy,
             reviewedOn: event.reviewedOn,
           };
@@ -1236,6 +1357,7 @@ export const useDraftStore = create<Store>()(
                   detail: e.reviewedBy ? `Counsel review attested by ${e.reviewedBy}` : undefined,
                   meta: {
                     exportId: e.id,
+                    artifactId: e.artifactId,
                     format: e.format,
                     reviewedBy: e.reviewedBy,
                     reviewedOn: e.reviewedOn,
@@ -1702,7 +1824,7 @@ export const useDraftStore = create<Store>()(
       // toast instead of silently failing if a write still overflows quota.
       storage: createJSONStorage(() =>
         createQuotaSafeStorage(
-          typeof window !== "undefined"
+          typeof window !== "undefined" && !isDatabaseWorkspaceEnabled()
             ? window.localStorage
             : { getItem: () => null, setItem: () => {}, removeItem: () => {} },
           () =>
@@ -1740,7 +1862,7 @@ if (typeof window !== "undefined") {
       return;
     }
     // Same-key cross-tab edit (not a wipe): rehydrate so the tabs converge.
-    if (e.key === PERSIST_KEY && e.newValue !== null) {
+    if (e.key === PERSIST_KEY && e.newValue !== null && !isDatabaseWorkspaceEnabled()) {
       // rehydrate() re-reads localStorage and replaces in-memory state.
       void useDraftStore.persist?.rehydrate?.();
     }
@@ -1862,6 +1984,26 @@ function truncateTimelineText(text: string, max = 120): string {
   const compact = text.replace(/\s+/g, " ").trim();
   if (compact.length <= max) return compact;
   return `${compact.slice(0, max - 1).trim()}…`;
+}
+
+function riskBandForLetter(riskClass: "low" | "medium" | "high"): RiskBand {
+  if (riskClass === "high") return "high";
+  if (riskClass === "medium") return "moderate";
+  return "low";
+}
+
+function matterTypeForLetter(letterType: LetterTypeId): MatterType {
+  if (letterType === "termination" || letterType === "warning") return "disciplinary";
+  if (letterType === "redundancy" || letterType === "redundancy_consultation_response") {
+    return "redundancy";
+  }
+  if (letterType.includes("grievance")) return "grievance";
+  if (letterType.includes("settlement")) return "settlement";
+  if (letterType.includes("tribunal") || letterType === "acas_ec_notification") return "tribunal";
+  if (letterType === "offer" || letterType === "right_to_work") return "onboarding";
+  if (letterType.includes("resignation") || letterType === "reference") return "offboarding";
+  if (letterType === "pip_response" || letterType === "probation_outcome") return "performance";
+  return "other";
 }
 
 // Exported for unit testing (the day-of-month boundary gates statutory

@@ -28,6 +28,8 @@ import { drafts } from "../../src/db/schema.js";
 import { buildPadesCms } from "../../src/lib/sign/pades.js";
 import { getActiveSigner } from "../../src/lib/sign/types.js";
 
+import { withSessionResponse } from "../_utils/workos.js";
+
 export const config = {
   runtime: "nodejs",
   maxDuration: 30,
@@ -66,6 +68,10 @@ type SignManifestResponse = {
 const MAX_MANIFEST_BYTES = 200_000;
 
 export async function POST(req: Request): Promise<Response> {
+  return withSessionResponse(req, handlePost);
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "sign-manifest", max: 30, windowMs: 60_000 });

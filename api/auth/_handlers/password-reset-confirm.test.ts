@@ -14,7 +14,7 @@ vi.mock("../../_utils/workos.js", () => ({
   getWorkos: () => ({
     userManagement: { resetPassword },
   }),
-  buildSessionCookie: vi.fn(async () => "drafthr_session=fake; Path=/; HttpOnly"),
+  buildClearCookie: vi.fn(() => "drafthr_session=; Path=/; Max-Age=0; HttpOnly"),
   // SessionPayload is a type, not a value — vi.mock factories only need to
   // surface the values the handler imports.
   SESSION_COOKIE: "drafthr_session",
@@ -38,7 +38,7 @@ function makeRequest(body: unknown, ipSuffix = "1") {
 }
 
 describe("POST /api/auth/password-reset-confirm", () => {
-  it("resets the password and mints a session cookie", async () => {
+  it("resets the password and requires WorkOS sign-in instead of minting a bypass cookie", async () => {
     resetPassword.mockResolvedValueOnce({
       user: {
         id: "user_1",
@@ -55,17 +55,8 @@ describe("POST /api/auth/password-reset-confirm", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      ok: true,
-      user: {
-        id: "user_1",
-        email: "ok@example.com",
-        firstName: "Ada",
-        lastName: "Lovelace",
-        profilePictureUrl: null,
-      },
-    });
-    expect(res.headers.get("set-cookie")).toContain("drafthr_session=");
+    expect(await res.json()).toEqual({ ok: true, requiresSignIn: true });
+    expect(res.headers.get("set-cookie")).toContain("Max-Age=0");
     expect(resetPassword).toHaveBeenCalledWith({
       token: "tok_abc",
       newPassword: "newpassword123",

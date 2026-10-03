@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
   PlusCircle,
@@ -36,7 +35,7 @@ import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { EmptyState } from "@/components/ds";
-import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 import { deriveEmployeesFromDrafts } from "@/lib/employees";
 import { draftsInMatter } from "@/lib/matters";
 import { effectiveRiskBand } from "@/lib/matters/risk";
@@ -123,6 +122,10 @@ function HrDashboard() {
     () => Object.values(drafts).filter((d) => !d.isTemplateSource),
     [drafts]
   );
+  const latestEmployerDraft = useMemo(
+    () => allDrafts.filter((d) => d.mode === "employer").sort((a, b) => b.updatedAt - a.updatedAt)[0],
+    [allDrafts]
+  );
   const riskSummary = useMemo(
     () => deriveRiskSummary(activeMatters, allDrafts),
     [activeMatters, allDrafts]
@@ -164,12 +167,6 @@ function HrDashboard() {
   // RECENT ACTIVITY: flatten draft timelines, sort, take 5
   const recent = useMemo(() => deriveRecentActivity(drafts, "employer"), [drafts]);
 
-  const fade = {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.35, ease: [0.32, 0.72, 0, 1] as const },
-  };
-
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
@@ -182,8 +179,7 @@ function HrDashboard() {
        * normalised employee directory is empty. One click migrates every
        * person mentioned in existing drafts into the workspace directory. */}
       {backfillCount > 0 && (
-        <motion.div
-          {...fade}
+        <div
           className="mb-5 rounded-[12px] border border-[var(--ds-line)] bg-gradient-to-r from-[var(--ds-blue-bg)]/40 to-[var(--ds-surface)] px-4 py-3.5 flex items-start gap-3"
         >
           <span
@@ -229,11 +225,11 @@ function HrDashboard() {
           >
             <X className="size-3.5" />
           </button>
-        </motion.div>
+        </div>
       )}
 
       {/* Greeting */}
-      <motion.header {...fade} className="mb-6">
+      <header className="mb-6">
         <h1
           className="m-0 text-[var(--ds-ink)] font-semibold"
           style={{
@@ -258,23 +254,19 @@ function HrDashboard() {
             </>
           ) : null}
         </p>
-      </motion.header>
+      </header>
 
       {/* Three-panel row */}
-      <motion.div
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.06 }}
+      <div
         className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-7"
       >
-        <TodayCard items={todayItems} prefix={prefix} />
+        <TodayCard items={todayItems} prefix={prefix} continueDraft={latestEmployerDraft} />
         <RiskRegister summary={riskSummary} />
         <ComplianceHealth summary={complianceSummary} prefix={prefix} />
-      </motion.div>
+      </div>
 
       {/* Recent activity */}
-      <motion.section
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.12 }}
+      <section
         className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden mb-6"
       >
         <header className="flex items-center justify-between px-[18px] py-3.5 border-b border-[var(--ds-line-2)]">
@@ -308,12 +300,10 @@ function HrDashboard() {
             ))}
           </ul>
         )}
-      </motion.section>
+      </section>
 
       {/* Footer CTAs */}
-      <motion.div
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.18 }}
+      <div
         className="flex flex-wrap items-center gap-2.5 mb-2"
       >
         <button
@@ -331,7 +321,7 @@ function HrDashboard() {
           Browse templates
           <ArrowRight className="size-3.5 opacity-70" />
         </Link>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -350,8 +340,17 @@ type TodayItem = {
   draftId?: string;
 };
 
-function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
+function TodayCard({
+  items,
+  prefix,
+  continueDraft,
+}: {
+  items: TodayItem[];
+  prefix: string;
+  continueDraft?: Draft;
+}) {
   const nav = useNavigate();
+  const emptyAction = emptyTodayAction(continueDraft, prefix);
   return (
     <DashboardPanel
       icon={Clock}
@@ -361,8 +360,8 @@ function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
       {items.length === 0 ? (
         <PanelEmpty
           body="Nothing due today."
-          ctaLabel="Start your first letter"
-          onClick={() => nav(`${prefix}/new`)}
+          ctaLabel={emptyAction.label}
+          onClick={() => nav(emptyAction.href)}
         />
       ) : (
         <>
@@ -729,7 +728,7 @@ function deriveRiskSummary(
   };
 }
 
-function deriveComplianceSummary(
+export function deriveComplianceSummary(
   drafts: Record<string, Draft>,
   mode: Mode
 ): ComplianceSummary {
@@ -743,11 +742,10 @@ function deriveComplianceSummary(
   let needsReview = 0;
   for (const d of all) {
     try {
-      const checks = runHealthChecks(d);
-      const score = computeHealthScore(checks);
-      if (score.band === "strong" && score.failCount === 0) {
+      const readiness = getDraftReadiness(d);
+      if (readiness.status === "ready_to_send" || readiness.status === "sent") {
         strong += 1;
-      } else if (score.failCount > 0 || score.band === "weak") {
+      } else if (readiness.blockers.length > 0) {
         needsReview += 1;
       }
     } catch {
@@ -760,6 +758,15 @@ function deriveComplianceSummary(
     needsReview,
     percent: Math.round((strong / all.length) * 100),
   };
+}
+
+export function emptyTodayAction(
+  continueDraft: Pick<Draft, "id"> | undefined,
+  prefix: string,
+): { label: string; href: string } {
+  return continueDraft
+    ? { label: "Continue your latest letter", href: `/editor/${continueDraft.id}` }
+    : { label: "Create your first letter", href: `${prefix}/new` };
 }
 
 type RecentItem = { id: string; label: string; ago: string; ts: number };
@@ -1234,15 +1241,12 @@ function deriveDeadlines(
     .slice(0, 5);
 }
 
-function draftStatus(d: {
-  sections: { status: string; html: string }[];
-}): "empty" | "drafting" | "ready" | "exported" {
-  const all = d.sections;
-  if (all.length === 0) return "empty";
-  if (all.every((s) => s.status === "empty" && !s.html)) return "empty";
-  if (all.every((s) => s.status === "ready")) return "ready";
-  if (all.some((s) => s.status === "ready" || s.status === "edited" || s.status === "streaming" || s.html))
-    return "drafting";
+function draftStatus(d: Draft): "empty" | "drafting" | "blocked" | "ready" | "exported" {
+  const readiness = getDraftReadiness(d);
+  if (readiness.status === "sent") return "exported";
+  if (readiness.status === "ready_to_send") return "ready";
+  if (readiness.status === "blocked") return "blocked";
+  if (readiness.sections.written > 0) return "drafting";
   return "empty";
 }
 
@@ -1252,6 +1256,8 @@ function statusLabel(status: ReturnType<typeof draftStatus>, sectionCount: numbe
       return "Ready to export";
     case "drafting":
       return `Drafting · ${sectionCount} section${sectionCount === 1 ? "" : "s"}`;
+    case "blocked":
+      return "Needs attention before sending";
     case "exported":
       return "Exported";
     default:

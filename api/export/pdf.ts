@@ -25,7 +25,11 @@ import { appendAuditEvent } from "../../src/db/audit.js";
 import { getDb } from "../../src/db/index.js";
 import { drafts } from "../../src/db/schema.js";
 import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
+import { parsePrivateImageUrl } from "../../src/lib/storage/privateImageUrl.js";
+import { readPrivateImage } from "../_utils/private-image.js";
 import { toServerUuid } from "../../src/lib/remote-ids.js";
+
+import { withSessionResponse } from "../_utils/workos.js";
 
 export const config = {
   runtime: "nodejs",
@@ -68,9 +72,17 @@ const A4_CSS = `
   hr { border: none; border-top: 1px solid #cbd5e1; margin: 12pt 0; }
   em { color: #475569; font-style: italic; }
   strong { font-weight: 600; }
+  .page-break-before { break-before: page; page-break-before: always; }
+  .figure-item { margin: 0 0 14pt; break-inside: avoid; }
+  .figure-body { white-space: pre-wrap; }
+  .figure-item img { max-width: 100%; max-height: 5in; object-fit: contain; }
 `;
 
 export async function POST(req: Request): Promise<Response> {
+  return withSessionResponse(req, handlePost);
+}
+
+async function handlePost(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "pdf", max: 12, windowMs: 60_000 });
@@ -160,9 +172,14 @@ export async function POST(req: Request): Promise<Response> {
       }
     });
 
-    // Inline https://blob images to data: URLs before render — Puppeteer's
+    // Inline private/legacy blob images to data: URLs before render — Puppeteer's
     // request interceptor above blocks all non-data:/about: requests by design.
-    const inlinedHtml = await inlineImagesForExport(body.html);
+    const inlinedHtml = await inlineImagesForExport(body.html, (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const pathname = parsePrivateImageUrl(url);
+      if (pathname) return readPrivateImage(pathname, tenantId);
+      return fetch(input, init);
+    });
     const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${inlinedHtml}</body></html>`;
     await page.setContent(fullHtml, { waitUntil: "load", timeout: PDF_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({

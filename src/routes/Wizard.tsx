@@ -57,6 +57,7 @@ export function Wizard({ mode }: { mode: Mode }) {
   const [answers, setAnswers] = useState<Record<string, unknown>>(
     () => initialAnswersRef.current
   );
+  const [showErrors, setShowErrors] = useState(false);
   const [showPrefillBanner, setShowPrefillBanner] = useState(
     () => Object.keys(initialAnswersRef.current).length > 0
   );
@@ -103,6 +104,16 @@ export function Wizard({ mode }: { mode: Mode }) {
     .every((q) => isQuestionAnswered(q, answers[q.id]));
 
   const onNext = () => {
+    if (!requiredAnswered) {
+      setShowErrors(true);
+      const firstMissing = visibleQuestions.find(
+        (q) => q.required && !isQuestionAnswered(q, answers[q.id]),
+      );
+      if (firstMissing) {
+        requestAnimationFrame(() => document.getElementById(`q-${firstMissing.id}`)?.focus());
+      }
+      return;
+    }
     if (isLast) {
       if (profile.autoFill) {
         const updates = profileUpdatesFromAnswers(answers, mode);
@@ -114,6 +125,7 @@ export function Wizard({ mode }: { mode: Mode }) {
       nav(`/editor/${id}`);
       return;
     }
+    setShowErrors(false);
     setStepIndex((i) => i + 1);
   };
 
@@ -121,6 +133,7 @@ export function Wizard({ mode }: { mode: Mode }) {
     if (stepIndex === 0) {
       nav(mode === "employer" ? "/hr" : "/me");
     } else {
+      setShowErrors(false);
       setStepIndex((i) => i - 1);
     }
   };
@@ -225,6 +238,11 @@ export function Wizard({ mode }: { mode: Mode }) {
 
       <Card>
         <CardContent className="p-4 sm:p-6 space-y-6">
+          {showErrors && !requiredAnswered && (
+            <p role="alert" aria-live="assertive" className="text-sm text-destructive">
+              Complete the required fields below to continue.
+            </p>
+          )}
           {/* Employee directory picker — only on the step that captures
            * the employee fields, only in HR mode, only when the workspace
            * has anyone to pick from. */}
@@ -248,6 +266,9 @@ export function Wizard({ mode }: { mode: Mode }) {
               q={q}
               value={answers[q.id]}
               onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+              error={showErrors && q.required && !isQuestionAnswered(q, answers[q.id])
+                ? "This field is required."
+                : undefined}
             />
           ))}
           {visibleQuestions.length === 0 && (
@@ -280,7 +301,7 @@ export function Wizard({ mode }: { mode: Mode }) {
           <ChevronLeft className="size-4 mr-1" />
           {stepIndex === 0 ? "Cancel" : "Back"}
         </Button>
-        <Button onClick={onNext} disabled={!requiredAnswered}>
+        <Button onClick={onNext} aria-disabled={!requiredAnswered}>
           {isLast ? (
             <>
               <Sparkles className="size-4 mr-1.5" />

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useDraftStore } from "@/lib/store";
 import type { Employee } from "@/lib/letters/types";
+import { answersFromEmployee } from "@/lib/employees";
 
 /**
  * "Pick from your employees" affordance — shown on the HR-mode wizard's
@@ -42,13 +43,7 @@ export function EmployeePicker({
   const handlePick = (emp: Employee) => {
     onPick(
       {
-        linkedEmployeeId: emp.id,
-        employeeLegalName: emp.legalName,
-        employeePreferredName: emp.preferredName,
-        employeeJobTitle: emp.jobTitle,
-        employeeDepartment: emp.department,
-        employeeEmail: emp.email,
-        employeeStartDate: emp.startDate,
+        ...answersFromEmployee(emp),
         workerClass: emp.workerClass ?? answers.workerClass,
       },
       emp

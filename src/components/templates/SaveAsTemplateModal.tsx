@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import type { Draft, SectionId } from "@/lib/letters/types";
+import type { Draft } from "@/lib/letters/types";
+import { saveDraftAsTemplate } from "@/lib/save-draft-template";
+import { uid } from "@/lib/utils";
 
 /**
  * "Save as template" modal — captures the current draft's per-section
@@ -30,7 +31,13 @@ export function SaveAsTemplateModal({
   open: boolean;
   onOpenChange: (next: boolean) => void;
 }) {
-  const createCustomTemplate = useDraftStore((s) => s.createCustomTemplate);
+  const [saving, setSaving] = useState(false);
+  const pendingId = useRef<string | null>(null);
+  const generation = useRef(0);
+  useEffect(() => {
+    pendingId.current = null; setSaving(false);
+    return () => { generation.current += 1; };
+  }, [draft.id, open]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const meta = getLetterMeta(draft.letterType);
@@ -41,33 +48,26 @@ export function SaveAsTemplateModal({
     [draft.sections]
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) return;
-    // Build sectionHtml keyed by canonical SectionId (not per-draft id) so a
-    // new draft spawned from this template can match sections by sectionId.
-    const sectionHtml: Partial<Record<SectionId, string>> = {};
-    for (const sec of draft.sections) {
-      if (sec.html.trim().length === 0) continue;
-      sectionHtml[sec.sectionId] = sec.html;
-    }
-    createCustomTemplate({
-      name: trimmed,
-      description: description.trim() || undefined,
-      baseLetterType: draft.letterType,
-      mode: draft.mode,
-      jurisdiction: draft.context.jurisdiction,
-      sectionHtml,
-      answers: draft.answers,
-    });
-    toast.success(`Saved "${trimmed}" to My Templates`);
-    setName("");
-    setDescription("");
-    onOpenChange(false);
+    if (!trimmed || saving) return;
+    pendingId.current ??= uid("tpl");
+    const attempt = generation.current;
+    setSaving(true);
+    try {
+      await saveDraftAsTemplate({ draft, templateId: pendingId.current, name: trimmed, description,
+        isCurrent: () => generation.current === attempt });
+      if (generation.current !== attempt) return;
+      toast.success(`Saved "${trimmed}" to My Templates`);
+      setName(""); setDescription(""); pendingId.current = null;
+      onOpenChange(false);
+    } catch (error) {
+      if (generation.current === attempt) toast.error(error instanceof Error ? error.message : "Template could not be saved.");
+    } finally { if (generation.current === attempt) setSaving(false); }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={next => { if (!saving) onOpenChange(next); }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Save as template</DialogTitle>
@@ -87,6 +87,7 @@ export function SaveAsTemplateModal({
               placeholder={`e.g. "Acme settlement language"`}
               autoFocus
               maxLength={120}
+              disabled={saving}
             />
           </div>
           <div className="grid gap-1.5">
@@ -98,6 +99,7 @@ export function SaveAsTemplateModal({
               placeholder="What this template is for, when to use it…"
               rows={3}
               maxLength={500}
+              disabled={saving}
             />
           </div>
 
@@ -121,11 +123,11 @@ export function SaveAsTemplateModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!name.trim() || populatedCount === 0}>
-            Save template
+          <Button onClick={handleSubmit} disabled={saving || !name.trim() || populatedCount === 0}>
+            {saving ? "Saving template…" : "Save template"}
           </Button>
         </DialogFooter>
       </DialogContent>

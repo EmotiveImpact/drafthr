@@ -1,6 +1,7 @@
 import type { Draft } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 
 type Props = {
   draft: Draft;
@@ -9,8 +10,9 @@ type Props = {
 };
 
 export function SectionsList({ draft, activeSectionId, onSelect }: Props) {
-  const total = draft.sections.length;
-  const ready = draft.sections.filter((s) => s.status === "ready").length;
+  const { sections } = getDraftReadiness(draft);
+  const total = sections.total;
+  const written = sections.written;
 
   return (
     <ScrollArea className="flex-1 min-h-0">
@@ -24,9 +26,9 @@ export function SectionsList({ draft, activeSectionId, onSelect }: Props) {
           </span>
           <span
             className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums"
-            title={`${ready} of ${total} sections marked ready`}
+            title={`${written} of ${total} sections written`}
           >
-            {ready}/{total}
+            {written}/{total}
           </span>
         </div>
         {draft.sections.map((s, i) => (

@@ -1,25 +1,6 @@
-/**
- * Per-user session epoch — the server-side session-revocation primitive.
- * (Security board SE-03, 2026-06-10.)
- *
- * A sealed `drafthr_session` cookie carries the epoch that was current when it
- * was minted. `requireSessionAndTenant` rejects any cookie whose epoch is
- * behind the user's stored epoch. Bumping the epoch — on sign-out and on
- * password reset — therefore invalidates EVERY outstanding cookie for that user
- * immediately, instead of letting an exfiltrated cookie stay valid for the full
- * 7-day TTL.
- *
- * Deliberately NOT a Drizzle-schema column. The `users` table is loaded with a
- * `select()` (all columns) on the auth hot path; if `session_epoch` were in the
- * schema, that select would reference the column and a deploy that landed
- * BEFORE the migration would 500 every authenticated request. Managing it via
- * defensive raw SQL means: column absent → the query throws → we return `null`
- * → enforcement is skipped → auth behaves exactly as it does today. Once
- * migration `0010_session_epoch` is applied, revocation activates with no code
- * change. Safe in either deploy order.
- *
- * All DB access here is best-effort: a transient error returns `null` (unknown)
- * rather than `0`, so a blip never spuriously logs a valid user out.
+/** Server-side session revocation counter. Authentication reads use strict mode:
+ * database errors deny access. Migration 0010 is required before deployment.
+ * Best-effort reads remain for compatibility with administrative callers.
  */
 import { sql } from "drizzle-orm";
 import { dbEnabled, getDb } from "../../src/db/index.js";
@@ -41,15 +22,19 @@ function toEpoch(v: unknown): number | null {
  * (DB off, column not migrated yet, transient error, or no such user). Callers
  * MUST treat `null` as "skip enforcement", never as `0`.
  */
-export async function getUserSessionEpoch(externalId: string): Promise<number | null> {
-  if (!dbEnabled()) return null;
+export async function getUserSessionEpoch(externalId: string, options: { strict?: boolean } = {}): Promise<number | null> {
+  if (!dbEnabled()) {
+    if (options.strict) throw new Error("Database session verification is unavailable");
+    return null;
+  }
   try {
     const res = await getDb().execute(
       sql`SELECT session_epoch FROM users WHERE external_id = ${externalId} LIMIT 1`,
     );
     const row = firstRow(res);
     return row ? toEpoch(row.session_epoch) : null;
-  } catch {
+  } catch (error) {
+    if (options.strict) throw error;
     return null; // column not migrated / transient — do not enforce
   }
 }

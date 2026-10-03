@@ -56,9 +56,10 @@ export function computeRowHash(opts: {
 
 export async function appendAuditEvent(
   input: AppendAuditEventInput,
+  transaction?: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
 ): Promise<AppendAuditEventResult> {
   const db = getDb();
-  const row = await db.transaction(async (tx) => {
+  const write = async (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => {
     // Serialize each tenant's chain head. Without this lock, concurrent appends
     // can read the same tail row and both insert events with the same prev_hash.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.tenantId}, 0))`);
@@ -101,13 +102,16 @@ export async function appendAuditEvent(
       });
 
     return insertedRow;
-  });
+  };
+  const row = transaction ? await write(transaction) : await db.transaction(write);
 
   // Transaction has committed. Fire the WorkOS mirror fire-and-forget — we
   // deliberately do not await so callers never block on WorkOS latency, and
   // never see a WorkOS-side failure bubble up. The sink itself swallows
   // exceptions and returns a typed result.
-  void mirrorToWorkOS({
+  // Callers composing an atomic business transaction must not send an external
+  // event before commit. Their authoritative local chain is written atomically.
+  if (!transaction) void mirrorToWorkOS({
     tenantId: input.tenantId,
     actorUserId: input.actorUserId ?? null,
     action: input.kind,

@@ -27,7 +27,7 @@ export async function migrateEmployerImages(
     const url = await uploadImage({
       dataUrl: source.letterheadDataUrl,
       filename: "letterhead",
-    });
+    }).catch(() => source.letterheadDataUrl);
     if (url !== source.letterheadDataUrl) patch.letterheadDataUrl = url;
   }
 
@@ -35,7 +35,7 @@ export async function migrateEmployerImages(
     const url = await uploadImage({
       dataUrl: source.signatureDataUrl,
       filename: "signature",
-    });
+    }).catch(() => source.signatureDataUrl);
     if (url !== source.signatureDataUrl) patch.signatureDataUrl = url;
   }
 

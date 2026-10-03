@@ -1,0 +1,41 @@
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { SaveAsTemplateModal } from "./SaveAsTemplateModal";
+import type { Draft } from "@/lib/letters/types";
+const fake = vi.hoisted(() => ({ save: vi.fn(), success: vi.fn(), error: vi.fn() }));
+vi.mock("@/lib/save-draft-template", () => ({ saveDraftAsTemplate: fake.save }));
+vi.mock("sonner", () => ({ toast: { success: fake.success, error: fake.error } }));
+const draft = { id: "draft", letterType: "offer", mode: "employer", context: { jurisdiction: "UK" }, sections: [{ html: "<p>Fictional clause</p>" }] } as Draft;
+beforeEach(() => { vi.clearAllMocks(); }); afterEach(cleanup);
+it("keeps the dialog pending until the database confirms, then closes with success", async () => {
+  let finish!: () => void; fake.save.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  const onOpenChange = vi.fn(), screen = render(<SaveAsTemplateModal draft={draft} open onOpenChange={onOpenChange} />);
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Reusable clause" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+  expect(screen.getByRole("button", { name: "Saving template…" })).toBeDisabled();
+  expect(fake.success).not.toHaveBeenCalled(); expect(onOpenChange).not.toHaveBeenCalled();
+  await act(async () => finish());
+  expect(fake.success).toHaveBeenCalledOnce(); expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+it("retains the name and same record ID for retry after failed confirmation", async () => {
+  fake.save.mockRejectedValue(new Error("Not confirmed"));
+  const onOpenChange = vi.fn(), screen = render(<SaveAsTemplateModal draft={draft} open onOpenChange={onOpenChange} />);
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Reusable clause" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+  await waitFor(() => expect(fake.error).toHaveBeenCalledOnce());
+  expect(screen.getByLabelText("Name")).toHaveValue("Reusable clause"); expect(onOpenChange).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+  await waitFor(() => expect(fake.error).toHaveBeenCalledTimes(2));
+  expect(fake.save.mock.calls[1][0].templateId).toBe(fake.save.mock.calls[0][0].templateId);
+  expect(fake.success).not.toHaveBeenCalled();
+});
+it("invalidates the operation when the editor unmounts and ignores late success", async () => {
+  let finish!: () => void; fake.save.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  const onOpenChange = vi.fn(), screen = render(<SaveAsTemplateModal draft={draft} open onOpenChange={onOpenChange} />);
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Reusable clause" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save template" }));
+  const isCurrent = fake.save.mock.calls[0][0].isCurrent;
+  expect(isCurrent()).toBe(true); screen.unmount(); expect(isCurrent()).toBe(false);
+  await act(async () => finish());
+  expect(fake.success).not.toHaveBeenCalled(); expect(onOpenChange).not.toHaveBeenCalled();
+});

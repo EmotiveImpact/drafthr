@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { ChevronRight, Download, Plus, UsersRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { matchEmployeeForDraft } from "@/lib/employees";
+import { matchEmployeeForDraft, matterInvolvesEmployee } from "@/lib/employees";
 import { Avatar, PageHeader } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +62,7 @@ export function EmployeesIndex() {
       return haystack.includes(q);
     });
 
-    const enriched = filtered.map((e) => buildRowSummary(e, allDrafts, allMatters));
+    const enriched = filtered.map((e) => buildRowSummary(e, allDrafts, allMatters, employees));
 
     enriched.sort((a, b) => {
       if (sort === "name") return a.employee.legalName.localeCompare(b.employee.legalName);
@@ -76,7 +75,7 @@ export function EmployeesIndex() {
     });
 
     return enriched;
-  }, [allEmployees, allDrafts, allMatters, search, statusFilter, sort]);
+  }, [allEmployees, allDrafts, allMatters, employees, search, statusFilter, sort]);
 
   const existingNames = useMemo(
     () =>
@@ -147,10 +146,7 @@ export function EmployeesIndex() {
 
       {/* Empty state */}
       {isEmpty && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
+        <div
           className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center"
         >
           <UsersRound className="size-8 text-[var(--ds-muted)] mx-auto mb-3" />
@@ -171,7 +167,7 @@ export function EmployeesIndex() {
               Add manually
             </Button>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Rows */}
@@ -182,10 +178,7 @@ export function EmployeesIndex() {
       )}
 
       {!isEmpty && rows.length > 0 && (
-        <motion.ul
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
+        <ul
           className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] divide-y divide-[var(--ds-line)] overflow-hidden m-0 p-0 list-none"
         >
           {rows.map((row) => (
@@ -195,7 +188,7 @@ export function EmployeesIndex() {
               onOpen={() => nav(`/employees/${row.employee.id}`)}
             />
           ))}
-        </motion.ul>
+        </ul>
       )}
 
       <EmployeeForm
@@ -244,18 +237,17 @@ type RowSummary = {
 function buildRowSummary(
   employee: Employee,
   drafts: Draft[],
-  matters: Matter[]
+  matters: Matter[],
+  employees: Record<string, Employee>,
 ): RowSummary {
-  // Match drafts by normalized legalName.
-  const empMap: Record<string, Employee> = { [employee.id]: employee };
   const linkedDrafts = drafts.filter(
-    (d) => matchEmployeeForDraft(d, empMap) === employee.id
+    (d) => matchEmployeeForDraft(d, employees) === employee.id
   );
   const sortedDrafts = [...linkedDrafts].sort((a, b) => b.updatedAt - a.updatedAt);
   const latestDraft = sortedDrafts[0];
 
   const matterCount = matters.filter((m) =>
-    m.participants?.some((p) => p.employeeId === employee.id)
+    matterInvolvesEmployee(m, employee.id, employees)
   ).length;
 
   const lastActivityAt = latestDraft?.updatedAt ?? employee.updatedAt;

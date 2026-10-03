@@ -1,24 +1,9 @@
-/**
- * Completes a password reset: consumes the one-time token, sets the new
- * password, and mints a session so the user doesn't have to go through
- * sign-in immediately after (they already proved control of the inbox).
- *
- * Why mint a session here? — UX. Having to re-enter the password they
- * literally just typed twice is fatiguing and signals "we don't trust you"
- * right after a recovery flow. The token + WorkOS-side ratchet (single use,
- * short TTL) is what we depend on for trust, not the password re-entry.
- *
- * The user record we get back from resetPassword has the verified email
- * already (you can't get a reset token without WorkOS having verified the
- * email at some point), so we don't need to recheck.
- */
-
+/** Complete recovery, then require a full WorkOS sign-in (including MFA/SSO). */
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import {
-  buildSessionCookie,
+  buildClearCookie,
   getWorkos,
-  type SessionPayload,
 } from "../../_utils/workos.js";
 import { bumpUserSessionEpoch } from "../../_utils/session-epoch.js";
 
@@ -94,25 +79,16 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Reset invalidates every existing session for this user: bump their epoch so
-  // any cookie minted before the reset is rejected, then mint a fresh cookie
-  // carrying the NEW epoch so the just-reset user stays signed in here. (SE-03.)
-  const newEpoch = await bumpUserSessionEpoch(resetUser.id);
-  const payload: SessionPayload = {
-    user: resetUser,
-    workosSession: "",
-    iat: Date.now(),
-    epoch: newEpoch ?? 0,
-  };
-  const sessionCookie = await buildSessionCookie(payload);
+  // Completing recovery never mints authentication or bypasses MFA/SSO.
+  await bumpUserSessionEpoch(resetUser.id);
   const headers = new Headers({
     "Content-Type": "application/json",
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   });
-  headers.append("Set-Cookie", sessionCookie);
+  headers.append("Set-Cookie", buildClearCookie());
 
-  return new Response(JSON.stringify({ ok: true, user: payload.user }), {
+  return new Response(JSON.stringify({ ok: true, requiresSignIn: true }), {
     status: 200,
     headers,
   });

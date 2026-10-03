@@ -1,0 +1,2 @@
+ALTER TABLE "drafts" ADD COLUMN "snapshot_json" jsonb;--> statement-breakpoint
+ALTER TABLE "drafts" ADD COLUMN "revision" integer DEFAULT 0 NOT NULL;

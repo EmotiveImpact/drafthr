@@ -18,7 +18,7 @@
  * user can merge by hand.
  * ==========================================================================*/
 
-import type { Draft, Employee, EmploymentStatus } from "./letters/types";
+import type { Draft, Employee, EmploymentStatus, LetterAnswers, Matter } from "./letters/types";
 
 /**
  * Suggestion shape — same fields as a future Employee record, plus
@@ -73,6 +73,7 @@ export function deriveEmployeesFromDrafts(
     const status: EmploymentStatus = "active";
     suggestions.push({
       legalName: emp.legalName.trim().replace(/\s+/g, " "),
+      address: emp.address || undefined,
       preferredName: emp.preferredName,
       jobTitle: emp.jobTitle || undefined,
       department: emp.department,
@@ -91,21 +92,61 @@ export function deriveEmployeesFromDrafts(
 }
 
 /**
- * Match an existing employee record to a draft's employee block by
- * normalized legalName. Returns the matching employee id, or null.
- *
- * Deliberately strict: equality only after normalization. The caller
- * should treat "no match" as "offer to create a new record", not as
- * "merge into the closest existing one".
+ * Explicit IDs are authoritative, including after a name change. A dangling
+ * ID must never fall back to somebody else with the same name. Legacy drafts
+ * without an ID can match only one unambiguous person in the FULL directory.
  */
 export function matchEmployeeForDraft(
   draft: Draft,
   employees: Record<string, Employee>
 ): string | null {
-  const key = normalizeName(draft.employee?.legalName);
-  if (!key) return null;
-  for (const emp of Object.values(employees)) {
-    if (normalizeName(emp.legalName) === key) return emp.id;
+  if (draft.mode !== "employer" || draft.isTemplateSource) return null;
+  // The directory picker stored its selection in answers before Draft gained
+  // employeeId. Preserve those existing explicit links too.
+  const linkedId = draft.employeeId ||
+    (typeof draft.answers?.linkedEmployeeId === "string" ? draft.answers.linkedEmployeeId : undefined);
+  if (linkedId) {
+    return Object.values(employees).some((employee) => employee.id === linkedId)
+      ? linkedId
+      : null;
   }
-  return null;
+  return uniqueEmployeeByName(draft.employee?.legalName, employees);
+}
+
+function uniqueEmployeeByName(
+  name: string | undefined,
+  employees: Record<string, Employee>,
+): string | null {
+  const key = normalizeName(name);
+  if (!key) return null;
+  const matches = Object.values(employees).filter((emp) => normalizeName(emp.legalName) === key);
+  return matches.length === 1 ? matches[0].id : null;
+}
+
+export function matterInvolvesEmployee(
+  matter: Matter,
+  employeeId: string,
+  employees: Record<string, Employee>,
+): boolean {
+  if (matter.mode !== "employer") return false;
+  const linked = (matter.participants ?? []).filter((p) => p.employeeId);
+  if (linked.length) return linked.some((p) => p.employeeId === employeeId);
+  return uniqueEmployeeByName(matter.parties?.primaryName, employees) === employeeId;
+}
+
+/** Shared directory → letter mapping for the picker and every creation path. */
+export function answersFromEmployee(employee: Employee): LetterAnswers {
+  // Include empty optional fields: choosing a different employee must clear
+  // the previous person's email/address rather than leaving it in the wizard.
+  return {
+    linkedEmployeeId: employee.id,
+    employeeLegalName: employee.legalName,
+    employeePreferredName: employee.preferredName,
+    employeeJobTitle: employee.jobTitle,
+    employeeDepartment: employee.department,
+    employeeAddress: employee.address,
+    employeeEmail: employee.email,
+    employeeStartDate: employee.startDate,
+    workerClass: employee.workerClass,
+  };
 }

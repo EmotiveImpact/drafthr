@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { ScoreRing } from "@/components/finalize/ScoreRing";
 import { FixThisFirst } from "@/components/finalize/FixThisFirst";
@@ -12,6 +11,7 @@ import {
   type Fix,
 } from "@/lib/finalize/healthChecks";
 import type { Draft } from "@/lib/letters/types";
+import { getDraftReadiness } from "@/lib/finalize/readiness";
 import { cn } from "@/lib/utils";
 import { AllChecks, type RailCheckRow } from "./AllChecks";
 
@@ -28,12 +28,6 @@ import { AllChecks, type RailCheckRow } from "./AllChecks";
  * so the look is identical between Review and Finalize. Health checks come
  * from the shared `lib/finalize/healthChecks` engine.
  */
-
-const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
-  strong: "Strong",
-  adequate: "Adequate",
-  weak: "Weak",
-};
 
 const BAND_CLASSES: Record<
   "strong" | "adequate" | "weak",
@@ -59,6 +53,8 @@ export function HealthTab({
   const checks = useMemo(() => runHealthChecks(draft), [draft]);
   const scoreData = useMemo(() => computeHealthScore(checks), [checks]);
   const fixes = useMemo(() => topFixes(checks, 3), [checks]);
+  const readiness = useMemo(() => getDraftReadiness(draft), [draft]);
+  const blocked = readiness.blockers.length > 0;
 
   // Route the Fix-this-first action through react-router. The check's
   // actionRoute enum is "editor" | "evidence" | "settings" — we compose
@@ -79,10 +75,7 @@ export function HealthTab({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+    <div
       className="space-y-4"
     >
       {/* Score summary — overall ring on the left, band + verdict + sub-rings on the right.
@@ -94,14 +87,16 @@ export function HealthTab({
             <span
               className={cn(
                 "inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider mb-1",
-                BAND_CLASSES[scoreData.band].bg,
-                BAND_CLASSES[scoreData.band].text,
+                blocked ? "bg-[var(--ds-red-bg)]" : BAND_CLASSES[scoreData.band].bg,
+                blocked ? "text-[var(--ds-red-fg)]" : BAND_CLASSES[scoreData.band].text,
               )}
             >
-              {BAND_LABEL[scoreData.band]}
+              {blocked ? "Blocked" : readiness.statusLabel}
             </span>
             <p className="text-[12.5px] font-semibold text-[var(--ds-ink)] m-0 leading-snug">
-              {scoreData.oneLiner}
+              {blocked
+                ? `Not ready to send — ${readiness.blockers.length} mandatory blocker${readiness.blockers.length === 1 ? "" : "s"}.`
+                : scoreData.oneLiner}
             </p>
             <p className="text-[11px] text-[var(--ds-muted)] mt-0.5">
               {scoreData.passCount} of {scoreData.totalCount} checks pass
@@ -109,15 +104,15 @@ export function HealthTab({
                 ` · ${scoreData.warnCount} warning${scoreData.warnCount === 1 ? "" : "s"}`}
               {scoreData.failCount > 0 &&
                 ` · ${scoreData.failCount} blocker${scoreData.failCount === 1 ? "" : "s"}`}
+              {blocked && scoreData.failCount === 0 &&
+                ` · ${readiness.blockers.length} workflow blocker${readiness.blockers.length === 1 ? "" : "s"}`}
             </p>
           </div>
         </div>
 
-        {/* Three dimension sub-rings — staggered count-up so the eye tracks
-         * across them. The rail is narrow so we use a 3-column grid with
-         * fixed equal width, not a flex row. */}
+        {/* Three dimension sub-rings, shown immediately at their final values. */}
         <div className="grid grid-cols-3 gap-2 mt-4">
-          {scoreData.dimensions.map((d, i) => (
+          {scoreData.dimensions.map((d) => (
             <div
               key={d.dimension}
               title={DIMENSION_DESCRIPTIONS[d.dimension]}
@@ -127,7 +122,6 @@ export function HealthTab({
                 score={d.score}
                 band={d.band}
                 size={36}
-                delay={0.2 + i * 0.1}
                 label={DIMENSION_LABELS[d.dimension]}
               />
             </div>
@@ -145,6 +139,6 @@ export function HealthTab({
         </h3>
         <AllChecks rows={rows} />
       </div>
-    </motion.div>
+    </div>
   );
 }

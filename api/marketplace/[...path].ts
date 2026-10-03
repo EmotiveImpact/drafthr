@@ -21,6 +21,7 @@
  *   GET    /api/marketplace/shared?token=…     (matter-scoped draft)
  */
 import { jsonError } from "../_utils/request.js";
+import { withSessionResponse } from "../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -86,7 +87,7 @@ async function dispatch(
   if (!mod) return jsonError(`Unknown marketplace path: ${action}`, 404);
   const handler = mod[method];
   if (!handler) return jsonError("Method Not Allowed", 405);
-  return handler(req);
+  return withSessionResponse(req, handler);
 }
 
 export async function GET(req: Request): Promise<Response> {
