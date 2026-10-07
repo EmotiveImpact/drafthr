@@ -319,7 +319,14 @@ function renderInlineChildren(
 function renderInlineNode(node: Node, ctx: RenderContext, style: InlineStyle): string {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = normalizeText(node.textContent ?? "");
-    return text.trim() ? textRun(text, style) : "";
+    if (text.trim()) return textRun(text, style);
+    // A whitespace-only node between two inline siblings is a real word
+    // break (`<strong>Jane</strong> <em>Smith</em>`). Dropping it ran the
+    // words together in Word.
+    if (text && isInlineSibling(node.previousSibling) && isInlineSibling(node.nextSibling)) {
+      return textRun(" ", style);
+    }
+    return "";
   }
 
   if (!(node instanceof HTMLElement) || isIgnorableElement(node)) {
@@ -742,6 +749,12 @@ function hasDirectBlockChildren(element: HTMLElement): boolean {
   return Array.from(element.children).some(
     (child) => child instanceof HTMLElement && isBlockElement(child)
   );
+}
+
+function isInlineSibling(node: Node | null): boolean {
+  if (!node) return false;
+  if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim());
+  return node instanceof HTMLElement && !isBlockElement(node) && node.tagName.toLowerCase() !== "br";
 }
 
 function isBlockElement(element: HTMLElement): boolean {

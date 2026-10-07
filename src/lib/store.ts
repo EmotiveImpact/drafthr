@@ -800,7 +800,16 @@ export const useDraftStore = create<Store>()(
           const d = s.drafts[id];
           if (!d) return s;
           const sections = d.sections.map((sec) =>
-            sec.id === sectionId ? { ...sec, html, status: "edited" as const } : sec
+            sec.id === sectionId
+              ? {
+                  ...sec,
+                  html,
+                  // Clearing a section (e.g. before a regenerate) leaves it
+                  // empty, not "edited"; health checks and the editor badge
+                  // read this status.
+                  status: hasVisibleContent(html) ? ("edited" as const) : ("empty" as const),
+                }
+              : sec
           );
           return {
             drafts: { ...s.drafts, [id]: { ...d, sections, updatedAt: Date.now() } },
@@ -1104,18 +1113,14 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[draftId];
           if (!d) return s;
-          const escaped = suggestionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           // Rewrite data-status on any <ins>/<del> that owns this id. Done
-          // via regex because we only touch one attribute — DOMParser would
-          // pay reparse cost on every keystroke if the rail batches calls.
-          const re = new RegExp(
-            `(<(?:ins|del)\\b[^>]*\\bdata-suggestion-id="${escaped}"[^>]*)\\bdata-status="[^"]*"`,
-            "g"
-          );
+          // per opening tag (attribute order independent) because we only
+          // touch one attribute; DOMParser would pay reparse cost on every
+          // keystroke if the rail batches calls.
           let touched = false;
           const sections = d.sections.map((sec) => {
             if (!sec.html?.includes("data-suggestion-id")) return sec;
-            const next = sec.html.replace(re, `$1data-status="${status}"`);
+            const next = rewriteSuggestionStatus(sec.html, (sid) => sid === suggestionId, null, status);
             if (next === sec.html) return sec;
             touched = true;
             return { ...sec, html: next };
@@ -1135,10 +1140,7 @@ export const useDraftStore = create<Store>()(
           const sections = d.sections.map((sec) => {
             if (!hasPendingSuggestions(sec.html)) return sec;
             // Flip pending → accepted, then merge to fold accepted edits in.
-            const flipped = sec.html.replace(
-              /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
-              `$1data-status="accepted"`
-            );
+            const flipped = rewriteSuggestionStatus(sec.html, () => true, "pending", "accepted");
             const merged = sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(flipped));
             const oldVersion: SectionVersion = {
               id: `suggestion-accept-${sec.id}-${now}`,
@@ -1166,10 +1168,7 @@ export const useDraftStore = create<Store>()(
           let touched = false;
           const sections = d.sections.map((sec) => {
             if (!hasPendingSuggestions(sec.html)) return sec;
-            const next = sec.html.replace(
-              /(<(?:ins|del)\b[^>]*\bdata-suggestion-id="[^"]+"[^>]*)\bdata-status="pending"/g,
-              `$1data-status="rejected"`
-            );
+            const next = rewriteSuggestionStatus(sec.html, () => true, "pending", "rejected");
             if (next === sec.html) return sec;
             touched = true;
             return { ...sec, html: next };
@@ -1252,13 +1251,25 @@ export const useDraftStore = create<Store>()(
           if (!d) return s;
           const employee = patch.employee ? { ...d.employee, ...patch.employee } : d.employee;
           const startDate = patch.employee?.startDate ?? d.employee.startDate;
+          const context = patch.context || patch.answers ? { ...d.context, ...patch.context } : d.context;
+          const answers = patch.answers ? { ...d.answers, ...patch.answers } : d.answers;
+          // The limitation deadline depends on jurisdiction, US state and the
+          // act date, any of which Edit Details can change. Recompute it so
+          // the calendar, banner and notifications don't keep the old date.
+          if (patch.context || patch.answers) {
+            context.protectedDeadline = computeProtectedDeadline({
+              ...(answers as Record<string, string | boolean | number | string[] | undefined>),
+              jurisdiction: context.jurisdiction,
+              usState: context.usState,
+            });
+          }
           return {
             drafts: {
               ...s.drafts,
               [id]: appendTimeline(
                 {
                   ...d,
-                  context: patch.context ? { ...d.context, ...patch.context } : d.context,
+                  context,
                   employer: patch.employer ? { ...d.employer, ...patch.employer } : d.employer,
                   employee: {
                     ...employee,
@@ -1267,7 +1278,7 @@ export const useDraftStore = create<Store>()(
                         ? monthsBetween(startDate)
                         : employee.serviceMonths,
                   },
-                  answers: patch.answers ? { ...d.answers, ...patch.answers } : d.answers,
+                  answers,
                 },
                 timelineEvent("details_updated", "Updated draft details", {
                   detail: detailsPatchSummary(patch),
@@ -1905,13 +1916,21 @@ function computeProtectedDeadline(
     };
   }
   if (jurisdiction === "US") {
+    // 300 days only where a state FEP agency shares the charge (deferral
+    // states). Without a known deferral state, show the shorter 180-day
+    // window: an early warning is safe, a late one can lose the claim.
+    const state = a.usState as string | undefined;
+    const days = state && !EEOC_NON_DEFERRAL_STATES.has(state) ? 300 : 180;
     return {
-      iso: addDaysToDateOnly(actDate, 300),
+      iso: addDaysToDateOnly(actDate, days),
       basis: PROTECTED_DEADLINE_BASIS_US,
     };
   }
   return undefined;
 }
+
+/** States with no state FEP agency, so the EEOC 180-day window applies. */
+const EEOC_NON_DEFERRAL_STATES = new Set(["AL", "AR", "GA", "MS", "NC"]);
 
 /**
  * Strip the `<mark data-comment-id={commentId}>` wrapper from a single
@@ -1938,7 +1957,11 @@ function hasNonTextContent(html: string): boolean {
     !/<a\b[^>]*\bhref=/i.test(html) &&
     !/\bdata-fig-id=/i.test(html) &&
     !/\bdata-att-id=/i.test(html) &&
-    !/class="(?:figure-ref|attachment-ref)"/i.test(html)
+    !/class="(?:figure-ref|attachment-ref)"/i.test(html) &&
+    // Structure and formatting the sentence diff flattens to plain <p>s, and
+    // comment anchors it drops (orphaning the thread).
+    !/<(?:h[1-6]|ul|ol|blockquote|strong|b|em|i|u)\b/i.test(html) &&
+    !/\bdata-comment-id=/i.test(html)
   ) {
     return false;
   }
@@ -1962,9 +1985,48 @@ function rejectedInlineHtml(
   if (liveHtml.includes("data-suggestion-id")) {
     // Authoring-mode merge: pending insertions removed, pending deletions
     // unwrapped (kept) — exactly "reject everything pending".
-    return sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(liveHtml));
+    const merged = sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(liveHtml));
+    // The staged diff is a flattened rebuild, so the merge loses whatever
+    // formatting the original had. When nothing was edited around the marks
+    // (same text as the snapshot), restore the snapshot instead.
+    if (prevHtml && plainText(merged) === plainText(prevHtml)) return prevHtml;
+    return merged;
   }
   return prevHtml ?? liveHtml;
+}
+
+/**
+ * Set data-status on <ins>/<del> suggestion marks whose id passes `match`
+ * (and whose current status is `from`, when given). Works per opening tag so
+ * attribute order doesn't matter: a pagedly round-trip can put data-status
+ * before data-suggestion-id, which the old single regex silently skipped.
+ */
+function rewriteSuggestionStatus(
+  html: string,
+  match: (suggestionId: string) => boolean,
+  from: string | null,
+  to: string,
+): string {
+  return html.replace(/<(?:ins|del)\b[^>]*>/gi, (tag) => {
+    const id = /\bdata-suggestion-id="([^"]+)"/.exec(tag)?.[1];
+    if (!id || !match(id)) return tag;
+    const current = /\bdata-status="([^"]*)"/.exec(tag)?.[1];
+    if (current === undefined) return tag;
+    if (from !== null && current !== from) return tag;
+    return tag.replace(/\bdata-status="[^"]*"/, `data-status="${to}"`);
+  });
+}
+
+function hasVisibleContent(html: string): boolean {
+  if (!html) return false;
+  if (/<img\b/i.test(html)) return true;
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim() !== "";
+}
+
+function plainText(html: string): string {
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  return (el.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 function stripMark(
@@ -1985,7 +2047,9 @@ function stripMark(
   const root = document.createElement("div");
   root.innerHTML = target.html;
   let changed = false;
-  root.querySelectorAll("mark[data-comment-id]").forEach((el) => {
+  // Tiptap writes <mark data-comment-id>; the pagedly review surface writes
+  // <span class="pagedly-comment" data-comment-id>. Unwrap either.
+  root.querySelectorAll("[data-comment-id]").forEach((el) => {
     if (el.getAttribute("data-comment-id") !== commentId) return;
     const parent = el.parentNode;
     if (!parent) return;

@@ -144,7 +144,13 @@ function syncedFields(r: RemoteDraft, local?: Draft) {
     answers: (r.answers ?? local?.answers ?? {}) as unknown as LetterAnswers,
     sections: mergeSections(r.sections, local),
     title: r.title ?? undefined,
-    matterId: r.matterId ?? undefined,
+    // The server stores the hashed uuid of a local `matter_…` id. Keep the
+    // local id when they refer to the same matter, or the draft would drop
+    // out of its matter on the device that filed it.
+    matterId:
+      local?.matterId && r.matterId && toServerUuid(local.matterId) === r.matterId
+        ? local.matterId
+        : r.matterId ?? undefined,
     reviewStatus: (r.reviewStatus ?? undefined) as ReviewStatus | undefined,
     isTemplateSource: r.isTemplateSource,
     templateSourceId: r.templateSourceId ?? undefined,

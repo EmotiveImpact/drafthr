@@ -42,6 +42,9 @@ export function ReviewStep() {
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const role = useProfileStore((s) => s.profile.workspaceRole);
+  const myName = useProfileStore(
+    (s) => s.profile.personal.preferredName || s.profile.personal.legalName,
+  );
 
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
   const [pendingComment, setPendingComment] = useState<PendingComment | null>(null);
@@ -245,10 +248,11 @@ export function ReviewStep() {
       </header>
 
       {/* Three columns: Health sidebar · letter · collaborative Review rail.
-       * The right rail is the review workspace (comment/suggest/approve). Both
-       * side rails are lg-only; below lg the letter takes the full width. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_340px]">
-        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
+       * The right rail is the review workspace (comment/suggest/approve). Below
+       * lg the page scrolls: the letter first, then health, then the review
+       * rail, so Submit / Approve / comments stay reachable on phones. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:overflow-hidden lg:grid-cols-[300px_minmax(0,1fr)_340px]">
+        <aside className="order-2 flex flex-col border-t border-[var(--ds-line)] bg-[var(--ds-surface)] lg:order-none lg:min-h-0 lg:border-t-0 lg:border-r">
           <WizardChrome draftId={draft.id} mode={draft.mode} current="review" />
           <ReviewRail
             draft={draft}
@@ -262,7 +266,7 @@ export function ReviewStep() {
 
         <main
           ref={canvasRef}
-          className="review-canvas relative min-h-0 overflow-hidden bg-[var(--ds-canvas)]"
+          className="review-canvas relative order-1 h-[75dvh] min-h-0 overflow-hidden bg-[var(--ds-canvas)] lg:order-none lg:h-auto"
         >
           {/* The review surface is the PAGEDLY editor (not the read-only
            * preview): comments + track-change suggestions happen ON the page.
@@ -295,7 +299,7 @@ export function ReviewStep() {
           />
         </main>
 
-        <aside className="hidden min-h-0 border-l border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
+        <aside className="order-3 flex flex-col border-t border-[var(--ds-line)] bg-[var(--ds-surface)] lg:order-none lg:min-h-0 lg:border-t-0 lg:border-l">
           <CollabReviewRail
             draft={draft}
             role={role}
@@ -351,6 +355,7 @@ export function ReviewStep() {
           open
           onOpenChange={(next) => !next && setReviewDialogKind(null)}
           kind={reviewDialogKind}
+          defaultReviewerName={myName}
           onSubmit={onReviewSubmit}
         />
       )}

@@ -88,6 +88,7 @@ import { deriveEvidenceTier } from "@/lib/letters/templates";
 import * as Dialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
+import { todayDateOnly } from "@/lib/date-only";
 import { useIsLargeViewport } from "@/lib/use-large-viewport";
 
 
@@ -488,7 +489,10 @@ export function Editor() {
       );
     } catch (err) {
       console.error(err);
-      alert("Generation failed: " + (err instanceof Error ? err.message : "unknown error"));
+      toast.error("Generation failed", {
+        description: err instanceof Error ? err.message : "Unknown error. Please try again.",
+        action: { label: "Retry", onClick: () => void runGenerateAll() },
+      });
     } finally {
       setGloballyStreaming(false);
       setRetryEvent(null);
@@ -511,7 +515,9 @@ export function Editor() {
       );
     } catch (err) {
       console.error(err);
-      alert("Regeneration failed: " + (err instanceof Error ? err.message : "unknown error"));
+      toast.error("Regeneration failed", {
+        description: err instanceof Error ? err.message : "Unknown error. Please try again.",
+      });
     } finally {
       setGloballyStreaming(false);
       setRetryEvent(null);
@@ -2271,14 +2277,14 @@ function CounselReviewDialog({
 }) {
   const [reviewedBy, setReviewedBy] = useState(existing?.reviewedBy ?? "");
   const [reviewedOn, setReviewedOn] = useState(
-    existing?.reviewedOn ?? new Date().toISOString().slice(0, 10)
+    existing?.reviewedOn ?? todayDateOnly()
   );
 
   // Reset to existing values whenever the dialog opens.
   useEffect(() => {
     if (open) {
       setReviewedBy(existing?.reviewedBy ?? "");
-      setReviewedOn(existing?.reviewedOn ?? new Date().toISOString().slice(0, 10));
+      setReviewedOn(existing?.reviewedOn ?? todayDateOnly());
     }
   }, [open, existing?.reviewedBy, existing?.reviewedOn]);
 

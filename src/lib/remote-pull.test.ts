@@ -99,6 +99,18 @@ describe("mergeRemoteDrafts — non-destructive cross-device merge", () => {
     expect(d.id).toBe("draft_1");
   });
 
+  it("keeps the local matter id when the server's uuid maps to it", () => {
+    const local = { draft_1: localDraft({ matterId: "matter_abc" }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ matterId: toServerUuid("matter_abc") })]);
+    expect(merged.draft_1.matterId).toBe("matter_abc");
+  });
+
+  it("takes the server matter when the draft was refiled elsewhere", () => {
+    const local = { draft_1: localDraft({ matterId: "matter_abc" }) };
+    const merged = mergeRemoteDrafts(local, [remoteDraft({ matterId: toServerUuid("matter_xyz") })]);
+    expect(merged.draft_1.matterId).toBe(toServerUuid("matter_xyz"));
+  });
+
   it("preserves local section id, versions, pendingChange, required by sectionId", () => {
     const local = { draft_1: localDraft() };
     const merged = mergeRemoteDrafts(local, [remoteDraft()]);

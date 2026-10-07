@@ -35,7 +35,7 @@ export function Onboarding() {
   const patchDefaults = useProfileStore((s) => s.patchDefaults);
   const markSetupComplete = useProfileStore((s) => s.markSetupComplete);
 
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(profile.role ? 1 : 0);
 
   // Local form state seeded from any existing profile values so re-entry
   // (we never hide the modal mid-flow) doesn't drop user input.
@@ -52,9 +52,11 @@ export function Onboarding() {
 
   // Reset step whenever the modal re-opens (shouldn't happen normally,
   // but keeps state predictable for future reopens).
+  // Skip the "which side" step when the role was already picked on the
+  // mode-picker page, so the user isn't asked the same question twice.
   useEffect(() => {
-    if (open) setStep(0);
-  }, [open]);
+    if (open) setStep(profile.role ? 1 : 0);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalSteps = 3;
   const canAdvance = useMemo(() => {

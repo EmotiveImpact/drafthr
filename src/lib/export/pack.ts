@@ -52,6 +52,12 @@ export async function exportLetterPack(
     renderLetterDocxBlob(draft).catch(() => null),
   ]);
 
+  // A pack without the letter is not an evidence pack. Fail loudly rather
+  // than download a ZIP whose README lists files it doesn't contain.
+  if (!pdfBlob && !docxBlob) {
+    throw new Error("Couldn't render the letter as PDF or Word, so the export pack was not created.");
+  }
+
   if (pdfBlob) zip.file(pdfFilenameFor(draft), pdfBlob);
   if (docxBlob) zip.file(docxFilenameFor(draft), docxBlob);
 
@@ -80,7 +86,13 @@ export async function exportLetterPack(
   // Machine-readable manifest + audit so the pack is reproducible.
   zip.file("manifest.json", JSON.stringify(buildManifest(draft, attestation, evidence), null, 2));
   zip.file("audit.json", JSON.stringify(buildAudit(draft), null, 2));
-  zip.file("README.txt", buildReadme(draft, attestation, evidence));
+  zip.file(
+    "README.txt",
+    buildReadme(draft, attestation, evidence, {
+      pdf: pdfBlob ? pdfFilenameFor(draft) : undefined,
+      docx: docxBlob ? docxFilenameFor(draft) : undefined,
+    }),
+  );
 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   triggerDownload(blob, filenameForPack(draft));
@@ -153,7 +165,8 @@ function buildAudit(draft: Draft): Record<string, unknown> {
 function buildReadme(
   draft: Draft,
   attestation: ExportAttestation | undefined,
-  evidence: EvidenceItem[]
+  evidence: EvidenceItem[],
+  letterFiles: { pdf?: string; docx?: string },
 ): string {
   const lines: string[] = [];
   lines.push(`DRAFTHR EXPORT PACK`);
@@ -173,8 +186,9 @@ function buildReadme(
   lines.push("");
   lines.push(`CONTENTS`);
   lines.push(`--------`);
-  lines.push(`  letter.pdf            Print-ready PDF of the letter.`);
-  lines.push(`  letter.docx           Editable Word version.`);
+  // List the letter files actually in the ZIP, under their real names.
+  if (letterFiles.pdf) lines.push(`  ${letterFiles.pdf}`, `                        Print-ready PDF of the letter.`);
+  if (letterFiles.docx) lines.push(`  ${letterFiles.docx}`, `                        Editable Word version.`);
   lines.push(`  pack-summary.html     One-page summary: review checklist, quality`);
   lines.push(`                        report, change timeline. Open in any browser.`);
   lines.push(`  manifest.json         Machine-readable index of the pack.`);

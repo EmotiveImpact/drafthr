@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Check,
@@ -144,13 +144,16 @@ export function CollabReviewRail({
   }, [openSuggest, draft.sections, onOpenSuggestConsumed]);
 
   // Clicking a comment highlight in the letter focuses that thread here.
+  // Scope the lookup to the rail: the page highlight carries the same
+  // data-comment-id and comes first in the DOM.
+  const railRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!focusCommentId) return;
     setTab("comments");
     // Defer so the Comments tab has mounted before we look for the thread.
     const t = setTimeout(() => {
-      document
-        .querySelector<HTMLElement>(`[data-comment-id="${focusCommentId}"]`)
+      railRef.current
+        ?.querySelector<HTMLElement>(`[data-comment-id="${CSS.escape(focusCommentId)}"]`)
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
       onFocusCommentConsumed?.();
     }, 60);
@@ -176,7 +179,7 @@ export function CollabReviewRail({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={railRef} className="flex h-full min-h-0 flex-col">
       {/* ── header: title + open count + reviewers ── */}
       <div className="shrink-0 border-b border-[var(--ds-line-2)] px-4 pt-3.5 pb-3">
         <div className="flex items-center gap-2">

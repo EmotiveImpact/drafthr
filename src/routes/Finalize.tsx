@@ -54,6 +54,7 @@ export function Finalize() {
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const recordExport = useDraftStore((s) => s.recordExport);
+  const updateAnswers = useDraftStore((s) => s.updateAnswers);
   const profile = useProfileStore((s) => s.profile);
   // "Drafted by Jane Doe" line in the hero. Falls back gracefully when the
   // user hasn't filled out their profile yet.
@@ -64,7 +65,17 @@ export function Finalize() {
 
   const [busyFormat, setBusyFormat] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [counselConfirmed, setCounselConfirmed] = useState(false);
+  // Counsel attestation: who reviewed it and when. Seeded from the Editor's
+  // "Mark reviewed by counsel" record so an attestation made there carries
+  // through. Never defaults to the drafter: the drafter is not counsel.
+  const storedCounsel = (draft?.answers as Record<string, unknown> | undefined)?._counselReview as
+    | { reviewedBy?: string; reviewedOn?: string }
+    | undefined;
+  const [counselName, setCounselName] = useState(storedCounsel?.reviewedBy ?? "");
+  const [counselDate, setCounselDate] = useState(storedCounsel?.reviewedOn ?? toDateOnly(new Date()));
+  const [counselConfirmed, setCounselConfirmed] = useState(
+    Boolean(storedCounsel?.reviewedBy && storedCounsel?.reviewedOn),
+  );
 
   const checks = useMemo<HealthCheck[]>(
     () => (draft ? runHealthChecks(draft) : []),
@@ -86,7 +97,8 @@ export function Finalize() {
   const meta = getLetterMeta(draft.letterType);
 
   const counselGateRequired = exportRequiresCounselGate(draft);
-  const counselAttested = !counselGateRequired || counselConfirmed;
+  const counselComplete = counselConfirmed && counselName.trim() !== "" && counselDate !== "";
+  const counselAttested = !counselGateRequired || counselComplete;
 
   const readyToShip = scoreData.failCount === 0 && scoreData.band === "strong";
   const shipBlocked = scoreData.failCount > 0 || !counselAttested;
@@ -105,8 +117,8 @@ export function Finalize() {
   };
 
   const guardCounsel = (): boolean => {
-    if (counselGateRequired && !counselConfirmed) {
-      alert("Please confirm counsel review before exporting this letter.");
+    if (counselGateRequired && !counselComplete) {
+      alert("Please enter who reviewed this letter as counsel, and when, before exporting it.");
       return false;
     }
     return true;
@@ -119,8 +131,8 @@ export function Finalize() {
   const exportAttestation = ():
     | { reviewedBy: string; reviewedOn: string }
     | undefined => {
-    if (!counselGateRequired || !counselConfirmed) return undefined;
-    return { reviewedBy: draftedBy, reviewedOn: toDateOnly(new Date()) };
+    if (!counselGateRequired || !counselComplete) return undefined;
+    return { reviewedBy: counselName.trim(), reviewedOn: counselDate };
   };
 
   const onExportPdf = async () => {
@@ -343,7 +355,27 @@ export function Finalize() {
             {counselGateRequired && (
               <CounselAttestation
                 confirmed={counselConfirmed}
-                onToggle={() => setCounselConfirmed((v) => !v)}
+                reviewerName={counselName}
+                reviewedOn={counselDate}
+                onReviewerNameChange={setCounselName}
+                onReviewedOnChange={setCounselDate}
+                onToggle={() => {
+                  const next = !counselConfirmed;
+                  setCounselConfirmed(next);
+                  // Persist so the attestation survives leaving Finalize and
+                  // matches what the Editor and Review step show.
+                  const answers = { ...draft.answers } as Record<string, unknown>;
+                  if (next && counselName.trim() && counselDate) {
+                    answers._counselReview = {
+                      reviewedBy: counselName.trim(),
+                      reviewedOn: counselDate,
+                      attestedAt: Date.now(),
+                    };
+                  } else {
+                    delete answers._counselReview;
+                  }
+                  updateAnswers(draft.id, answers as typeof draft.answers);
+                }}
               />
             )}
 
@@ -643,6 +675,10 @@ function ShipChecklist({
   );
 
   type CheckState = "ok" | "fail" | "warn" | "pending";
+  const answers = draft.answers as Record<string, unknown>;
+  const hasLetterhead = Boolean(
+    answers.hasLetterhead || draft.employer?.letterheadDataUrl || answers.letterheadDataUrl,
+  );
 
   const items: Array<{
     state: CheckState;
@@ -666,10 +702,11 @@ function ShipChecklist({
           ? `${evidenceCount} file${evidenceCount === 1 ? "" : "s"}`
           : "No evidence attached",
     },
-    {
-      state: "ok",
-      title: "Letterhead attached",
-    },
+    draft.mode === "employee"
+      ? { state: "ok" as CheckState, title: "Letterhead", sub: "Not needed for an employee letter" }
+      : hasLetterhead
+        ? { state: "ok" as CheckState, title: "Letterhead attached" }
+        : { state: "warn" as CheckState, title: "Letterhead", sub: "No company letterhead added" },
     {
       state: recipient ? "ok" : "fail",
       title: "Recipient details",
@@ -859,28 +896,64 @@ function FormatTile({
  */
 function CounselAttestation({
   confirmed,
+  reviewerName,
+  reviewedOn,
+  onReviewerNameChange,
+  onReviewedOnChange,
   onToggle,
 }: {
   confirmed: boolean;
+  reviewerName: string;
+  reviewedOn: string;
+  onReviewerNameChange: (value: string) => void;
+  onReviewedOnChange: (value: string) => void;
   onToggle: () => void;
 }) {
+  const canConfirm = reviewerName.trim() !== "" && reviewedOn !== "";
   return (
-    <motion.label
-      htmlFor="counsel-attestation"
+    <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.26, delay: 0.04, ease: [0.32, 0.72, 0, 1] }}
       className={cn(
-        "rounded-xl border px-4 py-3 mb-5 flex items-center gap-3 cursor-pointer select-none transition",
+        "rounded-xl border px-4 py-3 mb-5 transition",
         confirmed
           ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
           : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
       )}
     >
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto] mb-3">
+        <label className="text-[12px] font-medium text-[var(--ds-ink)]">
+          Reviewed by (counsel)
+          <input
+            type="text"
+            value={reviewerName}
+            onChange={(e) => onReviewerNameChange(e.target.value)}
+            disabled={confirmed}
+            placeholder="e.g. Priya Shah, Employment Solicitor"
+            className="mt-1 block w-full rounded-md border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[13px] font-normal disabled:opacity-70"
+          />
+        </label>
+        <label className="text-[12px] font-medium text-[var(--ds-ink)]">
+          Review date
+          <input
+            type="date"
+            value={reviewedOn}
+            onChange={(e) => onReviewedOnChange(e.target.value)}
+            disabled={confirmed}
+            className="mt-1 block w-full rounded-md border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[13px] font-normal disabled:opacity-70"
+          />
+        </label>
+      </div>
+      <label
+        htmlFor="counsel-attestation"
+        className={cn("flex items-center gap-3 select-none", canConfirm || confirmed ? "cursor-pointer" : "cursor-not-allowed opacity-70")}
+      >
       <input
         id="counsel-attestation"
         type="checkbox"
         checked={confirmed}
+        disabled={!canConfirm && !confirmed}
         onChange={onToggle}
         className="size-4 rounded border-[var(--ds-line)] accent-[var(--ds-ink)] shrink-0"
       />
@@ -902,7 +975,8 @@ function CounselAttestation({
           Required for this letter type before export or send.
         </div>
       </div>
-    </motion.label>
+      </label>
+    </motion.div>
   );
 }
 

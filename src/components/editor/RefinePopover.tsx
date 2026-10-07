@@ -72,7 +72,7 @@ export function RefinePopover({
               }
             }}
           />
-          <div className="flex items-center justify-between gap-2 mt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
             <Button
               variant="ghost"
               size="sm"

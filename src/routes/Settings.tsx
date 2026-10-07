@@ -356,7 +356,11 @@ export function Settings() {
                 value={profile.defaults.qwenModel ?? DEFAULT_MODEL}
                 onValueChange={(v) => patchDefaults({ qwenModel: v as QwenModelId })}
               >
-                <Select.Trigger />
+                {/* Show only the model name in the trigger; the long hint
+                 * stays in the list, where it overflowed the card before. */}
+                <Select.Trigger style={{ width: "100%", maxWidth: "100%" }}>
+                  {QWEN_MODEL_OPTIONS.find((m) => m.id === (profile.defaults.qwenModel ?? DEFAULT_MODEL))?.label}
+                </Select.Trigger>
                 <Select.Content>
                   {QWEN_MODEL_OPTIONS.map((m) => (
                     <Select.Item key={m.id} value={m.id}>

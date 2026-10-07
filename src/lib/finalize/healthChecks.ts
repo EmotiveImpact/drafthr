@@ -170,8 +170,11 @@ function bodyText(draft: Draft): string {
 
 function checkSections(draft: Draft): HealthCheck {
   const total = draft.sections.length;
+  // Count sections by what they contain, not by status: a section cleared
+  // for regeneration (or one that failed to generate) can carry "edited"
+  // with no text, and an empty letter must not score as complete.
   const ready = draft.sections.filter(
-    (s) => s.status === "ready" || s.status === "edited",
+    (s) => (s.status === "ready" || s.status === "edited") && stripHtml(s.html ?? "").trim() !== "",
   ).length;
   if (ready === total) {
     return {
@@ -283,6 +286,17 @@ function checkWordCount(draft: Draft): HealthCheck {
       dimension: "quality",
       label: `Word count in range (${words} / ${range.min}–${range.max})`,
       severity: "pass",
+    };
+  }
+  if (words === 0) {
+    return {
+      id: "wordcount",
+      dimension: "quality",
+      label: "The letter has no text yet",
+      severity: "fail",
+      detail: "Generate or write the letter before reviewing or sending it",
+      actionLabel: "Open editor",
+      actionRoute: "editor",
     };
   }
   return {
