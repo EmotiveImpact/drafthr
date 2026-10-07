@@ -83,7 +83,8 @@ export async function POST(req: Request): Promise<Response> {
       headers,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Authentication failed";
-    return jsonError(message, 401);
+    // Log the provider's error server-side; don't echo it to the browser.
+    console.error("[auth/callback] sign-in failed", err);
+    return jsonError("Authentication failed", 401);
   }
 }

@@ -20,6 +20,11 @@ const ALLOWED_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gi
 // ~10 MB ceiling on a single inlined image (defends the SSRF timing/size oracle
 // and keeps the export payload sane).
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+// A letter carries a letterhead, a signature and the odd embedded image. Cap
+// the number of distinct images and their combined size so one request can't
+// make the export function buffer hundreds of 10 MB objects before rendering.
+const MAX_IMAGES = 20;
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 
 /**
  * SSRF guard for the server-side export inliner. `inlineImagesForExport` runs
@@ -65,14 +70,18 @@ export async function inlineImagesForExport(
   if (matches.length === 0) return html;
 
   // Dedup by URL so the same letterhead used N times is fetched once.
-  const uniqueUrls = Array.from(new Set(matches.map((m) => m.url)));
+  const uniqueUrls = Array.from(new Set(matches.map((m) => m.url))).slice(0, MAX_IMAGES);
   const resolved = new Map<string, string>();
-  await Promise.all(
-    uniqueUrls.map(async (url) => {
-      const dataUrl = await tryFetchAsDataUrl(url, fetcher);
-      if (dataUrl) resolved.set(url, dataUrl);
-    }),
-  );
+  // Sequential on purpose: a letter has a handful of images, and fetching one
+  // at a time lets the running byte budget stop the work early.
+  let budget = MAX_TOTAL_BYTES;
+  for (const url of uniqueUrls) {
+    if (budget <= 0) break;
+    const fetched = await tryFetchAsDataUrl(url, fetcher, Math.min(MAX_IMAGE_BYTES, budget));
+    if (!fetched) continue;
+    budget -= fetched.bytes;
+    resolved.set(url, fetched.dataUrl);
+  }
 
   return html.replace(IMG_TAG_RE, (full, src: string) => {
     const data = resolved.get(src);
@@ -85,7 +94,8 @@ export async function inlineImagesForExport(
 async function tryFetchAsDataUrl(
   url: string,
   fetcher: typeof fetch,
-): Promise<string | null> {
+  maxBytes: number,
+): Promise<{ dataUrl: string; bytes: number } | null> {
   // SSRF guard: refuse anything not on the image-host allowlist BEFORE any
   // network call. (Senior sweep B3.)
   if (!isAllowedImageHost(url)) return null;
@@ -102,12 +112,12 @@ async function tryFetchAsDataUrl(
     // buffer a multi-hundred-MB object per <img> (memory/cost amplification) and
     // only fail the cap after the full read. (Security board SA-04, 2026-06-10.)
     const declaredLen = Number(res.headers.get("content-length"));
-    if (Number.isFinite(declaredLen) && declaredLen > MAX_IMAGE_BYTES) return null;
+    if (Number.isFinite(declaredLen) && declaredLen > maxBytes) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
     // Defense in depth: a server can lie about / omit Content-Length, so still
     // enforce the cap on the actual bytes read.
-    if (buf.byteLength > MAX_IMAGE_BYTES) return null;
-    return `data:${mime};base64,${bytesToBase64(buf)}`;
+    if (buf.byteLength > maxBytes) return null;
+    return { dataUrl: `data:${mime};base64,${bytesToBase64(buf)}`, bytes: buf.byteLength };
   } catch {
     return null;
   }

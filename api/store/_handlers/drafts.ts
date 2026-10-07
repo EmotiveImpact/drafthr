@@ -16,6 +16,7 @@ import { and, eq, lte, inArray, desc, isNull, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { rejectReadOnlyMember, rejectUnauthorisedReviewDecision } from "../../_utils/workspace-role.js";
 import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections, entitlementPurchases } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
@@ -180,7 +181,12 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
     const matterId = normalizeOptionalId(body.matterId);
     const templateSourceId = normalizeOptionalId(body.templateSourceId);
     const existingDraft = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, updatedAt: drafts.updatedAt })
+      .select({
+        id: drafts.id,
+        tenantId: drafts.tenantId,
+        updatedAt: drafts.updatedAt,
+        reviewStatus: drafts.reviewStatus,
+      })
       .from(drafts)
       .where(eq(drafts.id, body.id))
       .limit(1);
@@ -190,6 +196,12 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       return jsonError("Draft belongs to a different workspace", 403);
     }
     const isCreate = existingDraft.length === 0;
+    const decisionError = rejectUnauthorisedReviewDecision(
+      auth,
+      isCreate ? null : existingDraft[0].reviewStatus,
+      body.reviewStatus,
+    );
+    if (decisionError) return decisionError;
     let consume: ConsumeTarget | undefined;
     if (isCreate) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
@@ -410,6 +422,8 @@ async function guardWrite(req: Request): Promise<GuardResult> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return { ok: false, response: auth.response };
   if (!auth.activeTenant) return { ok: false, response: jsonError("No active workspace", 400) };
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return { ok: false, response: readOnly };
   return { ok: true, auth };
 }
 

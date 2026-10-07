@@ -11,6 +11,8 @@ import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { rejectReadOnlyMember } from "../../_utils/workspace-role.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { getDb } from "../../../src/db/index.js";
 import { drafts, sections } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
@@ -40,7 +42,10 @@ export async function POST(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<Body>(req, 8_000_000);
   if (!parsed.ok) return parsed.response;
-  const draftId = typeof parsed.body.draftId === "string" ? parsed.body.draftId.trim() : "";
+  const rawDraftId = typeof parsed.body.draftId === "string" ? parsed.body.draftId.trim() : "";
+  // A non-uuid id would raise Postgres 22P02 and surface as a 500.
+  const draftId = rawDraftId ? serverUuidOrNull(rawDraftId) : "";
+  if (draftId === null) return jsonError("Invalid draftId", 400);
   const sectionList = Array.isArray(parsed.body.sections) ? parsed.body.sections : null;
   if (!draftId) return jsonError("draftId required", 400);
   if (!sectionList) return jsonError("sections array required", 400);
@@ -51,6 +56,8 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return readOnly;
 
   try {
     const db = getDb();

@@ -152,3 +152,30 @@ function makeFetcher(map: Record<string, { bytes: Uint8Array; contentType: strin
     } as Response;
   }) as unknown as typeof fetch;
 }
+
+describe("inlineImagesForExport — resource caps", () => {
+  const png = (bytes: number) =>
+    new Response(new Uint8Array(bytes), { status: 200, headers: { "content-type": "image/png" } });
+
+  it("fetches at most 20 distinct images", async () => {
+    const fetcher = vi.fn(async () => png(10));
+    const html = Array.from(
+      { length: 30 },
+      (_, i) => `<img src="https://s.public.blob.vercel-storage.com/${i}.png">`,
+    ).join("");
+    await inlineImagesForExport(html, fetcher as unknown as typeof fetch);
+    expect(fetcher).toHaveBeenCalledTimes(20);
+  });
+
+  it("stops inlining once the combined byte budget is spent", async () => {
+    const nineMb = 9 * 1024 * 1024;
+    const fetcher = vi.fn(async () => png(nineMb));
+    const html = Array.from(
+      { length: 5 },
+      (_, i) => `<img src="https://s.public.blob.vercel-storage.com/${i}.png">`,
+    ).join("");
+    const out = await inlineImagesForExport(html, fetcher as unknown as typeof fetch);
+    // 25 MB budget: two 9 MB images fit, the third exceeds the remaining 7 MB.
+    expect((out.match(/data:image\/png/g) ?? []).length).toBe(2);
+  });
+});

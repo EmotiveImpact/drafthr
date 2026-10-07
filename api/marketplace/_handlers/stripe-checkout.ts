@@ -55,6 +55,7 @@ export async function POST(req: Request): Promise<Response> {
         requesterUserId: consultantBookings.requesterUserId,
         consultantProfileId: consultantBookings.consultantProfileId,
         matterTitle: consultantBookings.matterTitle,
+        status: consultantBookings.status,
       })
       .from(consultantBookings)
       .where(eq(consultantBookings.id, bookingId))
@@ -66,6 +67,12 @@ export async function POST(req: Request): Promise<Response> {
     }
     if (!booking.consultantProfileId) {
       return jsonError("Booking has no specialist attached", 412);
+    }
+    // Only a booking the specialist has accepted (or already delivered) can
+    // be paid. Without this a declined or requested booking could still be
+    // charged and the money routed to the consultant.
+    if (booking.status !== "accepted" && booking.status !== "delivered") {
+      return jsonError("This booking can't be paid in its current state", 409);
     }
 
     // Idempotency / double-charge guard: never start a second checkout for a
@@ -92,6 +99,22 @@ export async function POST(req: Request): Promise<Response> {
     // hiding the duplicate from reconciliation. Best-effort: expiring a session
     // that's already completed/expired throws, which we ignore.
     if (existingPayment?.checkoutSessionId) {
+      // If the prior session was actually paid but our webhook missed it (or
+      // failed to record it), reconcile now instead of charging again.
+      try {
+        const prior = await stripe.checkout.sessions.retrieve(existingPayment.checkoutSessionId);
+        if (prior.payment_status === "paid") {
+          const paymentIntentId =
+            typeof prior.payment_intent === "string" ? prior.payment_intent : prior.payment_intent?.id ?? null;
+          await db
+            .update(bookingPayments)
+            .set({ status: "paid", paymentIntentId, updatedAt: new Date() })
+            .where(eq(bookingPayments.bookingId, booking.id));
+          return jsonError("This booking is already paid", 409);
+        }
+      } catch (err) {
+        console.warn("[stripe-checkout] could not retrieve prior session", err);
+      }
       try {
         await stripe.checkout.sessions.expire(existingPayment.checkoutSessionId);
       } catch (err) {

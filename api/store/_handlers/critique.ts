@@ -130,7 +130,7 @@ export async function POST(req: Request): Promise<Response> {
     const clean = critique.trim();
     if (!clean) {
       // Empty completion — treat as a failed run and make the caller whole.
-      await refundCredits(tenantId, userId, CREDIT_COST, "ai_critique_refund");
+      await refundCredits(spend.debits, "ai_critique_refund");
       return jsonError("The critique came back empty — please try again.", 502);
     }
     return new Response(
@@ -140,7 +140,7 @@ export async function POST(req: Request): Promise<Response> {
   } catch (err) {
     // Model call failed after the debit — refund so the run is free.
     console.error("[store/critique] model error — refunding credit", err);
-    await refundCredits(tenantId, userId, CREDIT_COST, "ai_critique_refund");
+    await refundCredits(spend.debits, "ai_critique_refund");
     return jsonError("The critique service is busy — your credit was not charged. Please try again.", 502);
   }
 }

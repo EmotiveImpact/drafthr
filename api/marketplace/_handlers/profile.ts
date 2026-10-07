@@ -187,11 +187,13 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     fullName,
     role,
     bio,
-    specialty: (body.specialty ?? existing?.specialty ?? "").trim(),
+    specialty: (typeof body.specialty === "string" ? body.specialty : existing?.specialty ?? "").trim().slice(0, 120),
     specialties,
     price: clampInt(body.price ?? existing?.price ?? 150, 0, 5000),
-    currency: (body.currency ?? existing?.currency ?? "GBP") as "GBP" | "USD" | "EUR",
-    sla: (body.sla ?? existing?.sla ?? "24-48h").slice(0, 32),
+    currency: (["GBP", "USD", "EUR"].includes(body.currency as string)
+      ? body.currency
+      : existing?.currency ?? "GBP") as "GBP" | "USD" | "EUR",
+    sla: (typeof body.sla === "string" ? body.sla : existing?.sla ?? "24-48h").slice(0, 32),
     availability:
       body.availability && AVAILABILITY_VALUES.includes(body.availability)
         ? body.availability

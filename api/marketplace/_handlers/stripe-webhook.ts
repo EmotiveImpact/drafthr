@@ -100,9 +100,12 @@ export async function POST(req: Request): Promise<Response> {
         break;
     }
   } catch (err) {
-    // Log but still 200 — a DB hiccup shouldn't make Stripe retry-storm; the
-    // next account.updated / a manual reconcile will catch up.
+    // Return 500 so Stripe retries. Every branch above is an idempotent
+    // UPDATE keyed by account or booking id, so a retry is safe. Swallowing
+    // the error left a paid booking marked "unpaid", which invited the HR
+    // user to pay a second time.
     console.error("[stripe-webhook] handler error", event.type, err);
+    return jsonError("Webhook handler failed", 500);
   }
 
   return new Response(JSON.stringify({ received: true }), {

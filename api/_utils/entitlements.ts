@@ -15,32 +15,69 @@ type DbExecutor = {
   execute: (query: SQL) => Promise<unknown>;
 };
 
+type LedgerRow = { delta: number; expiresAt: Date | null; createdAt?: Date | null };
+
 /**
- * Non-expired credit balance for a caller: the tenant pool (when in a
- * workspace) plus the user's own packs. Shared by resolveEntitlements (read)
+ * Spendable credits in ONE ledger pool (a tenant or a user).
+ *
+ * Grants become buckets (plan drip expires at period end, packs never do).
+ * Replaying the ledger in order, each spend draws from the soonest-expiring
+ * bucket that was still live at the time of the spend. Only what is left in
+ * unexpired buckets counts. Summing raw deltas and dropping expired grants
+ * (the old approach) kept the spends but lost the grants they drew from, so
+ * using 30 of 50 drip credits in one period left 20 instead of 50 in the next.
+ */
+export function poolBalance(rows: LedgerRow[], now = Date.now()): number {
+  const ordered = [...rows].sort(
+    (a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0),
+  );
+  const buckets: { amount: number; expiresAt: number }[] = [];
+  let debt = 0;
+  for (const row of ordered) {
+    if (row.delta > 0) {
+      buckets.push({ amount: row.delta, expiresAt: row.expiresAt?.getTime() ?? Infinity });
+      continue;
+    }
+    const at = row.createdAt?.getTime() ?? 0;
+    let owed = -row.delta;
+    const live = buckets
+      .filter((b) => b.amount > 0 && b.expiresAt > at)
+      .sort((a, b) => a.expiresAt - b.expiresAt);
+    for (const bucket of live) {
+      const take = Math.min(bucket.amount, owed);
+      bucket.amount -= take;
+      owed -= take;
+      if (owed === 0) break;
+    }
+    debt += owed;
+  }
+  const remaining = buckets
+    .filter((b) => b.expiresAt > now)
+    .reduce((sum, b) => sum + b.amount, 0);
+  return Math.max(0, remaining - debt);
+}
+
+async function poolRows(exec: DbExecutor, subjectType: "tenant" | "user", subjectId: string): Promise<LedgerRow[]> {
+  return exec
+    .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt, createdAt: creditLedger.createdAt })
+    .from(creditLedger)
+    .where(and(eq(creditLedger.subjectType, subjectType), eq(creditLedger.subjectId, subjectId)));
+}
+
+/**
+ * Spendable credits for a caller, per pool: the tenant pool (when in a
+ * workspace) and the user's own packs. Shared by resolveEntitlements (read)
  * and spendCredits (inside its locked transaction) so the two can never
  * disagree on what "balance" means.
  */
-async function creditBalance(exec: DbExecutor, tenantId: string | null, userId: string): Promise<number> {
-  const now = Date.now();
-  const rows: { delta: number; expiresAt: Date | null }[] = [];
-  if (tenantId) {
-    rows.push(
-      ...(await exec
-        .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt })
-        .from(creditLedger)
-        .where(and(eq(creditLedger.subjectType, "tenant"), eq(creditLedger.subjectId, tenantId)))),
-    );
-  }
-  rows.push(
-    ...(await exec
-      .select({ delta: creditLedger.delta, expiresAt: creditLedger.expiresAt })
-      .from(creditLedger)
-      .where(and(eq(creditLedger.subjectType, "user"), eq(creditLedger.subjectId, userId)))),
-  );
-  return rows
-    .filter((r) => !r.expiresAt || r.expiresAt.getTime() > now)
-    .reduce((sum, r) => sum + r.delta, 0);
+async function creditPools(
+  exec: DbExecutor,
+  tenantId: string | null,
+  userId: string,
+): Promise<{ tenant: number; user: number }> {
+  const tenant = tenantId ? poolBalance(await poolRows(exec, "tenant", tenantId)) : 0;
+  const user = poolBalance(await poolRows(exec, "user", userId));
+  return { tenant, user };
 }
 
 export type Entitlements = {
@@ -90,7 +127,8 @@ export async function resolveEntitlements(
   }
 
   // Credit balance: tenant pool + user packs, excluding expired drip credits.
-  const credits = await creditBalance(db, tenantId, userId);
+  const pools = await creditPools(db, tenantId, userId);
+  const credits = pools.tenant + pools.user;
 
   return {
     plan: sub?.plan ?? null,
@@ -218,59 +256,69 @@ export async function assertCanCreateLetter(tenantId: string | null, userId: str
   return { ok: false, code: 402, reason: "Choose a plan or buy a letter to continue." };
 }
 
+export type CreditDebit = { subjectType: "tenant" | "user"; subjectId: string; amount: number };
+
 /**
- * Metering primitive: atomically spend `amount` credits for a subject, drawing
- * against the combined non-expired balance (tenant pool + user packs). Records a
- * negative ledger entry against the tenant when in a workspace context, else the
- * user. Returns the post-spend balance, or ok:false (unchanged) if insufficient.
+ * Metering primitive: atomically spend `amount` credits for a caller. Draws
+ * from the workspace pool first, then the user's own packs, and writes each
+ * debit against the pool it actually came from. (Debiting the tenant for
+ * credits that were really the user's let a user re-spend the same pack in
+ * every new workspace.) Returns the post-spend balance and the debits made,
+ * or ok:false (unchanged) if insufficient.
  *
- * Atomic under concurrency: a per-pool advisory lock (keyed on the debited
- * subject) serializes the read-balance-then-insert so two concurrent spends
- * can't both observe a sufficient balance and overspend the shared pool. The
- * lock is transaction-scoped (auto-released on commit/rollback) and keyed per
- * pool, so unrelated subjects never contend. Used by the AI-critique endpoint.
+ * Atomic under concurrency: per-pool advisory locks (tenant then user, always
+ * in that order) serialise the read-balance-then-insert so two concurrent
+ * spends can't both observe a sufficient balance. The locks are
+ * transaction-scoped. Used by the AI-critique endpoint.
  */
 export async function spendCredits(
   tenantId: string | null,
   userId: string,
   amount: number,
   reason = "spend",
-): Promise<{ ok: boolean; balance: number }> {
+): Promise<{ ok: boolean; balance: number; debits: CreditDebit[] }> {
   const db = getDb();
-  if (amount <= 0) return { ok: false, balance: 0 };
-  const poolKey = `credits:${tenantId ?? userId}`;
+  if (amount <= 0) return { ok: false, balance: 0, debits: [] };
   return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${poolKey}, 0))`);
-    const balance = await creditBalance(tx as unknown as DbExecutor, tenantId, userId);
-    if (balance < amount) return { ok: false, balance };
-    await tx.insert(creditLedger).values({
-      subjectType: tenantId ? "tenant" : "user",
-      subjectId: tenantId ?? userId,
-      delta: -amount,
-      reason,
-    });
-    return { ok: true, balance: balance - amount };
+    if (tenantId) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`credits:${tenantId}`}, 0))`);
+    }
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`credits:${userId}`}, 0))`);
+    const pools = await creditPools(tx as unknown as DbExecutor, tenantId, userId);
+    const balance = pools.tenant + pools.user;
+    if (balance < amount) return { ok: false, balance, debits: [] };
+    const fromTenant = tenantId ? Math.min(pools.tenant, amount) : 0;
+    const debits: CreditDebit[] = [];
+    if (fromTenant > 0) debits.push({ subjectType: "tenant", subjectId: tenantId!, amount: fromTenant });
+    if (amount - fromTenant > 0) debits.push({ subjectType: "user", subjectId: userId, amount: amount - fromTenant });
+    for (const d of debits) {
+      await tx.insert(creditLedger).values({
+        subjectType: d.subjectType,
+        subjectId: d.subjectId,
+        delta: -d.amount,
+        reason,
+      });
+    }
+    return { ok: true, balance: balance - amount, debits };
   });
 }
 
 /**
- * Refund `amount` credits to a subject (positive ledger entry). Used to make
- * the caller whole when a paid action fails after the debit — e.g. the model
- * call errors after an AI-critique credit was already spent. No lock needed: a
- * grant only ever increases the balance.
+ * Refund the debits a spendCredits call made (positive ledger entries against
+ * the same pools). Used to make the caller whole when a paid action fails
+ * after the debit, e.g. the model call errors after an AI-critique credit was
+ * spent. No lock needed: a grant only ever increases the balance.
  */
-export async function refundCredits(
-  tenantId: string | null,
-  userId: string,
-  amount: number,
-  reason = "refund",
-): Promise<void> {
-  if (amount <= 0) return;
+export async function refundCredits(debits: CreditDebit[], reason = "refund"): Promise<void> {
+  const rows = debits.filter((d) => d.amount > 0);
+  if (rows.length === 0) return;
   const db = getDb();
-  await db.insert(creditLedger).values({
-    subjectType: tenantId ? "tenant" : "user",
-    subjectId: tenantId ?? userId,
-    delta: amount,
-    reason,
-  });
+  for (const d of rows) {
+    await db.insert(creditLedger).values({
+      subjectType: d.subjectType,
+      subjectId: d.subjectId,
+      delta: d.amount,
+      reason,
+    });
+  }
 }

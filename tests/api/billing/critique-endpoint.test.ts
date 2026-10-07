@@ -11,6 +11,8 @@ const { spendCredits, refundCredits, generateText } = vi.hoisted(() => ({
 let nextBody: Record<string, unknown> = {};
 
 vi.mock("../../../api/_utils/entitlements.js", () => ({ spendCredits, refundCredits }));
+
+const DEBITS = [{ subjectType: "tenant", subjectId: "t1", amount: 1 }];
 vi.mock("ai", () => ({ generateText }));
 vi.mock("@ai-sdk/anthropic", () => ({ createAnthropic: () => () => ({ mockModel: true }) }));
 vi.mock("../../../api/_utils/rate-limit.js", () => ({ rateLimit: () => null }));
@@ -45,7 +47,7 @@ beforeEach(() => {
 
 describe("POST /api/store/critique", () => {
   it("returns 402 + needCredits and never calls the model when out of credits", async () => {
-    spendCredits.mockResolvedValue({ ok: false, balance: 0 });
+    spendCredits.mockResolvedValue({ ok: false, balance: 0, debits: [] });
     const res = await POST(req);
     expect(res.status).toBe(402);
     const body = await res.json();
@@ -55,7 +57,7 @@ describe("POST /api/store/critique", () => {
   });
 
   it("spends one credit and returns the critique on success", async () => {
-    spendCredits.mockResolvedValue({ ok: true, balance: 4 });
+    spendCredits.mockResolvedValue({ ok: true, balance: 4, debits: DEBITS });
     generateText.mockResolvedValue({ text: "**Verdict** — solid.\n**Risks** — none." });
     const res = await POST(req);
     expect(res.status).toBe(200);
@@ -68,19 +70,19 @@ describe("POST /api/store/critique", () => {
   });
 
   it("refunds the credit when the model call throws", async () => {
-    spendCredits.mockResolvedValue({ ok: true, balance: 4 });
+    spendCredits.mockResolvedValue({ ok: true, balance: 4, debits: DEBITS });
     generateText.mockRejectedValue(new Error("upstream 529"));
     const res = await POST(req);
     expect(res.status).toBe(502);
-    expect(refundCredits).toHaveBeenCalledWith("t1", "u1", 1, "ai_critique_refund");
+    expect(refundCredits).toHaveBeenCalledWith(DEBITS, "ai_critique_refund");
   });
 
   it("refunds the credit when the completion is empty", async () => {
-    spendCredits.mockResolvedValue({ ok: true, balance: 4 });
+    spendCredits.mockResolvedValue({ ok: true, balance: 4, debits: DEBITS });
     generateText.mockResolvedValue({ text: "   " });
     const res = await POST(req);
     expect(res.status).toBe(502);
-    expect(refundCredits).toHaveBeenCalledWith("t1", "u1", 1, "ai_critique_refund");
+    expect(refundCredits).toHaveBeenCalledWith(DEBITS, "ai_critique_refund");
   });
 
   it("rejects an unknown lens with 400 before spending", async () => {
