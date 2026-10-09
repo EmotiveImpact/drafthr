@@ -38,9 +38,12 @@ export const RemoteImageEmbed = Extension.create<RemoteImageEmbedOptions>({
           const inFlight = new Set<string>();
           let destroyed = false;
 
+          // Only rewrite the document while it can be edited. A locked letter
+          // (approved, a viewer, a reviewer in review) must not change just
+          // because it was opened: the swap fires onUpdate and saves.
           const resolve = (view: EditorView, url: string, dataUrl: string | null) => {
             inFlight.delete(url);
-            if (destroyed) return;
+            if (destroyed || !view.editable) return;
             const { state } = view;
             const targets: Array<{ pos: number; size: number; attrs: Record<string, unknown> }> = [];
             state.doc.descendants((node, pos) => {
@@ -65,6 +68,7 @@ export const RemoteImageEmbed = Extension.create<RemoteImageEmbedOptions>({
           };
 
           const scan = (view: EditorView) => {
+            if (!view.editable) return;
             view.state.doc.descendants((node) => {
               if (node.type.name !== "image") return;
               const src = node.attrs.src;
@@ -77,9 +81,13 @@ export const RemoteImageEmbed = Extension.create<RemoteImageEmbedOptions>({
           };
 
           scan(initialView);
+          let wasEditable = initialView.editable;
           return {
             update(view, prevState) {
-              if (view.state.doc !== prevState.doc) scan(view);
+              // Rescan on edits, and when a locked editor becomes editable.
+              const unlocked = view.editable && !wasEditable;
+              wasEditable = view.editable;
+              if (unlocked || view.state.doc !== prevState.doc) scan(view);
             },
             destroy() {
               destroyed = true;

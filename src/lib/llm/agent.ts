@@ -64,6 +64,26 @@ export function buildLetterContextMessage(draft: Pick<Draft, "sections">): UIMes
   };
 }
 
+export const AGENT_UNREACHABLE_MESSAGE = "Couldn't reach the model.";
+
+/**
+ * What to tell the user when an agent request fails. The endpoint answers a
+ * refusal with {"error": "..."} (plan or role gate, conversation too long),
+ * and the chat transport passes that body through as the error text; show it
+ * rather than a generic "couldn't reach the model", which sent people to
+ * Retry a request that can never succeed.
+ */
+export function agentErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : "";
+  try {
+    const parsed = JSON.parse(raw) as { error?: unknown } | null;
+    if (typeof parsed?.error === "string" && parsed.error.trim()) return parsed.error.trim();
+  } catch {
+    // Not a JSON error body: a network or streaming failure.
+  }
+  return AGENT_UNREACHABLE_MESSAGE;
+}
+
 function htmlToPlainText(html: string): string {
   if (!html) return "";
   const withBreaks = html

@@ -8,11 +8,10 @@ import { uid } from "@/lib/utils";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { buildAgentSystemPrompt, buildLetterContextMessage } from "@/lib/llm/agent";
+import { agentErrorMessage, buildAgentSystemPrompt, buildLetterContextMessage } from "@/lib/llm/agent";
 import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { regenerateSectionAsPending } from "@/lib/llm/draft";
-import { serverErrorMessage } from "@/lib/llm/client";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { Avatar, BrandMark } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
@@ -709,9 +708,7 @@ export function AIPanel({
         {error && (
           <div className="rounded-md border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] text-[12px] px-3 py-2 flex items-center gap-2">
             <AlertCircle className="size-3.5" />
-            {/* A refusal (no plan for the chosen model, read-only role, too
-             * long) carries a message the user can act on; show it. */}
-            <span className="flex-1">{serverErrorMessage(error.message) ?? "Couldn't reach the model."}</span>
+            <span className="flex-1">{agentErrorMessage(error)}</span>
             <button onClick={() => regenerate()} className="inline-flex items-center gap-1 hover:underline">
               <RotateCw className="size-3" /> Retry
             </button>

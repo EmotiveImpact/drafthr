@@ -41,13 +41,54 @@ describe("fetchImageAsDataUrl", () => {
     const cors = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     });
+    const noImage = vi.fn(async () => null);
     for (const f of [html, missing, huge, cors]) {
-      expect(await fetchImageAsDataUrl("https://example.com/a.png", { fetcher: f as unknown as typeof fetch })).toBeNull();
+      expect(
+        await fetchImageAsDataUrl("https://example.com/a.png", { fetcher: f as unknown as typeof fetch, loadImage: noImage }),
+      ).toBeNull();
     }
     const small = vi.fn(async () => response(PNG_BYTES, "image/png"));
     expect(
       await fetchImageAsDataUrl("https://example.com/a.png", { fetcher: small as unknown as typeof fetch, maxBytes: 10 }),
     ).toBeNull();
+  });
+
+  it("falls back to loading through an <img> when fetch is refused (the CSP allows images, not fetch)", async () => {
+    const data = `data:image/png;base64,${PNG_B64}`;
+    const refused = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const loadImage = vi.fn(async () => data);
+    expect(
+      await fetchImageAsDataUrl("https://cdn.example/a.png", { fetcher: refused as unknown as typeof fetch, loadImage }),
+    ).toBe(data);
+    expect(loadImage).toHaveBeenCalledWith("https://cdn.example/a.png", expect.any(Number), expect.any(Number));
+
+    // A definite answer from the host (404, not an image) is not retried.
+    loadImage.mockClear();
+    const missing = vi.fn(async () => response(PNG_BYTES, "image/png", { status: 404 }));
+    await fetchImageAsDataUrl("https://cdn.example/a.png", { fetcher: missing as unknown as typeof fetch, loadImage });
+    expect(loadImage).not.toHaveBeenCalled();
+  });
+
+  it("stops reading a body with no Content-Length once it passes the cap", async () => {
+    let pulled = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(1024));
+      },
+    });
+    const fetcher = vi.fn(
+      async () => new Response(endless, { headers: { "content-type": "image/png" } }),
+    );
+    expect(
+      await fetchImageAsDataUrl("https://example.com/big.png", {
+        fetcher: fetcher as unknown as typeof fetch,
+        maxBytes: 10 * 1024,
+      }),
+    ).toBeNull();
+    expect(pulled).toBeLessThan(20);
   });
 });
 
@@ -65,6 +106,26 @@ describe("RemoteImageEmbed editor extension", () => {
     editor.commands.insertContent(`<img src="https://example.com/chart.png" alt="Chart">`);
     await vi.waitFor(() => expect(editor.getHTML()).toContain(data));
     expect(editor.getHTML()).not.toContain("https://example.com/chart.png");
+    editor.destroy();
+  });
+
+  it("leaves a locked (read-only) letter untouched, and embeds once it becomes editable", async () => {
+    const data = `data:image/png;base64,${PNG_B64}`;
+    const fetchImage = vi.fn(async () => data);
+    const onUpdate = vi.fn();
+    const editor = new Editor({
+      extensions: [StarterKit, Image.configure({ allowBase64: true }), RemoteImageEmbed.configure({ fetchImage })],
+      content: `<p>Approved</p><img src="https://example.com/old.png">`,
+      editable: false,
+      onUpdate,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchImage).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(editor.getHTML()).toContain("https://example.com/old.png");
+
+    editor.setEditable(true, false);
+    await vi.waitFor(() => expect(editor.getHTML()).toContain(data));
     editor.destroy();
   });
 

@@ -7,11 +7,25 @@ import { useProfileStore } from "@/lib/profile";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { loadTemplate } from "@/lib/letters/templates";
 
-/** Templates are lazy-loaded; prompts fall back to generic instructions without one. */
-async function ensureTemplate(draft: Draft): Promise<void> {
+/**
+ * Templates are lazy-loaded. A letter type with no template uses the generic
+ * instructions; one whose template exists but failed to load (usually a stale
+ * chunk after a deploy) must not, or the letter would silently be drafted
+ * without its legal guidance.
+ */
+export const TEMPLATE_LOAD_FAILED_MESSAGE =
+  "Couldn't load the template for this letter. Reload the page and try again.";
+
+export async function ensureTemplate(
+  draft: Pick<Draft, "letterType" | "context">,
+): Promise<void> {
   const jurisdiction = draft.context?.jurisdiction;
   if (!draft.letterType || !jurisdiction) return;
-  await loadTemplate(draft.letterType, jurisdiction).catch(() => undefined);
+  try {
+    await loadTemplate(draft.letterType, jurisdiction);
+  } catch {
+    throw new Error(TEMPLATE_LOAD_FAILED_MESSAGE);
+  }
 }
 
 /** Resolve the user's preferred Qwen model from the persisted profile. */

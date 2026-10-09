@@ -28,7 +28,7 @@ import {
 import { buildSectionPrompt } from "@/lib/prompts/sections";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { loadTemplate } from "@/lib/letters/templates";
+import { ensureTemplate } from "@/lib/llm/draft";
 import { letterStepsFor } from "@/lib/letters/questions";
 import type {
   Draft,
@@ -379,7 +379,9 @@ export async function generateMergeTemplate(
   options: GenerateTemplateOptions
 ): Promise<TemplateDraft> {
   const seed = buildSeedDraft(options.letterType, options.mode, options.seedAnswers);
-  await loadTemplate(seed.letterType, seed.context.jurisdiction).catch(() => undefined);
+  // Throws when the template exists but cannot load, rather than drafting
+  // every row of the batch without it.
+  await ensureTemplate(seed);
   const system = buildSystemPrompt(seed);
   const keys = placeholderKeysFor(options.letterType, options.csvHeaders);
   const mergeHint = buildMergeInstruction(keys);

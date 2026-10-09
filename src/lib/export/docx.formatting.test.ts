@@ -107,6 +107,33 @@ describe("DOCX export formatting", () => {
   });
 });
 
+describe("DOCX schema order", () => {
+  // Word validates property elements against the OOXML sequence and reports
+  // "unreadable content" when they are out of order.
+  const TBL_PR_ORDER = ["tblStyle", "tblW", "jc", "tblInd", "tblBorders", "shd", "tblLayout", "tblCellMar", "tblLook"];
+  const P_PR_ORDER = ["pStyle", "keepNext", "numPr", "pBdr", "shd", "tabs", "spacing", "ind", "jc", "rPr"];
+
+  function expectInSchemaOrder(el: Element, order: string[]) {
+    const names = Array.from(el.children).map((c) => c.localName);
+    const positions = names.map((n) => order.indexOf(n));
+    expect(positions, names.join(",")).not.toContain(-1);
+    expect(positions, names.join(",")).toEqual([...positions].sort((a, b) => a - b));
+  }
+
+  it("writes table and paragraph properties in schema order", async () => {
+    const { doc } = await renderParts(
+      `<table><tr><th>A</th><td style="text-align:center">B</td></tr></table>
+       <div style="text-align:center"><p>Centred</p></div>
+       <blockquote><p style="text-align:right">Quoted</p></blockquote>`,
+    );
+    const tblPr = doc.getElementsByTagNameNS(W, "tblPr")[0];
+    expectInSchemaOrder(tblPr, TBL_PR_ORDER);
+    const pPrs = Array.from(doc.getElementsByTagNameNS(W, "pPr"));
+    expect(pPrs.length).toBeGreaterThan(0);
+    for (const pPr of pPrs) expectInSchemaOrder(pPr, P_PR_ORDER);
+  });
+});
+
 describe("layoutTableGrid", () => {
   function rowsOf(html: string) {
     const t = document.createElement("table");

@@ -75,9 +75,16 @@ export type PdfAttestation = { reviewedBy: string; reviewedOn: string };
 /** Server responses that mean "don't paper over this with the basic renderer". */
 const NO_FALLBACK_STATUSES: Record<number, string> = {
   401: "Your session has expired. Sign in again to export.",
-  413: "This letter is too large to export as a PDF (usually a very large pasted image). Make the image smaller and try again.",
   429: "Too many exports in a short time. Wait a minute and try again.",
 };
+
+const FALLBACK_REASON_UNAVAILABLE = "The server renderer was unavailable";
+// 413 falls back rather than blocking: the request carries every embedded
+// image, including the Exhibits appendix (every evidence item is a figure by
+// default), so a couple of phone photos exceed the platform's 4.5 MB request
+// limit. The in-browser renderer has no such limit.
+const FALLBACK_REASON_TOO_LARGE =
+  "This letter is too large for the server renderer (usually large images or exhibits)";
 
 /**
  * Ask the server to render the PDF (real text, audit record, timestamp).
@@ -85,14 +92,16 @@ const NO_FALLBACK_STATUSES: Record<number, string> = {
  * and tells the user that happened: the fallback is a picture of the letter
  * with no selectable text and no audit record, so it must never be silent.
  * Throws for statuses where falling back would hide a real problem.
+ * Exported for unit testing.
  */
-async function tryServerPdf(
+export async function tryServerPdf(
   body: string,
   filename: string,
   draftId: string,
   attestation?: PdfAttestation,
 ): Promise<Blob | null> {
   if (!shouldTryServerPdf()) return null;
+  let reason = FALLBACK_REASON_UNAVAILABLE;
   try {
     const res = await fetch("/api/export/pdf", {
       method: "POST",
@@ -108,12 +117,13 @@ async function tryServerPdf(
     if (res.ok) return await res.blob();
     const blocking = NO_FALLBACK_STATUSES[res.status];
     if (blocking) throw new Error(blocking);
+    if (res.status === 413) reason = FALLBACK_REASON_TOO_LARGE;
   } catch (err) {
     if (err instanceof Error && Object.values(NO_FALLBACK_STATUSES).includes(err.message)) throw err;
     // Network error: fall back below.
   }
   toast.warning("Exported with the basic PDF renderer", {
-    description: "The server renderer was unavailable, so this PDF is an image of the letter without selectable text or an export record.",
+    description: `${reason}, so this PDF is an image of the letter without selectable text or an export record.`,
   });
   return null;
 }

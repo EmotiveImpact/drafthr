@@ -89,10 +89,17 @@ describe("EvidenceDrawer (floating) is an accessible modal dialog", () => {
   it("pinned mode renders as a labelled region, not a dialog", () => {
     render(
       <MemoryRouter>
-        <EvidenceDrawer draft={draft} editor={null} open={false} onOpenChange={() => {}} pinned />
+        <button type="button">Outside</button>
+        <EvidenceDrawer draft={draft} editor={null} open onOpenChange={() => {}} pinned />
       </MemoryRouter>,
     );
+    // The Editor mounts the pinned rail with open set: it must still not be a
+    // modal, hide the page, or keep focus from leaving it.
     expect(screen.queryByRole("dialog")).toBeNull();
+    const outside = screen.getByRole("button", { name: "Outside" });
+    expect(outside.closest("[aria-hidden='true']")).toBeNull();
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
     expect(screen.getByRole("complementary", { name: "Evidence" })).toBeInTheDocument();
   });
 });
