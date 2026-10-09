@@ -191,16 +191,21 @@ export async function applyCheckoutSession(
     return "failed";
   }
 
-  const currency = (session.currency ?? "").toLowerCase();
+  // A localised (Adaptive Pricing) session rendered for an older API version
+  // reports the customer's currency at the top level and the amount we
+  // created it with under currency_conversion; compare against that.
+  const source = session.currency_conversion;
+  const amountTotal = source ? source.amount_total : session.amount_total;
+  const currency = ((source ? source.source_currency : session.currency) ?? "").toLowerCase();
   if (
     booking.priceAmount === null ||
-    session.amount_total !== booking.priceAmount ||
+    amountTotal !== booking.priceAmount ||
     currency !== booking.priceCurrency
   ) {
     console.warn("[marketplace-payments] session amount does not match the booking, ignoring", {
       session: session.id,
       booking: booking.id,
-      amountTotal: session.amount_total,
+      amountTotal,
       currency,
       expectedAmount: booking.priceAmount,
       expectedCurrency: booking.priceCurrency,
@@ -219,8 +224,11 @@ export async function applyCheckoutSession(
   const paymentIntentId = idOf(session.payment_intent);
   const now = new Date();
   // Never move a refunded or disputed payment back to paid/processing on a
-  // late or retried event, and never downgrade paid to processing.
-  const overwritable = status === "paid" ? ["unpaid", "processing", "failed", "paid"] : ["unpaid", "processing", "failed"];
+  // late or retried event, and never downgrade paid to processing. A failed
+  // payment isn't moved back to processing either: that is the same session's
+  // completed event arriving after its async_payment_failed (a new checkout
+  // resets the row to unpaid first).
+  const overwritable = status === "paid" ? ["unpaid", "processing", "failed", "paid"] : ["unpaid", "processing"];
   const [written] = await db
     .insert(bookingPayments)
     .values({
@@ -267,6 +275,34 @@ async function paymentForCharge(db: Db, paymentIntentId: string | null, chargeId
 }
 
 /**
+ * paymentForCharge for a refund, falling back to the bookingId the checkout
+ * put in the PaymentIntent's metadata when no row carries this payment intent
+ * yet. Stripe doesn't order events and retries failed deliveries later, so a
+ * refund can arrive before the checkout.session.completed that records the
+ * intent; ignoring it would let that late event mark the booking paid and
+ * open draft access with the money already returned. The row is stamped with
+ * the intent (only while it isn't paid), so the refund lands on it and the
+ * late completed event then finds a refunded payment and is ignored.
+ */
+async function paymentForRefund(db: Db, stripe: Stripe, paymentIntentId: string | null, chargeId: string) {
+  const found = await paymentForCharge(db, paymentIntentId, chargeId);
+  if (found || !paymentIntentId) return found;
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const bookingId = serverUuidOrNull(intent.metadata?.bookingId ?? null);
+  if (!bookingId) return null;
+  await db
+    .update(bookingPayments)
+    .set({ paymentIntentId })
+    .where(
+      and(
+        eq(bookingPayments.bookingId, bookingId),
+        inArray(bookingPayments.status, ["unpaid", "processing", "failed"]),
+      ),
+    );
+  return paymentForCharge(db, paymentIntentId, chargeId);
+}
+
+/**
  * Pull back the consultant's share of a destination charge. Skips a transfer
  * that is already fully reversed (e.g. the refund was issued with
  * reverse_transfer), and uses an idempotency key so a webhook retry can't
@@ -289,7 +325,7 @@ async function reverseTransfer(stripe: Stripe, transferId: string, idempotencyKe
  * is recorded but leaves the booking paid.
  */
 export async function applyChargeRefunded(db: Db, stripe: Stripe, charge: Stripe.Charge): Promise<"refunded" | "partial" | "ignored"> {
-  const payment = await paymentForCharge(db, idOf(charge.payment_intent), charge.id);
+  const payment = await paymentForRefund(db, stripe, idOf(charge.payment_intent), charge.id);
   if (!payment) {
     console.warn("[marketplace-payments] refund for an unknown charge, ignoring", charge.id);
     return "ignored";
@@ -314,17 +350,35 @@ export async function applyChargeRefunded(db: Db, stripe: Stripe, charge: Stripe
   return "refunded";
 }
 
-/** charge.dispute.created: mark the payment disputed and withdraw draft access. */
+/**
+ * charge.dispute.created: mark a paid payment disputed and withdraw draft
+ * access. A payment that is already refunded (cardholders do dispute refunded
+ * charges) only records the dispute: marking it disputed would let a won
+ * dispute restore it to paid and reopen a booking whose money went back.
+ */
 export async function applyDisputeCreated(db: Db, dispute: Stripe.Dispute): Promise<"disputed" | "ignored"> {
   const payment = await paymentForCharge(db, idOf(dispute.payment_intent), idOf(dispute.charge));
   if (!payment) {
     console.warn("[marketplace-payments] dispute for an unknown charge, ignoring", dispute.id);
     return "ignored";
   }
+  if (payment.status !== "paid" && payment.status !== "disputed") {
+    await db
+      .update(bookingPayments)
+      .set({ disputeId: dispute.id, chargeId: idOf(dispute.charge), updatedAt: new Date() })
+      .where(eq(bookingPayments.bookingId, payment.bookingId));
+    console.warn("[marketplace-payments] dispute on a payment that isn't paid, recorded only", dispute.id, payment.status);
+    return "ignored";
+  }
   await db
     .update(bookingPayments)
     .set({ status: "disputed", disputeId: dispute.id, chargeId: idOf(dispute.charge), updatedAt: new Date() })
-    .where(eq(bookingPayments.bookingId, payment.bookingId));
+    .where(
+      and(
+        eq(bookingPayments.bookingId, payment.bookingId),
+        inArray(bookingPayments.status, ["paid", "disputed"]),
+      ),
+    );
   await revokeDraftAccess(db, payment.bookingId);
   await recomputeConsultantRating(db, payment.consultantProfileId);
   return "disputed";
