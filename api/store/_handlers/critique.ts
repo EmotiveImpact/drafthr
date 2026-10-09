@@ -65,6 +65,20 @@ type CritiqueRequest = {
   jurisdiction?: string;
 };
 
+/**
+ * Refund a failed run without letting a refund error escape: a throw here used
+ * to turn the friendly 502 into a bare 500. No retry, because a partly written
+ * refund retried would pay some credits back twice; log loudly instead so the
+ * refund can be made by hand.
+ */
+async function refundSafely(debits: Parameters<typeof refundCredits>[0]): Promise<void> {
+  try {
+    await refundCredits(debits, "ai_critique_refund");
+  } catch (err) {
+    console.error("[store/critique] refund failed; refund by hand", { debits, err });
+  }
+}
+
 function shortLabel(v: unknown): string {
   return typeof v === "string" ? v.trim().slice(0, 80) : "";
 }
@@ -143,7 +157,7 @@ export async function POST(req: Request): Promise<Response> {
     const clean = critique.trim();
     if (!clean) {
       // Empty completion — treat as a failed run and make the caller whole.
-      await refundCredits(spend.debits, "ai_critique_refund");
+      await refundSafely(spend.debits);
       return jsonError("The critique came back empty — please try again.", 502);
     }
     return new Response(
@@ -153,7 +167,7 @@ export async function POST(req: Request): Promise<Response> {
   } catch (err) {
     // Model call failed after the debit — refund so the run is free.
     console.error("[store/critique] model error — refunding credit", err);
-    await refundCredits(spend.debits, "ai_critique_refund");
+    await refundSafely(spend.debits);
     return jsonError("The critique service is busy — your credit was not charged. Please try again.", 502);
   }
 }
