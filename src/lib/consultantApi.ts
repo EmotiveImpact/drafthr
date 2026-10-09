@@ -148,6 +148,15 @@ export type BookingMessageDTO = {
   ts: number;
 };
 
+export type BookingPaymentStatus =
+  | "unpaid"
+  | "processing"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "disputed"
+  | "dispute_lost";
+
 export type BookingDTO = {
   id: string;
   consultantProfileId: string;
@@ -158,6 +167,12 @@ export type BookingDTO = {
   responseNote: string | null;
   deliveryNote: string | null;
   rating: number | null;
+  /** Price agreed when the booking was placed, minor units + lowercase ISO
+   *  currency. What checkout charges, whatever the consultant's rate is now. */
+  priceAmount?: number | null;
+  priceCurrency?: string | null;
+  /** Only "paid" lets the consultant start work and opens the draft. */
+  paymentStatus?: BookingPaymentStatus;
   shareToken: string | null;
   shareTokenExpiresAt: number | null;
   messages: BookingMessageDTO[];
@@ -203,7 +218,7 @@ export function createBooking(input: {
 
 export function respondToBooking(
   bookingId: string,
-  action: "accept" | "decline" | "deliver" | "complete",
+  action: "accept" | "decline" | "deliver" | "complete" | "rate",
   opts?: { note?: string; rating?: number },
 ) {
   return call<{ booking: BookingDTO }>("/api/marketplace/bookings-respond", {

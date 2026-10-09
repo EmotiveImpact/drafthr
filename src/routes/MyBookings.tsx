@@ -234,6 +234,25 @@ export function MyBookings() {
   );
 }
 
+/** Accepted but not yet paid (or a previous attempt failed): the requester
+ *  needs to pay before the specialist can start. */
+function isAwaitingPayment(booking: Booking): boolean {
+  return !booking.paymentStatus || booking.paymentStatus === "unpaid" || booking.paymentStatus === "failed";
+}
+
+/** The agreed price snapshot, formatted, or null when the booking predates it. */
+function agreedPrice(booking: Booking): string | null {
+  if (!booking.priceAmount || !booking.priceCurrency) return null;
+  try {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: booking.priceCurrency.toUpperCase(),
+    }).format(booking.priceAmount / 100);
+  } catch {
+    return null;
+  }
+}
+
 function BookingRow({
   booking,
   consultant,
@@ -318,7 +337,34 @@ function BookingRow({
         <StatusBadge status={booking.status} />
       </header>
 
-      {paymentsOn && booking.status === "accepted" && (
+      {booking.status === "accepted" && booking.paymentStatus === "processing" && (
+        <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
+          Payment processing. Bank payments such as Direct Debit can take a few
+          working days to clear; the specialist starts once it does.
+        </p>
+      )}
+
+      {booking.status === "accepted" &&
+        (booking.paymentStatus === "refunded" ||
+          booking.paymentStatus === "disputed" ||
+          booking.paymentStatus === "dispute_lost") && (
+          <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
+            {booking.paymentStatus === "refunded"
+              ? "This booking was refunded."
+              : booking.paymentStatus === "disputed"
+                ? "This payment is under dispute, so work on the booking is paused."
+                : "This payment was reversed after a dispute."}
+          </p>
+        )}
+
+      {!paymentsOn && booking.status === "accepted" && isAwaitingPayment(booking) && (
+        <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
+          Awaiting payment. Online payment isn't available yet, so the specialist
+          can't start on this booking.
+        </p>
+      )}
+
+      {paymentsOn && booking.status === "accepted" && isAwaitingPayment(booking) && (
         <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
@@ -329,7 +375,10 @@ function BookingRow({
             {paying ? "Starting…" : "Pay for review"}
           </button>
           <span className="text-[11px] text-[var(--ds-muted)]">
-            Secure checkout via Stripe.
+            {agreedPrice(booking)
+              ? `${agreedPrice(booking)}, as agreed when you booked. Secure checkout via Stripe.`
+              : "Secure checkout via Stripe."}
+            {booking.paymentStatus === "failed" ? " Your last payment didn't go through." : ""}
           </span>
         </div>
       )}

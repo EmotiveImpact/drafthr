@@ -4,9 +4,22 @@
  * then reconciles payout + payment state into the decoupled tables.
  *
  * Handled events:
- *   account.updated            → payoutsEnabled / detailsSubmitted on the
- *                                consultant's Connect account
- *   checkout.session.completed → mark the booking's payment paid
+ *   account.updated                          → payoutsEnabled / detailsSubmitted
+ *                                              on the consultant's Connect account
+ *   checkout.session.completed               → paid when payment_status is "paid",
+ *                                              processing when an async method
+ *                                              (e.g. Direct Debit) is still settling
+ *   checkout.session.async_payment_succeeded → paid
+ *   checkout.session.async_payment_failed    → failed
+ *   charge.refunded                          → full refund: refunded, draft access
+ *                                              withdrawn, Connect transfer reversed
+ *   charge.dispute.created                   → disputed, draft access withdrawn
+ *   charge.dispute.closed                    → won: paid again; lost: transfer
+ *                                              reversed
+ *
+ * Every Checkout session is matched to its booking (metadata booking id, amount
+ * and currency against the booking's price snapshot) before anything is marked
+ * paid; a mismatch is logged and ignored. See api/_utils/marketplace-payments.ts.
  *
  * Configure the endpoint URL in Stripe (Developers → Webhooks):
  *   https://<your-domain>/api/marketplace/stripe-webhook
@@ -15,8 +28,14 @@ import type Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { getDb } from "../../../src/db/index.js";
-import { bookingPayments, stripeConnectAccounts } from "../../../src/db/schema.js";
+import { stripeConnectAccounts } from "../../../src/db/schema.js";
 import { getStripe } from "../../_utils/stripe.js";
+import {
+  applyChargeRefunded,
+  applyCheckoutSession,
+  applyDisputeClosed,
+  applyDisputeCreated,
+} from "../../_utils/marketplace-payments.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -53,6 +72,16 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("Invalid signature", 400);
   }
 
+  // Booking charges are destination charges, which live on the platform
+  // account. A payment or dispute event from a connected account (the Connect
+  // scope) is about that account's own business, never one of our bookings.
+  if (event.account && event.type !== "account.updated") {
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
   try {
     const db = getDb();
     switch (event.type) {
@@ -80,28 +109,32 @@ export async function POST(req: Request): Promise<Response> {
           .where(eq(stripeConnectAccounts.accountId, account.id));
         break;
       }
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const bookingId = session.metadata?.bookingId ?? session.client_reference_id ?? "";
-        if (bookingId && session.payment_status === "paid") {
-          const paymentIntentId =
-            typeof session.payment_intent === "string"
-              ? session.payment_intent
-              : session.payment_intent?.id ?? null;
-          await db
-            .update(bookingPayments)
-            .set({ status: "paid", paymentIntentId, updatedAt: new Date() })
-            .where(eq(bookingPayments.bookingId, bookingId));
-        }
+      case "checkout.session.completed":
+        await applyCheckoutSession(db, event.data.object as Stripe.Checkout.Session, "completed");
         break;
-      }
+      case "checkout.session.async_payment_succeeded":
+        await applyCheckoutSession(db, event.data.object as Stripe.Checkout.Session, "async_succeeded");
+        break;
+      case "checkout.session.async_payment_failed":
+        await applyCheckoutSession(db, event.data.object as Stripe.Checkout.Session, "async_failed");
+        break;
+      case "charge.refunded":
+        await applyChargeRefunded(db, stripe, event.data.object as Stripe.Charge);
+        break;
+      case "charge.dispute.created":
+        await applyDisputeCreated(db, event.data.object as Stripe.Dispute);
+        break;
+      case "charge.dispute.closed":
+        await applyDisputeClosed(db, stripe, event.data.object as Stripe.Dispute);
+        break;
       default:
         // Unhandled event types are acknowledged so Stripe doesn't retry.
         break;
     }
   } catch (err) {
     // Return 500 so Stripe retries. Every branch above is an idempotent
-    // UPDATE keyed by account or booking id, so a retry is safe. Swallowing
+    // write keyed by account or booking id, and transfer reversals carry an
+    // idempotency key, so a retry is safe. Swallowing
     // the error left a paid booking marked "unpaid", which invited the HR
     // user to pay a second time.
     console.error("[stripe-webhook] handler error", event.type, err);
