@@ -155,4 +155,21 @@ describe("store sync wiring", () => {
       Object.defineProperty(window, "location", { configurable: true, value: realLocation });
     }
   });
+
+  it("a write queued before another tab's change can't overwrite that change", async () => {
+    const { useDraftStore } = await import("./store");
+    useDraftStore.setState({ drafts: { a: draft("a") } });
+    // Inside the throttle window: queued, not yet on disk.
+    useDraftStore.setState({ drafts: { a: { ...draft("a", "<p>Mine</p>"), updatedAt: 2 } } });
+
+    // Another tab saves a new letter of its own.
+    const theirs = JSON.stringify({ state: { drafts: { a: draft("a"), b: draft("b") } }, version: 0 });
+    localStorage.setItem("scribehr-store-v1", theirs);
+    window.dispatchEvent(new StorageEvent("storage", { key: "scribehr-store-v1", newValue: theirs }));
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const onDisk = JSON.parse(localStorage.getItem("scribehr-store-v1")!).state.drafts;
+    expect(Object.keys(onDisk).sort()).toEqual(["a", "b"]);
+    expect(onDisk.a.sections[0].html).toBe("<p>Mine</p>");
+  });
 });

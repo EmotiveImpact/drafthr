@@ -1822,7 +1822,13 @@ if (typeof window !== "undefined") {
     // Same-key cross-tab edit (not a wipe): rehydrate so the tabs converge.
     if (e.key === PERSIST_KEY && e.newValue !== null) {
       // rehydrate() re-reads localStorage and replaces in-memory state.
-      void useDraftStore.persist?.rehydrate?.();
+      void Promise.resolve(useDraftStore.persist?.rehydrate?.()).then(() => {
+        // A throttled write queued before the rehydrate holds this tab's
+        // state from BEFORE the other tab's change; flushed as is, it would
+        // overwrite that change on disk (and the other tab would then
+        // rehydrate its own edit away). Queue the merged state instead.
+        if (hasUnpersistedWrites()) useDraftStore.setState({});
+      });
     }
   });
 }
