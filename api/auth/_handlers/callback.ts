@@ -9,7 +9,7 @@
  */
 
 import { readJsonRequest, enforceSameOrigin, jsonError } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable } from "../../_utils/rate-limit.js";
 import {
   getWorkos,
   buildSessionCookie,
@@ -28,7 +28,7 @@ export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
 
-  const limited = rateLimit(req, { name: "auth-callback", max: 20, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-callback", max: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<CallbackBody>(req);

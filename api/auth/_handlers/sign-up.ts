@@ -29,7 +29,7 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable } from "../../_utils/rate-limit.js";
 import { getWorkos } from "../../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
@@ -51,7 +51,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // 3/min/IP — sign-up is the highest-leverage abuse target (creates an
   // identity, ships an email). Keep it tight; real humans never hit this.
-  const limited = rateLimit(req, { name: "auth-sign-up", max: 3, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-sign-up", max: 3, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<SignUpBody>(req);
@@ -78,6 +78,16 @@ export async function POST(req: Request): Promise<Response> {
   if (!lastName || lastName.length > MAX_NAME) {
     return jsonError("Enter your last name.", 400);
   }
+
+  // Per-address cap on top of the per-IP one: each sign-up (or duplicate
+  // sign-up) sends a verification email, so a distributed sender must not be
+  // able to mailbomb one inbox from many IPs.
+  const perEmail = await rateLimitKeyDurable(`email:${email.toLowerCase()}`, {
+    name: "auth-sign-up-email",
+    max: 5,
+    windowMs: 60 * 60_000,
+  });
+  if (perEmail) return perEmail;
 
   const workos = getWorkos();
 

@@ -17,7 +17,7 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable, clientIp } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
@@ -52,7 +52,7 @@ export async function POST(req: Request): Promise<Response> {
   // Tight limit — password endpoints are the classic credential-stuffing
   // target. 10/min per IP is generous for a real user fat-fingering, harsh
   // for a script. WorkOS adds its own server-side throttling on top.
-  const limited = rateLimit(req, { name: "auth-password", max: 10, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-password", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<PasswordBody>(req);
@@ -66,6 +66,15 @@ export async function POST(req: Request): Promise<Response> {
   if (!password || password.length > MAX_PASSWORD) {
     return jsonError("Enter your password.", 400);
   }
+
+  // Per-account cap, shared across every instance and every source IP, so a
+  // credential-stuffing run spread over many addresses still stalls.
+  const perAccount = await rateLimitKeyDurable(`email:${email.toLowerCase()}`, {
+    name: "auth-password-email",
+    max: 20,
+    windowMs: 15 * 60_000,
+  });
+  if (perAccount) return perAccount;
 
   try {
     const { user, sealedSession } = await getWorkos().userManagement.authenticateWithPassword({

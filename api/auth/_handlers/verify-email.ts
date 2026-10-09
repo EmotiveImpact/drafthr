@@ -24,7 +24,7 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable, clientIp } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
@@ -61,7 +61,7 @@ export async function POST(req: Request): Promise<Response> {
   // 10/min/IP — generous enough that a user fat-fingering the code a few
   // times isn't locked out, harsh enough that brute-forcing a 6-digit
   // code from a single IP is impractical.
-  const limited = rateLimit(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<VerifyEmailBody>(req);
@@ -86,6 +86,14 @@ export async function POST(req: Request): Promise<Response> {
   if (pendingToken && pendingToken.length > MAX_TOKEN) {
     return jsonError("Verification context is invalid.", 400);
   }
+
+  // Per-subject cap so a six-digit code cannot be brute-forced by spreading
+  // guesses over many IPs or instances.
+  const perSubject = await rateLimitKeyDurable(
+    userId ? `user:${userId}` : `pending:${pendingToken}`,
+    { name: "auth-verify-email-subject", max: 10, windowMs: 15 * 60_000 },
+  );
+  if (perSubject) return perSubject;
 
   const workos = getWorkos();
 

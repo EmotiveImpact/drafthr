@@ -17,7 +17,7 @@
 import { randomBytes } from "node:crypto";
 import { getWorkos, buildStateCookie } from "../../_utils/workos.js";
 import { jsonError } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable } from "../../_utils/rate-limit.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -32,7 +32,7 @@ const ALLOWED_PROVIDERS = new Set([
 ]);
 
 export async function GET(req: Request): Promise<Response> {
-  const limited = rateLimit(req, { name: "auth-url", max: 30, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-url", max: 30, windowMs: 60_000 });
   if (limited) return limited;
 
   const redirectUri = process.env.WORKOS_REDIRECT_URI;
