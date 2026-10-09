@@ -11,7 +11,7 @@ import { tenants, users } from "../../src/db/schema.js";
 
 export type BillingSubjectType = "tenant" | "user";
 
-async function readStripeCustomerId(
+export async function readStripeCustomerId(
   subjectType: BillingSubjectType,
   subjectId: string,
 ): Promise<string | null> {

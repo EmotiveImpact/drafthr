@@ -1,17 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { drizzle } from "drizzle-orm/pg-proxy";
 import * as schema from "../../../src/db/schema.js";
 
 // A real drizzle instance whose driver just records the SQL it is asked to run,
 // so these tests check the statements Postgres would actually receive.
 const queries: { sql: string; params: unknown[] }[] = [];
+// Rows the fake driver returns for a statement (array rows, as pg-proxy expects).
+let respond: (sql: string) => unknown[][] = () => [];
 const db = drizzle(
   async (sql, params) => {
     queries.push({ sql, params });
-    return { rows: [] };
+    return { rows: respond(sql) };
   },
   { schema },
 );
+// pg-proxy has no transactions; run the callback on the same recorder.
+(db as unknown as { transaction: (cb: (tx: typeof db) => unknown) => unknown }).transaction = async (cb) => cb(db);
 vi.mock("../../../src/db/index.js", () => ({ getDb: () => db }));
 
 const retrieve = vi.fn();
@@ -47,6 +51,7 @@ function req(): Request {
 
 beforeEach(() => {
   queries.length = 0;
+  respond = () => [];
   retrieve.mockReset();
   process.env.STRIPE_BILLING_WEBHOOK_SECRET = "whsec_test";
 });
@@ -97,6 +102,118 @@ describe("billing webhook", () => {
     retrieve.mockRejectedValue(new Error("stripe down"));
     const res = await POST(req());
     expect(res.status).toBe(500);
+  });
+});
+
+describe("billing webhook — annual plans get monthly credits", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    delete process.env.STRIPE_PRICE_SUB_PRO_ANNUAL;
+  });
+
+  it("grants this month's credits, expiring at the end of the month, not the year", async () => {
+    process.env.STRIPE_PRICE_SUB_PRO_ANNUAL = "price_pro_annual";
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-10T12:00:00Z"));
+    const start = Date.UTC(2026, 0, 1) / 1000;
+    const end = Date.UTC(2027, 0, 1) / 1000;
+    retrieve.mockResolvedValue({
+      ...liveSub("active", "starter"),
+      items: { data: [{ price: { id: "price_pro_annual" }, current_period_start: start, current_period_end: end }] },
+    });
+    nextEvent = { id: "evt_a1", type: "customer.subscription.updated", data: { object: { id: "sub_1" } } };
+    await POST(req());
+
+    const upsert = queries.find((q) => q.sql.includes('insert into "subscriptions"'));
+    // The plan comes from the live price, not the "starter" checkout metadata.
+    expect(upsert!.params).toContain("pro");
+    expect(upsert!.params).not.toContain("starter");
+
+    const drip = queries.find((q) => q.sql.includes('insert into "credit_ledger"'));
+    expect(drip!.params).toContain(20);
+    expect(drip!.params).toContain(`drip:sub_1:${Date.UTC(2026, 4, 1) / 1000}`);
+    expect(drip!.params).toContain("2026-06-01T00:00:00.000Z");
+  });
+
+  it("keeps the period-start key on monthly plans, so existing grants aren't repeated", async () => {
+    retrieve.mockResolvedValue(liveSub("active"));
+    nextEvent = { id: "evt_a2", type: "customer.subscription.updated", data: { object: { id: "sub_1" } } };
+    await POST(req());
+    const drip = queries.find((q) => q.sql.includes('insert into "credit_ledger"'));
+    expect(drip!.params).toContain("drip:sub_1:1760000000");
+  });
+});
+
+describe("billing webhook — refunded one-off purchases", () => {
+  const USER = "22222222-2222-2222-2222-222222222222";
+
+  it("revokes a refunded credit pack's own grant and marks the purchase refunded", async () => {
+    respond = (sql) => {
+      if (sql.startsWith('update "entitlement_purchases"')) return [[USER, "credits_small"]];
+      if (sql.startsWith('select "id" from "credit_ledger"')) return [["grant-1"]];
+      return [];
+    };
+    nextEvent = {
+      id: "evt_r1",
+      type: "charge.refunded",
+      data: { object: { id: "ch_1", payment_intent: "pi_1", refunded: true } },
+    };
+    const res = await POST(req());
+    expect(res.status).toBe(200);
+
+    const mark = queries.find((q) => q.sql.startsWith('update "entitlement_purchases"'));
+    expect(mark!.sql).toContain('"refunded_at" is null');
+    expect(mark!.params).toContain("pi_1");
+
+    // Finds the grant by its purchase key, or (older grants) by the purchase's created_at.
+    const find = queries.find((q) => q.sql.startsWith('select "id" from "credit_ledger"'));
+    expect(find!.params).toContain("purchase:pi_1");
+    expect(find!.sql).toContain(
+      '"credit_ledger"."created_at" = (select "entitlement_purchases"."created_at" from "entitlement_purchases" where "entitlement_purchases"."stripe_payment_intent_id" = $',
+    );
+
+    const revoke = queries.find((q) => q.sql.includes('insert into "credit_ledger"'));
+    expect(revoke!.params).toEqual(expect.arrayContaining([USER, -5, "purchase_refund", "revoke:grant-1"]));
+    expect(revoke!.sql).toMatch(/on conflict \("grant_key"\) where "credit_ledger"\."grant_key" is not null do nothing/);
+  });
+
+  it("changes nothing for a charge that isn't a billing purchase (or was already reversed)", async () => {
+    nextEvent = {
+      id: "evt_r2",
+      type: "charge.refunded",
+      data: { object: { id: "ch_2", payment_intent: "pi_booking", refunded: true } },
+    };
+    await POST(req());
+    expect(queries.some((q) => q.sql.includes('insert into "credit_ledger"'))).toBe(false);
+  });
+
+  it("leaves a partial refund alone", async () => {
+    nextEvent = {
+      id: "evt_r3",
+      type: "charge.refunded",
+      data: { object: { id: "ch_3", payment_intent: "pi_1", refunded: false } },
+    };
+    await POST(req());
+    expect(queries.some((q) => q.sql.startsWith('update "entitlement_purchases"'))).toBe(false);
+  });
+
+  it("tags a new purchase's credit grant so a refund can find it", async () => {
+    respond = (sql) => (sql.startsWith('insert into "entitlement_purchases"') ? [["ent-1"]] : []);
+    nextEvent = {
+      id: "evt_r4",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          mode: "payment",
+          payment_status: "paid",
+          payment_intent: "pi_9",
+          metadata: { purpose: "billing", priceKey: "credits_small", userId: USER },
+        },
+      },
+    };
+    await POST(req());
+    const grant = queries.find((q) => q.sql.includes('insert into "credit_ledger"'));
+    expect(grant!.params).toContain("purchase:pi_9");
   });
 });
 
