@@ -6,6 +6,7 @@ import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
 import { markUnembeddedImagesHtml } from "@/lib/storage/embedRemoteImages";
+import { buildExhibitsAppendixHtml } from "./exhibits";
 import {
   brandedExportFooterHtml,
   resolveClientEnvFlag,
@@ -143,6 +144,8 @@ export function letterBodyHtml(draft: Draft): string {
     letterhead +
     resolved +
     attachments +
+    // Exhibits appendix: same builder as the page preview and the DOCX.
+    buildExhibitsAppendixHtml(draft) +
     "<hr />" +
     sanitizeLetterHtml(disclaimerHtmlFor(draft)) +
     // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands

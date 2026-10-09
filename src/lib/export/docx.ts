@@ -9,6 +9,7 @@ import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
 import { markUnembeddedImagesHtml } from "@/lib/storage/embedRemoteImages";
+import { buildExhibitsAppendixHtml } from "./exhibits";
 import { inlineImagesForExport } from "@/lib/storage/inlineImagesForExport";
 
 type InlineStyle = {
@@ -188,6 +189,8 @@ function buildDocxBodyHtml(draft: Draft): string {
     letterheadHtml(draft),
     resolved,
     attachmentsBlock,
+    // Same Exhibits appendix as the page preview and the PDF.
+    buildExhibitsAppendixHtml(draft),
     "<hr />",
     sanitizeLetterHtml(disclaimerHtmlFor(draft)),
     // Branded export footer — same toggle as PDF. See src/lib/branding/export-footer.ts.
