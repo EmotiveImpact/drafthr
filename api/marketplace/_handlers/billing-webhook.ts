@@ -6,6 +6,8 @@
  *
  * Handled:
  *   checkout.session.completed (mode=payment)  → entitlement + credits for a one-off
+ *   checkout.session.async_payment_succeeded   → the same, once a delayed
+ *                                                method (Direct Debit) settles
  *   customer.subscription.created / .updated / .deleted,
  *   invoice.payment_failed, invoice.paid       → re-read the subscription from
  *                                                Stripe and mirror its CURRENT
@@ -76,7 +78,10 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     switch (event.type) {
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      // A delayed method (Direct Debit) completes the session unpaid and
+      // confirms the payment days later in this event.
+      case "checkout.session.async_payment_succeeded": {
         const s = event.data.object as Stripe.Checkout.Session;
         if (s.metadata?.purpose !== "billing") break; // marketplace booking — not ours
         if (s.mode === "payment" && s.payment_status === "paid") {

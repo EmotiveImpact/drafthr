@@ -8,8 +8,8 @@
  *
  * A workspace plan sits on the shared workspace Stripe customer, so only
  * owners and admins may open it. A personal plan (Employee Plus) is the
- * user's own. Without a scope, the workspace plan is chosen when the
- * workspace has one, otherwise the caller's personal plan.
+ * user's own. Without a scope, the plan the app shows is chosen: a usable
+ * workspace plan, then a usable personal plan, then whichever exists.
  */
 import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
@@ -17,6 +17,7 @@ import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getStripe, appBaseUrl } from "../../_utils/stripe.js";
 import { readStripeCustomerId } from "../../_utils/stripe-billing.js";
+import { subjectHasActiveSubscription } from "../../_utils/entitlements.js";
 import { rejectNonBillingManager } from "../../_utils/workspace-role.js";
 import { getDb } from "../../../src/db/index.js";
 import { subscriptions } from "../../../src/db/schema.js";
@@ -67,6 +68,14 @@ export async function POST(req: Request): Promise<Response> {
     if (!tenantId) return jsonError("No active workspace", 412);
     subjectType = "tenant";
   } else if (scope === "personal") {
+    subjectType = "user";
+  } else if (tenantId && (await subjectHasActiveSubscription("tenant", tenantId))) {
+    // The same choice as the plan the app shows (pickEffectiveSubscription):
+    // a usable workspace plan, then a usable personal plan, then whichever
+    // exists. Picking the workspace whenever it had any row opened a
+    // cancelled workspace subscription while Settings showed Employee Plus.
+    subjectType = "tenant";
+  } else if (await subjectHasActiveSubscription("user", auth.userRow.id)) {
     subjectType = "user";
   } else {
     subjectType = tenantId && (await hasSubscription("tenant", tenantId)) ? "tenant" : "user";

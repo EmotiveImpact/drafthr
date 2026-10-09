@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { streamDraft, type Message } from "./client";
+import { serverErrorMessage, streamDraft, type Message } from "./client";
 
 function sseResponse(chunks: string[]): Response {
   const body = new ReadableStream<Uint8Array>({
@@ -64,5 +64,35 @@ describe("streamDraft — stream cut off without [DONE]", () => {
     });
     await expect(run).rejects.toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("streamDraft — refusals", () => {
+  it("shows the server's message for a 402, without retrying", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      new Response(JSON.stringify({ error: "Choose a plan, or switch to the standard model.", needPlan: true }), {
+        status: 402,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(streamDraft({ messages, onToken: () => {} })).rejects.toThrow(
+      "Choose a plan, or switch to the standard model.",
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("serverErrorMessage", () => {
+  it("reads the message from our JSON error envelope", () => {
+    // What the agent chat transport puts in its error for a 402.
+    expect(serverErrorMessage('{"error":"Choose a plan to continue.","needPlan":true}')).toBe(
+      "Choose a plan to continue.",
+    );
+  });
+  it("is null for anything else", () => {
+    expect(serverErrorMessage("Failed to fetch the chat response.")).toBeNull();
+    expect(serverErrorMessage("<html><title>502</title></html>")).toBeNull();
+    expect(serverErrorMessage('{"error":""}')).toBeNull();
+    expect(serverErrorMessage("null")).toBeNull();
   });
 });
