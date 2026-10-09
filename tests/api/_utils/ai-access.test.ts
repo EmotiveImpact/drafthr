@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 let auth: Record<string, unknown>;
 let active = false;
 let purchases: unknown[] = [];
+// The WHERE of the last purchase lookup, so a test can check what it filters on.
+let lastWhere: SQL | undefined;
 
 vi.mock("../../../api/_utils/session-with-tenant.js", () => ({
   requireSessionAndTenant: async () => auth,
@@ -11,7 +15,14 @@ vi.mock("../../../api/_utils/entitlements.js", () => ({
   resolveEntitlements: async () => ({ active }),
 }));
 vi.mock("../../../src/db/index.js", () => {
-  const chain = { from: () => chain, where: () => chain, limit: async () => purchases };
+  const chain = {
+    from: () => chain,
+    where: (w: SQL) => {
+      lastWhere = w;
+      return chain;
+    },
+    limit: async () => purchases,
+  };
   return { getDb: () => ({ select: () => chain }) };
 });
 
@@ -53,6 +64,13 @@ describe("rejectAiGeneration", () => {
     expect((await rejectAiGeneration(req(), "claude-sonnet-4-6"))?.status).toBe(402);
     purchases = [{ id: "p1" }];
     expect(await rejectAiGeneration(req(), "claude-sonnet-4-6")).toBeNull();
+  });
+
+  it("with the paywall on, does not count a refunded letter purchase", async () => {
+    process.env.DRAFTHR_ENFORCE_PAYWALL = "1";
+    await rejectAiGeneration(req(), "claude-sonnet-4-6");
+    const where = new PgDialect().sqlToQuery(lastWhere!).sql;
+    expect(where).toContain('"entitlement_purchases"."refunded_at" is null');
   });
 
   it("passes through an unauthenticated response", async () => {
