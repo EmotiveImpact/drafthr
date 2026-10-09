@@ -82,6 +82,11 @@ describe("rejectAiGeneration", () => {
 describe("isPremiumModel", () => {
   it("treats every Opus model as premium", () => {
     expect(isPremiumModel("claude-opus-4-7")).toBe(true);
+    // Other id shapes an operator could put in LLM_MODEL.
+    expect(isPremiumModel("claude-3-opus-20240229")).toBe(true);
+    expect(isPremiumModel("Claude-Opus-4-7")).toBe(true);
+    expect(isPremiumModel("claude-opus")).toBe(true);
+    expect(isPremiumModel("claude-sonnet-4-6")).toBe(false);
     expect(isPremiumModel("claude-haiku-4-5")).toBe(false);
     expect(isPremiumModel(undefined)).toBe(false);
   });

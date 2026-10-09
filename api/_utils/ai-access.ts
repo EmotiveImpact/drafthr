@@ -26,8 +26,12 @@ import { rejectReadOnlyMember } from "./workspace-role.js";
 
 const PURCHASE_WINDOW_DAYS = 30;
 
+/**
+ * Any Opus model id, whatever its naming scheme or case, so an older-style or
+ * dated id set through LLM_MODEL is gated as well.
+ */
 export function isPremiumModel(modelName: string | undefined): boolean {
-  return typeof modelName === "string" && /^claude-opus-/.test(modelName);
+  return typeof modelName === "string" && /opus/i.test(modelName);
 }
 
 function paymentRequired(error: string, extra: Record<string, unknown>): Response {
