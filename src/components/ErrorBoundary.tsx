@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { captureError } from "@/lib/observability/sentry";
+import { isChunkLoadError, reloadForStaleChunk } from "@/lib/chunk-reload";
 
 /**
  * App-level error boundary.
@@ -13,16 +14,23 @@ import { captureError } from "@/lib/observability/sentry";
  * Styled with the DraftHR DS tokens so the fallback itself stays on-brand.
  */
 type Props = { children: ReactNode };
-type State = { error: Error | null };
+type State = { error: Error | null; reloading: boolean };
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, reloading: false };
 
-  static getDerivedStateFromError(error: Error): State {
-    return { error };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    // A lazily loaded chunk that is gone after a deploy: reload to the new
+    // build rather than showing an error (see componentDidCatch).
+    return { error, reloading: isChunkLoadError(error) };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (isChunkLoadError(error)) {
+      if (reloadForStaleChunk()) return;
+      // Already reloaded moments ago: show the error card instead of looping.
+      if (this.state.reloading) this.setState({ reloading: false });
+    }
     // Report to Sentry (no-op if Sentry isn't configured) with the
     // component stack so we can locate the throwing component.
     try {
@@ -41,11 +49,20 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleReset = () => {
-    this.setState({ error: null });
+    this.setState({ error: null, reloading: false });
   };
 
   render() {
     if (!this.state.error) return this.props.children;
+    if (this.state.reloading) {
+      return (
+        <div className="min-h-screen grid place-items-center bg-[var(--ds-canvas)] px-6">
+          <p role="status" className="text-[13.5px] text-[var(--ds-body)]">
+            Loading the latest version of DraftHR…
+          </p>
+        </div>
+      );
+    }
 
     return (
       <div className="min-h-screen grid place-items-center bg-[var(--ds-canvas)] px-6">

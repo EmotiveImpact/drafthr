@@ -9,6 +9,7 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { initSentry } from "@/lib/observability/sentry";
 import { bootstrapTheme } from "@/lib/theme";
 import { getFlag, setFlag } from "@/lib/flags";
+import { reloadForStaleChunk } from "@/lib/chunk-reload";
 import "@fontsource/playfair-display/400.css";
 import "@fontsource/playfair-display/600.css";
 import "./styles/globals.css";
@@ -18,6 +19,14 @@ import "@radix-ui/themes/styles.css";
 
 bootstrapTheme();
 initSentry();
+
+// A lazily loaded chunk (route, letter template, export library) failed to
+// load, almost always because a deploy replaced it while this tab was open.
+// Reload once to pick up the new build; if that was already tried, the error
+// carries on to the caller or the ErrorBoundary.
+window.addEventListener("vite:preloadError", () => {
+  reloadForStaleChunk();
+});
 
 // Dev helper — flip feature flags from devtools without a code change.
 // e.g. window.__drafthr.setFlag("pixelPerfectEdit", true)
