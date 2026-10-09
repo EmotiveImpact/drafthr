@@ -31,6 +31,7 @@ import {
   type SessionPayload,
 } from "../../_utils/workos.js";
 import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
+import { linkDirectoryIdentityOnSignIn } from "../../_utils/directory-link.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -121,6 +122,8 @@ export async function POST(req: Request): Promise<Response> {
         lastName: user.lastName ?? null,
         profilePictureUrl: user.profilePictureUrl ?? null,
         sealedSession: sealedSession ?? "",
+        // The code just proved control of the inbox.
+        emailVerified: true,
       });
     }
 
@@ -135,6 +138,7 @@ export async function POST(req: Request): Promise<Response> {
       lastName: user.lastName ?? null,
       profilePictureUrl: user.profilePictureUrl ?? null,
       sealedSession: "",
+      emailVerified: true,
     });
   } catch (err) {
     console.warn("[auth/verify-email] failed", err);
@@ -155,7 +159,15 @@ async function respondWithSession(input: {
   lastName: string | null;
   profilePictureUrl: string | null;
   sealedSession: string;
+  emailVerified: boolean;
 }): Promise<Response> {
+  // Link Directory Sync placeholders before reading the epoch (see callback.ts).
+  await linkDirectoryIdentityOnSignIn({
+    workosUserId: input.id,
+    email: input.email,
+    emailVerified: input.emailVerified,
+  });
+
   const payload: SessionPayload = {
     user: {
       id: input.id,

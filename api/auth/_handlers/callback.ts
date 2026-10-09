@@ -19,6 +19,7 @@ import {
   type SessionPayload,
 } from "../../_utils/workos.js";
 import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
+import { linkDirectoryIdentityOnSignIn } from "../../_utils/directory-link.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -52,6 +53,15 @@ export async function POST(req: Request): Promise<Response> {
         sealSession: true,
         cookiePassword: process.env.WORKOS_COOKIE_PASSWORD!,
       },
+    });
+
+    // Link any Directory Sync placeholder for this verified email to the
+    // signed-in user before reading the epoch, so the session is minted for
+    // the linked row and offboarding reaches this account.
+    await linkDirectoryIdentityOnSignIn({
+      workosUserId: user.id,
+      email: user.email,
+      emailVerified: user.emailVerified,
     });
 
     const payload: SessionPayload = {
