@@ -8,6 +8,7 @@ import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize"
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
+import { markUnembeddedImagesHtml } from "@/lib/storage/embedRemoteImages";
 import { inlineImagesForExport } from "@/lib/storage/inlineImagesForExport";
 
 type InlineStyle = {
@@ -1031,7 +1032,9 @@ function injectSignatureIntoSignatureSection(
   // strip the rest via the export sanitiser so track-changes never reaches
   // the .docx output.
   const merged = mergeAcceptedSuggestionsHtml(section.html, { forExport: true });
-  const html = sanitizeLetterHtmlForExport(merged);
+  // Images that never got embedded (remote src) become a visible note
+  // instead of being dropped silently by the sanitiser.
+  const html = sanitizeLetterHtmlForExport(markUnembeddedImagesHtml(merged));
   if (!signature) return html;
   if (section.sectionId === "signature") return signature + html;
   return html;

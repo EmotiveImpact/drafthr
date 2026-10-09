@@ -5,6 +5,7 @@ import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize"
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
+import { markUnembeddedImagesHtml } from "@/lib/storage/embedRemoteImages";
 import {
   brandedExportFooterHtml,
   resolveClientEnvFlag,
@@ -426,7 +427,9 @@ function injectSignatureIntoSignatureSection(
   // which strips any remaining <ins>/<del> wrappers so reviewer track-changes
   // never leak into the rendered document.
   const merged = mergeAcceptedSuggestionsHtml(section.html, { forExport: true });
-  const html = sanitizeLetterHtmlForExport(merged);
+  // Images that never got embedded (remote src) become a visible note
+  // instead of being dropped silently by the sanitiser.
+  const html = sanitizeLetterHtmlForExport(markUnembeddedImagesHtml(merged));
   if (!signature) return html;
   if (section.sectionId === "signature") {
     // Prepend the signature image at the top of the signature block.
