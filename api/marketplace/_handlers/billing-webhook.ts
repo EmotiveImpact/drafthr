@@ -10,22 +10,25 @@
  *   invoice.payment_failed, invoice.paid       → re-read the subscription from
  *                                                Stripe and mirror its CURRENT
  *                                                state (see syncSubscription)
+ *   charge.refunded (full refund of a one-off)  → revoke the purchase and the
+ *                                                credits it granted
  *
  * Idempotent: every delivery is deduped via webhook_events_seen (insert the
  * event id; a conflict means "already processed" → ack + skip).
  */
 import type Stripe from "stripe";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { getStripe } from "../../_utils/stripe.js";
 import { getDb } from "../../../src/db/index.js";
 import { subscriptions, entitlementPurchases, creditLedger, webhookEventsSeen } from "../../../src/db/schema.js";
 import {
   catalogFor,
+  catalogEntryForPurchaseKind,
   isPriceKey,
-  creditsPerCycleForPlan,
   planForStripePriceId,
 } from "../../../src/lib/billing/catalog.js";
+import { dripPlanCredits, grantPlanDrip, REVOKE_PREFIX } from "../../_utils/entitlements.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -86,6 +89,16 @@ export async function POST(req: Request): Promise<Response> {
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
         await syncSubscription(db, stripe, (event.data.object as Stripe.Subscription).id);
+        break;
+      }
+      case "charge.refunded": {
+        // Only one-off billing purchases are recorded against a payment intent
+        // in entitlement_purchases; a charge with no such row (a marketplace
+        // booking, a subscription invoice) is left alone.
+        const charge = event.data.object as Stripe.Charge;
+        const pi =
+          typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id ?? null;
+        if (pi && charge.refunded) await reverseOneOff(db, pi);
         break;
       }
       case "invoice.payment_failed":
@@ -228,44 +241,26 @@ async function upsertSubscription(
       },
     });
 
-  // Drip the plan's included AI credits for THIS billing period. Keyed on
-  // `drip:<subId>:<periodStartUnix>` so it lands exactly once per period no
-  // matter how many subscription.created/.updated events Stripe sends (and
-  // regardless of their ordering vs invoice.paid). Only for a usable status —
-  // a past_due/incomplete period grants nothing; a later .updated flipping it
-  // active will grant then. Credits expire at period end (no rollover).
-  const drip = dripPlanCredits(plan, sub.status);
-  if (drip > 0) {
-    await db
-      .insert(creditLedger)
-      .values({
-        subjectType,
-        subjectId,
-        delta: drip,
-        reason: "plan_drip",
-        expiresAt: periodEnd,
-        grantKey: `drip:${sub.id}:${startUnix}`,
-      })
-      // The unique index is partial (grant_key IS NOT NULL); Postgres only
-      // matches it for ON CONFLICT when the same predicate is given.
-      .onConflictDoNothing({
-        target: creditLedger.grantKey,
-        where: sql`${creditLedger.grantKey} is not null`,
-      });
-  }
+  // Grant the plan's included AI credits for the current month. On a monthly
+  // plan that is this billing period; on an annual plan it is the current
+  // month of the year (later months are granted lazily when entitlements are
+  // read, as Stripe sends no event at those boundaries). Idempotent per
+  // window, so it lands exactly once however many events Stripe sends and in
+  // whatever order. Only for a usable status: a past_due/incomplete period
+  // grants nothing; a later sync that finds it active grants then.
+  await grantPlanDrip(db, {
+    subjectType,
+    subjectId,
+    stripeSubscriptionId: sub.id,
+    stripePriceId: priceId,
+    plan,
+    status: sub.status,
+    currentPeriodStart: periodStart,
+    currentPeriodEnd: periodEnd,
+  });
 }
 
-/**
- * How many plan-included credits to drip for a subscription in this state.
- * Non-zero only for a plan that includes a per-cycle drip AND a currently
- * usable status (active/trialing) — a past_due/incomplete/canceled period
- * grants nothing (a later .updated that flips it active grants then).
- */
-export function dripPlanCredits(plan: string, status: string): number {
-  const perCycle = creditsPerCycleForPlan(plan);
-  if (perCycle > 0 && (status === "active" || status === "trialing")) return perCycle;
-  return 0;
-}
+export { dripPlanCredits };
 
 async function recordOneOff(
   db: ReturnType<typeof getDb>,
@@ -307,7 +302,69 @@ async function recordOneOff(
         subjectId: userId,
         delta: entry.includedCredits,
         reason: entry.kind === "credits" ? "pack" : "letter_included",
+        // Lets a later refund find and revoke exactly this grant.
+        grantKey: `purchase:${paymentIntentId}`,
       });
     }
+  });
+}
+
+/**
+ * A one-off purchase was fully refunded: stop it authorising anything and take
+ * back the credits it granted. Runs in one transaction keyed on the purchase's
+ * refunded_at, so a redelivered event changes nothing. The clawback targets
+ * the purchase's own grant (`revoke:<grantId>`) and removes only what is left
+ * of it, so it never eats plan credits or other packs and never pushes the
+ * balance below zero. Partial refunds are left for support to handle by hand.
+ */
+async function reverseOneOff(db: ReturnType<typeof getDb>, paymentIntentId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [purchase] = await tx
+      .update(entitlementPurchases)
+      .set({ refundedAt: new Date() })
+      .where(
+        and(
+          eq(entitlementPurchases.stripePaymentIntentId, paymentIntentId),
+          isNull(entitlementPurchases.refundedAt),
+        ),
+      )
+      .returning({ userId: entitlementPurchases.userId, kind: entitlementPurchases.kind });
+    if (!purchase) return; // not a billing one-off, or already reversed
+
+    const credits = catalogEntryForPurchaseKind(purchase.kind)?.includedCredits ?? 0;
+    if (credits <= 0) return;
+
+    // Grants since this change carry `purchase:<pi>`. Older ones were written
+    // in the same transaction as the purchase, so they share its created_at.
+    const [grant] = await tx
+      .select({ id: creditLedger.id })
+      .from(creditLedger)
+      .where(
+        and(
+          eq(creditLedger.subjectType, "user"),
+          eq(creditLedger.subjectId, purchase.userId),
+          inArray(creditLedger.reason, ["pack", "letter_included"]),
+          // Compared in SQL, not via a JS Date, which would drop the microseconds.
+          sql`(${creditLedger.grantKey} = ${`purchase:${paymentIntentId}`} or (${creditLedger.grantKey} is null and ${creditLedger.createdAt} = (select ${entitlementPurchases.createdAt} from ${entitlementPurchases} where ${entitlementPurchases.stripePaymentIntentId} = ${paymentIntentId})))`,
+        ),
+      )
+      .limit(1);
+    if (!grant) {
+      console.warn("[billing-webhook] refunded purchase has no credit grant to revoke", paymentIntentId);
+      return;
+    }
+    await tx
+      .insert(creditLedger)
+      .values({
+        subjectType: "user",
+        subjectId: purchase.userId,
+        delta: -credits,
+        reason: "purchase_refund",
+        grantKey: `${REVOKE_PREFIX}${grant.id}`,
+      })
+      .onConflictDoNothing({
+        target: creditLedger.grantKey,
+        where: sql`${creditLedger.grantKey} is not null`,
+      });
   });
 }

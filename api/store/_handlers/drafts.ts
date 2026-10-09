@@ -214,7 +214,8 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
     if (isCreate) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
       // letters are gated; edits to existing drafts always go through.
-      const gate = await assertCanCreateLetter(tenantId, auth.userRow.id);
+      // The letter type decides which one-off letter tier can authorise it.
+      const gate = await assertCanCreateLetter(tenantId, auth.userRow.id, body.letterType ?? null);
       if (!gate.ok) return jsonError(gate.reason, gate.code);
       consume = gate.consume;
     }
@@ -273,6 +274,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
                     and(
                       eq(entitlementPurchases.id, consume.entitlementId),
                       isNull(entitlementPurchases.consumedAt),
+                      isNull(entitlementPurchases.refundedAt),
                     ),
                   )
                   .returning({ id: entitlementPurchases.id })
@@ -283,6 +285,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
                     and(
                       eq(entitlementPurchases.id, consume.entitlementId),
                       sql`${entitlementPurchases.lettersUsed} < ${entitlementPurchases.lettersTotal}`,
+                      isNull(entitlementPurchases.refundedAt),
                     ),
                   )
                   .returning({ id: entitlementPurchases.id });

@@ -657,6 +657,9 @@ export const entitlementPurchases = pgTable(
     // increments once per letter created against it. Remaining = total − used.
     lettersTotal: integer("letters_total"),
     lettersUsed: integer("letters_used").notNull().default(0),
+    // Set when the purchase's charge is fully refunded (charge.refunded). A
+    // refunded purchase authorises nothing and its included credits are revoked.
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("entitlement_purchases_user_idx").on(t.userId)],
@@ -673,8 +676,10 @@ export const creditLedger = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }), // drip expires at cycle end; packs null
     // Idempotency anchor for grants that must land exactly once regardless of how
     // many webhook deliveries carry them — e.g. per-period plan drip keyed
-    // `drip:<subId>:<periodStartUnix>`. NULL for one-off grants/spends (already
-    // deduped upstream). Enforced by a partial-unique index (non-null only).
+    // `drip:<subId>:<windowStartUnix>` (one window per month, also for annual
+    // plans), `purchase:<paymentIntentId>` for a one-off's included credits, and
+    // `revoke:<grantRowId>` for a refund clawback that targets that one grant.
+    // NULL for spends and spend refunds. Enforced by a partial-unique index.
     grantKey: text("grant_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -37,6 +37,7 @@ import { todayDateOnly } from "@/lib/date-only";
 import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 import { AuditLogsCard } from "@/components/AuditLogsCard";
 import { SecurityCard } from "@/components/SecurityCard";
+import { BillingCard } from "@/components/billing/BillingCard";
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -406,6 +407,9 @@ export function Settings() {
          * /sign-in/forgot-password page is signed-out only, so without this
          * surface signed-in users have no path to rotate their password. */}
         <SecurityCard />
+
+        {/* Billing — current plan and the Stripe Billing Portal. */}
+        <BillingCard />
 
         {/* Workspace — real members + invites when signed in to a tenant. */}
         <WorkspaceMembersCard />
