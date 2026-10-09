@@ -147,10 +147,21 @@ export function setPersistenceSuspended(value: boolean): void {
   if (value) cancelPendingWrites();
 }
 
+/** True while writes are suspended (see setPersistenceSuspended). Other
+ *  tenant-scoped writers (sync bookkeeping) check it too. */
+export function isPersistenceSuspended(): boolean {
+  return suspended;
+}
+
 /** True when this tab holds state the browser storage doesn't: a write is
  *  waiting on the throttle, or the last write failed on quota. */
 export function hasUnpersistedWrites(): boolean {
   return pendingWrites.size > 0 || health.full;
+}
+
+/** True while a throttled write is waiting (it will flush on its timer). */
+export function hasQueuedWrites(): boolean {
+  return pendingWrites.size > 0;
 }
 
 if (typeof window !== "undefined") {

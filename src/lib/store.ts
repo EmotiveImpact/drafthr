@@ -4,7 +4,9 @@ import { toast } from "sonner";
 import {
   createQuotaSafeStorage,
   estimateLocalStorageBytes,
+  hasQueuedWrites,
   hasUnpersistedWrites,
+  setPersistenceSuspended,
 } from "./storage/quota-safe-storage";
 import { TENANT_SCOPED_PERSIST_KEYS, WORKSPACE_SWAP_KEY } from "./session/clearLocalData";
 import type {
@@ -1798,6 +1800,9 @@ if (typeof window !== "undefined") {
     // Reload rather than rehydrate, so this tab can't persist the previous
     // workspace's in-memory state over it.
     if (e.key === WORKSPACE_SWAP_KEY) {
+      // Stop writing first: a throttled write (or the pagehide flush) from
+      // this tab would otherwise land on the swapped-in workspace's data.
+      setPersistenceSuspended(true);
       window.location.assign("/");
       return;
     }
@@ -1811,13 +1816,22 @@ if (typeof window !== "undefined") {
       e.newValue === null &&
       (TENANT_SCOPED_PERSIST_KEYS as readonly string[]).includes(e.key)
     ) {
+      setPersistenceSuspended(true);
       window.location.assign("/");
       return;
     }
     // Same-key cross-tab edit (not a wipe): rehydrate so the tabs converge.
     if (e.key === PERSIST_KEY && e.newValue !== null) {
       // rehydrate() re-reads localStorage and replaces in-memory state.
-      void useDraftStore.persist?.rehydrate?.();
+      void Promise.resolve(useDraftStore.persist?.rehydrate?.()).then(() => {
+        // A throttled write queued before the rehydrate holds this tab's
+        // state from BEFORE the other tab's change; flushed as is, it would
+        // overwrite that change on disk (and the other tab would then
+        // rehydrate its own edit away). Queue the merged state in its place
+        // (only replacing the queued value: this never writes straight away,
+        // so a workspace swap arriving next can still cancel it).
+        if (hasQueuedWrites()) useDraftStore.setState({});
+      });
     }
   });
 }
@@ -1906,6 +1920,14 @@ _setDualWriteStoreBridge({
       const d = s.drafts[localId];
       if (!d) return s;
       return { drafts: { ...s.drafts, [localId]: { ...d, reviewStatus: status } } };
+    }),
+  withdrawApproval: (localId, since) =>
+    useDraftStore.setState((s) => {
+      const d = s.drafts[localId];
+      if (!d?.approvals?.length) return s;
+      const approvals = d.approvals.filter((a) => !(a.decision === "approved" && a.createdAt >= since));
+      if (approvals.length === d.approvals.length) return s;
+      return { drafts: { ...s.drafts, [localId]: { ...d, approvals } } };
     }),
   addConflictCopy: (draft) => {
     const copy = conflictCopyOf(draft);

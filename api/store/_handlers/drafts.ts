@@ -7,7 +7,9 @@
  * - DELETE: soft-delete. The row stays as a scrubbed tombstone (deleted_at)
  *   so the pull can tell other devices to drop the draft, and an upsert of
  *   a tombstoned id is refused with 410 instead of re-creating the letter
- *   (and spending another letter credit).
+ *   (and spending another letter credit). Its collaboration data (comments,
+ *   approvals, timeline) is kept for the restore window only, see
+ *   purgeExpiredTombstoneExtras.
  *
  * Writes are revision-checked: every accepted write bumps drafts.revision and
  * an update must name the revision it was built on. A stale write gets 409
@@ -20,7 +22,7 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, inArray, desc, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, desc, isNull, isNotNull, lt, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -31,7 +33,7 @@ import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { assertCanCreateLetter, type ConsumeTarget } from "../../_utils/entitlements.js";
 import { isValidSectionInput } from "./_section-input.js";
-import { decideDraftWrite } from "./_draft-sync.js";
+import { decideDraftWrite, RESTORE_WINDOW_MS } from "./_draft-sync.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -159,6 +161,8 @@ export async function GET(req: Request): Promise<Response> {
       .orderBy(desc(drafts.deletedAt))
       .limit(MAX_DRAFTS);
 
+    await purgeExpiredTombstoneExtras(db, tenantId);
+
     const ids = draftRows.map((d) => d.id);
     const sectionRows = ids.length
       ? await db
@@ -240,6 +244,8 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
         reviewStatus: drafts.reviewStatus,
         revision: drafts.revision,
         deletedAt: drafts.deletedAt,
+        updatedAt: drafts.updatedAt,
+        isTemplateSource: drafts.isTemplateSource,
       })
       .from(drafts)
       .where(eq(drafts.id, body.id))
@@ -253,10 +259,17 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
             tenantId: existingDraft.tenantId,
             revision: existingDraft.revision ?? 0,
             deletedAt: existingDraft.deletedAt ?? null,
+            updatedAt: existingDraft.updatedAt ?? null,
+            reviewStatus: existingDraft.reviewStatus,
           }
         : null,
       tenantId,
-      { baseRevision: body.baseRevision, restore: body.restore },
+      {
+        baseRevision: body.baseRevision,
+        restore: body.restore,
+        clientRevision: body.clientRevision,
+        reviewStatus: body.reviewStatus,
+      },
       Date.now(),
     );
     if (decision.kind === "forbidden") {
@@ -264,9 +277,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       return jsonError("Draft belongs to a different workspace", 403);
     }
     if (decision.kind === "gone") return goneResponse(decision.deletedAt);
-    if (decision.kind === "stale") {
-      return conflictResponse(await loadCurrentDraft(db, tenantId, body.id), "stale revision");
-    }
+    if (decision.kind === "stale") return staleResponse(db, tenantId, body.id);
     const isCreate = decision.kind === "create";
     const restoring = decision.kind === "update" && decision.restore;
     // The letter tier is checked only when a letter is created, so its type is
@@ -296,9 +307,11 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       }
     }
     let consume: ConsumeTarget | undefined;
-    if (isCreate) {
+    if (isCreate && !body.isTemplateSource) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
       // letters are gated; edits to existing drafts always go through.
+      // Template sources aren't letters (the allowance doesn't count them),
+      // so saving one never spends a letter purchase or pack slot.
       // The letter type decides which one-off letter tier can authorise it.
       const gate = await assertCanCreateLetter(tenantId, auth.userRow.id, body.letterType ?? null);
       if (!gate.ok) return jsonError(gate.reason, gate.code);
@@ -383,7 +396,9 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
             title: body.title ?? null,
             jurisdiction: body.jurisdiction ?? null,
             reviewStatus: body.reviewStatus ?? "draft",
-            isTemplateSource: Boolean(body.isTemplateSource),
+            // Fixed at create: flipping it would let an ungated template
+            // save become a letter, or take a letter out of the allowance.
+            isTemplateSource: Boolean(existingDraft.isTemplateSource),
             templateSourceId,
             contextJson: body.context,
             employerJson: body.employer ?? null,
@@ -424,9 +439,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       }
       return { stale: false as const };
     });
-    if (writeResult.stale) {
-      return conflictResponse(await loadCurrentDraft(db, tenantId, body.id), "stale revision");
-    }
+    if (writeResult.stale) return staleResponse(db, tenantId, body.id);
 
     await safelyAppendAudit({
       tenantId,
@@ -504,7 +517,8 @@ export async function DELETE(req: Request): Promise<Response> {
 
     // Soft delete: keep the row as a tombstone but scrub the letter content,
     // so the PII the user deleted is gone while other devices can still learn
-    // the draft was deleted.
+    // the draft was deleted. The extras row stays until the restore window
+    // has passed (purgeExpiredTombstoneExtras) so an Undo keeps its authors.
     await db.transaction(async (tx) => {
       await tx
         .update(drafts)
@@ -520,8 +534,8 @@ export async function DELETE(req: Request): Promise<Response> {
         })
         .where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
       await tx.delete(sections).where(and(eq(sections.draftId, id), eq(sections.tenantId, tenantId)));
-      await tx.delete(draftExtras).where(and(eq(draftExtras.draftId, id), eq(draftExtras.tenantId, tenantId)));
     });
+    await purgeExpiredTombstoneExtras(db, tenantId);
 
     await safelyAppendAudit({
       tenantId,
@@ -539,6 +553,35 @@ export async function DELETE(req: Request): Promise<Response> {
   } catch (err) {
     console.error("[store/drafts DELETE] failed", err);
     return jsonError("Draft delete failed", 500);
+  }
+}
+
+/**
+ * Delete the collaboration data (comments, approvals, timeline) of this
+ * tenant's drafts deleted longer ago than the restore window. Until then it
+ * is kept so the Undo restores it as it was: re-sent from the client instead,
+ * every teammate's comment would be stamped as the restoring user's, and a
+ * drafter's copy of reviewers' approvals would be refused. There is no
+ * scheduled job, so this runs from the tenant's own pulls and deletes.
+ * Best effort: a failure here must not fail the request.
+ */
+async function purgeExpiredTombstoneExtras(db: Db, tenantId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - RESTORE_WINDOW_MS);
+  try {
+    await db.delete(draftExtras).where(
+      and(
+        eq(draftExtras.tenantId, tenantId),
+        inArray(
+          draftExtras.draftId,
+          db
+            .select({ id: drafts.id })
+            .from(drafts)
+            .where(and(eq(drafts.tenantId, tenantId), lt(drafts.deletedAt, cutoff))),
+        ),
+      ),
+    );
+  } catch (err) {
+    console.warn("[store/drafts] purging deleted drafts' extras failed", err);
   }
 }
 
@@ -632,6 +675,14 @@ function conflictResponse(
       },
     },
   );
+}
+
+/** 409 with the current row, or 410 when a concurrent delete removed it (the
+ *  client drops or keeps its copy on 410; a 409 with no row has nothing to
+ *  merge against). */
+async function staleResponse(db: Db, tenantId: string, id: string): Promise<Response> {
+  const current = await loadCurrentDraft(db, tenantId, id);
+  return current ? conflictResponse(current, "stale revision") : goneResponse(new Date());
 }
 
 /** 410 for an upsert of a draft that was deleted (on this or another device). */

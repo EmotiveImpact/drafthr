@@ -78,6 +78,12 @@ async function setup(initial: Draft[]) {
     setReviewStatus: (id, status) => {
       drafts[id] = { ...drafts[id], reviewStatus: status };
     },
+    withdrawApproval: (id, since) => {
+      drafts[id] = {
+        ...drafts[id],
+        approvals: (drafts[id].approvals ?? []).filter((a) => !(a.decision === "approved" && a.createdAt >= since)),
+      };
+    },
     addConflictCopy: (d) => {
       const id = `${d.id}_copy`;
       drafts[id] = { ...d, id, localOnly: true, reviewStatus: "draft", title: "(conflicted copy)" };
@@ -138,6 +144,49 @@ describe("revisions", () => {
     expect(getSyncMeta("d1")?.rev).toBe(7);
   });
 
+  it("keeps its own status change on a 409 when the content matches and the server status didn't move", async () => {
+    const base = makeDraft("d1", "<p>Same</p>");
+    const fetchMock = vi.fn().mockResolvedValueOnce(ok(1));
+    vi.stubGlobal("fetch", fetchMock);
+    const { mod, drafts } = await setup([base]);
+    await mod.syncDraft("d1");
+
+    // Submitted for review here; meanwhile the same text was re-saved
+    // elsewhere, so the revision moved on (now 2) with the status untouched.
+    drafts.d1 = { ...drafts.d1, reviewStatus: "in_review" };
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ current: remoteOf(base, 2) }), { status: 409 }))
+      .mockResolvedValueOnce(ok(3));
+    await mod.syncDraft("d1");
+    expect(drafts.d1.reviewStatus).toBe("in_review");
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const resent = postBodies(fetchMock)[2];
+    expect(resent.baseRevision).toBe(2);
+    expect(resent.reviewStatus).toBe("in_review");
+  });
+
+  it("recognises its own letter when the server returns jsonb objects with their keys reordered", async () => {
+    const local = makeDraft("d1", "<p>Same</p>", {
+      context: { jurisdiction: "UK", tone: "formal", protectedDeadline: { iso: "2026-01-01", basis: "b" } },
+      employee: { legalName: "Jane", jobTitle: "Engineer" },
+    } as unknown as Partial<Draft>);
+    // Postgres jsonb hands objects back in its own key order.
+    const current = remoteOf(local, 3, {
+      context: { tone: "formal", jurisdiction: "UK", protectedDeadline: { basis: "b", iso: "2026-01-01" } },
+      employee: { jobTitle: "Engineer", legalName: "Jane" },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ current }), { status: 409 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { mod, drafts, toast } = await setup([local]);
+
+    await mod.syncDraft("d1");
+    expect(Object.keys(drafts)).toEqual(["d1"]);
+    expect(toast.warning).not.toHaveBeenCalled();
+    const { getSyncMeta } = await import("./sync-meta");
+    expect(getSyncMeta("d1")?.rev).toBe(3);
+  });
+
   it("re-applies its edits on top when only the review status moved elsewhere, never reverting it", async () => {
     const base = makeDraft("d1", "<p>Base</p>");
     const fetchMock = vi.fn().mockResolvedValueOnce(ok(1));
@@ -161,6 +210,33 @@ describe("revisions", () => {
     expect(resent.baseRevision).toBe(2);
     expect(resent.reviewStatus).toBe("changes_requested");
     expect(resent.sections[0].html).toBe("<p>My edit</p>");
+  });
+
+  it("never carries an approval over to text that changed on another device first", async () => {
+    const base = makeDraft("d1", "<p>Base</p>", { reviewStatus: "in_review" });
+    const fetchMock = vi.fn().mockResolvedValueOnce(ok(1));
+    vi.stubGlobal("fetch", fetchMock);
+    const { mod, drafts, toast } = await setup([base]);
+    await mod.syncDraft("d1");
+
+    // The reviewer approves what this device shows, while the drafter's edit
+    // has already landed on the server (revision 2, still in review).
+    vi.advanceTimersByTime(1_000);
+    drafts.d1 = {
+      ...drafts.d1,
+      reviewStatus: "approved",
+      approvals: [{ id: "apr1", reviewerName: "Rev", decision: "approved", createdAt: Date.now() }],
+    };
+    const theirs = makeDraft("x", "<p>Drafter edit</p>", { reviewStatus: "in_review" });
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ current: remoteOf(theirs, 2) }), { status: 409 }));
+    await mod.syncDraft("d1");
+
+    expect(drafts.d1.sections[0].html).toBe("<p>Drafter edit</p>");
+    expect(drafts.d1.reviewStatus).toBe("in_review");
+    expect(drafts.d1.approvals).toEqual([]);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(postBodies(fetchMock).some((b, i) => i > 1 && b.reviewStatus === "approved")).toBe(false);
   });
 
   it("keeps both versions when both devices changed the letter", async () => {

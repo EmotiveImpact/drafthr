@@ -52,6 +52,16 @@ describe("clearTenantScopedLocalData (shared-browser PII leak — SA-01/SE-02)",
     expect(window.localStorage.getItem("drafthr-export-footer")).toBe("1");
   });
 
+  it("stops later writes from putting the wiped data back before the reload", async () => {
+    const { createQuotaSafeStorage } = await import("../storage/quota-safe-storage");
+    const storage = createQuotaSafeStorage(window.localStorage, () => {});
+    clearTenantScopedLocalData();
+    // e.g. a sync response landing between the wipe and the navigation.
+    storage.setItem("scribehr-store-v1", JSON.stringify({ state: { drafts: { d1: {} } } }));
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBeNull();
+    setPersistenceSuspended(false);
+  });
+
   it("is idempotent and safe when nothing is stored", () => {
     expect(() => clearTenantScopedLocalData()).not.toThrow();
     expect(() => clearTenantScopedLocalData()).not.toThrow();

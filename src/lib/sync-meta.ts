@@ -16,6 +16,7 @@
 import type { Draft } from "./letters/types";
 import type { DraftExtras, RemoteDraft } from "./remote-pull";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
+import { isPersistenceSuspended } from "./storage/quota-safe-storage";
 
 export const SYNC_META_STORAGE_KEY = "drafthr.sync-meta.v1";
 
@@ -47,6 +48,9 @@ function load(): Record<string, SyncMeta> {
 }
 
 function save(): void {
+  // While this tab's live keys belong to another workspace (mid-switch, or
+  // another tab swapped them), its bookkeeping must not be written over them.
+  if (isPersistenceSuspended()) return;
   try {
     localStorage.setItem(SYNC_META_STORAGE_KEY, JSON.stringify(cache ?? {}));
   } catch {
@@ -107,9 +111,23 @@ type ContentShape = {
   sections: { sectionId: string; title: string; html: string; status: string }[];
 };
 
+/**
+ * JSON with every object's keys sorted. The server keeps context, parties and
+ * answers in jsonb columns, which return keys in their own order, so plain
+ * JSON.stringify gave the same letter a different key on each side and every
+ * 409 looked like a real conflict.
+ */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
+
 function contentKeyOf(c: ContentShape): string {
   return hashString(
-    JSON.stringify([
+    canonicalJson([
       c.letterType,
       c.mode,
       c.title ?? null,

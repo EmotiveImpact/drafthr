@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import type { Draft, Matter, ReviewStatus } from "./letters/types";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
 import { extractExtras, type DraftExtras, type RemoteDraft } from "./remote-pull";
+import { isPersistenceSuspended } from "./storage/quota-safe-storage";
 import {
   clearSyncMeta,
   draftContentKey,
@@ -88,12 +89,28 @@ export function isDualWriteEnabled(): boolean {
   return ENABLED;
 }
 
+let paused = false;
+
+/** Stop pushing for the rest of this page load: the local data in memory
+ *  belongs to another workspace (or user) than the signed-in one. */
+export function pauseDualWrite(): void {
+  paused = true;
+}
+
+/** No pushes while this tab's in-memory data isn't the active workspace's:
+ *  paused above, or persistence suspended mid-switch / after a wipe. */
+function pushesBlocked(): boolean {
+  return paused || isPersistenceSuspended();
+}
+
 /** Store operations dual-write needs to resolve conflicts and remote deletes.
  *  Injected by the store so this module never imports it (circular import). */
 export type DualWriteStoreBridge = {
   /** Overlay a server version onto the local draft; returns the result. */
   applyServerDraft: (localId: string, remote: RemoteDraft) => Draft | null;
   setReviewStatus: (localId: string, status: ReviewStatus) => void;
+  /** Drop "approved" entries recorded at or after `since` (never synced). */
+  withdrawApproval: (localId: string, since: number) => void;
   /** Add a local-only copy of this draft (a new id); returns the new id. */
   addConflictCopy: (draft: Draft) => string | null;
   /** Keep the draft on this device only (deleted elsewhere, unsynced edits). */
@@ -155,7 +172,7 @@ export function setDualWriteMatterGetter(getter: (matterId: string) => Matter | 
  * Soft-fails: a missing matter or network error just yields null.
  */
 export async function pushMatter(matterId: string): Promise<string | null> {
-  if (!ENABLED) return null;
+  if (!ENABLED || pushesBlocked()) return null;
   // Don't resurrect a matter deleted locally while this push was queued (B7).
   if (deletedMatterIds.has(matterId)) return null;
   const matter = matterSnapshotGetter?.(matterId);
@@ -238,7 +255,7 @@ const matterTimers = new Map<string, ReturnType<typeof setTimeout>>();
  * re-ran pushMatter (bug #16). Collapses rapid edits into one POST.
  */
 export function enqueueMatterSync(matterId: string): void {
-  if (!ENABLED || !matterId) return;
+  if (!ENABLED || !matterId || pushesBlocked()) return;
   const existing = matterTimers.get(matterId);
   if (existing) clearTimeout(existing);
   const t = setTimeout(() => {
@@ -253,7 +270,7 @@ export function enqueueMatterSync(matterId: string): void {
 /** Schedule a debounced sync for one draft. Multiple calls in a short window
  * collapse into a single POST. */
 export function enqueueSync(draftId: string): void {
-  if (!ENABLED) return;
+  if (!ENABLED || pushesBlocked()) return;
   if (!draftId) return;
   const draft = snapshotGetter?.(draftId);
   if (draft?.localOnly) return;
@@ -287,6 +304,7 @@ export async function syncDraft(draftId: string, fallback?: Draft): Promise<void
 }
 
 async function syncDraftNow(draftId: string, fallback?: Draft): Promise<void> {
+  if (pushesBlocked()) return;
   // Don't sync a draft that's been deleted locally — a stale debounced POST
   // would resurrect it server-side (bug #6).
   if (deletedDraftIds.has(draftId)) return;
@@ -390,11 +408,14 @@ type ConflictBody = { current?: RemoteDraft | null; locked?: boolean; error?: st
  * A 409: the server moved on since this device's base revision (or the letter
  * is approved and locked). Never drop either side:
  *   1. same letter content on both sides → adopt the server copy (its review
- *      status wins, so an approval is never reverted);
+ *      status wins if it moved, so an approval is never reverted), then
+ *      re-apply our own status change if the server didn't touch the status;
  *   2. only the review status / references moved on the server, our content
  *      is new → take their status and re-send our content on their revision;
  *   3. our content is unchanged since our base → adopt the server copy, then
- *      re-apply our own status change if the server didn't touch the status;
+ *      re-apply our own status change if the server didn't touch the status
+ *      (except an approval: that was a decision about the text this device
+ *      showed, which has since changed);
  *   4. both changed → the server copy takes the original id and our version
  *      is kept as a local-only "conflicted copy".
  */
@@ -416,6 +437,13 @@ function resolveConflict(draftId: string, sent: Draft, body: ConflictBody): void
 
   if (serverContent === localContent) {
     markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
+    const baseStatus = meta?.key ? meta.key.split("|")[1] : undefined;
+    if (baseStatus && localStatus !== serverStatus && serverStatus === baseStatus && !body.locked) {
+      // Only this device changed the status, on the same text (so even an
+      // approval still stands): send it again on the server's revision.
+      bridge?.setReviewStatus(draftId, localStatus);
+      enqueueSync(draftId);
+    }
     clearFailures(draftId);
     return;
   }
@@ -429,7 +457,16 @@ function resolveConflict(draftId: string, sent: Draft, body: ConflictBody): void
     const baseStatus = meta.key.split("|")[1] ?? "draft";
     markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
     if (localStatus !== baseStatus && serverStatus === baseStatus && !body.locked) {
-      bridge?.setReviewStatus(draftId, localStatus);
+      if (localStatus === "approved") {
+        // The letter changed on another device before this approval landed.
+        // Carrying it over would approve text the reviewer never saw.
+        bridge?.withdrawApproval(draftId, meta.at);
+        toast.warning("This letter changed before your approval was saved", {
+          description: "The latest version is shown. Review it and approve again if it's still right.",
+        });
+      } else {
+        bridge?.setReviewStatus(draftId, localStatus);
+      }
     }
     clearFailures(draftId);
     return;
@@ -483,7 +520,7 @@ function handleRemoteDelete(draftId: string): void {
 export async function syncAllPending(
   getAll: () => Draft[],
 ): Promise<{ ok: number; failed: number }> {
-  if (!ENABLED) return { ok: 0, failed: 0 };
+  if (!ENABLED || pushesBlocked()) return { ok: 0, failed: 0 };
   let ok = 0;
   let failed = 0;
   for (const d of getAll()) {
@@ -525,6 +562,7 @@ export function resetDualWriteTimers(): void {
   failureToastShownFor.clear();
   paymentToastShownFor.clear();
   forbiddenToastShown = false;
+  paused = false;
   try {
     localStorage.removeItem(TOMBSTONE_STORAGE_KEY);
   } catch {

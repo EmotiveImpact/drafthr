@@ -116,15 +116,26 @@ function sectionsDiffer(a: SectionLike[], b: SectionLike[]): boolean {
 }
 
 type CommentAuthorAuth = MemberLike & {
-  userRow: { id: string; email?: string | null; legalName?: string | null };
+  userRow: { id: string; externalId: string; email?: string | null; legalName?: string | null };
 };
+
+/**
+ * The author id stamped on a comment. It must be the id the browser knows
+ * the user by (the session user id, users.external_id): the client compares
+ * it with that to tell its own comments from a teammate's. The internal
+ * users.id made every synced comment look like someone else's, so authors
+ * lost the delete control for their own comments on any other device.
+ */
+function commentAuthorId(auth: CommentAuthorAuth): string {
+  return auth.userRow.externalId;
+}
 
 const COMMENT_MODERATOR_ROLES = new Set(["owner", "admin"]);
 
 /** Only the comment's author, or a workspace owner/admin, may delete it. */
 export function canDeleteComment(auth: CommentAuthorAuth, stored: SyncedComment): boolean {
   if (COMMENT_MODERATOR_ROLES.has(auth.activeMember?.role ?? "")) return true;
-  if (stored.authorUserId) return stored.authorUserId === auth.userRow.id;
+  if (stored.authorUserId) return stored.authorUserId === commentAuthorId(auth);
   // Comments synced before author ids were stamped: fall back to the email.
   const email = (auth.userRow.email ?? "").toLowerCase();
   return Boolean(email) && (stored.authorEmail ?? "").toLowerCase() === email;
@@ -168,7 +179,7 @@ export function commentsForWrite(
       }
       byId.set(c.id, {
         ...c,
-        authorUserId: auth.userRow.id,
+        authorUserId: commentAuthorId(auth),
         authorName: displayNameFor(auth) ?? c.authorName,
         authorEmail: auth.userRow.email ?? c.authorEmail,
         updatedAt: commentVersion(c) || nowMs,

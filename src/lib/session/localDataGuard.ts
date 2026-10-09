@@ -11,7 +11,7 @@
 import { useDraftStore } from "@/lib/store";
 import { isDualWriteEnabled } from "@/lib/dual-write";
 import { hasUnsyncedChanges } from "@/lib/sync-meta";
-import { flushPendingWrites } from "@/lib/storage/quota-safe-storage";
+import { flushPendingWrites, hasUnpersistedWrites } from "@/lib/storage/quota-safe-storage";
 import {
   LOCAL_OWNER_KEY,
   TENANT_SCOPED_PERSIST_KEYS,
@@ -100,9 +100,17 @@ export function buildLocalBackup(now = new Date()): string {
   } catch {
     /* storage unavailable: fall back to the in-memory store below */
   }
-  if (!keys["scribehr-store-v1"]) {
+  // When this tab's writes are failing (storage full) the copy on disk is
+  // behind what the user sees, and the newest work is exactly what they need
+  // backed up: take the store from memory instead.
+  const onDisk = keys["scribehr-store-v1"];
+  if (!onDisk || hasUnpersistedWrites()) {
     const { drafts, matters, employees, tasks, events, customTemplates } = useDraftStore.getState();
-    keys["scribehr-store-v1"] = { state: { drafts, matters, employees, tasks, events, customTemplates } };
+    const envelope = onDisk && typeof onDisk === "object" ? (onDisk as { state?: Record<string, unknown> }) : {};
+    keys["scribehr-store-v1"] = {
+      ...envelope,
+      state: { ...(envelope.state ?? {}), drafts, matters, employees, tasks, events, customTemplates },
+    };
   }
   return JSON.stringify({ app: "DraftHR", kind: "local-backup", version: 1, exportedAt: now.toISOString(), keys }, null, 2);
 }
