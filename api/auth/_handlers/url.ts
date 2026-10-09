@@ -36,7 +36,10 @@ export async function GET(req: Request): Promise<Response> {
   if (limited) return limited;
 
   const redirectUri = process.env.WORKOS_REDIRECT_URI;
-  if (!redirectUri) return jsonError("WORKOS_REDIRECT_URI not configured", 500);
+  if (!redirectUri) {
+    console.error("[auth/url] WORKOS_REDIRECT_URI not configured");
+    return jsonError("Sign-in is unavailable right now. Please try again.", 500);
+  }
 
   const requestedProvider = new URL(req.url).searchParams.get("provider")?.trim() ?? "authkit";
   if (!ALLOWED_PROVIDERS.has(requestedProvider)) {
@@ -68,7 +71,9 @@ export async function GET(req: Request): Promise<Response> {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to build authorization URL";
-    return jsonError(message, 500);
+    // Usually a configuration problem (missing WorkOS env); log the detail,
+    // don't hand it to the browser.
+    console.error("[auth/url] failed to build authorization URL", err);
+    return jsonError("Sign-in is unavailable right now. Please try again.", 500);
   }
 }

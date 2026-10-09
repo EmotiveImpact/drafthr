@@ -48,32 +48,7 @@ export async function requireSessionAndTenant(
     // tenant_members joins can target them when invites resolve.
     let [userRow] = await db.select().from(users).where(eq(users.externalId, externalId)).limit(1);
     if (!userRow) {
-      // Bootstrap tenant — every user gets a personal tenant on mint, so audit
-      // chains for first-run actions have a home. They can switch to a shared
-      // workspace later (or stay on this one if they're a solo HR user).
-      const [bootTenant] = await db
-        .insert(tenants)
-        .values({
-          name: deriveBootstrapTenantName(session.user.email, session.user.firstName),
-        })
-        .returning();
-      [userRow] = await db
-        .insert(users)
-        .values({
-          tenantId: bootTenant.id,
-          externalId,
-          email: session.user.email,
-          legalName: deriveLegalName(session.user.firstName, session.user.lastName),
-          workspaceRole: "owner",
-          userType: "customer",
-        })
-        .returning();
-      await db.insert(tenantMembers).values({
-        userId: userRow.id,
-        tenantId: bootTenant.id,
-        role: "owner",
-        isActiveTenant: true,
-      });
+      userRow = await bootstrapUser(db, session);
     } else if (
       session.user.email &&
       session.user.email.toLowerCase() !== (userRow.email ?? "").toLowerCase()
@@ -136,6 +111,63 @@ export async function requireSessionAndTenant(
     console.error("[requireSessionAndTenant] db error", err);
     return { ok: false, response: jsonError("Workspace lookup failed", 500) };
   }
+}
+
+type Db = ReturnType<typeof getDb>;
+
+/**
+ * First sign-in: mint the user row plus a personal ("bootstrap") workspace, so
+ * audit chains for first-run actions have a home. They can switch to a shared
+ * workspace later (or stay on this one if they're a solo HR user).
+ *
+ * Idempotent under concurrent first requests (the SPA fires several at once).
+ * The user row is inserted first with ON CONFLICT (external_id) DO NOTHING,
+ * inside one transaction with the tenant and membership inserts. Only the
+ * request whose insert wins goes on to create the workspace; a racing request
+ * blocks on the unique index until the winner commits, inserts nothing, and
+ * reads the winner's row. Previously each racer created its own tenant before
+ * the user insert failed on the unique constraint, leaving orphan workspaces
+ * (and a 500 for the loser).
+ */
+export async function bootstrapUser(db: Db, session: SessionPayload): Promise<User> {
+  const externalId = session.user.id;
+  return db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(users)
+      .values({
+        externalId,
+        email: session.user.email,
+        legalName: deriveLegalName(session.user.firstName, session.user.lastName),
+        workspaceRole: "owner",
+        userType: "customer",
+      })
+      .onConflictDoNothing({ target: users.externalId })
+      .returning();
+    if (!inserted) {
+      const [existing] = await tx
+        .select()
+        .from(users)
+        .where(eq(users.externalId, externalId))
+        .limit(1);
+      if (!existing) throw new Error("user row vanished during bootstrap");
+      return existing;
+    }
+
+    const [bootTenant] = await tx
+      .insert(tenants)
+      .values({ name: deriveBootstrapTenantName(session.user.email, session.user.firstName) })
+      .returning();
+    await tx
+      .insert(tenantMembers)
+      .values({ userId: inserted.id, tenantId: bootTenant.id, role: "owner", isActiveTenant: true })
+      .onConflictDoNothing({ target: [tenantMembers.userId, tenantMembers.tenantId] });
+    const [withHome] = await tx
+      .update(users)
+      .set({ tenantId: bootTenant.id })
+      .where(eq(users.id, inserted.id))
+      .returning();
+    return withHome;
+  });
 }
 
 function deriveBootstrapTenantName(email: string, firstName: string | null): string {
