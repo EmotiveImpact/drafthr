@@ -40,12 +40,29 @@ type DocxImage = {
   heightEmu: number;
 };
 
+type DocxLink = {
+  relId: string;
+  target: string;
+};
+
 type RenderContext = {
   images: DocxImage[];
+  links: DocxLink[];
   nextRelId: number;
   nextDocPrId: number;
   listDepth: number;
 };
+
+/**
+ * Paragraph properties a container passes down to the paragraphs it holds:
+ * a blockquote's indent, or a centred wrapper's alignment (CSS text-align is
+ * inherited, so a `<div style="text-align:center">` around the letterhead
+ * must centre its contents in Word too).
+ */
+type BlockContext = Pick<ParagraphOptions, "alignment" | "indentLeft">;
+
+/** Usable text width of the A4 page with 1in margins, in twips. */
+const PAGE_TEXT_WIDTH_TWIPS = 11906 - 2 * 1440;
 
 const BLOCK_TAGS = new Set([
   "address",
@@ -99,6 +116,7 @@ export async function renderLetterDocxBlob(draft: Draft): Promise<Blob> {
   const body = parseBodyHtml(bodyHtml);
   const ctx: RenderContext = {
     images: [],
+    links: [],
     nextRelId: 1,
     nextDocPrId: 1,
     listDepth: 0,
@@ -113,7 +131,7 @@ export async function renderLetterDocxBlob(draft: Draft): Promise<Blob> {
   zip.folder("word")!.file("styles.xml", buildStylesXml());
   zip.folder("word")!.folder("_rels")!.file(
     "document.xml.rels",
-    buildDocumentRelsXml(ctx.images)
+    buildDocumentRelsXml(ctx.images, ctx.links)
   );
 
   const media = zip.folder("word")!.folder("media")!;
@@ -187,7 +205,8 @@ function parseBodyHtml(html: string): HTMLElement {
 function renderNodesAsBlocks(
   nodes: Node[],
   ctx: RenderContext,
-  baseInlineStyle: InlineStyle = {}
+  baseInlineStyle: InlineStyle = {},
+  block: BlockContext = {}
 ): string {
   const blocks: string[] = [];
   const inlineBuffer: Node[] = [];
@@ -196,7 +215,7 @@ function renderNodesAsBlocks(
     if (inlineBuffer.length === 0) return;
     const runs = inlineBuffer.map((node) => renderInlineNode(node, ctx, baseInlineStyle)).join("");
     if (runs.trim()) {
-      blocks.push(paragraph(runs, { spacingAfter: 160 }));
+      blocks.push(paragraph(runs, { ...block, spacingAfter: 160 }));
     }
     inlineBuffer.length = 0;
   };
@@ -217,7 +236,7 @@ function renderNodesAsBlocks(
 
     if (isBlockElement(node)) {
       flushInline();
-      blocks.push(renderBlockElement(node, ctx, baseInlineStyle));
+      blocks.push(renderBlockElement(node, ctx, baseInlineStyle, block));
     } else {
       inlineBuffer.push(node);
     }
@@ -230,9 +249,15 @@ function renderNodesAsBlocks(
 function renderBlockElement(
   element: HTMLElement,
   ctx: RenderContext,
-  baseInlineStyle: InlineStyle
+  baseInlineStyle: InlineStyle,
+  inherited: BlockContext = {}
 ): string {
   const tag = element.tagName.toLowerCase();
+  // An element's own text-align wins; otherwise it inherits its container's.
+  const block: BlockContext = {
+    ...inherited,
+    alignment: alignmentFromElement(element) ?? inherited.alignment,
+  };
 
   if (tag === "br") {
     return paragraph("");
@@ -243,9 +268,7 @@ function renderBlockElement(
   }
 
   if (tag === "img") {
-    return paragraph(renderImageRun(element as HTMLImageElement, ctx), {
-      alignment: alignmentFromElement(element),
-    });
+    return paragraph(renderImageRun(element as HTMLImageElement, ctx), block);
   }
 
   if (tag === "h1" || tag === "h2" || tag === "h3") {
@@ -258,8 +281,8 @@ function renderBlockElement(
         fontSizeHalfPoints: size,
       }),
       {
+        ...block,
         styleId: level === 1 ? "Heading1" : level === 2 ? "Heading2" : "Heading3",
-        alignment: alignmentFromElement(element),
         spacingAfter: level === 1 ? 180 : 140,
       }
     );
@@ -274,36 +297,42 @@ function renderBlockElement(
   }
 
   if (tag === "blockquote") {
-    const runs = renderInlineChildren(element, ctx, {
-      ...baseInlineStyle,
-      italic: true,
-      color: "475569",
-    });
-    return paragraph(runs, {
-      indentLeft: 360,
+    const quoteStyle: InlineStyle = { ...baseInlineStyle, italic: true, color: "475569" };
+    const quoteBlock: BlockContext = { ...block, indentLeft: (inherited.indentLeft ?? 0) + 360 };
+    // A quote holding several paragraphs (the editor always wraps quote text
+    // in <p>) must stay several paragraphs. Flattening the children into one
+    // run list merged them into a single Word paragraph.
+    if (hasDirectBlockChildren(element)) {
+      return renderNodesAsBlocks(Array.from(element.childNodes), ctx, quoteStyle, quoteBlock);
+    }
+    return paragraph(renderInlineChildren(element, ctx, quoteStyle), {
+      ...quoteBlock,
       spacingAfter: 180,
     });
   }
 
   if (tag === "pre") {
     return paragraph(renderInlineChildren(element, ctx, { ...baseInlineStyle, monospace: true }), {
+      ...block,
       spacingAfter: 180,
     });
   }
 
   if (tag === "p") {
     return paragraph(renderInlineChildren(element, ctx, baseInlineStyle), {
-      alignment: alignmentFromElement(element),
+      ...block,
       spacingAfter: 160,
     });
   }
 
   if (hasDirectBlockChildren(element)) {
-    return renderNodesAsBlocks(Array.from(element.childNodes), ctx, baseInlineStyle);
+    return renderNodesAsBlocks(Array.from(element.childNodes), ctx, baseInlineStyle, block);
   }
 
+  // A wrapper with only inline content (e.g. the centred letterhead <div>
+  // around an <img>) keeps its alignment.
   const runs = renderInlineChildren(element, ctx, baseInlineStyle);
-  return runs.trim() ? paragraph(runs, { spacingAfter: 160 }) : "";
+  return runs.trim() ? paragraph(runs, { ...block, spacingAfter: 160 }) : "";
 }
 
 function renderInlineChildren(
@@ -339,10 +368,26 @@ function renderInlineNode(node: Node, ctx: RenderContext, style: InlineStyle): s
   if (tag === "hr") return `<w:r><w:br/></w:r>`;
 
   const nextStyle = styleFromElement(node, style);
-  if (isBlockElement(node) && tag !== "span") {
-    return renderInlineChildren(node, ctx, nextStyle);
+  if (tag === "a") {
+    const runs = renderInlineChildren(node, ctx, nextStyle);
+    const target = safeLinkTarget(node.getAttribute("href"));
+    if (!target || !runs) return runs;
+    // External hyperlink: the URL lives in a relationship, the visible runs
+    // keep their link styling. Without this Word showed blue underlined text
+    // that went nowhere.
+    const link: DocxLink = { relId: `rId${ctx.nextRelId++}`, target };
+    ctx.links.push(link);
+    return `<w:hyperlink r:id="${link.relId}" w:history="1">${runs}</w:hyperlink>`;
   }
   return renderInlineChildren(node, ctx, nextStyle);
+}
+
+/** Only absolute web, mail and phone links become Word hyperlinks. */
+function safeLinkTarget(href: string | null): string | null {
+  const value = href?.trim();
+  if (!value) return null;
+  if (/^(https?:|mailto:|tel:)/i.test(value)) return value;
+  return null;
 }
 
 function renderList(list: HTMLElement, ctx: RenderContext, ordered: boolean): string {
@@ -401,12 +446,98 @@ function renderListItemInlineContent(li: HTMLElement, ctx: RenderContext): strin
     .join("");
 }
 
+const TABLE_PROPS = `<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
+
+/** One slot of the table grid: the start of a cell, or a row covered by a rowspan from above. */
+type GridSlot =
+  | { kind: "cell"; cell: HTMLTableCellElement; colSpan: number; rowSpan: number }
+  | { kind: "continue"; colSpan: number };
+
+/**
+ * Lay an HTML table out on a rectangular grid, honouring colspan and rowspan
+ * the way browsers do. Word needs this explicitly: a colspan becomes
+ * <w:gridSpan>, and a rowspan becomes a <w:vMerge w:val="restart"/> cell plus
+ * a <w:vMerge/> placeholder cell in each row it covers. Emitting the HTML
+ * cells as-is shifted every cell after a span into the wrong column.
+ *
+ * Exported for unit testing.
+ */
+export function layoutTableGrid(rows: HTMLTableRowElement[]): {
+  columnCount: number;
+  grid: Array<Array<GridSlot | undefined>>;
+} {
+  const grid: Array<Array<GridSlot | undefined>> = rows.map(() => []);
+  const occupied: boolean[][] = rows.map(() => []);
+  let columnCount = 0;
+
+  rows.forEach((row, r) => {
+    let c = 0;
+    const cells = Array.from(row.children).filter(
+      (cell): cell is HTMLTableCellElement =>
+        cell instanceof HTMLTableCellElement && ["td", "th"].includes(cell.tagName.toLowerCase())
+    );
+    for (const cell of cells) {
+      while (occupied[r][c]) c += 1;
+      const colSpan = clampSpan(cell.getAttribute("colspan"), 1000);
+      const rawRowSpan = cell.getAttribute("rowspan");
+      // rowspan="0" means "to the end of the table section"; treat it as the rest of the table.
+      const rowSpan =
+        rawRowSpan?.trim() === "0" ? rows.length - r : Math.min(clampSpan(rawRowSpan, 65534), rows.length - r);
+      grid[r][c] = { kind: "cell", cell, colSpan, rowSpan };
+      for (let dr = 0; dr < rowSpan; dr += 1) {
+        for (let dc = 0; dc < colSpan; dc += 1) occupied[r + dr][c + dc] = true;
+        if (dr > 0) grid[r + dr][c] = { kind: "continue", colSpan };
+      }
+      c += colSpan;
+      columnCount = Math.max(columnCount, c);
+    }
+    columnCount = Math.max(columnCount, occupied[r].length);
+  });
+
+  return { columnCount, grid };
+}
+
+function clampSpan(value: string | null, max: number): number {
+  const n = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, max);
+}
+
 function renderTable(table: HTMLTableElement, ctx: RenderContext): string {
   const rows = collectTableRows(table);
   if (rows.length === 0) return "";
 
-  const renderedRows = rows.map((row) => renderTableRow(row, ctx)).join("");
-  return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>${renderedRows}</w:tbl>`;
+  const { columnCount, grid } = layoutTableGrid(rows);
+  if (columnCount === 0) return "";
+  const colWidth = Math.floor(PAGE_TEXT_WIDTH_TWIPS / columnCount);
+  const tblGrid = `<w:tblGrid>${`<w:gridCol w:w="${colWidth}"/>`.repeat(columnCount)}</w:tblGrid>`;
+
+  const renderedRows = grid
+    .map((slots) => {
+      const cells: string[] = [];
+      let c = 0;
+      while (c < columnCount) {
+        const slot = slots[c];
+        if (!slot) {
+          // Short row: pad with an empty cell so the grid stays rectangular.
+          cells.push(tableCellXml("", 1, colWidth));
+          c += 1;
+          continue;
+        }
+        const width = colWidth * slot.colSpan;
+        if (slot.kind === "continue") {
+          cells.push(tableCellXml("", slot.colSpan, width, "<w:vMerge/>"));
+        } else {
+          cells.push(
+            renderTableCell(slot.cell, ctx, slot.colSpan, width, slot.rowSpan > 1 ? `<w:vMerge w:val="restart"/>` : "")
+          );
+        }
+        c += slot.colSpan;
+      }
+      return `<w:tr>${cells.join("")}</w:tr>`;
+    })
+    .join("");
+  return `<w:tbl>${TABLE_PROPS}${tblGrid}${renderedRows}</w:tbl>`;
 }
 
 function collectTableRows(table: HTMLTableElement): HTMLTableRowElement[] {
@@ -422,28 +553,28 @@ function collectTableRows(table: HTMLTableElement): HTMLTableRowElement[] {
   return rows;
 }
 
-function renderTableRow(row: HTMLTableRowElement, ctx: RenderContext): string {
-  const cells = Array.from(row.children)
-    .filter(
-      (cell): cell is HTMLTableCellElement =>
-        cell instanceof HTMLTableCellElement &&
-        ["td", "th"].includes(cell.tagName.toLowerCase())
-    )
-    .map((cell) => renderTableCell(cell, ctx))
-    .join("");
-  return `<w:tr>${cells}</w:tr>`;
-}
-
-function renderTableCell(cell: HTMLTableCellElement, ctx: RenderContext): string {
-  const isHeader = cell.tagName.toLowerCase() === "th";
-  const cellStyle: InlineStyle = isHeader ? { bold: true } : {};
-  const content = hasDirectBlockChildren(cell)
-    ? renderNodesAsBlocks(Array.from(cell.childNodes), ctx, cellStyle)
-    : paragraph(renderInlineChildren(cell, ctx, cellStyle), { spacingAfter: 0 });
-  const shading = isHeader ? `<w:shd w:fill="F8FAFC"/>` : "";
-  return `<w:tc><w:tcPr><w:tcW w:w="0" w:type="auto"/>${shading}</w:tcPr>${
+function tableCellXml(content: string, colSpan: number, widthTwips: number, extraProps = ""): string {
+  const span = colSpan > 1 ? `<w:gridSpan w:val="${colSpan}"/>` : "";
+  return `<w:tc><w:tcPr><w:tcW w:w="${widthTwips}" w:type="dxa"/>${span}${extraProps}</w:tcPr>${
     content || paragraph("")
   }</w:tc>`;
+}
+
+function renderTableCell(
+  cell: HTMLTableCellElement,
+  ctx: RenderContext,
+  colSpan: number,
+  widthTwips: number,
+  mergeProps: string
+): string {
+  const isHeader = cell.tagName.toLowerCase() === "th";
+  const cellStyle: InlineStyle = isHeader ? { bold: true } : {};
+  const block: BlockContext = { alignment: alignmentFromElement(cell) };
+  const content = hasDirectBlockChildren(cell)
+    ? renderNodesAsBlocks(Array.from(cell.childNodes), ctx, cellStyle, block)
+    : paragraph(renderInlineChildren(cell, ctx, cellStyle), { ...block, spacingAfter: 0 });
+  const shading = isHeader ? `<w:shd w:val="clear" w:color="auto" w:fill="F8FAFC"/>` : "";
+  return tableCellXml(content, colSpan, widthTwips, mergeProps + shading);
 }
 
 function textRun(text: string, style: InlineStyle): string {
@@ -825,7 +956,7 @@ function buildRootRelsXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
 }
 
-function buildDocumentRelsXml(images: DocxImage[]): string {
+function buildDocumentRelsXml(images: DocxImage[], links: DocxLink[] = []): string {
   const imageRels = images
     .map(
       (image) =>
@@ -834,7 +965,15 @@ function buildDocumentRelsXml(images: DocxImage[]): string {
         )}"/>`
     )
     .join("");
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${imageRels}</Relationships>`;
+  const linkRels = links
+    .map(
+      (link) =>
+        `<Relationship Id="${link.relId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${escapeXmlAttr(
+          link.target
+        )}" TargetMode="External"/>`
+    )
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${imageRels}${linkRels}</Relationships>`;
 }
 
 function buildStylesXml(): string {
