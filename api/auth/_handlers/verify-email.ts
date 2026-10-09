@@ -8,7 +8,9 @@
  *     the WorkOS email template to include both placeholders). After we
  *     call verifyEmail, we DO mint an iron-session cookie — they just
  *     proved control of the inbox, no reason to make them re-enter their
- *     password to be admitted.
+ *     password to be admitted. When the code is typed into the sign-up
+ *     page, that page also sends the password from its form and we set it
+ *     once the code checks out.
  *
  *  B) Sign-in-while-unverified flow — the user attempted to sign in with
  *     a valid password but unverified email; authenticateWithPassword
@@ -40,11 +42,17 @@ type VerifyEmailBody = {
   userId?: string;
   /** Returned by authenticateWithPassword as email_verification_required.pendingAuthenticationToken. */
   pendingAuthenticationToken?: string;
+  /** Flow A only: the password typed into the sign-up form in this browser.
+   *  Applied after the code proves the inbox, so the account's password is
+   *  always chosen by the person who verified it (see sign-up.ts). */
+  password?: string;
 };
 
 const MAX_CODE = 64;
 const MAX_USER_ID = 128;
 const MAX_TOKEN = 4096;
+const MIN_PASSWORD = 8;
+const MAX_PASSWORD = 256;
 
 /** Spoof-resistant client IP for WorkOS risk signals. The shared resolver
  *  (senior sweep B14) uses the proxy-appended last hop and returns the
@@ -130,6 +138,20 @@ export async function POST(req: Request): Promise<Response> {
     // Flow A: post-sign-up. verifyEmail confirms the address; we then
     // mint a session manually because no auth-with-credentials happened.
     const { user } = await workos.userManagement.verifyEmail({ code, userId });
+
+    // The code has proved the inbox; the password from this browser's
+    // sign-up form becomes the account's password. A duplicate sign-up
+    // replaces an unverified account's password with a random one, so
+    // without this the owner's own password would stop working. Best
+    // effort: they are verified and signed in either way, and can reset it.
+    const password = typeof parsed.body.password === "string" ? parsed.body.password : "";
+    if (password.length >= MIN_PASSWORD && password.length <= MAX_PASSWORD) {
+      try {
+        await workos.userManagement.updateUser({ userId: user.id, password });
+      } catch (err) {
+        console.error("[auth/verify-email] could not set the password after verification", err);
+      }
+    }
 
     return await respondWithSession({
       id: user.id,

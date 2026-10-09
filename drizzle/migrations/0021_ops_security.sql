@@ -7,7 +7,8 @@
 --    seq = max(seq) + 1 while holding the tenant's advisory lock, and the chain
 --    is walked by seq instead of created_at (millisecond ties used to fork it).
 --    Existing rows are backfilled per tenant in (created_at, id) order, which is
---    the order the old verifier walked.
+--    the order the old verifier walked. A BEFORE INSERT trigger fills seq for
+--    an insert that omits it (code deployed before this migration).
 -- 3. audit_events append-only trigger: rejects UPDATE and DELETE. The only
 --    exceptions are the two FK actions the schema already declares:
 --      - ON DELETE CASCADE from tenants (tenant erasure): allowed only once the
@@ -37,6 +38,28 @@ FROM (
 WHERE ae."id" = numbered."id" AND ae."seq" IS NULL;--> statement-breakpoint
 ALTER TABLE "audit_events" ALTER COLUMN "seq" SET NOT NULL;--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS "audit_events_tenant_seq_uniq" ON "audit_events" USING btree ("tenant_id", "seq");--> statement-breakpoint
+-- Number any row inserted without a seq. The deployed app and this migration
+-- don't switch over atomically: until code that assigns seq is live (and again
+-- after a rollback), appends arrive without it and would fail the NOT NULL,
+-- and every caller swallows audit failures, so events would be lost silently.
+-- Those appends already hold the tenant's advisory lock, so max + 1 is safe;
+-- anything that skips the lock still hits the unique (tenant_id, seq) index.
+-- A seq the app assigned is never overridden.
+CREATE OR REPLACE FUNCTION "audit_events_assign_seq"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW."seq" IS NULL THEN
+    SELECT coalesce(max("seq"), 0) + 1 INTO NEW."seq"
+    FROM "audit_events"
+    WHERE "tenant_id" = NEW."tenant_id";
+  END IF;
+  RETURN NEW;
+END;
+$$;--> statement-breakpoint
+DROP TRIGGER IF EXISTS "audit_events_assign_seq" ON "audit_events";--> statement-breakpoint
+CREATE TRIGGER "audit_events_assign_seq"
+  BEFORE INSERT ON "audit_events"
+  FOR EACH ROW EXECUTE FUNCTION "audit_events_assign_seq"();--> statement-breakpoint
 
 CREATE OR REPLACE FUNCTION "audit_events_reject_mutation"() RETURNS trigger
 LANGUAGE plpgsql AS $$

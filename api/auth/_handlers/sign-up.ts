@@ -28,6 +28,7 @@
  * "build your own UI" path the headless docs document.
  */
 
+import { randomBytes } from "node:crypto";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimitDurable, rateLimitKeyDurable } from "../../_utils/rate-limit.js";
 import { getWorkos } from "../../_utils/workos.js";
@@ -118,11 +119,7 @@ export async function POST(req: Request): Promise<Response> {
       // always return the existing user's id (resending only when unverified);
       // for a verified account the subsequent verify-email attempt simply
       // fails generically like any wrong code — no information is leaked.
-      const existingUserId = await silentlyResendVerificationByEmail(email, {
-        password,
-        firstName,
-        lastName,
-      });
+      const existingUserId = await silentlyResendVerificationByEmail(email);
       return ok(existingUserId);
     }
 
@@ -167,15 +164,12 @@ function ok(userId: string | null): Response {
 
 /**
  * Best-effort: look up the user by email and, if it is still unverified,
- * reset it to the details just submitted and trigger a fresh verification
- * email. Used only on the duplicate-email branch of sign-up so the rightful
- * owner still gets a usable link. Failures are swallowed (we already
- * committed to the generic-success contract for anti-enumeration).
+ * clear its password and trigger a fresh verification email. Used only on
+ * the duplicate-email branch of sign-up so the rightful owner still gets a
+ * usable link. Failures are swallowed (we already committed to the
+ * generic-success contract for anti-enumeration).
  */
-async function silentlyResendVerificationByEmail(
-  email: string,
-  details: { password: string; firstName: string; lastName: string },
-): Promise<string | null> {
+async function silentlyResendVerificationByEmail(email: string): Promise<string | null> {
   try {
     const workos = getWorkos();
     const list = await workos.userManagement.listUsers({ email, limit: 1 });
@@ -187,16 +181,19 @@ async function silentlyResendVerificationByEmail(
     // both cases so the sign-up response body is identical for verified and
     // unverified duplicates (anti-enumeration — bug #12).
     if (!user.emailVerified) {
-      // Take over the unverified account with the details just submitted.
-      // Otherwise someone who registered this email first keeps their
-      // password: when the real owner later signs up and verifies, they are
-      // signed into an account the squatter can still log into. Whoever
-      // proves the inbox now ends up with the only working password.
+      // Replace whatever password the unverified account has with a random
+      // one nobody knows. Otherwise someone who registered this email first
+      // keeps their password and can sign into the account once the real
+      // owner verifies it. The password just submitted is NOT used either:
+      // this request is anonymous, so using it would let anyone re-submit a
+      // sign-up for an address whose owner has just registered and take over
+      // the account when the owner verifies. The verifying browser sets the
+      // password instead (verify-email.ts), once the code has proved the inbox.
+      // If this update fails we send nothing, so the old password can't ride
+      // along on a verification.
       await workos.userManagement.updateUser({
         userId: user.id,
-        password: details.password,
-        firstName: details.firstName,
-        lastName: details.lastName,
+        password: unguessablePassword(),
       });
       await workos.userManagement.sendVerificationEmail({ userId: user.id });
     }
@@ -205,6 +202,12 @@ async function silentlyResendVerificationByEmail(
     console.warn("[auth/sign-up] silent resend failed", err);
     return null;
   }
+}
+
+/** 256 random bits plus one character from each class, so it clears any
+ *  WorkOS password-complexity setting. Never shown or stored anywhere. */
+function unguessablePassword(): string {
+  return `${randomBytes(32).toString("base64url")}Aa1!`;
 }
 
 function isWorkosConflict(err: unknown): boolean {

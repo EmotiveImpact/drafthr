@@ -249,8 +249,10 @@ export function createDrizzleDirectoryStore(): DirectoryStore {
         return rows.length > 0;
       } catch (err) {
         // 23505: external_id already taken by a row a concurrent request
-        // minted. The caller falls back to merging into that row.
-        if ((err as { code?: string })?.code === "23505") return false;
+        // minted. The caller falls back to merging into that row. Drizzle
+        // wraps driver errors, so the SQLSTATE is on `cause`.
+        const e = err as { code?: string; cause?: { code?: string } } | null;
+        if (e?.code === "23505" || e?.cause?.code === "23505") return false;
         throw err;
       }
     },

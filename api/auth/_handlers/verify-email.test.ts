@@ -10,10 +10,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const verifyEmail = vi.fn();
 const authenticateWithEmailVerification = vi.fn();
+const updateUser = vi.fn();
 
 vi.mock("../../_utils/workos.js", () => ({
   getWorkos: () => ({
-    userManagement: { verifyEmail, authenticateWithEmailVerification },
+    userManagement: { verifyEmail, authenticateWithEmailVerification, updateUser },
   }),
   buildSessionCookie: vi.fn(async () => "drafthr_session=fake; Path=/; HttpOnly"),
   SESSION_COOKIE: "drafthr_session",
@@ -22,6 +23,8 @@ vi.mock("../../_utils/workos.js", () => ({
 beforeEach(() => {
   verifyEmail.mockReset();
   authenticateWithEmailVerification.mockReset();
+  updateUser.mockReset();
+  vi.restoreAllMocks();
   process.env.WORKOS_CLIENT_ID = "client_test";
   process.env.WORKOS_COOKIE_PASSWORD = "x".repeat(32);
   vi.resetModules();
@@ -89,6 +92,72 @@ describe("POST /api/auth/verify-email", () => {
       pendingAuthenticationToken: "pending_xyz",
       clientId: "client_test",
     });
+  });
+
+  it("post-sign-up: sets the password the verifying browser submitted, after the code checks out", async () => {
+    verifyEmail.mockResolvedValueOnce({
+      user: { id: "user_5", email: "e@f.co", firstName: null, lastName: null, profilePictureUrl: null },
+    });
+    updateUser.mockResolvedValueOnce({ id: "user_5" });
+
+    const { POST } = await import("./verify-email.js");
+    const res = await POST(
+      makeRequest({ code: "123456", userId: "user_5", password: "owner-password-1" }, "5"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateUser).toHaveBeenCalledWith({ userId: "user_5", password: "owner-password-1" });
+    // The code is checked first: the password only lands once the inbox is proven.
+    expect(verifyEmail.mock.invocationCallOrder[0]).toBeLessThan(
+      updateUser.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("post-sign-up: leaves the password alone when the code is wrong", async () => {
+    verifyEmail.mockRejectedValueOnce(new Error("invalid_code"));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const { POST } = await import("./verify-email.js");
+    const res = await POST(
+      makeRequest({ code: "000000", userId: "user_6", password: "attacker-pw-123" }, "6"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("post-sign-up: still signs the user in if setting the password fails", async () => {
+    verifyEmail.mockResolvedValueOnce({
+      user: { id: "user_7", email: "g@h.co", firstName: null, lastName: null, profilePictureUrl: null },
+    });
+    updateUser.mockRejectedValueOnce(new Error("workos down"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { POST } = await import("./verify-email.js");
+    const res = await POST(
+      makeRequest({ code: "123456", userId: "user_7", password: "owner-password-1" }, "7"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("set-cookie")).toContain("drafthr_session=");
+  });
+
+  it("sign-in-while-unverified: never sets a password (the user just proved theirs)", async () => {
+    authenticateWithEmailVerification.mockResolvedValueOnce({
+      user: { id: "user_8", email: "i@j.co", firstName: null, lastName: null, profilePictureUrl: null },
+      sealedSession: "sealed",
+    });
+
+    const { POST } = await import("./verify-email.js");
+    const res = await POST(
+      makeRequest(
+        { code: "123456", pendingAuthenticationToken: "pending_8", password: "whatever-123" },
+        "8",
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateUser).not.toHaveBeenCalled();
   });
 
   it("rejects when neither userId nor pendingAuthenticationToken is present", async () => {
