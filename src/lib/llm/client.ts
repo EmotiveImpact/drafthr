@@ -78,6 +78,20 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     const detail = snippet ? ` — ${snippet}` : "";
     throw new RetryableError(`Server error (${res.status})${detail}`);
   }
+  if (res.status === 402 || res.status === 403) {
+    // Our own refusals (no plan for Opus, paywall, viewer role) carry a JSON
+    // message the user can act on; show it rather than a generic failure.
+    const text = await res.text().catch(() => "");
+    let message: string | null = null;
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown };
+      if (typeof parsed.error === "string") message = parsed.error;
+    } catch {
+      /* not our envelope */
+    }
+    if (message) throw new Error(message);
+    if (res.status === 402) throw new Error("This needs a paid plan.");
+  }
   if (res.status === 401 || res.status === 403) {
     // Vercel Deployment Protection or other auth gate is blocking the API.
     // Not retryable — the user has to disable protection or sign in.

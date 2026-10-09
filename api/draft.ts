@@ -9,7 +9,7 @@ import { streamText, type ModelMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
-import { enforceProductionSession } from "./_utils/production-auth.js";
+import { rejectAiGeneration } from "./_utils/ai-access.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -128,8 +128,6 @@ export async function POST(req: Request): Promise<Response> {
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
-  const sessionError = await enforceProductionSession(req);
-  if (sessionError) return sessionError;
 
   const parsed = await readJsonRequest<DraftRequest>(req);
   if (!parsed.ok) return parsed.response;
@@ -138,6 +136,8 @@ export async function POST(req: Request): Promise<Response> {
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return jsonError("messages[] required", 400);
   }
+  const accessError = await rejectAiGeneration(req, resolveModelName(body.model));
+  if (accessError) return accessError;
   const messagesError = rejectDraftMessages(body.messages);
   if (messagesError) return jsonError(messagesError, messagesError.includes("too long") ? 413 : 400);
 
