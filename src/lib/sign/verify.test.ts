@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { buildPadesCms } from "./pades.ts";
 import { createLocalSigner } from "./local-signer.ts";
 import { verifyPadesCms, verifyLegacy } from "./verify.ts";
-import { buildTestTsr } from "./__fixtures__/test-tsr.ts";
+import { buildTestTsr, createTestTimestamper } from "./__fixtures__/test-tsr.ts";
 
 const SIGNING_TIME = new Date("2026-05-18T12:00:00.000Z");
 const MANIFEST = new TextEncoder().encode(
@@ -25,15 +25,38 @@ const MANIFEST = new TextEncoder().encode(
 );
 
 describe("verifyPadesCms — new scheme", () => {
+  it("rejects a genuine timestamp token that covers something other than this signature", async () => {
+    // Backdating attack: the timestamp lives in an unsigned attribute, so a
+    // real token over an unrelated document must not vouch for this signature.
+    const signer = createLocalSigner();
+    const tsa = createTestTimestamper(new Date("2020-01-01T00:00:00.000Z"));
+    const unrelated = createHash("sha256").update("some other document").digest("hex");
+    const built = await buildPadesCms({
+      content: MANIFEST,
+      signer,
+      timestamp: () => tsa.timestamp(unrelated),
+      signingTime: SIGNING_TIME,
+    });
+    const result = await verifyPadesCms({
+      cms: built.cmsDer,
+      expectedContent: MANIFEST,
+      expectedPublicKey: await signer.publicKey(),
+      tsaTrustPins: tsa.parseOptions.trustedTsaKeyPins,
+      tsaName: tsa.parseOptions.tsaName,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("tsa_imprint_mismatch");
+  });
+
   it("returns ok:true for a freshly signed manifest", async () => {
     const signer = createLocalSigner();
     const sha256 = createHash("sha256").update(MANIFEST).digest("hex");
-    const { tsr, parseOptions } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp, parseOptions } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
 
@@ -57,13 +80,12 @@ describe("verifyPadesCms — new scheme", () => {
 
   it("rejects when the expected content has been tampered with", async () => {
     const signer = createLocalSigner();
-    const sha256 = createHash("sha256").update(MANIFEST).digest("hex");
-    const { tsr, parseOptions } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp, parseOptions } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
 
@@ -83,13 +105,12 @@ describe("verifyPadesCms — new scheme", () => {
   it("rejects when the supplied public key didn't sign the CMS", async () => {
     const signer = createLocalSigner();
     const otherSigner = createLocalSigner();
-    const sha256 = createHash("sha256").update(MANIFEST).digest("hex");
-    const { tsr, parseOptions } = buildTestTsr({ sha256Hex: sha256, genTime: SIGNING_TIME });
+    const { timestamp, parseOptions } = createTestTimestamper(SIGNING_TIME);
 
     const built = await buildPadesCms({
       content: MANIFEST,
       signer,
-      tsr,
+      timestamp,
       signingTime: SIGNING_TIME,
     });
 

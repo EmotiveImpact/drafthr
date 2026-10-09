@@ -51,7 +51,9 @@ nav — direct URL navigation to another role's surface redirects to `/`.
 - `store/drafts` writes/deletes scoped by `id AND tenantId`.
 - `agent`, `draft`, `export/pdf`, `upload/image`, `sign/manifest`:
   session-gated; export/pdf + sign/manifest tenant-scope the draft by
-  `id AND tenantId`.
+  `id AND tenantId`. `sign/manifest` is disabled unless
+  `DRAFTHR_MANIFEST_SIGNING=enabled`: it signs caller-supplied bytes, so it
+  must not run in production until the manifest is built on the server.
 - `directory-webhook`: WorkOS signature verified over the raw body before the
   payload is trusted; resolves org→tenant (no cross-tenant write).
 - `accept-invite`: session email must match the invite email.

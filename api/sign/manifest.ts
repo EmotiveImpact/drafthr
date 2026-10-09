@@ -11,6 +11,13 @@
  * endpoint with the canonical manifest JSON it just built, then drops the
  * returned CMS bytes into the ZIP alongside `manifest.json`.
  *
+ * DISABLED BY DEFAULT. This endpoint signs whatever manifest bytes the caller
+ * sends, with the one production key, and nothing in the signed content binds
+ * it to a tenant, draft or actor; any signed-in user could obtain a
+ * DraftHR-signed attestation of content they made up. No export calls it yet,
+ * so it stays off until the manifest is built on the server from the stored
+ * draft. Set DRAFTHR_MANIFEST_SIGNING=enabled only in a dev environment.
+ *
  * Audit: every successful signing emits a `draft.signed_with_kms` audit
  * event (or `draft.signed_local` for the dev path). The WorkOS Audit Logs
  * sink that sibling task 2B is wiring up will pick the same kind up for
@@ -66,6 +73,9 @@ type SignManifestResponse = {
 const MAX_MANIFEST_BYTES = 200_000;
 
 export async function POST(req: Request): Promise<Response> {
+  if (process.env.DRAFTHR_MANIFEST_SIGNING !== "enabled") {
+    return jsonError("Manifest signing is not available", 404);
+  }
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "sign-manifest", max: 30, windowMs: 60_000 });
@@ -128,20 +138,18 @@ export async function POST(req: Request): Promise<Response> {
     const signer = await getActiveSigner();
     signerName = signer.keyId.startsWith("local:") ? "local" : "kms";
 
-    const manifestSha256 = createHash("sha256").update(manifestBytes).digest("hex");
-    const [pk, tsr] = await Promise.all([
-      signer.publicKey(),
-      requestTsr(manifestSha256).catch(() => null),
-    ]);
-    publicKey = pk;
+    publicKey = await signer.publicKey();
 
+    // The timestamp is requested over the signature value once it exists
+    // (PAdES-B-T), so it can't be lifted onto a different signature.
     const built = await buildPadesCms({
       content: manifestBytes,
       signer,
-      tsr: tsr ?? undefined,
+      timestamp: (signatureSha256Hex) => requestTsr(signatureSha256Hex).catch(() => null),
     });
     cmsDer = built.cmsDer;
     contentSha256 = built.contentSha256Hex;
+    const tsr = built.tsr;
 
     if (tsr) {
       const parsedTsr = parseTsr(tsr);
