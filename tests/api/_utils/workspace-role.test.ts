@@ -109,9 +109,11 @@ describe("rejectEditOfApprovedDraft", () => {
 });
 
 describe("commentsForWrite (per-comment merge, author-only delete)", () => {
+  // userRow.id is the internal users.id; externalId is the session user id
+  // the browser compares comment authors against.
   const authAs = (role: string, id = "u-me", email = "me@x.com") => ({
     activeMember: { role },
-    userRow: { id, email, legalName: "Me Person" },
+    userRow: { id: `db-${id}`, externalId: id, email, legalName: "Me Person" },
   });
   const theirs = {
     id: "c1",
@@ -134,6 +136,17 @@ describe("commentsForWrite (per-comment merge, author-only delete)", () => {
       { id: "c2", authorId: "me", authorName: "Spoofed", body: "hi", createdAt: 5 },
     ]);
     expect(out[0]).toMatchObject({ authorUserId: "u-me", authorName: "Me Person", authorEmail: "me@x.com" });
+  });
+
+  it("stamps the id the author's browser knows them by, so their other devices still treat it as theirs", async () => {
+    const { canDeleteComment: clientCanDelete, isOthersComment } = await import("../../../src/lib/comments/identity");
+    const [stamped] = commentsForWrite(authAs("drafter", "user_01SESSION"), [], [
+      { id: "c3", authorId: "me", authorName: "Me", body: "mine", createdAt: 5 },
+    ]);
+    // The SPA's viewer id is the session user id (users.external_id).
+    const viewer = { userId: "user_01SESSION", role: "drafter" };
+    expect(isOthersComment(stamped as never, viewer)).toBe(false);
+    expect(clientCanDelete(stamped as never, viewer)).toBe(true);
   });
 
   it("ignores a delete of someone else's comment by a drafter", () => {
