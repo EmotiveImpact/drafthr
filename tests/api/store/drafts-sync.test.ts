@@ -297,6 +297,31 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
     expect((await res.json()).revision).toBe(1);
     expect(assertCanCreateLetter).toHaveBeenCalledTimes(1);
   });
+
+  it("saves a template source without the letter gate, so it never spends a letter purchase", async () => {
+    state.body = draftBody({ isTemplateSource: true });
+    state.selects = [[]];
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    expect(assertCanCreateLetter).not.toHaveBeenCalled();
+    expect(state.writes.filter((w) => w.op === "update")).toHaveLength(0);
+  });
+
+  it("never turns a stored template source into a letter, or back, on update", async () => {
+    // Otherwise a free template save could become an ungated letter.
+    state.body = draftBody({ baseRevision: 4, isTemplateSource: false });
+    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null, isTemplateSource: true }]];
+    expect((await POST(req)).status).toBe(200);
+    const update = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(update?.set).toMatchObject({ isTemplateSource: true });
+
+    state.writes = [];
+    state.body = draftBody({ baseRevision: 4, isTemplateSource: true });
+    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null, isTemplateSource: false }]];
+    expect((await POST(req)).status).toBe(200);
+    const second = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(second?.set).toMatchObject({ isTemplateSource: false });
+  });
 });
 
 describe("DELETE /api/store/drafts", () => {

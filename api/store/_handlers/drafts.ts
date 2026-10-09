@@ -244,6 +244,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
         revision: drafts.revision,
         deletedAt: drafts.deletedAt,
         updatedAt: drafts.updatedAt,
+        isTemplateSource: drafts.isTemplateSource,
       })
       .from(drafts)
       .where(eq(drafts.id, body.id))
@@ -299,9 +300,11 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       }
     }
     let consume: ConsumeTarget | undefined;
-    if (isCreate) {
+    if (isCreate && !body.isTemplateSource) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
       // letters are gated; edits to existing drafts always go through.
+      // Template sources aren't letters (the allowance doesn't count them),
+      // so saving one never spends a letter purchase or pack slot.
       // The letter type decides which one-off letter tier can authorise it.
       const gate = await assertCanCreateLetter(tenantId, auth.userRow.id, body.letterType ?? null);
       if (!gate.ok) return jsonError(gate.reason, gate.code);
@@ -386,7 +389,9 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
             title: body.title ?? null,
             jurisdiction: body.jurisdiction ?? null,
             reviewStatus: body.reviewStatus ?? "draft",
-            isTemplateSource: Boolean(body.isTemplateSource),
+            // Fixed at create: flipping it would let an ungated template
+            // save become a letter, or take a letter out of the allowance.
+            isTemplateSource: Boolean(existingDraft.isTemplateSource),
             templateSourceId,
             contextJson: body.context,
             employerJson: body.employer ?? null,
