@@ -128,10 +128,12 @@ has its **own** webhook endpoint + signing secret. Code:
    Webhooks, endpoint `https://<domain>/api/marketplace/billing-webhook`, events:
    `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated`, `customer.subscription.deleted`,
-   `invoice.paid`, `invoice.payment_failed`, `charge.refunded`. Copy its
-   signing secret into `STRIPE_BILLING_WEBHOOK_SECRET`. (An existing test-mode
-   endpoint needs `charge.refunded` added too: without it a refunded letter,
-   pack or credit purchase keeps working and keeps its credits.)
+   `invoice.paid`, `invoice.payment_failed`, `charge.refunded`,
+   `checkout.session.async_payment_succeeded`. Copy its signing secret into
+   `STRIPE_BILLING_WEBHOOK_SECRET`. (An existing test-mode endpoint needs the
+   last two added too: without `charge.refunded` a refunded letter, pack or
+   credit purchase keeps working and keeps its credits; without the async
+   event a one-off paid by Direct Debit is never delivered.)
    **Set up the Billing Portal in LIVE mode:** Stripe → Settings → Billing →
    Customer portal: save a configuration that allows cancelling, updating the
    card and switching between the six HR plan prices only (never Employee

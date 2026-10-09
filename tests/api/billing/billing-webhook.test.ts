@@ -215,6 +215,34 @@ describe("billing webhook — refunded one-off purchases", () => {
     const grant = queries.find((q) => q.sql.includes('insert into "credit_ledger"'));
     expect(grant!.params).toContain("purchase:pi_9");
   });
+
+  it("records a one-off paid by a delayed method once the payment succeeds", async () => {
+    respond = (sql) => (sql.startsWith('insert into "entitlement_purchases"') ? [["ent-2"]] : []);
+    const session = {
+      mode: "payment",
+      payment_intent: "pi_dd",
+      metadata: { purpose: "billing", priceKey: "credits_small", userId: USER },
+    };
+    // Direct Debit: the session completes unpaid, then succeeds days later.
+    nextEvent = {
+      id: "evt_r5",
+      type: "checkout.session.completed",
+      data: { object: { ...session, payment_status: "unpaid" } },
+    };
+    await POST(req());
+    expect(queries.some((q) => q.sql.startsWith('insert into "entitlement_purchases"'))).toBe(false);
+
+    nextEvent = {
+      id: "evt_r6",
+      type: "checkout.session.async_payment_succeeded",
+      data: { object: { ...session, payment_status: "paid" } },
+    };
+    await POST(req());
+    const purchase = queries.find((q) => q.sql.startsWith('insert into "entitlement_purchases"'));
+    expect(purchase!.params).toContain("pi_dd");
+    const grant = queries.find((q) => q.sql.includes('insert into "credit_ledger"'));
+    expect(grant!.params).toContain("purchase:pi_dd");
+  });
 });
 
 describe("graceUntilFor", () => {
