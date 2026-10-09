@@ -87,8 +87,15 @@ stays request-based). Code: `api/_utils/stripe.ts`,
 2. `npm run db:migrate` (applies 0012 — payments tables).
 3. In Stripe → Developers → Webhooks, add an endpoint
    `https://<your-domain>/api/marketplace/stripe-webhook` for events
-   `account.updated` and `checkout.session.completed`; copy its signing secret
-   into `STRIPE_WEBHOOK_SECRET`.
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `charge.refunded`,
+   `charge.dispute.created` and `charge.dispute.closed`; copy its signing
+   secret into `STRIPE_WEBHOOK_SECRET`. Add a second endpoint on the same URL
+   listening to events on connected accounts, for `account.updated`, and copy
+   its secret into `STRIPE_WEBHOOK_SECRET_CONNECT`. Without the async events a
+   Direct Debit payment never leaves "processing"; without the refund and
+   dispute events a refunded booking keeps its draft access and the
+   consultant keeps the transfer.
 4. `vercel --prod`, then test in **Stripe test mode**: a consultant connects
    payouts (Profile → Connect Stripe), an HR user pays an accepted booking
    (My bookings → Pay for review).

@@ -13,12 +13,14 @@ vi.mock("../../../src/db/index.js", () => ({ getDb: () => fake.db }));
 const transfersRetrieve = vi.fn();
 const createReversal = vi.fn(async () => ({ id: "trr_1" }));
 const chargesRetrieve = vi.fn();
+const paymentIntentsRetrieve = vi.fn();
 let nextEvent: unknown;
 vi.mock("../../../api/_utils/stripe.js", () => ({
   getStripe: () => ({
     webhooks: { constructEventAsync: async () => nextEvent },
     transfers: { retrieve: transfersRetrieve, createReversal },
     charges: { retrieve: chargesRetrieve },
+    paymentIntents: { retrieve: paymentIntentsRetrieve },
   }),
 }));
 
@@ -84,6 +86,8 @@ beforeEach(() => {
   transfersRetrieve.mockReset();
   createReversal.mockClear();
   chargesRetrieve.mockReset();
+  paymentIntentsRetrieve.mockReset();
+  paymentIntentsRetrieve.mockResolvedValue({ id: "pi_1", metadata: {} });
   process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
 });
 
@@ -126,6 +130,17 @@ describe("checkout sessions", () => {
     expect(shareTokenGrants()).toHaveLength(1);
   });
 
+  it("doesn't move a failed payment back to processing when its completed event arrives late", async () => {
+    givenBooking();
+    nextEvent = event("checkout.session.completed", session({ payment_status: "unpaid" }));
+    await POST(req());
+    const [upsert] = fake.find(/^insert into "booking_payments"/);
+    const where = upsert.sql.match(/ where "booking_payments"\."status" in \(([^)]*)\)/);
+    expect(where).not.toBeNull();
+    const placeholders = where![1].split(", ").map((p) => upsert.params[Number(p.slice(1)) - 1]);
+    expect(placeholders).toEqual(["unpaid", "processing"]);
+  });
+
   it("marks the payment failed when the async payment fails, for that session only", async () => {
     givenBooking();
     nextEvent = event("checkout.session.async_payment_failed", session({ payment_status: "unpaid" }));
@@ -147,6 +162,21 @@ describe("checkout sessions", () => {
     expect((await POST(req())).status).toBe(200);
     expect(paymentWrites()).toHaveLength(0);
     expect(shareTokenGrants()).toHaveLength(0);
+  });
+
+  it("matches a localised session on the amount and currency it was created with", async () => {
+    givenBooking();
+    nextEvent = event(
+      "checkout.session.completed",
+      session({
+        amount_total: 19000,
+        currency: "usd",
+        currency_conversion: { amount_subtotal: 15000, amount_total: 15000, fx_rate: "1.26", source_currency: "gbp" },
+      }),
+    );
+    await POST(req());
+    const [upsert] = fake.find(/^insert into "booking_payments"/);
+    expect(upsert.params).toContain("paid");
   });
 
   it("ignores a session for a booking that doesn't exist", async () => {
@@ -209,9 +239,27 @@ describe("refunds", () => {
 
   it("ignores a refund for a charge that isn't a booking", async () => {
     nextEvent = event("charge.refunded", charge());
-    await POST(req());
+    expect((await POST(req())).status).toBe(200);
     expect(paymentWrites()).toHaveLength(0);
     expect(createReversal).not.toHaveBeenCalled();
+  });
+
+  it("applies a refund that arrives before checkout.session.completed, by the intent's booking id", async () => {
+    // No row carries pi_1 yet: the completed event hasn't been recorded.
+    fake.respondOnce(/^select "booking_payments"."booking_id".* inner join "consultant_bookings"/s, []);
+    givenPayment("unpaid");
+    paymentIntentsRetrieve.mockResolvedValue({ id: "pi_1", metadata: { bookingId: BOOKING_ID } });
+    transfersRetrieve.mockResolvedValue({ id: "tr_1", amount: 15000, amount_reversed: 0, reversed: false });
+    nextEvent = event("charge.refunded", charge());
+    expect((await POST(req())).status).toBe(200);
+    // The row is stamped with the intent, but only while it isn't paid...
+    const [stamp] = fake.find(/^update "booking_payments" set "payment_intent_id" = \$1 where/);
+    expect(stamp.params).toEqual(["pi_1", BOOKING_ID, "unpaid", "processing", "failed"]);
+    // ...then refunded, so the late completed event finds it refunded and is ignored.
+    const [refund] = fake.find(/^update "booking_payments" set .*"amount_refunded" = /);
+    expect(refund.params).toContain("refunded");
+    expect(shareTokenRevokes()).toHaveLength(1);
+    expect(createReversal).toHaveBeenCalledTimes(1);
   });
 
   it("returns 500 so Stripe retries when the reversal fails", async () => {
@@ -239,6 +287,31 @@ describe("disputes", () => {
     const [update] = fake.find(/^update "booking_payments"/);
     expect(update.params).toEqual(expect.arrayContaining(["disputed", "dp_1"]));
     expect(shareTokenRevokes()).toHaveLength(1);
+  });
+
+  it("only records a dispute on a refunded payment, so winning it can't reopen the booking", async () => {
+    givenPayment("refunded");
+    nextEvent = event("charge.dispute.created", dispute());
+    expect((await POST(req())).status).toBe(200);
+    const [update] = fake.find(/^update "booking_payments"/);
+    expect(update.params).toContain("dp_1");
+    expect(update.params).not.toContain("disputed");
+
+    fake.reset();
+    givenPayment("refunded");
+    nextEvent = event("charge.dispute.closed", dispute({ status: "won" }));
+    expect((await POST(req())).status).toBe(200);
+    expect(paymentWrites()).toHaveLength(0);
+    expect(shareTokenGrants()).toHaveLength(0);
+  });
+
+  it("marks disputed only while the payment is still paid", async () => {
+    givenPayment("paid");
+    nextEvent = event("charge.dispute.created", dispute());
+    await POST(req());
+    const [update] = fake.find(/^update "booking_payments"/);
+    expect(update.sql).toMatch(/where \("booking_payments"\."booking_id" = \$\d+ and "booking_payments"\."status" in \(\$\d+, \$\d+\)\)$/);
+    expect(update.params.slice(-2)).toEqual(["paid", "disputed"]);
   });
 
   it("restores a won dispute to paid and re-opens access", async () => {

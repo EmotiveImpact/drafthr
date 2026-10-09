@@ -9,7 +9,7 @@
  * The amount charged is the price snapshot stored on the booking when it was
  * placed, never the consultant's current rate.
  */
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -184,7 +184,7 @@ export async function POST(req: Request): Promise<Response> {
     });
 
     // Record the pending payment (decoupled table).
-    await db
+    const [recorded] = await db
       .insert(bookingPayments)
       .values({
         bookingId: booking.id,
@@ -198,7 +198,26 @@ export async function POST(req: Request): Promise<Response> {
         target: bookingPayments.bookingId,
         // A fresh session after a failed async payment starts over as unpaid.
         set: { checkoutSessionId: session.id, status: "unpaid", amount, currency, updatedAt: new Date() },
-      });
+        // Compare-and-set against the row read above: if the prior session's
+        // webhook marked it paid or processing meanwhile, or a concurrent
+        // checkout already replaced the session, overwriting would lose that
+        // payment and invite a second charge.
+        setWhere: and(
+          inArray(bookingPayments.status, ["unpaid", "failed"]),
+          existingPayment?.checkoutSessionId
+            ? eq(bookingPayments.checkoutSessionId, existingPayment.checkoutSessionId)
+            : isNull(bookingPayments.checkoutSessionId),
+        ),
+      })
+      .returning({ bookingId: bookingPayments.bookingId });
+    if (!recorded) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (err) {
+        console.warn("[stripe-checkout] could not expire superseded session", err);
+      }
+      return jsonError("A payment for this booking is already under way. Refresh to see its status.", 409);
+    }
 
     return new Response(JSON.stringify({ url: session.url }), {
       status: 200,

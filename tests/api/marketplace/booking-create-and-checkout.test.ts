@@ -30,8 +30,10 @@ vi.mock("../../../api/_utils/consultant-emails.js", () => ({
 }));
 
 const sessionsCreate = vi.fn(async () => ({ id: "cs_new", url: "https://checkout.stripe.test/cs_new" }));
+const sessionsRetrieve = vi.fn();
+const sessionsExpire = vi.fn();
 vi.mock("../../../api/_utils/stripe.js", () => ({
-  getStripe: () => ({ checkout: { sessions: { create: sessionsCreate, retrieve: vi.fn(), expire: vi.fn() } } }),
+  getStripe: () => ({ checkout: { sessions: { create: sessionsCreate, retrieve: sessionsRetrieve, expire: sessionsExpire } } }),
   appBaseUrl: () => "https://app.test",
   platformFeeBps: () => 0,
 }));
@@ -71,6 +73,8 @@ function profileRow(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   fake.reset();
   sessionsCreate.mockClear();
+  sessionsRetrieve.mockReset();
+  sessionsExpire.mockReset();
   currentUser = "hr-user";
 });
 
@@ -103,9 +107,14 @@ describe("booking creation", () => {
 });
 
 describe("checkout", () => {
-  function givenPayableBooking(snapshot: { price_amount: number | null; price_currency: string | null }) {
+  function givenPayableBooking(
+    snapshot: { price_amount: number | null; price_currency: string | null },
+    existingPayment: Record<string, unknown> | null = null,
+  ) {
     fake.respond(/from "consultant_bookings"/, [bookingRow({ status: "accepted", ...snapshot })]);
-    fake.respond(/from "booking_payments"/, []);
+    fake.respond(/from "booking_payments"/, existingPayment ? [existingPayment] : []);
+    // The pending-payment upsert writes (and returns) the row.
+    fake.respond(/^insert into "booking_payments"/, [{ booking_id: BOOKING_ID }]);
     fake.respond(/from "stripe_connect_accounts"/, [
       { profile_id: PROFILE_ID, account_id: "acct_1", payouts_enabled: true, details_submitted: true, updated_at: new Date() },
     ]);
@@ -131,6 +140,27 @@ describe("checkout", () => {
     nextBody = { bookingId: BOOKING_ID };
     expect((await checkout.POST(req)).status).toBe(412);
     expect(sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("doesn't overwrite a payment that was recorded while the new session was being created", async () => {
+    // Read: unpaid on cs_old. Meanwhile cs_old's webhook marks the row paid,
+    // so the compare-and-set upsert writes nothing.
+    fake.respondOnce(/^insert into "booking_payments"/, []);
+    givenPayableBooking(
+      { price_amount: 15000, price_currency: "gbp" },
+      { status: "unpaid", checkout_session_id: "cs_old" },
+    );
+    sessionsRetrieve.mockResolvedValue({ id: "cs_old", payment_status: "unpaid" });
+    nextBody = { bookingId: BOOKING_ID };
+    const res = await checkout.POST(req);
+    expect(res.status).toBe(409);
+    const [upsert] = fake.find(/^insert into "booking_payments"/);
+    expect(upsert.sql).toMatch(
+      /where \("booking_payments"\."status" in \(\$\d+, \$\d+\) and "booking_payments"\."checkout_session_id" = \$\d+\) returning/,
+    );
+    expect(upsert.params.slice(-3)).toEqual(["unpaid", "failed", "cs_old"]);
+    // The session nobody will use is expired so it can't take a second payment.
+    expect(sessionsExpire).toHaveBeenCalledWith("cs_new");
   });
 
   it("refuses a second checkout while a Direct Debit is still processing", async () => {

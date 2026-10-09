@@ -10,7 +10,7 @@ import { drizzle } from "drizzle-orm/pg-proxy";
 import * as schema from "../../../src/db/schema.js";
 
 export type Query = { sql: string; params: unknown[] };
-type Responder = { match: RegExp; rows: Record<string, unknown>[] };
+type Responder = { match: RegExp; rows: Record<string, unknown>[]; once?: boolean };
 
 /** Column references in a select list or RETURNING clause, as [table, column]. */
 function columnsOf(sql: string): [string | null, string][] {
@@ -39,6 +39,7 @@ export function createFakeDb() {
       queries.push({ sql, params });
       const responder = responders.find((r) => r.match.test(sql));
       if (!responder) return { rows: [] };
+      if (responder.once) responders.splice(responders.indexOf(responder), 1);
       const cols = columnsOf(sql);
       const rows = responder.rows.map((obj) =>
         cols.map(([table, col]) => {
@@ -57,6 +58,10 @@ export function createFakeDb() {
     /** Answer every statement matching `match` with `rows`. First match wins. */
     respond(match: RegExp, rows: Record<string, unknown>[]) {
       responders.push({ match, rows });
+    },
+    /** Answer the next matching statement only, ahead of any `respond`. */
+    respondOnce(match: RegExp, rows: Record<string, unknown>[]) {
+      responders.unshift({ match, rows, once: true });
     },
     reset() {
       queries.length = 0;
