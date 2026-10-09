@@ -1,4 +1,4 @@
-import type { Collaborator, Draft } from "@/lib/letters/types";
+import type { Collaborator, Comment, Draft } from "@/lib/letters/types";
 import type { Profile } from "@/lib/profile";
 
 /**
@@ -70,4 +70,42 @@ export function collaboratorIdentity(c: Collaborator): CommentIdentity {
 
 export function listIdentities(draft: Draft, profile: Profile): CommentIdentity[] {
   return [meIdentity(profile), ...(draft.collaborators ?? []).map(collaboratorIdentity)];
+}
+
+/** Who is looking at the comments: the signed-in user id (null when auth is
+ *  off, i.e. a local-only demo) and their workspace role. */
+export type CommentViewer = { userId: string | null; role?: string | null };
+
+/** True when the comment was written by someone other than the viewer. A
+ *  comment synced from a teammate keeps the local "me" authorId, so the
+ *  workspace user id is what tells them apart. */
+export function isOthersComment(comment: Comment, viewer: CommentViewer): boolean {
+  return Boolean(comment.authorUserId && viewer.userId && comment.authorUserId !== viewer.userId);
+}
+
+/** The identity to render for a comment: the matching local identity, except
+ *  that a teammate's comment never resolves to "me". */
+export function identityForComment(
+  comment: Comment,
+  identities: CommentIdentity[],
+  viewer: CommentViewer,
+): CommentIdentity {
+  const match = isOthersComment(comment, viewer)
+    ? undefined
+    : identities.find((i) => i.id === comment.authorId);
+  if (match) return match;
+  const seed = comment.authorEmail ?? comment.authorUserId ?? comment.authorName;
+  return {
+    id: comment.authorUserId ?? comment.authorId,
+    name: comment.authorName || comment.authorEmail || "Someone",
+    email: comment.authorEmail,
+    initials: initialsOf(comment.authorName, comment.authorEmail),
+    hue: hashHue(seed ?? "?"),
+  };
+}
+
+/** Mirrors the server rule: only the author, or an owner/admin, may delete. */
+export function canDeleteComment(comment: Comment, viewer: CommentViewer): boolean {
+  if (viewer.role === "owner" || viewer.role === "admin") return true;
+  return !isOthersComment(comment, viewer);
 }
