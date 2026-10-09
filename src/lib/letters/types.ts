@@ -251,7 +251,7 @@ export type EvidenceItem = {
 export type ProtectedDeadline = {
   /** ISO date — the calculated tribunal/EEOC limitation deadline. */
   iso: string;
-  /** Human-readable basis (e.g. "ERA s.111: 3 months less one day from act on 14 March 2026"). */
+  /** Human-readable basis (e.g. "ERA s.111: 6 months less one day from an act on or after 1 October 2026"). */
   basis: string;
 };
 

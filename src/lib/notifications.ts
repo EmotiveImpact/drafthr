@@ -92,7 +92,7 @@ export function deriveNotifications(
             severity: ecDays < 5 ? "urgent" : "warn",
             kind: "acas_ec_deadline",
             title: `ACAS Early Conciliation in ${ecDays} day${ecDays === 1 ? "" : "s"}`,
-            description: `${label}: lodge ACAS EC by ${formatDate(ecIso)} to preserve the limitation pause (up to 6 weeks).`,
+            description: `${label}: lodge ACAS EC by ${formatDate(ecIso)} to leave time for conciliation before the limitation date.`,
             weight: 950 - ecDays,
             draftId: d.id,
             actionLabel: "Open draft",

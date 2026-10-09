@@ -1,5 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { inlineImagesForExport, isAllowedImageHost } from "./inlineImagesForExport";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  VERCEL_BLOB_PUBLIC_HOST_SUFFIX,
+  inlineImagesForExport,
+  isAllowedImageHost,
+  parseAllowedHosts,
+} from "./inlineImagesForExport";
 
 // A 1x1 transparent PNG — used as the fetched blob payload.
 const PNG_BYTES = new Uint8Array([
@@ -23,22 +28,52 @@ describe("isAllowedImageHost — SSRF guard (senior sweep B3)", () => {
   it("rejects an arbitrary host not on the allowlist", () => {
     expect(isAllowedImageHost("https://evil.example.com/x.png")).toBe(false);
   });
-  it("honours IMAGE_INLINE_ALLOWED_HOSTS", () => {
-    vi.stubEnv("IMAGE_INLINE_ALLOWED_HOSTS", "cdn.acme.test, blob.example");
-    expect(isAllowedImageHost("https://cdn.acme.test/x.png")).toBe(true);
-    expect(isAllowedImageHost("https://blob.example/x.png")).toBe(true);
-    expect(isAllowedImageHost("https://other.test/x.png")).toBe(false);
+  it("honours extra hosts the server passes in from IMAGE_INLINE_ALLOWED_HOSTS", () => {
+    const extra = parseAllowedHosts("cdn.acme.test, Blob.Example,,");
+    expect(extra).toEqual(["cdn.acme.test", "blob.example"]);
+    expect(isAllowedImageHost("https://cdn.acme.test/x.png", extra)).toBe(true);
+    expect(isAllowedImageHost("https://blob.example/x.png", extra)).toBe(true);
+    expect(isAllowedImageHost("https://other.test/x.png", extra)).toBe(false);
+    expect(parseAllowedHosts(undefined)).toEqual([]);
+  });
+  it("does not read the environment itself (the browser caller passes nothing)", () => {
+    vi.stubEnv("IMAGE_INLINE_ALLOWED_HOSTS", "cdn.acme.test");
+    expect(isAllowedImageHost("https://cdn.acme.test/x.png")).toBe(false);
+  });
+  it("works where `process` does not exist, as in the browser DOCX export", () => {
+    const g = globalThis as { process?: unknown };
+    const saved = g.process;
+    let blob: boolean | Error;
+    let other: boolean | Error;
+    try {
+      g.process = undefined;
+      const run = (url: string) => {
+        try {
+          return isAllowedImageHost(url);
+        } catch (err) {
+          return err as Error;
+        }
+      };
+      blob = run("https://abc123.public.blob.vercel-storage.com/x.png");
+      other = run("https://cdn.acme.test/x.png");
+    } finally {
+      g.process = saved;
+    }
+    expect(blob).toBe(true);
+    expect(other).toBe(false);
+  });
+  it("names the Blob host suffix the CSP allows", () => {
+    expect(VERCEL_BLOB_PUBLIC_HOST_SUFFIX).toBe(".public.blob.vercel-storage.com");
   });
 });
 
 describe("inlineImagesForExport", () => {
   // The existing tests use https://blob.example/* — allowlist it so the
   // inlining behaviour is exercised; the SSRF rejection is covered separately.
-  beforeEach(() => vi.stubEnv("IMAGE_INLINE_ALLOWED_HOSTS", "blob.example"));
-  afterEach(() => vi.unstubAllEnvs());
+  const opts = { extraAllowedHosts: ["blob.example"] };
   it("leaves html unchanged when there are no https images", async () => {
     const html = `<p>Hello</p><img src="data:image/png;base64,AAAA" />`;
-    const out = await inlineImagesForExport(html, makeFetcher());
+    const out = await inlineImagesForExport(html, makeFetcher(), opts);
     expect(out).toBe(html);
   });
 
@@ -50,7 +85,7 @@ describe("inlineImagesForExport", () => {
       },
     });
     const html = `<div><img src="https://blob.example/letterhead.png" alt="hd" /></div>`;
-    const out = await inlineImagesForExport(html, fetcher);
+    const out = await inlineImagesForExport(html, fetcher, opts);
     expect(out).toContain('src="data:image/png;base64,');
     expect(out).not.toContain("https://blob.example/letterhead.png");
     expect(out).toContain('alt="hd"');
@@ -64,7 +99,7 @@ describe("inlineImagesForExport", () => {
       }),
     );
     const html = `<img src="https://blob.example/a.png" /><img src="https://blob.example/a.png" />`;
-    await inlineImagesForExport(html, fetchSpy as unknown as typeof fetch);
+    await inlineImagesForExport(html, fetchSpy as unknown as typeof fetch, opts);
     expect(fetchSpy).toHaveBeenCalledOnce();
   });
 
@@ -73,7 +108,7 @@ describe("inlineImagesForExport", () => {
       new Response("not found", { status: 404 }),
     );
     const html = `<img src="https://blob.example/missing.png" />`;
-    const out = await inlineImagesForExport(html, fetcher as unknown as typeof fetch);
+    const out = await inlineImagesForExport(html, fetcher as unknown as typeof fetch, opts);
     expect(out).toContain("https://blob.example/missing.png");
   });
 
@@ -85,7 +120,7 @@ describe("inlineImagesForExport", () => {
       }),
     );
     const html = `<img src="https://blob.example/scary.svg" />`;
-    const out = await inlineImagesForExport(html, fetcher as unknown as typeof fetch);
+    const out = await inlineImagesForExport(html, fetcher as unknown as typeof fetch, opts);
     expect(out).toContain("https://blob.example/scary.svg");
     expect(out).not.toContain("data:image/svg+xml");
   });
@@ -98,7 +133,7 @@ describe("inlineImagesForExport", () => {
       }),
     );
     const html = `<img src="https://169.254.169.254/latest/meta-data/" /><img src="https://internal.svc/secret.png" />`;
-    const out = await inlineImagesForExport(html, fetchSpy as unknown as typeof fetch);
+    const out = await inlineImagesForExport(html, fetchSpy as unknown as typeof fetch, opts);
     expect(fetchSpy).not.toHaveBeenCalled();
     // src left intact (downstream render decides) — but no fetch happened.
     expect(out).toContain("169.254.169.254");
@@ -124,7 +159,7 @@ describe("inlineImagesForExport", () => {
     })) as unknown as typeof fetch;
 
     const html = `<img src="https://blob.example/huge.png" />`;
-    const out = await inlineImagesForExport(html, fetcher);
+    const out = await inlineImagesForExport(html, fetcher, opts);
     expect(fetcher).toHaveBeenCalledTimes(1); // it DID fetch (headers), but…
     expect(bodyRead).toBe(false); // …never buffered the 50MB body
     expect(out).toContain("https://blob.example/huge.png"); // src left intact, not inlined

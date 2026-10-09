@@ -44,10 +44,11 @@ type ImageLoader = (url: string, maxBytes: number, timeoutMs: number) => Promise
  * embedded (network or CORS failure, non-image, over the size cap). WebP is
  * re-encoded to PNG when the browser can, because Word cannot embed WebP.
  *
- * The app's Content-Security-Policy limits fetch() to our own origin
- * (connect-src) but allows images from any https host (img-src), so in
- * production the fetch is refused and the image is loaded through an <img>
- * element and redrawn on a canvas instead. Both need the host to allow CORS.
+ * The app's Content-Security-Policy limits fetch() to our own origin and a
+ * few service hosts such as Vercel Blob (connect-src) but allows images from
+ * any https host (img-src), so in production a third-party fetch is refused
+ * and the image is loaded through an <img> element and redrawn on a canvas
+ * instead. Both need the host to allow CORS.
  */
 export async function fetchImageAsDataUrl(
   url: string,

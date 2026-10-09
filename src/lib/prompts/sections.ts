@@ -169,7 +169,7 @@ const SECTION_INSTRUCTIONS: Record<string, string> = {
     "Render the reservation paragraph. Open with 'I reserve all my rights…' Include statutory, contractual, and common-law remedies. For tribunal-bound letters, reference the right to bring an Employment Tribunal / EEOC / state-agency claim.",
 
   deadline:
-    "Render a short paragraph noting the limitation deadline by which the employee must lodge proceedings (3 months less one day for UK ERA s.111; 180/300 days for EEOC). Reference the statutory basis. Do not invent figures — use [TBD] if uncertain.",
+    "Render a short paragraph noting the limitation deadline by which the employee must lodge proceedings (UK: 6 months less one day for acts on or after 1 October 2026 under the Employment Rights Act 2025, 3 months less one day for earlier acts, and 3 months less one day in Northern Ireland; EEOC: 180/300 days). Where a LIMITATION DEADLINE is supplied, use that date and basis. Reference the statutory basis. Do not invent figures: use [TBD] if uncertain.",
 
   header:
     "If this is a Without-Prejudice draft, render exactly one <p><strong>Without Prejudice and Subject to Contract</strong></p> as the header. Otherwise render an empty string.",
@@ -352,7 +352,7 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- Document the PIP engagement. ADA: if disability is implicated, document the interactive process. Reserve rights.",
   },
   acas_ec_notification: {
-    UK: "- Procedural cover for ACAS Early Conciliation. State intended claim type (unfair dismissal, discrimination, etc.), brief basis. Reference s.111 ERA limitation period (3 months less one day). Counsel review strongly recommended.",
+    UK: "- Procedural cover for ACAS Early Conciliation. State intended claim type (unfair dismissal, discrimination, etc.), brief basis. Reference the s.111 ERA / s.123 EqA limitation period: 6 months less one day where the act or effective date of termination is on or after 1 October 2026 (Employment Rights Act 2025), otherwise 3 months less one day, extended by early conciliation (s.207B). Counsel review strongly recommended.",
     US: "- EEOC charge cover. State protected characteristic, date(s) of act, brief factual basis. Reference 180/300-day filing window.",
   },
   tribunal_cover: {

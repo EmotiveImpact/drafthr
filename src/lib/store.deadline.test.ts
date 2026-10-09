@@ -33,6 +33,32 @@ describe("protected-act deadline", () => {
     expect(deadline?.basis).toMatch(/ACAS|tribunal/i);
   });
 
+  it("uses 6 months less one day in Great Britain for an act on or after 1 October 2026", async () => {
+    const { useDraftStore, id } = await create({ jurisdiction: "UK", ukRegion: "England & Wales", actDate: "2026-10-01" });
+    const deadline = useDraftStore.getState().drafts[id].context.protectedDeadline;
+    expect(deadline?.iso).toBe("2027-03-31");
+    expect(deadline?.basis).toContain("6 months less one day");
+  });
+
+  it("keeps 3 months less one day for an act before 1 October 2026", async () => {
+    const { useDraftStore, id } = await create({ jurisdiction: "UK", ukRegion: "Scotland", actDate: "2026-09-30" });
+    expect(useDraftStore.getState().drafts[id].context.protectedDeadline?.iso).toBe("2026-12-29");
+  });
+
+  it("keeps 3 months less one day in Northern Ireland", async () => {
+    const { useDraftStore, id } = await create({ jurisdiction: "UK", ukRegion: "Northern Ireland", actDate: "2026-10-01" });
+    const deadline = useDraftStore.getState().drafts[id].context.protectedDeadline;
+    expect(deadline?.iso).toBe("2026-12-31");
+    expect(deadline?.basis).toContain("Northern Ireland");
+  });
+
+  it("recomputes when Edit Details switches the UK region", async () => {
+    const { useDraftStore, id } = await create({ jurisdiction: "UK", ukRegion: "England & Wales", actDate: "2026-10-15" });
+    expect(useDraftStore.getState().drafts[id].context.protectedDeadline?.iso).toBe("2027-04-14");
+    useDraftStore.getState().patchDraft(id, { context: { ukRegion: "Northern Ireland" } });
+    expect(useDraftStore.getState().drafts[id].context.protectedDeadline?.iso).toBe("2027-01-14");
+  });
+
   it("recomputes when the act date changes", async () => {
     const { useDraftStore, id } = await create({ jurisdiction: "UK", actDate: "2026-01-10" });
     useDraftStore.getState().patchDraft(id, { answers: { actDate: "2026-02-01" } });
