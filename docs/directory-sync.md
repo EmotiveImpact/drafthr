@@ -71,9 +71,10 @@ directory users, edit the mapping in the WorkOS Admin Portal.
 
 Deprovisioning sets `tenant_members.status = 'deprovisioned'` and stamps
 `deprovisioned_at`. The `users` row stays — it's referenced by audit events,
-comments, drafts, and approval history. Hard-deleting would corrupt the
-hash chain (it has a `users` FK with `ON DELETE CASCADE`) and lose audit
-trail.
+comments, drafts, and approval history. Hard-deleting would not break the
+hash chain (`audit_events.actor_user_id` is `ON DELETE SET NULL`, the one
+change the append-only trigger from migration 0021 allows, and it isn't
+hashed) but it would lose who performed each audited action.
 
 If a customer ever needs a true hard-delete (GDPR right-to-erasure), we
 expose that via a separate workflow that snapshots and detaches the audit

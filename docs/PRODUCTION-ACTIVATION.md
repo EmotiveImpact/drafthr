@@ -95,7 +95,8 @@ stays request-based). Code: `api/_utils/stripe.ts`,
    its secret into `STRIPE_WEBHOOK_SECRET_CONNECT`. Without the async events a
    Direct Debit payment never leaves "processing"; without the refund and
    dispute events a refunded booking keeps its draft access and the
-   consultant keeps the transfer.
+   consultant keeps the transfer. The consultant's share link to the draft is
+   only minted once the booking is paid.
 4. `vercel --prod`, then test in **Stripe test mode**: a consultant connects
    payouts (Profile → Connect Stripe), an HR user pays an accepted booking
    (My bookings → Pay for review).
@@ -113,9 +114,14 @@ mode** (v0.21.1): the `/pricing` storefront, subscriptions (Starter/Pro/Business
 packs, the **AI critique** feature (spends 1 credit, Claude Opus 4.8, refunded on
 failure), and the **per-cycle credit drip**. Idempotent webhooks mirror Stripe →
 `subscriptions` / `entitlement_purchases` / `credit_ledger`. Migrations 0013,
-0016, 0017 are **already applied** to prod. **0019** (`entitlement_purchases.refunded_at`)
-must be applied before deploying code that reads it: the refund webhook and the
-paywall gate both do. The hard paywall (server gate `assertCanCreateLetter` + client
+0016, 0017 are **already applied** to prod. **Migrations 0018 to 0021 are new and
+must be applied before this code is deployed** (`node scripts/run-migrations-direct.mjs`):
+the code reads `drafts.revision` / `drafts.deleted_at`,
+`entitlement_purchases.refunded_at` and `audit_events.seq`, so deploying first
+breaks draft sync, the paywall gate and audit writes. Apply them immediately
+before promoting the deploy: once 0021 makes `audit_events.seq` NOT NULL, the
+previous release's audit appends fail (logged and skipped) until the new code
+is live. The hard paywall (server gate `assertCanCreateLetter` + client
 `<PaywallGate>`) is complete but **env-gated OFF** via `DRAFTHR_ENFORCE_PAYWALL`.
 
 Direct-charge billing is separate from the marketplace's Connect flow above; it

@@ -456,7 +456,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
       id: "disclosure",
       title: "What you are disclosing",
       description:
-        "PIDA / s.43A ERA 1996 protection requires: information (not allegation), reasonable belief, public interest, and one of six categories (criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, environmental damage, deliberate concealment).",
+        "PIDA / s.43A ERA 1996 protection requires: information (not allegation), reasonable belief, public interest, and one of the s.43B categories (criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, sexual harassment, environmental damage, deliberate concealment).",
       questions: [
         {
           id: "category",
@@ -468,6 +468,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
             { value: "legal_obligation", label: "Breach of a legal obligation" },
             { value: "miscarriage_of_justice", label: "Miscarriage of justice" },
             { value: "health_safety", label: "Danger to health and safety" },
+            { value: "sexual_harassment", label: "Sexual harassment" },
             { value: "environmental", label: "Damage to the environment" },
             { value: "concealment", label: "Deliberate concealment of any of the above" },
           ],

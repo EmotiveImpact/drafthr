@@ -77,4 +77,38 @@ describe("placeholder health check", () => {
     const check = placeholderCheck("<p>See Agnew [2023] UKSC 33, and the words 'recieved' [sic].</p>");
     expect(check.severity).toBe("pass");
   });
+
+  it("ignores the evidence references the editor inserts", () => {
+    // EvidenceDrawer / evidence-refs.ts write these into the letter body; the
+    // separate evidence check validates them.
+    const check = placeholderCheck(
+      '<p>The rota <span class="figure-ref" data-fig-id="e1">[See Fig 2]</span> and the emails ' +
+        '<span class="attachment-ref" data-att-id="e2">[See Attachments]</span>, and the note [See Exhibit A].</p>',
+    );
+    expect(check.severity).toBe("pass");
+  });
+
+  it("ignores editorial brackets in quoted material", () => {
+    const check = placeholderCheck("<p>She wrote 'you will be dismissed' [emphasis added] about [redacted].</p>");
+    expect(check.severity).toBe("pass");
+  });
+
+  it("finds no placeholders in any template's worked example", async () => {
+    const { loadAllTemplates, getTemplate } = await import("@/lib/letters/templates");
+    const { TEMPLATE_METADATA } = await import("@/lib/letters/templates/metadata");
+    await loadAllTemplates();
+    const flagged: string[] = [];
+    const keys = Object.keys(TEMPLATE_METADATA);
+    expect(keys.length).toBeGreaterThan(50);
+    for (const key of keys) {
+      const [letterType, jurisdiction] = key.split("__") as [Draft["letterType"], "UK" | "US"];
+      const tpl = getTemplate(letterType, jurisdiction);
+      expect(tpl, key).toBeDefined();
+      for (const s of tpl?.sections ?? []) {
+        const check = placeholderCheck(s.example);
+        if (check.severity !== "pass") flagged.push(`${key}/${s.sectionId}: ${check.detail}`);
+      }
+    }
+    expect(flagged).toEqual([]);
+  });
 });

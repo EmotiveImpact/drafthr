@@ -236,6 +236,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       .select({
         id: drafts.id,
         tenantId: drafts.tenantId,
+        letterType: drafts.letterType,
         reviewStatus: drafts.reviewStatus,
         revision: drafts.revision,
         deletedAt: drafts.deletedAt,
@@ -268,6 +269,12 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
     }
     const isCreate = decision.kind === "create";
     const restoring = decision.kind === "update" && decision.restore;
+    // The letter tier is checked only when a letter is created, so its type is
+    // fixed from then on: an update switching a routine letter to a tribunal
+    // one would skip the tier gate. No client flow changes an existing type.
+    if (!isCreate && body.letterType !== existingDraft.letterType) {
+      return jsonError("A letter's type can't be changed after it is created", 422);
+    }
     const decisionError = rejectUnauthorisedReviewDecision(
       auth,
       isCreate ? null : existingDraft.reviewStatus,

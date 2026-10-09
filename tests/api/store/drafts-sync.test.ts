@@ -163,7 +163,7 @@ describe("decideDraftWrite", () => {
 describe("POST /api/store/drafts (tombstones + revisions)", () => {
   it("returns 410 for a tombstoned id and never touches the paywall or the row", async () => {
     state.body = draftBody({ baseRevision: 4 });
-    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: new Date() }]];
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", reviewStatus: "draft", revision: 4, deletedAt: new Date() }]];
     const res = await POST(req);
     expect(res.status).toBe(410);
     expect((await res.json()).deleted).toBe(true);
@@ -173,7 +173,7 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
 
   it("restores a just-deleted draft for the Undo without spending a credit", async () => {
     state.body = draftBody({ restore: true });
-    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 5, deletedAt: new Date() }]];
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", reviewStatus: "draft", revision: 5, deletedAt: new Date() }]];
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect((await res.json()).revision).toBe(6);
@@ -185,7 +185,7 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
   it("rejects a stale write with 409 and the current row, leaving the approval alone", async () => {
     state.body = draftBody({ baseRevision: 3, reviewStatus: "in_review" });
     state.selects = [
-      [{ id: ID, tenantId: "t1", reviewStatus: "approved", revision: 4, deletedAt: null }],
+      [{ id: ID, tenantId: "t1", letterType: "termination", reviewStatus: "approved", revision: 4, deletedAt: null }],
       [fullRow()],
       [{ sectionId: "intro", title: "Intro", html: "<p>Theirs</p>", status: "ready", position: 0 }],
     ];
@@ -200,7 +200,7 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
 
   it("accepts a write on the current revision and bumps it", async () => {
     state.body = draftBody({ baseRevision: 4 });
-    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null }]];
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", reviewStatus: "draft", revision: 4, deletedAt: null }]];
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect((await res.json()).revision).toBe(5);
@@ -211,7 +211,7 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
   it("returns 409 with the current row when a concurrent write wins the compare-and-swap", async () => {
     state.body = draftBody({ baseRevision: 4 });
     state.selects = [
-      [{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null }],
+      [{ id: ID, tenantId: "t1", letterType: "termination", reviewStatus: "draft", revision: 4, deletedAt: null }],
       [fullRow({ revision: 5, reviewStatus: "draft" })],
       [],
     ];
@@ -219,6 +219,15 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
     const res = await POST(req);
     expect(res.status).toBe(409);
     expect((await res.json()).revision).toBe(5);
+  });
+
+  it("refuses an update that changes the letter type, so the tier gate can't be skipped", async () => {
+    state.body = draftBody({ baseRevision: 4, letterType: "acas_ec_notification" });
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "holiday_request", reviewStatus: "draft", revision: 4, deletedAt: null }]];
+    const res = await POST(req);
+    expect(res.status).toBe(422);
+    expect(state.writes).toHaveLength(0);
+    expect(assertCanCreateLetter).not.toHaveBeenCalled();
   });
 
   it("creates at revision 1 through the paywall gate", async () => {
