@@ -6,7 +6,7 @@ import {
   estimateLocalStorageBytes,
   hasUnpersistedWrites,
 } from "./storage/quota-safe-storage";
-import { TENANT_SCOPED_PERSIST_KEYS } from "./session/clearLocalData";
+import { TENANT_SCOPED_PERSIST_KEYS, WORKSPACE_SWAP_KEY } from "./session/clearLocalData";
 import type {
   AIAction,
   AIChatMessage,
@@ -1794,6 +1794,13 @@ if (typeof window !== "undefined") {
   const PERSIST_KEY = "scribehr-store-v1";
   window.addEventListener("storage", (e) => {
     if (!e.key) return;
+    // Another tab switched this device to a different workspace's local data.
+    // Reload rather than rehydrate, so this tab can't persist the previous
+    // workspace's in-memory state over it.
+    if (e.key === WORKSPACE_SWAP_KEY) {
+      window.location.assign("/");
+      return;
+    }
     // Another tab signed out / switched workspace → it WIPED a tenant-scoped
     // key. Tear this tab down too, so it can't keep the previous tenant's PII
     // in memory and re-persist it under the wiped key for the next user (board

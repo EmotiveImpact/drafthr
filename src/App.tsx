@@ -26,6 +26,8 @@ import {
 } from "@/lib/sync-meta";
 import { useAuth } from "@/lib/auth";
 import { StorageQuotaBanner } from "@/components/StorageQuotaBanner";
+import { LocalDataLossDialog } from "@/components/LocalDataLossDialog";
+import { reconcileLocalDataOwner } from "@/lib/session/clearLocalData";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
@@ -136,9 +138,25 @@ const SYNC_META_ACCESS: SyncMetaAccess = {
   clear: clearSyncMeta,
 };
 
+/** Set when the local data was just swapped for another workspace's: the
+ *  in-memory store is stale until the reload, so nothing may sync it. */
+let localDataReloadPending = false;
+
 export function App() {
   const location = useLocation();
   const { activeTenant, isLoaded, user } = useAuth();
+  // Make sure the local data on this device belongs to this user and
+  // workspace before anything syncs it. Data left by another workspace (or a
+  // user who didn't sign out) is stashed under its owner, not shown here and
+  // not deleted; this workspace's own stash comes back after a reload.
+  // Declared first so it runs before the sync effects below in each commit.
+  useEffect(() => {
+    if (!isLoaded || !user || !activeTenant) return;
+    if (reconcileLocalDataOwner(user.id, activeTenant.id)) {
+      localDataReloadPending = true;
+      window.location.reload();
+    }
+  }, [isLoaded, user, activeTenant]);
   // One-shot migration for existing base64 letterhead/signature → Blob URL.
   // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
   // swaps them out lazily so the dual-write rollout doesn't carry those blobs
@@ -174,7 +192,7 @@ export function App() {
   // successful sync. Runs once per mount; unchanged drafts are skipped, so a
   // reload no longer re-posts the whole workspace.
   useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
     const drafts = Object.values(useDraftStore.getState().drafts);
     if (drafts.length === 0) return;
@@ -197,7 +215,7 @@ export function App() {
   // store so a second device / teammate sees the same letters. The merge is
   // non-destructive (preserves newer local edits + all local-only fields).
   useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
     void (async () => {
       // Retry deletes that never got a confirmed 2xx (tab closed / offline)
@@ -263,6 +281,7 @@ export function App() {
   return (
     <Layout>
       <StorageQuotaBanner />
+      <LocalDataLossDialog />
       {showTour && (
         <Suspense fallback={null}>
           <OnboardingTour />

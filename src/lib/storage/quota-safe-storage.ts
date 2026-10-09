@@ -137,6 +137,16 @@ export function cancelPendingWrites(): void {
   for (const p of [...pendingWrites]) p.cancel();
 }
 
+let suspended = false;
+
+/** Stop (or resume) writing to storage. Set while this tab's live keys hold
+ *  another workspace's data (mid-switch, before the reload), so the previous
+ *  workspace's in-memory state can't be persisted over it. */
+export function setPersistenceSuspended(value: boolean): void {
+  suspended = value;
+  if (value) cancelPendingWrites();
+}
+
 /** True when this tab holds state the browser storage doesn't: a write is
  *  waiting on the throttle, or the last write failed on quota. */
 export function hasUnpersistedWrites(): boolean {
@@ -234,6 +244,7 @@ export function createQuotaSafeStorage(
       backing.removeItem(name);
     },
     setItem: (name, value) => {
+      if (suspended) return;
       const sinceLast = Date.now() - lastWriteAt;
       if (throttleMs <= 0 || (sinceLast >= throttleMs && !timer)) {
         write(name, value);
