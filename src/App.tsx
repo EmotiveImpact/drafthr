@@ -14,8 +14,20 @@ import {
   mergeRemoteDrafts,
   pullRemoteExtras,
   mergeRemoteExtras,
+  type SyncMetaAccess,
 } from "@/lib/remote-pull";
+import {
+  clearSyncMeta,
+  draftContentKey,
+  draftSyncKey,
+  getSyncMeta,
+  patchSyncMeta,
+  setSyncMeta,
+} from "@/lib/sync-meta";
 import { useAuth } from "@/lib/auth";
+import { StorageQuotaBanner } from "@/components/StorageQuotaBanner";
+import { LocalDataLossDialog } from "@/components/LocalDataLossDialog";
+import { reconcileLocalDataOwner } from "@/lib/session/clearLocalData";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { RootRedirect } from "@/routes/RootRedirect";
@@ -121,9 +133,40 @@ function EditorFallback() {
   );
 }
 
+// Revision bookkeeping for the cross-device pull (see src/lib/sync-meta.ts).
+const SYNC_META_ACCESS: SyncMetaAccess = {
+  get: getSyncMeta,
+  adopted: (localId, revision, draft) =>
+    setSyncMeta(localId, {
+      rev: revision,
+      key: draftSyncKey(draft),
+      ckey: draftContentKey(draft),
+      ekey: getSyncMeta(localId)?.ekey,
+      at: Date.now(),
+    }),
+  rebased: (localId, revision) => patchSyncMeta(localId, { rev: revision }),
+  clear: clearSyncMeta,
+};
+
+/** Set when the local data was just swapped for another workspace's: the
+ *  in-memory store is stale until the reload, so nothing may sync it. */
+let localDataReloadPending = false;
+
 export function App() {
   const location = useLocation();
   const { activeTenant, isLoaded, user } = useAuth();
+  // Make sure the local data on this device belongs to this user and
+  // workspace before anything syncs it. Data left by another workspace (or a
+  // user who didn't sign out) is stashed under its owner, not shown here and
+  // not deleted; this workspace's own stash comes back after a reload.
+  // Declared first so it runs before the sync effects below in each commit.
+  useEffect(() => {
+    if (!isLoaded || !user || !activeTenant) return;
+    if (reconcileLocalDataOwner(user.id, activeTenant.id)) {
+      localDataReloadPending = true;
+      window.location.reload();
+    }
+  }, [isLoaded, user, activeTenant]);
   // One-shot migration for existing base64 letterhead/signature → Blob URL.
   // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
   // swaps them out lazily so the dual-write rollout doesn't carry those blobs
@@ -155,10 +198,11 @@ export function App() {
   }, []);
 
   // Dual-write backfill — when the flag is on AND the user has an active
-  // tenant, POST every locally-known draft that hasn't synced yet. Runs once
-  // per mount; idempotent for re-runs (already-synced drafts no-op).
+  // tenant, POST every locally-known draft that changed since its last
+  // successful sync. Runs once per mount; unchanged drafts are skipped, so a
+  // reload no longer re-posts the whole workspace.
   useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
     const drafts = Object.values(useDraftStore.getState().drafts);
     if (drafts.length === 0) return;
@@ -181,20 +225,25 @@ export function App() {
   // store so a second device / teammate sees the same letters. The merge is
   // non-destructive (preserves newer local edits + all local-only fields).
   useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
     void (async () => {
       // Retry deletes that never got a confirmed 2xx (tab closed / offline)
       // BEFORE pulling, so a pending-delete row is gone rather than merged.
       await reissuePendingDeletes();
       if (cancelled) return;
-      await pullRemoteDrafts((remote) => {
+      await pullRemoteDrafts((remote, deleted) => {
         if (cancelled) return;
         // Re-read the live store at apply time so a concurrent edit isn't lost.
-        // Skip adoption of rows whose delete is still unconfirmed (BUG-05).
+        // Skip adoption of rows whose delete is still unconfirmed (BUG-05),
+        // and drop drafts deleted on another device (server tombstones).
         const local = useDraftStore.getState().drafts;
         useDraftStore.setState({
-          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones()),
+          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones(), {
+            deleted,
+            syncMeta: SYNC_META_ACCESS,
+            syncKey: draftSyncKey,
+          }),
         });
       });
       if (cancelled) return;
@@ -241,6 +290,8 @@ export function App() {
     !hasSeenTour();
   return (
     <Layout>
+      <StorageQuotaBanner />
+      <LocalDataLossDialog />
       {showTour && (
         <Suspense fallback={null}>
           <OnboardingTour />

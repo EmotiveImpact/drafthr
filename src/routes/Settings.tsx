@@ -52,8 +52,6 @@ export function Settings() {
   const setWorkspaceRole = useProfileStore((s) => s.setWorkspaceRole);
   const markSetupComplete = useProfileStore((s) => s.markSetupComplete);
   const resetProfile = useProfileStore((s) => s.reset);
-  const drafts = useDraftStore((s) => s.drafts);
-  const deleteDraft = useDraftStore((s) => s.deleteDraft);
 
   const [savedFlash, setSavedFlash] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,7 +112,9 @@ export function Settings() {
         "This will erase your profile and all drafts from this device. Cloud-stored data is unaffected. Continue?"
       )
     ) {
-      Object.keys(drafts).forEach((id) => deleteDraft(id));
+      // Local wipe only: deleteDraft would also delete each letter from the
+      // workspace, which this "this device only" action promises not to do.
+      useDraftStore.setState({ drafts: {} });
       resetProfile();
       nav("/");
     }

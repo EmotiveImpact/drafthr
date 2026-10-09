@@ -1,11 +1,27 @@
 /**
  * Client dual-write: tap every draft mutation and POST a shaped payload to
  * /api/store/drafts, debounced per-draft. Failures degrade defensively —
- * the local write already succeeded; the next mutation retries.
+ * the local write already succeeded and is retried.
  *
- * Wiring: useDraftStore subscribes to its own state and call enqueueSync(id)
- * after every mutation that touched a draft. The store calls the no-op
- * variant when the flag is off (the function returns immediately).
+ * Wiring: useDraftStore subscribes to its own state and calls enqueueSync(id)
+ * after every mutation that touched a draft's synced fields. Remote deletes
+ * are issued only by the explicit delete actions, never inferred from a draft
+ * disappearing from state (a cross-tab rehydrate while storage is full used
+ * to look like a mass delete).
+ *
+ * Sync rules:
+ *   • Only changed drafts are sent. sync-meta keeps a content key of what the
+ *     server last accepted, so a page load or rehydrate doesn't re-post every
+ *     draft (which tripped the 120/min rate limit).
+ *   • Every write names the server revision it was built on. A 409 carries the
+ *     current server row; we adopt it when the content matches, re-apply our
+ *     content on top when only the review status moved, and otherwise keep
+ *     both (the server version under the original id, ours as a local
+ *     "conflicted copy"). A stale write can never revert an approval.
+ *   • 410 means the draft was deleted on another device: the local copy is
+ *     removed, or kept as a local-only copy when it holds unsynced edits.
+ *   • 429 is retried with backoff honouring Retry-After. 403 and repeated
+ *     failures surface a toast instead of failing silently.
  *
  * The flag lives in VITE_DRAFTHR_DUAL_WRITE — Vite inlines it at build, so
  * a misconfigured client can't dual-write without an explicit build env var.
@@ -13,16 +29,24 @@
  * server is the authoritative gate.
  */
 import { toast } from "sonner";
-import type { Draft, Matter } from "./letters/types";
+import type { Draft, Matter, ReviewStatus } from "./letters/types";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
-import { extractExtras } from "./remote-pull";
+import { extractExtras, type DraftExtras, type RemoteDraft } from "./remote-pull";
+import {
+  clearSyncMeta,
+  draftContentKey,
+  draftSyncKey,
+  extrasKey,
+  getSyncMeta,
+  patchSyncMeta,
+  remoteContentKey,
+  setSyncMeta,
+} from "./sync-meta";
 
 const DEBOUNCE_MS = 400;
 const ENABLED = readFlag();
 const pendingDraftIds = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
-const syncedAt = new Map<string, number>();
-const staleRevisionByDraftId = new Map<string, number>();
 // Tombstones: ids deleted locally. A debounced upsert POST already on the wire
 // must NOT resurrect a draft the user just deleted — if the DELETE commits
 // first server-side, the POST's create branch would blindly re-INSERT it
@@ -34,19 +58,79 @@ const deletedDraftIds = new Set<string>();
 // would otherwise re-INSERT a ghost matter + spurious matter.created audit.
 // (Senior sweep B7 — the unfixed matters analog of bug #6.)
 const deletedMatterIds = new Set<string>();
+// Ids the sidebar's Undo restored: the next upsert asks the server to lift
+// its tombstone (honoured for a short window after the delete).
+const restoreRequested = new Set<string>();
+// One sync per draft at a time, so two quick edits can't both be sent on the
+// same base revision (the second would 409 against the first).
+const inFlightSyncs = new Map<string, Promise<void>>();
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let consecutiveDeleteFailures = 0;
 let deleteFailureToastShown = false;
-// Per-draft, NOT global: a single global counter was reset by ANY draft's
-// successful sync, so in a multi-draft workspace healthy drafts kept resetting
-// it and the "your edits aren't syncing" toast for the one conflicted draft
-// never fired (FQ-02). The toast flag is also per-draft and cleared on that
-// draft's success, so a recovery followed by a NEW conflict re-notifies.
-const staleConflictsByDraftId = new Map<string, number>();
-const staleConflictToastShownFor = new Set<string>();
+// Per draft, so one healthy draft's success can't mask another's failures
+// (FQ-02). The toast flag is cleared on that draft's success, so a recovery
+// followed by a new run of failures re-notifies.
+const failuresByDraftId = new Map<string, number>();
+const failureToastShownFor = new Set<string>();
+const paymentToastShownFor = new Set<string>();
+let forbiddenToastShown = false;
+
+const MAX_429_RETRIES = 4;
+const MAX_RETRY_DELAY_MS = 60_000;
+let sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Tests only: replace the backoff sleep. */
+export function _setSleepForTests(fn: (ms: number) => Promise<void>): void {
+  sleep = fn;
+}
 
 export function isDualWriteEnabled(): boolean {
   return ENABLED;
 }
+
+/** Store operations dual-write needs to resolve conflicts and remote deletes.
+ *  Injected by the store so this module never imports it (circular import). */
+export type DualWriteStoreBridge = {
+  /** Overlay a server version onto the local draft; returns the result. */
+  applyServerDraft: (localId: string, remote: RemoteDraft) => Draft | null;
+  setReviewStatus: (localId: string, status: ReviewStatus) => void;
+  /** Add a local-only copy of this draft (a new id); returns the new id. */
+  addConflictCopy: (draft: Draft) => string | null;
+  /** Keep the draft on this device only (deleted elsewhere, unsynced edits). */
+  keepLocalOnly: (localId: string) => void;
+  /** Drop the draft locally without issuing a remote delete. */
+  removeLocally: (localId: string) => void;
+  applyExtras: (localId: string, extras: DraftExtras) => void;
+};
+
+let bridge: DualWriteStoreBridge | null = null;
+
+export function setDualWriteStoreBridge(next: DualWriteStoreBridge | null): void {
+  bridge = next;
+}
+
+/** How long to wait before retrying a 429: the server's Retry-After (seconds
+ *  or an HTTP date) when present, else exponential backoff. */
+export function retryDelayMs(res: Pick<Response, "headers">, attempt: number): number {
+  const header = res.headers.get("Retry-After");
+  if (header) {
+    const secs = Number(header);
+    if (Number.isFinite(secs) && secs >= 0) return Math.min(secs * 1000, MAX_RETRY_DELAY_MS);
+    const at = Date.parse(header);
+    if (!Number.isNaN(at)) return Math.min(Math.max(at - Date.now(), 0), MAX_RETRY_DELAY_MS);
+  }
+  return Math.min(1000 * 2 ** attempt, 30_000);
+}
+
+/** fetch that retries 429 responses with backoff. Other statuses return as-is. */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 || attempt >= MAX_429_RETRIES) return res;
+    await sleep(retryDelayMs(res, attempt));
+  }
+}
+
 
 /** Snapshot a draft from the live Zustand state. Kept in this module so tests
  * can inject a different getter without importing the store. */
@@ -165,12 +249,14 @@ export function enqueueMatterSync(matterId: string): void {
 }
 
 /** Schedule a debounced sync for one draft. Multiple calls in a short window
+
+/** Schedule a debounced sync for one draft. Multiple calls in a short window
  * collapse into a single POST. */
 export function enqueueSync(draftId: string): void {
   if (!ENABLED) return;
   if (!draftId) return;
   const draft = snapshotGetter?.(draftId);
-  if (draft && isStaleSnapshot(draft)) return;
+  if (draft?.localOnly) return;
   pendingDraftIds.add(draftId);
   const existing = timers.get(draftId);
   if (existing) clearTimeout(existing);
@@ -185,96 +271,237 @@ export function enqueueSync(draftId: string): void {
   timers.set(draftId, t);
 }
 
-/** Force-sync a single draft. Resolves once the POST round-trips (or fails).
- * Safe to call when dual-write is off — resolves to a no-op. */
-export async function syncDraft(draftId: string): Promise<void> {
+/** Sync a single draft if (and only if) it changed since the server last
+ * accepted it. Resolves once the round-trip settles. Safe to call when
+ * dual-write is off — resolves to a no-op. */
+export async function syncDraft(draftId: string, fallback?: Draft): Promise<void> {
   if (!ENABLED) return;
+  const previous = inFlightSyncs.get(draftId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(() => syncDraftNow(draftId, fallback));
+  inFlightSyncs.set(draftId, run);
+  try {
+    await run;
+  } finally {
+    if (inFlightSyncs.get(draftId) === run) inFlightSyncs.delete(draftId);
+  }
+}
+
+async function syncDraftNow(draftId: string, fallback?: Draft): Promise<void> {
   // Don't sync a draft that's been deleted locally — a stale debounced POST
   // would resurrect it server-side (bug #6).
   if (deletedDraftIds.has(draftId)) return;
-  const draft = snapshotGetter?.(draftId);
-  if (!draft) return;
-  if (isStaleSnapshot(draft)) return;
+  const draft = snapshotGetter?.(draftId) ?? fallback ?? null;
+  if (!draft || draft.localOnly) return;
+  const meta = getSyncMeta(draftId);
+  const key = draftSyncKey(draft);
+  if (!meta || meta.key !== key || restoreRequested.has(draftId)) {
+    const outcome = await pushDraft(draft, key);
+    if (outcome !== "ok") return;
+  }
+  // Collaboration data (comments / timeline / approvals) syncs separately and
+  // only once the draft exists server-side. It changes without touching the
+  // letter content, so it has its own change key.
+  const current = snapshotGetter?.(draftId) ?? draft;
+  const synced = getSyncMeta(draftId);
+  if (!synced) return;
+  const extras = extractExtras(current);
+  const ekey = extrasKey(extras);
+  if (extras && ekey !== synced.ekey) await pushDraftExtras(current, extras, ekey);
+}
+
+type PushOutcome = "ok" | "conflict" | "gone" | "failed";
+
+async function pushDraft(draft: Draft, key: string): Promise<PushOutcome> {
+  const draftId = draft.id;
+  const meta = getSyncMeta(draftId);
+  const restoring = restoreRequested.has(draftId);
   // Mirror the draft's matter FIRST so the FK resolves. On any failure
   // resolvedMatterId stays null — the draft still syncs, just unfiled
-  // server-side (today's behaviour, never a 409 regression).
+  // server-side (never a 409 regression).
   const resolvedMatterId = draft.matterId ? await pushMatter(draft.matterId) : null;
-  const payload = toServerPayload(draft, resolvedMatterId);
+  const payload = toServerPayload(draft, resolvedMatterId, meta?.rev ?? null, restoring);
+  let res: Response;
   try {
-    const res = await fetch("/api/store/drafts", {
+    res = await fetchWithRetry("/api/store/drafts", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload),
     });
-    if (res.ok) {
-      staleRevisionByDraftId.delete(draftId);
-      syncedAt.set(draftId, Date.now());
-      clearStaleConflicts(draftId);
-      // Best-effort: mirror the draft's collaboration data (comments / timeline
-      // / approvals) to the decoupled extras endpoint. Failure here never
-      // affects the draft sync (the draft is already saved).
-      void pushDraftExtras(draft);
-      // The user deleted this draft WHILE the POST was on the wire — the POST
-      // just (re)created/updated the row, so re-issue the DELETE to converge
-      // (bug #6: delete-during-sync left a ghost row in the server mirror).
-      if (deletedDraftIds.has(draftId)) {
-        void deleteDraftRemotely(draftId);
-      }
-    } else if (res.status === 409) {
-      markSnapshotStale(draftId, payload.clientRevision);
-      console.warn("[dual-write] stale snapshot skipped", draftId, res.status);
-      recordStaleConflict(draftId);
-    } else if (res.status === 503) {
-      // Server flag off — silently stop until the next refresh.
-      return;
-    } else {
-      console.warn("[dual-write] sync failed", draftId, res.status);
-    }
   } catch (err) {
-    console.warn("[dual-write] sync threw", draftId, err);
+    recordSyncFailure(draftId, err, true);
+    return "failed";
+  }
+
+  if (res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { revision?: number };
+    setSyncMeta(draftId, {
+      rev: typeof data.revision === "number" ? data.revision : (meta?.rev ?? 0) + 1,
+      key,
+      ckey: draftContentKey(draft),
+      ekey: restoring ? undefined : meta?.ekey,
+      at: Date.now(),
+    });
+    restoreRequested.delete(draftId);
+    clearFailures(draftId);
+    // The user deleted this draft WHILE the POST was on the wire — the POST
+    // just (re)created/updated the row, so re-issue the DELETE to converge
+    // (bug #6: delete-during-sync left a ghost row in the server mirror).
+    if (deletedDraftIds.has(draftId)) {
+      void deleteDraftRemotely(draftId);
+      return "gone";
+    }
+    return "ok";
+  }
+
+  switch (res.status) {
+    case 409: {
+      const body = (await res.json().catch(() => ({}))) as ConflictBody;
+      resolveConflict(draftId, draft, body);
+      return "conflict";
+    }
+    case 410:
+      handleRemoteDelete(draftId);
+      return "gone";
+    case 503:
+      // Server flag off — silently stop until the next refresh.
+      return "failed";
+    case 401:
+      // Session expired: the next mutation after sign-in retries.
+      return "failed";
+    case 403:
+      notifyForbidden(draftId);
+      return "failed";
+    case 402: {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      notifyPaymentRequired(draftId, body.error);
+      return "failed";
+    }
+    default:
+      // 429 (retries exhausted) and 5xx are transient; other 4xx are not.
+      recordSyncFailure(draftId, res.status, res.status === 429 || res.status >= 500);
+      return "failed";
   }
 }
 
-/** Sync every locally-known draft that has no `_syncedAt`. Used once at app
- * mount as a backfill when dual-write was just enabled. */
+type ConflictBody = { current?: RemoteDraft | null; locked?: boolean; error?: string };
+
+/**
+ * A 409: the server moved on since this device's base revision (or the letter
+ * is approved and locked). Never drop either side:
+ *   1. same letter content on both sides → adopt the server copy (its review
+ *      status wins, so an approval is never reverted);
+ *   2. only the review status / references moved on the server, our content
+ *      is new → take their status and re-send our content on their revision;
+ *   3. our content is unchanged since our base → adopt the server copy, then
+ *      re-apply our own status change if the server didn't touch the status;
+ *   4. both changed → the server copy takes the original id and our version
+ *      is kept as a local-only "conflicted copy".
+ */
+function resolveConflict(draftId: string, sent: Draft, body: ConflictBody): void {
+  const current = body.current;
+  if (!current) {
+    // The row vanished, or a server without revision support: nothing to
+    // merge against. Keep the local copy and tell the user after a few tries.
+    recordSyncFailure(draftId, 409, false);
+    return;
+  }
+  const live = snapshotGetter?.(draftId) ?? sent;
+  const meta = getSyncMeta(draftId);
+  const rev = typeof current.revision === "number" ? current.revision : 0;
+  const serverContent = remoteContentKey(current);
+  const localContent = draftContentKey(live);
+  const serverStatus = (current.reviewStatus ?? "draft") as ReviewStatus;
+  const localStatus = live.reviewStatus ?? "draft";
+
+  if (serverContent === localContent) {
+    markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
+    clearFailures(draftId);
+    return;
+  }
+  if (!body.locked && meta?.ckey && serverContent === meta.ckey) {
+    if (serverStatus !== localStatus) bridge?.setReviewStatus(draftId, serverStatus);
+    patchSyncMeta(draftId, { rev, ckey: serverContent, key: "" });
+    enqueueSync(draftId);
+    return;
+  }
+  if (meta?.ckey && localContent === meta.ckey) {
+    const baseStatus = meta.key.split("|")[1] ?? "draft";
+    markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
+    if (localStatus !== baseStatus && serverStatus === baseStatus && !body.locked) {
+      bridge?.setReviewStatus(draftId, localStatus);
+    }
+    clearFailures(draftId);
+    return;
+  }
+  const copyId = bridge?.addConflictCopy(live) ?? null;
+  markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
+  clearFailures(draftId);
+  toast.warning("This letter was changed on another device", {
+    description: copyId
+      ? "The latest saved version is shown. Your version is kept on this device as a conflicted copy."
+      : "The latest saved version is shown.",
+  });
+}
+
+function markAdopted(draftId: string, rev: number, draft: Draft): void {
+  const prev = getSyncMeta(draftId);
+  setSyncMeta(draftId, {
+    rev,
+    key: draftSyncKey(draft),
+    ckey: draftContentKey(draft),
+    ekey: prev?.ekey,
+    at: Date.now(),
+  });
+}
+
+/** 410: deleted on another device. Drop the local copy, or keep it on this
+ *  device only when it holds edits the server never received. */
+function handleRemoteDelete(draftId: string): void {
+  const draft = snapshotGetter?.(draftId);
+  const meta = getSyncMeta(draftId);
+  const unsynced = Boolean(draft) && (!meta || meta.key !== draftSyncKey(draft!));
+  clearSyncMeta(draftId);
+  restoreRequested.delete(draftId);
+  clearFailures(draftId);
+  if (unsynced) {
+    bridge?.keepLocalOnly(draftId);
+    toast.warning("This letter was deleted on another device", {
+      description: "Your unsaved changes are kept on this device only.",
+    });
+  } else {
+    bridge?.removeLocally(draftId);
+    toast("A letter was deleted on another device", {
+      description: "It has been removed from this device too.",
+    });
+  }
+}
+
+/** Push every locally-known draft that changed since its last successful
+ * sync. Run at app mount; unchanged drafts are skipped, so a reload doesn't
+ * re-post the whole workspace. `ok` counts drafts actually pushed. */
 export async function syncAllPending(
   getAll: () => Draft[],
 ): Promise<{ ok: number; failed: number }> {
   if (!ENABLED) return { ok: 0, failed: 0 };
-  const drafts = getAll();
   let ok = 0;
   let failed = 0;
-  for (const d of drafts) {
-    if (syncedAt.has(d.id)) {
-      ok += 1;
-      continue;
-    }
+  for (const d of getAll()) {
+    if (d.localOnly || deletedDraftIds.has(d.id)) continue;
+    const meta = getSyncMeta(d.id);
+    const key = draftSyncKey(d);
+    const extras = extractExtras(d);
+    const needsDraft = !meta || meta.key !== key;
+    const needsExtras = Boolean(extras) && extrasKey(extras) !== meta?.ekey;
+    if (!needsDraft && !needsExtras) continue;
     try {
-      if (isStaleSnapshot(d)) continue;
-      const resolvedMatterId = d.matterId ? await pushMatter(d.matterId) : null;
-      const payload = toServerPayload(d, resolvedMatterId);
-      const res = await fetch("/api/store/drafts", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        staleRevisionByDraftId.delete(d.id);
-        syncedAt.set(d.id, Date.now());
-        clearStaleConflicts(d.id);
-        ok += 1;
-      } else if (res.status === 409) {
-        markSnapshotStale(d.id, payload.clientRevision);
-        console.warn("[dual-write] stale backfill skipped", d.id, res.status);
-        recordStaleConflict(d.id);
-      } else {
-        failed += 1;
-      }
+      await syncDraft(d.id, d);
     } catch {
-      failed += 1;
+      /* logged inside */
     }
+    const after = getSyncMeta(d.id);
+    if (!needsDraft || (after && after.key === key)) ok += 1;
+    else failed += 1;
   }
   return { ok, failed };
 }
@@ -285,14 +512,19 @@ export function resetDualWriteTimers(): void {
   timers.clear();
   for (const t of matterTimers.values()) clearTimeout(t);
   matterTimers.clear();
+  for (const t of retryTimers.values()) clearTimeout(t);
+  retryTimers.clear();
   deletedMatterIds.clear();
   pendingDraftIds.clear();
-  staleRevisionByDraftId.clear();
   deletedDraftIds.clear();
+  restoreRequested.clear();
+  inFlightSyncs.clear();
   consecutiveDeleteFailures = 0;
   deleteFailureToastShown = false;
-  staleConflictsByDraftId.clear();
-  staleConflictToastShownFor.clear();
+  failuresByDraftId.clear();
+  failureToastShownFor.clear();
+  paymentToastShownFor.clear();
+  forbiddenToastShown = false;
   try {
     localStorage.removeItem(TOMBSTONE_STORAGE_KEY);
   } catch {
@@ -307,7 +539,7 @@ export function _isPending(draftId: string): boolean {
 
 /** Visible for tests only. */
 export function _hasSynced(draftId: string): boolean {
-  return syncedAt.has(draftId);
+  return Boolean(getSyncMeta(draftId));
 }
 
 /** In-flight DELETE round-trips, keyed by draft id. undeleteDraft() awaits the
@@ -392,6 +624,7 @@ export async function reissuePendingDeletes(): Promise<void> {
   }
 }
 
+
 /** Fire-and-forget remote delete. The caller owns local state removal. */
 export async function deleteDraftRemotely(draftId: string): Promise<void> {
   if (!ENABLED) return;
@@ -399,6 +632,10 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
   // Tombstone the id and cancel any debounced upsert so an in-flight / pending
   // POST can't recreate the row after we delete it (bug #6).
   deletedDraftIds.add(draftId);
+  restoreRequested.delete(draftId);
+  // The meta describes a server row that is about to be a tombstone; drop it
+  // so an Undo re-sends the draft instead of treating it as already synced.
+  clearSyncMeta(draftId);
   // Persist BEFORE the fetch so a tab close mid-flight can't lose the intent.
   persistTombstone(toServerUuid(draftId));
   const pendingTimer = timers.get(draftId);
@@ -453,6 +690,9 @@ export async function deleteDraftRemotely(draftId: string): Promise<void> {
 export function undeleteDraft(draftId: string): void {
   if (!ENABLED || !draftId) return;
   deletedDraftIds.delete(draftId);
+  // The server now holds a tombstone for this id; the restore flag asks it to
+  // lift it (honoured for a short window after the delete).
+  restoreRequested.add(draftId);
   // Also clear the persisted tombstone so the restored draft survives the
   // next mount's merge + reissuePendingDeletes.
   unpersistTombstone(toServerUuid(draftId));
@@ -474,29 +714,55 @@ function readFlag(): boolean {
   }
 }
 
-/** Best-effort mirror of a draft's collaboration data to the decoupled extras
- *  endpoint. Never throws — a missing table / 503 / network error is swallowed
- *  so it can't affect the (already-succeeded) draft sync. Skips drafts with no
- *  collab data so we don't write empty rows. */
-async function pushDraftExtras(draft: Draft): Promise<void> {
-  const extras = extractExtras(draft);
-  if (!extras) return;
+/** Mirror a draft's collaboration data to the decoupled extras endpoint. The
+ *  server merges per item and returns the merged result, which we fold back
+ *  in so this device picks up teammates' comments and resolves. A failure is
+ *  swallowed (the draft itself is already saved) and retried on the next
+ *  change, since the extras key is only recorded on success. */
+async function pushDraftExtras(draft: Draft, extras: DraftExtras, ekey: string): Promise<void> {
   try {
-    await fetch("/api/store/draft-extras", {
+    const res = await fetchWithRetry("/api/store/draft-extras", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ id: toServerUuid(draft.id), extras }),
     });
+    if (res.status === 410) {
+      handleRemoteDelete(draft.id);
+      return;
+    }
+    if (res.status === 403) {
+      notifyForbidden(draft.id);
+      return;
+    }
+    if (!res.ok) return;
+    patchSyncMeta(draft.id, { ekey });
+    const data = (await res.json().catch(() => ({}))) as { extras?: DraftExtras };
+    if (data.extras && typeof data.extras === "object") {
+      bridge?.applyExtras(draft.id, data.extras);
+      // Record the key of what we now hold, so adopting the server's merge
+      // doesn't trigger another push of the same data.
+      const after = snapshotGetter?.(draft.id);
+      if (after) patchSyncMeta(draft.id, { ekey: extrasKey(extractExtras(after)) });
+    }
   } catch {
-    /* best-effort — collaboration data will re-sync on the next draft write */
+    /* best-effort — collaboration data re-syncs on the next change */
   }
 }
 
-function toServerPayload(draft: Draft, resolvedMatterId: string | null = null) {
+function toServerPayload(
+  draft: Draft,
+  resolvedMatterId: string | null = null,
+  baseRevision: number | null = null,
+  restore = false,
+) {
   return {
     id: toServerUuid(draft.id),
     clientRevision: draft.updatedAt,
+    // The server revision this write is built on; the server 409s anything
+    // older so a stale device can't overwrite newer edits.
+    baseRevision,
+    ...(restore ? { restore: true } : {}),
     letterType: draft.letterType,
     mode: draft.mode,
     title: draft.title ?? null,
@@ -521,48 +787,63 @@ function toServerPayload(draft: Draft, resolvedMatterId: string | null = null) {
   };
 }
 
-function isStaleSnapshot(draft: Draft): boolean {
-  const staleRevision = staleRevisionByDraftId.get(draft.id);
-  return staleRevision !== undefined && draft.updatedAt <= staleRevision;
-}
-
-function markSnapshotStale(draftId: string, clientRevision: number): void {
-  const previous = staleRevisionByDraftId.get(draftId) ?? -Infinity;
-  staleRevisionByDraftId.set(draftId, Math.max(previous, clientRevision));
-
-  const currentDraft = snapshotGetter?.(draftId);
-  if (currentDraft && currentDraft.updatedAt > clientRevision) return;
-
-  const timer = timers.get(draftId);
-  if (timer) clearTimeout(timer);
-  timers.delete(draftId);
-  pendingDraftIds.delete(draftId);
-}
-
 /**
- * A 409 means the server copy is NEWER than this client's revision — another
- * tab or device wrote a higher revision. Dual-write is write-only (no pull /
- * merge path yet), so this client's edits will keep failing the server's
- * revision guard and silently never land. We can't merge here, but we must
- * not let the user believe they're saved: surface ONE toast after repeated
- * conflicts. Mirrors recordDeleteFailure. (Full multi-device reconcile is a
- * separate feature — tracked in the bug log.)
+ * Count a failed sync. After three in a row for one draft, tell the user once
+ * (the edits are safe on this device). Transient failures (network, 5xx, 429
+ * after its retries) are retried automatically with growing gaps, so a draft
+ * nobody touches again still gets there.
  */
-function recordStaleConflict(draftId: string): void {
-  const count = (staleConflictsByDraftId.get(draftId) ?? 0) + 1;
-  staleConflictsByDraftId.set(draftId, count);
-  if (count > 3 && !staleConflictToastShownFor.has(draftId)) {
-    staleConflictToastShownFor.add(draftId);
+function recordSyncFailure(draftId: string, reason: unknown, transient: boolean): void {
+  const count = (failuresByDraftId.get(draftId) ?? 0) + 1;
+  failuresByDraftId.set(draftId, count);
+  console.warn("[dual-write] sync failed", draftId, reason);
+  if (count >= 3 && !failureToastShownFor.has(draftId)) {
+    failureToastShownFor.add(draftId);
     toast.error("Your changes aren't syncing to your workspace", {
       description:
-        "A newer copy of this letter was saved elsewhere (another tab or device). Your edits are kept on this device — reload to pull the latest.",
+        "They're saved on this device and we'll keep trying. Check your connection, or reload if this carries on.",
     });
+  }
+  if (transient && !retryTimers.has(draftId)) {
+    const delay = Math.min(30_000 * 2 ** (count - 1), 5 * 60_000);
+    retryTimers.set(
+      draftId,
+      setTimeout(() => {
+        retryTimers.delete(draftId);
+        enqueueSync(draftId);
+      }, delay),
+    );
   }
 }
 
-function clearStaleConflicts(draftId: string): void {
-  staleConflictsByDraftId.delete(draftId);
-  staleConflictToastShownFor.delete(draftId);
+function clearFailures(draftId: string): void {
+  failuresByDraftId.delete(draftId);
+  failureToastShownFor.delete(draftId);
+  paymentToastShownFor.delete(draftId);
+  const t = retryTimers.get(draftId);
+  if (t) clearTimeout(t);
+  retryTimers.delete(draftId);
+}
+
+/** 403: read-only role, or the draft belongs to a workspace that isn't the
+ *  active one. Retrying won't help, so say so (once per session). */
+function notifyForbidden(draftId: string): void {
+  console.warn("[dual-write] sync forbidden", draftId);
+  if (forbiddenToastShown) return;
+  forbiddenToastShown = true;
+  toast.error("Your changes can't be saved to this workspace", {
+    description:
+      "You may have read-only access, or this letter belongs to another workspace. Your edits are kept on this device.",
+  });
+}
+
+function notifyPaymentRequired(draftId: string, message: string | undefined): void {
+  console.warn("[dual-write] sync needs a plan or letter credit", draftId);
+  if (paymentToastShownFor.has(draftId)) return;
+  paymentToastShownFor.add(draftId);
+  toast.error("This letter isn't saved to your workspace yet", {
+    description: message || "Choose a plan or letter to save it. It's kept on this device in the meantime.",
+  });
 }
 
 function recordDeleteFailure(draftId: string, reason: unknown): void {

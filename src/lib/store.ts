@@ -1,8 +1,12 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { toast } from "sonner";
-import { createQuotaSafeStorage } from "./storage/quota-safe-storage";
-import { TENANT_SCOPED_PERSIST_KEYS } from "./session/clearLocalData";
+import {
+  createQuotaSafeStorage,
+  estimateLocalStorageBytes,
+  hasUnpersistedWrites,
+} from "./storage/quota-safe-storage";
+import { TENANT_SCOPED_PERSIST_KEYS, WORKSPACE_SWAP_KEY } from "./session/clearLocalData";
 import type {
   AIAction,
   AIChatMessage,
@@ -533,7 +537,10 @@ export const useDraftStore = create<Store>()(
           };
         }),
 
-      deleteMatter: (id) =>
+      deleteMatter: (id) => {
+        // Remote deletes come only from this explicit action, never from a
+        // matter vanishing out of state (rehydrate, workspace swap).
+        if (get().matters[id]) void _dualWriteDeleteMatterRemotely(id);
         set((s) => {
           if (!s.matters[id]) return s;
           // Pull the matter out and clear matterId from any draft pointing at it.
@@ -552,7 +559,8 @@ export const useDraftStore = create<Store>()(
             Object.entries(s.events).filter(([, e]) => e.matterId !== id),
           );
           return { matters: remaining, drafts, tasks, events };
-        }),
+        });
+      },
 
       addMatterParticipant: (matterId, participant) =>
         set((s) => {
@@ -1372,7 +1380,8 @@ export const useDraftStore = create<Store>()(
         set((s) => {
           const d = s.drafts[id];
           if (!d) return s;
-          const comment: Comment = { ...c, id: newId, createdAt: Date.now() };
+          const now = Date.now();
+          const comment: Comment = { ...c, id: newId, createdAt: now, updatedAt: now };
           const section = d.sections.find((sec) => sec.id === c.sectionId);
           return {
             drafts: {
@@ -1402,16 +1411,26 @@ export const useDraftStore = create<Store>()(
           // Strip <mark data-comment-id={commentId}> from the section HTML so
           // the inline highlight disappears alongside the thread.
           const nextSections = stripMark(d.sections, target?.sectionId, commentId);
-          // Remove the comment AND any replies under it.
+          // Remove the comment AND any replies under it, leaving tombstones so
+          // the delete syncs and another device can't bring them back.
+          const removed = (d.comments ?? []).filter(
+            (c) => c.id === commentId || c.parentId === commentId
+          );
           const next = (d.comments ?? []).filter(
             (c) => c.id !== commentId && c.parentId !== commentId
           );
+          const deletedAt = Date.now();
+          const known = new Set((d.commentTombstones ?? []).map((t) => t.id));
+          const commentTombstones = [
+            ...(d.commentTombstones ?? []),
+            ...removed.filter((c) => !known.has(c.id)).map((c) => ({ id: c.id, deletedAt })),
+          ];
           const section = d.sections.find((sec) => sec.id === target?.sectionId);
           return {
             drafts: {
               ...s.drafts,
               [id]: appendTimeline(
-                { ...d, comments: next, sections: nextSections },
+                { ...d, comments: next, commentTombstones, sections: nextSections },
                 timelineEvent("comment_deleted", "Deleted comment", {
                   actorName: target?.authorName,
                   sectionId: target?.sectionId,
@@ -1445,8 +1464,11 @@ export const useDraftStore = create<Store>()(
               [id]: appendTimeline(
                 {
                   ...d,
+                  // updatedAt makes the newer resolve / reopen win on sync.
                   comments: (d.comments ?? []).map((c) =>
-                    c.id === commentId ? { ...c, resolved } : c
+                    c.id === commentId
+                      ? { ...c, resolved, updatedAt: Date.now(), resolvedAt: resolved ? Date.now() : undefined }
+                      : c
                   ),
                   sections: nextSections,
                 },
@@ -1698,12 +1720,18 @@ export const useDraftStore = create<Store>()(
           };
         }),
 
-      deleteDraft: (id) =>
+      deleteDraft: (id) => {
+        // The only place a remote draft delete is issued. Inferring deletes
+        // from drafts disappearing out of state let a cross-tab rehydrate
+        // (e.g. while this tab's writes were failing on a full storage quota)
+        // delete drafts on the server.
+        if (get().drafts[id]) void _dualWriteDeleteDraftRemotely(id);
         set((s) => {
           const next = { ...s.drafts };
           delete next[id];
           return { drafts: next };
-        }),
+        });
+      },
     }),
     {
       name: "scribehr-store-v1",
@@ -1721,11 +1749,40 @@ export const useDraftStore = create<Store>()(
               description:
                 "Recent changes may not be saved on this device. Remove a large letterhead/signature image or export and delete old letters to free space.",
             }),
+          {
+            // Coalesce bursts (streaming AI output changes the store on every
+            // token) into at most two writes a second.
+            throttleMs: 500,
+            estimateUsage: () =>
+              typeof window !== "undefined" ? estimateLocalStorageBytes(window.localStorage) : 0,
+          },
         ),
       ),
+      // A rehydrate (another tab wrote) replaces state with what's on disk.
+      // When this tab's own writes are failing on quota (or still waiting on
+      // the throttle), disk is BEHIND memory, so keep this tab's newer and
+      // not-yet-persisted drafts instead of silently dropping them.
+      merge: (persisted, current) => mergePersistedDrafts(persisted, current, hasUnpersistedWrites()),
     }
   )
 );
+
+/** Persist merge for useDraftStore. Exported for tests. */
+export function mergePersistedDrafts<T extends { drafts: Record<string, Draft> }>(
+  persisted: unknown,
+  current: T,
+  memoryAhead: boolean,
+): T {
+  const p = (persisted ?? {}) as Partial<T>;
+  const merged = { ...current, ...p } as T;
+  if (!memoryAhead || !p.drafts) return merged;
+  const drafts: Record<string, Draft> = { ...p.drafts };
+  for (const [id, d] of Object.entries(current.drafts)) {
+    const onDisk = drafts[id];
+    if (!onDisk || d.updatedAt > onDisk.updatedAt) drafts[id] = d;
+  }
+  return { ...merged, drafts };
+}
 
 // Cross-tab coherence (senior sweep I-SYNC-1). The persist middleware writes to
 // localStorage but does NOT listen for writes from OTHER tabs — so two tabs on
@@ -1737,6 +1794,13 @@ if (typeof window !== "undefined") {
   const PERSIST_KEY = "scribehr-store-v1";
   window.addEventListener("storage", (e) => {
     if (!e.key) return;
+    // Another tab switched this device to a different workspace's local data.
+    // Reload rather than rehydrate, so this tab can't persist the previous
+    // workspace's in-memory state over it.
+    if (e.key === WORKSPACE_SWAP_KEY) {
+      window.location.assign("/");
+      return;
+    }
     // Another tab signed out / switched workspace → it WIPED a tenant-scoped
     // key. Tear this tab down too, so it can't keep the previous tenant's PII
     // in memory and re-persist it under the wiped key for the next user (board
@@ -1769,12 +1833,106 @@ import {
   enqueueMatterSync as _dualWriteEnqueueMatterSync,
   setDualWriteSnapshotGetter as _setDualWriteSnapshotGetter,
   setDualWriteMatterGetter as _setDualWriteMatterGetter,
+  setDualWriteStoreBridge as _setDualWriteStoreBridge,
   isDualWriteEnabled as _isDualWriteEnabled,
   syncDraft as _dualWriteSyncDraft,
 } from "./dual-write";
+import {
+  applyRemoteDraft as _applyRemoteDraft,
+  mergeExtrasIntoDraft as _mergeExtrasIntoDraft,
+} from "./remote-pull";
 
 _setDualWriteSnapshotGetter((draftId) => useDraftStore.getState().drafts[draftId] ?? null);
 _setDualWriteMatterGetter((matterId) => useDraftStore.getState().matters[matterId] ?? null);
+
+// The draft fields that reach the server (draft row + extras). A draft whose
+// object changed but whose synced fields are all the same references (AI chat
+// streaming, evidence, exports) needs no sync at all; dual-write then skips
+// anything whose content key matches what the server last accepted, so a
+// cross-tab rehydrate (every object new, same content) re-sends nothing.
+const SYNCED_DRAFT_FIELDS = [
+  "letterType",
+  "mode",
+  "title",
+  "context",
+  "employer",
+  "employee",
+  "answers",
+  "sections",
+  "reviewStatus",
+  "matterId",
+  "isTemplateSource",
+  "templateSourceId",
+  "comments",
+  "commentTombstones",
+  "timeline",
+  "approvals",
+  "outcomeSought",
+] as const satisfies readonly (keyof Draft)[];
+
+export function syncedFieldsChanged(prev: Draft | undefined, next: Draft): boolean {
+  if (!prev) return true;
+  return SYNCED_DRAFT_FIELDS.some((k) => prev[k] !== next[k]);
+}
+
+/** A local-only copy of a draft holding this device's version after a sync
+ *  conflict. Never synced, so it can't spend a letter credit. */
+export function conflictCopyOf(draft: Draft, now = Date.now()): Draft {
+  const baseTitle = draft.title?.trim() || getLetterMeta(draft.letterType)?.title || "Letter";
+  return {
+    ...draft,
+    id: uid("draft"),
+    title: `${baseTitle} (conflicted copy)`,
+    localOnly: true,
+    reviewStatus: "draft",
+    approvals: [],
+    submittedForReviewAt: undefined,
+    reviewDecidedAt: undefined,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+_setDualWriteStoreBridge({
+  applyServerDraft: (localId, remote) => {
+    const existing = useDraftStore.getState().drafts[localId];
+    if (!existing) return null;
+    const next = _applyRemoteDraft(existing, remote);
+    useDraftStore.setState((s) => ({ drafts: { ...s.drafts, [localId]: next } }));
+    return next;
+  },
+  setReviewStatus: (localId, status) =>
+    useDraftStore.setState((s) => {
+      const d = s.drafts[localId];
+      if (!d) return s;
+      return { drafts: { ...s.drafts, [localId]: { ...d, reviewStatus: status } } };
+    }),
+  addConflictCopy: (draft) => {
+    const copy = conflictCopyOf(draft);
+    useDraftStore.setState((s) => ({ drafts: { ...s.drafts, [copy.id]: copy } }));
+    return copy.id;
+  },
+  keepLocalOnly: (localId) =>
+    useDraftStore.setState((s) => {
+      const d = s.drafts[localId];
+      if (!d) return s;
+      return { drafts: { ...s.drafts, [localId]: { ...d, localOnly: true } } };
+    }),
+  removeLocally: (localId) =>
+    useDraftStore.setState((s) => {
+      if (!s.drafts[localId]) return s;
+      const next = { ...s.drafts };
+      delete next[localId];
+      return { drafts: next };
+    }),
+  applyExtras: (localId, extras) =>
+    useDraftStore.setState((s) => {
+      const d = s.drafts[localId];
+      if (!d) return s;
+      const next = _mergeExtrasIntoDraft(d, extras);
+      return next === d ? s : { drafts: { ...s.drafts, [localId]: next } };
+    }),
+});
 
 if (_isDualWriteEnabled()) {
   let prevDrafts = useDraftStore.getState().drafts;
@@ -1783,35 +1941,25 @@ if (_isDualWriteEnabled()) {
     const next = state.drafts;
     if (next !== prevDrafts) {
       for (const [id, draft] of Object.entries(next)) {
-        if (prevDrafts[id] !== draft) {
+        if (prevDrafts[id] !== draft && !draft.localOnly && syncedFieldsChanged(prevDrafts[id], draft)) {
           _dualWriteEnqueueSync(id);
         }
       }
-      // Deletions — drafts present before but missing now.
-      for (const id of Object.keys(prevDrafts)) {
-        if (!(id in next)) {
-          // Fire-and-forget delete. We do NOT debounce deletions — they're rare
-          // and the user expects them to land immediately.
-          void _dualWriteDeleteDraftRemotely(id);
-        }
-      }
+      // Deletions are NOT inferred here: deleteDraft issues the remote delete
+      // itself. A draft can leave state for reasons that must never delete it
+      // on the server (another tab's rehydrate, a remote tombstone, a
+      // workspace swap).
       prevDrafts = next;
     }
 
-    // Matters: mirror deletions immediately, and debounce-sync any
-    // create/update so matter-only edits (rename / close / archive /
-    // counsel-reviewed) reach the server — previously they only synced as a
-    // side-effect of an incidental draft edit, leaving the row stale (bug #16).
+    // Matters: debounce-sync any create/update so matter-only edits (rename /
+    // close / archive / counsel-reviewed) reach the server (bug #16). Remote
+    // deletes come from deleteMatter only, for the same reason as drafts.
     const nextMatters = state.matters;
     if (nextMatters !== prevMatters) {
       for (const [id, matter] of Object.entries(nextMatters)) {
         if (prevMatters[id] !== matter) {
           _dualWriteEnqueueMatterSync(id);
-        }
-      }
-      for (const id of Object.keys(prevMatters)) {
-        if (!(id in nextMatters)) {
-          void _dualWriteDeleteMatterRemotely(id);
         }
       }
       prevMatters = nextMatters;

@@ -8,7 +8,7 @@
  *        current rate is snapshotted onto the booking as the agreed price;
  *        a consultant can't book themselves.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -155,7 +155,7 @@ export async function POST(req: Request): Promise<Response> {
     const [ownedDraft] = await db
       .select({ id: drafts.id })
       .from(drafts)
-      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant.id)))
+      .where(and(eq(drafts.id, boundDraftId), eq(drafts.tenantId, auth.activeTenant.id), isNull(drafts.deletedAt)))
       .limit(1);
     if (!ownedDraft) return jsonError("Draft not found in this workspace", 404);
     boundDraftId = ownedDraft.id;

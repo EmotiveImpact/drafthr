@@ -7,6 +7,11 @@
  * "approved" with a hand-built request. These helpers close that gap.
  */
 import { jsonError } from "./request.js";
+import {
+  commentVersion,
+  unionAppendOnly,
+  type SyncedComment,
+} from "../../src/lib/comments/merge.js";
 
 type MemberLike = { activeMember: { role: string } | null };
 
@@ -108,4 +113,106 @@ function sectionsDiffer(a: SectionLike[], b: SectionLike[]): boolean {
     const prev = byId.get(s.sectionId);
     return !prev || prev.html !== s.html || (prev.title ?? "") !== (s.title ?? "");
   });
+}
+
+type CommentAuthorAuth = MemberLike & {
+  userRow: { id: string; email?: string | null; legalName?: string | null };
+};
+
+const COMMENT_MODERATOR_ROLES = new Set(["owner", "admin"]);
+
+/** Only the comment's author, or a workspace owner/admin, may delete it. */
+export function canDeleteComment(auth: CommentAuthorAuth, stored: SyncedComment): boolean {
+  if (COMMENT_MODERATOR_ROLES.has(auth.activeMember?.role ?? "")) return true;
+  if (stored.authorUserId) return stored.authorUserId === auth.userRow.id;
+  // Comments synced before author ids were stamped: fall back to the email.
+  const email = (auth.userRow.email ?? "").toLowerCase();
+  return Boolean(email) && (stored.authorEmail ?? "").toLowerCase() === email;
+}
+
+function displayNameFor(auth: CommentAuthorAuth): string | undefined {
+  return auth.userRow.legalName?.trim() || auth.userRow.email || undefined;
+}
+
+/**
+ * The comments list to store when a member syncs a draft's extras, merged per
+ * comment against what the server already holds (see src/lib/comments/merge):
+ *
+ * - comments already stored are never dropped, so a device that hasn't seen a
+ *   new comment can't erase it;
+ * - a new comment is stamped with the caller's user id and display name, so
+ *   other devices render the real author instead of "me";
+ * - a delete is a tombstone, accepted only from the author or an owner/admin
+ *   (anyone else's delete is ignored), and a tombstone is final;
+ * - resolve / reopen is accepted from any member with write access when it is
+ *   newer than the stored copy. The author, body and anchor of a stored
+ *   comment can't be rewritten by a sync.
+ */
+export function commentsForWrite(
+  auth: CommentAuthorAuth,
+  stored: unknown,
+  incoming: unknown,
+  nowMs: number = Date.now(),
+): SyncedComment[] {
+  const storedList = (Array.isArray(stored) ? stored : []).filter(isCommentLike);
+  const incomingList = (Array.isArray(incoming) ? incoming : []).filter(isCommentLike);
+  const byId = new Map(storedList.map((c) => [c.id, c]));
+  for (const c of incomingList) {
+    const prev = byId.get(c.id);
+    if (!prev) {
+      if (c.deleted) {
+        // A tombstone for a comment the server never stored: keep it bare so
+        // the id stays dead without storing any content.
+        byId.set(c.id, { id: c.id, deleted: true, deletedAt: c.deletedAt ?? nowMs, updatedAt: c.updatedAt ?? nowMs });
+        continue;
+      }
+      byId.set(c.id, {
+        ...c,
+        authorUserId: auth.userRow.id,
+        authorName: displayNameFor(auth) ?? c.authorName,
+        authorEmail: auth.userRow.email ?? c.authorEmail,
+        updatedAt: commentVersion(c) || nowMs,
+      });
+      continue;
+    }
+    if (prev.deleted) continue;
+    if (c.deleted) {
+      if (!canDeleteComment(auth, prev)) continue;
+      byId.set(c.id, {
+        id: prev.id,
+        sectionId: prev.sectionId,
+        parentId: prev.parentId,
+        authorUserId: prev.authorUserId,
+        createdAt: prev.createdAt,
+        deleted: true,
+        deletedAt: c.deletedAt ?? nowMs,
+        updatedAt: Math.max(commentVersion(c), commentVersion(prev)),
+      });
+      continue;
+    }
+    if (commentVersion(c) > commentVersion(prev)) {
+      byId.set(c.id, {
+        ...prev,
+        resolved: Boolean(c.resolved),
+        resolvedAt: c.resolvedAt,
+        resolvedBy: c.resolvedBy,
+        updatedAt: commentVersion(c),
+      });
+    }
+  }
+  return [...byId.values()].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+}
+
+function isCommentLike(c: unknown): c is SyncedComment {
+  return Boolean(c) && typeof c === "object" && typeof (c as { id?: unknown }).id === "string";
+}
+
+/** Timeline entries are an append-only record: union by id, never replaced. */
+export function timelineForWrite(stored: unknown, incoming: unknown): { id: string; createdAt?: number }[] {
+  const ok = (x: unknown): x is { id: string; createdAt?: number } =>
+    Boolean(x) && typeof x === "object" && typeof (x as { id?: unknown }).id === "string";
+  return unionAppendOnly(
+    (Array.isArray(stored) ? stored : []).filter(ok),
+    (Array.isArray(incoming) ? incoming : []).filter(ok),
+  );
 }

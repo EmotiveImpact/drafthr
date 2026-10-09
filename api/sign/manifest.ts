@@ -24,7 +24,7 @@
  * free.
  */
 import { createHash } from "node:crypto";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { rateLimit } from "../_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../_utils/request.js";
 import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
@@ -241,7 +241,7 @@ async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<
   const [draft] = await db
     .select({ id: drafts.id })
     .from(drafts)
-    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)))
+    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId), isNull(drafts.deletedAt)))
     .limit(1);
   return Boolean(draft);
 }
