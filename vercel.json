@@ -13,10 +13,33 @@
         {
           "key": "Permissions-Policy",
           "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
-        },
+        }
+      ]
+    },
+    {
+      "source": "/((?!.*\\.html$).*)",
+      "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.workos.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src 'none'; worker-src 'self' blob:; form-action 'self' https://api.workos.com https://*.authkit.app; upgrade-insecure-requests"
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.workos.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src 'none'; worker-src 'self' blob:; form-action 'self' https://api.workos.com https://*.authkit.app; upgrade-insecure-requests"
+        }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.workos.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src 'none'; worker-src 'self' blob:; form-action 'self' https://api.workos.com https://*.authkit.app; upgrade-insecure-requests"
+        }
+      ]
+    },
+    {
+      "source": "/((?!index\\.html$).*\\.html)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; worker-src 'self' blob:; form-action 'none'; upgrade-insecure-requests"
         }
       ]
     }

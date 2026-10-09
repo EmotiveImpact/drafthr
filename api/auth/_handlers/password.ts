@@ -17,13 +17,14 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable, clientIp } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
   type SessionPayload,
 } from "../../_utils/workos.js";
 import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
+import { linkDirectoryIdentityOnSignIn } from "../../_utils/directory-link.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -52,7 +53,7 @@ export async function POST(req: Request): Promise<Response> {
   // Tight limit — password endpoints are the classic credential-stuffing
   // target. 10/min per IP is generous for a real user fat-fingering, harsh
   // for a script. WorkOS adds its own server-side throttling on top.
-  const limited = rateLimit(req, { name: "auth-password", max: 10, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-password", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<PasswordBody>(req);
@@ -67,6 +68,15 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("Enter your password.", 400);
   }
 
+  // Per-account cap, shared across every instance and every source IP, so a
+  // credential-stuffing run spread over many addresses still stalls.
+  const perAccount = await rateLimitKeyDurable(`email:${email.toLowerCase()}`, {
+    name: "auth-password-email",
+    max: 20,
+    windowMs: 15 * 60_000,
+  });
+  if (perAccount) return perAccount;
+
   try {
     const { user, sealedSession } = await getWorkos().userManagement.authenticateWithPassword({
       clientId: process.env.WORKOS_CLIENT_ID!,
@@ -78,6 +88,15 @@ export async function POST(req: Request): Promise<Response> {
         sealSession: true,
         cookiePassword: process.env.WORKOS_COOKIE_PASSWORD!,
       },
+    });
+
+    // Link any Directory Sync placeholder for this verified email to the
+    // signed-in user before reading the epoch, so the session is minted for
+    // the linked row and offboarding reaches this account.
+    await linkDirectoryIdentityOnSignIn({
+      workosUserId: user.id,
+      email: user.email,
+      emailVerified: user.emailVerified,
     });
 
     const payload: SessionPayload = {

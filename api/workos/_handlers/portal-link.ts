@@ -96,7 +96,6 @@ export async function POST(req: Request): Promise<Response> {
     });
   } catch (err) {
     console.error("[portal-link] generateLink failed", err);
-    const message = err instanceof Error ? err.message : "Failed to generate portal link";
-    return jsonError(message, 500);
+    return jsonError("Failed to generate portal link", 500);
   }
 }

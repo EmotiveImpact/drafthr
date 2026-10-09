@@ -161,8 +161,10 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return jsonError(`signing failed: ${message}`, 500);
+    // Signer / KMS errors can carry key ids and provider detail: log them,
+    // return a generic message.
+    console.error("[sign/manifest] signing failed", err);
+    return jsonError("Signing failed", 500);
   }
 
   // ---- Audit ------------------------------------------------------------

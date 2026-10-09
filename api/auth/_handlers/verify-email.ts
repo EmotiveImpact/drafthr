@@ -24,13 +24,14 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable, clientIp } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
   type SessionPayload,
 } from "../../_utils/workos.js";
 import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
+import { linkDirectoryIdentityOnSignIn } from "../../_utils/directory-link.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -61,7 +62,7 @@ export async function POST(req: Request): Promise<Response> {
   // 10/min/IP — generous enough that a user fat-fingering the code a few
   // times isn't locked out, harsh enough that brute-forcing a 6-digit
   // code from a single IP is impractical.
-  const limited = rateLimit(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<VerifyEmailBody>(req);
@@ -86,6 +87,14 @@ export async function POST(req: Request): Promise<Response> {
   if (pendingToken && pendingToken.length > MAX_TOKEN) {
     return jsonError("Verification context is invalid.", 400);
   }
+
+  // Per-subject cap so a six-digit code cannot be brute-forced by spreading
+  // guesses over many IPs or instances.
+  const perSubject = await rateLimitKeyDurable(
+    userId ? `user:${userId}` : `pending:${pendingToken}`,
+    { name: "auth-verify-email-subject", max: 10, windowMs: 15 * 60_000 },
+  );
+  if (perSubject) return perSubject;
 
   const workos = getWorkos();
 
@@ -113,6 +122,8 @@ export async function POST(req: Request): Promise<Response> {
         lastName: user.lastName ?? null,
         profilePictureUrl: user.profilePictureUrl ?? null,
         sealedSession: sealedSession ?? "",
+        // The code just proved control of the inbox.
+        emailVerified: true,
       });
     }
 
@@ -127,6 +138,7 @@ export async function POST(req: Request): Promise<Response> {
       lastName: user.lastName ?? null,
       profilePictureUrl: user.profilePictureUrl ?? null,
       sealedSession: "",
+      emailVerified: true,
     });
   } catch (err) {
     console.warn("[auth/verify-email] failed", err);
@@ -147,7 +159,15 @@ async function respondWithSession(input: {
   lastName: string | null;
   profilePictureUrl: string | null;
   sealedSession: string;
+  emailVerified: boolean;
 }): Promise<Response> {
+  // Link Directory Sync placeholders before reading the epoch (see callback.ts).
+  await linkDirectoryIdentityOnSignIn({
+    workosUserId: input.id,
+    email: input.email,
+    emailVerified: input.emailVerified,
+  });
+
   const payload: SessionPayload = {
     user: {
       id: input.id,

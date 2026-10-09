@@ -20,7 +20,7 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable } from "../../_utils/rate-limit.js";
 import { getWorkos } from "../../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
@@ -35,7 +35,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // 5/min/IP — same class of mailbomb risk as resend-verification, slightly
   // looser because real users sometimes legitimately retry across devices.
-  const limited = rateLimit(req, {
+  const limited = await rateLimitDurable(req, {
     name: "auth-password-reset-request",
     max: 5,
     windowMs: 60_000,
@@ -49,6 +49,12 @@ export async function POST(req: Request): Promise<Response> {
   if (!email || email.length > MAX_EMAIL || !email.includes("@")) {
     return jsonError("Enter a valid email address.", 400);
   }
+  const perEmail = await rateLimitKeyDurable(`email:${email.toLowerCase()}`, {
+    name: "auth-password-reset-email",
+    max: 5,
+    windowMs: 60 * 60_000,
+  });
+  if (perEmail) return perEmail;
 
   try {
     // createPasswordReset returns a password_reset object with a URL we

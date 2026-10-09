@@ -116,3 +116,32 @@ export function formatDate(d: Date): string {
   // that mean different things in EU vs US date formats).
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
+
+// Free-text sanitising for anything a user typed (workspace names, display
+// names, letter titles, messages). Outbound email is sent from DraftHR's
+// domain, so user text must never be able to turn it into a convincing
+// phishing message: no links (mail clients auto-link bare domains too), no
+// email addresses, no control or bidi-override characters, and a hard length
+// cap. Callers still HTML-escape the result; this is about content, not markup.
+const URL_WITH_SCHEME_RE = /\b[a-z][a-z0-9+.-]*:\/\/\S*/gi;
+const WWW_RE = /\bwww\.\S*/gi;
+const EMAIL_RE = /[^\s@<>]+@[^\s@<>]+/g;
+// Bare domains such as "evil.example" or "pay-now.co.uk/login": two or more
+// labels with an alphabetic final label of 2 to 24 characters.
+const BARE_DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b(?:\/\S*)?/gi;
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001F\u007F-\u009F​-‏‪-‮⁠-⁩﻿]/g;
+
+export function sanitizeFreeText(value: string | null | undefined, maxChars: number): string {
+  if (!value) return "";
+  const cleaned = String(value)
+    .replace(CONTROL_RE, " ")
+    .replace(URL_WITH_SCHEME_RE, " ")
+    .replace(WWW_RE, " ")
+    .replace(EMAIL_RE, " ")
+    .replace(BARE_DOMAIN_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned.length <= maxChars) return cleaned;
+  return cleaned.slice(0, maxChars).trimEnd() + "…";
+}
