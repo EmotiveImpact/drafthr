@@ -243,7 +243,9 @@ describe("SignUp", () => {
     const verifyCall = fetchSpy.mock.calls[1]!;
     expect(verifyCall[0]).toBe("/api/auth/verify-email");
     const body = JSON.parse(((verifyCall[1] as RequestInit).body as string) ?? "{}");
-    expect(body).toEqual({ code: "477205", userId: "user_01" });
+    // The form's password travels with the code: the server sets it only once
+    // the code has proved the inbox (a repeat sign-up randomises it).
+    expect(body).toEqual({ code: "477205", userId: "user_01", password: "longenough123" });
   });
 });
 

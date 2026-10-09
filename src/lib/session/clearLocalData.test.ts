@@ -1,8 +1,14 @@
-import { afterEach, describe, expect, it, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, beforeEach, vi } from "vitest";
 import {
   clearTenantScopedLocalData,
+  localNamespace,
+  readLocalOwner,
+  reconcileLocalDataOwner,
+  stashedNamespaces,
+  switchLocalWorkspace,
   TENANT_SCOPED_PERSIST_KEYS,
 } from "./clearLocalData";
+import { setPersistenceSuspended } from "../storage/quota-safe-storage";
 
 /**
  * Security board SA-01 / SE-02: persisted tenant PII must not survive sign-out
@@ -46,6 +52,16 @@ describe("clearTenantScopedLocalData (shared-browser PII leak — SA-01/SE-02)",
     expect(window.localStorage.getItem("drafthr-export-footer")).toBe("1");
   });
 
+  it("stops later writes from putting the wiped data back before the reload", async () => {
+    const { createQuotaSafeStorage } = await import("../storage/quota-safe-storage");
+    const storage = createQuotaSafeStorage(window.localStorage, () => {});
+    clearTenantScopedLocalData();
+    // e.g. a sync response landing between the wipe and the navigation.
+    storage.setItem("scribehr-store-v1", JSON.stringify({ state: { drafts: { d1: {} } } }));
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBeNull();
+    setPersistenceSuspended(false);
+  });
+
   it("is idempotent and safe when nothing is stored", () => {
     expect(() => clearTenantScopedLocalData()).not.toThrow();
     expect(() => clearTenantScopedLocalData()).not.toThrow();
@@ -77,5 +93,79 @@ describe("clearTenantScopedLocalData (shared-browser PII leak — SA-01/SE-02)",
     expect([...TENANT_SCOPED_PERSIST_KEYS].sort()).toEqual(
       ["drafthr.bookings.v1", "drafthr.consultant", "scribehr-profile-v1", "scribehr-store-v1"].sort(),
     );
+  });
+});
+
+describe("per-workspace local data (switching never deletes)", () => {
+  const A = localNamespace("u1", "tA");
+  const B = localNamespace("u1", "tB");
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    setPersistenceSuspended(false);
+  });
+  afterEach(() => {
+    window.localStorage.clear();
+    setPersistenceSuspended(false);
+  });
+
+  it("stashes workspace A on switch and restores it on switching back", () => {
+    window.localStorage.setItem("scribehr-store-v1", "A-drafts");
+    window.localStorage.setItem("drafthr.sync-meta.v1", "A-meta");
+    window.localStorage.setItem("scribehr-profile-v1", "profile");
+
+    expect(switchLocalWorkspace(A, B)).toBe(true);
+    // B starts empty; A's data is not visible but not gone either.
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBeNull();
+    expect(window.localStorage.getItem("drafthr.sync-meta.v1")).toBeNull();
+    expect(window.localStorage.getItem("scribehr-profile-v1")).toBe("profile");
+    expect(readLocalOwner()).toBe(B);
+    expect(stashedNamespaces(B)).toEqual([A]);
+
+    window.localStorage.setItem("scribehr-store-v1", "B-drafts");
+    expect(switchLocalWorkspace(B, A)).toBe(true);
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBe("A-drafts");
+    expect(window.localStorage.getItem("drafthr.sync-meta.v1")).toBe("A-meta");
+
+    expect(switchLocalWorkspace(A, B)).toBe(true);
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBe("B-drafts");
+  });
+
+  it("puts everything back and reports failure when the stash doesn't fit", () => {
+    window.localStorage.setItem("scribehr-store-v1", "A-drafts");
+    const realSetItem = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k.startsWith("drafthr.stash.")) throw new DOMException("full", "QuotaExceededError");
+      return realSetItem.call(this, k, v);
+    });
+    expect(switchLocalWorkspace(A, B)).toBe(false);
+    spy.mockRestore();
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBe("A-drafts");
+    expect(stashedNamespaces()).toEqual([]);
+  });
+
+  it("stashes data left by another workspace instead of showing it here", () => {
+    window.localStorage.setItem("drafthr.local-owner.v1", A);
+    window.localStorage.setItem("scribehr-store-v1", "A-drafts");
+    expect(reconcileLocalDataOwner("u1", "tB")).toBe(true);
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBeNull();
+    expect(stashedNamespaces(B)).toEqual([A]);
+    // Same owner again: nothing to do.
+    expect(reconcileLocalDataOwner("u1", "tB")).toBe(false);
+  });
+
+  it("adopts unowned (pre-upgrade) data for the signed-in workspace", () => {
+    window.localStorage.setItem("scribehr-store-v1", "legacy");
+    expect(reconcileLocalDataOwner("u1", "tA")).toBe(false);
+    expect(readLocalOwner()).toBe(A);
+    expect(window.localStorage.getItem("scribehr-store-v1")).toBe("legacy");
+  });
+
+  it("a full sign-out wipe also removes other workspaces' stashes", () => {
+    window.localStorage.setItem("scribehr-store-v1", "A-drafts");
+    switchLocalWorkspace(A, B);
+    clearTenantScopedLocalData({ includeStashes: true });
+    expect(stashedNamespaces()).toEqual([]);
+    expect(readLocalOwner()).toBeNull();
   });
 });

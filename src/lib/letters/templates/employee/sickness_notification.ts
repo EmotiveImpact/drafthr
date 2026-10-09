@@ -5,7 +5,7 @@ export const SICKNESS_NOTIFICATION_UK: LetterTemplate = {
   jurisdiction: "UK",
   evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Sickness Notification — EMPLOYEE MODE):
-- Statutory Sick Pay (SSP) under the Social Security Contributions and Benefits Act 1992 from day 4 of incapacity (subject to qualifying conditions; the lower earnings limit is recalculated annually).
+- Statutory Sick Pay (SSP) under the Social Security Contributions and Benefits Act 1992, payable from the first day of incapacity for periods from 6 April 2026, at the standard weekly rate or 80% of average weekly earnings if lower (the Employment Rights Act 2025 removed the three waiting days and the lower earnings limit). For earlier periods the old rules applied: from day 4, subject to the lower earnings limit.
 - Self-certification (form SC2 or employer equivalent) for absences of 7 calendar days or fewer; a fit note (Med 3) from a registered healthcare professional is required from day 8 of absence.
 - "May be fit for work" fit notes engage the employer to consider amended duties / reduced hours / phased return / workplace adaptations.
 - Where the underlying condition is or may be a disability under s.6 Equality Act 2010, the duty to make reasonable adjustments may apply.

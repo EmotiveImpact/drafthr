@@ -178,6 +178,11 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Signing out wipes this browser. Anything that exists only here
+    // (employees, tasks, events, templates, evidence, unsynced letters) is
+    // listed first, with a backup offered; cancelling keeps the session.
+    const { confirmLocalDataLoss } = await import("@/lib/session/localDataGuard");
+    if (!(await confirmLocalDataLoss("sign-out"))) return;
     try {
       await fetch("/api/auth/sign-out", {
         method: "POST",
@@ -192,7 +197,8 @@ function RealAuthProvider({ children }: { children: ReactNode }) {
       // Wipe tenant-scoped PII from localStorage BEFORE navigating so the next
       // user on a shared/kiosk browser can't read the previous user's drafts,
       // matters, employees, profile, or bookings (security board SA-01/SE-02).
-      clearTenantScopedLocalData();
+      // includeStashes: other workspaces' data kept on this device goes too.
+      clearTenantScopedLocalData({ includeStashes: true });
       // Hard navigation so any in-memory route guards re-evaluate cleanly.
       window.location.assign("/");
     }

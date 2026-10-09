@@ -8,7 +8,9 @@
  *    preserve that guarantee by inlining before the render starts.
  *  - Client-side DOCX (lib/export/docx.ts) parses data: URLs into image
  *    bytes; https URLs would degrade to "[Image: alt]". Inlining keeps the
- *    letterhead + signature in the doc.
+ *    letterhead + signature in the doc. This path runs in the browser, so
+ *    the module must not touch `process`, and the Blob host must be in the
+ *    CSP connect-src (vercel.json).
  *
  * Failures inline-skip: if a fetch returns non-2xx or non-image, we leave
  * the original src in place so the render path can decide (alt fallback or
@@ -26,17 +28,36 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGES = 20;
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
 
+/** Public Vercel Blob hosts, where api/upload/image.ts stores letter images. */
+export const VERCEL_BLOB_PUBLIC_HOST_SUFFIX = ".public.blob.vercel-storage.com";
+
+/**
+ * Parse a comma-separated host list such as the server's
+ * IMAGE_INLINE_ALLOWED_HOSTS env var into lower-cased host names.
+ */
+export function parseAllowedHosts(raw: string | undefined): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 /**
  * SSRF guard for the server-side export inliner. `inlineImagesForExport` runs
  * inside a Vercel function (api/export/pdf.ts) and fetches user-controlled
  * image URLs — without a guard, any authenticated user could make the function
  * fetch cloud-metadata / internal hosts (blind SSRF). Only allow https on a
  * known image host: Vercel Blob (*.public.blob.vercel-storage.com) plus any
- * hosts in IMAGE_INLINE_ALLOWED_HOSTS. Reject IP-literal hosts outright (kills
- * the obvious 169.254.169.254 / 127.0.0.1 / 10.x vectors and forces everything
- * through the host allowlist). (Senior sweep B3.)
+ * `extraHosts` the server passes in (from IMAGE_INLINE_ALLOWED_HOSTS). Reject
+ * IP-literal hosts outright (kills the obvious 169.254.169.254 / 127.0.0.1 /
+ * 10.x vectors and forces everything through the host allowlist). (Senior
+ * sweep B3.)
+ *
+ * The extra hosts are a parameter rather than read from the environment here
+ * because the DOCX export calls this in the browser, where `process` does not
+ * exist and reading it threw for every non-Blob image.
  */
-export function isAllowedImageHost(rawUrl: string): boolean {
+export function isAllowedImageHost(rawUrl: string, extraHosts: readonly string[] = []): boolean {
   let u: URL;
   try {
     u = new URL(rawUrl);
@@ -50,18 +71,21 @@ export function isAllowedImageHost(rawUrl: string): boolean {
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":") || u.hostname.startsWith("[")) {
     return false;
   }
-  if (host.endsWith(".public.blob.vercel-storage.com")) return true;
-  const extra = (process.env.IMAGE_INLINE_ALLOWED_HOSTS ?? "")
-    .split(",")
-    .map((h) => h.trim().toLowerCase())
-    .filter(Boolean);
-  return extra.includes(host);
+  if (host.endsWith(VERCEL_BLOB_PUBLIC_HOST_SUFFIX)) return true;
+  return extraHosts.some((h) => h.trim().toLowerCase() === host);
 }
+
+export type InlineImagesOptions = {
+  /** Extra https hosts to inline from, beyond Vercel Blob (server only). */
+  extraAllowedHosts?: readonly string[];
+};
 
 export async function inlineImagesForExport(
   html: string,
   fetcher: typeof fetch = fetch,
+  options: InlineImagesOptions = {},
 ): Promise<string> {
+  const extraHosts = options.extraAllowedHosts ?? [];
   const matches: { url: string; index: number; length: number }[] = [];
   IMG_TAG_RE.lastIndex = 0;
   for (let m = IMG_TAG_RE.exec(html); m !== null; m = IMG_TAG_RE.exec(html)) {
@@ -77,7 +101,7 @@ export async function inlineImagesForExport(
   let budget = MAX_TOTAL_BYTES;
   for (const url of uniqueUrls) {
     if (budget <= 0) break;
-    const fetched = await tryFetchAsDataUrl(url, fetcher, Math.min(MAX_IMAGE_BYTES, budget));
+    const fetched = await tryFetchAsDataUrl(url, fetcher, Math.min(MAX_IMAGE_BYTES, budget), extraHosts);
     if (!fetched) continue;
     budget -= fetched.bytes;
     resolved.set(url, fetched.dataUrl);
@@ -95,10 +119,11 @@ async function tryFetchAsDataUrl(
   url: string,
   fetcher: typeof fetch,
   maxBytes: number,
+  extraHosts: readonly string[],
 ): Promise<{ dataUrl: string; bytes: number } | null> {
   // SSRF guard: refuse anything not on the image-host allowlist BEFORE any
   // network call. (Senior sweep B3.)
-  if (!isAllowedImageHost(url)) return null;
+  if (!isAllowedImageHost(url, extraHosts)) return null;
   try {
     // redirect:"manual" so an allowlisted host can't 30x us onto an internal
     // target — a redirect yields an opaqueredirect/non-2xx we simply skip.

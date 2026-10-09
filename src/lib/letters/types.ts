@@ -251,7 +251,7 @@ export type EvidenceItem = {
 export type ProtectedDeadline = {
   /** ISO date — the calculated tribunal/EEOC limitation deadline. */
   iso: string;
-  /** Human-readable basis (e.g. "ERA s.111: 3 months less one day from act on 14 March 2026"). */
+  /** Human-readable basis (e.g. "ERA s.111: 6 months less one day from an act on or after 1 October 2026"). */
   basis: string;
 };
 
@@ -416,6 +416,20 @@ export type Comment = {
   quote?: string;
   createdAt: number;
   resolved?: boolean;
+  /** Workspace user id of the author. Stamped by the server on sync, and set
+   *  locally when signed in, so teammates' comments never render as "me". */
+  authorUserId?: string;
+  /** Bumped on resolve / reopen so the newer state wins across devices. */
+  updatedAt?: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+};
+
+/** A deleted comment, kept so the delete reaches other devices and a device
+ *  that still has the comment can't bring it back. */
+export type CommentTombstone = {
+  id: string;
+  deletedAt: number;
 };
 
 /**
@@ -461,6 +475,11 @@ export type Draft = {
   collaborators?: Collaborator[];
   /** Threaded comments on this draft. */
   comments?: Comment[];
+  /** Deleted comment ids (synced as tombstones). */
+  commentTombstones?: CommentTombstone[];
+  /** Kept on this device only and never synced. Set on the copy that holds
+   *  this device's version after a sync conflict with another device. */
+  localOnly?: boolean;
   /** Persisted AI chat thread for this draft. */
   aiChat?: AIChatMessage[];
   /** Append-only audit trail for high-signal draft events. */

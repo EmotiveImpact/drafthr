@@ -63,6 +63,8 @@ async function loadHandler(action: string): Promise<HandlerModule | null> {
       return import("./_handlers/billing-checkout.js");
     case "billing-status":
       return import("./_handlers/billing-status.js");
+    case "billing-portal":
+      return import("./_handlers/billing-portal.js");
     case "billing-webhook":
       return import("./_handlers/billing-webhook.js");
     default:

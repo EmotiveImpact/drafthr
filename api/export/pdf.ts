@@ -14,7 +14,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
 import { rateLimit, clientIp } from "../_utils/rate-limit.js";
@@ -23,8 +23,14 @@ import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
 import { parseTsr, requestTsr } from "../_utils/tsa.js";
 import { appendAuditEvent } from "../../src/db/audit.js";
 import { getDb } from "../../src/db/index.js";
-import { drafts } from "../../src/db/schema.js";
-import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
+import { drafts, sections } from "../../src/db/schema.js";
+import {
+  exportedHtmlMatchesStored,
+  sha256Hex,
+  storedDraftSha256,
+  type StoredSection,
+} from "../_utils/export-integrity.js";
+import { inlineImagesForExport, parseAllowedHosts } from "../../src/lib/storage/inlineImagesForExport.js";
 import { toServerUuid } from "../../src/lib/remote-ids.js";
 
 export const config = {
@@ -122,10 +128,12 @@ export async function POST(req: Request): Promise<Response> {
   const draftId = rawDraftId ? toServerUuid(rawDraftId) : "";
   // The lookup hits Postgres (getDb() throws if DATABASE_URL is unset; the query
   // throws on a Neon outage). Per the "never blocks the PDF" contract, a DB blip
-  // must NOT 500 the export before Chromium runs — swallow any failure to false.
-  const draftExists = draftId
-    ? await draftBelongsToTenant(draftId, tenantId).catch(() => false)
-    : false;
+  // must NOT 500 the export before Chromium runs — swallow any failure to null.
+  // The stored sections are what the audit entry hashes: the HTML in the request
+  // is whatever the browser chose to send, so it is never the recorded content.
+  const storedSections = draftId
+    ? await loadStoredSections(draftId, tenantId).catch(() => null)
+    : null;
 
   const packUrl = process.env.CHROMIUM_PACK_URL ?? DEFAULT_PACK_URL;
 
@@ -162,7 +170,9 @@ export async function POST(req: Request): Promise<Response> {
 
     // Inline https://blob images to data: URLs before render — Puppeteer's
     // request interceptor above blocks all non-data:/about: requests by design.
-    const inlinedHtml = await inlineImagesForExport(body.html);
+    const inlinedHtml = await inlineImagesForExport(body.html, fetch, {
+      extraAllowedHosts: parseAllowedHosts(process.env.IMAGE_INLINE_ALLOWED_HOSTS),
+    });
     const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${inlinedHtml}</body></html>`;
     await page.setContent(fullHtml, { waitUntil: "load", timeout: PDF_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({
@@ -186,7 +196,7 @@ export async function POST(req: Request): Promise<Response> {
     // tenant (a bogus/foreign draftId still renders, but writes no audit row
     // pointing at a draft we don't own). The export must not fail if Postgres
     // is down, so we swallow every error and log for backfill.
-    if (draftExists) {
+    if (storedSections) {
       await tryAppendExportAudit(
         req,
         body,
@@ -199,6 +209,7 @@ export async function POST(req: Request): Promise<Response> {
         sha256,
         tsr,
         tsrParsed,
+        storedSections,
       ).catch(() => {});
     }
 
@@ -233,8 +244,19 @@ async function tryAppendExportAudit(
   sha256: string,
   tsr: Buffer | null,
   tsrParsed: ReturnType<typeof parseTsr> | null,
+  storedSections: StoredSection[],
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
+
+  // Content integrity: the recorded hash is computed from the draft as stored
+  // for this tenant. The client HTML is only compared against it, and its own
+  // hash is kept separately, labelled as what was rendered.
+  const content = {
+    draftSha256: storedDraftSha256(storedSections),
+    storedSectionCount: storedSections.length,
+    renderedHtmlSha256: sha256Hex(body.html),
+    renderedHtmlMatchesDraft: exportedHtmlMatchesStored(body.html, storedSections),
+  };
 
   // Use the spoof-resistant resolver (proxy-set IP), not the attacker-
   // controllable leftmost XFF — the audit record must hold a trustworthy IP.
@@ -265,9 +287,10 @@ async function tryAppendExportAudit(
         format: "pdf",
         sha256,
         byteLength: pdfBytes.byteLength,
+        ...content,
         ip,
-        reviewedBy: body.reviewedBy ?? null,
-        reviewedOn: body.reviewedOn ?? null,
+        reviewedBy: auditText(body.reviewedBy, 200),
+        reviewedOn: auditText(body.reviewedOn, 40),
         tsa,
       },
     });
@@ -277,19 +300,33 @@ async function tryAppendExportAudit(
   }
 }
 
-async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<boolean> {
+/**
+ * Tenant-scoped load of the stored draft content for the audit entry. Returns
+ * null when the draft is not this tenant's (or no DB is configured), in which
+ * case the export still renders but writes no audit row.
+ */
+async function loadStoredSections(draftId: string, tenantId: string): Promise<StoredSection[] | null> {
   // Mirror tryAppendExportAudit's env-guard: with no DB configured there's
-  // nothing to look up, and getDb() would throw. Fail closed to false so the
-  // export proceeds without an audit row rather than 500ing.
-  if (!process.env.DATABASE_URL) return false;
-  if (!isUuid(draftId)) return false;
+  // nothing to look up, and getDb() would throw.
+  if (!process.env.DATABASE_URL) return null;
+  if (!isUuid(draftId)) return null;
   const db = getDb();
   const [draft] = await db
     .select({ id: drafts.id })
     .from(drafts)
-    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)))
+    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId), isNull(drafts.deletedAt)))
     .limit(1);
-  return Boolean(draft);
+  if (!draft) return null;
+  return await db
+    .select({
+      sectionId: sections.sectionId,
+      title: sections.title,
+      html: sections.html,
+      position: sections.position,
+    })
+    .from(sections)
+    .where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)))
+    .orderBy(asc(sections.position));
 }
 
 function parseContentLength(req: Request): number | null {
@@ -319,4 +356,11 @@ function jsonError(error: string, status: number): Response {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/** A short caller-supplied string for the audit payload, or null. */
+function auditText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : null;
 }

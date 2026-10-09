@@ -7,6 +7,8 @@ import {
   jsonb,
   uuid,
   integer,
+  bigint,
+  primaryKey,
   boolean,
   date,
   index,
@@ -269,9 +271,17 @@ export const drafts = pgTable(
     answersJson: jsonb("answers_json").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    // Soft-delete tombstone. A deleted draft keeps its row (content scrubbed)
+    // so the sync pull can tell other devices to drop it and a stale upsert of
+    // the id is refused rather than re-creating the letter.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Bumped on every accepted write. Clients send the revision they last saw
+    // and a write against an older one is rejected with 409.
+    revision: integer("revision").notNull().default(0),
   },
   (t) => [
     index("drafts_tenant_idx").on(t.tenantId),
+    index("drafts_tenant_deleted_idx").on(t.tenantId, t.deletedAt),
     index("drafts_author_idx").on(t.authorUserId),
     index("drafts_matter_idx").on(t.matterId),
   ],
@@ -409,6 +419,16 @@ export const approvals = pgTable(
 // row_hash = sha256(prev_hash || ':' || canonicalJson(payload) || ':' || kind ||
 //                   ':' || subject_id || ':' || created_at_epoch_ms)
 // Genesis prev_hash is 64 zeros.
+//
+// seq is the per-tenant position in the chain (1, 2, 3, ...). It is assigned
+// inside the append transaction while the tenant's chain head is held under an
+// advisory lock, and the chain is ordered by seq, never by created_at: two
+// appends in the same millisecond (or from instances with skewed clocks) used
+// to tie on created_at and could fork the chain. The unique (tenant_id, seq)
+// index makes a duplicate position impossible even if the lock were bypassed.
+// Migration 0021 also installs a trigger that rejects UPDATE and DELETE on this
+// table (other than the FK cascade/set-null paths), so the chain is append-only
+// at the database level too.
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -421,6 +441,7 @@ export const auditEvents = pgTable(
     subjectId: uuid("subject_id").notNull(),
     actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
     payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull(),
+    seq: bigint("seq", { mode: "number" }).notNull(),
     prevHash: text("prev_hash").notNull(),
     rowHash: text("row_hash").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -428,6 +449,7 @@ export const auditEvents = pgTable(
   (t) => [
     index("audit_events_tenant_created_idx").on(t.tenantId, t.createdAt.desc()),
     uniqueIndex("audit_events_tenant_rowhash_uniq").on(t.tenantId, t.rowHash),
+    uniqueIndex("audit_events_tenant_seq_uniq").on(t.tenantId, t.seq),
     check(
       "audit_events_row_hash_hex64",
       sql`char_length(${t.rowHash}) = 64 AND ${t.rowHash} ~ '^[0-9a-f]{64}$'`,
@@ -547,6 +569,12 @@ export const consultantBookings = pgTable(
     responseNote: text("response_note"),
     deliveryNote: text("delivery_note"),
     rating: integer("rating"),
+    /** Price agreed when the booking was placed, in minor units (pence/cents),
+     *  and its lowercase ISO currency. Checkout charges from this snapshot,
+     *  never the consultant's live rate, so a rate change after booking can't
+     *  alter what the requester pays. Null only on legacy rows. */
+    priceAmount: integer("price_amount"),
+    priceCurrency: text("price_currency"),
     bookedAt: timestamp("booked_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -554,7 +582,7 @@ export const consultantBookings = pgTable(
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    /** Random bearer token generated when the booking is accepted. Tied
+    /** Random bearer token generated once the booking is paid. Tied
      *  to {bookingId, draftId}; expires shareTokenExpiresAt. Used by the
      *  consultant to fetch the specific draft they're reviewing without
      *  needing membership in the HR tenant. */
@@ -596,7 +624,8 @@ export const stripeConnectAccounts = pgTable(
   (t) => [index("stripe_connect_accounts_account_idx").on(t.accountId)],
 );
 
-// Payment state for a booking (HR pays for the review at booking time).
+// Payment state for a booking (HR pays once the consultant accepts; nothing is
+// delivered and no draft access is granted until this row is "paid").
 export const bookingPayments = pgTable(
   "booking_payments",
   {
@@ -605,12 +634,24 @@ export const bookingPayments = pgTable(
       .references(() => consultantBookings.id, { onDelete: "cascade" }),
     checkoutSessionId: text("checkout_session_id"),
     paymentIntentId: text("payment_intent_id"),
-    status: text("status").notNull().default("unpaid"), // unpaid | paid | refunded
+    // unpaid | processing (async method, e.g. Direct Debit, not yet settled) |
+    // paid | failed | refunded (full refund) | disputed | dispute_lost.
+    // Only "paid" unlocks delivery, completion, rating and draft access.
+    status: text("status").notNull().default("unpaid"),
     amount: integer("amount"), // minor units (pence/cents)
     currency: text("currency"),
+    /** Stripe charge and the destination-charge transfer to the consultant's
+     *  Connect account, recorded from charge events so a refund can reverse it. */
+    chargeId: text("charge_id"),
+    transferId: text("transfer_id"),
+    amountRefunded: integer("amount_refunded"), // minor units
+    disputeId: text("dispute_id"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("booking_payments_session_idx").on(t.checkoutSessionId)],
+  (t) => [
+    index("booking_payments_session_idx").on(t.checkoutSessionId),
+    index("booking_payments_payment_intent_idx").on(t.paymentIntentId),
+  ],
 );
 
 // --- billing (subscriptions, one-off purchases, credit ledger) ---------------
@@ -657,6 +698,9 @@ export const entitlementPurchases = pgTable(
     // increments once per letter created against it. Remaining = total − used.
     lettersTotal: integer("letters_total"),
     lettersUsed: integer("letters_used").notNull().default(0),
+    // Set when the purchase's charge is fully refunded (charge.refunded). A
+    // refunded purchase authorises nothing and its included credits are revoked.
+    refundedAt: timestamp("refunded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [index("entitlement_purchases_user_idx").on(t.userId)],
@@ -673,8 +717,10 @@ export const creditLedger = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }), // drip expires at cycle end; packs null
     // Idempotency anchor for grants that must land exactly once regardless of how
     // many webhook deliveries carry them — e.g. per-period plan drip keyed
-    // `drip:<subId>:<periodStartUnix>`. NULL for one-off grants/spends (already
-    // deduped upstream). Enforced by a partial-unique index (non-null only).
+    // `drip:<subId>:<windowStartUnix>` (one window per month, also for annual
+    // plans), `purchase:<paymentIntentId>` for a one-off's included credits, and
+    // `revoke:<grantRowId>` for a refund clawback that targets that one grant.
+    // NULL for spends and spend refunds. Enforced by a partial-unique index.
     grantKey: text("grant_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -692,6 +738,23 @@ export const webhookEventsSeen = pgTable("webhook_events_seen", {
   eventId: text("event_id").primaryKey(),
   seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Durable rate-limit counters (api/_utils/rate-limit.ts). Fixed windows: one
+// row per (key, window_start), incremented atomically with
+// INSERT ... ON CONFLICT DO UPDATE ... RETURNING so every serverless instance
+// shares the same count. Old windows are pruned opportunistically.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.key, t.windowStart] }),
+    index("rate_limits_window_start_idx").on(t.windowStart),
+  ],
+);
 
 // --- inferred types ----------------------------------------------------------
 

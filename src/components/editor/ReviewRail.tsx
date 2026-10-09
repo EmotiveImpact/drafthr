@@ -3,6 +3,7 @@ import { Tabs as TabsPrimitive } from "radix-ui";
 import { ArrowRight, Pin, PinOff, X } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { buildTemplateQualityReport } from "@/lib/template-quality";
+import { useLetterTemplate } from "@/lib/letters/templates";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
@@ -59,6 +60,8 @@ export function ReviewRail({
   // old flat ReviewRail used. Wrapped in useMemo because the tab content is
   // remounted on tab switch and we don't want to re-do the template-quality
   // walk every time.
+  // Template constraints are lazy-loaded; recompute the rows once they land.
+  const template = useLetterTemplate(draft.letterType, draft.context.jurisdiction);
   const rows = useMemo<RailCheckRow[]>(
     () =>
       buildRailRows({
@@ -70,6 +73,7 @@ export function ReviewRail({
       }),
     [
       draft,
+      template,
       counselReviewedBy,
       unresolvedComments,
       onJumpToSection,

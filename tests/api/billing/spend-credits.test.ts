@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { subscriptions } from "../../../src/db/schema.js";
 
 // Fake db/tx: creditBalance() issues one select per subject (tenant then user);
 // each resolves to the next queued row-set. insert() records the ledger row.
@@ -9,8 +10,16 @@ let selectQueue: Row[][] = [];
 const inserted: Array<Record<string, unknown>> = [];
 const execCalls: unknown[] = [];
 
+// Subscription lookups (the lazy monthly grant) find no plan, so they never
+// touch the ledger queue.
+const noSubscriptions = { where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }) };
 const exec = {
-  select: () => ({ from: () => ({ where: () => Promise.resolve(selectQueue.shift() ?? []) }) }),
+  select: () => ({
+    from: (table: unknown) =>
+      table === subscriptions
+        ? noSubscriptions
+        : { where: () => Promise.resolve(selectQueue.shift() ?? []) },
+  }),
   insert: () => ({
     values: (v: Record<string, unknown>) => {
       inserted.push(v);
@@ -146,5 +155,79 @@ describe("refundCredits — makes a failed paid action whole", () => {
   it("no-ops when nothing was debited", async () => {
     await refundCredits([], "ai_critique_refund");
     expect(inserted).toHaveLength(0);
+  });
+});
+
+describe("spend refunds keep the expiry of the credits they give back", () => {
+  const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  it("records which grants a spend drew on, soonest-expiring first", async () => {
+    selectQueue = [
+      [
+        { delta: 10, expiresAt: null, createdAt: new Date(Date.now() - 2000) }, // pack
+        { delta: 5, expiresAt: future, createdAt: new Date(Date.now() - 1000) }, // plan credits
+      ] as Row[],
+    ];
+    const r = await spendCredits(null, "u1", 7, "ai_critique");
+    expect(r.ok).toBe(true);
+    expect(r.debits[0].parts).toEqual([
+      { amount: 5, expiresAt: future },
+      { amount: 2, expiresAt: null },
+    ]);
+  });
+
+  it("refunds plan credits with their original expiry, not as permanent credits", async () => {
+    await refundCredits(
+      [{ subjectType: "tenant", subjectId: "t1", amount: 3, parts: [{ amount: 3, expiresAt: future }] }],
+      "ai_critique_refund",
+    );
+    expect(inserted).toEqual([
+      expect.objectContaining({ subjectType: "tenant", subjectId: "t1", delta: 3, expiresAt: future }),
+    ]);
+  });
+
+  it("does not resurrect credits whose grant has expired since the spend", async () => {
+    const past = new Date(Date.now() - 1000);
+    await refundCredits(
+      [
+        {
+          subjectType: "user",
+          subjectId: "u1",
+          amount: 3,
+          parts: [
+            { amount: 2, expiresAt: past },
+            { amount: 1, expiresAt: null },
+          ],
+        },
+      ],
+      "ai_critique_refund",
+    );
+    expect(inserted).toEqual([expect.objectContaining({ delta: 1, expiresAt: null })]);
+  });
+});
+
+describe("poolBalance — refunded credit purchases", () => {
+  const at = (iso: string) => new Date(iso);
+
+  it("a revocation removes only the refunded grant, leaving plan credits alone", () => {
+    const rows = [
+      { id: "plan", delta: 20, expiresAt: at("2026-03-01"), createdAt: at("2026-02-01") },
+      { id: "pack", delta: 5, expiresAt: null, createdAt: at("2026-02-02") },
+      { delta: -5, expiresAt: null, createdAt: at("2026-02-03"), grantKey: "revoke:pack" },
+    ];
+    // A plain debit would have drawn on the expiring plan credits and left
+    // the refunded pack's credits in place for good.
+    expect(poolBalance(rows, at("2026-02-10").getTime())).toBe(20);
+    expect(poolBalance(rows, at("2026-03-10").getTime())).toBe(0);
+  });
+
+  it("never takes more than is left of the grant, so the balance can't go into debt", () => {
+    const rows = [
+      { id: "pack", delta: 5, expiresAt: null, createdAt: at("2026-02-01") },
+      { delta: -4, expiresAt: null, createdAt: at("2026-02-02") }, // spent 4 of it
+      { delta: -5, expiresAt: null, createdAt: at("2026-02-03"), grantKey: "revoke:pack" },
+      { id: "later", delta: 10, expiresAt: null, createdAt: at("2026-02-04") },
+    ];
+    expect(poolBalance(rows, at("2026-02-10").getTime())).toBe(10);
   });
 });

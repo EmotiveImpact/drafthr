@@ -12,7 +12,7 @@ export const RESIGNATION_CONSTRUCTIVE_UK: LetterTemplate = {
 - Recite the breach particulars with strict factual chronology — dates, named individuals, named witnesses. Identify the "last straw" if relying on a course of conduct.
 - Identify the contractual term breached (express clauses by number; or the implied term of mutual trust and confidence at common law).
 - This is OPEN correspondence and tribunal-bound. No intensifiers, no admissions, no settlement language, no threats.
-- Reserve all rights expressly including unfair dismissal proceedings under Part X ERA 1996, with the s.111 limitation period of 3 months less one day from the effective date of termination (subject to ACAS EC).
+- Reserve all rights expressly including unfair dismissal proceedings under Part X ERA 1996, with the s.111 limitation period of 6 months less one day from the effective date of termination where that date is on or after 1 October 2026 (Employment Rights Act 2025), or 3 months less one day where it is earlier (subject to ACAS EC).
 - For protected-characteristic angles, frame as belief and cite the Equality Act 2010 — but note that automatic unfair dismissal claims (e.g. s.103A whistleblowing, s.99 pregnancy/maternity, s.104 assertion of statutory right) should be flagged where relevant.
 - DO NOT give long notice. The resignation should ordinarily be effective immediately or on a short timeframe — a long notice period weakens the "in response" element. Where the user gives notice, the letter must state it is given without prejudice to the constructive dismissal position.
 - British English throughout. Counsel review is strongly recommended; this template is a defensible first draft, not a substitute for legal advice.`,

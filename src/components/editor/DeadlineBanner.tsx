@@ -12,6 +12,7 @@ export function DeadlineBanner({ draft }: { draft: Draft }) {
   if (draft.mode !== "employee" || !deadline) return null;
 
   const days = daysUntil(deadline.iso);
+  const conciliationNote = earlyConciliationNote(draft);
   const tone =
     days < 0
       ? "border-rose-300 bg-rose-50 text-rose-900"
@@ -35,13 +36,23 @@ export function DeadlineBanner({ draft }: { draft: Draft }) {
             : `Tribunal deadline: ${formatDate(deadline.iso)} (${days} days away).`}
         </strong>{" "}
         {deadline.basis}{" "}
-        <span className="opacity-75">
-          ACAS Early Conciliation must be lodged before this date — the EC clock can extend the
-          limitation by up to 6 weeks.
-        </span>
+        {conciliationNote && <span className="opacity-75">{conciliationNote}</span>}
       </div>
     </div>
   );
+}
+
+/**
+ * Early conciliation must start before the primary limit expires. It stops
+ * the clock while it runs (up to 12 weeks for ACAS notifications from
+ * 1 December 2025) and leaves at least a month after the certificate.
+ */
+function earlyConciliationNote(draft: Draft): string | null {
+  if (draft.context.jurisdiction !== "UK") return null;
+  if (draft.context.ukRegion === "Northern Ireland") {
+    return "Start Labour Relations Agency early conciliation before this date: it extends the time limit while conciliation runs.";
+  }
+  return "Start ACAS Early Conciliation before this date: the clock stops while conciliation runs (up to 12 weeks) and you then have at least one month from the certificate to file.";
 }
 
 function daysUntil(iso: string): number {

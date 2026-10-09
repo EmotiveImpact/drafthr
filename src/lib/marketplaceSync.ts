@@ -120,6 +120,14 @@ export async function pushProfile(): Promise<boolean> {
     return false;
   }
   useConsultantStore.getState().hydrateFromServer(dtoToProfile(res.data.profile));
+  // Editing a vetted field (rate, credentials, bio, specialties) sends a live
+  // profile back to the review queue. Say so, rather than letting the
+  // consultant assume they're still listed.
+  if (p.status === "published" && res.data.profile.status === "pending_review") {
+    toast.info(
+      "Your changes need a quick review before your profile is listed again. You're hidden from the marketplace until then.",
+    );
+  }
   return true;
 }
 
@@ -177,6 +185,9 @@ function dtoToBooking(
       ? ({ GBP: "£", USD: "$", EUR: "€" } as const)[dto.consultantCurrency]
       : prior?.consultantCurrency,
     consultantPrice: dto.consultantPrice ?? prior?.consultantPrice,
+    priceAmount: dto.priceAmount ?? prior?.priceAmount,
+    priceCurrency: dto.priceCurrency ?? prior?.priceCurrency,
+    paymentStatus: dto.paymentStatus ?? prior?.paymentStatus,
   };
 }
 

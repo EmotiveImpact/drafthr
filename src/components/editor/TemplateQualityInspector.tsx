@@ -5,6 +5,7 @@ import {
   type TemplateRequirementStatus,
 } from "@/lib/template-quality";
 import { cn } from "@/lib/utils";
+import { useLetterTemplate } from "@/lib/letters/templates";
 
 const STATUS_LABEL: Record<TemplateRequirementStatus, string> = {
   covered: "Covered",
@@ -14,6 +15,8 @@ const STATUS_LABEL: Record<TemplateRequirementStatus, string> = {
 };
 
 export function TemplateQualityInspector({ draft }: { draft: Draft }) {
+  // Re-render once the lazily loaded template (constraints) arrives.
+  useLetterTemplate(draft.letterType, draft.context.jurisdiction);
   const report = buildTemplateQualityReport(draft);
   const requirements = report.sections.flatMap((section) => section.requirements);
   const hasRequirements = requirements.length > 0 || report.compliance.length > 0;

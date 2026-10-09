@@ -75,11 +75,11 @@ export async function POST(req: Request): Promise<Response> {
 
     // IDOR guard + trustworthy title: read the draft in the caller's tenant.
     const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, title: drafts.title, letterType: drafts.letterType, authorUserId: drafts.authorUserId })
+      .select({ id: drafts.id, tenantId: drafts.tenantId, title: drafts.title, letterType: drafts.letterType, authorUserId: drafts.authorUserId, deletedAt: drafts.deletedAt })
       .from(drafts)
       .where(eq(drafts.id, draftId))
       .limit(1);
-    if (!draft) return jsonError("Draft not found", 404);
+    if (!draft || draft.deletedAt) return jsonError("Draft not found", 404);
     if (draft.tenantId !== tenantId) {
       return jsonError("Draft belongs to a different workspace", 403);
     }

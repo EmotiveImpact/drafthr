@@ -9,8 +9,12 @@ roles, or the auth model change.
 - Chokepoint: `requireSessionAndTenant` (`api/_utils/session-with-tenant.ts`)
   validates the session, upserts the local `users` row, resolves the active
   tenant, and **fails closed** (returns 500, never data) on error.
-- AI / upload endpoints use `enforceProductionSession`
+- The upload endpoint uses `enforceProductionSession`
   (`api/_utils/production-auth.ts`) — now also fail-closed (see below).
+  `/api/draft` and `/api/agent` use `rejectAiGeneration`
+  (`api/_utils/ai-access.ts`): the same fail-closed session check, plus
+  viewers are refused, Opus needs a paid plan, and generation needs a plan or a
+  recent letter purchase once `DRAFTHR_ENFORCE_PAYWALL=1`.
 
 ## Enforcement verified at runtime (unauthenticated curl, prod)
 Every protected endpoint returns 401/403 to an anonymous caller. The only
@@ -48,16 +52,26 @@ nav — direct URL navigation to another role's surface redirects to `/`.
 - Workspace `member-role` + `member-remove` + `invite-revoke`: gated to
   owner/admin of the active tenant; target scoped to the same tenant;
   `canManageOwners` + last-owner guard.
-- `store/drafts` writes/deletes scoped by `id AND tenantId`.
+- `store/drafts` writes/deletes scoped by `id AND tenantId`. Deletes are soft
+  (the row stays as a scrubbed tombstone); writes are revision-checked (409 on
+  a stale revision, 410 for a deleted id), and a letter's type can't change
+  after creation, so the per-tier paywall check at create time holds.
 - `agent`, `draft`, `export/pdf`, `upload/image`, `sign/manifest`:
   session-gated; export/pdf + sign/manifest tenant-scope the draft by
-  `id AND tenantId`.
+  `id AND tenantId`. `sign/manifest` is disabled unless
+  `DRAFTHR_MANIFEST_SIGNING=enabled`: it signs caller-supplied bytes, so it
+  must not run in production until the manifest is built on the server.
 - `directory-webhook`: WorkOS signature verified over the raw body before the
   payload is trusted; resolves org→tenant (no cross-tenant write).
 - `accept-invite`: session email must match the invite email.
 - OAuth callback: `state` cookie CSRF check; provider allowlist.
-- Marketplace tag filter uses bound params (`sql.join`), not `sql.raw`. Only
-  `sql.execute` in the codebase is the parameterised advisory-lock in audit.
+- Marketplace tag filter uses bound params (`sql.join`), not `sql.raw`. Every
+  raw `execute` (advisory locks, session epoch, rate-limit counters) goes
+  through the parameterised `sql` tag; there is no `sql.raw`.
+- `audit_events` is append-only in the database (migration 0021): a trigger
+  rejects UPDATE, DELETE and TRUNCATE, except the tenant-erasure cascade and the
+  `actor_user_id` SET NULL when a user is deleted. The chain is ordered by a
+  per-tenant `seq` assigned under the tenant's advisory lock.
 
 ## Fixed in the security-board pass (2026-05)
 - **Per-route role guards.** `<Protected roles={[…]}>` — HR/employee/consultant
@@ -104,9 +118,11 @@ nav — direct URL navigation to another role's surface redirects to `/`.
 5. ~~**`photoUrl` stored verbatim**~~ **DONE.** `profile.ts` persists the
    `validatePhotoUrl`-checked value, not the raw body (verified 2026-06-10).
 6. **In-memory rate limiter is per-instance** (`api/_utils/rate-limit.ts`) —
-   effective limit is `max × warm instances`. → Move to a shared store
-   (Upstash/Vercel KV) for credential/LLM/upload routes. WorkOS throttles
-   auth server-side as a backstop.
+   effective limit is `max × warm instances`. **PARTLY DONE:**
+   `rateLimitDurable` adds a shared Postgres counter (`rate_limits`, migration
+   0021) for the auth routes and workspace invites; it fails open if the
+   database is unreachable. AI, upload and store routes still use only the
+   per-instance limiter. WorkOS throttles auth server-side as a backstop.
 7. ~~**No server-side session revocation.**~~ **DONE (SE-03, 2026-06-10).**
    Per-user `session_epoch` (migration `0010_session_epoch`): the sealed cookie
    carries the epoch it was minted with, `requireSessionAndTenant` rejects any

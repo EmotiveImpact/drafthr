@@ -28,8 +28,9 @@
  * "build your own UI" path the headless docs document.
  */
 
+import { randomBytes } from "node:crypto";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable } from "../../_utils/rate-limit.js";
 import { getWorkos } from "../../_utils/workos.js";
 
 export const config = { runtime: "nodejs" };
@@ -51,7 +52,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // 3/min/IP — sign-up is the highest-leverage abuse target (creates an
   // identity, ships an email). Keep it tight; real humans never hit this.
-  const limited = rateLimit(req, { name: "auth-sign-up", max: 3, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-sign-up", max: 3, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<SignUpBody>(req);
@@ -78,6 +79,16 @@ export async function POST(req: Request): Promise<Response> {
   if (!lastName || lastName.length > MAX_NAME) {
     return jsonError("Enter your last name.", 400);
   }
+
+  // Per-address cap on top of the per-IP one: each sign-up (or duplicate
+  // sign-up) sends a verification email, so a distributed sender must not be
+  // able to mailbomb one inbox from many IPs.
+  const perEmail = await rateLimitKeyDurable(`email:${email.toLowerCase()}`, {
+    name: "auth-sign-up-email",
+    max: 5,
+    windowMs: 60 * 60_000,
+  });
+  if (perEmail) return perEmail;
 
   const workos = getWorkos();
 
@@ -152,10 +163,11 @@ function ok(userId: string | null): Response {
 }
 
 /**
- * Best-effort: look up the user by email and trigger a fresh verification
- * email. Used only on the duplicate-email branch of sign-up so the rightful
- * owner still gets a usable link. Failures are swallowed (we already
- * committed to the generic-success contract for anti-enumeration).
+ * Best-effort: look up the user by email and, if it is still unverified,
+ * clear its password and trigger a fresh verification email. Used only on
+ * the duplicate-email branch of sign-up so the rightful owner still gets a
+ * usable link. Failures are swallowed (we already committed to the
+ * generic-success contract for anti-enumeration).
  */
 async function silentlyResendVerificationByEmail(email: string): Promise<string | null> {
   try {
@@ -169,6 +181,20 @@ async function silentlyResendVerificationByEmail(email: string): Promise<string 
     // both cases so the sign-up response body is identical for verified and
     // unverified duplicates (anti-enumeration — bug #12).
     if (!user.emailVerified) {
+      // Replace whatever password the unverified account has with a random
+      // one nobody knows. Otherwise someone who registered this email first
+      // keeps their password and can sign into the account once the real
+      // owner verifies it. The password just submitted is NOT used either:
+      // this request is anonymous, so using it would let anyone re-submit a
+      // sign-up for an address whose owner has just registered and take over
+      // the account when the owner verifies. The verifying browser sets the
+      // password instead (verify-email.ts), once the code has proved the inbox.
+      // If this update fails we send nothing, so the old password can't ride
+      // along on a verification.
+      await workos.userManagement.updateUser({
+        userId: user.id,
+        password: unguessablePassword(),
+      });
       await workos.userManagement.sendVerificationEmail({ userId: user.id });
     }
     return user.id;
@@ -176,6 +202,12 @@ async function silentlyResendVerificationByEmail(email: string): Promise<string 
     console.warn("[auth/sign-up] silent resend failed", err);
     return null;
   }
+}
+
+/** 256 random bits plus one character from each class, so it clears any
+ *  WorkOS password-complexity setting. Never shown or stored anywhere. */
+function unguessablePassword(): string {
+  return `${randomBytes(32).toString("base64url")}Aa1!`;
 }
 
 function isWorkosConflict(err: unknown): boolean {

@@ -9,7 +9,7 @@
  */
 
 import { readJsonRequest, enforceSameOrigin, jsonError } from "../../_utils/request.js";
-import { rateLimit } from "../../_utils/rate-limit.js";
+import { rateLimitDurable } from "../../_utils/rate-limit.js";
 import {
   getWorkos,
   buildSessionCookie,
@@ -19,6 +19,7 @@ import {
   type SessionPayload,
 } from "../../_utils/workos.js";
 import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
+import { linkDirectoryIdentityOnSignIn } from "../../_utils/directory-link.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -28,7 +29,7 @@ export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
 
-  const limited = rateLimit(req, { name: "auth-callback", max: 20, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-callback", max: 20, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<CallbackBody>(req);
@@ -52,6 +53,15 @@ export async function POST(req: Request): Promise<Response> {
         sealSession: true,
         cookiePassword: process.env.WORKOS_COOKIE_PASSWORD!,
       },
+    });
+
+    // Link any Directory Sync placeholder for this verified email to the
+    // signed-in user before reading the epoch, so the session is minted for
+    // the linked row and offboarding reaches this account.
+    await linkDirectoryIdentityOnSignIn({
+      workosUserId: user.id,
+      email: user.email,
+      emailVerified: user.emailVerified,
     });
 
     const payload: SessionPayload = {

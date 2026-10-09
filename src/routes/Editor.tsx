@@ -1510,11 +1510,7 @@ export function Editor() {
                 <div className="rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] text-[12.5px] px-3 py-2 flex items-center gap-2">
                   <Send className="size-3.5 shrink-0" />
                   <span className="leading-snug">
-                    Read-only during review — toggle role in{" "}
-                    <Link to="/settings" className="underline font-medium">
-                      Settings
-                    </Link>{" "}
-                    to edit.
+                    Read-only during review. Comment or decide on the Review step; the drafter edits once a decision is made.
                   </span>
                 </div>
               )}

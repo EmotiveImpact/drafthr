@@ -264,7 +264,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
     title: "Pay Dispute / Wage Claim",
     shortTitle: "Pay dispute",
     description:
-      "Recover unpaid wages, holiday pay, expenses, commissions or notice pay. UK: s.13 ERA 1996 unauthorised deduction, 3-month limit. US: FLSA + state wage-payment laws.",
+      "Recover unpaid wages, holiday pay, expenses, commissions or notice pay. UK: s.13 ERA 1996 unauthorised deduction, 6-month limit for deductions from 1 October 2026 (3 months before then and in Northern Ireland). US: FLSA + state wage-payment laws.",
     riskClass: "medium",
     jurisdictionScope: "shared",
     flagshipV1: false,

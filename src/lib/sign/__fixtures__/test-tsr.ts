@@ -69,8 +69,9 @@ export function buildTestTsr(opts: {
   sha256Hex: string;
   genTime: Date;
   status?: PKIStatus;
+  signer?: TestSigner;
 }): TestTsr {
-  const signer = createTestSigner();
+  const signer = opts.signer ?? createTestSigner();
   const tstInfo = new TSTInfo({
     version: TSTInfoVersion.v1,
     policy: "1.2.3.4.5",
@@ -126,6 +127,22 @@ export function buildTestTsr(opts: {
       trustedTsaKeyPins: signer.keyPins,
       tsaName: "Test TSA",
     },
+  };
+}
+
+/**
+ * A test TSA with one fixed key, for buildPadesCms's `timestamp` callback:
+ * the trust pins are known up front, and each call stamps whatever digest
+ * it is handed (the signature value, in the writer).
+ */
+export function createTestTimestamper(genTime: Date): {
+  timestamp: (sha256Hex: string) => Promise<Uint8Array>;
+  parseOptions: TestTsr["parseOptions"];
+} {
+  const signer = createTestSigner();
+  return {
+    timestamp: async (sha256Hex) => buildTestTsr({ sha256Hex, genTime, signer }).tsr,
+    parseOptions: { trustedTsaKeyPins: signer.keyPins, tsaName: "Test TSA" },
   };
 }
 

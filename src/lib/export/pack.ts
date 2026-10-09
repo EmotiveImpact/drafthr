@@ -1,15 +1,14 @@
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
-import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
-import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { sectionLabels, displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { buildDraftTimeline } from "@/lib/timeline";
 import {
   buildTemplateQualityReport,
   type TemplateRequirementStatus,
 } from "@/lib/template-quality";
-import { renderLetterPdfBlob, filenameFor as pdfFilenameFor } from "./pdf";
+import { renderLetterPdfBlob, filenameFor as pdfFilenameFor, letterBodyHtml } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
-import { isSafeImageDataUrl, isSafeImageRef } from "@/lib/safe-data-url";
+import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { loadTemplate } from "@/lib/letters/templates";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -45,10 +44,13 @@ export async function exportLetterPack(
 ): Promise<void> {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
+  // Template constraints feed the quality section of the summary; they are
+  // lazy-loaded, so make sure they are present before building it.
+  await loadTemplate(draft.letterType, draft.context.jurisdiction).catch(() => undefined);
 
   // Render the letter to both formats in parallel.
   const [pdfBlob, docxBlob] = await Promise.all([
-    renderLetterPdfBlob(draft).catch(() => null),
+    renderLetterPdfBlob(draft, attestation).catch(() => null),
     renderLetterDocxBlob(draft).catch(() => null),
   ]);
 
@@ -245,7 +247,7 @@ function buildEvidenceIndexHtml(draft: Draft): string {
   .empty{color:#94a3b8;font-style:italic}
 </style></head><body>
 <h1>Exhibit Index</h1>
-<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(draft.letterType)} · Generated ${escapeHtml(new Date().toLocaleString())}</p>
+<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(draft.letterType)} · Generated ${escapeHtml(packDateTime(draft, Date.now()))}</p>
 
 ${
   figures.length > 0
@@ -392,7 +394,7 @@ export function buildExportPackHtml(
   draft: Draft,
   attestation?: ExportAttestation
 ): string {
-  const generatedAt = new Date().toLocaleString();
+  const generatedAt = packDateTime(draft, Date.now());
   const quality = buildTemplateQualityReport(draft);
   const timeline = buildDraftTimeline(draft).slice().reverse();
   const evidence = draft.evidence ?? [];
@@ -485,10 +487,11 @@ export function buildExportPackHtml(
     <section class="section">
       <h2>Letter</h2>
       <article class="letter-page">
-        ${letterheadHtml(draft)}
-        ${draft.sections.map((section) => sanitizeLetterHtml(section.html)).join("\n")}
-        <hr />
-        ${sanitizeLetterHtml(disclaimerHtmlFor(draft))}
+        ${/* Same body the PDF and DOCX ship: accepted suggestions merged,
+            reviewer track changes and comment marks stripped, letterhead
+            only when the letter goes out on letterhead. The authoring
+            sanitiser used here before leaked both. */ ""}
+        ${letterBodyHtml(draft)}
       </article>
     </section>
 
@@ -534,7 +537,7 @@ export function buildExportPackHtml(
           : `<ul class="clean">${timeline
               .map(
                 (event) => `<li>
-                  <div class="timeline-time">${escapeHtml(new Date(event.createdAt).toLocaleString())}</div>
+                  <div class="timeline-time">${escapeHtml(packDateTime(draft, event.createdAt))}</div>
                   <strong>${escapeHtml(event.title)}</strong>
                   ${event.sectionTitle ? `<div class="small muted">${escapeHtml(event.sectionTitle)}</div>` : ""}
                   ${event.detail ? `<p class="small muted">${escapeHtml(event.detail)}</p>` : ""}
@@ -628,7 +631,7 @@ function renderEvidenceItem(draft: Draft, item: EvidenceItem, index: number): st
   return `<li>
     <span class="label">Evidence ${index + 1} · ${escapeHtml(item.kind)}</span>
     <h3>${escapeHtml(item.filename || labelForEvidence(item))}</h3>
-    <p class="small muted">Added ${escapeHtml(new Date(item.uploadedAt).toLocaleString())} · ${escapeHtml(links || "General draft evidence")}</p>
+    <p class="small muted">Added ${escapeHtml(packDateTime(draft, item.uploadedAt))} · ${escapeHtml(links || "General draft evidence")}</p>
     <p>${escapeHtml(item.parsedSummary || item.content || "No summary supplied.")}</p>
     <p class="small muted">AI prompt use: ${item.includeVerbatim ? "verbatim content included" : "summary only"}</p>
     ${image ? `<img class="evidence-img" src="${escapeAttribute(image)}" alt="" />` : ""}
@@ -654,6 +657,16 @@ function statusClass(status: TemplateRequirementStatus): string {
   return "check";
 }
 
+/**
+ * A date and time for the pack, in the letter's jurisdiction rather than the
+ * browser's locale, so a UK bundle opened on a US-locale machine doesn't read
+ * 10/9/2026 for 10 September. Month names keep it unambiguous either way.
+ */
+export function packDateTime(draft: Pick<Draft, "context">, at: number | string | Date): string {
+  const locale = draft.context?.jurisdiction === "US" ? "en-US" : "en-GB";
+  return new Date(at).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+}
+
 function packTitle(draft: Draft): string {
   const party = draft.mode === "employer" ? draft.employee.legalName : draft.employer.legalName;
   return `${draft.letterType} export pack${party ? ` - ${party}` : ""}`;
@@ -664,12 +677,6 @@ function filenameForPack(draft: Draft): string {
     .replace(/[^a-z0-9]+/gi, "-")
     .replace(/^-|-$/g, "");
   return `${draft.letterType}-${safe || "letter"}-${draft.context.issueDate}-pack.zip`;
-}
-
-function letterheadHtml(draft: Draft): string {
-  const url = draft.employer.letterheadDataUrl;
-  if (!isSafeImageRef(url)) return "";
-  return `<div style="margin:0 0 24px 0;text-align:center;"><img src="${escapeAttribute(url)}" style="max-width:100%;max-height:120px;display:inline-block;" alt="" /></div>`;
 }
 
 function imageDataUrl(item: EvidenceItem): string | undefined {

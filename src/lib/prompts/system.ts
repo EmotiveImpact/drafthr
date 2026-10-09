@@ -15,6 +15,17 @@ const TONE_GUIDANCE: Record<string, string> = {
   firm: "Firm and unambiguous. No softening hedges. Still respectful.",
 };
 
+/**
+ * Northern Ireland employment law is devolved and differs from Great Britain:
+ * the templates and fences are written for GB, so an NI letter gets this
+ * override telling the model which instruments to use instead.
+ */
+const NORTHERN_IRELAND_BLOCK = `NORTHERN IRELAND: THIS OVERRIDES ANY GB LAW CITED ELSEWHERE IN THESE INSTRUCTIONS (THE LETTER NOTES ABOVE AND EACH SECTION'S LEGAL FENCES):
+- Employment law in Northern Ireland is devolved. Do NOT cite the Employment Rights Act 1996, the ACAS Code of Practice, ACAS early conciliation, s.10 Employment Relations Act 1999 or the Employment Rights Act 2025 (including its six-month tribunal time limit) as if they applied. Most industrial tribunal claims in Northern Ireland must still be presented within 3 months less one day (for example unfair dismissal under Article 145 of the Employment Rights (Northern Ireland) Order 1996), extended by LRA early conciliation.
+- Use the NI equivalents: the Employment Rights (Northern Ireland) Order 1996; the Labour Relations Agency (LRA) Code of Practice on Disciplinary and Grievance Procedures; early conciliation through the LRA; the right to be accompanied under Article 12 of the Employment Relations (Northern Ireland) Order 1999; claims go to an industrial tribunal (or the Fair Employment Tribunal for religious or political discrimination).
+- The Equality Act 2010 largely does not extend to Northern Ireland. Discrimination protections come from separate NI legislation (for example the Sex Discrimination (NI) Order 1976, the Race Relations (NI) Order 1997, the Disability Discrimination Act 1995 as it applies in NI, and the Fair Employment and Treatment (NI) Order 1998).
+- Where you are unsure whether a GB rule has an NI equivalent, write [TBD: confirm NI position] rather than citing GB law.`;
+
 const JURISDICTION_LANGUAGE: Record<string, string> = {
   UK: "British English spelling (organisation, recognise, behaviour, programme).",
   US: "American English spelling (organization, recognize, behavior, program).",
@@ -34,6 +45,19 @@ export function buildSystemPrompt(draft: Draft): string {
       : draft.context.usState ?? "";
 
   const isEmployer = draft.mode === "employer";
+  const isUk = j === "UK";
+  // Examples in the quality bar must match the jurisdiction: UK-only
+  // citations and audiences in a US prompt pulled ERA and ACAS references
+  // into US letters.
+  const citeExample = isUk
+    ? `"Section 86 ERA 1996" beats "the relevant notice provisions"`
+    : `"Cal. Lab. Code §201" beats "applicable state law"`;
+  const audience = isUk
+    ? "HR directors, employment counsel, ACAS conciliators, employment judges, and opposing solicitors. They go on a tribunal bundle"
+    : "HR directors, employment counsel, EEOC and state agency investigators, judges, and opposing counsel. They become exhibits in agency charges and litigation";
+  const caseCiteExample = isUk
+    ? "s.94 ERA 1996; Western Excavating v Sharp [1978] ICR 221; Omilaju [2005] EWCA Civ 1493 — full neutral citation"
+    : "42 U.S.C. §2000e-2; McDonnell Douglas Corp. v. Green, 411 U.S. 792 (1973) — full reporter citation";
 
   const partyBlock = isEmployer
     ? `EMPLOYER (sender):
@@ -77,7 +101,7 @@ QUALITY BAR — non-negotiable:
 - Statutorily anchored. Where a section, regulation, or case applies, cite it by name and section number.
 - No intensifiers ("very serious", "extremely concerning"). Facts carry weight.
 - No expressions of regret unless tactically warranted AND they don't undermine the legal position.
-- Specific over abstract. "By 28 June 2026" beats "in due course". "Section 86 ERA 1996" beats "the relevant notice provisions".
+- Specific over abstract. "By 28 June 2026" beats "in due course". ${citeExample}.
 - Every sentence carries weight. If a sentence isn't load-bearing, cut it.
 
 LETTER TYPE: ${meta.title} (${meta.id})
@@ -99,10 +123,10 @@ EVIDENCE AND ATTACHMENTS:
 ${evidencePromptBlock(draft)}
 
 QUALITY BAR — NON-NEGOTIABLE:
-- These letters must be EXCEPTIONAL. They are read by HR directors, employment counsel, ACAS conciliators, employment judges, and opposing solicitors. They go on a tribunal bundle. They WIN cases.
+- These letters must be EXCEPTIONAL. They are read by ${audience}. They WIN cases.
 - Be precise, dated, named. Every assertion of fact is anchored to a date or a named person where the data allows. Vagueness loses cases.
 - Where the user has supplied a structured list (incidents, witnesses, prior raises) — preserve the order, dates, and names verbatim. Do NOT compress, paraphrase away specifics, or merge entries.
-- Where statute or case law is referenced in the template addendum, cite it correctly (s.94 ERA 1996; Western Excavating v Sharp [1978] ICR 221; Omilaju [2005] EWCA Civ 1493 — full neutral citation).
+- Where statute or case law is referenced in the template addendum, cite it correctly (${caseCiteExample}).
 - Tone calibrated to risk class: high-risk = surgical, restrained, no editorialising; medium = clear and firm; low = courteous and professional.
 - No filler. No throat-clearing. No "I hope this letter finds you well." Every sentence carries weight.
 - If a fact is genuinely unavailable, write [TBD] — never invent.
@@ -127,14 +151,16 @@ ${
   const tplAddendum = tpl?.letterSystemAddendum
     ? `\n\n${tpl.letterSystemAddendum}`
     : "";
+  const niBlock =
+    isUk && draft.context.ukRegion === "Northern Ireland" ? `\n\n${NORTHERN_IRELAND_BLOCK}` : "";
 
   if (!isEmployer) {
     return `${base}${tplAddendum}
 
-${buildEmployeeRightsBlock(draft)}`.trim();
+${buildEmployeeRightsBlock(draft)}${niBlock}`.trim();
   }
 
-  return `${base}${tplAddendum}`.trim();
+  return `${base}${tplAddendum}${niBlock}`.trim();
 }
 
 export function buildConsistencyPrompt(): string {

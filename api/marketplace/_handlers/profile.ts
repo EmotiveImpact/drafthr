@@ -13,6 +13,12 @@
  * Until a real admin surface exists, VETTING_AUTO_PUBLISH=1 in the env
  * publishes profiles immediately on first save so the marketplace isn't
  * empty during early development. Flip it off before launch.
+ *
+ * Re-vetting: editing a field the admin vetted (see VETTED_FIELDS) sends a
+ * published, paused or rejected profile back to 'pending_review', which takes
+ * it out of the public listing until an admin approves it again. Cosmetic and
+ * operational fields (photo, availability, turnaround) stay exempt. A
+ * suspended profile stays suspended whatever is edited.
  */
 import { eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
@@ -53,6 +59,35 @@ type ProfileInput = {
   photoUrl?: string | null;
   availability?: Availability;
 };
+
+/**
+ * The fields admin vetting covers: identity, credentials (the role line), the
+ * claims in the bio and specialty quote, practice areas and jurisdictions (the
+ * specialties tags), and the rate. Changing any of them needs a fresh review.
+ * Exempt: photoUrl and availability (cosmetic), and sla (a turnaround
+ * estimate, not a vetted claim). initials is derived from fullName.
+ */
+export const VETTED_FIELDS = [
+  "fullName",
+  "role",
+  "bio",
+  "specialty",
+  "specialties",
+  "price",
+  "currency",
+] as const;
+
+type VettedValues = Pick<typeof consultantProfiles.$inferSelect, (typeof VETTED_FIELDS)[number]>;
+
+/** True when any vetted field differs between the stored profile and the write. */
+export function changesVettedFields(existing: VettedValues, next: VettedValues): boolean {
+  return VETTED_FIELDS.some(
+    (f) => JSON.stringify(existing[f] ?? null) !== JSON.stringify(next[f] ?? null),
+  );
+}
+
+/** Statuses a vetted-field edit sends back to the review queue. */
+const REVET_STATUSES = new Set(["published", "paused", "rejected"]);
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -164,6 +199,12 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   }
 
   const initials = fullName ? initialsOf(fullName) : existing?.initials ?? "??";
+  // Cap the specialty quote at 120 characters, but leave a stored one that
+  // predates the cap alone when it's resubmitted unchanged (the profile form
+  // sends it on every save): truncating it would count as a vetted edit and
+  // pull the profile from the listing over a photo or availability change.
+  const specialtyIn = asStr(body.specialty, existing?.specialty ?? "").trim();
+  const specialty = specialtyIn === existing?.specialty ? existing.specialty : specialtyIn.slice(0, 120);
   const specialties = Array.isArray(body.specialties)
     ? body.specialties.filter((s): s is string => typeof s === "string" && s.length > 0)
     : (existing?.specialties as string[] | undefined) ?? [];
@@ -187,7 +228,7 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     fullName,
     role,
     bio,
-    specialty: (typeof body.specialty === "string" ? body.specialty : existing?.specialty ?? "").trim().slice(0, 120),
+    specialty,
     specialties,
     price: clampInt(body.price ?? existing?.price ?? 150, 0, 5000),
     currency: (["GBP", "USD", "EUR"].includes(body.currency as string)
@@ -202,7 +243,8 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     // otherwise the sanitisation is discarded on the accept path.
     photoUrl,
     // First save publishes immediately when VETTING_AUTO_PUBLISH=1, otherwise
-    // pending_review. Subsequent updates preserve whatever the admin set.
+    // pending_review. Subsequent updates preserve whatever the admin set,
+    // unless a vetted field changed (below).
     status:
       existing?.status ??
       ((AUTO_PUBLISH ? "published" : "pending_review") as
@@ -210,6 +252,9 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
         | "pending_review"),
     updatedAt: new Date(),
   };
+  if (existing && REVET_STATUSES.has(existing.status) && changesVettedFields(existing, values)) {
+    values.status = AUTO_PUBLISH ? "published" : "pending_review";
+  }
 
   if (!existing) {
     // PATCH is a partial update of an EXISTING profile. Creating one here would

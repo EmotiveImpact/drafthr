@@ -3,7 +3,14 @@ import { createPortal } from "react-dom";
 import { Check, MessageSquarePlus, Reply, Trash2, X } from "lucide-react";
 import type { Comment, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { meIdentity, listIdentities } from "@/lib/comments/identity";
+import {
+  type CommentViewer,
+  canDeleteComment,
+  identityForComment,
+  meIdentity,
+  listIdentities,
+} from "@/lib/comments/identity";
+import { useCommentViewer } from "@/lib/comments/useCommentViewer";
 import { useProfileStore } from "@/lib/profile";
 import { Avatar } from "@/components/ds";
 
@@ -61,6 +68,7 @@ export function FloatingCommentPanel({
 
   const me = useMemo(() => meIdentity(profile), [profile]);
   const identities = useMemo(() => listIdentities(draft, profile), [draft, profile]);
+  const viewer = useCommentViewer();
 
   const panelRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -181,6 +189,7 @@ export function FloatingCommentPanel({
             const id = addComment(draft.id, {
               sectionId: mode.sectionId,
               authorId: me.id,
+              authorUserId: viewer.userId ?? undefined,
               authorName: me.name ?? "Me",
               authorEmail: me.email,
               body,
@@ -197,12 +206,14 @@ export function FloatingCommentPanel({
           root={rootComment}
           replies={replies}
           identities={identities}
+          viewer={viewer}
           me={me}
           onReply={(body) => {
             addComment(draft.id, {
               sectionId: rootComment.sectionId,
               parentId: rootComment.id,
               authorId: me.id,
+              authorUserId: viewer.userId ?? undefined,
               authorName: me.name ?? "Me",
               authorEmail: me.email,
               body,
@@ -291,6 +302,7 @@ function ThreadView({
   root,
   replies,
   identities,
+  viewer,
   me,
   onReply,
   onDelete,
@@ -300,6 +312,7 @@ function ThreadView({
   root: Comment;
   replies: Comment[];
   identities: ReturnType<typeof listIdentities>;
+  viewer: CommentViewer;
   me: ReturnType<typeof meIdentity>;
   onReply: (body: string) => void;
   onDelete: (commentId: string) => void;
@@ -324,8 +337,8 @@ function ThreadView({
 
       <CommentBody
         comment={root}
-        author={identities.find((i) => i.id === root.authorId) ?? identityFromComment(root)}
-        onDelete={() => onDelete(root.id)}
+        author={identityForComment(root, identities, viewer)}
+        onDelete={canDeleteComment(root, viewer) ? () => onDelete(root.id) : undefined}
         onToggleResolve={onToggleResolve}
         showResolve
       />
@@ -337,8 +350,8 @@ function ThreadView({
         >
           <CommentBody
             comment={r}
-            author={identities.find((i) => i.id === r.authorId) ?? identityFromComment(r)}
-            onDelete={() => onDelete(r.id)}
+            author={identityForComment(r, identities, viewer)}
+            onDelete={canDeleteComment(r, viewer) ? () => onDelete(r.id) : undefined}
           />
         </div>
       ))}
@@ -386,7 +399,8 @@ function CommentBody({
 }: {
   comment: Comment;
   author: { name?: string; initials: string; email?: string; id: string };
-  onDelete: () => void;
+  /** Omitted when the viewer may not delete this comment. */
+  onDelete?: () => void;
   onToggleResolve?: () => void;
   showResolve?: boolean;
 }) {
@@ -418,42 +432,20 @@ function CommentBody({
             <Check className="size-3.5" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={onDelete}
-          className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-red-bg)] hover:text-[var(--ds-red-fg)]"
-          aria-label="Delete"
-          title="Delete"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-red-bg)] hover:text-[var(--ds-red-fg)]"
+            aria-label="Delete"
+            title="Delete"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
-}
-
-/** Build a minimal identity object from the flat Comment fields when the
- *  comment's author isn't in the draft's identity list (e.g. an external
- *  commenter we haven't onboarded yet). */
-function identityFromComment(c: Comment): {
-  id: string;
-  initials: string;
-  name?: string;
-  email?: string;
-} {
-  const initials = c.authorName
-    .split(/\s+/)
-    .map((s) => s[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase() || "?";
-  return {
-    id: c.authorId,
-    initials,
-    name: c.authorName,
-    email: c.authorEmail,
-  };
 }
 
 function relTime(ts: number): string {

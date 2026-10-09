@@ -1,6 +1,6 @@
 import type { Draft, EvidenceDisplayMode, EvidenceItem } from "@/lib/letters/types";
 import type { ExpectedEvidence } from "@/lib/letters/templates/types";
-import { getTemplate } from "@/lib/letters/templates";
+import { getTemplateMetadata } from "@/lib/letters/templates";
 
 /**
  * Compute checklist status for each ExpectedEvidence row declared by the
@@ -17,7 +17,7 @@ export type ExpectedEvidenceStatus = {
 };
 
 export function buildExpectedEvidenceStatus(draft: Draft): ExpectedEvidenceStatus[] {
-  const template = getTemplate(draft.letterType, draft.context.jurisdiction);
+  const template = getTemplateMetadata(draft.letterType, draft.context.jurisdiction);
   const expected = template?.expectedEvidence ?? [];
   if (expected.length === 0) return [];
   const items = draft.evidence ?? [];

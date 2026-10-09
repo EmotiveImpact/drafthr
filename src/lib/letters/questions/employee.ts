@@ -142,7 +142,7 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
         type: "date",
         label: "When did the conduct or decision happen?",
         help:
-          "If it's a continuing course of conduct, pick the most recent incident. UK tribunal limitation is 3 months less one day from this date.",
+          "If it's a continuing course of conduct, pick the most recent incident. UK tribunal limitation is 6 months less one day from this date if it was on or after 1 October 2026, or 3 months less one day if earlier. In Northern Ireland it is 3 months less one day.",
       },
       {
         id: "sendBy",
@@ -456,7 +456,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
       id: "disclosure",
       title: "What you are disclosing",
       description:
-        "PIDA / s.43A ERA 1996 protection requires: information (not allegation), reasonable belief, public interest, and one of six categories (criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, environmental damage, deliberate concealment).",
+        "PIDA / s.43A ERA 1996 protection requires: information (not allegation), reasonable belief, public interest, and one of the s.43B categories (criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, sexual harassment, environmental damage, deliberate concealment).",
       questions: [
         {
           id: "category",
@@ -468,6 +468,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
             { value: "legal_obligation", label: "Breach of a legal obligation" },
             { value: "miscarriage_of_justice", label: "Miscarriage of justice" },
             { value: "health_safety", label: "Danger to health and safety" },
+            { value: "sexual_harassment", label: "Sexual harassment" },
             { value: "environmental", label: "Damage to the environment" },
             { value: "concealment", label: "Deliberate concealment of any of the above" },
           ],
@@ -502,7 +503,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
             ],
           },
         },
-        { id: "reasonableBeliefBasis", type: "textarea", label: "Why you reasonably believe the information is substantially true", required: true },
+        { id: "reasonableBeliefBasis", type: "textarea", label: "Why you reasonably believe the information shows wrongdoing", required: true },
         { id: "publicInterestBasis", type: "textarea", label: "Why disclosure is in the public interest", required: true },
         {
           id: "recipient",

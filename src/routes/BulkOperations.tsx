@@ -30,8 +30,10 @@ import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { useDraftStore } from "@/lib/store";
 import type { LetterTypeId } from "@/lib/letters/types";
 import {
+  findMissingMergeValues,
   parseCsv,
   rowToAnswers,
+  type MissingMergeValues,
   sampleCsvFor,
   sampleHeadersFor,
   type CsvParseResult,
@@ -198,6 +200,23 @@ export default function BulkOperations() {
       setGenerateState({ phase: "error", message });
       toast.error("Generation failed", { description: message });
       return;
+    }
+
+    // Check every row against the placeholders the template actually uses
+    // BEFORE creating drafts, and say which rows and fields will read
+    // "[field not set]". The per-row result cards repeat this afterwards.
+    const usedPlaceholders = Array.from(
+      new Set(template.sections.flatMap((section) => findUnresolvedPlaceholders(section.html))),
+    );
+    const missingForTemplate = findMissingMergeValues(parsed.rows, usedPlaceholders, parsed.rowNumbers);
+    if (missingForTemplate.length > 0) {
+      toast.warning(
+        `${missingForTemplate.length} row${missingForTemplate.length === 1 ? " is" : "s are"} missing values the letter uses`,
+        {
+          description: describeMissing(missingForTemplate),
+          duration: 10000,
+        },
+      );
     }
 
     // Phase 2: client-side fan-out. For each row, personalise then
@@ -683,6 +702,15 @@ function StepUpload({
   );
 }
 
+/** "Row 3 (Jane Patel): salary, review_date; Row 5: ..." for at most `limit` rows. */
+function describeMissing(missing: MissingMergeValues[], limit = 5): string {
+  const shown = missing.slice(0, limit).map(
+    (m) => `Row ${m.rowNumber}${m.employeeName ? ` (${m.employeeName})` : ""}: ${m.fields.join(", ")}`,
+  );
+  const more = missing.length - shown.length;
+  return shown.join("; ") + (more > 0 ? `; and ${more} more` : "");
+}
+
 function StepPreview({
   parsed,
   generating,
@@ -690,6 +718,12 @@ function StepPreview({
   parsed: CsvParseResult;
   generating: boolean;
 }) {
+  // Every CSV column is offered to the generator as a {{placeholder}}, so an
+  // empty cell means that row's letter will read "[field not set]".
+  const missing = useMemo(
+    () => findMissingMergeValues(parsed.rows, parsed.headers, parsed.rowNumbers),
+    [parsed],
+  );
   const visibleRows = parsed.rows.slice(0, 25);
   const overflow = parsed.rows.length - visibleRows.length;
 
@@ -714,6 +748,34 @@ function StepPreview({
         {" "}
         · estimated time: instant (stub)
       </p>
+
+      {missing.length > 0 && (
+        <div
+          role="alert"
+          className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+        >
+          <p className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" aria-hidden />
+            {missing.length} row{missing.length === 1 ? " has" : "s have"} missing values
+          </p>
+          <p className="mt-1 text-xs">
+            These letters will show "[field not set]" where the value is missing. Fill in the
+            CSV and upload it again, or carry on and complete them in the editor.
+          </p>
+          <ul className="mt-2 space-y-0.5 text-xs">
+            {missing.slice(0, 20).map((m) => (
+              <li key={m.rowNumber}>
+                <span className="font-medium">
+                  Row {m.rowNumber}
+                  {m.employeeName ? ` (${m.employeeName})` : ""}:
+                </span>{" "}
+                {m.fields.join(", ")}
+              </li>
+            ))}
+            {missing.length > 20 && <li>and {missing.length - 20} more rows</li>}
+          </ul>
+        </div>
+      )}
 
       <ul className="mt-6 divide-y divide-border overflow-hidden rounded-xl border border-border">
         {visibleRows.map((row, i) => (

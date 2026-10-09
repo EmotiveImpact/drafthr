@@ -9,13 +9,19 @@
  * tenant + IDOR). Excludes evidence file blobs (those are base64 → object
  * storage, not a JSON column).
  */
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { draftExtras, drafts } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
+import {
+  approvalsForWrite,
+  commentsForWrite,
+  rejectReadOnlyMember,
+  timelineForWrite,
+} from "../../_utils/workspace-role.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -43,7 +49,9 @@ export async function GET(req: Request): Promise<Response> {
         updatedAt: draftExtras.updatedAt,
       })
       .from(draftExtras)
-      .where(eq(draftExtras.tenantId, auth.activeTenant.id));
+      // A deleted draft's extras are only kept for its Undo; never hand them out.
+      .innerJoin(drafts, eq(drafts.id, draftExtras.draftId))
+      .where(and(eq(draftExtras.tenantId, auth.activeTenant.id), isNull(drafts.deletedAt)));
 
     const out = rows.map((r) => ({
       id: r.draftId,
@@ -70,6 +78,8 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return readOnly;
   const tenantId = auth.activeTenant.id;
 
   const parsed = await readJsonRequest<ExtrasInput>(req, 4_000_000);
@@ -80,32 +90,64 @@ export async function POST(req: Request): Promise<Response> {
   // Postgres 22P02 and surface as a 500 (400 is the app's convention here).
   const draftId = serverUuidOrNull(body.id);
   if (!draftId) return jsonError("Invalid draft id", 400);
-  const extras = body.extras && typeof body.extras === "object" ? body.extras : {};
+  const incoming = body.extras && typeof body.extras === "object" ? body.extras : {};
 
   try {
     const db = getDb();
-    // IDOR: the draft must exist in the caller's tenant before we attach extras.
-    const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId })
-      .from(drafts)
-      .where(eq(drafts.id, draftId))
-      .limit(1);
-    if (!draft) return jsonError("Draft not found", 404);
-    if (draft.tenantId !== tenantId) {
-      return jsonError("Draft belongs to a different workspace", 403);
-    }
+    const result = await db.transaction(async (tx) => {
+      // IDOR: the draft must exist in the caller's tenant before we attach
+      // extras. The row lock serialises extras writes per draft: two devices
+      // merging against the same stored copy would otherwise each drop the
+      // other's new comments or approvals, and a delete landing mid-merge
+      // would see its scrubbed extras written back.
+      const [draft] = await tx
+        .select({ id: drafts.id, tenantId: drafts.tenantId, deletedAt: drafts.deletedAt })
+        .from(drafts)
+        .where(eq(drafts.id, draftId))
+        .limit(1)
+        .for("update");
+      if (!draft) return jsonError("Draft not found", 404);
+      if (draft.tenantId !== tenantId) {
+        return jsonError("Draft belongs to a different workspace", 403);
+      }
+      if (draft.deletedAt) return jsonError("Draft was deleted", 410);
 
-    await db
-      .insert(draftExtras)
-      .values({ draftId, tenantId, extrasJson: extras, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: draftExtras.draftId,
-        // Scope the update to this tenant as defence-in-depth.
-        where: eq(draftExtras.tenantId, tenantId),
-        set: { extrasJson: extras, updatedAt: new Date() },
-      });
+      // Merge per item against what the server already holds, never replace
+      // the blob: approvals are append-only and only approvers may add
+      // decisions (approvalsForWrite); comments merge by id with tombstones and
+      // author-only deletes (commentsForWrite); the timeline is append-only.
+      const [existing] = await tx
+        .select({ extras: draftExtras.extrasJson })
+        .from(draftExtras)
+        .where(and(eq(draftExtras.draftId, draftId), eq(draftExtras.tenantId, tenantId)))
+        .limit(1);
+      const stored = (existing?.extras as Record<string, unknown> | null) ?? {};
+      const inc = incoming as Record<string, unknown>;
+      const merged = {
+        ...stored,
+        ...incoming,
+        comments: commentsForWrite(auth, stored.comments, inc.comments),
+        timeline: timelineForWrite(stored.timeline, inc.timeline),
+        approvals: approvalsForWrite(auth, stored.approvals, inc.approvals),
+        outcomeSought: "outcomeSought" in inc ? inc.outcomeSought : stored.outcomeSought,
+      };
 
-    return new Response(JSON.stringify({ ok: true, id: draftId }), {
+      await tx
+        .insert(draftExtras)
+        .values({ draftId, tenantId, extrasJson: merged, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: draftExtras.draftId,
+          // Scope the update to this tenant as defence-in-depth.
+          where: eq(draftExtras.tenantId, tenantId),
+          set: { extrasJson: merged, updatedAt: new Date() },
+        });
+      return merged;
+    });
+    if (result instanceof Response) return result;
+    const extras = result;
+
+    // Return the merged result so the caller can adopt other devices' changes.
+    return new Response(JSON.stringify({ ok: true, id: draftId, extras }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
