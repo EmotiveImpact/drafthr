@@ -106,8 +106,9 @@ mode** (v0.21.1): the `/pricing` storefront, subscriptions (Starter/Pro/Business
 packs, the **AI critique** feature (spends 1 credit, Claude Opus 4.8, refunded on
 failure), and the **per-cycle credit drip**. Idempotent webhooks mirror Stripe →
 `subscriptions` / `entitlement_purchases` / `credit_ledger`. Migrations 0013,
-0016, 0017 are **already applied** to prod, so **no new migration is needed to go
-live**. The hard paywall (server gate `assertCanCreateLetter` + client
+0016, 0017 are **already applied** to prod. **0019** (`entitlement_purchases.refunded_at`)
+must be applied before deploying code that reads it: the refund webhook and the
+paywall gate both do. The hard paywall (server gate `assertCanCreateLetter` + client
 `<PaywallGate>`) is complete but **env-gated OFF** via `DRAFTHR_ENFORCE_PAYWALL`.
 
 Direct-charge billing is separate from the marketplace's Connect flow above; it
@@ -127,8 +128,16 @@ has its **own** webhook endpoint + signing secret. Code:
    Webhooks, endpoint `https://<domain>/api/marketplace/billing-webhook`, events:
    `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated`, `customer.subscription.deleted`,
-   `invoice.paid`, `invoice.payment_failed`. Copy its signing secret into
-   `STRIPE_BILLING_WEBHOOK_SECRET`.
+   `invoice.paid`, `invoice.payment_failed`, `charge.refunded`. Copy its
+   signing secret into `STRIPE_BILLING_WEBHOOK_SECRET`. (An existing test-mode
+   endpoint needs `charge.refunded` added too: without it a refunded letter,
+   pack or credit purchase keeps working and keeps its credits.)
+   **Set up the Billing Portal in LIVE mode:** Stripe → Settings → Billing →
+   Customer portal: save a configuration that allows cancelling, updating the
+   card and switching between the six HR plan prices only (never Employee
+   Plus, which is billed to the person, not the workspace). "Manage billing"
+   fails until a live default configuration exists. To use a non-default one,
+   set its id in `STRIPE_BILLING_PORTAL_CONFIGURATION`.
 5. **Re-do the marketplace Connect webhook in live mode** too (see the section
    above — `STRIPE_WEBHOOK_SECRET` + `STRIPE_WEBHOOK_SECRET_CONNECT`).
 6. **Flip enforcement:** set `DRAFTHR_ENFORCE_PAYWALL=1` on Vercel prod.
