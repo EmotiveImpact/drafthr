@@ -92,47 +92,57 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const db = getDb();
-    // IDOR: the draft must exist in the caller's tenant before we attach extras.
-    const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, deletedAt: drafts.deletedAt })
-      .from(drafts)
-      .where(eq(drafts.id, draftId))
-      .limit(1);
-    if (!draft) return jsonError("Draft not found", 404);
-    if (draft.tenantId !== tenantId) {
-      return jsonError("Draft belongs to a different workspace", 403);
-    }
-    if (draft.deletedAt) return jsonError("Draft was deleted", 410);
+    const result = await db.transaction(async (tx) => {
+      // IDOR: the draft must exist in the caller's tenant before we attach
+      // extras. The row lock serialises extras writes per draft: two devices
+      // merging against the same stored copy would otherwise each drop the
+      // other's new comments or approvals, and a delete landing mid-merge
+      // would see its scrubbed extras written back.
+      const [draft] = await tx
+        .select({ id: drafts.id, tenantId: drafts.tenantId, deletedAt: drafts.deletedAt })
+        .from(drafts)
+        .where(eq(drafts.id, draftId))
+        .limit(1)
+        .for("update");
+      if (!draft) return jsonError("Draft not found", 404);
+      if (draft.tenantId !== tenantId) {
+        return jsonError("Draft belongs to a different workspace", 403);
+      }
+      if (draft.deletedAt) return jsonError("Draft was deleted", 410);
 
-    // Merge per item against what the server already holds, never replace
-    // the blob: approvals are append-only and only approvers may add
-    // decisions (approvalsForWrite); comments merge by id with tombstones and
-    // author-only deletes (commentsForWrite); the timeline is append-only.
-    const [existing] = await db
-      .select({ extras: draftExtras.extrasJson })
-      .from(draftExtras)
-      .where(and(eq(draftExtras.draftId, draftId), eq(draftExtras.tenantId, tenantId)))
-      .limit(1);
-    const stored = (existing?.extras as Record<string, unknown> | null) ?? {};
-    const inc = incoming as Record<string, unknown>;
-    const extras = {
-      ...stored,
-      ...incoming,
-      comments: commentsForWrite(auth, stored.comments, inc.comments),
-      timeline: timelineForWrite(stored.timeline, inc.timeline),
-      approvals: approvalsForWrite(auth, stored.approvals, inc.approvals),
-      outcomeSought: "outcomeSought" in inc ? inc.outcomeSought : stored.outcomeSought,
-    };
+      // Merge per item against what the server already holds, never replace
+      // the blob: approvals are append-only and only approvers may add
+      // decisions (approvalsForWrite); comments merge by id with tombstones and
+      // author-only deletes (commentsForWrite); the timeline is append-only.
+      const [existing] = await tx
+        .select({ extras: draftExtras.extrasJson })
+        .from(draftExtras)
+        .where(and(eq(draftExtras.draftId, draftId), eq(draftExtras.tenantId, tenantId)))
+        .limit(1);
+      const stored = (existing?.extras as Record<string, unknown> | null) ?? {};
+      const inc = incoming as Record<string, unknown>;
+      const merged = {
+        ...stored,
+        ...incoming,
+        comments: commentsForWrite(auth, stored.comments, inc.comments),
+        timeline: timelineForWrite(stored.timeline, inc.timeline),
+        approvals: approvalsForWrite(auth, stored.approvals, inc.approvals),
+        outcomeSought: "outcomeSought" in inc ? inc.outcomeSought : stored.outcomeSought,
+      };
 
-    await db
-      .insert(draftExtras)
-      .values({ draftId, tenantId, extrasJson: extras, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: draftExtras.draftId,
-        // Scope the update to this tenant as defence-in-depth.
-        where: eq(draftExtras.tenantId, tenantId),
-        set: { extrasJson: extras, updatedAt: new Date() },
-      });
+      await tx
+        .insert(draftExtras)
+        .values({ draftId, tenantId, extrasJson: merged, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: draftExtras.draftId,
+          // Scope the update to this tenant as defence-in-depth.
+          where: eq(draftExtras.tenantId, tenantId),
+          set: { extrasJson: merged, updatedAt: new Date() },
+        });
+      return merged;
+    });
+    if (result instanceof Response) return result;
+    const extras = result;
 
     // Return the merged result so the caller can adopt other devices' changes.
     return new Response(JSON.stringify({ ok: true, id: draftId, extras }), {
