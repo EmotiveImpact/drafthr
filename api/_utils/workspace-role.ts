@@ -37,3 +37,15 @@ export function rejectUnauthorisedReviewDecision(
   if (APPROVER_ROLES.has(auth.activeMember?.role ?? "")) return null;
   return jsonError("Only reviewers, admins or owners can approve or request changes", 403);
 }
+
+const BILLING_ROLES = new Set(["owner", "admin"]);
+
+/**
+ * 403 unless the caller can manage the workspace's billing (owner or admin).
+ * A workspace plan lands on the shared workspace Stripe customer, so a viewer
+ * or drafter should not be able to start one.
+ */
+export function rejectNonBillingManager(auth: MemberLike): Response | null {
+  if (BILLING_ROLES.has(auth.activeMember?.role ?? "")) return null;
+  return jsonError("Only workspace owners or admins can manage the workspace plan", 403);
+}

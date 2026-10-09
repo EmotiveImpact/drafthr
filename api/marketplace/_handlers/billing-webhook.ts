@@ -6,21 +6,26 @@
  *
  * Handled:
  *   checkout.session.completed (mode=payment)  → entitlement + credits for a one-off
- *   customer.subscription.created / .updated   → upsert the subscription mirror
- *   customer.subscription.deleted              → mark canceled
- *   invoice.payment_failed                     → status=past_due, grace_until=now+3d
- *   invoice.paid                               → clear grace, status=active
+ *   customer.subscription.created / .updated / .deleted,
+ *   invoice.payment_failed, invoice.paid       → re-read the subscription from
+ *                                                Stripe and mirror its CURRENT
+ *                                                state (see syncSubscription)
  *
  * Idempotent: every delivery is deduped via webhook_events_seen (insert the
  * event id; a conflict means "already processed" → ack + skip).
  */
 import type Stripe from "stripe";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { jsonError } from "../../_utils/request.js";
 import { getStripe } from "../../_utils/stripe.js";
 import { getDb } from "../../../src/db/index.js";
 import { subscriptions, entitlementPurchases, creditLedger, webhookEventsSeen } from "../../../src/db/schema.js";
-import { catalogFor, isPriceKey, creditsPerCycleForPlan } from "../../../src/lib/billing/catalog.js";
+import {
+  catalogFor,
+  isPriceKey,
+  creditsPerCycleForPlan,
+  planForStripePriceId,
+} from "../../../src/lib/billing/catalog.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -78,38 +83,15 @@ export async function POST(req: Request): Promise<Response> {
         break;
       }
       case "customer.subscription.created":
-      case "customer.subscription.updated": {
-        await upsertSubscription(db, event.data.object as Stripe.Subscription);
-        break;
-      }
+      case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        await db
-          .update(subscriptions)
-          .set({ status: "canceled", updatedAt: new Date() })
-          .where(eq(subscriptions.stripeSubscriptionId, sub.id));
+        await syncSubscription(db, stripe, (event.data.object as Stripe.Subscription).id);
         break;
       }
-      case "invoice.payment_failed": {
-        const inv = event.data.object as Stripe.Invoice;
-        const subId = subscriptionIdOf(inv);
-        if (subId) {
-          await db
-            .update(subscriptions)
-            .set({ status: "past_due", graceUntil: new Date(Date.now() + GRACE_MS), updatedAt: new Date() })
-            .where(eq(subscriptions.stripeSubscriptionId, subId));
-        }
-        break;
-      }
+      case "invoice.payment_failed":
       case "invoice.paid": {
-        const inv = event.data.object as Stripe.Invoice;
-        const subId = subscriptionIdOf(inv);
-        if (subId) {
-          await db
-            .update(subscriptions)
-            .set({ status: "active", graceUntil: null, updatedAt: new Date() })
-            .where(eq(subscriptions.stripeSubscriptionId, subId));
-        }
+        const subId = subscriptionIdOf(event.data.object as Stripe.Invoice);
+        if (subId) await syncSubscription(db, stripe, subId);
         break;
       }
       default:
@@ -158,6 +140,33 @@ export function subscriptionIdOf(inv: Stripe.Invoice): string | null {
   );
 }
 
+/**
+ * Mirror a subscription's CURRENT state from Stripe. Stripe does not guarantee
+ * event order and retries failed deliveries for days, so copying the status out
+ * of whichever payload arrives let a stale `.updated` (or a late `invoice.paid`)
+ * flip a canceled subscription back to active. Re-reading the object makes every
+ * subscription and invoice event converge on the truth, whatever order they land.
+ */
+async function syncSubscription(
+  db: ReturnType<typeof getDb>,
+  stripe: Stripe,
+  subscriptionId: string,
+): Promise<void> {
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  await upsertSubscription(db, sub);
+}
+
+/**
+ * The grace window for a subscription in `status`. Set once, when the row first
+ * goes past_due, and kept on later failed retries; Stripe sends a fresh
+ * `invoice.payment_failed` for every retry, and resetting the clock each time
+ * kept a failing card fully entitled for the whole multi-week retry schedule.
+ */
+export function graceUntilFor(status: string, existing: Date | null, now = Date.now()): Date | null {
+  if (status !== "past_due") return null;
+  return existing ?? new Date(now + GRACE_MS);
+}
+
 async function upsertSubscription(
   db: ReturnType<typeof getDb>,
   sub: Stripe.Subscription,
@@ -168,7 +177,9 @@ async function upsertSubscription(
   if (!subjectId) return; // not one of ours (no billing metadata)
   const item = sub.items.data[0];
   const priceId = item?.price?.id ?? "";
-  const plan = m.plan || "unknown";
+  // The live price decides the plan, so a change made in Stripe lands here;
+  // checkout metadata is only the fallback for a price we don't recognise.
+  const plan = planForStripePriceId(priceId) ?? (m.plan || "unknown");
   // Stripe API ≥2025 moved current_period_* onto the subscription ITEM; older
   // versions have it on the subscription. Read the item first, fall back.
   const startUnix =
@@ -192,6 +203,7 @@ async function upsertSubscription(
     currentPeriodStart: periodStart,
     currentPeriodEnd: periodEnd,
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
+    graceUntil: graceUntilFor(sub.status, null),
     updatedAt: new Date(),
   };
 
@@ -207,6 +219,11 @@ async function upsertSubscription(
         currentPeriodStart: values.currentPeriodStart,
         currentPeriodEnd: values.currentPeriodEnd,
         cancelAtPeriodEnd: values.cancelAtPeriodEnd,
+        // Keep an existing grace deadline while still past_due (see graceUntilFor).
+        graceUntil:
+          sub.status === "past_due"
+            ? sql`coalesce(${subscriptions.graceUntil}, excluded.grace_until)`
+            : null,
         updatedAt: values.updatedAt,
       },
     });
@@ -229,7 +246,12 @@ async function upsertSubscription(
         expiresAt: periodEnd,
         grantKey: `drip:${sub.id}:${startUnix}`,
       })
-      .onConflictDoNothing({ target: creditLedger.grantKey });
+      // The unique index is partial (grant_key IS NOT NULL); Postgres only
+      // matches it for ON CONFLICT when the same predicate is given.
+      .onConflictDoNothing({
+        target: creditLedger.grantKey,
+        where: sql`${creditLedger.grantKey} is not null`,
+      });
   }
 }
 

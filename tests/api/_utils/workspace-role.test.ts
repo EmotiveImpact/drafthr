@@ -37,3 +37,18 @@ describe("rejectUnauthorisedReviewDecision", () => {
     expect(rejectUnauthorisedReviewDecision(as("drafter"), "draft", undefined)).toBeNull();
   });
 });
+
+describe("rejectNonBillingManager", () => {
+  it("lets owners and admins manage the workspace plan", async () => {
+    const { rejectNonBillingManager } = await import("../../../api/_utils/workspace-role.js");
+    expect(rejectNonBillingManager({ activeMember: { role: "owner" } })).toBeNull();
+    expect(rejectNonBillingManager({ activeMember: { role: "admin" } })).toBeNull();
+  });
+  it("refuses everyone else", async () => {
+    const { rejectNonBillingManager } = await import("../../../api/_utils/workspace-role.js");
+    for (const role of ["reviewer", "drafter", "viewer"]) {
+      expect(rejectNonBillingManager({ activeMember: { role } })?.status).toBe(403);
+    }
+    expect(rejectNonBillingManager({ activeMember: null })?.status).toBe(403);
+  });
+});

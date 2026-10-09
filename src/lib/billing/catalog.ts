@@ -139,3 +139,18 @@ export function stripePriceId(key: PriceKey): string | null {
   if (typeof process === "undefined" || !process.env) return null;
   return process.env[CATALOG[key].stripePriceIdEnv]?.trim() || null;
 }
+
+/**
+ * The plan a Stripe subscription price belongs to, by matching it against this
+ * environment's seeded price ids. Used by the billing webhook so a plan change
+ * made in Stripe (portal or support) reaches the app, rather than trusting the
+ * plan frozen into checkout metadata. Null if the price is not one of ours.
+ */
+export function planForStripePriceId(priceId: string | null | undefined): PlanId | null {
+  if (!priceId) return null;
+  for (const key of Object.keys(CATALOG) as PriceKey[]) {
+    const entry = CATALOG[key];
+    if (entry.kind === "plan" && entry.plan && stripePriceId(key) === priceId) return entry.plan;
+  }
+  return null;
+}

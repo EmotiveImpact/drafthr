@@ -98,33 +98,49 @@ function isUsable(status: string, graceUntil: Date | null): boolean {
   return false;
 }
 
+type SubRow = typeof subscriptions.$inferSelect;
+
+/**
+ * Choose the subscription that decides the caller's plan. A usable workspace
+ * plan wins, then a usable personal plan (Employee Plus); only when neither is
+ * usable do we fall back to the newest row so the UI can show why (canceled,
+ * past_due). Picking purely by `updatedAt` let a dead subscription that merely
+ * received a late event hide a live one. Rows must be newest-first.
+ */
+export function pickEffectiveSubscription(
+  tenantRows: SubRow[],
+  userRows: SubRow[],
+): SubRow | undefined {
+  const usable = (r: SubRow) => isUsable(r.status, r.graceUntil);
+  return (
+    tenantRows.find(usable) ??
+    userRows.find(usable) ??
+    tenantRows[0] ??
+    userRows[0]
+  );
+}
+
 export async function resolveEntitlements(
   tenantId: string | null,
   userId: string,
 ): Promise<Entitlements> {
   const db = getDb();
 
-  // Prefer the workspace (tenant) plan; fall back to a user subscription
-  // (Employee Plus). Most-recently-updated row wins if there's ever more than one.
-  let sub:
-    | typeof subscriptions.$inferSelect
-    | undefined;
-  if (tenantId) {
-    [sub] = await db
-      .select()
-      .from(subscriptions)
-      .where(and(eq(subscriptions.subjectType, "tenant"), eq(subscriptions.subjectId, tenantId)))
-      .orderBy(desc(subscriptions.updatedAt))
-      .limit(1);
-  }
-  if (!sub) {
-    [sub] = await db
-      .select()
-      .from(subscriptions)
-      .where(and(eq(subscriptions.subjectType, "user"), eq(subscriptions.subjectId, userId)))
-      .orderBy(desc(subscriptions.updatedAt))
-      .limit(1);
-  }
+  const tenantRows: SubRow[] = tenantId
+    ? await db
+        .select()
+        .from(subscriptions)
+        .where(and(eq(subscriptions.subjectType, "tenant"), eq(subscriptions.subjectId, tenantId)))
+        .orderBy(desc(subscriptions.updatedAt))
+        .limit(10)
+    : [];
+  const userRows: SubRow[] = await db
+    .select()
+    .from(subscriptions)
+    .where(and(eq(subscriptions.subjectType, "user"), eq(subscriptions.subjectId, userId)))
+    .orderBy(desc(subscriptions.updatedAt))
+    .limit(10);
+  const sub = pickEffectiveSubscription(tenantRows, userRows);
 
   // Credit balance: tenant pool + user packs, excluding expired drip credits.
   const pools = await creditPools(db, tenantId, userId);
@@ -153,13 +169,11 @@ export async function subjectHasActiveSubscription(
   subjectId: string,
 ): Promise<boolean> {
   const db = getDb();
-  const [sub] = await db
+  const rows = await db
     .select({ status: subscriptions.status, graceUntil: subscriptions.graceUntil })
     .from(subscriptions)
-    .where(and(eq(subscriptions.subjectType, subjectType), eq(subscriptions.subjectId, subjectId)))
-    .orderBy(desc(subscriptions.updatedAt))
-    .limit(1);
-  return sub ? isUsable(sub.status, sub.graceUntil) : false;
+    .where(and(eq(subscriptions.subjectType, subjectType), eq(subscriptions.subjectId, subjectId)));
+  return rows.some((r) => isUsable(r.status, r.graceUntil));
 }
 
 /** What the draft-create must consume to honour this authorization, if anything. */
