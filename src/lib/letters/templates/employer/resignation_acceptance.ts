@@ -112,7 +112,7 @@ export const RESIGNATION_ACCEPTANCE_US: LetterTemplate = {
   evidenceTier: "light",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Resignation Acceptance):
 - 'Two weeks' notice' is custom and not statutorily required in most states; the employer cannot generally require notice unless the employment agreement provides for it.
-- Final-pay timing is state-specific. California (Lab. Code 202): if the employee gives at least 72 hours' notice, all wages are due on the last day; otherwise within 72 hours of the resignation. New York (Labor Law 191): next regular payday. Texas (Lab. Code 61.014): next regular payday. Massachusetts (M.G.L. c.149 148): next regular payday for voluntary separation.
+- Final-pay timing is state-specific. California (Lab. Code 202): if the employee gives at least 72 hours' notice, all wages are due on the last day; otherwise within 72 hours of the resignation. New York (Labor Law 191): next regular payday. Texas (Lab. Code 61.014(a)(2)): next regular payday. Massachusetts (M.G.L. c.149 148): next regular payday for voluntary separation.
 - Accrued unused PTO must be paid out in CA, CO, MA, IL, NE, ND where vested under company policy.
 - COBRA continuation election notice within 14 days under 29 USC 1166.
 - Continuing obligations: confidentiality, IP assignment under the Proprietary Information and Inventions Agreement, and any narrow non-solicit (where enforceable) survive termination — refer to the contract clauses, do not enlarge them.

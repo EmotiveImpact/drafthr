@@ -341,7 +341,7 @@ Two variants — for cause / without cause.
 - Statutory Maternity Leave 52 weeks; SMP 39 weeks (90% earnings 6 weeks, then £184.03/week or 90% if lower — 2024–25)
 - Statutory Paternity Leave 1–2 weeks (extended under 2024 reforms)
 - Shared Parental Leave up to 50 weeks shared
-- SSP £116.75/week up to 28 weeks (2024–25)
+- SSP up to 28 weeks. From 6 April 2026 (Employment Rights Act 2025) it is paid from day 1 at the standard weekly rate or 80% of average weekly earnings if lower, with no lower earnings limit; check the current rate each April
 - KIT days: 10 maternity / 20 SPLIT
 - Unpaid Parental Leave: 18 weeks per child up to age 18
 - Carer's Leave Act 2023: 1 week/year unpaid (Apr 2024)
@@ -444,7 +444,7 @@ Two variants — for cause / without cause.
 - Sponsor Licence under Skilled Worker route — Home Office compliance
 - CoS — defined or undefined
 - Right to Work checks (List A / List B) — share code for non-British/Irish
-- Going-rate salary thresholds (April 2024 — £38,700 general)
+- Going-rate salary thresholds (general threshold £41,700 from 22 July 2025; check current Home Office figures)
 
 **US legal fences:**
 - H-1B specialty occupation — bachelor's minimum, prevailing wage (LCA)

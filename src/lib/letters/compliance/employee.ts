@@ -105,10 +105,10 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "PIDA / s.43A attestation",
     description:
-      "Protection requires explicit reasonable belief that the information is substantially true and the disclosure is in the public interest. Magic words.",
+      "Protection requires a reasonable belief that the information tends to show a relevant failure and that the disclosure is in the public interest (s.43B). 'Substantially true' is the stricter test for prescribed persons and wider disclosures only.",
     match: { kind: "regex", value: "(?:reasonable|reasonably)\\s+belie(?:f|ve).*(?:substantially\\s+true|public\\s+interest)|public\\s+interest.*(?:reasonable|reasonably)\\s+belie(?:f|ve)", flags: "is" },
     recommendation:
-      "Add: 'I make this disclosure under s.43A Employment Rights Act 1996. I reasonably believe the information is substantially true and that disclosure is in the public interest.'",
+      "Add: 'I make this disclosure under s.43A Employment Rights Act 1996. I reasonably believe the information tends to show [the relevant failure] and that disclosure is in the public interest.'",
   },
   {
     id: "emp_uk_whistle_category_named",
@@ -141,10 +141,10 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "UK GDPR Art. 15 cited",
     description:
-      "Cite UK GDPR Art. 15 / Data Protection Act 2018 s.45 so the 1-month statutory window starts ticking unambiguously.",
+      "Cite Article 15 UK GDPR so the 1-month statutory window starts ticking unambiguously.",
     match: { kind: "regex", value: "Article\\s*15|Art\\.\\s*15|UK GDPR|Data Protection Act\\s*2018|DPA\\s*2018", flags: "i" },
     recommendation:
-      "Add: 'I make this request under Article 15 UK GDPR and section 45 Data Protection Act 2018.'",
+      "Add: 'I make this request under Article 15 UK GDPR.'",
   },
   {
     id: "emp_us_sar_basis_california",

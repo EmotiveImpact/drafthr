@@ -45,3 +45,24 @@ describe("streamDraft — mid-stream error after tokens", () => {
     expect(onDone).not.toHaveBeenCalled();
   });
 });
+
+describe("streamDraft — stream cut off without [DONE]", () => {
+  it("does not report a truncated section as done", async () => {
+    // Every attempt drops mid-stream (e.g. the function timed out).
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      sseResponse(['data: {"delta":"The employee was"}\n\n']),
+    );
+    const onDone = vi.fn();
+    const ctl = new AbortController();
+    const run = streamDraft({
+      messages,
+      onToken: () => {},
+      onDone,
+      // Abort during the first retry back-off so the test doesn't wait.
+      onRetry: () => ctl.abort(),
+      signal: ctl.signal,
+    });
+    await expect(run).rejects.toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+});

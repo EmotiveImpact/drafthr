@@ -502,7 +502,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
             ],
           },
         },
-        { id: "reasonableBeliefBasis", type: "textarea", label: "Why you reasonably believe the information is substantially true", required: true },
+        { id: "reasonableBeliefBasis", type: "textarea", label: "Why you reasonably believe the information shows wrongdoing", required: true },
         { id: "publicInterestBasis", type: "textarea", label: "Why disclosure is in the public interest", required: true },
         {
           id: "recipient",

@@ -6,7 +6,7 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Pay Dispute / Unauthorised Deductions — EMPLOYEE MODE):
 - Statutory basis: s.13 Employment Rights Act 1996 — an employer must not make any deduction from a worker's wages unless authorised by statute, an express contractual provision, or written consent given before the deduction.
-- Limitation: 3 months less one day from the date of payment of the underpaid wages (s.23 ERA), subject to ACAS Early Conciliation extension. Bear Scotland Ltd v Fulton [2014] UKEAT 0047/13/0411 — a "series of deductions" can extend back, but Deduction from Wages (Limitation) Regulations 2014 cap the look-back at 2 years for claims presented on or after 1 July 2015.
+- Limitation: 3 months less one day from the date of payment of the underpaid wages (s.23 ERA), subject to ACAS Early Conciliation extension. For a series of deductions time runs from the last one (s.23(3)), and a gap of three months or more does not by itself break the series (Chief Constable of the PSNI v Agnew [2023] UKSC 33, departing from Bear Scotland v Fulton on this point); in Great Britain the Deduction from Wages (Limitation) Regulations 2014 cap the look-back at 2 years for claims presented on or after 1 July 2015.
 - Holiday pay underpayment claims: Working Time Regulations 1998 reg.13 / 13A; or as unauthorised deduction under s.13 ERA.
 - National Minimum Wage Act 1998 / National Living Wage where the dispute concerns the legal floor.
 - Tone: assertive, forensic. Itemise the underpayment with calculation. British English.

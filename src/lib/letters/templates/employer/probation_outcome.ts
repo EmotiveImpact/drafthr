@@ -129,7 +129,7 @@ export const PROBATION_OUTCOME_US: LetterTemplate = {
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (US Probation Outcome):
 - US employment is at-will throughout any introductory or probationary period; the employer may terminate at any time without cause. Document the legitimate business reason for any Fail outcome to defeat discrimination claims (Title VII, ADA, ADEA, FEHA, state analogs).
-- On Fail / termination at end of probation: California requires immediate payment of all final wages on the last day for employer-initiated terminations (Lab. Code 201; Lab. Code 203 waiting-time penalty for non-compliance). NY: next regular payday. TX: next regular payday under Lab. Code 61.014. Verify state rule.
+- On Fail / termination at end of probation: California requires immediate payment of all final wages on the last day for employer-initiated terminations (Lab. Code 201; Lab. Code 203 waiting-time penalty for non-compliance). NY: next regular payday. TX: within six calendar days of discharge under Lab. Code 61.014(a)(1). Verify state rule.
 - Accrued unused PTO must be paid out in CA, CO, MA, IL, NE, ND under state final-pay rules where it has vested under policy.
 - COBRA continuation notice (29 USC 1166) must follow within 14 days for terminating employees enrolled in employer health plans.
 - ADA: if disability is implicated in performance, separate the performance issue from accommodation discussion and document the interactive process.

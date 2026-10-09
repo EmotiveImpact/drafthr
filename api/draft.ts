@@ -214,6 +214,11 @@ export async function POST(req: Request): Promise<Response> {
           totalTokens += 1;
           writeEvent({ delta: chunk });
         }
+        // Output that stopped at the token cap is cut off mid-section; say so
+        // rather than letting the client save it as finished.
+        if (!cancelled && !realError && (await result.finishReason) === "length") {
+          realError = "This section hit the length limit and was cut off. Regenerate it, or ask for a shorter version.";
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "unknown error";
         realError = msg;

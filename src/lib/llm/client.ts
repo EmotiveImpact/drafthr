@@ -146,7 +146,10 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     }
     throw new Error(proxyError);
   }
-  opts.onDone?.();
+  // No [DONE] and no error event: the connection dropped or the function was
+  // stopped mid-stream (e.g. the 60s limit). Treating that as success saved a
+  // section cut off mid-sentence as "ready", so fail it as retryable instead.
+  throw new RetryableError("The connection dropped before the section finished. Try again.");
 }
 
 async function fetchOrThrow(opts: StreamOptions): Promise<Response> {
