@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
@@ -18,20 +18,45 @@ import {
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Home } from "@/routes/Home";
-import { Wizard } from "@/routes/Wizard";
 import { RootRedirect } from "@/routes/RootRedirect";
-import { ModePicker } from "@/routes/ModePicker";
-import { Settings } from "@/routes/Settings";
-import { DirectorySync as SettingsDirectorySync } from "@/routes/settings/DirectorySync";
-import { Privacy } from "@/routes/Privacy";
-import { Terms } from "@/routes/Terms";
-import { BrowseLetters } from "@/routes/BrowseLetters";
 import { PaywallGate } from "@/components/billing/PaywallGate";
-import { ReviewStep } from "@/routes/ReviewStep";
-import { MattersIndex } from "@/routes/MattersIndex";
-import { EmployeesIndex } from "@/routes/EmployeesIndex";
-import { Approvals } from "@/routes/Approvals";
+// Every route is its own chunk (React.lazy) so the first paint only pays for
+// the shell (Layout, auth, router) plus the route actually being shown.
+// Previously ~30 routes were imported eagerly, which dragged the editor
+// stack, the paged view and every letter template into the entry chunk.
+function lazyNamed<M, K extends keyof M & string>(load: () => Promise<M>, name: K): M[K] {
+  return lazy(() =>
+    load().then((m) => ({ default: m[name] as unknown as ComponentType<Record<string, unknown>> })),
+  ) as unknown as M[K];
+}
+const Home = lazyNamed(() => import("@/routes/Home"), "Home");
+const Wizard = lazyNamed(() => import("@/routes/Wizard"), "Wizard");
+// ModePicker stays eager: RootRedirect (the landing route) renders it inline.
+import { ModePicker } from "@/routes/ModePicker";
+const Settings = lazyNamed(() => import("@/routes/Settings"), "Settings");
+const SettingsDirectorySync = lazyNamed(() => import("@/routes/settings/DirectorySync"), "DirectorySync");
+const Privacy = lazyNamed(() => import("@/routes/Privacy"), "Privacy");
+const Terms = lazyNamed(() => import("@/routes/Terms"), "Terms");
+const BrowseLetters = lazyNamed(() => import("@/routes/BrowseLetters"), "BrowseLetters");
+const ReviewStep = lazyNamed(() => import("@/routes/ReviewStep"), "ReviewStep");
+const MattersIndex = lazyNamed(() => import("@/routes/MattersIndex"), "MattersIndex");
+const EmployeesIndex = lazyNamed(() => import("@/routes/EmployeesIndex"), "EmployeesIndex");
+const Approvals = lazyNamed(() => import("@/routes/Approvals"), "Approvals");
+const MatterDrillDown = lazyNamed(() => import("@/components/reports/MatterDrillDown"), "MatterDrillDown");
+const FailingCheckDrillDown = lazyNamed(() => import("@/components/reports/FailingCheckDrillDown"), "FailingCheckDrillDown");
+const SignIn = lazyNamed(() => import("@/routes/SignIn"), "SignIn");
+const SignUp = lazyNamed(() => import("@/routes/SignUp"), "SignUp");
+const ForgotPassword = lazyNamed(() => import("@/routes/ForgotPassword"), "ForgotPassword");
+const ResetPassword = lazyNamed(() => import("@/routes/ResetPassword"), "ResetPassword");
+const VerifyEmail = lazyNamed(() => import("@/routes/VerifyEmail"), "VerifyEmail");
+const AuthCallback = lazyNamed(() => import("@/routes/AuthCallback"), "AuthCallback");
+const SignupWorkspace = lazyNamed(() => import("@/routes/SignupWorkspace"), "SignupWorkspace");
+const JoinInvite = lazyNamed(() => import("@/routes/JoinInvite"), "JoinInvite");
+const ConsultantHome = lazyNamed(() => import("@/routes/ConsultantHome"), "ConsultantHome");
+const ConsultantProfile = lazyNamed(() => import("@/routes/ConsultantProfile"), "ConsultantProfile");
+const MyBookings = lazyNamed(() => import("@/routes/MyBookings"), "MyBookings");
+const ConsultantAdminReview = lazyNamed(() => import("@/routes/ConsultantAdminReview"), "ConsultantAdminReview");
+const SharedDraftReview = lazyNamed(() => import("@/routes/SharedDraftReview"), "SharedDraftReview");
 // Heavy / non-first-paint routes are lazy-loaded — they pulled ~hundreds of KB
 // into the main chunk (Reports charts, BulkOps CSV+merge, Finalize export
 // pipeline, MatterDetail/EmployeeDetail). (Senior sweep I-PERF-1.) See the
@@ -47,21 +72,6 @@ const MatterDetail = lazy(() => import("@/routes/MatterDetail").then((m) => ({ d
 const EmployeeDetail = lazy(() => import("@/routes/EmployeeDetail").then((m) => ({ default: m.EmployeeDetail })));
 const BulkOperations = lazy(() => import("@/routes/BulkOperations"));
 const Reports = lazy(() => import("@/routes/Reports").then((m) => ({ default: m.Reports })));
-import { MatterDrillDown } from "@/components/reports/MatterDrillDown";
-import { FailingCheckDrillDown } from "@/components/reports/FailingCheckDrillDown";
-import { SignIn } from "@/routes/SignIn";
-import { SignUp } from "@/routes/SignUp";
-import { ForgotPassword } from "@/routes/ForgotPassword";
-import { ResetPassword } from "@/routes/ResetPassword";
-import { VerifyEmail } from "@/routes/VerifyEmail";
-import { AuthCallback } from "@/routes/AuthCallback";
-import { SignupWorkspace } from "@/routes/SignupWorkspace";
-import { JoinInvite } from "@/routes/JoinInvite";
-import { ConsultantHome } from "@/routes/ConsultantHome";
-import { ConsultantProfile } from "@/routes/ConsultantProfile";
-import { MyBookings } from "@/routes/MyBookings";
-import { ConsultantAdminReview } from "@/routes/ConsultantAdminReview";
-import { SharedDraftReview } from "@/routes/SharedDraftReview";
 import { Layout } from "@/components/Layout";
 import { NotFound } from "@/routes/NotFound";
 import { Protected } from "@/lib/auth/Protected";

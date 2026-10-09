@@ -8,6 +8,7 @@ import {
 import { renderLetterPdfBlob, filenameFor as pdfFilenameFor, letterBodyHtml } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { loadTemplate } from "@/lib/letters/templates";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -43,6 +44,9 @@ export async function exportLetterPack(
 ): Promise<void> {
   const JSZip = (await import("jszip")).default;
   const zip = new JSZip();
+  // Template constraints feed the quality section of the summary; they are
+  // lazy-loaded, so make sure they are present before building it.
+  await loadTemplate(draft.letterType, draft.context.jurisdiction).catch(() => undefined);
 
   // Render the letter to both formats in parallel.
   const [pdfBlob, docxBlob] = await Promise.all([
