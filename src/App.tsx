@@ -197,33 +197,16 @@ export function App() {
     };
   }, []);
 
-  // Dual-write backfill — when the flag is on AND the user has an active
-  // tenant, POST every locally-known draft that changed since its last
-  // successful sync. Runs once per mount; unchanged drafts are skipped, so a
-  // reload no longer re-posts the whole workspace.
-  useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
-    let cancelled = false;
-    const drafts = Object.values(useDraftStore.getState().drafts);
-    if (drafts.length === 0) return;
-    void syncAllPending(() => Object.values(useDraftStore.getState().drafts)).then((result) => {
-      if (cancelled) return;
-      if (result.ok > 0) {
-        toast.success(`${result.ok} draft${result.ok === 1 ? "" : "s"} synced to your workspace.`);
-      }
-      if (result.failed > 0) {
-        console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, activeTenant]);
-
   // Cross-device PULL — when the flag is on AND the user has an active tenant,
   // fetch the tenant's drafts from the server and merge them into the local
   // store so a second device / teammate sees the same letters. The merge is
   // non-destructive (preserves newer local edits + all local-only fields).
+  //
+  // Then the dual-write backfill: POST every locally-known draft that changed
+  // since its last successful sync. It runs after the pull so each draft's
+  // server revision is known first; pushed before it (as on the first load
+  // after the revision upgrade, with no sync metadata yet) every draft drew a
+  // 409 and anything changed elsewhere came back as a conflicted copy.
   useEffect(() => {
     if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
@@ -243,6 +226,10 @@ export function App() {
             deleted,
             syncMeta: SYNC_META_ACCESS,
             syncKey: draftSyncKey,
+            onKeptLocalOnly: () =>
+              toast.warning("A letter was deleted on another device", {
+                description: "Your unsaved changes to it are kept on this device only.",
+              }),
           }),
         });
       });
@@ -254,6 +241,15 @@ export function App() {
         const local = useDraftStore.getState().drafts;
         useDraftStore.setState({ drafts: mergeRemoteExtras(local, remoteExtras) });
       });
+      if (cancelled || Object.keys(useDraftStore.getState().drafts).length === 0) return;
+      const result = await syncAllPending(() => Object.values(useDraftStore.getState().drafts));
+      if (cancelled) return;
+      if (result.ok > 0) {
+        toast.success(`${result.ok} draft${result.ok === 1 ? "" : "s"} synced to your workspace.`);
+      }
+      if (result.failed > 0) {
+        console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
+      }
     })();
     return () => {
       cancelled = true;

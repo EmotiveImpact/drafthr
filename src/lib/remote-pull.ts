@@ -214,6 +214,9 @@ export function mergeRemoteDrafts(
     /** Content key of a local draft (sync-meta draftSyncKey), injected so this
      *  module doesn't import the hashing helpers. */
     syncKey?: (d: Draft) => string;
+    /** Told about a draft deleted elsewhere that was kept on this device only
+     *  because it holds edits the server never received. */
+    onKeptLocalOnly?: (localId: string) => void;
   } = {},
 ): Record<string, Draft> {
   // Index local drafts by their server-uuid so we can match against remote.
@@ -226,9 +229,19 @@ export function mergeRemoteDrafts(
   for (const t of options.deleted ?? []) {
     const existing = localByServerId.get(t.id);
     if (!existing || existing.localOnly) continue;
-    delete merged[existing.id];
+    // Same rule as a 410 on push: edits the server never received are kept
+    // on this device only rather than dropped with the deleted draft.
+    const meta = syncMeta?.get(existing.id);
+    const unsynced =
+      meta && syncKey ? meta.key !== syncKey(existing) : existing.updatedAt > t.deletedAt;
     localByServerId.delete(t.id);
     syncMeta?.clear(existing.id);
+    if (unsynced) {
+      merged[existing.id] = { ...existing, localOnly: true };
+      options.onKeptLocalOnly?.(existing.id);
+    } else {
+      delete merged[existing.id];
+    }
   }
 
   for (const r of remote) {

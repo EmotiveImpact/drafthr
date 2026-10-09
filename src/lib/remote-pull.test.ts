@@ -272,7 +272,7 @@ describe("mergeRemoteDrafts — tombstones and revisions", () => {
   }
 
   it("drops a draft deleted on another device", () => {
-    const { store, access } = metaAccess({ draft_1: { rev: 1, key: "k", ckey: "", at: 1 } });
+    const { store, access } = metaAccess({ draft_1: { rev: 1, key: draftSyncKey(localDraft()), ckey: "", at: 1 } });
     const merged = mergeRemoteDrafts({ draft_1: localDraft() }, [], new Set(), {
       deleted: [{ id: toServerUuid("draft_1"), deletedAt: 1 }],
       syncMeta: access,
@@ -280,6 +280,32 @@ describe("mergeRemoteDrafts — tombstones and revisions", () => {
     });
     expect(merged.draft_1).toBeUndefined();
     expect(store.draft_1).toBeUndefined();
+  });
+
+  it("keeps unsynced edits on this device only when the draft was deleted elsewhere", () => {
+    const local = localDraft();
+    const { store, access } = metaAccess({ draft_1: { rev: 1, key: "an-older-push", ckey: "", at: 1 } });
+    const kept: string[] = [];
+    const merged = mergeRemoteDrafts({ draft_1: local }, [], new Set(), {
+      deleted: [{ id: toServerUuid("draft_1"), deletedAt: 1 }],
+      syncMeta: access,
+      syncKey: draftSyncKey,
+      onKeptLocalOnly: (id) => kept.push(id),
+    });
+    expect(merged.draft_1.localOnly).toBe(true);
+    expect(merged.draft_1.sections[0].html).toBe("<p>local body</p>");
+    expect(store.draft_1).toBeUndefined();
+    expect(kept).toEqual(["draft_1"]);
+  });
+
+  it("without sync metadata, keeps a copy only if it was edited after the delete", () => {
+    const deleted = [{ id: toServerUuid("draft_1"), deletedAt: 6_000 }];
+    const { access } = metaAccess();
+    const opts = { deleted, syncMeta: access, syncKey: draftSyncKey };
+    expect(mergeRemoteDrafts({ draft_1: localDraft({ updatedAt: 5_000 }) }, [], new Set(), opts).draft_1).toBeUndefined();
+    expect(mergeRemoteDrafts({ draft_1: localDraft({ updatedAt: 7_000 }) }, [], new Set(), opts).draft_1?.localOnly).toBe(
+      true,
+    );
   });
 
   it("never drops a local-only conflict copy on a tombstone", () => {
