@@ -125,4 +125,34 @@ describe("store sync wiring", () => {
     expect(copy.approvals).toEqual([]);
     expect(copy.title).toMatch(/conflicted copy/);
   });
+
+  it("stops writing as soon as another tab swaps this device to another workspace", async () => {
+    const realLocation = window.location;
+    Object.defineProperty(window, "location", { configurable: true, value: { ...realLocation, assign: vi.fn() } });
+    try {
+      const { useDraftStore } = await import("./store");
+      const { WORKSPACE_SWAP_KEY } = await import("./session/clearLocalData");
+      const { setSyncMeta, SYNC_META_STORAGE_KEY } = await import("./sync-meta");
+      useDraftStore.setState({ drafts: { a: draft("a") } });
+      // A second change inside the throttle window waits to be written.
+      useDraftStore.setState({ drafts: { a: draft("a", "<p>Later</p>") } });
+
+      // The other tab moves this workspace aside and restores another one.
+      const other = JSON.stringify({ state: { drafts: { b: draft("b") } }, version: 0 });
+      localStorage.setItem("scribehr-store-v1", other);
+      localStorage.setItem(SYNC_META_STORAGE_KEY, "{}");
+      window.dispatchEvent(new StorageEvent("storage", { key: WORKSPACE_SWAP_KEY, newValue: "1" }));
+      expect(window.location.assign).toHaveBeenCalledWith("/");
+
+      // Neither the queued write nor anything this tab does before it unloads
+      // may land on the other workspace's data.
+      useDraftStore.setState({ drafts: { a: draft("a", "<p>Even later</p>") } });
+      setSyncMeta("a", { rev: 1, key: "k", ckey: "c", at: 1 });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(localStorage.getItem("scribehr-store-v1")).toBe(other);
+      expect(localStorage.getItem(SYNC_META_STORAGE_KEY)).toBe("{}");
+    } finally {
+      Object.defineProperty(window, "location", { configurable: true, value: realLocation });
+    }
+  });
 });

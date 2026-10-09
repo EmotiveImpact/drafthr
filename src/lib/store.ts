@@ -5,6 +5,7 @@ import {
   createQuotaSafeStorage,
   estimateLocalStorageBytes,
   hasUnpersistedWrites,
+  setPersistenceSuspended,
 } from "./storage/quota-safe-storage";
 import { TENANT_SCOPED_PERSIST_KEYS, WORKSPACE_SWAP_KEY } from "./session/clearLocalData";
 import type {
@@ -1798,6 +1799,9 @@ if (typeof window !== "undefined") {
     // Reload rather than rehydrate, so this tab can't persist the previous
     // workspace's in-memory state over it.
     if (e.key === WORKSPACE_SWAP_KEY) {
+      // Stop writing first: a throttled write (or the pagehide flush) from
+      // this tab would otherwise land on the swapped-in workspace's data.
+      setPersistenceSuspended(true);
       window.location.assign("/");
       return;
     }
@@ -1811,6 +1815,7 @@ if (typeof window !== "undefined") {
       e.newValue === null &&
       (TENANT_SCOPED_PERSIST_KEYS as readonly string[]).includes(e.key)
     ) {
+      setPersistenceSuspended(true);
       window.location.assign("/");
       return;
     }

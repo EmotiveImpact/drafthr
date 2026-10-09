@@ -16,6 +16,7 @@
 import type { Draft } from "./letters/types";
 import type { DraftExtras, RemoteDraft } from "./remote-pull";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
+import { isPersistenceSuspended } from "./storage/quota-safe-storage";
 
 export const SYNC_META_STORAGE_KEY = "drafthr.sync-meta.v1";
 
@@ -47,6 +48,9 @@ function load(): Record<string, SyncMeta> {
 }
 
 function save(): void {
+  // While this tab's live keys belong to another workspace (mid-switch, or
+  // another tab swapped them), its bookkeeping must not be written over them.
+  if (isPersistenceSuspended()) return;
   try {
     localStorage.setItem(SYNC_META_STORAGE_KEY, JSON.stringify(cache ?? {}));
   } catch {

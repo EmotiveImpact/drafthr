@@ -25,7 +25,7 @@
  * worse experience for no security gain.
  */
 
-import { cancelPendingWrites, flushPendingWrites, setPersistenceSuspended } from "../storage/quota-safe-storage";
+import { flushPendingWrites, setPersistenceSuspended } from "../storage/quota-safe-storage";
 
 /** localStorage keys that hold tenant-scoped data and must be wiped on
  *  sign-out / workspace switch. Keep in sync with each store's persist `name`. */
@@ -44,7 +44,8 @@ export const TENANT_SCOPED_PERSIST_KEYS = [
  * Callers hard-navigate immediately afterwards, so the in-memory zustand
  * state is torn down by the reload; this function only has to guarantee the
  * on-disk copy is gone before the next user's session initialises. Throttled
- * writes still waiting are dropped first, so they can't put the data back.
+ * writes still waiting are dropped and further writes are suspended until
+ * that reload, so neither can put the data back.
  *
  * `keepProfile` keeps the user's profile (the employer/employee mode choice +
  * credits) for callers that wipe on behalf of the same user (board JA-03).
@@ -55,7 +56,7 @@ export const TENANT_SCOPED_PERSIST_KEYS = [
  */
 export function clearTenantScopedLocalData(opts?: { keepProfile?: boolean; includeStashes?: boolean }): void {
   if (typeof window === "undefined") return;
-  cancelPendingWrites();
+  setPersistenceSuspended(true);
   const keys = opts?.keepProfile
     ? TENANT_SCOPED_PERSIST_KEYS.filter((k) => k !== "scribehr-profile-v1")
     : TENANT_SCOPED_PERSIST_KEYS;
