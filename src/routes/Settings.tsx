@@ -413,7 +413,10 @@ export function Settings() {
         {/* WorkOS Audit Logs mirror status (admin-only) — null for non-admins. */}
         <AuditLogsCard />
 
-        {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
+        {/* Solo / sim role picker — local dev + screencasts only. In a real build
+         * it let any member make themselves owner in the browser, unlocking
+         * approve buttons and approved drafts for client-side export. */}
+        {import.meta.env.DEV && (
         <Card size="3">
           <Box mb="3">
             <Heading size="3" mb="1">Role (local simulation)</Heading>
@@ -441,6 +444,7 @@ export function Settings() {
             </Field>
           </Grid>
         </Card>
+        )}
 
         {/* Auto-fill */}
         <Card size="3">

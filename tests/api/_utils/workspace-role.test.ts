@@ -52,3 +52,56 @@ describe("rejectNonBillingManager", () => {
     expect(rejectNonBillingManager({ activeMember: null })?.status).toBe(403);
   });
 });
+
+describe("approvalsForWrite", () => {
+  const reviewer = { activeMember: { role: "reviewer" } };
+  const drafter = { activeMember: { role: "drafter" } };
+  const stored = [{ id: "a1", decision: "submitted" }];
+
+  it("drops a non-approver's own approved or changes-requested entries", async () => {
+    const { approvalsForWrite } = await import("../../../api/_utils/workspace-role.js");
+    const out = approvalsForWrite(drafter, stored, [
+      ...stored,
+      { id: "fake", decision: "approved" },
+      { id: "fake2", decision: "changes_requested" },
+      { id: "s2", decision: "submitted" },
+    ]);
+    expect(out.map((a) => a.id)).toEqual(["a1", "s2"]);
+  });
+
+  it("lets an approver add a decision", async () => {
+    const { approvalsForWrite } = await import("../../../api/_utils/workspace-role.js");
+    const out = approvalsForWrite(reviewer, stored, [{ id: "ok", decision: "approved" }]);
+    expect(out.map((a) => a.id)).toEqual(["a1", "ok"]);
+  });
+
+  it("never lets a sync erase entries the server already holds", async () => {
+    const { approvalsForWrite } = await import("../../../api/_utils/workspace-role.js");
+    expect(approvalsForWrite(reviewer, stored, []).map((a) => a.id)).toEqual(["a1"]);
+    expect(approvalsForWrite(reviewer, stored, undefined).map((a) => a.id)).toEqual(["a1"]);
+  });
+});
+
+describe("rejectEditOfApprovedDraft", () => {
+  const stored = [{ sectionId: "s1", title: "Intro", html: "<p>Agreed text</p>" }];
+
+  it("refuses new content on an approved draft that stays approved", async () => {
+    const { rejectEditOfApprovedDraft } = await import("../../../api/_utils/workspace-role.js");
+    const res = rejectEditOfApprovedDraft("approved", "approved", stored, [
+      { sectionId: "s1", title: "Intro", html: "<p>Rewritten</p>" },
+    ]);
+    expect(res?.status).toBe(409);
+    expect(
+      rejectEditOfApprovedDraft("approved", undefined, stored, [...stored, { sectionId: "s2", html: "x" }])?.status,
+    ).toBe(409);
+  });
+
+  it("allows an unchanged re-sync and edits that re-open review", async () => {
+    const { rejectEditOfApprovedDraft } = await import("../../../api/_utils/workspace-role.js");
+    expect(rejectEditOfApprovedDraft("approved", "approved", stored, [...stored])).toBeNull();
+    expect(
+      rejectEditOfApprovedDraft("approved", "in_review", stored, [{ sectionId: "s1", html: "new" }]),
+    ).toBeNull();
+    expect(rejectEditOfApprovedDraft("draft", "draft", stored, [{ sectionId: "s1", html: "new" }])).toBeNull();
+  });
+});

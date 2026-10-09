@@ -16,6 +16,7 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { draftExtras, drafts } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
+import { approvalsForWrite, rejectReadOnlyMember } from "../../_utils/workspace-role.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -70,6 +71,8 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return readOnly;
   const tenantId = auth.activeTenant.id;
 
   const parsed = await readJsonRequest<ExtrasInput>(req, 4_000_000);
@@ -80,7 +83,7 @@ export async function POST(req: Request): Promise<Response> {
   // Postgres 22P02 and surface as a 500 (400 is the app's convention here).
   const draftId = serverUuidOrNull(body.id);
   if (!draftId) return jsonError("Invalid draft id", 400);
-  const extras = body.extras && typeof body.extras === "object" ? body.extras : {};
+  const incoming = body.extras && typeof body.extras === "object" ? body.extras : {};
 
   try {
     const db = getDb();
@@ -94,6 +97,19 @@ export async function POST(req: Request): Promise<Response> {
     if (draft.tenantId !== tenantId) {
       return jsonError("Draft belongs to a different workspace", 403);
     }
+
+    // Approvals are append-only and only approvers may add decisions, so they
+    // are merged against what the server already holds (see approvalsForWrite).
+    const [existing] = await db
+      .select({ extras: draftExtras.extrasJson })
+      .from(draftExtras)
+      .where(eq(draftExtras.draftId, draftId))
+      .limit(1);
+    const storedApprovals = (existing?.extras as Record<string, unknown> | null)?.approvals;
+    const extras = {
+      ...incoming,
+      approvals: approvalsForWrite(auth, storedApprovals, (incoming as Record<string, unknown>).approvals),
+    };
 
     await db
       .insert(draftExtras)

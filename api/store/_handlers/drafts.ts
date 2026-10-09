@@ -16,7 +16,7 @@ import { and, eq, lte, inArray, desc, isNull, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
-import { rejectReadOnlyMember, rejectUnauthorisedReviewDecision } from "../../_utils/workspace-role.js";
+import { rejectReadOnlyMember, rejectUnauthorisedReviewDecision, rejectEditOfApprovedDraft } from "../../_utils/workspace-role.js";
 import { getDb } from "../../../src/db/index.js";
 import { customTemplates, drafts, matters, sections, entitlementPurchases } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
@@ -202,6 +202,14 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       body.reviewStatus,
     );
     if (decisionError) return decisionError;
+    if (!isCreate && existingDraft[0].reviewStatus === "approved" && Array.isArray(body.sections)) {
+      const stored = await db
+        .select({ sectionId: sections.sectionId, title: sections.title, html: sections.html })
+        .from(sections)
+        .where(and(eq(sections.draftId, body.id), eq(sections.tenantId, tenantId)));
+      const locked = rejectEditOfApprovedDraft("approved", body.reviewStatus, stored, body.sections);
+      if (locked) return locked;
+    }
     let consume: ConsumeTarget | undefined;
     if (isCreate) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new

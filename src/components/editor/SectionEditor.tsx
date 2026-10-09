@@ -541,20 +541,20 @@ export function SectionEditor({
             variant="ghost"
             className="size-7"
             onClick={(e) => { e.stopPropagation(); onClear(); }}
-            disabled={isStreaming}
+            disabled={isStreaming || !editable}
             aria-label="Clear section"
           >
             <Trash2 className="size-3.5" />
           </Button>
           <RefinePopover
-            disabled={isStreaming}
+            disabled={isStreaming || !editable}
             onRefineRegenerate={(instruction) => onRegenerate(instruction)}
             onPlainRegenerate={() => onRegenerate()}
             trigger={
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={isStreaming}
+                disabled={isStreaming || !editable}
                 className="h-7 px-2 text-xs"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -679,7 +679,9 @@ export function SectionEditor({
        * clicked <ins>/<del> mark. Single-suggestion target (vs the
        * canvas-level "Accept all" banner). Closes on outside click via the
        * useEffect below. */}
-      {pendingSuggestion && (
+      {/* Locked drafts (approved, viewer, reviewer in review) can't accept or
+       * reject suggestions; the bubble only appears where editing is allowed. */}
+      {pendingSuggestion && editable && (
         <SuggestionAcceptBubble
           rect={pendingSuggestion.rect}
           kind={pendingSuggestion.kind}

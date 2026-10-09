@@ -11,7 +11,7 @@ import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
-import { rejectReadOnlyMember } from "../../_utils/workspace-role.js";
+import { rejectEditOfApprovedDraft, rejectReadOnlyMember } from "../../_utils/workspace-role.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { getDb } from "../../../src/db/index.js";
 import { drafts, sections } from "../../../src/db/schema.js";
@@ -62,7 +62,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const db = getDb();
     const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId })
+      .select({ id: drafts.id, tenantId: drafts.tenantId, reviewStatus: drafts.reviewStatus })
       .from(drafts)
       .where(eq(drafts.id, draftId))
       .limit(1);
@@ -72,6 +72,14 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const tenantId = auth.activeTenant.id;
+    if (draft.reviewStatus === "approved") {
+      const stored = await db
+        .select({ sectionId: sections.sectionId, title: sections.title, html: sections.html })
+        .from(sections)
+        .where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)));
+      const locked = rejectEditOfApprovedDraft("approved", "approved", stored, sectionList);
+      if (locked) return locked;
+    }
     await db.transaction(async (tx) => {
       // Scope the delete by tenant too (belt-and-braces — draftId is already
       // tenant-verified above, but this keeps the mutation itself tenant-bounded).

@@ -49,3 +49,63 @@ export function rejectNonBillingManager(auth: MemberLike): Response | null {
   if (BILLING_ROLES.has(auth.activeMember?.role ?? "")) return null;
   return jsonError("Only workspace owners or admins can manage the workspace plan", 403);
 }
+
+type ApprovalLike = { id?: unknown; decision?: unknown };
+
+/**
+ * The approvals list to store when a member syncs a draft's extras. Approvals
+ * are an append-only record, so entries already on the server are always kept
+ * (a sync can't erase who approved what), and a caller who cannot decide
+ * reviews can't add an "approved" or "changes requested" entry of their own;
+ * other entries (such as "submitted") pass through.
+ */
+export function approvalsForWrite(
+  auth: MemberLike,
+  stored: unknown,
+  incoming: unknown,
+): ApprovalLike[] {
+  const storedList = Array.isArray(stored) ? (stored as ApprovalLike[]) : [];
+  const incomingList = Array.isArray(incoming) ? (incoming as ApprovalLike[]) : [];
+  const canDecide = APPROVER_ROLES.has(auth.activeMember?.role ?? "");
+  const seen = new Set(storedList.map((a) => String(a?.id)));
+  const out = [...storedList];
+  for (const a of incomingList) {
+    if (!a || typeof a !== "object" || typeof a.id !== "string" || seen.has(a.id)) continue;
+    if (!canDecide && typeof a.decision === "string" && DECISION_STATUSES.has(a.decision)) continue;
+    seen.add(a.id);
+    out.push(a);
+  }
+  return out;
+}
+
+type SectionLike = { sectionId: string; title?: string; html: string };
+
+/**
+ * 409 when a write would change the letter content of an approved draft
+ * without first taking it out of "approved". The editor locks approved
+ * drafts, but the server accepted new sections as long as the status was
+ * re-sent unchanged, so an approved letter could be rewritten and still show
+ * as approved. Moving the status out of approved (re-opening review) is how
+ * an approved letter is edited.
+ */
+export function rejectEditOfApprovedDraft(
+  storedStatus: string | null | undefined,
+  nextStatus: string | null | undefined,
+  storedSections: SectionLike[],
+  incomingSections: SectionLike[] | null | undefined,
+): Response | null {
+  if (storedStatus !== "approved") return null;
+  if (nextStatus && nextStatus !== "approved") return null;
+  if (!incomingSections) return null;
+  if (!sectionsDiffer(storedSections, incomingSections)) return null;
+  return jsonError("This letter is approved and locked. Re-open it for review before editing.", 409);
+}
+
+function sectionsDiffer(a: SectionLike[], b: SectionLike[]): boolean {
+  if (a.length !== b.length) return true;
+  const byId = new Map(a.map((s) => [s.sectionId, s]));
+  return b.some((s) => {
+    const prev = byId.get(s.sectionId);
+    return !prev || prev.html !== s.html || (prev.title ?? "") !== (s.title ?? "");
+  });
+}

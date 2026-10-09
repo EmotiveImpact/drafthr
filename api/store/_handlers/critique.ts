@@ -16,6 +16,7 @@ import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/requ
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { spendCredits, refundCredits } from "../../_utils/entitlements.js";
+import { rejectReadOnlyMember } from "../../_utils/workspace-role.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -64,6 +65,10 @@ type CritiqueRequest = {
   jurisdiction?: string;
 };
 
+function shortLabel(v: unknown): string {
+  return typeof v === "string" ? v.trim().slice(0, 80) : "";
+}
+
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
   if (sameOrigin) return sameOrigin;
@@ -75,12 +80,19 @@ export async function POST(req: Request): Promise<Response> {
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
+  // Viewers are read-only and must not spend the workspace's credit pool.
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return readOnly;
   const tenantId = auth.activeTenant?.id ?? null;
   const userId = auth.userRow.id;
 
   const parsed = await readJsonRequest<CritiqueRequest>(req, 200_000);
   if (!parsed.ok) return parsed.response;
-  const { lens, letterText, letterType, jurisdiction } = parsed.body;
+  const { lens, letterText } = parsed.body;
+  // These go into the prompt; cap them so they can't carry a second letter
+  // past the MAX_LETTER_CHARS limit.
+  const letterType = shortLabel(parsed.body.letterType);
+  const jurisdiction = shortLabel(parsed.body.jurisdiction);
   if (!isLens(lens)) return jsonError("Unknown critique lens", 400);
   const text = typeof letterText === "string" ? letterText.trim() : "";
   if (!text) return jsonError("Nothing to critique yet — write some of the letter first.", 400);
