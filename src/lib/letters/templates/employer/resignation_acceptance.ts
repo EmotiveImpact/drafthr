@@ -114,7 +114,7 @@ export const RESIGNATION_ACCEPTANCE_US: LetterTemplate = {
 - 'Two weeks' notice' is custom and not statutorily required in most states; the employer cannot generally require notice unless the employment agreement provides for it.
 - Final-pay timing is state-specific. California (Lab. Code 202): if the employee gives at least 72 hours' notice, all wages are due on the last day; otherwise within 72 hours of the resignation. New York (Labor Law 191): next regular payday. Texas (Lab. Code 61.014(a)(2)): next regular payday. Massachusetts (M.G.L. c.149 148): next regular payday for voluntary separation.
 - Accrued unused PTO must be paid out in CA, CO, MA, IL, NE, ND where vested under company policy.
-- COBRA continuation election notice within 14 days under 29 USC 1166.
+- COBRA continuation election notice (29 USC 1166; 29 CFR 2590.606-4): the employer notifies the plan administrator within 30 days of the qualifying event, and the administrator sends the election notice within 14 days of that (44 days in total where the employer is the administrator). Do not promise the employee a 14-day timescale.
 - Continuing obligations: confidentiality, IP assignment under the Proprietary Information and Inventions Agreement, and any narrow non-solicit (where enforceable) survive termination — refer to the contract clauses, do not enlarge them.
 - Non-competes: unenforceable in California (Bus. & Prof. Code 16600), North Dakota, Oklahoma, and Minnesota; do not assert enforcement in those states.
 - Register: courteous, warm where appropriate, factual. American English throughout.`,
@@ -173,7 +173,7 @@ export const RESIGNATION_ACCEPTANCE_US: LetterTemplate = {
       title: "Final pay, PTO, benefits, and property",
       instruction:
         "State final-pay timing per state law, accrued PTO payout, COBRA notice timing, property return, and continuing obligations under the PIIA. Cite the applicable state final-pay statute.",
-      scaffold: `<p>Your final paycheck, including all earned but unpaid wages through your last day and {{accruedPtoHours}} hours of accrued unused paid time off, will be issued {{finalPayTimingStatement}} in accordance with {{stateFinalPayStatute}}, less applicable federal, state, and local taxes and authorized deductions. Your participation in the company's medical, dental, vision, and life insurance plans will end on {{benefitsEndDate}}; you will receive a separate COBRA continuation election notice within 14 days under 29 USC section 1166.</p>
+      scaffold: `<p>Your final paycheck, including all earned but unpaid wages through your last day and {{accruedPtoHours}} hours of accrued unused paid time off, will be issued {{finalPayTimingStatement}} in accordance with {{stateFinalPayStatute}}, less applicable federal, state, and local taxes and authorized deductions. Your participation in the company's medical, dental, vision, and life insurance plans will end on {{benefitsEndDate}}; you will receive a separate COBRA continuation election notice from the plan administrator under 29 USC section 1166.</p>
 <p>Please return all company property in your possession by {{propertyReturnDate}}, including {{propertyList}}. Your continuing obligations of confidentiality and intellectual property assignment under the Proprietary Information and Inventions Agreement you signed on {{piiaSignedDate}} survive the end of your employment.</p>`,
       constraints: [
         "MUST cite the applicable state final-pay statute.",
@@ -183,7 +183,7 @@ export const RESIGNATION_ACCEPTANCE_US: LetterTemplate = {
         "MUST NOT enlarge restrictive covenants.",
         "MUST NOT assert non-compete enforcement in CA, ND, OK, MN.",
       ],
-      example: `<p>Your final paycheck, including all earned but unpaid wages through your last day and 80 hours of accrued unused paid time off, will be issued to you on May 19, 2026 in accordance with California Labor Code section 202, less applicable federal, state, and local taxes and authorized deductions. Your participation in the company's medical, dental, vision, and life insurance plans will end on May 31, 2026; you will receive a separate COBRA continuation election notice within 14 days under 29 USC section 1166.</p>
+      example: `<p>Your final paycheck, including all earned but unpaid wages through your last day and 80 hours of accrued unused paid time off, will be issued to you on May 19, 2026 in accordance with California Labor Code section 202, less applicable federal, state, and local taxes and authorized deductions. Your participation in the company's medical, dental, vision, and life insurance plans will end on May 31, 2026; you will receive a separate COBRA continuation election notice from the plan administrator under 29 USC section 1166.</p>
 <p>Please return all company property in your possession by May 19, 2026, including your laptop, badge, mobile device, and any printed materials marked confidential. Your continuing obligations of confidentiality and intellectual property assignment under the Proprietary Information and Inventions Agreement you signed on June 1, 2024 survive the end of your employment.</p>`,
     },
     {

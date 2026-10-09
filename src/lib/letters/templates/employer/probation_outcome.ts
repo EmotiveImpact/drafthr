@@ -131,7 +131,7 @@ export const PROBATION_OUTCOME_US: LetterTemplate = {
 - US employment is at-will throughout any introductory or probationary period; the employer may terminate at any time without cause. Document the legitimate business reason for any Fail outcome to defeat discrimination claims (Title VII, ADA, ADEA, FEHA, state analogs).
 - On Fail / termination at end of probation: California requires immediate payment of all final wages on the last day for employer-initiated terminations (Lab. Code 201; Lab. Code 203 waiting-time penalty for non-compliance). NY: next regular payday. TX: within six calendar days of discharge under Lab. Code 61.014(a)(1). Verify state rule.
 - Accrued unused PTO must be paid out in CA, CO, MA, IL, NE, ND under state final-pay rules where it has vested under policy.
-- COBRA continuation notice (29 USC 1166) must follow within 14 days for terminating employees enrolled in employer health plans.
+- For terminating employees enrolled in employer health plans: COBRA continuation election notice (29 USC 1166; 29 CFR 2590.606-4): the employer notifies the plan administrator within 30 days of the qualifying event, and the administrator sends the election notice within 14 days of that (44 days in total where the employer is the administrator). Do not promise the employee a 14-day timescale.
 - ADA: if disability is implicated in performance, separate the performance issue from accommodation discussion and document the interactive process.
 - Register: factual, professional, no character commentary. American English throughout.`,
   sections: [
