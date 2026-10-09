@@ -202,6 +202,24 @@ describe("migration 0021 (append-only audit table)", () => {
     expect(sqlText).toMatch(/BEFORE UPDATE OR DELETE ON "audit_events"/);
   });
 
+  it("numbers rows inserted without a seq, so code from before 0021 keeps its audit trail", () => {
+    // The app and the migration don't ship atomically: until the new code is
+    // live (or after a rollback), inserts arrive without seq and would fail
+    // the NOT NULL. A BEFORE INSERT trigger numbers them; it must only fill a
+    // missing seq, never override one the app assigned under its lock.
+    const fn = sqlText.slice(sqlText.indexOf('CREATE OR REPLACE FUNCTION "audit_events_assign_seq"'));
+    expect(fn.length).toBeLessThan(sqlText.length);
+    expect(fn).toMatch(/IF NEW\."seq" IS NULL THEN/);
+    expect(fn).toMatch(/coalesce\(max\("seq"\), 0\) \+ 1/i);
+    const drop = sqlText.indexOf('DROP TRIGGER IF EXISTS "audit_events_assign_seq"');
+    const create = sqlText.indexOf('CREATE TRIGGER "audit_events_assign_seq"');
+    expect(drop).toBeGreaterThan(-1);
+    expect(create).toBeGreaterThan(drop);
+    expect(sqlText).toMatch(/BEFORE INSERT ON "audit_events"/);
+    // Installed only once every existing row has a seq (after the backfill).
+    expect(create).toBeGreaterThan(sqlText.indexOf('ALTER COLUMN "seq" SET NOT NULL'));
+  });
+
   it("creates the durable rate_limits table idempotently", () => {
     expect(sqlText).toMatch(/CREATE TABLE IF NOT EXISTS "rate_limits"/);
     expect(sqlText).toMatch(/PRIMARY KEY \("key", "window_start"\)/);
