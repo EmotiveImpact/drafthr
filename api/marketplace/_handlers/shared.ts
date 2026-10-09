@@ -82,7 +82,8 @@ export async function GET(req: Request): Promise<Response> {
     .from(drafts)
     .where(eq(drafts.id, booking.draftId))
     .limit(1);
-  if (!draftRow) return jsonError("Draft not found", 404);
+  // A soft-deleted draft is a scrubbed tombstone, not a letter to share.
+  if (!draftRow || draftRow.deletedAt) return jsonError("Draft not found", 404);
   if (draftRow.tenantId !== booking.tenantId) {
     return jsonError("Draft not found", 404);
   }

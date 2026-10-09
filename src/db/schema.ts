@@ -269,9 +269,17 @@ export const drafts = pgTable(
     answersJson: jsonb("answers_json").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    // Soft-delete tombstone. A deleted draft keeps its row (content scrubbed)
+    // so the sync pull can tell other devices to drop it and a stale upsert of
+    // the id is refused rather than re-creating the letter.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // Bumped on every accepted write. Clients send the revision they last saw
+    // and a write against an older one is rejected with 409.
+    revision: integer("revision").notNull().default(0),
   },
   (t) => [
     index("drafts_tenant_idx").on(t.tenantId),
+    index("drafts_tenant_deleted_idx").on(t.tenantId, t.deletedAt),
     index("drafts_author_idx").on(t.authorUserId),
     index("drafts_matter_idx").on(t.matterId),
   ],

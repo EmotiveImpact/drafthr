@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  commentsForWrite,
+  timelineForWrite,
   rejectReadOnlyMember,
   rejectUnauthorisedReviewDecision,
 } from "../../../api/_utils/workspace-role";
@@ -103,5 +105,84 @@ describe("rejectEditOfApprovedDraft", () => {
       rejectEditOfApprovedDraft("approved", "in_review", stored, [{ sectionId: "s1", html: "new" }]),
     ).toBeNull();
     expect(rejectEditOfApprovedDraft("draft", "draft", stored, [{ sectionId: "s1", html: "new" }])).toBeNull();
+  });
+});
+
+describe("commentsForWrite (per-comment merge, author-only delete)", () => {
+  const authAs = (role: string, id = "u-me", email = "me@x.com") => ({
+    activeMember: { role },
+    userRow: { id, email, legalName: "Me Person" },
+  });
+  const theirs = {
+    id: "c1",
+    sectionId: "s1",
+    authorId: "me",
+    authorUserId: "u-them",
+    authorName: "Them",
+    body: "Their note",
+    createdAt: 100,
+    updatedAt: 100,
+  };
+
+  it("keeps a stored comment the incoming list doesn't have (no erase by a stale device)", () => {
+    const out = commentsForWrite(authAs("drafter"), [theirs], []);
+    expect(out.map((c) => c.id)).toEqual(["c1"]);
+  });
+
+  it("stamps a new comment with the caller's user id and display name", () => {
+    const out = commentsForWrite(authAs("drafter"), [], [
+      { id: "c2", authorId: "me", authorName: "Spoofed", body: "hi", createdAt: 5 },
+    ]);
+    expect(out[0]).toMatchObject({ authorUserId: "u-me", authorName: "Me Person", authorEmail: "me@x.com" });
+  });
+
+  it("ignores a delete of someone else's comment by a drafter", () => {
+    const out = commentsForWrite(authAs("drafter"), [theirs], [{ id: "c1", deleted: true, updatedAt: 200 }]);
+    expect(out[0].deleted).toBeFalsy();
+    expect(out[0].body).toBe("Their note");
+  });
+
+  it("accepts a delete from the author and scrubs the body", () => {
+    const out = commentsForWrite(authAs("drafter", "u-them"), [theirs], [{ id: "c1", deleted: true, updatedAt: 200 }]);
+    expect(out[0]).toMatchObject({ id: "c1", deleted: true });
+    expect(out[0].body).toBeUndefined();
+  });
+
+  it.each(["owner", "admin"])("lets an %s delete anyone's comment", (role) => {
+    const out = commentsForWrite(authAs(role), [theirs], [{ id: "c1", deleted: true, updatedAt: 200 }]);
+    expect(out[0].deleted).toBe(true);
+  });
+
+  it("falls back to the email for legacy comments without an author id", () => {
+    const legacy = { ...theirs, authorUserId: undefined, authorEmail: "ME@x.com" };
+    const out = commentsForWrite(authAs("drafter"), [legacy], [{ id: "c1", deleted: true, updatedAt: 200 }]);
+    expect(out[0].deleted).toBe(true);
+  });
+
+  it("a tombstone is final: a stale device can't bring the comment back", () => {
+    const tomb = { id: "c1", deleted: true, updatedAt: 200 };
+    const out = commentsForWrite(authAs("owner"), [tomb], [{ ...theirs, updatedAt: 300 }]);
+    expect(out[0].deleted).toBe(true);
+  });
+
+  it("lets any writer resolve, but only a newer change applies and authorship can't change", () => {
+    const resolved = commentsForWrite(authAs("drafter"), [theirs], [
+      { ...theirs, resolved: true, updatedAt: 150, authorName: "Hijack", body: "edited" },
+    ]);
+    expect(resolved[0]).toMatchObject({ resolved: true, authorName: "Them", body: "Their note", updatedAt: 150 });
+    const stale = commentsForWrite(authAs("drafter"), [{ ...theirs, resolved: true, updatedAt: 150 }], [
+      { ...theirs, resolved: false, updatedAt: 120 },
+    ]);
+    expect(stale[0].resolved).toBe(true);
+  });
+});
+
+describe("timelineForWrite", () => {
+  it("is append-only by id", () => {
+    const out = timelineForWrite(
+      [{ id: "e1", createdAt: 1, title: "stored" }],
+      [{ id: "e1", createdAt: 1, title: "changed" }, { id: "e2", createdAt: 2 }],
+    );
+    expect(out).toEqual([{ id: "e1", createdAt: 1, title: "stored" }, { id: "e2", createdAt: 2 }]);
   });
 });

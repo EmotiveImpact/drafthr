@@ -14,7 +14,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
 import { rateLimit, clientIp } from "../_utils/rate-limit.js";
@@ -287,7 +287,7 @@ async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<
   const [draft] = await db
     .select({ id: drafts.id })
     .from(drafts)
-    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)))
+    .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId), isNull(drafts.deletedAt)))
     .limit(1);
   return Boolean(draft);
 }

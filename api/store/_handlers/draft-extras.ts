@@ -9,14 +9,19 @@
  * tenant + IDOR). Excludes evidence file blobs (those are base64 → object
  * storage, not a JSON column).
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { draftExtras, drafts } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
-import { approvalsForWrite, rejectReadOnlyMember } from "../../_utils/workspace-role.js";
+import {
+  approvalsForWrite,
+  commentsForWrite,
+  rejectReadOnlyMember,
+  timelineForWrite,
+} from "../../_utils/workspace-role.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -89,7 +94,7 @@ export async function POST(req: Request): Promise<Response> {
     const db = getDb();
     // IDOR: the draft must exist in the caller's tenant before we attach extras.
     const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId })
+      .select({ id: drafts.id, tenantId: drafts.tenantId, deletedAt: drafts.deletedAt })
       .from(drafts)
       .where(eq(drafts.id, draftId))
       .limit(1);
@@ -97,18 +102,26 @@ export async function POST(req: Request): Promise<Response> {
     if (draft.tenantId !== tenantId) {
       return jsonError("Draft belongs to a different workspace", 403);
     }
+    if (draft.deletedAt) return jsonError("Draft was deleted", 410);
 
-    // Approvals are append-only and only approvers may add decisions, so they
-    // are merged against what the server already holds (see approvalsForWrite).
+    // Merge per item against what the server already holds, never replace
+    // the blob: approvals are append-only and only approvers may add
+    // decisions (approvalsForWrite); comments merge by id with tombstones and
+    // author-only deletes (commentsForWrite); the timeline is append-only.
     const [existing] = await db
       .select({ extras: draftExtras.extrasJson })
       .from(draftExtras)
-      .where(eq(draftExtras.draftId, draftId))
+      .where(and(eq(draftExtras.draftId, draftId), eq(draftExtras.tenantId, tenantId)))
       .limit(1);
-    const storedApprovals = (existing?.extras as Record<string, unknown> | null)?.approvals;
+    const stored = (existing?.extras as Record<string, unknown> | null) ?? {};
+    const inc = incoming as Record<string, unknown>;
     const extras = {
+      ...stored,
       ...incoming,
-      approvals: approvalsForWrite(auth, storedApprovals, (incoming as Record<string, unknown>).approvals),
+      comments: commentsForWrite(auth, stored.comments, inc.comments),
+      timeline: timelineForWrite(stored.timeline, inc.timeline),
+      approvals: approvalsForWrite(auth, stored.approvals, inc.approvals),
+      outcomeSought: "outcomeSought" in inc ? inc.outcomeSought : stored.outcomeSought,
     };
 
     await db
@@ -121,7 +134,8 @@ export async function POST(req: Request): Promise<Response> {
         set: { extrasJson: extras, updatedAt: new Date() },
       });
 
-    return new Response(JSON.stringify({ ok: true, id: draftId }), {
+    // Return the merged result so the caller can adopt other devices' changes.
+    return new Response(JSON.stringify({ ok: true, id: draftId, extras }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });

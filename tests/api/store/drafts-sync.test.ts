@@ -1,0 +1,263 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { decideDraftWrite, RESTORE_WINDOW_MS } from "../../../api/store/_handlers/_draft-sync";
+
+// --- a minimal chainable stand-in for the drizzle query builder -------------
+// Each select() resolves to the next queued result; update/insert/delete record
+// what they were asked to do so the tests can assert on the writes.
+type Recorded = { op: "update" | "insert" | "delete"; table: unknown; set?: Record<string, unknown> };
+const { state, assertCanCreateLetter } = vi.hoisted(() => ({
+  state: {
+    selects: [] as unknown[][],
+    updateReturns: [] as unknown[][],
+    writes: [] as Recorded[],
+    body: {} as Record<string, unknown>,
+    role: "drafter",
+  },
+  assertCanCreateLetter: vi.fn(async () => ({ ok: true as const })),
+}));
+
+function chain(result: () => unknown, onSet?: (v: Record<string, unknown>) => void) {
+  const c: Record<string, unknown> = {};
+  for (const m of ["from", "where", "limit", "orderBy", "values", "onConflictDoUpdate", "returning"]) {
+    c[m] = () => c;
+  }
+  c.set = (v: Record<string, unknown>) => {
+    onSet?.(v);
+    return c;
+  };
+  c.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+    Promise.resolve(result()).then(res, rej);
+  return c;
+}
+
+const fakeDb = {
+  select: () => chain(() => state.selects.shift() ?? []),
+  update: (table: unknown) => {
+    const rec: Recorded = { op: "update", table };
+    state.writes.push(rec);
+    return chain(
+      () => state.updateReturns.shift() ?? [{ id: "x" }],
+      (v) => {
+        rec.set = v;
+      },
+    );
+  },
+  insert: (table: unknown) => {
+    const rec: Recorded = { op: "insert", table };
+    state.writes.push(rec);
+    return chain(() => [], undefined);
+  },
+  delete: (table: unknown) => {
+    state.writes.push({ op: "delete", table });
+    return chain(() => []);
+  },
+  transaction: async (fn: (tx: unknown) => unknown) => fn(fakeDb),
+};
+
+vi.mock("../../../src/db/index.js", () => ({ getDb: () => fakeDb }));
+vi.mock("../../../src/db/audit.js", () => ({ appendAuditEvent: async () => {} }));
+vi.mock("../../../api/_utils/entitlements.js", () => ({ assertCanCreateLetter }));
+vi.mock("../../../api/_utils/rate-limit.js", () => ({ rateLimit: () => null }));
+vi.mock("../../../api/_utils/session-with-tenant.js", () => ({
+  requireSessionAndTenant: async () => ({
+    ok: true,
+    activeTenant: { id: "t1" },
+    activeMember: { role: state.role },
+    userRow: { id: "u1", email: "a@b.com" },
+  }),
+}));
+vi.mock("../../../api/_utils/request.js", () => ({
+  enforceSameOrigin: () => null,
+  readJsonRequest: async () => ({ ok: true, body: state.body }),
+  jsonError: (error: string, status: number) =>
+    new Response(JSON.stringify({ error }), { status, headers: { "Content-Type": "application/json" } }),
+}));
+
+import { DELETE, GET, POST } from "../../../api/store/_handlers/drafts";
+import { drafts } from "../../../src/db/schema";
+
+const ID = "11111111-1111-4111-8111-111111111111";
+const req = {} as Request;
+
+function draftBody(extra: Record<string, unknown> = {}) {
+  return {
+    id: ID,
+    letterType: "termination",
+    mode: "employer",
+    context: { jurisdiction: "UK" },
+    reviewStatus: "draft",
+    sections: [{ sectionId: "intro", title: "Intro", html: "<p>Mine</p>", status: "ready", position: 0 }],
+    ...extra,
+  };
+}
+
+function fullRow(over: Record<string, unknown> = {}) {
+  return {
+    id: ID,
+    tenantId: "t1",
+    letterType: "termination",
+    mode: "employer",
+    title: null,
+    jurisdiction: "UK",
+    matterId: null,
+    reviewStatus: "approved",
+    isTemplateSource: false,
+    templateSourceId: null,
+    contextJson: {},
+    employerJson: null,
+    employeeJson: null,
+    answersJson: null,
+    createdAt: new Date(1_000),
+    updatedAt: new Date(2_000),
+    deletedAt: null,
+    revision: 4,
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  process.env.DRAFTHR_DUAL_WRITE = "true";
+  state.selects = [];
+  state.updateReturns = [];
+  state.writes = [];
+  state.role = "drafter";
+  assertCanCreateLetter.mockClear();
+});
+
+describe("decideDraftWrite", () => {
+  const live = { tenantId: "t1", revision: 3, deletedAt: null };
+  it("creates when no row exists", () => {
+    expect(decideDraftWrite(null, "t1", {}, 0)).toEqual({ kind: "create" });
+  });
+  it("refuses another tenant's row", () => {
+    expect(decideDraftWrite({ ...live, tenantId: "t2" }, "t1", { baseRevision: 3 }, 0).kind).toBe("forbidden");
+  });
+  it("accepts an update built on the current revision", () => {
+    expect(decideDraftWrite(live, "t1", { baseRevision: 3 }, 0)).toEqual({
+      kind: "update",
+      expectedRevision: 3,
+      restore: false,
+    });
+  });
+  it.each([2, undefined, "3", -1])("treats base revision %s as stale", (base) => {
+    expect(decideDraftWrite(live, "t1", { baseRevision: base }, 0).kind).toBe("stale");
+  });
+  it("refuses an upsert of a tombstoned draft", () => {
+    const deletedAt = new Date(10_000);
+    expect(decideDraftWrite({ ...live, deletedAt }, "t1", { baseRevision: 3 }, 20_000)).toEqual({
+      kind: "gone",
+      deletedAt,
+    });
+  });
+  it("lets the Undo restore a tombstone only within the window", () => {
+    const deletedAt = new Date(10_000);
+    expect(decideDraftWrite({ ...live, deletedAt }, "t1", { restore: true }, 10_000 + RESTORE_WINDOW_MS).kind).toBe(
+      "update",
+    );
+    expect(
+      decideDraftWrite({ ...live, deletedAt }, "t1", { restore: true }, 10_001 + RESTORE_WINDOW_MS).kind,
+    ).toBe("gone");
+  });
+});
+
+describe("POST /api/store/drafts (tombstones + revisions)", () => {
+  it("returns 410 for a tombstoned id and never touches the paywall or the row", async () => {
+    state.body = draftBody({ baseRevision: 4 });
+    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: new Date() }]];
+    const res = await POST(req);
+    expect(res.status).toBe(410);
+    expect((await res.json()).deleted).toBe(true);
+    expect(assertCanCreateLetter).not.toHaveBeenCalled();
+    expect(state.writes).toHaveLength(0);
+  });
+
+  it("restores a just-deleted draft for the Undo without spending a credit", async () => {
+    state.body = draftBody({ restore: true });
+    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 5, deletedAt: new Date() }]];
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).revision).toBe(6);
+    expect(assertCanCreateLetter).not.toHaveBeenCalled();
+    const update = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(update?.set).toMatchObject({ deletedAt: null, revision: 6 });
+  });
+
+  it("rejects a stale write with 409 and the current row, leaving the approval alone", async () => {
+    state.body = draftBody({ baseRevision: 3, reviewStatus: "in_review" });
+    state.selects = [
+      [{ id: ID, tenantId: "t1", reviewStatus: "approved", revision: 4, deletedAt: null }],
+      [fullRow()],
+      [{ sectionId: "intro", title: "Intro", html: "<p>Theirs</p>", status: "ready", position: 0 }],
+    ];
+    const res = await POST(req);
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.revision).toBe(4);
+    expect(body.current.reviewStatus).toBe("approved");
+    expect(body.current.sections[0].html).toBe("<p>Theirs</p>");
+    expect(state.writes).toHaveLength(0);
+  });
+
+  it("accepts a write on the current revision and bumps it", async () => {
+    state.body = draftBody({ baseRevision: 4 });
+    state.selects = [[{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null }]];
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).revision).toBe(5);
+    const update = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(update?.set).toMatchObject({ revision: 5 });
+  });
+
+  it("returns 409 with the current row when a concurrent write wins the compare-and-swap", async () => {
+    state.body = draftBody({ baseRevision: 4 });
+    state.selects = [
+      [{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null }],
+      [fullRow({ revision: 5, reviewStatus: "draft" })],
+      [],
+    ];
+    state.updateReturns = [[]];
+    const res = await POST(req);
+    expect(res.status).toBe(409);
+    expect((await res.json()).revision).toBe(5);
+  });
+
+  it("creates at revision 1 through the paywall gate", async () => {
+    state.body = draftBody();
+    state.selects = [[]];
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+    expect((await res.json()).revision).toBe(1);
+    expect(assertCanCreateLetter).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DELETE /api/store/drafts", () => {
+  it("soft-deletes and scrubs the row instead of removing it", async () => {
+    state.body = { id: ID };
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", title: "T", deletedAt: null }]];
+    const res = await DELETE(req);
+    expect(res.status).toBe(200);
+    const update = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(update?.set?.deletedAt).toBeInstanceOf(Date);
+    expect(update?.set).toMatchObject({ title: null, employeeJson: null, answersJson: null });
+    expect(state.writes.some((w) => w.op === "delete" && w.table === drafts)).toBe(false);
+  });
+
+  it("is idempotent for an already-deleted draft", async () => {
+    state.body = { id: ID };
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", title: null, deletedAt: new Date() }]];
+    const res = await DELETE(req);
+    expect(res.status).toBe(200);
+    expect(state.writes).toHaveLength(0);
+  });
+});
+
+describe("GET /api/store/drafts", () => {
+  it("returns live drafts with their revision plus tombstones", async () => {
+    state.selects = [[fullRow({ reviewStatus: "draft" })], [{ id: "dead", deletedAt: new Date(5_000) }], []];
+    const res = await GET(req);
+    const body = await res.json();
+    expect(body.drafts[0].revision).toBe(4);
+    expect(body.deleted).toEqual([{ id: "dead", deletedAt: 5_000 }]);
+  });
+});
