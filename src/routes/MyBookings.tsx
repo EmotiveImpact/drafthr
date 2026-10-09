@@ -235,8 +235,10 @@ export function MyBookings() {
 }
 
 /** Accepted but not yet paid (or a previous attempt failed): the requester
- *  needs to pay before the specialist can start. */
+ *  needs to pay before the specialist can start. A booking delivered before
+ *  payment was required is payable too, and can't be completed until it is. */
 function isAwaitingPayment(booking: Booking): boolean {
+  if (booking.status !== "accepted" && booking.status !== "delivered") return false;
   return !booking.paymentStatus || booking.paymentStatus === "unpaid" || booking.paymentStatus === "failed";
 }
 
@@ -344,7 +346,7 @@ function BookingRow({
         </p>
       )}
 
-      {booking.status === "accepted" &&
+      {(booking.status === "accepted" || booking.status === "delivered") &&
         (booking.paymentStatus === "refunded" ||
           booking.paymentStatus === "disputed" ||
           booking.paymentStatus === "dispute_lost") && (
@@ -357,14 +359,15 @@ function BookingRow({
           </p>
         )}
 
-      {!paymentsOn && booking.status === "accepted" && isAwaitingPayment(booking) && (
+      {!paymentsOn && isAwaitingPayment(booking) && (
         <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
-          Awaiting payment. Online payment isn't available yet, so the specialist
-          can't start on this booking.
+          {booking.status === "delivered"
+            ? "Awaiting payment. Online payment isn't available yet, so this booking can't be completed."
+            : "Awaiting payment. Online payment isn't available yet, so the specialist can't start on this booking."}
         </p>
       )}
 
-      {paymentsOn && booking.status === "accepted" && isAwaitingPayment(booking) && (
+      {paymentsOn && isAwaitingPayment(booking) && (
         <div className="mt-3 flex items-center gap-2">
           <button
             type="button"
@@ -400,7 +403,10 @@ function BookingRow({
         </div>
       )}
 
-      {booking.status === "delivered" && !submitted && (
+      {/* Completing needs a paid booking, so rating waits for the payment. */}
+      {booking.status === "delivered" &&
+        !submitted &&
+        (!booking.paymentStatus || booking.paymentStatus === "paid") && (
         <div className="mt-3 flex items-center gap-3">
           <span className="text-[12px] font-semibold text-[var(--ds-ink)]">
             Rate this review:
