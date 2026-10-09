@@ -173,6 +173,7 @@ type AgentRequest = {
 // under the shared "ai" rate limit. Reject rather than truncate — a silently
 // truncated letter context would produce confidently-wrong AI output.
 const MAX_SYSTEM_CHARS = 100_000;
+const MAX_MESSAGES_CHARS = 200_000;
 
 export async function POST(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
@@ -198,6 +199,15 @@ export async function POST(req: Request): Promise<Response> {
     modelMessages = await convertToModelMessages(body.messages);
   } catch {
     return jsonError("Invalid messages payload", 400);
+  }
+  // The system prompt travels in `system` (capped above); a system-role
+  // message inside the conversation would let user-controlled text speak with
+  // system authority. And cap the conversation itself, like `system`.
+  if (modelMessages.some((m) => m.role === "system")) {
+    return jsonError("Invalid messages payload", 400);
+  }
+  if (JSON.stringify(modelMessages).length > MAX_MESSAGES_CHARS) {
+    return jsonError("This conversation is too long. Start a new chat.", 413);
   }
 
   if (typeof body.system === "string" && body.system.length > MAX_SYSTEM_CHARS) {
