@@ -239,6 +239,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
         reviewStatus: drafts.reviewStatus,
         revision: drafts.revision,
         deletedAt: drafts.deletedAt,
+        updatedAt: drafts.updatedAt,
       })
       .from(drafts)
       .where(eq(drafts.id, body.id))
@@ -252,10 +253,17 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
             tenantId: existingDraft.tenantId,
             revision: existingDraft.revision ?? 0,
             deletedAt: existingDraft.deletedAt ?? null,
+            updatedAt: existingDraft.updatedAt ?? null,
+            reviewStatus: existingDraft.reviewStatus,
           }
         : null,
       tenantId,
-      { baseRevision: body.baseRevision, restore: body.restore },
+      {
+        baseRevision: body.baseRevision,
+        restore: body.restore,
+        clientRevision: body.clientRevision,
+        reviewStatus: body.reviewStatus,
+      },
       Date.now(),
     );
     if (decision.kind === "forbidden") {
@@ -263,9 +271,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       return jsonError("Draft belongs to a different workspace", 403);
     }
     if (decision.kind === "gone") return goneResponse(decision.deletedAt);
-    if (decision.kind === "stale") {
-      return conflictResponse(await loadCurrentDraft(db, tenantId, body.id), "stale revision");
-    }
+    if (decision.kind === "stale") return staleResponse(db, tenantId, body.id);
     const isCreate = decision.kind === "create";
     const restoring = decision.kind === "update" && decision.restore;
     const decisionError = rejectUnauthorisedReviewDecision(
@@ -417,9 +423,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       }
       return { stale: false as const };
     });
-    if (writeResult.stale) {
-      return conflictResponse(await loadCurrentDraft(db, tenantId, body.id), "stale revision");
-    }
+    if (writeResult.stale) return staleResponse(db, tenantId, body.id);
 
     await safelyAppendAudit({
       tenantId,
@@ -625,6 +629,14 @@ function conflictResponse(
       },
     },
   );
+}
+
+/** 409 with the current row, or 410 when a concurrent delete removed it (the
+ *  client drops or keeps its copy on 410; a 409 with no row has nothing to
+ *  merge against). */
+async function staleResponse(db: Db, tenantId: string, id: string): Promise<Response> {
+  const current = await loadCurrentDraft(db, tenantId, id);
+  return current ? conflictResponse(current, "stale revision") : goneResponse(new Date());
 }
 
 /** 410 for an upsert of a draft that was deleted (on this or another device). */

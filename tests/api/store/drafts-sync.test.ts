@@ -139,8 +139,31 @@ describe("decideDraftWrite", () => {
       restore: false,
     });
   });
-  it.each([2, undefined, "3", -1])("treats base revision %s as stale", (base) => {
+  it.each([2, null, "3", -1])("treats base revision %s as stale", (base) => {
     expect(decideDraftWrite(live, "t1", { baseRevision: base }, 0).kind).toBe("stale");
+  });
+  describe("clients from before revisions (no baseRevision sent)", () => {
+    const stored = { ...live, updatedAt: new Date(5_000), reviewStatus: "in_review" };
+    it("accepts an edit at least as new as the stored one, on the current revision", () => {
+      expect(decideDraftWrite(stored, "t1", { clientRevision: 5_000, reviewStatus: "in_review" }, 0)).toEqual({
+        kind: "update",
+        expectedRevision: 3,
+        restore: false,
+      });
+    });
+    it("rejects an older edit, or one with no edit time", () => {
+      expect(decideDraftWrite(stored, "t1", { clientRevision: 4_999 }, 0).kind).toBe("stale");
+      expect(decideDraftWrite(stored, "t1", {}, 0).kind).toBe("stale");
+    });
+    it("never lets one take a letter out of approved", () => {
+      const approved = { ...stored, reviewStatus: "approved" };
+      expect(decideDraftWrite(approved, "t1", { clientRevision: 9_000, reviewStatus: "in_review" }, 0).kind).toBe(
+        "stale",
+      );
+      expect(decideDraftWrite(approved, "t1", { clientRevision: 9_000, reviewStatus: "approved" }, 0).kind).toBe(
+        "update",
+      );
+    });
   });
   it("refuses an upsert of a tombstoned draft", () => {
     const deletedAt = new Date(10_000);
@@ -219,6 +242,43 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
     const res = await POST(req);
     expect(res.status).toBe(409);
     expect((await res.json()).revision).toBe(5);
+  });
+
+  it("keeps accepting writes from a tab opened before revisions existed", async () => {
+    // The old client sends clientRevision (its edit time) and no baseRevision.
+    state.body = draftBody({ clientRevision: 3_000 });
+    state.selects = [
+      [{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null, updatedAt: new Date(2_000) }],
+    ];
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect((await res.json()).revision).toBe(5);
+    const update = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(update?.set).toMatchObject({ revision: 5 });
+  });
+
+  it("still refuses an old tab's write that is older than the stored edit", async () => {
+    state.body = draftBody({ clientRevision: 1_000 });
+    state.selects = [
+      [{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null, updatedAt: new Date(2_000) }],
+      [fullRow({ reviewStatus: "draft" })],
+      [],
+    ];
+    const res = await POST(req);
+    expect(res.status).toBe(409);
+    expect(state.writes).toHaveLength(0);
+  });
+
+  it("answers 410, not an empty 409, when a delete lands between the read and the write", async () => {
+    state.body = draftBody({ baseRevision: 4 });
+    state.selects = [
+      [{ id: ID, tenantId: "t1", reviewStatus: "draft", revision: 4, deletedAt: null }],
+      // loadCurrentDraft finds the row tombstoned by the concurrent delete.
+      [fullRow({ revision: 5, deletedAt: new Date() })],
+    ];
+    state.updateReturns = [[]];
+    const res = await POST(req);
+    expect(res.status).toBe(410);
   });
 
   it("creates at revision 1 through the paywall gate", async () => {

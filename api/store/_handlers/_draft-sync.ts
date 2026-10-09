@@ -10,6 +10,11 @@
  *   was built on (`baseRevision`); anything else is stale and gets a 409 with
  *   the current row, so one device can no longer overwrite another's edits or
  *   revert an approval it never saw.
+ * - A client loaded before revisions existed (a tab left open across the
+ *   deploy) sends no `baseRevision` at all. It gets the old edit-time check
+ *   instead of a 409 on every write, so its edits keep reaching the server,
+ *   except that it may not take a letter out of "approved" (it can't know the
+ *   approval happened).
  */
 
 /** How long after a delete the deleting device may still Undo it. */
@@ -19,6 +24,9 @@ export type ExistingDraftState = {
   tenantId: string;
   revision: number;
   deletedAt: Date | null;
+  /** Used only for writes from clients without revisions. */
+  updatedAt?: Date | null;
+  reviewStatus?: string | null;
 };
 
 export type DraftWriteDecision =
@@ -35,7 +43,7 @@ export function parseBaseRevision(value: unknown): number | null {
 export function decideDraftWrite(
   existing: ExistingDraftState | null,
   tenantId: string,
-  input: { baseRevision?: unknown; restore?: unknown },
+  input: { baseRevision?: unknown; restore?: unknown; clientRevision?: unknown; reviewStatus?: unknown },
   nowMs: number,
 ): DraftWriteDecision {
   if (!existing) return { kind: "create" };
@@ -47,7 +55,29 @@ export function decideDraftWrite(
     }
     return { kind: "gone", deletedAt: existing.deletedAt };
   }
+  // Current clients always send the field (null when they don't know the
+  // revision). Its absence marks a client from before revisions.
+  if (input.baseRevision === undefined) return decideLegacyWrite(existing, input);
   const base = parseBaseRevision(input.baseRevision);
   if (base === null || base !== existing.revision) return { kind: "stale" };
+  return { kind: "update", expectedRevision: existing.revision, restore: false };
+}
+
+/** The pre-revision rule: the client's edit time must not be older than the
+ *  stored one. The update still compare-and-swaps on the current revision. */
+function decideLegacyWrite(
+  existing: ExistingDraftState,
+  input: { clientRevision?: unknown; reviewStatus?: unknown },
+): DraftWriteDecision {
+  const clientRevision =
+    typeof input.clientRevision === "number" && Number.isFinite(input.clientRevision) && input.clientRevision >= 0
+      ? input.clientRevision
+      : null;
+  if (clientRevision === null || !existing.updatedAt || clientRevision < existing.updatedAt.getTime()) {
+    return { kind: "stale" };
+  }
+  if (existing.reviewStatus === "approved" && (input.reviewStatus ?? "draft") !== "approved") {
+    return { kind: "stale" };
+  }
   return { kind: "update", expectedRevision: existing.revision, restore: false };
 }
