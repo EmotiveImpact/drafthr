@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   tenantId: "t1" as string | null,
   body: {} as Record<string, unknown>,
   subs: { tenant: true, user: false } as Record<string, boolean>,
+  // Which subject's subscription is usable (active, or past_due in grace).
+  active: { tenant: false, user: false } as Record<string, boolean>,
   customers: { tenant: "cus_ws", user: "cus_me" } as Record<string, string | null>,
 }));
 const portalCreate = vi.hoisted(() => vi.fn(async () => ({ url: "https://billing.stripe.com/p/session" })));
@@ -40,7 +42,7 @@ vi.mock("../../../api/_utils/stripe-billing.js", () => ({
   getOrCreateCustomer: async () => "cus_ws",
 }));
 vi.mock("../../../api/_utils/entitlements.js", () => ({
-  subjectHasActiveSubscription: async () => false,
+  subjectHasActiveSubscription: async (subjectType: string) => state.active[subjectType] ?? false,
 }));
 // A real drizzle instance over a fake driver: a subscriptions lookup finds a
 // row when the subject type it asks about has one in `state.subs`.
@@ -64,6 +66,7 @@ beforeEach(() => {
   state.tenantId = "t1";
   state.body = {};
   state.subs = { tenant: true, user: false };
+  state.active = { tenant: false, user: false };
   state.customers = { tenant: "cus_ws", user: "cus_me" };
   portalCreate.mockClear();
   checkoutCreate.mockClear();
@@ -92,6 +95,24 @@ describe("POST /api/marketplace/billing-portal", () => {
     const res = await POST(req);
     expect(res.status).toBe(200);
     expect(portalCreate).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_me" }));
+  });
+
+  it("opens the plan the app shows: a live personal plan over a dead workspace one", async () => {
+    // Settings shows "Employee Plus" here (the workspace plan was cancelled),
+    // so Manage billing must open that, not the old workspace subscription.
+    state.role = "drafter";
+    state.subs = { tenant: true, user: true };
+    state.active = { tenant: false, user: true };
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    expect(portalCreate).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_me" }));
+  });
+
+  it("still prefers a live workspace plan over a live personal one", async () => {
+    state.subs = { tenant: true, user: true };
+    state.active = { tenant: true, user: true };
+    await POST(req);
+    expect(portalCreate).toHaveBeenCalledWith(expect.objectContaining({ customer: "cus_ws" }));
   });
 
   it("says so when there is no subscription to manage", async () => {
