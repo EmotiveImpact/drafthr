@@ -53,7 +53,7 @@ describe("ErrorBoundary and stale chunks after a deploy", () => {
   });
 
   it("does not reload for ordinary render errors", async () => {
-    function Broken(): JSX.Element {
+    function Broken(): React.ReactElement {
       throw new Error("boom");
     }
     renderInBoundary(Broken);
