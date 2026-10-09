@@ -547,6 +547,12 @@ export const consultantBookings = pgTable(
     responseNote: text("response_note"),
     deliveryNote: text("delivery_note"),
     rating: integer("rating"),
+    /** Price agreed when the booking was placed, in minor units (pence/cents),
+     *  and its lowercase ISO currency. Checkout charges from this snapshot,
+     *  never the consultant's live rate, so a rate change after booking can't
+     *  alter what the requester pays. Null only on legacy rows. */
+    priceAmount: integer("price_amount"),
+    priceCurrency: text("price_currency"),
     bookedAt: timestamp("booked_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -554,7 +560,7 @@ export const consultantBookings = pgTable(
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    /** Random bearer token generated when the booking is accepted. Tied
+    /** Random bearer token generated once the booking is paid. Tied
      *  to {bookingId, draftId}; expires shareTokenExpiresAt. Used by the
      *  consultant to fetch the specific draft they're reviewing without
      *  needing membership in the HR tenant. */
@@ -596,7 +602,8 @@ export const stripeConnectAccounts = pgTable(
   (t) => [index("stripe_connect_accounts_account_idx").on(t.accountId)],
 );
 
-// Payment state for a booking (HR pays for the review at booking time).
+// Payment state for a booking (HR pays once the consultant accepts; nothing is
+// delivered and no draft access is granted until this row is "paid").
 export const bookingPayments = pgTable(
   "booking_payments",
   {
@@ -605,12 +612,24 @@ export const bookingPayments = pgTable(
       .references(() => consultantBookings.id, { onDelete: "cascade" }),
     checkoutSessionId: text("checkout_session_id"),
     paymentIntentId: text("payment_intent_id"),
-    status: text("status").notNull().default("unpaid"), // unpaid | paid | refunded
+    // unpaid | processing (async method, e.g. Direct Debit, not yet settled) |
+    // paid | failed | refunded (full refund) | disputed | dispute_lost.
+    // Only "paid" unlocks delivery, completion, rating and draft access.
+    status: text("status").notNull().default("unpaid"),
     amount: integer("amount"), // minor units (pence/cents)
     currency: text("currency"),
+    /** Stripe charge and the destination-charge transfer to the consultant's
+     *  Connect account, recorded from charge events so a refund can reverse it. */
+    chargeId: text("charge_id"),
+    transferId: text("transfer_id"),
+    amountRefunded: integer("amount_refunded"), // minor units
+    disputeId: text("dispute_id"),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("booking_payments_session_idx").on(t.checkoutSessionId)],
+  (t) => [
+    index("booking_payments_session_idx").on(t.checkoutSessionId),
+    index("booking_payments_payment_intent_idx").on(t.paymentIntentId),
+  ],
 );
 
 // --- billing (subscriptions, one-off purchases, credit ledger) ---------------

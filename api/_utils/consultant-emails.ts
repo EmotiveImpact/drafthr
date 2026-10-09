@@ -104,14 +104,14 @@ export async function sendBookingAcceptedEmail(bookingId: string) {
   const subject = `${p.consultantProfile.fullName} accepted your review request`;
   const html = `
     <p>Hi ${escapeHtml(p.requesterName)},</p>
-    <p><strong>${escapeHtml(p.consultantProfile.fullName)}</strong> has accepted your booking and started work.</p>
+    <p><strong>${escapeHtml(p.consultantProfile.fullName)}</strong> has accepted your booking. Pay for the review in DraftHR and they'll start work once the payment clears.</p>
     ${p.booking.responseNote ? `<blockquote>${escapeHtml(p.booking.responseNote)}</blockquote>` : ""}
     <p>Expected delivery: ${
       p.booking.expectedDeliveryAt
         ? p.booking.expectedDeliveryAt.toLocaleString()
         : "soon"
     }.</p>
-    <p><a href="${appUrl("/consultants")}">Open the marketplace →</a></p>
+    <p><a href="${appUrl("/bookings")}">Pay for the review →</a></p>
   `;
   return sendEmail({
     to: p.requesterEmail,

@@ -127,6 +127,13 @@
       "when": 1783184132963,
       "tag": "0017_slippery_famine",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783200000000,
+      "tag": "0018_marketplace_payments",
+      "breakpoints": true
     }
   ]
 }
