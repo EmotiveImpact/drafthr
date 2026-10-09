@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { toast } from "sonner";
-import { createQuotaSafeStorage } from "./storage/quota-safe-storage";
+import {
+  createQuotaSafeStorage,
+  estimateLocalStorageBytes,
+  hasUnpersistedWrites,
+} from "./storage/quota-safe-storage";
 import { TENANT_SCOPED_PERSIST_KEYS } from "./session/clearLocalData";
 import type {
   AIAction,
@@ -1745,11 +1749,40 @@ export const useDraftStore = create<Store>()(
               description:
                 "Recent changes may not be saved on this device. Remove a large letterhead/signature image or export and delete old letters to free space.",
             }),
+          {
+            // Coalesce bursts (streaming AI output changes the store on every
+            // token) into at most two writes a second.
+            throttleMs: 500,
+            estimateUsage: () =>
+              typeof window !== "undefined" ? estimateLocalStorageBytes(window.localStorage) : 0,
+          },
         ),
       ),
+      // A rehydrate (another tab wrote) replaces state with what's on disk.
+      // When this tab's own writes are failing on quota (or still waiting on
+      // the throttle), disk is BEHIND memory, so keep this tab's newer and
+      // not-yet-persisted drafts instead of silently dropping them.
+      merge: (persisted, current) => mergePersistedDrafts(persisted, current, hasUnpersistedWrites()),
     }
   )
 );
+
+/** Persist merge for useDraftStore. Exported for tests. */
+export function mergePersistedDrafts<T extends { drafts: Record<string, Draft> }>(
+  persisted: unknown,
+  current: T,
+  memoryAhead: boolean,
+): T {
+  const p = (persisted ?? {}) as Partial<T>;
+  const merged = { ...current, ...p } as T;
+  if (!memoryAhead || !p.drafts) return merged;
+  const drafts: Record<string, Draft> = { ...p.drafts };
+  for (const [id, d] of Object.entries(current.drafts)) {
+    const onDisk = drafts[id];
+    if (!onDisk || d.updatedAt > onDisk.updatedAt) drafts[id] = d;
+  }
+  return { ...merged, drafts };
+}
 
 // Cross-tab coherence (senior sweep I-SYNC-1). The persist middleware writes to
 // localStorage but does NOT listen for writes from OTHER tabs — so two tabs on

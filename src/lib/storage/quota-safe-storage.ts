@@ -30,6 +30,7 @@ let quotaToastShown = false;
 /** Reset module state — tests only. */
 export function _resetQuotaToast(): void {
   quotaToastShown = false;
+  health = { nearQuota: false, full: false, usedBytes: 0 };
 }
 
 /**
@@ -76,6 +77,91 @@ function isQuotaError(err: unknown): boolean {
   );
 }
 
+/* ── Storage health (persistent quota banner) ──────────────────────────────
+ * The one-off toast was easy to miss and never came back for the rest of the
+ * page load. The banner reads this instead: `nearQuota` while usage is above
+ * the threshold, `full` from a failed write until the next successful one. */
+
+/** localStorage is typically capped at 5 MiB per origin (UTF-16, 2 bytes/char). */
+export const ASSUMED_QUOTA_BYTES = 5 * 1024 * 1024;
+export const NEAR_QUOTA_RATIO = 0.8;
+
+export type StorageHealth = { nearQuota: boolean; full: boolean; usedBytes: number };
+
+let health: StorageHealth = { nearQuota: false, full: false, usedBytes: 0 };
+const healthListeners = new Set<() => void>();
+
+export function getStorageHealth(): StorageHealth {
+  return health;
+}
+
+export function subscribeStorageHealth(listener: () => void): () => void {
+  healthListeners.add(listener);
+  return () => healthListeners.delete(listener);
+}
+
+function setHealth(next: Partial<StorageHealth>): void {
+  const merged = { ...health, ...next };
+  if (merged.nearQuota === health.nearQuota && merged.full === health.full && merged.usedBytes === health.usedBytes) {
+    return;
+  }
+  health = merged;
+  for (const l of healthListeners) l();
+}
+
+/** Rough bytes used by an origin's localStorage (keys + values, UTF-16). */
+export function estimateLocalStorageBytes(storage: Storage = window.localStorage): number {
+  let chars = 0;
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (key === null) continue;
+    chars += key.length + (storage.getItem(key)?.length ?? 0);
+  }
+  return chars * 2;
+}
+
+/* ── Pending (throttled) writes ─────────────────────────────────────────── */
+
+type PendingWrite = { flush: () => void; cancel: () => void };
+const pendingWrites = new Set<PendingWrite>();
+
+/** Write every throttled value now (before a backup export, a stash, or the
+ *  page going away). */
+export function flushPendingWrites(): void {
+  for (const p of [...pendingWrites]) p.flush();
+}
+
+/** Drop every throttled value without writing it (before a local wipe, so a
+ *  trailing write can't put the data back). */
+export function cancelPendingWrites(): void {
+  for (const p of [...pendingWrites]) p.cancel();
+}
+
+/** True when this tab holds state the browser storage doesn't: a write is
+ *  waiting on the throttle, or the last write failed on quota. */
+export function hasUnpersistedWrites(): boolean {
+  return pendingWrites.size > 0 || health.full;
+}
+
+if (typeof window !== "undefined") {
+  // Don't lose the trailing write of a burst when the tab closes or hides.
+  window.addEventListener("pagehide", flushPendingWrites);
+  window.addEventListener("beforeunload", flushPendingWrites);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushPendingWrites();
+  });
+}
+
+export type QuotaSafeStorageOptions = {
+  /** Coalesce writes that land within this window of the previous one (the
+   *  first write of a burst goes straight through). Streaming AI output
+   *  changes the store on every token; without this each token re-serialised
+   *  the whole store into localStorage. 0 writes every change immediately. */
+  throttleMs?: number;
+  /** Bytes in use after a successful write, for the near-quota banner. */
+  estimateUsage?: () => number;
+};
+
 /**
  * Build a quota-safe StateStorage over a backing Storage (window.localStorage
  * in prod). `onQuotaError` is injected so the toast dependency stays out of
@@ -84,27 +170,78 @@ function isQuotaError(err: unknown): boolean {
 export function createQuotaSafeStorage(
   backing: Pick<Storage, "getItem" | "setItem" | "removeItem">,
   onQuotaError: () => void,
+  options: QuotaSafeStorageOptions = {},
 ): StateStorage {
+  const throttleMs = options.throttleMs ?? 0;
+  let lastWriteAt = -Infinity;
+  const queued = new Map<string, string>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const write = (name: string, value: string) => {
+    lastWriteAt = Date.now();
+    const trimmed = stripPersistedImages(value);
+    try {
+      backing.setItem(name, trimmed);
+      const usedBytes = options.estimateUsage?.() ?? 0;
+      setHealth({
+        full: false,
+        usedBytes,
+        nearQuota: usedBytes > ASSUMED_QUOTA_BYTES * NEAR_QUOTA_RATIO,
+      });
+    } catch (err) {
+      if (isQuotaError(err)) {
+        setHealth({ full: true, nearQuota: true });
+        if (!quotaToastShown) {
+          quotaToastShown = true;
+          onQuotaError();
+        }
+        // Best effort: don't rethrow — the in-memory store is intact, and a
+        // throw here would also be swallowed by the persist middleware. The
+        // banner and toast are the actionable signal.
+        return;
+      }
+      throw err;
+    }
+  };
+
+  const pending: PendingWrite = {
+    flush: () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      pendingWrites.delete(pending);
+      const entries = [...queued];
+      queued.clear();
+      for (const [name, value] of entries) {
+        try {
+          write(name, value);
+        } catch (err) {
+          console.error("[storage] deferred write failed", err);
+        }
+      }
+    },
+    cancel: () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      queued.clear();
+      pendingWrites.delete(pending);
+    },
+  };
+
   return {
     getItem: (name) => backing.getItem(name),
-    removeItem: (name) => backing.removeItem(name),
+    removeItem: (name) => {
+      queued.delete(name);
+      backing.removeItem(name);
+    },
     setItem: (name, value) => {
-      const trimmed = stripPersistedImages(value);
-      try {
-        backing.setItem(name, trimmed);
-      } catch (err) {
-        if (isQuotaError(err)) {
-          if (!quotaToastShown) {
-            quotaToastShown = true;
-            onQuotaError();
-          }
-          // Best effort: don't rethrow — the in-memory store is intact, and a
-          // throw here would also be swallowed by the persist middleware. The
-          // toast is the actionable signal.
-          return;
-        }
-        throw err;
+      const sinceLast = Date.now() - lastWriteAt;
+      if (throttleMs <= 0 || (sinceLast >= throttleMs && !timer)) {
+        write(name, value);
+        return;
       }
+      queued.set(name, value);
+      pendingWrites.add(pending);
+      if (!timer) timer = setTimeout(pending.flush, Math.max(throttleMs - sinceLast, 0));
     },
   };
 }

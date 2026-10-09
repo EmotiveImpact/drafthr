@@ -104,6 +104,18 @@ describe("store sync wiring", () => {
     expect(d.commentTombstones).toHaveLength(2);
   });
 
+  it("a rehydrate keeps this tab's unpersisted drafts while its storage writes are failing", async () => {
+    const { mergePersistedDrafts } = await import("./store");
+    const current = { drafts: { mine: { ...draft("mine"), updatedAt: 9 }, both: { ...draft("both"), updatedAt: 9 } } };
+    const persisted = { drafts: { both: { ...draft("both"), updatedAt: 3 }, theirs: draft("theirs") } };
+    const ahead = mergePersistedDrafts(persisted, current, true);
+    expect(Object.keys(ahead.drafts).sort()).toEqual(["both", "mine", "theirs"]);
+    expect(ahead.drafts.both.updatedAt).toBe(9);
+    // Healthy storage: disk is authoritative, as before.
+    const normal = mergePersistedDrafts(persisted, current, false);
+    expect(Object.keys(normal.drafts).sort()).toEqual(["both", "theirs"]);
+  });
+
   it("builds a local-only conflicted copy that drops the approval", async () => {
     const { conflictCopyOf } = await import("./store");
     const copy = conflictCopyOf({ ...draft("a"), reviewStatus: "approved", approvals: [{ id: "x" }] } as never);

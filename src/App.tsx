@@ -25,6 +25,7 @@ import {
   setSyncMeta,
 } from "@/lib/sync-meta";
 import { useAuth } from "@/lib/auth";
+import { StorageQuotaBanner } from "@/components/StorageQuotaBanner";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { Home } from "@/routes/Home";
@@ -261,6 +262,7 @@ export function App() {
     !hasSeenTour();
   return (
     <Layout>
+      <StorageQuotaBanner />
       {showTour && (
         <Suspense fallback={null}>
           <OnboardingTour />
