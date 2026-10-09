@@ -232,9 +232,9 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     jurisdiction: "UK",
     severity: "required",
     label: "Limitation period referenced",
-    description: "Reference s.111 ERA 1996 / 3-month tribunal limitation so it's clear you're acting in time.",
-    match: { kind: "regex", value: "section\\s*111|s\\.\\s*111|limitation period|three[- ]month|3[- ]month", flags: "i" },
+    description: "Reference s.111 ERA 1996 / the tribunal limitation period so it's clear you're acting in time.",
+    match: { kind: "regex", value: "section\\s*111|s\\.\\s*111|limitation period|(three|six|3|6)[- ]month", flags: "i" },
     recommendation:
-      "Add: 'I am notifying ACAS of a prospective claim within the s.111 ERA 1996 limitation period (3 months less one day).'",
+      "Add: 'I am notifying ACAS of a prospective claim within the s.111 ERA 1996 limitation period (6 months less one day for acts on or after 1 October 2026, 3 months less one day before that).'",
   },
 ];

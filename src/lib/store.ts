@@ -35,10 +35,10 @@ import { uid } from "./utils";
 import { getLetterMeta } from "./letters/catalog";
 import {
   addDaysToDateOnly,
-  addMonthsToDateOnly,
   parseDateOnly,
   todayDateOnly,
 } from "./date-only";
+import { ukTribunalLimitation } from "./tribunal-limitation";
 import { sanitizeLetterHtml } from "./sanitize";
 import { isSafeImageRef } from "./safe-data-url";
 import {
@@ -225,8 +225,6 @@ type Store = {
   deleteDraft: (id: string) => void;
 };
 
-const PROTECTED_DEADLINE_BASIS_UK =
-  "ERA s.111(2): tribunal claim must be presented within 3 months less one day of the act complained of (subject to ACAS Early Conciliation extension).";
 const PROTECTED_DEADLINE_BASIS_US =
   "EEOC: 180 days from the act complained of (extended to 300 days in deferral states). State agency windows may differ.";
 
@@ -1268,6 +1266,7 @@ export const useDraftStore = create<Store>()(
             context.protectedDeadline = computeProtectedDeadline({
               ...(answers as Record<string, string | boolean | number | string[] | undefined>),
               jurisdiction: context.jurisdiction,
+              ukRegion: context.ukRegion,
               usState: context.usState,
             });
           }
@@ -2058,10 +2057,10 @@ function computeProtectedDeadline(
 
   const jurisdiction = a.jurisdiction as "UK" | "US" | undefined;
   if (jurisdiction === "UK") {
-    return {
-      iso: addDaysToDateOnly(addMonthsToDateOnly(actDate, 3), -1),
-      basis: PROTECTED_DEADLINE_BASIS_UK,
-    };
+    // 6 months less one day in Great Britain for acts on or after
+    // 1 October 2026, 3 months before that and in Northern Ireland.
+    const limit = ukTribunalLimitation(actDate, a.ukRegion as Draft["context"]["ukRegion"]);
+    return limit ? { iso: limit.iso, basis: limit.basis } : undefined;
   }
   if (jurisdiction === "US") {
     // 300 days only where a state FEP agency shares the charge (deferral

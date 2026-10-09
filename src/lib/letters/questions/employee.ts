@@ -142,7 +142,7 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
         type: "date",
         label: "When did the conduct or decision happen?",
         help:
-          "If it's a continuing course of conduct, pick the most recent incident. UK tribunal limitation is 3 months less one day from this date.",
+          "If it's a continuing course of conduct, pick the most recent incident. UK tribunal limitation is 6 months less one day from this date if it was on or after 1 October 2026, or 3 months less one day if earlier. In Northern Ireland it is 3 months less one day.",
       },
       {
         id: "sendBy",

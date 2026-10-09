@@ -41,9 +41,10 @@ export function addMonthsToDateOnly(iso: string, months: number): string {
   if (!date) return iso;
   // Date.setMonth overflows when the source day doesn't exist in the target
   // month (e.g. Nov 30 + 3mo → "Feb 30" → rolls into Mar 1/2). That silently
-  // pushes month-end dates 1-2 days too late — and this feeds the UK ET
-  // limitation deadline ("3 months less one day"), so an overflow tells users
-  // they have MORE time than they legally do. Clamp to the last valid day.
+  // pushes month-end dates 1-2 days too late, which for any deadline tells
+  // users they have MORE time than they do. Clamp to the last valid day.
+  // (The UK tribunal limit uses lastDayOfMonthsBeginningWith in
+  // tribunal-limitation.ts, which applies the corresponding date rule.)
   const day = date.getDate();
   date.setDate(1); // park on the 1st so the month shift can't overflow
   date.setMonth(date.getMonth() + months);
