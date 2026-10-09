@@ -124,7 +124,11 @@ export const DIMENSION_DESCRIPTIONS: Record<HealthDimension, string> = {
 // name], [job title], mail merge's [x not set], and any {{token}} left behind.
 // Case citations like [2023] start with a digit and don't match.
 const PLACEHOLDER_RE = /\[(TBD[^\]]{0,80}|[A-Za-z][A-Za-z0-9_ ]{0,40})\]|\{\{\s*([^}]{1,60}?)\s*\}\}/g;
-const NOT_PLACEHOLDERS = new Set(["sic"]);
+// Brackets a finished letter legitimately carries: editorial marks in quoted
+// material, and the "[See Fig 2]" / "[See Attachments]" references the editor
+// inserts (validated by checkEvidenceRefs instead).
+const NOT_PLACEHOLDERS = new Set(["sic", "emphasis added", "emphasis in original", "redacted"]);
+const EVIDENCE_REF_RE = /^see\s/i;
 const PII_PATTERNS: { id: string; re: RegExp; label: string }[] = [
   {
     id: "ni-number",
@@ -233,6 +237,7 @@ function checkPlaceholders(draft: Draft): HealthCheck {
   const found = new Set<string>();
   for (const m of text.matchAll(PLACEHOLDER_RE)) {
     const name = (m[1] ?? m[2] ?? "").trim();
+    if (m[1] !== undefined && EVIDENCE_REF_RE.test(name)) continue;
     if (name && !NOT_PLACEHOLDERS.has(name.toLowerCase())) found.add(name);
   }
   if (found.size === 0) {
