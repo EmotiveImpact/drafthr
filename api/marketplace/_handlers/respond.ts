@@ -35,6 +35,7 @@ import {
 } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import {
+  grantDraftAccess,
   paymentStatusOf,
   priceSnapshot,
   recomputeConsultantRating,
@@ -221,6 +222,20 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("Booking already transitioned — please refresh.", 409);
   }
 
+  // A booking paid before it was accepted (checkout used to allow it) never
+  // got a share link from the webhook, which only opens access on working
+  // bookings. Open it now that the booking is accepted.
+  let result = next;
+  if (body.action === "accept" && paymentStatus === "paid") {
+    await grantDraftAccess(db, next.id, now);
+    const [refreshed] = await db
+      .select()
+      .from(consultantBookings)
+      .where(eq(consultantBookings.id, next.id))
+      .limit(1);
+    if (refreshed) result = refreshed;
+  }
+
   // Recompute the consultant's aggregate rating + review count whenever a
   // rating lands. Without this, consultant_profiles.rating_x10 stays at the
   // seed 50 (5.0) forever and the marketplace's core trust signal is dead.
@@ -239,7 +254,7 @@ export async function POST(req: Request): Promise<Response> {
     console.error("[bookings] notify failed", body.action, err);
   });
 
-  return new Response(JSON.stringify({ booking: toClient(next, paymentStatus) }), {
+  return new Response(JSON.stringify({ booking: toClient(result, paymentStatus) }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });

@@ -96,6 +96,18 @@ describe("payment gate", () => {
     expect(setClause).not.toContain("share_token");
   });
 
+  it("opens draft access on accept when the booking was already paid for", async () => {
+    // Checkout used to allow paying a requested booking; the webhook then
+    // found no working booking to open access on.
+    givenBooking({ status: "requested" }, "paid");
+    nextBody = { bookingId: BOOKING_ID, action: "accept" };
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const grants = fake.find(/^update "consultant_bookings" set "share_token" = \$1, "share_token_expires_at" = \$2 where .*"share_token" is null/s);
+    expect(grants).toHaveLength(1);
+    expect(grants[0].params[0]).toMatch(/^sht_/);
+  });
+
   it("snapshots the price on accept for a legacy booking that has none", async () => {
     givenBooking({ status: "requested", price_amount: null, price_currency: null }, null);
     fake.respond(/^select "price", "currency" from "consultant_profiles"/, [{ price: 120, currency: "EUR" }]);
