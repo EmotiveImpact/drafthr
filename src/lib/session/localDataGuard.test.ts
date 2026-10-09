@@ -88,4 +88,29 @@ describe("buildLocalBackup", () => {
     expect(backup.keys["drafthr.stash.v1:u1:t2:scribehr-store-v1"]).toBeDefined();
     expect(backup.keys["scribehr-theme-v1"]).toBeUndefined();
   });
+
+  it("backs up the in-memory letters, not the stale disk copy, while storage writes are failing", async () => {
+    const { useDraftStore } = await import("@/lib/store");
+    localStorage.setItem(
+      "scribehr-store-v1",
+      JSON.stringify({ state: { drafts: { a: { id: "a", title: "Saved earlier" } } }, version: 0 }),
+    );
+    const original = Storage.prototype.setItem;
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "scribehr-store-v1") throw new DOMException("full", "QuotaExceededError");
+      return original.call(this, key, value);
+    });
+    try {
+      useDraftStore.setState({ drafts: { a: { ...d("a"), title: "Typed after storage filled up" } } });
+      const backup = JSON.parse(buildLocalBackup());
+      expect(backup.keys["scribehr-store-v1"].state.drafts.a.title).toBe("Typed after storage filled up");
+      expect(backup.keys["scribehr-store-v1"].version).toBe(0);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
 });
