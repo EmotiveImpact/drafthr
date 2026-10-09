@@ -30,7 +30,7 @@ import {
   storedDraftSha256,
   type StoredSection,
 } from "../_utils/export-integrity.js";
-import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
+import { inlineImagesForExport, parseAllowedHosts } from "../../src/lib/storage/inlineImagesForExport.js";
 import { toServerUuid } from "../../src/lib/remote-ids.js";
 
 export const config = {
@@ -170,7 +170,9 @@ export async function POST(req: Request): Promise<Response> {
 
     // Inline https://blob images to data: URLs before render — Puppeteer's
     // request interceptor above blocks all non-data:/about: requests by design.
-    const inlinedHtml = await inlineImagesForExport(body.html);
+    const inlinedHtml = await inlineImagesForExport(body.html, fetch, {
+      extraAllowedHosts: parseAllowedHosts(process.env.IMAGE_INLINE_ALLOWED_HOSTS),
+    });
     const fullHtml = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${PDF_CSP}"><style>${A4_CSS}</style></head><body>${inlinedHtml}</body></html>`;
     await page.setContent(fullHtml, { waitUntil: "load", timeout: PDF_RENDER_TIMEOUT_MS });
     const pdf = await page.pdf({
