@@ -9,7 +9,7 @@
  * tenant + IDOR). Excludes evidence file blobs (those are base64 → object
  * storage, not a JSON column).
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -49,7 +49,9 @@ export async function GET(req: Request): Promise<Response> {
         updatedAt: draftExtras.updatedAt,
       })
       .from(draftExtras)
-      .where(eq(draftExtras.tenantId, auth.activeTenant.id));
+      // A deleted draft's extras are only kept for its Undo; never hand them out.
+      .innerJoin(drafts, eq(drafts.id, draftExtras.draftId))
+      .where(and(eq(draftExtras.tenantId, auth.activeTenant.id), isNull(drafts.deletedAt)));
 
     const out = rows.map((r) => ({
       id: r.draftId,

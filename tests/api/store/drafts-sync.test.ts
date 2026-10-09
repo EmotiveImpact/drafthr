@@ -4,12 +4,13 @@ import { decideDraftWrite, RESTORE_WINDOW_MS } from "../../../api/store/_handler
 // --- a minimal chainable stand-in for the drizzle query builder -------------
 // Each select() resolves to the next queued result; update/insert/delete record
 // what they were asked to do so the tests can assert on the writes.
-type Recorded = { op: "update" | "insert" | "delete"; table: unknown; set?: Record<string, unknown> };
+type Recorded = { op: "update" | "insert" | "delete"; table: unknown; set?: Record<string, unknown>; inTx?: boolean };
 const { state, assertCanCreateLetter } = vi.hoisted(() => ({
   state: {
     selects: [] as unknown[][],
     updateReturns: [] as unknown[][],
     writes: [] as Recorded[],
+    inTx: false,
     body: {} as Record<string, unknown>,
     role: "drafter",
   },
@@ -48,10 +49,17 @@ const fakeDb = {
     return chain(() => [], undefined);
   },
   delete: (table: unknown) => {
-    state.writes.push({ op: "delete", table });
+    state.writes.push({ op: "delete", table, inTx: state.inTx });
     return chain(() => []);
   },
-  transaction: async (fn: (tx: unknown) => unknown) => fn(fakeDb),
+  transaction: async (fn: (tx: unknown) => unknown) => {
+    state.inTx = true;
+    try {
+      return await fn(fakeDb);
+    } finally {
+      state.inTx = false;
+    }
+  },
 };
 
 vi.mock("../../../src/db/index.js", () => ({ getDb: () => fakeDb }));
@@ -74,7 +82,7 @@ vi.mock("../../../api/_utils/request.js", () => ({
 }));
 
 import { DELETE, GET, POST } from "../../../api/store/_handlers/drafts";
-import { drafts } from "../../../src/db/schema";
+import { draftExtras, drafts, sections } from "../../../src/db/schema";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const req = {} as Request;
@@ -301,6 +309,18 @@ describe("DELETE /api/store/drafts", () => {
     expect(update?.set?.deletedAt).toBeInstanceOf(Date);
     expect(update?.set).toMatchObject({ title: null, employeeJson: null, answersJson: null });
     expect(state.writes.some((w) => w.op === "delete" && w.table === drafts)).toBe(false);
+    expect(state.writes.some((w) => w.op === "delete" && w.table === sections && w.inTx)).toBe(true);
+  });
+
+  it("keeps the extras through the restore window so an Undo keeps comment authors and approvals", async () => {
+    state.body = { id: ID };
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", title: "T", deletedAt: null }]];
+    await DELETE(req);
+    const extrasDeletes = state.writes.filter((w) => w.op === "delete" && w.table === draftExtras);
+    // Only the purge of drafts deleted before the window, outside the
+    // delete's own transaction; this draft's extras are not removed with it.
+    expect(extrasDeletes).toHaveLength(1);
+    expect(extrasDeletes[0].inTx).toBe(false);
   });
 
   it("is idempotent for an already-deleted draft", async () => {

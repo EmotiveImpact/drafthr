@@ -7,7 +7,9 @@
  * - DELETE: soft-delete. The row stays as a scrubbed tombstone (deleted_at)
  *   so the pull can tell other devices to drop the draft, and an upsert of
  *   a tombstoned id is refused with 410 instead of re-creating the letter
- *   (and spending another letter credit).
+ *   (and spending another letter credit). Its collaboration data (comments,
+ *   approvals, timeline) is kept for the restore window only, see
+ *   purgeExpiredTombstoneExtras.
  *
  * Writes are revision-checked: every accepted write bumps drafts.revision and
  * an update must name the revision it was built on. A stale write gets 409
@@ -20,7 +22,7 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, inArray, desc, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, desc, isNull, isNotNull, lt, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -31,7 +33,7 @@ import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { assertCanCreateLetter, type ConsumeTarget } from "../../_utils/entitlements.js";
 import { isValidSectionInput } from "./_section-input.js";
-import { decideDraftWrite } from "./_draft-sync.js";
+import { decideDraftWrite, RESTORE_WINDOW_MS } from "./_draft-sync.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -158,6 +160,8 @@ export async function GET(req: Request): Promise<Response> {
       .where(and(eq(drafts.tenantId, tenantId), isNotNull(drafts.deletedAt)))
       .orderBy(desc(drafts.deletedAt))
       .limit(MAX_DRAFTS);
+
+    await purgeExpiredTombstoneExtras(db, tenantId);
 
     const ids = draftRows.map((d) => d.id);
     const sectionRows = ids.length
@@ -501,7 +505,8 @@ export async function DELETE(req: Request): Promise<Response> {
 
     // Soft delete: keep the row as a tombstone but scrub the letter content,
     // so the PII the user deleted is gone while other devices can still learn
-    // the draft was deleted.
+    // the draft was deleted. The extras row stays until the restore window
+    // has passed (purgeExpiredTombstoneExtras) so an Undo keeps its authors.
     await db.transaction(async (tx) => {
       await tx
         .update(drafts)
@@ -517,8 +522,8 @@ export async function DELETE(req: Request): Promise<Response> {
         })
         .where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
       await tx.delete(sections).where(and(eq(sections.draftId, id), eq(sections.tenantId, tenantId)));
-      await tx.delete(draftExtras).where(and(eq(draftExtras.draftId, id), eq(draftExtras.tenantId, tenantId)));
     });
+    await purgeExpiredTombstoneExtras(db, tenantId);
 
     await safelyAppendAudit({
       tenantId,
@@ -536,6 +541,35 @@ export async function DELETE(req: Request): Promise<Response> {
   } catch (err) {
     console.error("[store/drafts DELETE] failed", err);
     return jsonError("Draft delete failed", 500);
+  }
+}
+
+/**
+ * Delete the collaboration data (comments, approvals, timeline) of this
+ * tenant's drafts deleted longer ago than the restore window. Until then it
+ * is kept so the Undo restores it as it was: re-sent from the client instead,
+ * every teammate's comment would be stamped as the restoring user's, and a
+ * drafter's copy of reviewers' approvals would be refused. There is no
+ * scheduled job, so this runs from the tenant's own pulls and deletes.
+ * Best effort: a failure here must not fail the request.
+ */
+async function purgeExpiredTombstoneExtras(db: Db, tenantId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - RESTORE_WINDOW_MS);
+  try {
+    await db.delete(draftExtras).where(
+      and(
+        eq(draftExtras.tenantId, tenantId),
+        inArray(
+          draftExtras.draftId,
+          db
+            .select({ id: drafts.id })
+            .from(drafts)
+            .where(and(eq(drafts.tenantId, tenantId), lt(drafts.deletedAt, cutoff))),
+        ),
+      ),
+    );
+  } catch (err) {
+    console.warn("[store/drafts] purging deleted drafts' extras failed", err);
   }
 }
 
