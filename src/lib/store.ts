@@ -1907,6 +1907,14 @@ _setDualWriteStoreBridge({
       if (!d) return s;
       return { drafts: { ...s.drafts, [localId]: { ...d, reviewStatus: status } } };
     }),
+  withdrawApproval: (localId, since) =>
+    useDraftStore.setState((s) => {
+      const d = s.drafts[localId];
+      if (!d?.approvals?.length) return s;
+      const approvals = d.approvals.filter((a) => !(a.decision === "approved" && a.createdAt >= since));
+      if (approvals.length === d.approvals.length) return s;
+      return { drafts: { ...s.drafts, [localId]: { ...d, approvals } } };
+    }),
   addConflictCopy: (draft) => {
     const copy = conflictCopyOf(draft);
     useDraftStore.setState((s) => ({ drafts: { ...s.drafts, [copy.id]: copy } }));

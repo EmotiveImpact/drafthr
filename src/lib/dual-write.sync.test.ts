@@ -78,6 +78,12 @@ async function setup(initial: Draft[]) {
     setReviewStatus: (id, status) => {
       drafts[id] = { ...drafts[id], reviewStatus: status };
     },
+    withdrawApproval: (id, since) => {
+      drafts[id] = {
+        ...drafts[id],
+        approvals: (drafts[id].approvals ?? []).filter((a) => !(a.decision === "approved" && a.createdAt >= since)),
+      };
+    },
     addConflictCopy: (d) => {
       const id = `${d.id}_copy`;
       drafts[id] = { ...d, id, localOnly: true, reviewStatus: "draft", title: "(conflicted copy)" };
@@ -182,6 +188,33 @@ describe("revisions", () => {
     expect(resent.baseRevision).toBe(2);
     expect(resent.reviewStatus).toBe("changes_requested");
     expect(resent.sections[0].html).toBe("<p>My edit</p>");
+  });
+
+  it("never carries an approval over to text that changed on another device first", async () => {
+    const base = makeDraft("d1", "<p>Base</p>", { reviewStatus: "in_review" });
+    const fetchMock = vi.fn().mockResolvedValueOnce(ok(1));
+    vi.stubGlobal("fetch", fetchMock);
+    const { mod, drafts, toast } = await setup([base]);
+    await mod.syncDraft("d1");
+
+    // The reviewer approves what this device shows, while the drafter's edit
+    // has already landed on the server (revision 2, still in review).
+    vi.advanceTimersByTime(1_000);
+    drafts.d1 = {
+      ...drafts.d1,
+      reviewStatus: "approved",
+      approvals: [{ id: "apr1", reviewerName: "Rev", decision: "approved", createdAt: Date.now() }],
+    };
+    const theirs = makeDraft("x", "<p>Drafter edit</p>", { reviewStatus: "in_review" });
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ current: remoteOf(theirs, 2) }), { status: 409 }));
+    await mod.syncDraft("d1");
+
+    expect(drafts.d1.sections[0].html).toBe("<p>Drafter edit</p>");
+    expect(drafts.d1.reviewStatus).toBe("in_review");
+    expect(drafts.d1.approvals).toEqual([]);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(postBodies(fetchMock).some((b, i) => i > 1 && b.reviewStatus === "approved")).toBe(false);
   });
 
   it("keeps both versions when both devices changed the letter", async () => {

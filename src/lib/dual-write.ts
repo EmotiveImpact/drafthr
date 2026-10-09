@@ -94,6 +94,8 @@ export type DualWriteStoreBridge = {
   /** Overlay a server version onto the local draft; returns the result. */
   applyServerDraft: (localId: string, remote: RemoteDraft) => Draft | null;
   setReviewStatus: (localId: string, status: ReviewStatus) => void;
+  /** Drop "approved" entries recorded at or after `since` (never synced). */
+  withdrawApproval: (localId: string, since: number) => void;
   /** Add a local-only copy of this draft (a new id); returns the new id. */
   addConflictCopy: (draft: Draft) => string | null;
   /** Keep the draft on this device only (deleted elsewhere, unsynced edits). */
@@ -394,7 +396,9 @@ type ConflictBody = { current?: RemoteDraft | null; locked?: boolean; error?: st
  *   2. only the review status / references moved on the server, our content
  *      is new → take their status and re-send our content on their revision;
  *   3. our content is unchanged since our base → adopt the server copy, then
- *      re-apply our own status change if the server didn't touch the status;
+ *      re-apply our own status change if the server didn't touch the status
+ *      (except an approval: that was a decision about the text this device
+ *      showed, which has since changed);
  *   4. both changed → the server copy takes the original id and our version
  *      is kept as a local-only "conflicted copy".
  */
@@ -429,7 +433,16 @@ function resolveConflict(draftId: string, sent: Draft, body: ConflictBody): void
     const baseStatus = meta.key.split("|")[1] ?? "draft";
     markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
     if (localStatus !== baseStatus && serverStatus === baseStatus && !body.locked) {
-      bridge?.setReviewStatus(draftId, localStatus);
+      if (localStatus === "approved") {
+        // The letter changed on another device before this approval landed.
+        // Carrying it over would approve text the reviewer never saw.
+        bridge?.withdrawApproval(draftId, meta.at);
+        toast.warning("This letter changed before your approval was saved", {
+          description: "The latest version is shown. Review it and approve again if it's still right.",
+        });
+      } else {
+        bridge?.setReviewStatus(draftId, localStatus);
+      }
     }
     clearFailures(draftId);
     return;
