@@ -450,7 +450,7 @@ function renderListItemInlineContent(li: HTMLElement, ctx: RenderContext): strin
     .join("");
 }
 
-const TABLE_PROPS = `<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
+const TABLE_PROPS = `<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:left w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:right w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="CBD5E1"/></w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr>`;
 
 /** One slot of the table grid: the start of a cell, or a row covered by a rowspan from above. */
 type GridSlot =
@@ -593,10 +593,14 @@ function paragraph(runs: string, options: ParagraphOptions = {}): string {
 }
 
 function paragraphProperties(options: ParagraphOptions): string {
+  // Order matters: Word validates <w:pPr> children against the schema
+  // sequence (pStyle, pBdr, spacing, ind, jc).
   const props: string[] = [];
   if (options.styleId) props.push(`<w:pStyle w:val="${options.styleId}"/>`);
-  if (options.alignment && options.alignment !== "left") {
-    props.push(`<w:jc w:val="${options.alignment}"/>`);
+  if (options.borderBottom) {
+    props.push(
+      `<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="CBD5E1"/></w:pBdr>`
+    );
   }
   if (options.spacingAfter !== undefined) {
     props.push(`<w:spacing w:after="${options.spacingAfter}"/>`);
@@ -608,10 +612,8 @@ function paragraphProperties(options: ParagraphOptions): string {
       }/>`
     );
   }
-  if (options.borderBottom) {
-    props.push(
-      `<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="CBD5E1"/></w:pBdr>`
-    );
+  if (options.alignment && options.alignment !== "left") {
+    props.push(`<w:jc w:val="${options.alignment}"/>`);
   }
   return props.length > 0 ? `<w:pPr>${props.join("")}</w:pPr>` : "";
 }
