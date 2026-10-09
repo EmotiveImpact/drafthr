@@ -408,7 +408,8 @@ type ConflictBody = { current?: RemoteDraft | null; locked?: boolean; error?: st
  * A 409: the server moved on since this device's base revision (or the letter
  * is approved and locked). Never drop either side:
  *   1. same letter content on both sides → adopt the server copy (its review
- *      status wins, so an approval is never reverted);
+ *      status wins if it moved, so an approval is never reverted), then
+ *      re-apply our own status change if the server didn't touch the status;
  *   2. only the review status / references moved on the server, our content
  *      is new → take their status and re-send our content on their revision;
  *   3. our content is unchanged since our base → adopt the server copy, then
@@ -436,6 +437,13 @@ function resolveConflict(draftId: string, sent: Draft, body: ConflictBody): void
 
   if (serverContent === localContent) {
     markAdopted(draftId, rev, bridge?.applyServerDraft(draftId, current) ?? live);
+    const baseStatus = meta?.key ? meta.key.split("|")[1] : undefined;
+    if (baseStatus && localStatus !== serverStatus && serverStatus === baseStatus && !body.locked) {
+      // Only this device changed the status, on the same text (so even an
+      // approval still stands): send it again on the server's revision.
+      bridge?.setReviewStatus(draftId, localStatus);
+      enqueueSync(draftId);
+    }
     clearFailures(draftId);
     return;
   }

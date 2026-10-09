@@ -144,6 +144,28 @@ describe("revisions", () => {
     expect(getSyncMeta("d1")?.rev).toBe(7);
   });
 
+  it("keeps its own status change on a 409 when the content matches and the server status didn't move", async () => {
+    const base = makeDraft("d1", "<p>Same</p>");
+    const fetchMock = vi.fn().mockResolvedValueOnce(ok(1));
+    vi.stubGlobal("fetch", fetchMock);
+    const { mod, drafts } = await setup([base]);
+    await mod.syncDraft("d1");
+
+    // Submitted for review here; meanwhile the same text was re-saved
+    // elsewhere, so the revision moved on (now 2) with the status untouched.
+    drafts.d1 = { ...drafts.d1, reviewStatus: "in_review" };
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ current: remoteOf(base, 2) }), { status: 409 }))
+      .mockResolvedValueOnce(ok(3));
+    await mod.syncDraft("d1");
+    expect(drafts.d1.reviewStatus).toBe("in_review");
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    const resent = postBodies(fetchMock)[2];
+    expect(resent.baseRevision).toBe(2);
+    expect(resent.reviewStatus).toBe("in_review");
+  });
+
   it("recognises its own letter when the server returns jsonb objects with their keys reordered", async () => {
     const local = makeDraft("d1", "<p>Same</p>", {
       context: { jurisdiction: "UK", tone: "formal", protectedDeadline: { iso: "2026-01-01", basis: "b" } },
