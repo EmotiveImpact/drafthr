@@ -125,7 +125,8 @@ export async function POST(req: Request): Promise<Response> {
     const model = createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(CRITIQUE_MODEL);
     const { text: critique } = await generateText({
       model,
-      temperature: 0.3,
+      // No temperature: Opus 4.7 and later reject sampling parameters with a
+      // 400, which made every critique fail (and refund).
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       system:
         `${lensDef.system}\n\n` +
