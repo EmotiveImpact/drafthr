@@ -292,6 +292,13 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       body.reviewStatus,
     );
     if (decisionError) return decisionError;
+    // Delete scrubs the stored sections, so a restore has nothing to compare
+    // the incoming text against: an approved letter could be deleted and then
+    // restored with different wording but still marked approved. A restored
+    // approved letter therefore comes back re-opened and needs approving again.
+    if (restoring && existingDraft.reviewStatus === "approved") {
+      body.reviewStatus = "draft";
+    }
     if (!isCreate && !restoring && existingDraft.reviewStatus === "approved" && Array.isArray(body.sections)) {
       const stored = await db
         .select({ sectionId: sections.sectionId, title: sections.title, html: sections.html })

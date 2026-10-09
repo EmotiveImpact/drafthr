@@ -213,6 +213,15 @@ describe("POST /api/store/drafts (tombstones + revisions)", () => {
     expect(update?.set).toMatchObject({ deletedAt: null, revision: 6 });
   });
 
+  it("brings a restored approved letter back re-opened, since its text can't be checked", async () => {
+    state.body = draftBody({ restore: true, reviewStatus: "approved" });
+    state.selects = [[{ id: ID, tenantId: "t1", letterType: "termination", reviewStatus: "approved", revision: 5, deletedAt: new Date() }]];
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+    const update = state.writes.find((w) => w.op === "update" && w.table === drafts);
+    expect(update?.set).toMatchObject({ deletedAt: null, reviewStatus: "draft" });
+  });
+
   it("rejects a stale write with 409 and the current row, leaving the approval alone", async () => {
     state.body = draftBody({ baseRevision: 3, reviewStatus: "in_review" });
     state.selects = [
