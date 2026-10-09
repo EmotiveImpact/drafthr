@@ -14,7 +14,16 @@ import {
   mergeRemoteDrafts,
   pullRemoteExtras,
   mergeRemoteExtras,
+  type SyncMetaAccess,
 } from "@/lib/remote-pull";
+import {
+  clearSyncMeta,
+  draftContentKey,
+  draftSyncKey,
+  getSyncMeta,
+  patchSyncMeta,
+  setSyncMeta,
+} from "@/lib/sync-meta";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
@@ -111,6 +120,21 @@ function EditorFallback() {
   );
 }
 
+// Revision bookkeeping for the cross-device pull (see src/lib/sync-meta.ts).
+const SYNC_META_ACCESS: SyncMetaAccess = {
+  get: getSyncMeta,
+  adopted: (localId, revision, draft) =>
+    setSyncMeta(localId, {
+      rev: revision,
+      key: draftSyncKey(draft),
+      ckey: draftContentKey(draft),
+      ekey: getSyncMeta(localId)?.ekey,
+      at: Date.now(),
+    }),
+  rebased: (localId, revision) => patchSyncMeta(localId, { rev: revision }),
+  clear: clearSyncMeta,
+};
+
 export function App() {
   const location = useLocation();
   const { activeTenant, isLoaded, user } = useAuth();
@@ -145,8 +169,9 @@ export function App() {
   }, []);
 
   // Dual-write backfill — when the flag is on AND the user has an active
-  // tenant, POST every locally-known draft that hasn't synced yet. Runs once
-  // per mount; idempotent for re-runs (already-synced drafts no-op).
+  // tenant, POST every locally-known draft that changed since its last
+  // successful sync. Runs once per mount; unchanged drafts are skipped, so a
+  // reload no longer re-posts the whole workspace.
   useEffect(() => {
     if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
     let cancelled = false;
@@ -178,13 +203,18 @@ export function App() {
       // BEFORE pulling, so a pending-delete row is gone rather than merged.
       await reissuePendingDeletes();
       if (cancelled) return;
-      await pullRemoteDrafts((remote) => {
+      await pullRemoteDrafts((remote, deleted) => {
         if (cancelled) return;
         // Re-read the live store at apply time so a concurrent edit isn't lost.
-        // Skip adoption of rows whose delete is still unconfirmed (BUG-05).
+        // Skip adoption of rows whose delete is still unconfirmed (BUG-05),
+        // and drop drafts deleted on another device (server tombstones).
         const local = useDraftStore.getState().drafts;
         useDraftStore.setState({
-          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones()),
+          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones(), {
+            deleted,
+            syncMeta: SYNC_META_ACCESS,
+            syncKey: draftSyncKey,
+          }),
         });
       });
       if (cancelled) return;

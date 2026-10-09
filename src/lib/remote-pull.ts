@@ -12,24 +12,27 @@
  *     exports, collaborators, per-section versions/pendingChange) is preserved
  *     automatically — including fields added in the future — because we never
  *     enumerate them to drop.
- *   • Newer-wins: if the LOCAL copy has a newer updatedAt than the server, we
- *     keep local untouched (an unsynced local edit is never clobbered).
+ *   • Revision-aware: when this device knows the server revision its copy is
+ *     based on (sync-meta), a local copy with unsynced edits is kept untouched
+ *     and the next push resolves any conflict (409 → keep both). A local copy
+ *     with no unsynced edits takes the newer server version. Without sync
+ *     metadata (older callers, tests) the legacy newer-updatedAt rule applies.
  *   • A draft present only on the server is adopted (created on another device).
  *   • A draft present only locally is kept (created offline / not yet pushed).
  *
  * Gated by the same VITE_DRAFTHR_DUAL_WRITE flag as the write path, so read and
  * write are always consistent and the default (flag off) behaviour is unchanged.
  *
+ *   • Deletes propagate: the server returns tombstones for deleted drafts and
+ *     the merge drops the local copy.
+ *
  * Known limitations (documented, none are data-loss):
- *   • A delete on another device doesn't propagate on pull (the row is simply
- *     absent from the response, and we keep local-only drafts). Deletes still
- *     apply on the device that issued them.
  *   • A pulled draft's matterId is the SERVER matter UUID. Matters are still
  *     push-only (no matters GET yet), so on the pulling device that id won't
  *     resolve to a local matter and the draft↔matter link is hidden in the UI.
  *     The UUID is preserved (every dereference is null-safe) so the link is
  *     restored once a symmetric matters-pull lands; it's never written wrong.
- * Both are later features (delete reconciliation + matters pull).
+ * That is a later feature (matters pull).
  */
 import type {
   Draft,
@@ -43,8 +46,11 @@ import type {
   Section,
   SectionId,
 } from "@/lib/letters/types";
+import type { Comment, CommentTombstone } from "@/lib/letters/types";
 import { toServerUuid } from "@/lib/remote-ids";
 import { uid } from "@/lib/utils";
+import { mergeCommentLists, type SyncedComment } from "@/lib/comments/merge";
+import type { SyncMeta } from "@/lib/sync-meta";
 
 /** One section as returned by GET /api/store/drafts. */
 export type RemoteSection = {
@@ -72,8 +78,34 @@ export type RemoteDraft = {
   answers: Record<string, unknown> | null;
   createdAt: number;
   updatedAt: number;
+  /** Server write revision (absent from servers older than migration 0020). */
+  revision?: number;
   sections: RemoteSection[];
 };
+
+/** A deleted draft as returned by GET /api/store/drafts. */
+export type RemoteTombstone = { id: string; deletedAt: number };
+
+/** Read/write access to sync bookkeeping, injected so the merge stays pure. */
+export type SyncMetaAccess = {
+  get: (localId: string) => SyncMeta | undefined;
+  /** Record that the local copy now matches this server revision. */
+  adopted: (localId: string, revision: number, draft: Draft) => void;
+  /** Record the server revision under a local copy that has its own edits. */
+  rebased: (localId: string, revision: number) => void;
+  clear: (localId: string) => void;
+};
+
+/** Overlay a server version onto a local draft, keeping every local-only
+ *  field (comments, evidence, AI chat, section versions …). */
+export function applyRemoteDraft(existing: Draft, r: RemoteDraft): Draft {
+  return {
+    ...existing,
+    ...syncedFields(r, existing),
+    id: existing.id,
+    createdAt: existing.createdAt,
+  } as Draft;
+}
 
 /** Rebuild the sections array, preserving local section id/required/versions/
  *  pendingChange when a section with the same sectionId already exists.
@@ -173,12 +205,31 @@ export function mergeRemoteDrafts(
    *  the merge adopted the server row, the store subscription re-POSTed it,
    *  and PII the user destroyed re-entrenched itself (BUG-05). */
   tombstonedServerIds: ReadonlySet<string> = new Set(),
+  options: {
+    /** Drafts deleted on the server (by any device). Their local copy is
+     *  dropped, except a local-only conflict copy. */
+    deleted?: RemoteTombstone[];
+    /** Sync bookkeeping. When given, revisions decide newer-vs-older. */
+    syncMeta?: SyncMetaAccess;
+    /** Content key of a local draft (sync-meta draftSyncKey), injected so this
+     *  module doesn't import the hashing helpers. */
+    syncKey?: (d: Draft) => string;
+  } = {},
 ): Record<string, Draft> {
   // Index local drafts by their server-uuid so we can match against remote.
   const localByServerId = new Map<string, Draft>();
   for (const d of Object.values(local)) localByServerId.set(toServerUuid(d.id), d);
 
   const merged: Record<string, Draft> = { ...local };
+  const { syncMeta, syncKey } = options;
+
+  for (const t of options.deleted ?? []) {
+    const existing = localByServerId.get(t.id);
+    if (!existing || existing.localOnly) continue;
+    delete merged[existing.id];
+    localByServerId.delete(t.id);
+    syncMeta?.clear(existing.id);
+  }
 
   for (const r of remote) {
     // A tombstoned row is pending deletion — never adopt it. (If it ALSO
@@ -186,6 +237,26 @@ export function mergeRemoteDrafts(
     // tombstone, so this guard only ever suppresses remote-only ghosts.)
     if (tombstonedServerIds.has(r.id) && !localByServerId.has(r.id)) continue;
     const existing = localByServerId.get(r.id);
+    if (existing && existing.localOnly) continue;
+    if (existing && syncMeta && syncKey && typeof r.revision === "number") {
+      const meta = syncMeta.get(existing.id);
+      const unsynced = !meta || meta.key !== syncKey(existing);
+      if (meta && meta.rev >= r.revision) continue; // server unchanged since our base
+      if (unsynced) {
+        if (!meta && existing.updatedAt >= r.updatedAt) {
+          // First sync after the revision upgrade: the local copy was edited
+          // after the server's, so treat it as built on this revision. Any
+          // real conflict still surfaces as a 409 on the next push.
+          syncMeta.rebased(existing.id, r.revision);
+          continue;
+        }
+        if (meta) continue; // unsynced edits: the next push resolves (409 keeps both)
+      }
+      const next = applyRemoteDraft(existing, r);
+      merged[existing.id] = next;
+      syncMeta.adopted(existing.id, r.revision, next);
+      continue;
+    }
     if (existing) {
       // Keep local on newer-OR-EQUAL timestamp: a strict > would let a
       // same-millisecond server copy clobber an unsynced local edit.
@@ -201,10 +272,12 @@ export function mergeRemoteDrafts(
       } as Draft;
     } else {
       // Remote-only — adopt it under the server UUID as the local id.
-      merged[r.id] = {
+      const adopted = {
         id: r.id,
         ...syncedFields(r, undefined),
       } as Draft;
+      merged[r.id] = adopted;
+      if (syncMeta && typeof r.revision === "number") syncMeta.adopted(r.id, r.revision, adopted);
     }
   }
 
@@ -217,7 +290,7 @@ export function mergeRemoteDrafts(
  * is best-effort and must never break the local-first experience.
  */
 export async function pullRemoteDrafts(
-  applyMerge: (remote: RemoteDraft[]) => void,
+  applyMerge: (remote: RemoteDraft[], deleted: RemoteTombstone[]) => void,
 ): Promise<{ ok: boolean; count: number }> {
   if (!dualWriteEnabled()) return { ok: false, count: 0 };
   try {
@@ -229,9 +302,10 @@ export async function pullRemoteDrafts(
     if (!res.ok) return { ok: false, count: 0 };
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.toLowerCase().includes("application/json")) return { ok: false, count: 0 };
-    const data = (await res.json()) as { drafts?: RemoteDraft[] };
+    const data = (await res.json()) as { drafts?: RemoteDraft[]; deleted?: RemoteTombstone[] };
     const remote = Array.isArray(data.drafts) ? data.drafts : [];
-    applyMerge(remote);
+    const deleted = Array.isArray(data.deleted) ? data.deleted : [];
+    applyMerge(remote, deleted);
     return { ok: true, count: remote.length };
   } catch {
     return { ok: false, count: 0 };
@@ -255,7 +329,8 @@ function dualWriteEnabled(): boolean {
 
 /** The collab subset of a Draft that syncs through /api/store/draft-extras. */
 export type DraftExtras = {
-  comments?: Draft["comments"];
+  /** Live comments plus tombstones (`deleted: true`) of deleted ones. */
+  comments?: SyncedComment[];
   timeline?: Draft["timeline"];
   approvals?: Draft["approvals"];
   outcomeSought?: Draft["outcomeSought"];
@@ -267,7 +342,15 @@ export type RemoteExtras = { id: string; extras: DraftExtras };
  *  nothing to sync (so we don't write empty rows). */
 export function extractExtras(draft: Draft): DraftExtras | null {
   const extras: DraftExtras = {};
-  if (draft.comments?.length) extras.comments = draft.comments;
+  const tombstones: SyncedComment[] = (draft.commentTombstones ?? []).map((t) => ({
+    id: t.id,
+    deleted: true,
+    deletedAt: t.deletedAt,
+    updatedAt: t.deletedAt,
+  }));
+  if (draft.comments?.length || tombstones.length) {
+    extras.comments = [...(draft.comments ?? []), ...tombstones];
+  }
   if (draft.timeline?.length) extras.timeline = draft.timeline;
   if (draft.approvals?.length) extras.approvals = draft.approvals;
   if (draft.outcomeSought) extras.outcomeSought = draft.outcomeSought;
@@ -287,10 +370,31 @@ function unionById<T extends { id: string; createdAt?: number }>(
   return [...map.values()].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
 }
 
+/** Merge local comments (+ tombstones) with a remote comment list per item:
+ *  tombstones win, otherwise the newer updatedAt wins (resolve / reopen). */
+export function mergeCommentsWithRemote(
+  draft: Draft,
+  remote: SyncedComment[] | undefined,
+): { comments: Comment[]; commentTombstones: CommentTombstone[] } {
+  const local: SyncedComment[] = [
+    ...((draft.comments ?? []) as SyncedComment[]),
+    ...(draft.commentTombstones ?? []).map((t) => ({ id: t.id, deleted: true, deletedAt: t.deletedAt, updatedAt: t.deletedAt })),
+  ];
+  const merged = mergeCommentLists(local, remote);
+  const comments: Comment[] = [];
+  const commentTombstones: CommentTombstone[] = [];
+  for (const c of merged) {
+    if (c.deleted) commentTombstones.push({ id: c.id, deletedAt: c.deletedAt ?? c.updatedAt ?? 0 });
+    else comments.push(c as Comment);
+  }
+  return { comments, commentTombstones };
+}
+
 /**
- * Merge server collab-extras into the local draft map. Pure + non-destructive:
- * comments/timeline/approvals union by id (no item lost from either side);
- * outcomeSought fills only when local is empty. Returns a new map.
+ * Merge server collab-extras into the local draft map. Pure: comments merge
+ * per item (tombstones, newer resolve state), timeline and approvals union by
+ * id, outcomeSought fills only when local is empty. A draft whose extras don't
+ * change keeps its object identity, so a pull doesn't trigger a re-sync.
  */
 export function mergeRemoteExtras(
   local: Record<string, Draft>,
@@ -299,20 +403,44 @@ export function mergeRemoteExtras(
   const localByServerId = new Map<string, Draft>();
   for (const d of Object.values(local)) localByServerId.set(toServerUuid(d.id), d);
 
-  const merged: Record<string, Draft> = { ...local };
+  let merged: Record<string, Draft> | null = null;
   for (const r of remote) {
     const existing = localByServerId.get(r.id);
     if (!existing) continue; // extras for a draft we don't have locally — skip
-    const e = r.extras ?? {};
-    merged[existing.id] = {
-      ...existing,
-      comments: unionById(existing.comments, e.comments),
-      timeline: unionById(existing.timeline, e.timeline),
-      approvals: unionById(existing.approvals, e.approvals),
-      outcomeSought: existing.outcomeSought || e.outcomeSought,
-    } as Draft;
+    const next = mergeExtrasIntoDraft(existing, r.extras ?? {});
+    if (next === existing) continue;
+    merged ??= { ...local };
+    merged[existing.id] = next;
   }
-  return merged;
+  return merged ?? local;
+}
+
+/** Apply one draft's remote extras. Returns the same object when nothing changed. */
+export function mergeExtrasIntoDraft(existing: Draft, e: DraftExtras): Draft {
+  const { comments, commentTombstones } = mergeCommentsWithRemote(existing, e.comments);
+  const next = {
+    ...existing,
+    comments,
+    commentTombstones,
+    timeline: unionById(existing.timeline, e.timeline),
+    approvals: unionById(existing.approvals, e.approvals),
+    outcomeSought: existing.outcomeSought || e.outcomeSought,
+  } as Draft;
+  const before = JSON.stringify([
+    existing.comments ?? [],
+    existing.commentTombstones ?? [],
+    existing.timeline ?? [],
+    existing.approvals ?? [],
+    existing.outcomeSought ?? null,
+  ]);
+  const after = JSON.stringify([
+    next.comments ?? [],
+    next.commentTombstones ?? [],
+    next.timeline ?? [],
+    next.approvals ?? [],
+    next.outcomeSought ?? null,
+  ]);
+  return before === after ? existing : next;
 }
 
 /** Fetch the tenant's draft-extras and merge them into the local store.
