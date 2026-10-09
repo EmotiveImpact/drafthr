@@ -7,6 +7,8 @@ import {
   jsonb,
   uuid,
   integer,
+  bigint,
+  primaryKey,
   boolean,
   date,
   index,
@@ -409,6 +411,16 @@ export const approvals = pgTable(
 // row_hash = sha256(prev_hash || ':' || canonicalJson(payload) || ':' || kind ||
 //                   ':' || subject_id || ':' || created_at_epoch_ms)
 // Genesis prev_hash is 64 zeros.
+//
+// seq is the per-tenant position in the chain (1, 2, 3, ...). It is assigned
+// inside the append transaction while the tenant's chain head is held under an
+// advisory lock, and the chain is ordered by seq, never by created_at: two
+// appends in the same millisecond (or from instances with skewed clocks) used
+// to tie on created_at and could fork the chain. The unique (tenant_id, seq)
+// index makes a duplicate position impossible even if the lock were bypassed.
+// Migration 0021 also installs a trigger that rejects UPDATE and DELETE on this
+// table (other than the FK cascade/set-null paths), so the chain is append-only
+// at the database level too.
 export const auditEvents = pgTable(
   "audit_events",
   {
@@ -421,6 +433,7 @@ export const auditEvents = pgTable(
     subjectId: uuid("subject_id").notNull(),
     actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
     payloadJson: jsonb("payload_json").$type<Record<string, unknown>>().notNull(),
+    seq: bigint("seq", { mode: "number" }).notNull(),
     prevHash: text("prev_hash").notNull(),
     rowHash: text("row_hash").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -428,6 +441,7 @@ export const auditEvents = pgTable(
   (t) => [
     index("audit_events_tenant_created_idx").on(t.tenantId, t.createdAt.desc()),
     uniqueIndex("audit_events_tenant_rowhash_uniq").on(t.tenantId, t.rowHash),
+    uniqueIndex("audit_events_tenant_seq_uniq").on(t.tenantId, t.seq),
     check(
       "audit_events_row_hash_hex64",
       sql`char_length(${t.rowHash}) = 64 AND ${t.rowHash} ~ '^[0-9a-f]{64}$'`,
@@ -692,6 +706,23 @@ export const webhookEventsSeen = pgTable("webhook_events_seen", {
   eventId: text("event_id").primaryKey(),
   seenAt: timestamp("seen_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+// Durable rate-limit counters (api/_utils/rate-limit.ts). Fixed windows: one
+// row per (key, window_start), incremented atomically with
+// INSERT ... ON CONFLICT DO UPDATE ... RETURNING so every serverless instance
+// shares the same count. Old windows are pruned opportunistically.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({ columns: [t.key, t.windowStart] }),
+    index("rate_limits_window_start_idx").on(t.windowStart),
+  ],
+);
 
 // --- inferred types ----------------------------------------------------------
 

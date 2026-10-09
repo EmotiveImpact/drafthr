@@ -6,6 +6,14 @@
 // Genesis prev_hash for a tenant is 64 zeros. The whole select-then-insert
 // runs in a single transaction to keep concurrent appends serialised.
 //
+// Ordering: each row carries a per-tenant `seq` (1, 2, 3, ...). The chain head
+// is the row with the highest seq, read while holding a transaction-scoped
+// advisory lock on the tenant, and the new row takes seq + 1. Chaining on the
+// app clock (created_at, to the millisecond) could fork under bursts: two rows
+// in the same millisecond tie, and the uuid tiebreak picks an arbitrary "tail".
+// The unique (tenant_id, seq) index turns any residual race into a hard error
+// instead of a silent fork.
+//
 // AFTER the transaction commits we fire-and-forget the WorkOS Audit Logs
 // sink (`sendToWorkOSAuditLogs`). That sink is a best-effort downstream
 // mirror — the local chain remains the source of truth. We deliberately do
@@ -32,10 +40,22 @@ export type AppendAuditEventInput = {
 
 export type AppendAuditEventResult = {
   id: string;
+  seq: number;
   rowHash: string;
   prevHash: string;
   createdAt: Date;
 };
+
+/** The chain position after `prevSeq` (the current head), or 1 for genesis.
+ *  bigint columns can surface as strings depending on the driver, so coerce. */
+export function nextAuditSeq(prevSeq: number | string | bigint | null | undefined): number {
+  if (prevSeq === null || prevSeq === undefined) return 1;
+  const n = Number(prevSeq);
+  if (!Number.isSafeInteger(n) || n < 0) {
+    throw new Error(`audit chain head has an invalid seq: ${String(prevSeq)}`);
+  }
+  return n + 1;
+}
 
 export function computeRowHash(opts: {
   prevHash: string;
@@ -64,13 +84,14 @@ export async function appendAuditEvent(
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.tenantId}, 0))`);
 
     const [prev] = await tx
-      .select({ rowHash: auditEvents.rowHash })
+      .select({ rowHash: auditEvents.rowHash, seq: auditEvents.seq })
       .from(auditEvents)
       .where(eq(auditEvents.tenantId, input.tenantId))
-      .orderBy(desc(auditEvents.createdAt), desc(auditEvents.id))
+      .orderBy(desc(auditEvents.seq))
       .limit(1);
 
     const prevHash = prev?.rowHash ?? GENESIS_PREV_HASH;
+    const seq = nextAuditSeq(prev?.seq);
     const createdAt = new Date();
     const rowHash = computeRowHash({
       prevHash,
@@ -89,12 +110,14 @@ export async function appendAuditEvent(
         subjectId: input.subjectId,
         actorUserId: input.actorUserId ?? null,
         payloadJson: input.payload,
+        seq,
         prevHash,
         rowHash,
         createdAt,
       })
       .returning({
         id: auditEvents.id,
+        seq: auditEvents.seq,
         rowHash: auditEvents.rowHash,
         prevHash: auditEvents.prevHash,
         createdAt: auditEvents.createdAt,
