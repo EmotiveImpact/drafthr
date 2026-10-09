@@ -7,7 +7,7 @@
  * Per-section audit events are noisy — we chain a single `section.updated`
  * event with a section_id summary instead of one per section.
  */
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -62,7 +62,13 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const db = getDb();
     const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, reviewStatus: drafts.reviewStatus, deletedAt: drafts.deletedAt })
+      .select({
+        id: drafts.id,
+        tenantId: drafts.tenantId,
+        reviewStatus: drafts.reviewStatus,
+        deletedAt: drafts.deletedAt,
+        revision: drafts.revision,
+      })
       .from(drafts)
       .where(eq(drafts.id, draftId))
       .limit(1);
@@ -82,14 +88,25 @@ export async function POST(req: Request): Promise<Response> {
       const locked = rejectEditOfApprovedDraft("approved", "approved", stored, sectionList);
       if (locked) return locked;
     }
-    await db.transaction(async (tx) => {
+    const outcome = await db.transaction(async (tx) => {
       // Any accepted write moves the draft's revision on, so a device holding
       // the previous revision gets a 409 from the drafts upsert instead of
-      // silently overwriting these sections.
-      await tx
+      // silently overwriting these sections. Compare-and-swap on the revision
+      // read above: an approval or delete landing since then would otherwise
+      // be written past (the approved-letter check ran on the older state).
+      const bumped = await tx
         .update(drafts)
         .set({ revision: sql`${drafts.revision} + 1`, updatedAt: new Date() })
-        .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)));
+        .where(
+          and(
+            eq(drafts.id, draftId),
+            eq(drafts.tenantId, tenantId),
+            eq(drafts.revision, draft.revision),
+            isNull(drafts.deletedAt),
+          ),
+        )
+        .returning({ id: drafts.id });
+      if (bumped.length === 0) return "stale" as const;
       // Scope the delete by tenant too (belt-and-braces — draftId is already
       // tenant-verified above, but this keeps the mutation itself tenant-bounded).
       await tx.delete(sections).where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)));
@@ -104,7 +121,9 @@ export async function POST(req: Request): Promise<Response> {
           position: s.position,
         });
       }
+      return "ok" as const;
     });
+    if (outcome === "stale") return jsonError("stale revision", 409);
 
     await safelyAppendAudit({
       tenantId: auth.activeTenant.id,
