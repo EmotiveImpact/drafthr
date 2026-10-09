@@ -67,7 +67,11 @@ export function parseCsvRecords(text: string): { records: string[][]; error?: st
       }
       continue;
     }
-    if (ch === '"') {
+    if (ch === '"' && cell.trim() === "") {
+      // Only a quote that opens a field starts a quoted value. A stray quote
+      // inside an unquoted value (12" monitor) is kept as a character, as
+      // Excel does, instead of swallowing the rest of the file.
+      cell = "";
       inQuotes = true;
       quotedStartRecord = records.length + 1;
     } else if (ch === ",") {
@@ -120,7 +124,10 @@ export function parseCsv(raw: string): CsvParseResult {
     };
   }
 
-  const headers = records[0].cells.map((h) => h.toLowerCase());
+  const columns = records[0].cells.map((h) => h.toLowerCase());
+  // Spreadsheets often export trailing columns with no name; ignore them
+  // rather than reporting them as duplicate '' columns.
+  const headers = columns.filter((h) => h !== "");
   if (!headers.includes("employee_name")) {
     return {
       headers,
@@ -151,8 +158,8 @@ export function parseCsv(raw: string): CsvParseResult {
 
   for (const { cells, fileRow } of records.slice(1)) {
     const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = cells[idx] ?? "";
+    columns.forEach((h, idx) => {
+      if (h) row[h] = cells[idx] ?? "";
     });
     if (!row.employee_name) {
       // fileRow is the record's spreadsheet row (header = row 1), so the user

@@ -35,6 +35,22 @@ describe("parseCsv: RFC 4180 quoted fields", () => {
     expect(r.rows).toEqual([{ employee_name: "Jane", role: "Engineer" }]);
   });
 
+  it("keeps a stray quote inside an unquoted value as a character", () => {
+    const r = parseCsv('employee_name,notes\nJane,Needs a 12" monitor\nMarcus,"ok, thanks"');
+    expect(r.error).toBeUndefined();
+    expect(r.rows).toEqual([
+      { employee_name: "Jane", notes: 'Needs a 12" monitor' },
+      { employee_name: "Marcus", notes: "ok, thanks" },
+    ]);
+  });
+
+  it("ignores unnamed trailing columns that spreadsheets export", () => {
+    const r = parseCsv("employee_name,role,,\nJane,Engineer,,\n");
+    expect(r.error).toBeUndefined();
+    expect(r.headers).toEqual(["employee_name", "role"]);
+    expect(r.rows).toEqual([{ employee_name: "Jane", role: "Engineer" }]);
+  });
+
   it("reports an unterminated quoted field instead of swallowing the file", () => {
     const r = parseCsv('employee_name,notes\nJane,"never closed\nMarcus,x');
     expect(r.error).toMatch(/no closing quote/i);
