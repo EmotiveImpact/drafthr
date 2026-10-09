@@ -138,6 +138,27 @@ describe("revisions", () => {
     expect(getSyncMeta("d1")?.rev).toBe(7);
   });
 
+  it("recognises its own letter when the server returns jsonb objects with their keys reordered", async () => {
+    const local = makeDraft("d1", "<p>Same</p>", {
+      context: { jurisdiction: "UK", tone: "formal", protectedDeadline: { iso: "2026-01-01", basis: "b" } },
+      employee: { legalName: "Jane", jobTitle: "Engineer" },
+    } as unknown as Partial<Draft>);
+    // Postgres jsonb hands objects back in its own key order.
+    const current = remoteOf(local, 3, {
+      context: { tone: "formal", jurisdiction: "UK", protectedDeadline: { basis: "b", iso: "2026-01-01" } },
+      employee: { jobTitle: "Engineer", legalName: "Jane" },
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ current }), { status: 409 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { mod, drafts, toast } = await setup([local]);
+
+    await mod.syncDraft("d1");
+    expect(Object.keys(drafts)).toEqual(["d1"]);
+    expect(toast.warning).not.toHaveBeenCalled();
+    const { getSyncMeta } = await import("./sync-meta");
+    expect(getSyncMeta("d1")?.rev).toBe(3);
+  });
+
   it("re-applies its edits on top when only the review status moved elsewhere, never reverting it", async () => {
     const base = makeDraft("d1", "<p>Base</p>");
     const fetchMock = vi.fn().mockResolvedValueOnce(ok(1));
