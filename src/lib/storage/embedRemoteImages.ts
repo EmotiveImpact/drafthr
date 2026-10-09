@@ -32,31 +32,55 @@ export function isRemoteImageSrc(src: unknown): src is string {
   return typeof src === "string" && /^https?:\/\//i.test(src.trim());
 }
 
+/** Give up on a remote image that has not arrived by then. */
+const FETCH_TIMEOUT_MS = 15_000;
+/** Longest edge when an image is redrawn through a canvas (ample for print). */
+const MAX_REDRAW_EDGE_PX = 2400;
+
+type ImageLoader = (url: string, maxBytes: number, timeoutMs: number) => Promise<string | null>;
+
 /**
  * Fetch a remote image and return it as a data URL, or null when it cannot be
  * embedded (network or CORS failure, non-image, over the size cap). WebP is
  * re-encoded to PNG when the browser can, because Word cannot embed WebP.
+ *
+ * The app's Content-Security-Policy limits fetch() to our own origin
+ * (connect-src) but allows images from any https host (img-src), so in
+ * production the fetch is refused and the image is loaded through an <img>
+ * element and redrawn on a canvas instead. Both need the host to allow CORS.
  */
 export async function fetchImageAsDataUrl(
   url: string,
-  opts: { fetcher?: typeof fetch; maxBytes?: number } = {},
+  opts: { fetcher?: typeof fetch; maxBytes?: number; loadImage?: ImageLoader; timeoutMs?: number } = {},
 ): Promise<string | null> {
   const fetcher = opts.fetcher ?? fetch;
   const maxBytes = opts.maxBytes ?? MAX_PASTED_IMAGE_BYTES;
+  const timeoutMs = opts.timeoutMs ?? FETCH_TIMEOUT_MS;
   if (!isRemoteImageSrc(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
   try {
-    const res = await fetcher(url, {
+    res = await fetcher(url, {
       mode: "cors",
       credentials: "omit",
       referrerPolicy: "no-referrer",
+      signal: controller.signal,
     });
+  } catch {
+    clearTimeout(timer);
+    // Refused by the CSP (or CORS, or the network): try the <img> route.
+    if (controller.signal.aborted) return null;
+    return (opts.loadImage ?? loadImageAsDataUrl)(url, maxBytes, timeoutMs);
+  }
+  try {
     if (!res.ok) return null;
     const mime = (res.headers.get("content-type") ?? "").toLowerCase().split(";")[0].trim();
     if (!EMBEDDABLE_MIME.has(mime)) return null;
     const declared = Number(res.headers.get("content-length"));
     if (Number.isFinite(declared) && declared > maxBytes) return null;
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.byteLength === 0 || bytes.byteLength > maxBytes) return null;
+    const bytes = await readCapped(res, maxBytes);
+    if (!bytes || bytes.byteLength === 0) return null;
     if (mime === "image/webp") {
       const png = await reencodeAsPng(bytes, mime);
       if (png && isSafeImageDataUrl(png)) return png;
@@ -65,7 +89,93 @@ export async function fetchImageAsDataUrl(
     return isSafeImageDataUrl(dataUrl) ? dataUrl : null;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/**
+ * Read a response body, giving up as soon as it passes `maxBytes`. A missing
+ * or false Content-Length must not let a huge body be buffered in full.
+ */
+async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array | null> {
+  if (!res.body) {
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    return bytes.byteLength > maxBytes ? null : bytes;
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      void reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/**
+ * Load an image through an <img> element (allowed by img-src) and redraw it on
+ * a canvas, scaled down to MAX_REDRAW_EDGE_PX. PNG keeps transparency; a
+ * photo too big as PNG is retried as JPEG on white. A host without CORS
+ * fails to load (crossOrigin="anonymous"), so the canvas is never tainted.
+ */
+function loadImageAsDataUrl(url: string, maxBytes: number, timeoutMs: number): Promise<string | null> {
+  if (typeof document === "undefined" || typeof Image === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    const finish = (value: string | null) => {
+      clearTimeout(timer);
+      img.onload = null;
+      img.onerror = null;
+      if (value === null) img.removeAttribute("src");
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    img.onerror = () => finish(null);
+    img.onload = () => {
+      try {
+        const { naturalWidth: w, naturalHeight: h } = img;
+        if (!w || !h) return finish(null);
+        const scale = Math.min(1, MAX_REDRAW_EDGE_PX / Math.max(w, h));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return finish(null);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        let dataUrl = canvas.toDataURL("image/png");
+        if (dataUrlByteLength(dataUrl) > maxBytes) {
+          ctx.globalCompositeOperation = "destination-over";
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          dataUrl = canvas.toDataURL("image/jpeg", 0.88);
+        }
+        finish(dataUrlByteLength(dataUrl) <= maxBytes && isSafeImageDataUrl(dataUrl) ? dataUrl : null);
+      } catch {
+        finish(null);
+      }
+    };
+    img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
+    img.src = url;
+  });
+}
+
+function dataUrlByteLength(dataUrl: string): number {
+  const comma = dataUrl.indexOf(",");
+  return Math.floor(((dataUrl.length - comma - 1) * 3) / 4);
 }
 
 /**
