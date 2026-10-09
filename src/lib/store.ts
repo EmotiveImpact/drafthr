@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   createQuotaSafeStorage,
   estimateLocalStorageBytes,
+  hasQueuedWrites,
   hasUnpersistedWrites,
   setPersistenceSuspended,
 } from "./storage/quota-safe-storage";
@@ -1826,8 +1827,10 @@ if (typeof window !== "undefined") {
         // A throttled write queued before the rehydrate holds this tab's
         // state from BEFORE the other tab's change; flushed as is, it would
         // overwrite that change on disk (and the other tab would then
-        // rehydrate its own edit away). Queue the merged state instead.
-        if (hasUnpersistedWrites()) useDraftStore.setState({});
+        // rehydrate its own edit away). Queue the merged state in its place
+        // (only replacing the queued value: this never writes straight away,
+        // so a workspace swap arriving next can still cancel it).
+        if (hasQueuedWrites()) useDraftStore.setState({});
       });
     }
   });

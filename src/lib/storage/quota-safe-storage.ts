@@ -159,6 +159,11 @@ export function hasUnpersistedWrites(): boolean {
   return pendingWrites.size > 0 || health.full;
 }
 
+/** True while a throttled write is waiting (it will flush on its timer). */
+export function hasQueuedWrites(): boolean {
+  return pendingWrites.size > 0;
+}
+
 if (typeof window !== "undefined") {
   // Don't lose the trailing write of a burst when the tab closes or hides.
   window.addEventListener("pagehide", flushPendingWrites);
