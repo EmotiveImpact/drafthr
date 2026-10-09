@@ -6,7 +6,7 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Pay Dispute / Unauthorised Deductions — EMPLOYEE MODE):
 - Statutory basis: s.13 Employment Rights Act 1996 — an employer must not make any deduction from a worker's wages unless authorised by statute, an express contractual provision, or written consent given before the deduction.
-- Limitation: 3 months less one day from the date of payment of the underpaid wages (s.23 ERA), subject to ACAS Early Conciliation extension. For a series of deductions time runs from the last one (s.23(3)), and a gap of three months or more does not by itself break the series (Chief Constable of the PSNI v Agnew [2023] UKSC 33, departing from Bear Scotland v Fulton on this point); in Great Britain the Deduction from Wages (Limitation) Regulations 2014 cap the look-back at 2 years for claims presented on or after 1 July 2015.
+- Limitation (s.23(2) ERA): 6 months less one day from the date of payment of the underpaid wages where that payment (or the last deduction in a series) was made on or after 1 October 2026 (Employment Rights Act 2025, Sch.12); 3 months less one day where it was made before that date. Both are subject to the ACAS Early Conciliation extension. For a series of deductions time runs from the last one (s.23(3)), and a gap of three months or more does not by itself break the series (Chief Constable of the PSNI v Agnew [2023] UKSC 33, departing from Bear Scotland v Fulton on this point); in Great Britain the Deduction from Wages (Limitation) Regulations 2014 cap the look-back at 2 years for claims presented on or after 1 July 2015.
 - Holiday pay underpayment claims: Working Time Regulations 1998 reg.13 / 13A; or as unauthorised deduction under s.13 ERA.
 - National Minimum Wage Act 1998 / National Living Wage where the dispute concerns the legal floor.
 - Tone: assertive, forensic. Itemise the underpayment with calculation. British English.
@@ -60,7 +60,7 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
 <p>The sums I claim are as follows:</p>
 <ol>
   <li><strong>Sales commission Q1 2026</strong> — period 1 January to 31 March 2026; amount due £18,420 (3% of £614,000 net new business per clause 6.2 of my Employment Contract); amount paid £4,200; shortfall <strong>£14,220</strong>. Calculation: my Q1 closed-won book was £614,000 net new (CRM export attached); commission rate 3%; gross due £18,420.</li>
-  <li><strong>Statutory holiday pay</strong> — period 1 April 2025 to 31 March 2026; 5 days of accrued and untaken statutory holiday under WTR 1998 reg.13, paid out as regular daily rate (£345/day) rather than the statutory average including commission per Bear Scotland v Fulton [2014]; underpayment <strong>£612</strong>.</li>
+  <li><strong>Statutory holiday pay</strong> — period 1 April 2025 to 31 March 2026; 5 days of accrued and untaken statutory holiday under WTR 1998 reg.13, paid out as regular daily rate (£345/day) rather than the statutory average including commission (WTR 1998 reg.16(3ZA); British Gas Trading Ltd v Lock [2016] EWCA Civ 983); underpayment <strong>£612</strong>.</li>
 </ol>
 <p>The total I claim is <strong>£14,832</strong> gross.</p>`,
     },
@@ -74,14 +74,14 @@ export const PAY_DISPUTE_UK: LetterTemplate = {
         "MUST cite the contractual clause(s) by number.",
         "MUST cite s.13 ERA 1996 (and any other relevant statute).",
       ],
-      example: `<p>The basis on which the sums are due is as follows: clause 6.2 of my Employment Contract dated 4 March 2022 (commission entitlement); regulation 13 of the Working Time Regulations 1998 (statutory annual leave) read with Bear Scotland Ltd v Fulton [2014] UKEAT 0047/13/0411 (commission to be reflected in holiday pay). Each shortfall is, in my submission, an unauthorised deduction from wages under section 13 of the Employment Rights Act 1996.</p>`,
+      example: `<p>The basis on which the sums are due is as follows: clause 6.2 of my Employment Contract dated 4 March 2022 (commission entitlement); regulation 13 of the Working Time Regulations 1998 (statutory annual leave) and regulation 16(3ZA), read with British Gas Trading Ltd v Lock [2016] EWCA Civ 983 (commission to be reflected in holiday pay). Each shortfall is, in my submission, an unauthorised deduction from wages under section 13 of the Employment Rights Act 1996.</p>`,
     },
     {
       sectionId: "next_steps",
       title: "Demand for payment within reasonable period",
       instruction:
-        "Demand payment by a reasonable but specific deadline (typically 14 or 21 calendar days from the date of the letter). Refer to the limitation period (3 months less one day per s.23 ERA) and the ACAS EC route as the next procedural step.",
-      scaffold: `<p>I ask that the sum of £{{totalShortfall}} be paid into my nominated account by {{paymentDeadlineUK}}. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act (3 months less one day from the relevant deduction).</p>`,
+        "Demand payment by a reasonable but specific deadline (typically 14 or 21 calendar days from the date of the letter). Refer to the limitation period under s.23 ERA (6 months less one day where the last deduction was on or after 1 October 2026, otherwise 3 months less one day) and the ACAS EC route as the next procedural step.",
+      scaffold: `<p>I ask that the sum of £{{totalShortfall}} be paid into my nominated account by {{paymentDeadlineUK}}. If payment is not received by that date I will, without further notice, notify ACAS under the Early Conciliation procedure with a view to bringing a claim in the Employment Tribunal under section 13 of the Employment Rights Act 1996. I am mindful of the limitation period under section 23 of the Act ({{limitationPeriod}} from the relevant deduction).</p>`,
       constraints: [
         "MUST demand payment by a specific date.",
         "MUST reference ACAS EC and s.23 ERA limitation.",

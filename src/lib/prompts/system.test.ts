@@ -77,5 +77,9 @@ describe("buildSystemPrompt — jurisdiction", () => {
     const prompt = buildSystemPrompt(makeDraft({ jurisdiction: "UK", ukRegion: "Northern Ireland" }));
     expect(prompt).toContain("Employment Rights (Northern Ireland) Order 1996");
     expect(prompt).toContain("Labour Relations Agency");
+    // The block is appended after the template notes, so it must point back
+    // at them (and at the section fences), not "below".
+    expect(prompt).toContain("OVERRIDES ANY GB LAW CITED ELSEWHERE");
+    expect(prompt.indexOf("NORTHERN IRELAND:")).toBeGreaterThan(prompt.indexOf("QUALITY BAR"));
   });
 });

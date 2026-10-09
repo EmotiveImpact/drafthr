@@ -117,8 +117,8 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "Statutory category named",
     description:
-      "Name the s.43B category — criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, environmental damage, or deliberate concealment.",
-    match: { kind: "regex", value: "criminal offence|breach of (?:a )?legal obligation|miscarriage of justice|health and safety|environmental damage|deliberate concealment", flags: "i" },
+      "Name the s.43B category: criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, sexual harassment, environmental damage, or deliberate concealment.",
+    match: { kind: "regex", value: "criminal offence|breach of (?:a )?legal obligation|miscarriage of justice|health and safety|sexual harassment|environmental damage|deliberate concealment", flags: "i" },
     recommendation: "Identify which s.43B category your disclosure falls into.",
   },
   {

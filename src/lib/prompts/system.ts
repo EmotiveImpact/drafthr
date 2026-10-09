@@ -20,8 +20,8 @@ const TONE_GUIDANCE: Record<string, string> = {
  * the templates and fences are written for GB, so an NI letter gets this
  * override telling the model which instruments to use instead.
  */
-const NORTHERN_IRELAND_BLOCK = `NORTHERN IRELAND — OVERRIDES THE GB LAW IN THE NOTES BELOW:
-- Employment law in Northern Ireland is devolved. Do NOT cite the Employment Rights Act 1996, the ACAS Code of Practice, ACAS early conciliation, s.10 Employment Relations Act 1999 or the Employment Rights Act 2025 as if they applied.
+const NORTHERN_IRELAND_BLOCK = `NORTHERN IRELAND: THIS OVERRIDES ANY GB LAW CITED ELSEWHERE IN THESE INSTRUCTIONS (THE LETTER NOTES ABOVE AND EACH SECTION'S LEGAL FENCES):
+- Employment law in Northern Ireland is devolved. Do NOT cite the Employment Rights Act 1996, the ACAS Code of Practice, ACAS early conciliation, s.10 Employment Relations Act 1999 or the Employment Rights Act 2025 (including its six-month tribunal time limit) as if they applied.
 - Use the NI equivalents: the Employment Rights (Northern Ireland) Order 1996; the Labour Relations Agency (LRA) Code of Practice on Disciplinary and Grievance Procedures; early conciliation through the LRA; the right to be accompanied under Article 12 of the Employment Relations (Northern Ireland) Order 1999; claims go to an industrial tribunal (or the Fair Employment Tribunal for religious or political discrimination).
 - The Equality Act 2010 largely does not extend to Northern Ireland. Discrimination protections come from separate NI legislation (for example the Sex Discrimination (NI) Order 1976, the Race Relations (NI) Order 1997, the Disability Discrimination Act 1995 as it applies in NI, and the Fair Employment and Treatment (NI) Order 1998).
 - Where you are unsure whether a GB rule has an NI equivalent, write [TBD: confirm NI position] rather than citing GB law.`;
