@@ -14,7 +14,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer-core";
 import { rateLimit, clientIp } from "../_utils/rate-limit.js";
@@ -23,7 +23,13 @@ import { requireSessionAndTenant } from "../_utils/session-with-tenant.js";
 import { parseTsr, requestTsr } from "../_utils/tsa.js";
 import { appendAuditEvent } from "../../src/db/audit.js";
 import { getDb } from "../../src/db/index.js";
-import { drafts } from "../../src/db/schema.js";
+import { drafts, sections } from "../../src/db/schema.js";
+import {
+  exportedHtmlMatchesStored,
+  sha256Hex,
+  storedDraftSha256,
+  type StoredSection,
+} from "../_utils/export-integrity.js";
 import { inlineImagesForExport } from "../../src/lib/storage/inlineImagesForExport.js";
 import { toServerUuid } from "../../src/lib/remote-ids.js";
 
@@ -122,10 +128,12 @@ export async function POST(req: Request): Promise<Response> {
   const draftId = rawDraftId ? toServerUuid(rawDraftId) : "";
   // The lookup hits Postgres (getDb() throws if DATABASE_URL is unset; the query
   // throws on a Neon outage). Per the "never blocks the PDF" contract, a DB blip
-  // must NOT 500 the export before Chromium runs — swallow any failure to false.
-  const draftExists = draftId
-    ? await draftBelongsToTenant(draftId, tenantId).catch(() => false)
-    : false;
+  // must NOT 500 the export before Chromium runs — swallow any failure to null.
+  // The stored sections are what the audit entry hashes: the HTML in the request
+  // is whatever the browser chose to send, so it is never the recorded content.
+  const storedSections = draftId
+    ? await loadStoredSections(draftId, tenantId).catch(() => null)
+    : null;
 
   const packUrl = process.env.CHROMIUM_PACK_URL ?? DEFAULT_PACK_URL;
 
@@ -186,7 +194,7 @@ export async function POST(req: Request): Promise<Response> {
     // tenant (a bogus/foreign draftId still renders, but writes no audit row
     // pointing at a draft we don't own). The export must not fail if Postgres
     // is down, so we swallow every error and log for backfill.
-    if (draftExists) {
+    if (storedSections) {
       await tryAppendExportAudit(
         req,
         body,
@@ -199,6 +207,7 @@ export async function POST(req: Request): Promise<Response> {
         sha256,
         tsr,
         tsrParsed,
+        storedSections,
       ).catch(() => {});
     }
 
@@ -233,8 +242,19 @@ async function tryAppendExportAudit(
   sha256: string,
   tsr: Buffer | null,
   tsrParsed: ReturnType<typeof parseTsr> | null,
+  storedSections: StoredSection[],
 ): Promise<void> {
   if (!process.env.DATABASE_URL) return;
+
+  // Content integrity: the recorded hash is computed from the draft as stored
+  // for this tenant. The client HTML is only compared against it, and its own
+  // hash is kept separately, labelled as what was rendered.
+  const content = {
+    draftSha256: storedDraftSha256(storedSections),
+    storedSectionCount: storedSections.length,
+    renderedHtmlSha256: sha256Hex(body.html),
+    renderedHtmlMatchesDraft: exportedHtmlMatchesStored(body.html, storedSections),
+  };
 
   // Use the spoof-resistant resolver (proxy-set IP), not the attacker-
   // controllable leftmost XFF — the audit record must hold a trustworthy IP.
@@ -265,6 +285,7 @@ async function tryAppendExportAudit(
         format: "pdf",
         sha256,
         byteLength: pdfBytes.byteLength,
+        ...content,
         ip,
         reviewedBy: auditText(body.reviewedBy, 200),
         reviewedOn: auditText(body.reviewedOn, 40),
@@ -277,19 +298,33 @@ async function tryAppendExportAudit(
   }
 }
 
-async function draftBelongsToTenant(draftId: string, tenantId: string): Promise<boolean> {
+/**
+ * Tenant-scoped load of the stored draft content for the audit entry. Returns
+ * null when the draft is not this tenant's (or no DB is configured), in which
+ * case the export still renders but writes no audit row.
+ */
+async function loadStoredSections(draftId: string, tenantId: string): Promise<StoredSection[] | null> {
   // Mirror tryAppendExportAudit's env-guard: with no DB configured there's
-  // nothing to look up, and getDb() would throw. Fail closed to false so the
-  // export proceeds without an audit row rather than 500ing.
-  if (!process.env.DATABASE_URL) return false;
-  if (!isUuid(draftId)) return false;
+  // nothing to look up, and getDb() would throw.
+  if (!process.env.DATABASE_URL) return null;
+  if (!isUuid(draftId)) return null;
   const db = getDb();
   const [draft] = await db
     .select({ id: drafts.id })
     .from(drafts)
     .where(and(eq(drafts.id, draftId), eq(drafts.tenantId, tenantId)))
     .limit(1);
-  return Boolean(draft);
+  if (!draft) return null;
+  return await db
+    .select({
+      sectionId: sections.sectionId,
+      title: sections.title,
+      html: sections.html,
+      position: sections.position,
+    })
+    .from(sections)
+    .where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)))
+    .orderBy(asc(sections.position));
 }
 
 function parseContentLength(req: Request): number | null {
