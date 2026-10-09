@@ -8,7 +8,12 @@ import {
 
 const { appendAuditEvent, db } = vi.hoisted(() => ({
   appendAuditEvent: vi.fn(async () => {}),
-  db: { draftRows: [] as Array<{ id: string }>, sectionRows: [] as unknown[], calls: [] as string[] },
+  db: {
+    draftRows: [] as Array<{ id: string }>,
+    sectionRows: [] as unknown[],
+    calls: [] as string[],
+    failSections: false,
+  },
 }));
 
 vi.mock("../../../api/_utils/rate-limit.js", () => ({ rateLimit: () => null, clientIp: () => "203.0.113.9" }));
@@ -28,6 +33,7 @@ vi.mock("../../../src/db/index.js", () => ({
         },
         orderBy: async () => {
           db.calls.push(`${table}.orderBy`);
+          if (db.failSections) throw new Error("connection terminated");
           return db.sectionRows;
         },
       }),
@@ -89,6 +95,7 @@ beforeEach(() => {
   db.draftRows = [{ id: DRAFT_UUID }];
   db.sectionRows = SECTIONS;
   db.calls = [];
+  db.failSections = false;
 });
 
 describe("draft.exported audit entry", () => {
@@ -113,6 +120,16 @@ describe("draft.exported audit entry", () => {
     const payload = (appendAuditEvent.mock.calls[0] as unknown as [{ payload: Record<string, unknown> }])[0];
     expect(payload.payload.draftSha256).toBe(storedDraftSha256(SECTIONS));
     expect(payload.payload.renderedHtmlMatchesDraft).toBe(false);
+  });
+
+  it("still returns the PDF when the stored-draft lookup or the audit write fails", async () => {
+    db.failSections = true;
+    expect((await POST(request("<p>Dear Jamie,</p>"))).status).toBe(200);
+    expect(appendAuditEvent).not.toHaveBeenCalled();
+
+    db.failSections = false;
+    appendAuditEvent.mockRejectedValueOnce(new Error("audit insert failed"));
+    expect((await POST(request("<p>Dear Jamie,</p>"))).status).toBe(200);
   });
 
   it("writes no audit row for a draft outside the tenant, but still renders", async () => {
