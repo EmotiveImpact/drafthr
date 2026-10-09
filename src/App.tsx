@@ -5,6 +5,7 @@ import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
 import {
   isDualWriteEnabled,
+  pauseDualWrite,
   persistedDraftTombstones,
   reissuePendingDeletes,
   syncAllPending,
@@ -27,7 +28,14 @@ import {
 import { useAuth } from "@/lib/auth";
 import { StorageQuotaBanner } from "@/components/StorageQuotaBanner";
 import { LocalDataLossDialog } from "@/components/LocalDataLossDialog";
-import { reconcileLocalDataOwner } from "@/lib/session/clearLocalData";
+import {
+  clearTenantScopedLocalData,
+  localNamespace,
+  readLocalOwner,
+  reconcileLocalDataOwner,
+  switchLocalWorkspace,
+} from "@/lib/session/clearLocalData";
+import { confirmLocalDataLoss } from "@/lib/session/localDataGuard";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { RootRedirect } from "@/routes/RootRedirect";
@@ -165,7 +173,22 @@ export function App() {
     if (reconcileLocalDataOwner(user.id, activeTenant.id)) {
       localDataReloadPending = true;
       window.location.reload();
+      return;
     }
+    const ns = localNamespace(user.id, activeTenant.id);
+    const owner = readLocalOwner();
+    if (owner === null || owner === ns) return;
+    // Another workspace's (or user's) data is still live because there was
+    // no room to stash it. Never push or pull it into this workspace; offer
+    // to delete it from this device (with a backup) instead.
+    localDataReloadPending = true;
+    pauseDualWrite();
+    void confirmLocalDataLoss("switch").then((proceed) => {
+      if (!proceed) return;
+      clearTenantScopedLocalData({ keepProfile: true });
+      switchLocalWorkspace(null, ns);
+      window.location.reload();
+    });
   }, [isLoaded, user, activeTenant]);
   // One-shot migration for existing base64 letterhead/signature → Blob URL.
   // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this

@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import type { Draft, Matter, ReviewStatus } from "./letters/types";
 import { serverUuidOrNull, toServerUuid } from "./remote-ids";
 import { extractExtras, type DraftExtras, type RemoteDraft } from "./remote-pull";
+import { isPersistenceSuspended } from "./storage/quota-safe-storage";
 import {
   clearSyncMeta,
   draftContentKey,
@@ -86,6 +87,20 @@ export function _setSleepForTests(fn: (ms: number) => Promise<void>): void {
 
 export function isDualWriteEnabled(): boolean {
   return ENABLED;
+}
+
+let paused = false;
+
+/** Stop pushing for the rest of this page load: the local data in memory
+ *  belongs to another workspace (or user) than the signed-in one. */
+export function pauseDualWrite(): void {
+  paused = true;
+}
+
+/** No pushes while this tab's in-memory data isn't the active workspace's:
+ *  paused above, or persistence suspended mid-switch / after a wipe. */
+function pushesBlocked(): boolean {
+  return paused || isPersistenceSuspended();
 }
 
 /** Store operations dual-write needs to resolve conflicts and remote deletes.
@@ -157,7 +172,7 @@ export function setDualWriteMatterGetter(getter: (matterId: string) => Matter | 
  * Soft-fails: a missing matter or network error just yields null.
  */
 export async function pushMatter(matterId: string): Promise<string | null> {
-  if (!ENABLED) return null;
+  if (!ENABLED || pushesBlocked()) return null;
   // Don't resurrect a matter deleted locally while this push was queued (B7).
   if (deletedMatterIds.has(matterId)) return null;
   const matter = matterSnapshotGetter?.(matterId);
@@ -240,7 +255,7 @@ const matterTimers = new Map<string, ReturnType<typeof setTimeout>>();
  * re-ran pushMatter (bug #16). Collapses rapid edits into one POST.
  */
 export function enqueueMatterSync(matterId: string): void {
-  if (!ENABLED || !matterId) return;
+  if (!ENABLED || !matterId || pushesBlocked()) return;
   const existing = matterTimers.get(matterId);
   if (existing) clearTimeout(existing);
   const t = setTimeout(() => {
@@ -255,7 +270,7 @@ export function enqueueMatterSync(matterId: string): void {
 /** Schedule a debounced sync for one draft. Multiple calls in a short window
  * collapse into a single POST. */
 export function enqueueSync(draftId: string): void {
-  if (!ENABLED) return;
+  if (!ENABLED || pushesBlocked()) return;
   if (!draftId) return;
   const draft = snapshotGetter?.(draftId);
   if (draft?.localOnly) return;
@@ -289,6 +304,7 @@ export async function syncDraft(draftId: string, fallback?: Draft): Promise<void
 }
 
 async function syncDraftNow(draftId: string, fallback?: Draft): Promise<void> {
+  if (pushesBlocked()) return;
   // Don't sync a draft that's been deleted locally — a stale debounced POST
   // would resurrect it server-side (bug #6).
   if (deletedDraftIds.has(draftId)) return;
@@ -496,7 +512,7 @@ function handleRemoteDelete(draftId: string): void {
 export async function syncAllPending(
   getAll: () => Draft[],
 ): Promise<{ ok: number; failed: number }> {
-  if (!ENABLED) return { ok: 0, failed: 0 };
+  if (!ENABLED || pushesBlocked()) return { ok: 0, failed: 0 };
   let ok = 0;
   let failed = 0;
   for (const d of getAll()) {
@@ -538,6 +554,7 @@ export function resetDualWriteTimers(): void {
   failureToastShownFor.clear();
   paymentToastShownFor.clear();
   forbiddenToastShown = false;
+  paused = false;
   try {
     localStorage.removeItem(TOMBSTONE_STORAGE_KEY);
   } catch {
