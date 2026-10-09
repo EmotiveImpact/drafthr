@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize";
@@ -56,28 +57,63 @@ type JsPdfDocument = {
  * to bundle the PDF alongside DOCX + evidence. The auto-download flow
  * is in exportLetterToPdf() below.
  */
-export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
+export async function renderLetterPdfBlob(
+  draft: Draft,
+  attestation?: PdfAttestation,
+): Promise<Blob> {
   const filename = filenameFor(draft);
   const body = letterBodyHtml(draft);
-
-  // 1) Try server-side render
-  if (shouldTryServerPdf()) {
-    try {
-      const res = await fetch("/api/export/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: body, filename, draftId: draft.id }),
-      });
-      if (res.ok) {
-        return await res.blob();
-      }
-    } catch {
-      // Fall through to client-side
-    }
-  }
-
-  // 2) Client-side fallback
+  const server = await tryServerPdf(body, filename, draft.id, attestation);
+  if (server) return server;
   return await clientSidePdfBlob(body, filename);
+}
+
+export type PdfAttestation = { reviewedBy: string; reviewedOn: string };
+
+/** Server responses that mean "don't paper over this with the basic renderer". */
+const NO_FALLBACK_STATUSES: Record<number, string> = {
+  401: "Your session has expired. Sign in again to export.",
+  413: "This letter is too large to export as a PDF (usually a very large pasted image). Make the image smaller and try again.",
+  429: "Too many exports in a short time. Wait a minute and try again.",
+};
+
+/**
+ * Ask the server to render the PDF (real text, audit record, timestamp).
+ * Returns null when the caller should fall back to the in-browser renderer,
+ * and tells the user that happened: the fallback is a picture of the letter
+ * with no selectable text and no audit record, so it must never be silent.
+ * Throws for statuses where falling back would hide a real problem.
+ */
+async function tryServerPdf(
+  body: string,
+  filename: string,
+  draftId: string,
+  attestation?: PdfAttestation,
+): Promise<Blob | null> {
+  if (!shouldTryServerPdf()) return null;
+  try {
+    const res = await fetch("/api/export/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        html: body,
+        filename,
+        draftId,
+        reviewedBy: attestation?.reviewedBy,
+        reviewedOn: attestation?.reviewedOn,
+      }),
+    });
+    if (res.ok) return await res.blob();
+    const blocking = NO_FALLBACK_STATUSES[res.status];
+    if (blocking) throw new Error(blocking);
+  } catch (err) {
+    if (err instanceof Error && Object.values(NO_FALLBACK_STATUSES).includes(err.message)) throw err;
+    // Network error: fall back below.
+  }
+  toast.warning("Exported with the basic PDF renderer", {
+    description: "The server renderer was unavailable, so this PDF is an image of the letter without selectable text or an export record.",
+  });
+  return null;
 }
 
 /**
@@ -149,30 +185,17 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export async function exportLetterToPdf(draft: Draft): Promise<void> {
+export async function exportLetterToPdf(
+  draft: Draft,
+  attestation?: PdfAttestation,
+): Promise<void> {
   const filename = filenameFor(draft);
   const body = letterBodyHtml(draft);
-
-  // 1) Try server-side render
-  if (shouldTryServerPdf()) {
-    try {
-      const res = await fetch("/api/export/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: body, filename, draftId: draft.id }),
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        triggerDownload(blob, filename);
-        return;
-      }
-      // 404 / 500 on prod misconfig: fall through.
-    } catch {
-      // Network error: silently fall back.
-    }
+  const server = await tryServerPdf(body, filename, draft.id, attestation);
+  if (server) {
+    triggerDownload(server, filename);
+    return;
   }
-
-  // 2) Client-side fallback
   await clientSidePdf(body, filename);
 }
 

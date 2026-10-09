@@ -266,8 +266,8 @@ async function tryAppendExportAudit(
         sha256,
         byteLength: pdfBytes.byteLength,
         ip,
-        reviewedBy: body.reviewedBy ?? null,
-        reviewedOn: body.reviewedOn ?? null,
+        reviewedBy: auditText(body.reviewedBy, 200),
+        reviewedOn: auditText(body.reviewedOn, 40),
         tsa,
       },
     });
@@ -319,4 +319,11 @@ function jsonError(error: string, status: number): Response {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+/** A short caller-supplied string for the audit payload, or null. */
+function auditText(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : null;
 }

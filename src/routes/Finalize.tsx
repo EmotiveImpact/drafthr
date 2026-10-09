@@ -140,9 +140,9 @@ export function Finalize() {
     setBusyFormat("pdf");
     try {
       const { renderLetterPdfBlob, filenameFor } = await import("@/lib/export/pdf");
-      const blob = await renderLetterPdfBlob(draft);
-      downloadBlob(blob, filenameFor(draft));
       const att = exportAttestation();
+      const blob = await renderLetterPdfBlob(draft, att);
+      downloadBlob(blob, filenameFor(draft));
       recordExport(draft.id, { format: "pdf", reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
     } catch (err) {
       alert(`PDF export failed: ${err instanceof Error ? err.message : err}`);
@@ -174,10 +174,18 @@ export function Finalize() {
       // Route through the DOM so HTML entities are DECODED, not left as raw
       // "&amp;"/"&lt;" tokens in the .txt (bug #11). innerHTML strips tags AND
       // decodes entities in one step, matching the PDF/DOCX textContent paths.
+      // TipTap's HTML has no whitespace between blocks, so textContent alone
+      // ran paragraphs together ("Dear Jane,We write..."). Break lines at
+      // <br> and paragraph-level blocks first.
       const htmlToPlain = (html: string): string => {
         const el = document.createElement("div");
         el.innerHTML = html ?? "";
-        return (el.textContent ?? "").trim();
+        el.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+        el.querySelectorAll("li").forEach((li) => li.prepend("- "));
+        el.querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, div, tr").forEach((b) =>
+          b.append("\n\n"),
+        );
+        return (el.textContent ?? "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
       };
       // Resolve inline AI suggestions the same way the PDF/DOCX/pack sinks do
       // (mergeAcceptedSuggestionsHtml → sanitizeLetterHtmlForExport) BEFORE
