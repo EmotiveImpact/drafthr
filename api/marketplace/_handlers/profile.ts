@@ -199,6 +199,12 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
   }
 
   const initials = fullName ? initialsOf(fullName) : existing?.initials ?? "??";
+  // Cap the specialty quote at 120 characters, but leave a stored one that
+  // predates the cap alone when it's resubmitted unchanged (the profile form
+  // sends it on every save): truncating it would count as a vetted edit and
+  // pull the profile from the listing over a photo or availability change.
+  const specialtyIn = asStr(body.specialty, existing?.specialty ?? "").trim();
+  const specialty = specialtyIn === existing?.specialty ? existing.specialty : specialtyIn.slice(0, 120);
   const specialties = Array.isArray(body.specialties)
     ? body.specialties.filter((s): s is string => typeof s === "string" && s.length > 0)
     : (existing?.specialties as string[] | undefined) ?? [];
@@ -222,7 +228,7 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     fullName,
     role,
     bio,
-    specialty: (typeof body.specialty === "string" ? body.specialty : existing?.specialty ?? "").trim().slice(0, 120),
+    specialty,
     specialties,
     price: clampInt(body.price ?? existing?.price ?? 150, 0, 5000),
     currency: (["GBP", "USD", "EUR"].includes(body.currency as string)

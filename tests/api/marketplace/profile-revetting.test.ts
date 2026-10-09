@@ -97,6 +97,26 @@ describe("profile re-vetting", () => {
     expect(statusWritten()).toContain("published");
   });
 
+  it("keeps a published profile listed when an older, longer specialty is resubmitted unchanged", async () => {
+    // Saved before the 120-character cap; the profile form resends it on every save.
+    const longSpecialty = "Settlement agreements, TUPE consultations and tribunal-ready grievance outcomes, usually turned round within one working day.";
+    expect(longSpecialty.length).toBeGreaterThan(120);
+    fake.respond(/^select .* from "consultant_profiles"/s, [{ ...existing, specialty: longSpecialty, status: "published" }]);
+    fake.respond(/^update "consultant_profiles"/, [{ ...existing, specialty: longSpecialty, status: "published" }]);
+    nextBody = { specialty: longSpecialty, availability: "booked" };
+    await PATCH({} as Request);
+    expect(statusWritten()).toContain("published");
+    expect(statusWritten()).toContain(longSpecialty);
+  });
+
+  it("caps a changed specialty at 120 characters", async () => {
+    givenProfile("published");
+    nextBody = { specialty: "x".repeat(200) };
+    await PATCH({} as Request);
+    expect(statusWritten()).toContain("x".repeat(120));
+    expect(statusWritten()).toContain("pending_review");
+  });
+
   it("never lifts a suspension through an edit", async () => {
     givenProfile("suspended");
     nextBody = { price: 90 };
