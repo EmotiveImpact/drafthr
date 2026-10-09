@@ -17,6 +17,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import * as Dialog from "@radix-ui/react-dialog";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayModeOf, figureLabelFor } from "@/lib/evidence";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
@@ -235,6 +236,11 @@ export function EvidenceDrawer({
     return draft.sections.find((s) => s.id === id)?.title ?? "";
   }, [editor, draft.sections, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // After an insert the floating dialog closes and focus belongs in the
+  // editor at the new reference, not back on the button that opened it.
+  const focusEditorOnClose = useRef(false);
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+
   const insert = (item: EvidenceItem) => {
     if (!editor) return;
     const mode = displayModeOf(item);
@@ -261,7 +267,10 @@ export function EvidenceDrawer({
     // When floating, the user expects the drawer to dismiss after insert
     // (the canvas is what they want to see next). When pinned, leave it open
     // — they're doing batched insertions and will dismiss themselves.
-    if (!pinned) onOpenChange(false);
+    if (!pinned) {
+      focusEditorOnClose.current = true;
+      onOpenChange(false);
+    }
   };
 
   // ----------------- Shared body (used by both render modes) -----------------
@@ -274,9 +283,16 @@ export function EvidenceDrawer({
         <Paperclip className="size-[18px]" />
       </div>
       <div className="min-w-0 flex-1">
-        <h2 className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
-          Insert evidence
-        </h2>
+        {pinned ? (
+          <h2 className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
+            Insert evidence
+          </h2>
+        ) : (
+          // Dialog.Title gives the floating dialog its accessible name.
+          <Dialog.Title className="text-[15px] font-bold tracking-tight text-[var(--ds-ink)]">
+            Insert evidence
+          </Dialog.Title>
+        )}
         {cursorSectionTitle && (
           <p className="text-[11.5px] text-[var(--ds-muted)] mt-0.5 truncate">
             At cursor in §{cursorSectionTitle}
@@ -297,14 +313,12 @@ export function EvidenceDrawer({
         </button>
       )}
       {!pinned && (
-        <button
-          type="button"
-          onClick={() => onOpenChange(false)}
+        <Dialog.Close
           aria-label="Close evidence drawer"
           className="size-7 rounded-md grid place-items-center text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
         >
           <X className="size-4" />
-        </button>
+        </Dialog.Close>
       )}
     </div>
   );
@@ -543,46 +557,75 @@ export function EvidenceDrawer({
   // slot so we just fill the slot.
   if (pinned) {
     return (
-      <div className="flex flex-col h-full min-h-0 bg-white text-[var(--ds-ink)]">
+      <aside
+        aria-label="Evidence"
+        className="flex flex-col h-full min-h-0 bg-white text-[var(--ds-ink)]"
+      >
         {innerBody}
-      </div>
+      </aside>
     );
   }
 
-  // Floating mode — Framer Motion overlay matching the AI drawer animation.
+  // Floating mode — a modal dialog on the Radix primitive, animated with
+  // Framer Motion like the AI drawer. Radix supplies the accessibility:
+  // role="dialog" + aria-modal, the label from Dialog.Title, focus moved in on
+  // open and trapped while open, Escape and scrim click to close, the rest of
+  // the page hidden from assistive tech, and focus returned to the element
+  // that opened it on close.
   return (
-    <>
-      {/* Scrim — same styling as the AI drawer scrim in Editor.tsx */}
-      <button
-        type="button"
-        className={cn(
-          "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none",
-          open ? "opacity-100" : "opacity-0 pointer-events-none"
-        )}
-        aria-label="Close evidence drawer"
-        aria-hidden={!open || undefined}
-        tabIndex={open ? undefined : -1}
-        onClick={() => onOpenChange(false)}
-      />
-      {/* Overlay — spring constants identical to the AI drawer */}
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
         {open && (
-          <motion.aside
-            key="evidence-drawer-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Insert evidence"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 42, mass: 0.9 }}
-            className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden"
-          >
-            {innerBody}
-          </motion.aside>
+          <Dialog.Portal forceMount>
+            <Dialog.Overlay forceMount asChild>
+              <motion.div
+                key="evidence-drawer-scrim"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-30 bg-black/30"
+              />
+            </Dialog.Overlay>
+            <Dialog.Content
+              forceMount
+              asChild
+              aria-modal="true"
+              aria-describedby={undefined}
+              onOpenAutoFocus={() => {
+                // Remember what opened the dialog. Radix only restores focus
+                // to its own Dialog.Trigger, and this drawer is opened from
+                // several places (toolbar, section header, keyboard shortcut).
+                const active = document.activeElement;
+                returnFocusTo.current =
+                  active instanceof HTMLElement && active !== document.body ? active : null;
+              }}
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                if (focusEditorOnClose.current && editor) {
+                  editor.commands.focus();
+                } else if (returnFocusTo.current?.isConnected) {
+                  returnFocusTo.current.focus();
+                }
+                focusEditorOnClose.current = false;
+                returnFocusTo.current = null;
+              }}
+            >
+              <motion.aside
+                key="evidence-drawer-overlay"
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", stiffness: 340, damping: 42, mass: 0.9 }}
+                className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden focus:outline-none"
+              >
+                {innerBody}
+              </motion.aside>
+            </Dialog.Content>
+          </Dialog.Portal>
         )}
       </AnimatePresence>
-    </>
+    </Dialog.Root>
   );
 }
 
