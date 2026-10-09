@@ -40,6 +40,7 @@ import type {
   SectionId,
 } from "@/lib/letters/types";
 import { todayDateOnly } from "@/lib/date-only";
+import { foldKey } from "./keys";
 import { useProfileStore } from "@/lib/profile";
 
 export type MergeRow = Record<string, string | number | undefined>;
@@ -75,20 +76,6 @@ function escapeHtml(value: string): string {
  * hyphens folded to underscores. Lets the model write {{employee-name}}
  * and still match the CSV column `employee_name`.
  */
-/**
- * Canonical placeholder/column key: lowercase, with `.`/`-` AND camelCase
- * boundaries folded to `_`. This is the single normalisation both sides of the
- * merge agree on — without the camelCase fold, a wizard scalar id like
- * `reviewMeetingDate` (advertised verbatim as a {{placeholder}}) could never
- * match a snake_case CSV column `review_meeting_date` (bug #18).
- */
-function foldKey(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase()
-    .replace(/[.\-]/g, "_");
-}
-
 function normaliseRow(row: MergeRow): Map<string, string> {
   const out = new Map<string, string>();
   for (const [rawKey, rawValue] of Object.entries(row)) {
