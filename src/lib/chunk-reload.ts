@@ -30,6 +30,7 @@ export function isChunkLoadError(err: unknown): boolean {
 type ReloadWindow = {
   location: Pick<Location, "reload">;
   sessionStorage: Pick<Storage, "getItem" | "setItem">;
+  navigator?: Pick<Navigator, "onLine">;
 };
 
 let reloadStarted = false;
@@ -37,11 +38,13 @@ let reloadStarted = false;
 /**
  * Reload the page once to fetch the current build. Returns true when a reload
  * is under way (started now or already started), false when one was tried
- * within the cooldown or sessionStorage is unavailable, in which case the
- * caller shows its error instead of looping.
+ * within the cooldown, sessionStorage is unavailable or the device is
+ * offline (a reload would lose the app entirely), in which case the caller
+ * shows its error instead.
  */
 export function reloadForStaleChunk(win: ReloadWindow = window, now = Date.now()): boolean {
   if (reloadStarted) return true;
+  if (win.navigator?.onLine === false) return false;
   try {
     const last = Number(win.sessionStorage.getItem(RELOAD_KEY)) || 0;
     if (now - last < RELOAD_COOLDOWN_MS) return false;

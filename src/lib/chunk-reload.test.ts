@@ -51,6 +51,12 @@ describe("reloadForStaleChunk", () => {
     expect(reloadForStaleChunk(second, 1_000_000 + 120_000)).toBe(true);
   });
 
+  it("does not reload while offline, where a reload would lose the app", () => {
+    const win = { ...fakeWindow(), navigator: { onLine: false } };
+    expect(reloadForStaleChunk(win)).toBe(false);
+    expect(win.location.reload).not.toHaveBeenCalled();
+  });
+
   it("does not reload when sessionStorage is unavailable", () => {
     const win = fakeWindow();
     win.sessionStorage.getItem = () => {
