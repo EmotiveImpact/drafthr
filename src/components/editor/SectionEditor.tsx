@@ -49,6 +49,7 @@ import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
+import { RemoteImageEmbed } from "@/lib/tiptap/remote-image-embed";
 import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
@@ -164,6 +165,10 @@ export function SectionEditor({
           style: "max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0;",
         },
       }),
+      // Images pasted or dropped from a web page arrive with a remote src,
+      // which the export sanitiser drops. Embed them as data URLs right away
+      // (or leave a visible "[image not embedded]" note when the fetch fails).
+      RemoteImageEmbed,
       // Word-doc-style alignment (left / center / right / justify) on
       // paragraphs + headings. Applied via a data-text-align attribute
       // that the sanitiser already preserves on <p>/<h*>.

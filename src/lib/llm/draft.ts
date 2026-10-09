@@ -5,6 +5,14 @@ import { streamDraft } from "./client";
 import { uid } from "@/lib/utils";
 import { useProfileStore } from "@/lib/profile";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { loadTemplate } from "@/lib/letters/templates";
+
+/** Templates are lazy-loaded; prompts fall back to generic instructions without one. */
+async function ensureTemplate(draft: Draft): Promise<void> {
+  const jurisdiction = draft.context?.jurisdiction;
+  if (!draft.letterType || !jurisdiction) return;
+  await loadTemplate(draft.letterType, jurisdiction).catch(() => undefined);
+}
 
 /** Resolve the user's preferred Qwen model from the persisted profile. */
 function activeModel(): string | undefined {
@@ -36,6 +44,7 @@ export async function generateAllSections(
   signal: AbortSignal,
   callbacks: GenerateCallbacks = {}
 ): Promise<void> {
+  await ensureTemplate(draft);
   const system = buildSystemPrompt(draft);
   const priorTitles: string[] = [];
 
@@ -116,6 +125,7 @@ export async function regenerateSectionAsPending(
   refineInstruction?: string,
   source: "regenerate" | "addClause" | "tighten" = "regenerate"
 ): Promise<void> {
+  await ensureTemplate(draft);
   const system = buildSystemPrompt(draft);
   // Guard the not-found case: findIndex → -1 would make slice(0, -1) return
   // ALL sections except the last (a concurrent delete could remove `section`
@@ -197,6 +207,7 @@ export async function regenerateSection(
    */
   refineInstruction?: string
 ): Promise<void> {
+  await ensureTemplate(draft);
   const system = buildSystemPrompt(draft);
   // Guard the not-found case: findIndex → -1 would make slice(0, -1) return
   // ALL sections except the last (a concurrent delete could remove `section`
