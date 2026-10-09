@@ -20,6 +20,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const createUser = vi.fn();
 const sendVerificationEmail = vi.fn();
 const listUsers = vi.fn();
+const updateUser = vi.fn();
 
 vi.mock("../../_utils/workos.js", () => ({
   getWorkos: () => ({
@@ -27,6 +28,7 @@ vi.mock("../../_utils/workos.js", () => ({
       createUser,
       sendVerificationEmail,
       listUsers,
+      updateUser,
     },
   }),
 }));
@@ -35,6 +37,7 @@ beforeEach(() => {
   createUser.mockReset();
   sendVerificationEmail.mockReset();
   listUsers.mockReset();
+  updateUser.mockReset();
   // Reset the in-process rate-limit bucket between tests.
   vi.resetModules();
 });
@@ -118,6 +121,14 @@ describe("POST /api/auth/sign-up", () => {
     // Background: we DID silently resend so the rightful owner still gets
     // a usable email.
     expect(sendVerificationEmail).toHaveBeenCalledWith({ userId: "user_existing" });
+    // Pre-hijack defence: the unverified account takes the password just
+    // submitted, so whoever registered the email first can't keep a way in.
+    expect(updateUser).toHaveBeenCalledWith({
+      userId: "user_existing",
+      password: "longenough123",
+      firstName: "Ada",
+      lastName: "Lovelace",
+    });
   });
 
   it("does NOT resend to an already-verified user (would look like phishing)", async () => {
@@ -142,6 +153,8 @@ describe("POST /api/auth/sign-up", () => {
 
     expect(res.status).toBe(200);
     expect(sendVerificationEmail).not.toHaveBeenCalled();
+    // A verified account's password is never touched by a sign-up attempt.
+    expect(updateUser).not.toHaveBeenCalled();
   });
 
   it("surfaces a 422 validation error verbatim (password too weak etc)", async () => {
