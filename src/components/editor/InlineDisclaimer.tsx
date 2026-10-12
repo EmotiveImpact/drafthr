@@ -6,9 +6,9 @@ import { ShieldAlert, Info, AlertTriangle, Scale } from "lucide-react";
 type Variant = "danger" | "warn" | "muted";
 
 const VARIANT: Record<Variant, { bg: string; border?: string; iconColor: string; textColor?: string }> = {
-  danger: { bg: "var(--red-2)", border: "var(--red-6)", iconColor: "var(--red-11)", textColor: "var(--red-12)" },
-  warn: { bg: "var(--amber-2)", border: "var(--amber-6)", iconColor: "var(--amber-11)", textColor: "var(--amber-12)" },
-  muted: { bg: "var(--gray-2)", border: "var(--gray-5)", iconColor: "var(--gray-11)", textColor: "var(--gray-12)" },
+  danger: { bg: "var(--ds-red-bg)", iconColor: "var(--ds-red-fg)", textColor: "var(--ds-ink)" },
+  warn: { bg: "var(--ds-amber-bg)", iconColor: "var(--ds-amber-fg)", textColor: "var(--ds-ink)" },
+  muted: { bg: "var(--ds-surface-2)", iconColor: "var(--ds-muted)", textColor: "var(--ds-body)" },
 };
 
 function Banner({
@@ -28,8 +28,8 @@ function Banner({
       p="3"
       style={{
         background: v.bg,
-        border: `1px solid ${v.border}`,
-        borderRadius: "var(--radius-3)",
+        border: v.border ? `1px solid ${v.border}` : "1px solid transparent",
+        borderRadius: "var(--ds-r-m)",
         color: v.textColor,
       }}
     >
@@ -71,7 +71,7 @@ export function InlineDisclaimer({ draft }: { draft: Draft }) {
     return (
       <Banner variant="muted" icon={<Info className="size-4" />}>
         <Text as="p" size="1">
-          Drafted with an AI tool — not legal advice. Free advice:{" "}
+          Drafted with an AI tool. Not legal advice. Free advice:{" "}
           {j === "UK"
             ? "ACAS 0300 123 1100, Citizens Advice, Working Families."
             : "EEOC 1-800-669-4000, NLRB, your state DOL, lawhelp.org."}

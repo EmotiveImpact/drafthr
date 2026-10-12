@@ -36,14 +36,14 @@ import {
 
 const MAX_EMBED_BYTES = 5 * 1024 * 1024;
 
-async function fileToDataUrl(file: File): Promise<string | null> {
+export async function fileToDataUrl(file: File): Promise<string | null> {
   if (!isAllowedEmbeddedImageFile(file)) {
     alert("Please use a PNG, JPEG, WEBP, or GIF image.");
     return null;
   }
   if (file.size > MAX_EMBED_BYTES) {
     alert(
-      `${file.name} is larger than 5 MB. Use the Evidence step instead — that path keeps the original file at full quality.`
+      `${file.name} is larger than 5 MB. Use the Evidence step instead. That path keeps the original file at full quality.`
     );
     return null;
   }
