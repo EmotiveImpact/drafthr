@@ -6,7 +6,7 @@ import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import { BookingDialog } from "@/components/consultants/BookingDialog";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { useAuth } from "@/lib/auth";
-import { PageHeader, type PageTab } from "@/components/ds";
+import { PageHeader } from "@/components/ds";
 import { BTN_OUTLINE } from "@/components/consultants/ui";
 import { useDraftStore } from "@/lib/store";
 import { displayTitleFor } from "@/lib/letters/display";
@@ -212,9 +212,14 @@ export function ConsultantsIndex() {
     // never appear until the user happens to type or toggle a filter.
   }, [query, activeTags, sortKey, ALL_CONSULTANTS]);
 
-  /** Specialty pill tabs pick one specialty at a time; "All" clears it. */
-  function selectTag(tag: string) {
-    setActiveTags(tag === ALL_TAB ? new Set() : new Set([tag]));
+  /** Specialty pills toggle; several can be active at once (AND filter). */
+  function toggleTag(tag: string) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
   }
 
   function clearFilters() {
@@ -248,15 +253,6 @@ export function ConsultantsIndex() {
       .catch(() => setLoadState("error"));
   };
 
-  const activeTab = activeTags.size === 1 ? [...activeTags][0] : ALL_TAB;
-  const tabs: PageTab[] = [
-    { id: ALL_TAB, label: "All", count: ALL_CONSULTANTS.length },
-    ...ALL_TAGS.map((tag) => ({
-      id: tag,
-      label: tag,
-      count: ALL_CONSULTANTS.filter((c) => c.specialties.includes(tag)).length,
-    })),
-  ];
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -268,11 +264,36 @@ export function ConsultantsIndex() {
             crumbs={[{ label: "Marketplace" }]}
             title="Employment-law specialists"
             lede="Get a qualified specialist on your letter. Most reviews come back within 24 hours, at a fraction of what a formal legal instruction costs."
-            tabs={loadState === "ready" && ALL_TAGS.length > 0 ? tabs : undefined}
-            activeTab={activeTab}
-            onTabChange={selectTag}
-            className="mb-6"
+            className="mb-0"
           />
+
+          {/* Specialty filter: 2A pill look, but each pill toggles so several
+           * can be active (an expert must have all of them). "All" clears.
+           * The track wraps instead of running off the edge. */}
+          {loadState === "ready" && ALL_TAGS.length > 0 && (
+            <div
+              role="group"
+              aria-label="Filter by specialty"
+              className="mt-7 flex w-fit max-w-full flex-wrap gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]"
+            >
+              <FilterPill
+                label="All"
+                count={ALL_CONSULTANTS.length}
+                on={activeTags.size === 0}
+                onClick={() => setActiveTags(new Set())}
+              />
+              {ALL_TAGS.map((tag) => (
+                <FilterPill
+                  key={tag}
+                  label={tag}
+                  count={ALL_CONSULTANTS.filter((c) => c.specialties.includes(tag)).length}
+                  on={activeTags.has(tag)}
+                  onClick={() => toggleTag(tag)}
+                />
+              ))}
+            </div>
+          )}
+          <div className="mb-6" />
 
           {draftId && <DraftBanner draftId={draftId} />}
 
@@ -295,8 +316,8 @@ export function ConsultantsIndex() {
                 <span aria-hidden>&nbsp;</span>
               )}
             </p>
-            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-              <div className="relative min-w-0 flex-1 sm:w-[240px] sm:flex-none">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+              <div className="relative min-w-0 basis-full sm:basis-auto sm:w-[240px] sm:flex-none">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-muted)]" />
                 <input
                   type="text"
@@ -336,7 +357,7 @@ export function ConsultantsIndex() {
               </Select>
 
               {(activeTags.size > 0 || query) && (
-                <button type="button" onClick={clearFilters} className={`${BTN_OUTLINE} hidden sm:inline-flex`}>
+                <button type="button" onClick={clearFilters} className={BTN_OUTLINE}>
                   Clear all
                 </button>
               )}
@@ -406,7 +427,37 @@ export function ConsultantsIndex() {
   );
 }
 
-const ALL_TAB = "__all__";
+/** One toggle pill, styled like the 2A PillTabs (raised white when on). */
+function FilterPill({
+  label,
+  count,
+  on,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={
+        "inline-flex h-[30px] items-center gap-[7px] whitespace-nowrap rounded-[7px] px-[13px] text-[13.5px] font-medium transition-colors " +
+        (on
+          ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
+          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]")
+      }
+    >
+      {label}
+      <span className={"ds-mono text-[11.5px] " + (on ? "text-[var(--ds-muted)]" : "text-[var(--ds-faint)]")}>
+        {count}
+      </span>
+    </button>
+  );
+}
 
 /** Opened from a letter's Review or Finalise step: say which letter the
  *  booking will carry, as a 4B-style file chip. */
