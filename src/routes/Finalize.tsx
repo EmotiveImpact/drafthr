@@ -1,18 +1,17 @@
 import { useMemo, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
-  Check,
-  AlertTriangle,
+  ChevronDown,
+  Download,
   FileText,
-  FileDown,
   Package,
   FileType2,
+  Scale,
   Send,
   ShieldCheck,
   ArrowRight,
-  X,
 } from "lucide-react";
 
 import { useDraftStore } from "@/lib/store";
@@ -23,8 +22,13 @@ import { toDateOnly } from "@/lib/date-only";
 import type { Draft } from "@/lib/letters/types";
 import { recipientNameFor } from "@/lib/letters/display";
 import { Button } from "@/components/ui/button";
-import { BrandMark } from "@/components/ds/BrandMark";
-import { Wordmark } from "@/components/ds/Wordmark";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   runHealthChecks,
@@ -32,15 +36,22 @@ import {
   type HealthCheck,
 } from "@/lib/finalize/healthChecks";
 import { ConfettiBurst } from "@/components/finalize/ConfettiBurst";
-import { WizardChrome } from "@/components/editor/WizardChrome";
+import { ScoreRing } from "@/components/finalize/ScoreRing";
+import { DocBar, DOC_BTN, DOC_BTN_PRIMARY } from "@/components/finalize/DocBar";
+import { OutputChip, PaperThumb, PlanCard, PlanStep, PlanSteps, Pill } from "@/components/finalize/Plan";
+import { tintForLetter, tintStyle } from "@/components/templates/tints";
 import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 
 /**
- * Finalise — Option H layout.
+ * Finalise: the last step of the letter, laid out like the 14B workspace.
  *
- * Sidebar: WizardChrome + thumbnail + ship checklist + export 2×2 + sticky Mark-as-sent CTA.
- * Canvas: CounselAttestation (if required) + 3-card consultant marketplace + trust line + skip row.
+ * Document bar (11A): file name, Edit / Review / Finalise, Export menu with
+ * PDF, Word, Plain text and Evidence pack.
+ * Centre: the letter as it will be exported.
+ * Side panel: what you're sending (6B), the "Ready to send" 4B step list
+ * with the health ring and output chips, the counsel sign-off when the
+ * letter type needs it, a 6B Experts card, then the near-black Mark as sent.
  */
 
 const BAND_LABEL: Record<"strong" | "adequate" | "weak", string> = {
@@ -249,115 +260,146 @@ export function Finalize() {
 
   /* -------------------------- Render -------------------------- */
 
+  const exportedFormats = new Set((draft.exports ?? []).map((e) => e.format));
+  const letterTitle = draft.title ?? meta.title;
+  const recipient = recipientNameFor(draft) ?? "HR Officer";
+  const exportBlockedTitle = counselAttested
+    ? undefined
+    : "Add the counsel sign-off before exporting";
+
+  const exportActions: ExportAction[] = [
+    { id: "pdf", label: "PDF", ext: ".pdf", hint: "Print-ready", icon: FileText, iconCls: "text-[var(--ds-red-fg)]", onClick: onExportPdf },
+    { id: "docx", label: "Word", ext: ".docx", hint: "Editable", icon: FileText, iconCls: "text-[var(--ds-blue-fg)]", onClick: onExportDocx },
+    { id: "txt", label: "Plain text", ext: ".txt", hint: "No formatting", icon: FileType2, iconCls: "text-[var(--ds-muted)]", onClick: onExportTxt },
+    { id: "pack", busyId: "zip", label: "Evidence pack", ext: ".zip", hint: "Letter, evidence, summary and audit file", icon: Package, iconCls: "text-[var(--ds-violet-fg)]", onClick: onExportZip },
+  ];
+
+  const blockedReason = !shipBlocked
+    ? null
+    : !counselAttested
+      ? "Add the counsel sign-off to mark this as sent."
+      : "Resolve the blocking checks in Review to mark this as sent.";
+
+  const markAsSentButton = (extra?: string) => (
+    <button
+      type="button"
+      onClick={onMarkAsSent}
+      disabled={shipBlocked}
+      className={cn(
+        "flex items-center justify-center gap-2 bg-[var(--ds-accent)] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]",
+        "disabled:cursor-not-allowed disabled:bg-[var(--ds-chip)] disabled:text-[var(--ds-subtle)]",
+        extra,
+      )}
+    >
+      <Send className="size-3.5" /> Mark as sent
+    </button>
+  );
+
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
       {showConfetti && <ConfettiBurst onDone={() => setShowConfetti(false)} />}
 
-      {/* Branded sticky header */}
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
-        <Link
-          to="/"
-          aria-label="Home"
-          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
+      <DocBar
+        draft={draft}
+        current="finalize"
+        title={letterTitle}
+        label="Finalise"
+        actions={
+          <>
+            <button
+              type="button"
+              className={DOC_BTN}
+              onClick={() => nav(`/editor/${draft.id}/review`)}
+              aria-label="Back to review"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span className="hidden sm:inline">Review</span>
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className={DOC_BTN_PRIMARY} aria-label="Export">
+                  <Download className="size-3.5" />
+                  <span className="hidden sm:inline">Export</span>
+                  <ChevronDown className="size-3.5 opacity-70" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-[260px]">
+                <DropdownMenuLabel className="text-[12px] font-normal text-[var(--ds-muted)]">
+                  {counselAttested ? "Download this letter as" : "Add the counsel sign-off to export"}
+                </DropdownMenuLabel>
+                {exportActions.map((a) => (
+                  <DropdownMenuItem
+                    key={a.id}
+                    disabled={!counselAttested || busyFormat !== null}
+                    onSelect={() => void a.onClick()}
+                    className="gap-2.5 py-2"
+                  >
+                    <a.icon className={cn("size-4", a.iconCls)} />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="text-[13px] text-[var(--ds-ink)]">{a.label}</span>
+                      <span className="truncate text-[11.5px] text-[var(--ds-muted)]">{a.hint}</span>
+                    </span>
+                    <span className="ds-mono ml-auto text-[11px] text-[var(--ds-faint)]">{a.ext}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
+
+      {/* Letter in the centre, the Finalise step in the side panel (14B).
+       * Below lg the page scrolls as one column: the step first, then the
+       * letter, with Mark as sent pinned to the viewport foot. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 content-start overflow-y-auto lg:content-stretch lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden">
+        <main className="order-2 border-t lg:min-h-0 border-[var(--ds-line)] lg:order-none lg:overflow-y-auto lg:border-t-0">
+          <div className="mx-auto max-w-[760px] px-3 pb-28 pt-6 sm:px-6 sm:pt-8 lg:pb-12">
+            <LetterPage draft={draft} />
+          </div>
+        </main>
+
+        <aside
+          aria-label="Finalise"
+          className="order-1 flex flex-col bg-[var(--ds-surface)] lg:order-none lg:min-h-0 lg:border-l lg:border-[var(--ds-line)]"
         >
-          <BrandMark size={36} />
-          <Wordmark size={16} className="hidden sm:inline" />
-        </Link>
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">Finalise</span>
-        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">
-          · {draft.title ?? meta.title}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => nav(`/editor/${draft.id}/review`)}
-          >
-            <ArrowLeft className="size-3.5 mr-1.5" />
-            Review
-          </Button>
-        </div>
-      </header>
-
-      {/* 2-column layout: 300px sidebar + scrollable body */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
-
-        {/* ── Sidebar ── */}
-        <aside className="hidden min-h-0 border-r border-[var(--ds-line)] bg-[var(--ds-surface)] lg:flex lg:flex-col">
-          <WizardChrome draftId={draft.id} mode={draft.mode} current="finalize" />
-
-          <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3 min-h-0">
-            {/* What you're sending */}
-            <SectionLabel>What you're sending</SectionLabel>
-            <ThumbnailBlock draft={draft} />
-
-            {/* Ready to ship checklist */}
-            <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
-              Ready to ship
-            </SectionLabel>
-            <ShipChecklist
+          <div className="flex-1 space-y-3.5 p-3 sm:p-4 lg:overflow-y-auto">
+            <SendingCard
               draft={draft}
-              counselAttested={counselAttested}
-              onFixClick={() => nav(`/editor/${draft.id}/review`)}
+              letterTitle={letterTitle}
+              draftedBy={draftedBy}
+              recipient={recipient}
             />
 
-            {/* Export 2×2 grid */}
-            <SectionLabel>Export</SectionLabel>
-            <div className="grid grid-cols-2 gap-1.5">
-              <FormatTile
-                compact
-                title="PDF"
-                desc="Print-ready"
-                primary
-                busy={busyFormat === "pdf"}
-                onClick={onExportPdf}
-                disabled={!counselAttested}
-                icon={<FileText className="size-3.5" />}
+            <PlanCard
+              title="Ready to send"
+              sub={`Letter health ${BAND_LABEL[scoreData.band].toLowerCase()}, ${scoreData.score} of 100`}
+              headerAside={<ScoreRing score={scoreData.score} band={scoreData.band} size={40} />}
+            >
+              <ShipChecklist
+                draft={draft}
+                counselAttested={counselAttested}
+                counselRequired={counselGateRequired}
+                onFixClick={() => nav(`/editor/${draft.id}/review`)}
               />
-              <FormatTile
-                compact
-                title="DOCX"
-                desc="Editable"
-                busy={busyFormat === "docx"}
-                onClick={onExportDocx}
-                disabled={!counselAttested}
-                icon={<FileText className="size-3.5" />}
-              />
-              <FormatTile
-                compact
-                title="TXT"
-                desc="Plain"
-                busy={busyFormat === "txt"}
-                onClick={onExportTxt}
-                disabled={!counselAttested}
-                icon={<FileType2 className="size-3.5" />}
-              />
-              <FormatTile
-                compact
-                title="ZIP"
-                desc="Pack"
-                busy={busyFormat === "zip"}
-                onClick={onExportZip}
-                disabled={!counselAttested}
-                icon={<Package className="size-3.5" />}
-              />
-            </div>
-          </div>
 
-          {/* Sticky Mark-as-sent CTA */}
-          <button
-            type="button"
-            onClick={onMarkAsSent}
-            disabled={shipBlocked}
-            className="shrink-0 bg-[var(--ds-ink)] text-white text-[13px] font-bold py-3 flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed transition"
-          >
-            <Send className="size-3.5" /> Mark as sent
-          </button>
-        </aside>
-
-        {/* ── Canvas / Body ── */}
-        <main className="min-h-0 overflow-y-auto">
-          <div className="mx-auto max-w-[1000px] px-4 py-7 sm:px-6 sm:py-10 pb-24 lg:pb-10">
+              <div className="mt-1 border-t border-[var(--ds-line)] pt-3">
+                <div className="mb-2 text-[12px] text-[var(--ds-muted)]">Outputs</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {exportActions.map((a) => (
+                    <OutputChip
+                      key={a.id}
+                      icon={<a.icon className={cn("size-3.5", a.iconCls)} />}
+                      name={a.label}
+                      busy={busyFormat === (a.busyId ?? a.id)}
+                      disabled={!counselAttested || (busyFormat !== null && busyFormat !== (a.busyId ?? a.id))}
+                      done={exportedFormats.has(a.id as never)}
+                      title={exportBlockedTitle ?? `Download ${a.label}${a.id === "pack" ? "" : ` (${a.ext})`}`}
+                      onClick={() => void a.onClick()}
+                    />
+                  ))}
+                </div>
+              </div>
+            </PlanCard>
 
             {/* Counsel attestation gate — only for high-risk letters */}
             {counselGateRequired && (
@@ -387,103 +429,40 @@ export function Finalize() {
               />
             )}
 
-            {/* Document hero + honest specialist-review CTA. No fabricated
-             * stats, testimonials, or seed cards — the real marketplace
-             * (/consultants) owns listing, loading, and empty states. */}
-            <DocumentHero
-              letterTitle={draft.title ?? meta.title}
-              draftedBy={draftedBy}
-              recipient={recipientNameFor(draft) ?? "HR Officer"}
-              onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)}
-            />
+            {/* Honest specialist-review offer. No fabricated stats,
+             * testimonials or seed cards: the real marketplace
+             * (/consultants) owns listing, loading and empty states. */}
+            <ExpertsCard onSeeSpecialists={() => nav(`/consultants?draft=${draft.id}`)} />
 
-            {/* Skip row */}
-            <div className="mt-3 text-center text-[11.5px] text-[var(--ds-muted)] p-3 border border-dashed border-[var(--ds-line)] rounded-lg">
-              Or skip —{" "}
+            <p className="m-0 px-1 pb-1 text-center text-[12px] text-[var(--ds-muted)]">
+              Or skip,{" "}
               <button
                 type="button"
                 onClick={onMarkAsSent}
                 disabled={!readyToShip}
-                className="text-[var(--ds-ink)] font-semibold underline disabled:no-underline disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed"
+                className="font-medium text-[var(--ds-ink)] underline underline-offset-2 disabled:cursor-not-allowed disabled:text-[var(--ds-subtle)] disabled:no-underline"
               >
                 mark as sent
               </button>{" "}
               without a second opinion
-            </div>
-
-            {/* MOBILE-ONLY ship surface — the desktop sidebar (checklist +
-             * export + Mark-as-sent) is hidden below lg, so mirror those
-             * essentials here so mobile users can actually ship. The viewport-
-             * fixed Mark-as-sent button outside the main element handles
-             * thumb-reach for the primary action. */}
-            <div className="lg:hidden mt-8 pt-6 border-t border-[var(--ds-line)] flex flex-col gap-3">
-              <SectionLabel right={`${scoreData.score} · ${BAND_LABEL[scoreData.band]}`}>
-                Ready to ship
-              </SectionLabel>
-              <ShipChecklist
-                draft={draft}
-                counselAttested={counselAttested}
-                onFixClick={() => nav(`/editor/${draft.id}/review`)}
-              />
-
-              <SectionLabel>Export</SectionLabel>
-              <div className="grid grid-cols-2 gap-2">
-                <FormatTile
-                  compact
-                  title="PDF"
-                  desc="Print-ready"
-                  primary
-                  busy={busyFormat === "pdf"}
-                  onClick={onExportPdf}
-                  disabled={!counselAttested}
-                  icon={<FileText className="size-3.5" />}
-                />
-                <FormatTile
-                  compact
-                  title="DOCX"
-                  desc="Editable"
-                  busy={busyFormat === "docx"}
-                  onClick={onExportDocx}
-                  disabled={!counselAttested}
-                  icon={<FileText className="size-3.5" />}
-                />
-                <FormatTile
-                  compact
-                  title="TXT"
-                  desc="Plain"
-                  busy={busyFormat === "txt"}
-                  onClick={onExportTxt}
-                  disabled={!counselAttested}
-                  icon={<FileType2 className="size-3.5" />}
-                />
-                <FormatTile
-                  compact
-                  title="ZIP"
-                  desc="Pack"
-                  busy={busyFormat === "zip"}
-                  onClick={onExportZip}
-                  disabled={!counselAttested}
-                  icon={<Package className="size-3.5" />}
-                />
-              </div>
-            </div>
-
+            </p>
           </div>
-        </main>
+
+          {/* Desktop: Mark as sent sits at the foot of the side panel. */}
+          <div className="hidden shrink-0 border-t border-[var(--ds-line)] p-3 sm:p-4 lg:block">
+            {blockedReason && (
+              <p className="m-0 mb-2 text-center text-[12px] text-[var(--ds-muted)]">{blockedReason}</p>
+            )}
+            {markAsSentButton("h-10 w-full rounded-[var(--ds-r-s)] text-[13.5px]")}
+          </div>
+        </aside>
       </div>
 
-      {/* Mobile-only viewport-fixed Mark-as-sent CTA. The desktop equivalent
-       * lives inside the sidebar at the bottom of the left column. Below lg
-       * the sidebar is hidden, so we anchor the primary ship action to the
-       * viewport bottom — always reachable without scrolling. */}
-      <button
-        type="button"
-        onClick={onMarkAsSent}
-        disabled={shipBlocked}
-        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--ds-ink)] text-white text-[14px] font-bold py-3.5 flex items-center justify-center gap-2 hover:opacity-90 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] disabled:cursor-not-allowed shadow-[0_-4px_12px_rgba(0,0,0,0.10)] transition"
-      >
-        <Send className="size-4" /> Mark as sent
-      </button>
+      {/* Phones: Mark as sent pinned to the viewport foot, always within
+       * thumb reach without scrolling. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--ds-line)] bg-[var(--ds-surface)] p-3 shadow-[var(--ds-shadow-m)] lg:hidden">
+        {markAsSentButton("h-11 w-full rounded-[var(--ds-r-m)] text-[14px]")}
+      </div>
     </div>
   );
 }
@@ -492,187 +471,138 @@ export function Finalize() {
  * Subcomponents
  * ==========================================================================*/
 
-/**
- * Document hero + social-proof upsell.
- *
- * Three vertically stacked sections inside one bordered card:
- *   1. Letter title (Playfair display serif) + "drafted by X · ready for Y"
- *      subtitle, with a Fluent Emoji 3D page icon on the left.
- *   2. Violet-tinted social-proof block: avatar stack (4 recent bookers) +
- *      "412 people had a specialist review..." sentence + "See specialists ↓"
- *      CTA that smooth-scrolls to the consultant grid below.
- *   3. Italic testimonial quote with the customer's name + resolution date.
- *
- * The 412 number and testimonial are placeholder copy — wire to a real
- * bookings API + permissioned customer testimonials before promoting this
- * to production marketing channels.
- *
- * Icons use Microsoft Fluent Emoji 3D (open source, CDN-hosted) so the
- * page/paperclip/etc render identically across macOS, Windows, Linux,
- * iOS, and Android — instead of falling back to the platform emoji font.
- */
-function DocumentHero({
+type ExportAction = {
+  id: "pdf" | "docx" | "txt" | "pack";
+  /** busyFormat key when it differs from the export record's format. */
+  busyId?: string;
+  label: string;
+  ext: string;
+  hint: string;
+  icon: typeof FileText;
+  iconCls: string;
+  onClick: () => void | Promise<void>;
+};
+
+/** The letter itself, as it will be exported, on a white A4-ish page. */
+function LetterPage({ draft }: { draft: Draft }) {
+  const html = useMemo(
+    () =>
+      draft.sections
+        .map((s) =>
+          sanitizeLetterHtmlForExport(mergeAcceptedSuggestionsHtml(s.html ?? "", { forExport: true })),
+        )
+        .filter((h) => h.replace(/<[^>]+>/g, "").trim().length > 0)
+        .join(""),
+    [draft.sections],
+  );
+  return (
+    <article
+      aria-label="Letter preview"
+      className="rounded-[3px] bg-[var(--ds-surface)] px-6 py-8 shadow-[var(--ds-shadow-m)] ring-1 ring-[var(--ds-line)] sm:px-[68px] sm:py-16"
+    >
+      {html ? (
+        <div className="final-letter" dangerouslySetInnerHTML={{ __html: html }} />
+      ) : (
+        <p className="m-0 text-[13px] text-[var(--ds-muted)]">
+          This letter has no content yet. Go back to Edit to write it.
+        </p>
+      )}
+      <style>{finalLetterStyles}</style>
+    </article>
+  );
+}
+
+const finalLetterStyles = `
+.final-letter { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.62; color: var(--ds-ink); overflow-wrap: anywhere; }
+.final-letter p { margin: 0 0 0.9em; }
+.final-letter h1, .final-letter h2, .final-letter h3 { font-weight: 600; line-height: 1.3; margin: 1.3em 0 0.5em; }
+.final-letter h1 { font-size: 1.25rem; } .final-letter h2 { font-size: 1.12rem; } .final-letter h3 { font-size: 1rem; }
+.final-letter ul, .final-letter ol { margin: 0 0 0.9em 1.3em; padding: 0; }
+.final-letter li { margin: 0 0 0.3em; }
+.final-letter table { width: 100%; border-collapse: collapse; margin: 0.75em 0; font-size: 0.95em; }
+.final-letter th, .final-letter td { border: 1px solid var(--ds-line); padding: 6px 10px; text-align: left; }
+.final-letter img { max-width: 100%; height: auto; }
+.final-letter a { color: inherit; }
+`;
+
+/** 6B "What you're sending" card: tinted page thumbnail plus the facts. */
+function SendingCard({
+  draft,
   letterTitle,
   draftedBy,
   recipient,
-  onSeeSpecialists,
 }: {
+  draft: Draft;
   letterTitle: string;
   draftedBy: string;
   recipient: string;
-  onSeeSpecialists: () => void;
 }) {
+  const evidenceCount = draft.evidence?.length ?? 0;
+  const jurisdiction = draft.context?.jurisdiction ?? "UK";
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-      className="mt-2 rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6 flex flex-col gap-3"
-      aria-labelledby="finalise-hero-title"
+    <section
+      aria-label="What you're sending"
+      className="group/card flex items-stretch gap-3 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5"
     >
-      {/* Title row.
-       *
-       * The page icon is the raw Unicode `📄` (Page Facing Up) character. On
-       * macOS/iOS it renders as Apple Color Emoji — the warm white document
-       * with horizontal lines that the design mockup used. Windows users
-       * see Segoe UI Emoji; Android users see Noto Color Emoji. We accept
-       * the platform drift in exchange for the warmth Apple's emoji has
-       * (Microsoft Fluent Emoji 3D was tried and rejected — it renders as
-       * a purple Microsoft-house-style document that doesn't match the
-       * mockup's softness). */}
-      <div className="flex items-start gap-3">
-        <div
-          aria-hidden
-          className="text-[36px] leading-none shrink-0 select-none"
-          style={{ fontFamily: 'apple color emoji, "segoe ui emoji", "noto color emoji", emoji, system-ui, sans-serif' }}
-        >
-          📄
+      <PaperThumb tint={tintForLetter(draft.letterType)} height={92} scale={0.62} className="w-[92px] shrink-0" />
+      <div className="flex min-w-0 flex-1 flex-col justify-center py-1 pr-2">
+        <div className="text-[11.5px] text-[var(--ds-muted)]">What you're sending</div>
+        <div className="truncate text-[14px] font-medium text-[var(--ds-ink)]">{letterTitle}</div>
+        <div className="mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+          {jurisdiction}, drafted by {draftedBy}, for {recipient}
         </div>
-        <div className="flex-1 min-w-0">
-          <h2
-            id="finalise-hero-title"
-            className="m-0 font-display text-[22px] sm:text-[24px] font-semibold tracking-[-.005em] leading-[1.15] text-[var(--ds-ink)]"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            {letterTitle}
-          </h2>
-          <p className="text-[12.5px] text-[var(--ds-muted)] mt-1 m-0">
-            UK · drafted by {draftedBy} · ready for {recipient}
-          </p>
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          <Pill>2 pages, A4</Pill>
+          <Pill>
+            {evidenceCount > 0 ? `${evidenceCount} evidence file${evidenceCount === 1 ? "" : "s"}` : "No evidence"}
+          </Pill>
         </div>
       </div>
+    </section>
+  );
+}
 
-      {/* Optional specialist review — an honest CTA into the real marketplace.
-       * No fabricated stats or testimonials; pricing/availability live on the
-       * specialists' actual profiles. */}
-      <div className="mt-1 rounded-xl border border-[var(--ds-violet-bd,#ddd6fe)] bg-gradient-to-br from-[var(--ds-violet-bg,#f5f3ff)] to-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-        <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-[var(--ds-body)]">
-          <strong className="text-[var(--ds-ink)] font-semibold">
-            Want a second opinion before you send?
-          </strong>{" "}
-          Book a qualified employment-law specialist to review this letter — most
-          reviews come back within 24 hours.
-        </div>
-
-        <button
-          type="button"
-          onClick={onSeeSpecialists}
-          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-4 rounded-lg bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 transition whitespace-nowrap"
-        >
+/** 6B Experts card: a second opinion before sending. */
+function ExpertsCard({ onSeeSpecialists }: { onSeeSpecialists: () => void }) {
+  return (
+    <section
+      aria-labelledby="finalise-experts-title"
+      style={tintStyle("lavender")}
+      className="overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)]"
+    >
+      <div className="mx-1.5 mt-1.5 flex h-[68px] items-center gap-3 rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--tint)] px-4 text-[var(--tint-ink)]">
+        <span className="grid size-9 place-items-center rounded-full bg-[var(--ds-surface)] shadow-[var(--ds-shadow-s)]">
+          <Scale className="size-4" strokeWidth={1.75} />
+        </span>
+        <span className="text-[12.5px] font-medium">Employment law specialists</span>
+      </div>
+      <div className="px-4 pb-4 pt-3">
+        <h3 id="finalise-experts-title" className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">
+          Want a second opinion before you send?
+        </h3>
+        <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+          Book a qualified employment law specialist to review this letter. Most reviews come back
+          within 24 hours.
+        </p>
+        <button type="button" onClick={onSeeSpecialists} className={cn(DOC_BTN, "mt-3")}>
           See specialists
           <ArrowRight className="size-3.5" />
         </button>
       </div>
-    </motion.section>
+    </section>
   );
 }
 
-/** Tiny uppercase section label with optional right-aligned secondary text. */
-function SectionLabel({
-  children,
-  right,
-}: {
-  children: React.ReactNode;
-  right?: string;
-}) {
-  return (
-    <div className="text-[10px] font-bold uppercase tracking-[.08em] text-[var(--ds-muted)] mt-1 select-none">
-      {children}
-      {right && (
-        <span className="float-right text-[var(--ds-subtle,var(--ds-muted))] font-medium normal-case tracking-normal">
-          {right}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** Mini letter thumbnail + meta rows (pages, recipient, evidence). */
-function ThumbnailBlock({ draft }: { draft: Draft }) {
-  const recipient = recipientNameFor(draft) ?? "HR Officer";
-  const evidenceCount = draft.evidence?.length ?? 0;
-
-  // Pull first section text for the mini paper preview
-  const firstSectionText = (draft.sections[0]?.html ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 260);
-
-  return (
-    <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-lg p-2.5 flex items-start gap-2.5">
-      {/* Mini paper */}
-      <div
-        className="shrink-0 w-14 h-20 bg-white border border-[var(--ds-line)] rounded-sm shadow-sm overflow-hidden p-1.5"
-        style={{ fontFamily: '"Source Serif 4", Georgia, serif' }}
-        aria-hidden="true"
-      >
-        <p
-          className="text-[var(--ds-muted)] leading-tight"
-          style={{ fontSize: "3.5px", lineHeight: 1.3 }}
-        >
-          {firstSectionText || "Dear HR,\n\nI formally request…"}
-        </p>
-      </div>
-
-      {/* Meta rows */}
-      <div className="flex-1 min-w-0">
-        <div className="text-[11.5px] font-semibold text-[var(--ds-ink)] mb-1 truncate">
-          {draft.title ?? "Letter"}
-        </div>
-        <MetaRow label="Pages" value="2 · A4" />
-        <MetaRow label="To" value={recipient} />
-        <MetaRow
-          label="Evidence"
-          value={evidenceCount > 0 ? `${evidenceCount} file${evidenceCount === 1 ? "" : "s"}` : "None"}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MetaRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-1.5 mt-0.5">
-      <span
-        className="text-[var(--ds-muted)] font-semibold uppercase tracking-[.04em] shrink-0"
-        style={{ fontSize: "9px", minWidth: "44px" }}
-      >
-        {label}
-      </span>
-      <span className="text-[10px] text-[var(--ds-muted)] truncate">{value}</span>
-    </div>
-  );
-}
-
-/** 5-item ship checklist with ✓ / ✗ / ○ visual states. */
+/** Ready-to-send checklist as a 4B step list with ticks. */
 function ShipChecklist({
   draft,
   counselAttested,
+  counselRequired,
   onFixClick,
 }: {
   draft: Draft;
   counselAttested: boolean;
+  counselRequired: boolean;
   onFixClick: () => void;
 }) {
   const evidenceCount = draft.evidence?.length ?? 0;
@@ -718,189 +648,63 @@ function ShipChecklist({
     {
       state: recipient ? "ok" : "fail",
       title: "Recipient details",
-      sub: recipient ? undefined : "Missing — required",
+      sub: recipient ? undefined : "Missing, required",
       fixable: !recipient,
     },
     {
       state: counselAttested ? "ok" : "pending",
       title: "Counsel review",
-      sub: counselAttested ? undefined : "Optional · see canvas",
+      sub: counselAttested
+        ? counselRequired
+          ? "Signed off"
+          : "Not required for this letter"
+        : "Sign off below before export",
     },
   ];
 
-  const stateClasses: Record<CheckState, string> = {
-    ok: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    warn: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    fail: "bg-[var(--red-lt,#fef2f2)] text-[var(--red,#dc2626)]",
-    pending: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-  };
-
-  const stateIcon: Record<CheckState, React.ReactNode> = {
-    ok: <Check className="size-2.5" strokeWidth={3} />,
-    warn: <AlertTriangle className="size-2.5" strokeWidth={2.5} />,
-    fail: <X className="size-2.5" strokeWidth={3} />,
-    pending: <span className="text-[8px] font-bold leading-none">○</span>,
-  };
+  const okCount = items.filter((i) => i.state === "ok").length;
+  const stepState = { ok: "ok", warn: "warn", fail: "fail", pending: "todo" } as const;
 
   return (
-    <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-lg overflow-hidden">
-      {items.map((item, i) => (
-        <div
-          key={item.title}
-          className={cn(
-            "flex items-start gap-2.5 px-2.5 py-2 text-[11.5px] text-[var(--ds-body,var(--ds-ink))]",
-            i < items.length - 1 && "border-b border-[var(--ds-line-2)]",
-            item.fixable && "cursor-pointer hover:bg-[var(--ds-canvas)]",
-          )}
-          onClick={item.fixable ? onFixClick : undefined}
-          role={item.fixable ? "button" : undefined}
-        >
+    <>
+      <div className="mt-3 flex items-center gap-2">
+        <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-[var(--ds-line)]">
           <span
-            className={cn(
-              "size-[17px] rounded-full shrink-0 grid place-items-center mt-0.5",
-              stateClasses[item.state],
-            )}
-          >
-            {stateIcon[item.state]}
-          </span>
-          <div className="flex-1 min-w-0">
-            <div
-              className={cn(
-                "font-semibold leading-tight",
-                item.state === "pending" && "text-[var(--ds-muted)] font-medium",
-              )}
-            >
-              {item.title}
-            </div>
-            {item.sub && (
-              <div className="text-[10.5px] text-[var(--ds-muted)] mt-0.5">
-                {item.sub}
-              </div>
-            )}
-          </div>
-          {item.fixable && (
-            <span className="text-[10px] font-semibold text-[var(--ds-ink)] bg-[var(--ds-line-2)] px-1.5 py-0.5 rounded self-center shrink-0">
-              Fix →
-            </span>
-          )}
+            className="block h-full rounded-full bg-[var(--ds-ink)] transition-[width] duration-500"
+            style={{ width: `${(okCount / items.length) * 100}%` }}
+          />
         </div>
-      ))}
-    </div>
-  );
-}
-
-/**
- * Compact export tile for the 2-col sidebar grid.
- * Supports compact=true (sidebar) and the default large mode (kept for future use).
- */
-function FormatTile({
-  icon,
-  title,
-  desc,
-  busy,
-  primary,
-  disabled,
-  onClick,
-  compact,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-  busy: boolean;
-  primary?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  compact?: boolean;
-}) {
-  if (compact) {
-    return (
-      <motion.button
-        type="button"
-        onClick={onClick}
-        disabled={busy || disabled}
-        whileHover={{ scale: disabled ? 1 : 1.02 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
-        transition={{ duration: 0.12 }}
-        className={cn(
-          "flex flex-col gap-0.5 p-2 rounded-md text-left transition disabled:opacity-50 disabled:cursor-not-allowed",
-          primary
-            ? "bg-[var(--ds-ink)] text-white"
-            : "bg-[var(--ds-surface)] border border-[var(--ds-line)] text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]",
-        )}
-      >
-        <div className="flex items-center gap-1">
-          {busy ? (
-            <motion.span
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-              className="inline-flex"
-            >
-              <FileDown className="size-3" />
-            </motion.span>
-          ) : (
-            <span className={primary ? "text-white/80" : "text-[var(--ds-muted)]"}>
-              {icon}
-            </span>
-          )}
-          <span className="text-[11px] font-semibold leading-tight">
-            {busy ? "…" : title}
-          </span>
-        </div>
-        <span
-          className={cn(
-            "text-[9px] leading-tight",
-            primary ? "text-white/70" : "text-[var(--ds-muted)]",
-          )}
-        >
-          {desc}
+        <span className="ds-mono shrink-0 text-[11.5px] text-[var(--ds-muted)]">
+          {okCount} of {items.length}
         </span>
-      </motion.button>
-    );
-  }
-
-  // Full-size tile (kept for potential future use)
-  return (
-    <div className="flex flex-col items-start gap-2 p-4">
-      <div className="inline-flex items-center justify-center size-8 rounded-lg bg-[var(--ds-line-2)] text-[var(--ds-ink)]">
-        {icon}
       </div>
-      <div className="flex-1">
-        <h4 className="text-[13px] font-semibold m-0 leading-tight">{title}</h4>
-        <p className="text-[11.5px] text-[var(--ds-muted)] m-0 mt-0.5 leading-snug">{desc}</p>
-      </div>
-      <motion.button
-        type="button"
-        onClick={onClick}
-        disabled={busy || disabled}
-        whileHover={{ scale: disabled ? 1 : 1.02 }}
-        whileTap={{ scale: disabled ? 1 : 0.97 }}
-        transition={{ duration: 0.12 }}
-        className={cn(
-          "mt-1 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed",
-          primary
-            ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
-            : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
-        )}
-      >
-        {busy ? (
-          <motion.span
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-            className="inline-flex"
+      <PlanSteps>
+        {items.map((item) => (
+          <PlanStep
+            key={item.title}
+            state={stepState[item.state]}
+            sub={item.sub}
+            onClick={item.fixable ? onFixClick : undefined}
+            aside={
+              item.fixable ? (
+                <span className="inline-flex h-6 items-center gap-1 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12px] font-medium text-[var(--ds-ink)]">
+                  Fix
+                  <ArrowRight className="size-3" />
+                </span>
+              ) : undefined
+            }
           >
-            <FileDown className="size-3.5" />
-          </motion.span>
-        ) : (
-          <FileDown className="size-3.5" />
-        )}
-        {busy ? "…" : "Download"}
-      </motion.button>
-    </div>
+            {item.title}
+          </PlanStep>
+        ))}
+      </PlanSteps>
+    </>
   );
 }
 
 /**
  * Counsel-review attestation gate. Only renders for high-risk letter types.
+ * Blocks every export and Mark as sent until filled in and confirmed.
  */
 function CounselAttestation({
   confirmed,
@@ -918,20 +722,41 @@ function CounselAttestation({
   onToggle: () => void;
 }) {
   const canConfirm = reviewerName.trim() !== "" && reviewedOn !== "";
+  const field =
+    "mt-1 block w-full rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-1.5 text-[13px] font-normal text-[var(--ds-ink)] outline-none transition focus:border-[var(--ds-line-strong)] disabled:bg-[var(--ds-surface-2)] disabled:text-[var(--ds-muted)]";
   return (
-    <motion.div
+    <motion.section
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.26, delay: 0.04, ease: [0.32, 0.72, 0, 1] }}
-      className={cn(
-        "rounded-xl border px-4 py-3 mb-5 transition",
-        confirmed
-          ? "border-[var(--ds-green-bg)] bg-[var(--ds-green-bg)]/40"
-          : "border-[var(--ds-amber-bg)] bg-[var(--ds-amber-bg)]/40",
-      )}
+      aria-labelledby="counsel-signoff-title"
+      className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-4"
     >
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto] mb-3">
-        <label className="text-[12px] font-medium text-[var(--ds-ink)]">
+      <div className="mb-3 flex items-start gap-2.5">
+        <span
+          className={cn(
+            "grid size-7 shrink-0 place-items-center rounded-full",
+            confirmed
+              ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
+              : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+          )}
+        >
+          <ShieldCheck className="size-4" strokeWidth={2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 id="counsel-signoff-title" className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">
+            Counsel sign-off
+          </h3>
+          <p className="m-0 mt-0.5 text-[12.5px] text-[var(--ds-muted)]">
+            Required for this letter type before export or send.
+          </p>
+        </div>
+        <Pill tone={confirmed ? "green" : "amber"} round>
+          {confirmed ? "Signed off" : "Needed"}
+        </Pill>
+      </div>
+      <div className="mb-3 grid gap-2.5 sm:grid-cols-[1fr_150px]">
+        <label className="text-[12px] font-medium text-[var(--ds-body)]">
           Reviewed by (counsel)
           <input
             type="text"
@@ -939,52 +764,39 @@ function CounselAttestation({
             onChange={(e) => onReviewerNameChange(e.target.value)}
             disabled={confirmed}
             placeholder="e.g. Priya Shah, Employment Solicitor"
-            className="mt-1 block w-full rounded-md border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[13px] font-normal disabled:opacity-70"
+            className={field}
           />
         </label>
-        <label className="text-[12px] font-medium text-[var(--ds-ink)]">
+        <label className="text-[12px] font-medium text-[var(--ds-body)]">
           Review date
           <input
             type="date"
             value={reviewedOn}
             onChange={(e) => onReviewedOnChange(e.target.value)}
             disabled={confirmed}
-            className="mt-1 block w-full rounded-md border border-[var(--ds-line)] bg-white px-2.5 py-1.5 text-[13px] font-normal disabled:opacity-70"
+            className={field}
           />
         </label>
       </div>
       <label
         htmlFor="counsel-attestation"
-        className={cn("flex items-center gap-3 select-none", canConfirm || confirmed ? "cursor-pointer" : "cursor-not-allowed opacity-70")}
-      >
-      <input
-        id="counsel-attestation"
-        type="checkbox"
-        checked={confirmed}
-        disabled={!canConfirm && !confirmed}
-        onChange={onToggle}
-        className="size-4 rounded border-[var(--ds-line)] accent-[var(--ds-ink)] shrink-0"
-      />
-      <span
         className={cn(
-          "inline-flex items-center justify-center size-7 rounded-full shrink-0",
-          confirmed
-            ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-            : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+          "flex items-center gap-2.5 rounded-[var(--ds-r-s)] bg-[var(--ds-surface)] px-3 py-2.5 ring-1 ring-[var(--ds-line)] select-none",
+          canConfirm || confirmed ? "cursor-pointer" : "cursor-not-allowed opacity-70",
         )}
       >
-        <ShieldCheck className="size-4" strokeWidth={2.5} />
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="text-[13.5px] font-semibold text-[var(--ds-ink)] leading-tight">
+        <input
+          id="counsel-attestation"
+          type="checkbox"
+          checked={confirmed}
+          disabled={!canConfirm && !confirmed}
+          onChange={onToggle}
+          className="size-4 shrink-0 rounded border-[var(--ds-line)] accent-[var(--ds-accent)]"
+        />
+        <span className="text-[13px] font-medium leading-snug text-[var(--ds-ink)]">
           I confirm this has been reviewed by counsel
-        </div>
-        <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
-          Required for this letter type before export or send.
-        </div>
-      </div>
+        </span>
       </label>
-    </motion.div>
+    </motion.section>
   );
 }
-

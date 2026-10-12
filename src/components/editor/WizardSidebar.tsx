@@ -92,23 +92,25 @@ export function WizardSidebar({
       />
 
       {showTabs && (
-        <div
-          className="flex items-stretch border-b border-[var(--ds-line)] shrink-0"
-          role="tablist"
-          aria-label="Left rail"
-        >
-          <TabButton
-            active={activeTab === "sections"}
-            onClick={() => setTab("sections")}
-            label="Sections"
-            badge={`${ready}/${total}`}
-          />
-          <TabButton
-            active={activeTab === "secondary"}
-            onClick={() => setTab("secondary")}
-            label={secondaryTabLabel}
-            badge={secondaryTabBadge}
-          />
+        <div className="shrink-0 border-b border-[var(--ds-line-2)] px-3 py-2.5">
+          <div
+            className="flex items-stretch gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]"
+            role="tablist"
+            aria-label="Left rail"
+          >
+            <TabButton
+              active={activeTab === "sections"}
+              onClick={() => setTab("sections")}
+              label="Sections"
+              badge={`${ready}/${total}`}
+            />
+            <TabButton
+              active={activeTab === "secondary"}
+              onClick={() => setTab("secondary")}
+              label={secondaryTabLabel}
+              badge={secondaryTabBadge}
+            />
+          </div>
         </div>
       )}
 
@@ -118,12 +120,10 @@ export function WizardSidebar({
            * Sections header row. With tabs it moves to the tab badge
            * so the header isn't duplicating it. */}
           {!showTabs && (
-            <div className="border-b border-[var(--ds-line-2)] px-4 py-3 flex items-center justify-between">
-              <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
-                Sections
-              </h2>
+            <div className="flex items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
+              <h2 className="m-0 text-[12.5px] font-medium text-[var(--ds-muted)]">Sections</h2>
               <span
-                className="text-[10px] font-medium text-[var(--ds-muted)] tabular-nums"
+                className="ds-mono text-[11.5px] text-[var(--ds-muted)]"
                 title={`${ready} of ${total} sections marked ready`}
               >
                 {ready}/{total}
@@ -132,52 +132,12 @@ export function WizardSidebar({
           )}
 
           <ScrollArea className="flex-1 min-h-0">
-            <div className="p-3 space-y-0.5">
-              {draft.sections.map((s, i) => {
-                const isActive = activeSectionId === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    title={s.title}
-                    onClick={() => onSelectSection(s.id)}
-                    className={cn(
-                      "w-full min-w-0 overflow-hidden text-left px-2 py-1.5 rounded-md text-[13px] flex items-center gap-2 transition-colors",
-                      isActive
-                        ? "bg-[var(--ds-line-2)] text-[var(--ds-ink)] font-medium"
-                        : "text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]"
-                    )}
-                  >
-                    <span className="inline-grid place-items-center size-5 rounded-md bg-[var(--ds-line-2)] text-[10px] font-medium text-[var(--ds-muted)] shrink-0">
-                      {i + 1}
-                    </span>
-                    <span className="flex-1 min-w-0 truncate">
-                      {sidebarLabelFor(s)}
-                    </span>
-                    {current === "edit" && s.pendingChange ? (
-                      <span
-                        className="shrink-0 px-1 py-px text-[9px] font-bold rounded-full bg-[var(--ds-amber-fg)] text-white"
-                        title="AI proposed a change — open this section to review"
-                      >
-                        +1
-                      </span>
-                    ) : (
-                      <span
-                        className={cn(
-                          "size-1.5 rounded-full shrink-0",
-                          s.status === "ready" && "bg-[var(--ds-green-fg)]",
-                          s.status === "edited" && "bg-[var(--ds-amber-fg)]",
-                          s.status === "streaming" &&
-                            "bg-[var(--ds-ink)] animate-pulse",
-                          s.status === "empty" && "bg-[var(--ds-line)]"
-                        )}
-                        aria-hidden
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <SectionList
+              draft={draft}
+              current={current}
+              activeSectionId={activeSectionId}
+              onSelectSection={onSelectSection}
+            />
           </ScrollArea>
         </>
       ) : (
@@ -187,6 +147,69 @@ export function WizardSidebar({
         <div className="flex-1 min-h-0 flex flex-col">{secondaryTab}</div>
       )}
     </>
+  );
+}
+
+/**
+ * The list of letter sections: number, compact label, status dot (or a
+ * "+1" when DraftHR has proposed a change in Edit). Used by the rail above
+ * and by the Evidence page's side panel.
+ */
+export function SectionList({
+  draft,
+  current,
+  activeSectionId,
+  onSelectSection,
+}: {
+  draft: Draft;
+  current: "edit" | "evidence" | "review" | "finalize";
+  activeSectionId?: string | null;
+  onSelectSection: (sectionId: string) => void;
+}) {
+  return (
+    <div className="space-y-0.5 p-3">
+      {draft.sections.map((s, i) => {
+        const isActive = activeSectionId === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            title={s.title}
+            onClick={() => onSelectSection(s.id)}
+            className={cn(
+              "flex w-full min-w-0 items-center gap-2.5 overflow-hidden rounded-[var(--ds-r-s)] px-2 py-1.5 text-left text-[13px] transition-colors",
+              isActive
+                ? "bg-[var(--ds-surface-2)] font-medium text-[var(--ds-ink)]"
+                : "text-[var(--ds-body)] hover:bg-[var(--ds-surface-2)]"
+            )}
+          >
+            <span className="ds-mono w-4 shrink-0 text-right text-[11px] text-[var(--ds-faint)]">
+              {i + 1}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{sidebarLabelFor(s)}</span>
+            {current === "edit" && s.pendingChange ? (
+              <span
+                className="shrink-0 rounded-[var(--ds-r-s)] bg-[var(--ds-violet-bg)] px-1.5 py-px text-[10.5px] font-medium text-[var(--ds-violet-fg)]"
+                title="DraftHR proposed a change. Open this section to review it."
+              >
+                +1
+              </span>
+            ) : (
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  s.status === "ready" && "bg-[var(--ds-green-fg)]",
+                  s.status === "edited" && "bg-[var(--ds-amber-dot)]",
+                  s.status === "streaming" && "animate-pulse bg-[var(--ds-ink)]",
+                  s.status === "empty" && "bg-[var(--ds-line-strong)]"
+                )}
+                aria-hidden
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -208,17 +231,15 @@ function TabButton({
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "flex-1 flex items-center justify-center gap-1.5 h-9 text-[12px] font-medium border-b-2 -mb-px transition",
+        "flex h-[26px] flex-1 items-center justify-center gap-1.5 rounded-[7px] text-[12.5px] font-medium transition",
         active
-          ? "border-[var(--ds-ink)] text-[var(--ds-ink)] bg-[var(--ds-surface)]"
-          : "border-transparent text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]"
+          ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
+          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
       )}
     >
       <span>{label}</span>
       {badge && (
-        <span className="text-[10px] text-[var(--ds-muted)] tabular-nums">
-          {badge}
-        </span>
+        <span className="ds-mono text-[11px] text-[var(--ds-faint)]">{badge}</span>
       )}
     </button>
   );

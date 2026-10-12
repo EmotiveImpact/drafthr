@@ -23,12 +23,12 @@ export function QuestionField({ q, value, onChange }: Props) {
   const id = `q-${q.id}`;
   return (
     <div className="space-y-2">
-      <Label id={`${id}-label`} htmlFor={id} className="text-sm font-medium">
+      <Label id={`${id}-label`} htmlFor={id} className="text-[13.5px] font-medium text-[var(--ds-ink)]">
         {q.label}
-        {q.required && <span className="text-destructive ml-0.5">*</span>}
+        {q.required && <span className="ml-0.5 text-[var(--ds-red-fg)]">*</span>}
       </Label>
       {q.help && (
-        <p className="text-xs text-muted-foreground leading-relaxed -mt-1">{q.help}</p>
+        <p className="-mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">{q.help}</p>
       )}
       {renderControl(q, id, value, onChange)}
     </div>
@@ -57,17 +57,17 @@ function renderControl(
           role="group"
           aria-labelledby={`${id}-label`}
           aria-required={q.required}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 rounded-md border border-letter-rule p-3"
+          className="grid grid-cols-1 gap-1 rounded-[var(--ds-r-m)] border border-[var(--ds-line)] p-2 sm:grid-cols-2"
         >
           {q.options?.map((opt) => {
             const checked = selected.includes(opt.value);
             return (
-              <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-accent/40 rounded-sm px-2 py-1">
+              <label key={opt.value} className="flex cursor-pointer items-center gap-2.5 rounded-[var(--ds-r-s)] px-2 py-1.5 text-[13.5px] text-[var(--ds-body)] hover:bg-[var(--ds-surface-2)]">
                 <input
                   type="checkbox"
                   checked={checked}
                   onChange={() => toggle(opt.value)}
-                  className="size-4"
+                  className="size-4 shrink-0 accent-[var(--ds-accent)]"
                 />
                 <span>{opt.label}</span>
               </label>
@@ -118,7 +118,7 @@ function renderControl(
             checked={Boolean(value)}
             onCheckedChange={(v) => onChange(v)}
           />
-          <span className="text-sm text-muted-foreground">
+          <span className="text-[13.5px] text-[var(--ds-muted)]">
             {value ? "Yes" : "No"}
           </span>
         </div>
@@ -232,17 +232,17 @@ function RepeaterField({
       {items.map((item, idx) => (
         <div
           key={idx}
-          className="rounded-md border border-letter-rule bg-letter-surface/40 p-3 space-y-3"
+          className="space-y-3 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] p-3.5"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
+            <span className="text-[12px] font-medium text-[var(--ds-muted)]">
               {cfg.itemLabel} {idx + 1}
             </span>
             {items.length > min && (
               <button
                 type="button"
                 onClick={() => removeItem(idx)}
-                className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1"
+                className="inline-flex items-center gap-1 text-[12px] text-[var(--ds-muted)] hover:text-[var(--ds-red-fg)]"
                 aria-label={`Remove ${cfg.itemLabel.toLowerCase()} ${idx + 1}`}
               >
                 <Trash2 className="size-3" />

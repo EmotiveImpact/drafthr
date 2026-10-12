@@ -81,62 +81,41 @@ export function SharedDraftReview() {
     );
   }
 
-  return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
-      <button
-        type="button"
-        onClick={() => nav("/c")}
-        className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden />
-        Back to inbox
-      </button>
+  const brief = shared?.booking.message ?? booking.message;
 
-      <header className="mb-6">
-        <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
+  return (
+    <div className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-8 sm:py-10">
+      <BackToInbox nav={nav} />
+
+      <header className="mb-7">
+        <p className="m-0 inline-flex items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]">
           <Lock className="size-3" aria-hidden />
-          Shared draft · read-only
+          Shared draft, read only
         </p>
-        <h1 className="mt-2 text-[clamp(26px,3.2vw,36px)] font-semibold text-[var(--ds-ink)]">
+        <h1 className="ds-title m-0 mt-2 text-[clamp(30px,4vw,40px)] leading-[1.1] [overflow-wrap:anywhere]">
           {shared?.booking.matterTitle ?? booking.matterTitle ?? "Untitled matter"}
         </h1>
-        {(shared?.booking.message ?? booking.message) && (
-          <p className="mt-3 max-w-[60ch] rounded-md bg-[var(--ds-surface-2)] px-4 py-3 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-            <span className="mr-1 font-semibold text-[var(--ds-ink)]">HR brief:</span>
-            {shared?.booking.message ?? booking.message}
-          </p>
-        )}
       </header>
 
-      <section className="rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-6">
-        <div className="mb-4 flex items-center gap-2 text-[13px] font-semibold text-[var(--ds-ink)]">
-          <FileText className="size-4 text-[var(--ds-muted)]" aria-hidden />
-          Draft contents
-        </div>
-        {loading ? (
-          <div className="grid place-items-center px-5 py-10 text-[13px] text-[var(--ds-muted)]">
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-            <p className="mt-2">Fetching the draft…</p>
-          </div>
-        ) : shared ? (
-          <div className="space-y-4">
-            <div className="rounded-md bg-[var(--ds-surface-2)] px-3 py-2 text-[12.5px] text-[var(--ds-body)]">
-              <p>
-                <strong>Letter type:</strong> {shared.draft.letterType.replace(/_/g, " ")}
-              </p>
-              <p>
-                <strong>Jurisdiction:</strong> {shared.draft.jurisdiction ?? "—"}
-              </p>
-              <p>
-                <strong>Mode:</strong> {shared.draft.mode}
-              </p>
+      {/* 14B in read-only mode: the letter in the centre, the brief and the
+       * letter facts in the side panel. Phones stack the panel first. */}
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
+        <section
+          aria-label="Draft contents"
+          className="order-2 min-w-0 rounded-[3px] bg-[var(--ds-surface)] px-6 py-8 shadow-[var(--ds-shadow-m)] ring-1 ring-[var(--ds-line)] sm:px-14 sm:py-12 lg:order-none"
+        >
+          {loading ? (
+            <div className="grid place-items-center px-5 py-10 text-[13px] text-[var(--ds-muted)]">
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              <p className="mt-2">Fetching the draft…</p>
             </div>
-            <div className="prose prose-sm max-w-none">
+          ) : shared ? (
+            <div>
               {shared.draft.sections.map((s) => (
-                <article key={s.id} className="mb-4">
-                  <h3 className="font-semibold text-[var(--ds-ink)]">{s.title}</h3>
+                <article key={s.id} className="mb-6 last:mb-0">
+                  <h3 className="m-0 mb-1.5 text-[12px] font-medium text-[var(--ds-muted)]">{s.title}</h3>
                   <div
-                    className="leading-relaxed text-[var(--ds-body)]"
+                    className="shared-letter"
                     // Defence-in-depth: this is a raw-HTML sink rendered to a
                     // consultant via a share token. Section html is normally
                     // sanitised on write, but an aborted/partial AI stream can
@@ -146,27 +125,73 @@ export function SharedDraftReview() {
                   />
                 </article>
               ))}
+              <style>{sharedLetterStyles}</style>
             </div>
-            <p className="mt-4 inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
-              <ShieldCheck className="size-3" aria-hidden />
-              Token-scoped read access · expires 30 days after payment
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-10 text-center">
-            <p className="text-[13.5px] text-[var(--ds-body)]">
-              {error
-                ? error
-                : "Draft access opens once the booking is paid. If HR has just paid, refresh the inbox to pick up the share link."}
-            </p>
-            <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)]">
-              <ShieldCheck className="size-3.5" aria-hidden />
-              Access is bookingId-scoped and time-limited.
-            </p>
-          </div>
-        )}
-      </section>
+          ) : (
+            <div className="px-2 py-10 text-center">
+              <FileText className="mx-auto size-5 text-[var(--ds-faint)]" aria-hidden />
+              <p className="m-0 mt-3 text-[13.5px] text-[var(--ds-body)]">
+                {error
+                  ? error
+                  : "Draft access opens once the booking is paid. If HR has just paid, refresh the inbox to pick up the share link."}
+              </p>
+              <p className="m-0 mt-3 inline-flex items-center gap-1.5 text-[12px] text-[var(--ds-muted)]">
+                <ShieldCheck className="size-3.5" aria-hidden />
+                Access is booking-scoped and time-limited.
+              </p>
+            </div>
+          )}
+        </section>
+
+        <aside aria-label="About this draft" className="order-1 flex min-w-0 flex-col gap-3 lg:order-none lg:sticky lg:top-6">
+          {brief && (
+            <section className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-4">
+              <h2 className="m-0 text-[12.5px] font-medium text-[var(--ds-muted)]">HR brief</h2>
+              <p className="m-0 mt-1.5 text-[13.5px] leading-relaxed text-[var(--ds-body)]">{brief}</p>
+            </section>
+          )}
+          {shared && (
+            <section className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
+              <h2 className="m-0 text-[12.5px] font-medium text-[var(--ds-muted)]">Letter</h2>
+              <dl className="m-0 mt-2 grid grid-cols-[96px_minmax(0,1fr)] gap-y-2 text-[13px]">
+                <dt className="text-[var(--ds-muted)]">Letter type</dt>
+                <dd className="m-0 capitalize text-[var(--ds-ink)]">
+                  {shared.draft.letterType.replace(/_/g, " ")}
+                </dd>
+                <dt className="text-[var(--ds-muted)]">Jurisdiction</dt>
+                <dd className="m-0 text-[var(--ds-ink)]">{shared.draft.jurisdiction ?? "Not set"}</dd>
+                <dt className="text-[var(--ds-muted)]">Mode</dt>
+                <dd className="m-0 capitalize text-[var(--ds-ink)]">{shared.draft.mode}</dd>
+              </dl>
+            </section>
+          )}
+          <p className="m-0 inline-flex items-start gap-1.5 px-1 text-[12px] leading-relaxed text-[var(--ds-muted)]">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            Token-scoped read access. Expires 30 days after payment.
+          </p>
+        </aside>
+      </div>
     </div>
+  );
+}
+
+const sharedLetterStyles = `
+.shared-letter { font-family: var(--font-serif); font-size: 15.5px; line-height: 1.62; color: var(--ds-ink); overflow-wrap: anywhere; }
+.shared-letter p { margin: 0 0 0.9em; }
+.shared-letter ul, .shared-letter ol { margin: 0 0 0.9em 1.3em; padding: 0; }
+.shared-letter h1, .shared-letter h2, .shared-letter h3 { font-weight: 600; margin: 1em 0 0.4em; }
+`;
+
+function BackToInbox({ nav }: { nav: ReturnType<typeof useNavigate> }) {
+  return (
+    <button
+      type="button"
+      onClick={() => nav("/c")}
+      className="mb-5 inline-flex items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+    >
+      <ArrowLeft className="size-3.5" aria-hidden />
+      Back to inbox
+    </button>
   );
 }
 
@@ -180,17 +205,10 @@ function NotFoundShell({
   body: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-      <button
-        type="button"
-        onClick={() => nav("/c")}
-        className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-      >
-        <ArrowLeft className="size-3.5" aria-hidden />
-        Back to inbox
-      </button>
-      <h1 className="text-[clamp(24px,3vw,32px)] font-semibold text-[var(--ds-ink)]">{title}</h1>
-      <p className="mt-3 text-[14px] text-[var(--ds-body)]">{body}</p>
+    <div className="mx-auto max-w-3xl px-4 py-12 sm:px-8 sm:py-16">
+      <BackToInbox nav={nav} />
+      <h1 className="ds-title m-0 text-[clamp(30px,4vw,40px)] leading-[1.1]">{title}</h1>
+      <p className="m-0 mt-3 text-[14px] text-[var(--ds-muted)]">{body}</p>
     </div>
   );
 }

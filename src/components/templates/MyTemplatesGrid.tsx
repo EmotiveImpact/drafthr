@@ -10,11 +10,14 @@ import { RenameCustomTemplateModal } from "./RenameCustomTemplateModal";
 import { NewTemplateModal } from "./NewTemplateModal";
 
 /**
- * Grid of the user's workspace-saved custom templates, scoped to a
- * single mode. Empty-state nudges the user toward saving from an open
- * draft.
+ * Grid of the user's workspace-saved custom templates (6B cards), scoped to
+ * a single mode. Empty state nudges the user toward creating one or saving
+ * from an open draft.
+ *
+ * `onCreate` lets the page own the "Create a template" modal (the template
+ * library header has the button); without it the grid opens its own.
  */
-export function MyTemplatesGrid({ mode }: { mode: Mode }) {
+export function MyTemplatesGrid({ mode, onCreate }: { mode: Mode; onCreate?: () => void }) {
   const nav = useNavigate();
   const customTemplates = useDraftStore((s) => s.customTemplates);
   const createDraftFromCustomTemplate = useDraftStore(
@@ -24,6 +27,7 @@ export function MyTemplatesGrid({ mode }: { mode: Mode }) {
 
   const [renaming, setRenaming] = useState<CustomTemplate | null>(null);
   const [creating, setCreating] = useState(false);
+  const create = onCreate ?? (() => setCreating(true));
 
   // Sort by most-recently-updated within the active mode.
   const templates = useMemo(() => {
@@ -44,39 +48,44 @@ export function MyTemplatesGrid({ mode }: { mode: Mode }) {
     toast.success(`Deleted "${tpl.name}"`);
   };
 
+  const ownModal = !onCreate && (
+    <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />
+  );
+
   if (templates.length === 0) {
     return (
       <>
-        <div className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center">
-          <div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)]">
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-12 text-center">
+          <div className="mx-auto mb-3 grid size-11 place-items-center rounded-full bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]">
             <BookmarkPlus className="size-5" />
           </div>
-          <h3 className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
+          <h3 className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">
             No custom templates yet
           </h3>
-          <p className="text-[12.5px] text-[var(--ds-muted)] mt-1 mb-4 m-0">
-            Build one from scratch with <span className="font-medium">New template</span>,
-            or save from an open draft (File → Save as template).
+          <p className="m-0 mb-4 mt-1 text-[12.5px] text-[var(--ds-muted)]">
+            Build one from scratch, or use Save as template on an open letter.
           </p>
-          <Button size="sm" onClick={() => setCreating(true)}>
+          <Button size="sm" onClick={create}>
             <Plus className="size-3.5" />
             New template
           </Button>
         </div>
-        <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />
+        {ownModal}
       </>
     );
   }
 
   return (
     <>
-      <div className="flex items-center justify-end mb-3">
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="size-3.5" />
-          New template
-        </Button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {!onCreate && (
+        <div className="mb-3 flex items-center justify-end">
+          <Button size="sm" onClick={create}>
+            <Plus className="size-3.5" />
+            New template
+          </Button>
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {templates.map((t) => (
           <CustomTemplateCard
             key={t.id}
@@ -94,7 +103,7 @@ export function MyTemplatesGrid({ mode }: { mode: Mode }) {
           if (!o) setRenaming(null);
         }}
       />
-      <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />
+      {ownModal}
     </>
   );
 }

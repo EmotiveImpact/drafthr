@@ -4,16 +4,20 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  ListOrdered,
   Loader2,
-  PanelLeft,
   PanelRight,
   Paperclip,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
-import { WizardSidebar } from "@/components/editor/WizardSidebar";
+import { SectionList } from "@/components/editor/WizardSidebar";
+import { PillTabs } from "@/components/ds/PageHeader";
+import { DocBar, DOC_BTN, DOC_BTN_PRIMARY } from "@/components/finalize/DocBar";
+import { cn } from "@/lib/utils";
 import { EvidenceRequirementsList } from "@/components/editor/EvidenceRequirementsList";
 import { EditableTitleBar } from "@/components/editor/EditableTitleBar";
 import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
@@ -27,24 +31,21 @@ import {
   findTargetSectionForItem,
 } from "@/components/editor/EvidencePanel";
 import { regenerateSection } from "@/lib/llm/draft";
+import { getLetterMeta } from "@/lib/letters/catalog";
+
+type RailTab = "evidence" | "required" | "sections";
 
 /**
- * Evidence step — wizard's middle stop on the employee track.
+ * Evidence page (`/editor/:id/evidence`), laid out like the 14B workspace:
  *
- * Layout deliberately mirrors the Edit page so users don't feel a visual
- * flinch crossing from Edit → Evidence:
- *
- *   - Header bar mirrors the Editor's compact 48px header (back button,
- *     title, next CTA).
- *   - Left rail: WizardSidebar with Sections + Required tabs (unchanged).
- *   - Center: stacked SectionEditor cards — same component as the Edit
- *     page, so prose styling, toolbar, and editing affordances are
- *     identical. A banner above explains this is Evidence linking mode.
- *   - Right rail: EvidencePanel — replaces the AI panel from Edit. Search,
- *     kind filters, evidence cards, inline edit, and an Add-new form.
- *
- * The previous bespoke "Selected section" + "Add evidence" layout is gone;
- * everything that used to live in those panels now lives in EvidencePanel.
+ *   - Document bar (11A): back to the letter, file name, Edit / Review /
+ *     Finalise, then Back to letter and Review.
+ *   - Centre: the letter, as the same stacked SectionEditor cards Edit
+ *     uses, so prose styling and editing affordances are identical.
+ *   - Side panel: the evidence list (EvidencePanel: search, kind filters,
+ *     evidence cards, inline edit, Add new) in place of Edits / Progress /
+ *     Chat, with the required-evidence checklist and the section list as
+ *     the panel's other tabs. Below lg the panel is a drawer.
  */
 export function EvidenceStep() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -78,8 +79,8 @@ export function EvidenceStep() {
   const [streamingSectionId, setStreamingSectionId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [showSidebar, setShowSidebar] = useState(false);
   const [showRail, setShowRail] = useState(false);
+  const [railTab, setRailTab] = useState<RailTab>("evidence");
 
   // Sync the URL section param into local state when it changes.
   useEffect(() => {
@@ -165,145 +166,103 @@ export function EvidenceStep() {
     }
   };
 
+  const requiredBadge = (() => {
+    const status = buildExpectedEvidenceStatus(draft);
+    if (status.length === 0) return undefined;
+    const ok = status.filter((row) => row.ok).length;
+    return `${ok}/${status.length}`;
+  })();
+
+  const openPanel = (tab: RailTab) => {
+    setRailTab(tab);
+    setShowRail(true);
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Mirrors the Editor's compact 48px header so the wizard chrome
-       * doesn't shift when crossing Edit → Evidence. Brand mark + back
-       * to letters on the left; centred title; next CTA on the right. */}
-      <header className="h-12 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center gap-3 px-3 sm:px-4">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => nav(`/editor/${draft.id}`)}
-          aria-label="Back to letter"
-        >
-          <ArrowLeft className="size-4" />
-        </Button>
-        <div className="flex items-center gap-2 min-w-0">
-          <Paperclip className="size-4 text-[var(--ds-muted)] shrink-0" />
-          <h1 className="m-0 truncate text-[13px] font-semibold text-[var(--ds-ink)]">
-            Evidence & Attachments
-          </h1>
-          <span className="hidden md:inline text-[12px] text-[var(--ds-muted)] truncate">
-            ·{" "}
-            {draft.employee.legalName || draft.employer.legalName || "Draft"}
-          </span>
-        </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          {/* Mobile rail toggles — mirror the Editor's mobile pattern. */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="lg:hidden"
-            onClick={() => setShowSidebar((current) => !current)}
-            aria-label="Toggle sections rail"
-            title="Sections"
+      <DocBar
+        draft={draft}
+        current="evidence"
+        title={draft.title || getLetterMeta(draft.letterType).title}
+        label="Evidence"
+        leading={
+          <button
+            type="button"
+            onClick={() => nav(`/editor/${draft.id}`)}
+            aria-label="Back to letter"
+            className="-mx-1 grid size-9 shrink-0 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-body)] transition hover:bg-[var(--ds-surface-2)]"
           >
-            <PanelLeft className="size-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="lg:hidden"
-            onClick={() => setShowRail((current) => !current)}
-            aria-label="Toggle evidence rail"
-            title="Evidence"
-          >
-            <PanelRight className="size-4" />
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to={`/editor/${draft.id}`}>
-              <span className="hidden sm:inline">Back to letter</span>
-              <ArrowLeft className="size-4 sm:hidden" />
+            <ArrowLeft className="size-4" />
+          </button>
+        }
+        actions={
+          <>
+            {/* Phones: the side panel is a drawer; these open it. */}
+            <button
+              type="button"
+              className={cn(DOC_BTN, "px-2 lg:hidden")}
+              onClick={() => (showRail && railTab === "sections" ? setShowRail(false) : openPanel("sections"))}
+              aria-label="Toggle sections rail"
+              title="Sections"
+            >
+              <ListOrdered className="size-4" />
+            </button>
+            <button
+              type="button"
+              className={cn(DOC_BTN, "px-2 lg:hidden")}
+              onClick={() => (showRail && railTab === "evidence" ? setShowRail(false) : openPanel("evidence"))}
+              aria-label="Toggle evidence rail"
+              title="Evidence"
+            >
+              <PanelRight className="size-4" />
+            </button>
+            <Link to={`/editor/${draft.id}`} className={cn(DOC_BTN, "hidden sm:inline-flex")}>
+              Back to letter
             </Link>
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => nav(`/editor/${draft.id}/review`)}
-            aria-label="Next: Review"
-            className="px-2 sm:px-3"
-          >
-            <span className="hidden sm:inline">Review</span>
-            <ArrowRight className="size-4 sm:ml-1.5" />
-          </Button>
-        </div>
-      </header>
+            <button
+              type="button"
+              onClick={() => nav(`/editor/${draft.id}/review`)}
+              aria-label="Next: Review"
+              className={cn(DOC_BTN_PRIMARY, "px-2 sm:px-3")}
+            >
+              <span className="hidden sm:inline">Review</span>
+              <ArrowRight className="size-3.5" />
+            </button>
+          </>
+        }
+      />
 
       {/* One-line notice strip — appears after a Reference / Quote insert.
-       * Click to dismiss. Same styling as the previous EvidenceStep. */}
+       * Click to dismiss. */}
       {notice && (
         <button
           type="button"
           onClick={() => setNotice(null)}
-          className="flex shrink-0 items-center justify-center gap-2 border-b border-[var(--ds-line)] bg-[var(--ds-green-bg)] px-4 py-1.5 text-[12px] text-[var(--ds-green-fg)] hover:brightness-95 transition"
+          className="flex shrink-0 items-center justify-center gap-2 border-b border-[var(--ds-line)] bg-[var(--ds-green-bg)] px-4 py-1.5 text-[12.5px] text-[var(--ds-green-fg)] transition hover:brightness-95"
         >
           <CheckCircle2 className="size-3.5" />
           {notice}
         </button>
       )}
 
-      {/* Three-column shell — same proportions as Editor.tsx so the visual
-       * grid is identical. Below lg both rails become drawers (mobile
-       * pattern unchanged from the previous EvidenceStep). */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)_360px] min-h-0 relative overflow-hidden">
-        {/* Left rail — Sections + Required tabs. Identical to the previous
-         * EvidenceStep's left rail (which already matched Edit). */}
-        <aside
-          className={
-            "border-r border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 flex flex-col overflow-hidden " +
-            (showSidebar
-              ? "absolute inset-y-0 left-0 z-40 w-[280px] shadow-xl lg:static lg:shadow-none lg:w-auto"
-              : "hidden lg:flex")
-          }
-        >
-          <WizardSidebar
-            draft={draft}
-            current="evidence"
-            activeSectionId={activeSectionId}
-            onSelectSection={(id) => {
-              setActiveSectionId(id);
-              setShowSidebar(false);
-              const el = document.querySelector(`[data-section-id="${id}"]`);
-              el?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            secondaryTabLabel="Required"
-            secondaryTabBadge={(() => {
-              const status = buildExpectedEvidenceStatus(draft);
-              if (status.length === 0) return undefined;
-              const ok = status.filter((row) => row.ok).length;
-              return `${ok}/${status.length}`;
-            })()}
-            secondaryTab={
-              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-                <EvidenceRequirementsList draft={draft} />
-              </div>
-            }
-          />
-        </aside>
-
-        {/* Center column — the letter view. Same stacked SectionEditor
-         * cards Edit uses. EditableTitleBar + InlineDisclaimer +
-         * DeadlineBanner at the top, then sections. A small banner just
-         * below the title reminds the user this is Evidence linking mode. */}
-        <main className="flex flex-col bg-[var(--ds-canvas)] min-w-0 min-h-0 relative">
-          <div className="flex-1 overflow-auto min-h-0">
-            <div className="mx-auto max-w-3xl py-6 sm:py-8 px-3 sm:px-6 space-y-3">
+      {/* 14B: the letter in the centre, the evidence list in the side panel
+       * (in place of Edits / Progress / Chat), with Required and Sections as
+       * the panel's other tabs. Below lg the panel becomes a drawer. */}
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_400px]">
+        <main className="relative flex min-h-0 min-w-0 flex-col bg-[var(--ds-canvas)]">
+          <div className="min-h-0 flex-1 overflow-auto">
+            <div className="mx-auto max-w-3xl space-y-3 px-3 py-6 sm:px-6 sm:py-8">
               <EditableTitleBar draft={draft} />
               <InlineDisclaimer draft={draft} />
               <DeadlineBanner draft={draft} />
 
-              {/* Mode banner — telegraphs that the right rail isn't the AI
-               * agent here, it's evidence. Identical visual weight to the
-               * InlineDisclaimer it sits beneath, so the page doesn't get
-               * top-heavy. */}
-              <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-amber-bg)]/40 px-3 py-2 text-[11.5px] leading-relaxed text-[var(--ds-amber-fg)] flex items-start gap-2">
-                <Paperclip className="size-3.5 mt-0.5 shrink-0" />
+              {/* Mode note: the side panel is evidence here, not DraftHR. */}
+              <div className="flex items-start gap-2.5 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                <Paperclip className="mt-0.5 size-3.5 shrink-0" />
                 <span>
-                  <strong className="font-semibold">Evidence linking mode.</strong>{" "}
-                  Click any section to make it the active target, then use the
-                  Evidence panel on the right to add items, link them, or insert
-                  references / quotes at the cursor.
+                  <strong className="font-medium text-[var(--ds-ink)]">Linking evidence.</strong>{" "}
+                  Click a section to make it the target, then use the Evidence panel to add items,
+                  link them, or insert references and quotes.
                 </span>
               </div>
 
@@ -340,7 +299,7 @@ export function EvidenceStep() {
                 />
               ))}
               {streamingSectionId && (
-                <p className="text-xs text-muted-foreground flex items-center gap-2 mt-4">
+                <p className="mt-4 flex items-center gap-2 text-[12px] text-[var(--ds-muted)]">
                   <Loader2 className="size-3 animate-spin" />
                   Regenerating section…
                 </p>
@@ -349,42 +308,78 @@ export function EvidenceStep() {
           </div>
         </main>
 
-        {/* Right rail — Evidence management. Replaces the AI agent panel
-         * from Edit. Permanent on lg:+, sliding drawer on mobile. */}
+        {/* Side panel: permanent on lg+, sliding drawer on phones. */}
         <aside
+          aria-label="Evidence panel"
           className={
-            "border-l border-[var(--ds-line)] bg-[var(--ds-surface)] min-h-0 flex flex-col overflow-hidden " +
+            "flex min-h-0 flex-col overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
             (showRail
-              ? "fixed inset-y-0 right-0 z-40 w-[min(420px,90vw)] shadow-[-12px_0_32px_rgba(0,0,0,0.18)] lg:static lg:shadow-none lg:w-auto"
+              ? "fixed inset-y-0 right-0 z-40 w-[min(420px,92vw)] shadow-[var(--ds-shadow-l)] lg:static lg:w-auto lg:shadow-none"
               : "hidden lg:flex")
           }
         >
-          <EvidencePanel
-            draft={draft}
-            activeSectionId={activeSectionId}
-            onChangeEvidence={onChangeEvidence}
-            onInsertAtSection={onInsertAtSection}
-            autoOpenAdd={autoOpenAdd}
-          />
+          <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-[var(--ds-line-2)] px-3">
+            <PillTabs
+              className="mt-0"
+              activeTab={railTab}
+              onTabChange={(id) => setRailTab(id as RailTab)}
+              tabs={[
+                { id: "evidence", label: "Evidence", count: draft.evidence?.length ?? 0 },
+                ...(requiredBadge ? [{ id: "required", label: `Required ${requiredBadge}` }] : []),
+                { id: "sections", label: "Sections" },
+              ]}
+            />
+            <button
+              type="button"
+              onClick={() => setShowRail(false)}
+              aria-label="Close panel"
+              className="ml-auto grid size-8 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] lg:hidden"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className={cn("flex min-h-0 flex-1 flex-col", railTab !== "evidence" && "hidden")}>
+            <EvidencePanel
+              draft={draft}
+              activeSectionId={activeSectionId}
+              onChangeEvidence={onChangeEvidence}
+              onInsertAtSection={onInsertAtSection}
+              autoOpenAdd={autoOpenAdd}
+            />
+          </div>
+          {railTab === "required" && (
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+              <EvidenceRequirementsList draft={draft} />
+            </div>
+          )}
+          {railTab === "sections" && (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <SectionList
+                draft={draft}
+                current="evidence"
+                activeSectionId={activeSectionId}
+                onSelectSection={(id) => {
+                  setActiveSectionId(id);
+                  setShowRail(false);
+                  const el = document.querySelector(`[data-section-id="${id}"]`);
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              />
+            </div>
+          )}
         </aside>
 
-        {/* Mobile scrim — fades over the canvas when either rail is open
-         * on small viewports. Mirrors the Editor's pattern. */}
+        {/* Mobile scrim — fades over the canvas when the drawer is open. */}
         <button
           type="button"
           className={
-            "lg:hidden fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 motion-reduce:transition-none " +
-            (showSidebar || showRail
-              ? "opacity-100"
-              : "opacity-0 pointer-events-none")
+            "lg:hidden fixed inset-0 z-30 bg-[var(--ds-ink)]/30 transition-opacity duration-300 motion-reduce:transition-none " +
+            (showRail ? "opacity-100" : "opacity-0 pointer-events-none")
           }
           aria-label="Close panel"
-          aria-hidden={!(showSidebar || showRail) || undefined}
-          tabIndex={!(showSidebar || showRail) ? -1 : undefined}
-          onClick={() => {
-            setShowSidebar(false);
-            setShowRail(false);
-          }}
+          aria-hidden={!showRail || undefined}
+          tabIndex={!showRail ? -1 : undefined}
+          onClick={() => setShowRail(false)}
         />
       </div>
     </div>
