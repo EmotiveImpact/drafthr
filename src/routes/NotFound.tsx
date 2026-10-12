@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/ds";
 
 /**
- * 404 — unknown route. The app's wildcard previously bounced every mistyped
+ * 404: unknown route. The app's wildcard previously bounced every mistyped
  * or stale URL to "/" with no explanation; this gives an honest "not found"
  * with a clear way back. "Go to DraftHR" routes to "/", where RootRedirect
  * picks the right destination (sign-in / workspace setup / home) based on the
@@ -12,42 +12,40 @@ import { BrandMark, Wordmark } from "@/components/ds";
 export function NotFound() {
   const nav = useNavigate();
   return (
-    <div className="flex flex-1 items-center justify-center px-4 py-20 min-h-[60vh]">
-      <div className="w-full max-w-[440px] text-center">
+    <div className="flex min-h-[60vh] flex-1 items-center justify-center px-4 py-20">
+      <div className="w-full max-w-[480px] text-center">
         <Link
           to="/"
           aria-label="DraftHR home"
-          className="inline-flex items-center gap-2.5 mb-8"
+          className="mb-10 inline-flex items-center gap-2.5"
         >
-          <BrandMark size={40} />
-          <Wordmark size={24} />
+          <BrandMark size={32} />
+          <Wordmark size={20} />
         </Link>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          404
-        </p>
-        <h1 className="mt-2 text-[clamp(22px,3vw,28px)] font-semibold tracking-[-0.01em] text-[var(--ds-ink)] leading-[1.15]">
-          We couldn't find that page.
+        <p className="m-0 text-[13px] text-[var(--ds-muted)]">Error 404</p>
+        <h1 className="ds-title m-0 mt-2 text-[clamp(32px,4.4vw,42px)] leading-[1.1]">
+          We couldn't find that page
         </h1>
-        <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
+        <p className="m-0 mt-3 text-[15px] leading-relaxed text-[var(--ds-muted)]">
           The link may be broken, or the page may have moved. Let's get you back
           to your workspace.
         </p>
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => nav(-1)}
-            className="inline-flex items-center gap-1.5 h-[40px] px-4 rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[13px] hover:bg-[var(--ds-surface-2)] transition"
-          >
-            <ArrowLeft className="size-4" aria-hidden />
-            Go back
-          </button>
+        <div className="mt-7 flex items-center justify-center gap-3">
           <Link
             to="/"
-            className="inline-flex items-center justify-center h-[40px] px-4 rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13px] hover:-translate-y-px hover:shadow-md transition"
+            className="inline-flex h-10 items-center justify-center rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] px-4 text-[14px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
           >
             Go to DraftHR
           </Link>
         </div>
+        <button
+          type="button"
+          onClick={() => nav(-1)}
+          className="mt-4 inline-flex items-center gap-1.5 text-[13px] text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
+        >
+          <ArrowLeft className="size-3.5" aria-hidden />
+          Go back
+        </button>
       </div>
     </div>
   );

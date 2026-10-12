@@ -1,9 +1,11 @@
-import { useNavigate } from "react-router-dom";
-import { Box, Button, Card, Flex, Grid, Heading, Inset, Text } from "@radix-ui/themes";
-import { ArrowUpRight, Briefcase, GraduationCap, UserRound } from "lucide-react";
+import type { ReactNode } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, Briefcase, GraduationCap, UserRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
+import { BrandMark, Wordmark } from "@/components/ds";
+import { PaperThumb } from "@/components/reports/parts";
 
 export function ModePicker() {
   const nav = useNavigate();
@@ -29,123 +31,142 @@ export function ModePicker() {
   };
 
   return (
-    <Box className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-16">
-      <Box mb="8" maxWidth="640px">
-        <Text size="1" color="gray" weight="medium" className="uppercase tracking-[0.18em]">
-          DRAFTHR
-        </Text>
-        <Heading size="8" mt="2" mb="3" weight="medium">
-          Who are you writing as?
-        </Heading>
-        <Text size="3" color="gray">
-          Pick one. We'll save your role and adapt the platform around it. You can change it any
-          time in{" "}
-          <Text
-            asChild
-            color="gold"
-            weight="medium"
-            className="cursor-pointer hover:underline"
-          >
-            <button onClick={() => nav("/settings")}>Settings</button>
-          </Text>
-          .
-        </Text>
-      </Box>
+    <div className="min-h-screen bg-[var(--ds-canvas)] text-[var(--ds-ink)]">
+      <div className="mx-auto w-full max-w-[1080px] px-4 py-8 sm:px-8 sm:py-12">
+        <Link to="/" aria-label="DraftHR home" className="inline-flex items-center gap-2.5">
+          <BrandMark size={30} />
+          <Wordmark size={20} />
+        </Link>
 
-      <Grid columns={{ initial: "1", md: "3" }} gap="4" mb="6">
-        <RoleCard
-          icon={<Briefcase className="size-5" />}
-          title="I'm in HR or management"
-          description="Drafting letters TO an employee — offers, terminations, warnings, redundancies, references. The platform helps you comply with ACAS, s.98 ERA, WARN, OWBPA, COBRA, and state-specific final-pay rules."
-          meta="14 letter types · UK + US · Counsel-review gate on high-risk letters"
-          onClick={() => choose("employer")}
-        />
-        <RoleCard
-          icon={<UserRound className="size-5" />}
-          title="I'm an employee"
-          description="Drafting letters TO HR or your employer — grievances, resignations, flexible-working requests, SARs, appeals, whistleblowing, accommodation requests. The platform helps you preserve your rights and not prejudice future claims."
-          meta="21 letter types · UK + US · Tribunal-deadline tracking · Register-safety check"
-          onClick={() => choose("employee")}
-        />
-        <RoleCard
-          icon={<GraduationCap className="size-5" />}
-          title="I'm a consultant"
-          description="Reviewing letters FOR HR teams — settlement, TUPE, complex disciplinary or grievance flows. Get matched via the marketplace; receive bookings with the full evidence pack, cite-checked clauses, and a clean diff."
-          meta="Marketplace listing · Inbound bookings · Named opinions · Flat-fee or hourly"
-          onClick={chooseConsultant}
-        />
-      </Grid>
+        {/* 2A title */}
+        <header className="mb-9 mt-10 max-w-[640px] sm:mt-14">
+          <h1 className="ds-title m-0 text-[clamp(32px,4.4vw,44px)] leading-[1.08]">
+            Who are you writing as?
+          </h1>
+          <p className="m-0 mt-3 text-[15px] leading-relaxed text-[var(--ds-muted)]">
+            Pick one. We'll save your role and adapt DraftHR around it. You can change it any time
+            in{" "}
+            <button
+              type="button"
+              onClick={() => nav("/settings")}
+              className="font-medium text-[var(--ds-ink)] underline underline-offset-2"
+            >
+              Settings
+            </button>
+            .
+          </p>
+        </header>
 
-      {recent.length > 0 && (
-        <Box>
-          <Heading size="2" mb="3" color="gray" weight="medium">
-            Or jump back into a recent draft
-          </Heading>
-          <Grid columns={{ initial: "1", sm: "3" }} gap="2">
-            {recent.map((d) => (
-              <Button
-                key={d.id}
-                variant="outline"
-                size="3"
-                color="gray"
-                onClick={() => nav(`/editor/${d.id}`)}
-                className="!h-auto !py-3 !justify-start"
-              >
-                <Flex direction="column" align="start" gap="1" className="min-w-0">
-                  <Text
-                    size="1"
-                    color="gray"
-                    weight="medium"
-                    className="uppercase tracking-[0.18em]"
+        <div className="grid gap-4 md:grid-cols-3">
+          <RoleCard
+            tint="lavender"
+            icon={<Briefcase className="size-7" strokeWidth={1.5} />}
+            title="I'm in HR or management"
+            description="Drafting letters to an employee: offers, terminations, warnings, redundancies and references. DraftHR helps you comply with ACAS, s.98 ERA, WARN, OWBPA, COBRA and state final-pay rules."
+            meta="14 letter types, UK and US, counsel review on high-risk letters"
+            onClick={() => choose("employer")}
+          />
+          <RoleCard
+            tint="mint"
+            icon={<UserRound className="size-7" strokeWidth={1.5} />}
+            title="I'm an employee"
+            description="Drafting letters to HR or your employer: grievances, resignations, flexible working requests, SARs, appeals, whistleblowing and accommodation requests. DraftHR helps you protect your rights and keep future claims open."
+            meta="21 letter types, UK and US, tribunal deadline tracking"
+            onClick={() => choose("employee")}
+          />
+          <RoleCard
+            tint="peach"
+            icon={<GraduationCap className="size-7" strokeWidth={1.5} />}
+            title="I'm a consultant"
+            description="Reviewing letters for HR teams: settlement, TUPE, and complex disciplinary or grievance cases. Get matched through the marketplace and receive bookings with the full evidence pack and cite-checked clauses."
+            meta="Marketplace listing, inbound bookings, flat fee or hourly"
+            onClick={chooseConsultant}
+          />
+        </div>
+
+        {recent.length > 0 && (
+          <section className="mt-10">
+            <h2 className="m-0 mb-2 text-[15px] font-semibold text-[var(--ds-ink)]">
+              Or jump back into a recent draft
+            </h2>
+            <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-3">
+              {recent.map((d) => (
+                <li key={d.id} className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => nav(`/editor/${d.id}`)}
+                    className="flex w-full min-w-0 items-center gap-3 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-3 text-left transition hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-s)]"
                   >
-                    {d.mode === "employer" ? "HR" : "Employee"} · {d.context.jurisdiction}
-                  </Text>
-                  <Text size="2" weight="medium" className="truncate">
-                    {d.letterType.replace(/_/g, " ")}
-                  </Text>
-                </Flex>
-              </Button>
-            ))}
-          </Grid>
-        </Box>
-      )}
-    </Box>
+                    <PaperThumb seed={d.id} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-[14px] font-semibold text-[var(--ds-ink)]">
+                        {sentenceCase(d.letterType.replace(/_/g, " "))}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[12.5px] text-[var(--ds-muted)]">
+                        {d.mode === "employer" ? "HR" : "Employee"}, {d.context.jurisdiction}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </div>
   );
 }
 
+const TINTS = {
+  lavender: ["var(--ds-tint-lavender)", "var(--ds-tint-lavender-ink)"],
+  mint: ["var(--ds-tint-mint)", "var(--ds-tint-mint-ink)"],
+  peach: ["var(--ds-tint-peach)", "var(--ds-tint-peach-ink)"],
+} as const;
+
+/** 6B pastel card: tinted top with an icon, then the title and one line of explanation. */
 function RoleCard({
+  tint,
   icon,
   title,
   description,
   meta,
   onClick,
 }: {
-  icon: React.ReactNode;
+  tint: keyof typeof TINTS;
+  icon: ReactNode;
   title: string;
   description: string;
   meta: string;
   onClick: () => void;
 }) {
+  const [bg, ink] = TINTS[tint];
   return (
-    <Card asChild size="3" className="cursor-pointer group transition-colors hover:bg-[var(--accent-2)]">
-      <button type="button" onClick={onClick} className="text-left w-full">
-        <Inset clip="padding-box" side="top" pb="current">
-          <Flex direction="column" gap="3" p="2">
-            <Flex justify="between" align="center" mb="2">
-              <Box
-                className="size-10 rounded-md grid place-items-center"
-                style={{ background: "var(--accent-3)", color: "var(--accent-11)" }}
-              >
-                {icon}
-              </Box>
-              <ArrowUpRight className="size-4 text-[var(--gray-9)] opacity-0 group-hover:opacity-100 transition" />
-            </Flex>
-            <Heading size="4" weight="medium">{title}</Heading>
-            <Text size="2" color="gray" className="leading-relaxed">{description}</Text>
-            <Text size="1" color="gray" mt="2">{meta}</Text>
-          </Flex>
-        </Inset>
-      </button>
-    </Card>
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex w-full min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5 text-left transition hover:-translate-y-px hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)]"
+    >
+      <span
+        className="grid h-[108px] place-items-center rounded-[calc(var(--ds-r-l)-5px)]"
+        style={{ background: bg, color: ink }}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <span className="flex flex-1 flex-col px-3 pb-3 pt-3.5">
+        <span className="text-[16px] font-semibold text-[var(--ds-ink)]">{title}</span>
+        <span className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
+          {description}
+        </span>
+        <span className="mt-auto flex items-center justify-between gap-3 pt-4 text-[12.5px] text-[var(--ds-muted)]">
+          <span>{meta}</span>
+          <ArrowRight className="size-4 shrink-0 text-[var(--ds-subtle)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ds-ink)]" />
+        </span>
+      </span>
+    </button>
   );
+}
+
+function sentenceCase(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

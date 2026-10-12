@@ -261,7 +261,7 @@ function PasswordField({
     <div>
       <label
         htmlFor={id}
-        className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
+        className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
       >
         {label}
       </label>
@@ -274,7 +274,7 @@ function PasswordField({
           onChange={(e) => onChange(e.target.value)}
           required
           disabled={disabled}
-          className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white pl-3 pr-16 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+          className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] pl-3 pr-16 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
         />
         <button
           type="button"
@@ -282,7 +282,7 @@ function PasswordField({
           tabIndex={-1}
           aria-pressed={show}
           aria-label={show ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-medium text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
         >
           {show ? "Hide" : "Show"}
         </button>
@@ -433,7 +433,7 @@ export function CheckYourEmail({
           ) : null}
           We sent a 6-digit code to{" "}
           <span className="font-semibold text-[var(--ds-ink)]">{displayEmail}</span>. Enter
-          it below — the code expires in 10 minutes.
+          it below. The code expires in 10 minutes.
         </div>
       </div>
 
@@ -441,7 +441,7 @@ export function CheckYourEmail({
         <div>
           <label
             htmlFor="verification-code"
-            className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
+            className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
           >
             Verification code
           </label>
@@ -457,14 +457,14 @@ export function CheckYourEmail({
             onChange={(e) => setCode(e.target.value)}
             disabled={verifying}
             placeholder="000000"
-            className="w-full h-[44px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-center font-mono text-[20px] tracking-[0.4em] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+            className="w-full h-[44px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-3 text-center font-mono text-[20px] tracking-[0.4em] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
           />
         </div>
 
         {verifyError && <ErrorAlert message={verifyError} />}
         {!userId && (
           <ErrorAlert
-            message="If you already have an account, sign in instead — no new code was sent."
+            message="If you already have an account, sign in instead. No new code was sent."
           />
         )}
 
@@ -485,7 +485,7 @@ export function CheckYourEmail({
           type="button"
           onClick={() => void onResend()}
           disabled={resendState === "sending"}
-          className="w-full inline-flex items-center justify-center gap-2 h-[36px] rounded-[8px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60"
+          className="w-full inline-flex items-center justify-center gap-2 h-[36px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60"
         >
           {resendState === "sending" && (
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -494,7 +494,7 @@ export function CheckYourEmail({
             <CheckCircle2 className="size-4 text-[var(--ds-green-fg)]" aria-hidden />
           )}
           {resendState === "sent"
-            ? "Sent — check your inbox"
+            ? "Sent. Check your inbox"
             : resendState === "sending"
               ? "Sending…"
               : "Didn't get a code? Resend"}

@@ -187,9 +187,9 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                   <FileText className="size-4" />
                   <div className="flex flex-col min-w-0">
                     <span className="truncate text-[13px]">
-                      {s.draftTitle} · {s.sectionTitle}
+                      {s.draftTitle}: {s.sectionTitle}
                     </span>
-                    <span className="truncate text-[11px] text-muted-foreground">{s.snippet}</span>
+                    <span className="truncate text-[12px] text-[var(--ds-muted)]">{s.snippet}</span>
                   </div>
                 </CommandItem>
               ))}
@@ -220,7 +220,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                     <span className="truncate text-[13px]">
                       {c.author} on {c.draftTitle}
                     </span>
-                    <span className="truncate text-[11px] text-muted-foreground">{c.snippet}</span>
+                    <span className="truncate text-[12px] text-[var(--ds-muted)]">{c.snippet}</span>
                   </div>
                 </CommandItem>
               ))}
@@ -242,7 +242,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                   <History className="size-4" />
                   <span className="truncate">{d.title}</span>
                   {d.recipient && (
-                    <span className="text-xs text-muted-foreground truncate">· {d.recipient}</span>
+                    <span className="text-[12px] text-[var(--ds-muted)] truncate">{d.recipient}</span>
                   )}
                   <CommandShortcut>{d.jurisdiction}</CommandShortcut>
                 </CommandItem>
@@ -264,7 +264,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                 >
                   <PlusCircle className="size-4" />
                   <span className="truncate">{l.shortTitle}</span>
-                  <span className="text-xs text-muted-foreground truncate">· {l.title}</span>
+                  <span className="text-[12px] text-[var(--ds-muted)] truncate">{l.title}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

@@ -61,13 +61,12 @@ export function MatterTasks({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut", delay: 0.1 }}
-      className="mb-5"
     >
-      <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--ds-line-2)]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 flex items-center gap-1.5">
-            <ListChecks className="size-3" /> Tasks
-            <span className="text-[var(--ds-muted)] font-mono ml-1">
+      <div className="overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5">
+        <div className="flex items-center justify-between px-2.5 pb-1.5 pt-1.5">
+          <h2 className="m-0 flex items-center gap-2 text-[13.5px] font-semibold text-[var(--ds-ink)]">
+            <ListChecks className="size-3.5 text-[var(--ds-muted)]" aria-hidden /> Tasks
+            <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">
               {openCount}/{total}
             </span>
           </h2>
@@ -75,17 +74,17 @@ export function MatterTasks({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
             >
-              <Plus className="size-3" /> New task
+              <Plus className="size-3.5" /> New task
             </button>
           )}
         </div>
 
         {total === 0 && !adding ? (
-          <div className="px-4 py-6 text-center">
-            <p className="text-[13px] text-[var(--ds-muted)] m-0 mb-2">
-              No tasks yet — track what needs doing next
+          <div className="rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--ds-surface-2)] px-4 py-6 text-center">
+            <p className="m-0 mb-3 text-[13px] text-[var(--ds-muted)]">
+              No tasks yet. Track what needs doing next.
             </p>
             <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
               <Plus className="size-3.5" /> New task
@@ -117,15 +116,15 @@ export function MatterTasks({
         )}
 
         {adding && (
-          <div className="border-t border-[var(--ds-line-2)] px-4 py-3 bg-[var(--ds-surface-2)]">
-            <div className="flex flex-col sm:flex-row gap-2">
+          <div className="mt-1 rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--ds-surface-2)] px-3 py-3">
+            <div className="flex flex-col gap-2">
               <input
                 autoFocus
                 type="text"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="What needs doing?"
-                className="flex-1 text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:ring-2 focus:ring-[var(--ds-line)]"
+                className="flex-1 text-[13px] px-2.5 py-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:border-[var(--ds-focus)]"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") onSave();
                   if (e.key === "Escape") resetForm();
@@ -136,7 +135,7 @@ export function MatterTasks({
                 value={due}
                 min={todayDateOnly()}
                 onChange={(e) => setDue(e.target.value)}
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
+                className="text-[13px] px-2.5 py-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
               />
               <div className="flex gap-2">
                 <Button size="sm" onClick={onSave} disabled={!label.trim()}>
@@ -166,7 +165,7 @@ function TaskRow({
   completed?: boolean;
 }) {
   return (
-    <li className="flex items-center gap-3 px-4 py-2.5 border-t border-[var(--ds-line-2)] first:border-t-0 group">
+    <li className="group flex items-center gap-3 rounded-[var(--ds-r-m)] px-2.5 py-2 hover:bg-[var(--ds-surface-2)]">
       <button
         type="button"
         onClick={onToggle}
@@ -196,24 +195,25 @@ function TaskRow({
           {task.label}
         </div>
       </div>
-      <div className="text-[11px] text-[var(--ds-muted)] shrink-0 tabular-nums">
+      <div className="shrink-0 text-[12px] tabular-nums text-[var(--ds-muted)]">
         {completed
           ? task.doneAt
-            ? `completed ${formatDateOnly(
+            ? `Done ${formatDateOnly(
                 toDateOnly(new Date(task.doneAt)),
-                { dateStyle: "medium" }
+                { day: "numeric", month: "short" },
+                "en-GB"
               )}`
-            : "completed"
+            : "Done"
           : task.dueISO
-          ? `due ${formatDateOnly(task.dueISO, { dateStyle: "medium" })}`
-          : "no date"}
+          ? formatDateOnly(task.dueISO, { day: "numeric", month: "short" }, "en-GB")
+          : "No date"}
       </div>
       {!completed && (
         <Button
           variant="outline"
           size="sm"
           onClick={onToggle}
-          className="hidden group-hover:inline-flex shrink-0"
+          className="hidden h-7 shrink-0 px-2 text-[12px] xl:group-hover:inline-flex"
         >
           Done
         </Button>

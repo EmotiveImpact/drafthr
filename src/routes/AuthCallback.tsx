@@ -108,15 +108,15 @@ export function AuthCallback() {
   }, [params, navigate, refresh]);
 
   return (
-    <div className="min-h-screen grid place-items-center px-6">
+    <div className="min-h-screen grid place-items-center bg-[var(--ds-canvas)] px-6">
       <div className="w-full max-w-md space-y-4 text-center">
         {error ? (
           <>
-            <h1 className="text-lg font-semibold">Couldn't complete sign-in</h1>
-            <p className="text-sm text-muted-foreground">{error}</p>
+            <h1 className="ds-title m-0 text-[28px] leading-tight">Couldn't complete sign-in</h1>
+            <p className="text-[14px] text-[var(--ds-muted)]">{error}</p>
             <Link
               to="/sign-in"
-              className="inline-block text-sm font-medium text-primary underline-offset-4 hover:underline"
+              className="inline-flex h-9 items-center rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] px-4 text-[13.5px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
             >
               Try again
             </Link>
@@ -125,7 +125,7 @@ export function AuthCallback() {
           <>
             <Skeleton className="h-6 w-2/3 mx-auto" />
             <Skeleton className="h-4 w-full" />
-            <p className="text-sm text-muted-foreground">Signing you in…</p>
+            <p className="text-[13px] text-[var(--ds-muted)]">Signing you in…</p>
           </>
         )}
       </div>

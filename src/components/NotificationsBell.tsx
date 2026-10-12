@@ -7,21 +7,26 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/Badge";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { deriveNotifications, topSeverity } from "@/lib/notifications";
 
 const PILL: Record<string, string> = {
-  urgent: "bg-rose-500 text-white",
-  warn: "bg-amber-500 text-white",
-  info: "bg-muted-foreground text-background",
+  urgent: "bg-[var(--ds-red-fg)] text-white",
+  warn: "bg-[var(--ds-amber-dot)] text-white",
+  info: "bg-[var(--ds-muted)] text-white",
 };
 
-const RING: Record<string, string> = {
-  urgent: "border-rose-200 bg-rose-50/60",
-  warn: "border-amber-200 bg-amber-50/60",
-  info: "border-letter-rule",
+const DOT: Record<string, string> = {
+  urgent: "bg-[var(--ds-red-fg)]",
+  warn: "bg-[var(--ds-amber-dot)]",
+  info: "bg-[var(--ds-faint)]",
+};
+
+const LABEL: Record<string, string> = {
+  urgent: "Urgent",
+  warn: "Action",
+  info: "Heads up",
 };
 
 /**
@@ -67,44 +72,38 @@ export function NotificationsBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <div className="px-3 py-2.5 flex items-center justify-between border-b border-sidebar-border">
-          <span className="text-sm font-medium">Notifications</span>
+      <PopoverContent
+        align="end"
+        className="w-80 overflow-hidden rounded-[var(--ds-r-m)] border-[var(--ds-line)] bg-[var(--ds-surface)] p-0 shadow-[var(--ds-shadow-l)]"
+      >
+        <div className="flex items-center justify-between border-b border-[var(--ds-line)] px-3.5 py-3">
+          <span className="text-[13.5px] font-semibold text-[var(--ds-ink)]">Notifications</span>
           <button
-            className="text-xs text-muted-foreground hover:text-foreground underline"
+            className="text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
             onClick={() => go("/notifications")}
           >
             View all
           </button>
         </div>
         {list.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-            All clear — nothing needs your attention.
+          <div className="px-3 py-8 text-center text-[12.5px] text-[var(--ds-muted)]">
+            All clear. Nothing needs your attention.
           </div>
         ) : (
-          <ul className="divide-y divide-sidebar-border max-h-[60vh] overflow-auto">
+          <ul className="m-0 max-h-[60vh] list-none divide-y divide-[var(--ds-line-2)] overflow-auto p-0">
             {preview.map((n) => (
               <li key={n.id}>
                 <button
                   type="button"
                   onClick={() => n.actionHref && go(n.actionHref)}
-                  className={`text-left w-full px-3 py-2.5 cursor-pointer hover:bg-muted/40 ${RING[n.severity]}`}
+                  className="w-full cursor-pointer px-3.5 py-3 text-left hover:bg-[var(--ds-surface-2)]"
                 >
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-xs font-medium truncate flex-1">{n.title}</span>
-                    <Badge
-                      className={
-                        n.severity === "urgent"
-                          ? "bg-rose-50 text-rose-900 border-rose-200"
-                          : n.severity === "warn"
-                          ? "bg-amber-50 text-amber-900 border-amber-200"
-                          : "bg-muted text-foreground border-letter-rule"
-                      }
-                    >
-                      {n.severity}
-                    </Badge>
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className={`size-1.5 shrink-0 rounded-full ${DOT[n.severity]}`} aria-hidden />
+                    <span className="flex-1 truncate text-[13px] font-medium text-[var(--ds-ink)]">{n.title}</span>
+                    <span className="shrink-0 text-[11px] text-[var(--ds-muted)]">{LABEL[n.severity] ?? n.severity}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                  <p className="m-0 line-clamp-2 pl-3.5 text-[12px] leading-relaxed text-[var(--ds-muted)]">
                     {n.description}
                   </p>
                 </button>
@@ -114,10 +113,10 @@ export function NotificationsBell() {
               <li>
                 <button
                   type="button"
-                  className="text-left w-full px-3 py-2 text-center text-xs text-muted-foreground hover:bg-muted/40 cursor-pointer"
+                  className="w-full cursor-pointer px-3 py-2.5 text-center text-[12.5px] text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
                   onClick={() => go("/notifications")}
                 >
-                  + {list.length - preview.length} more →
+                  {list.length - preview.length} more
                 </button>
               </li>
             )}

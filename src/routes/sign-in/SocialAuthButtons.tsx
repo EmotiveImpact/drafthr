@@ -133,7 +133,7 @@ function SocialButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
+      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-surface)] disabled:hover:border-[var(--ds-line)]"
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       <span className="truncate">{shortLabel}</span>
@@ -191,7 +191,7 @@ function LinkedInGlyph() {
 
 export function AuthDivider({ label }: { label: string }) {
   return (
-    <div className="relative my-5 text-center text-[11px] uppercase tracking-[0.12em] text-[var(--ds-muted)]">
+    <div className="relative my-5 text-center text-[12px] text-[var(--ds-muted)]">
       <span className="bg-[var(--ds-surface)] px-3 relative z-10">{label}</span>
       <span
         aria-hidden

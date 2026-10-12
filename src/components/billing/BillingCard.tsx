@@ -7,12 +7,14 @@
  * through the billing webhook. Workspace plans can only be managed by owners
  * and admins; the server enforces that and its message is shown as a toast.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
-import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
+import { Button } from "@radix-ui/themes";
+import { CreditCard, ExternalLink, FileText, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { getBillingStatus, openBillingPortal, type BillingStatus } from "@/lib/billing/api";
+import { useDraftStore } from "@/lib/store";
+import { SectionCard, StatTile, StatTileGrid, StatusPill } from "@/components/reports/parts";
 
 const PLAN_NAMES: Record<string, string> = {
   starter: "Starter",
@@ -25,9 +27,17 @@ function formatDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export function BillingCard() {
+/** Start of the current allowance window, or the first of this month. */
+function windowStart(status: BillingStatus | null): number {
+  if (status?.allowanceStart) return status.allowanceStart;
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+}
+
+export function BillingCard({ fallback = null }: { fallback?: ReactNode } = {}) {
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [opening, setOpening] = useState(false);
+  const drafts = useDraftStore((s) => s.drafts);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +49,12 @@ export function BillingCard() {
     };
   }, []);
 
-  if (!status?.configured) return null;
+  const lettersThisPeriod = useMemo(() => {
+    const from = windowStart(status);
+    return Object.values(drafts).filter((d) => d.createdAt >= from).length;
+  }, [drafts, status]);
+
+  if (!status?.configured) return <>{fallback}</>;
 
   const onManage = async () => {
     if (opening) return;
@@ -55,53 +70,69 @@ export function BillingCard() {
 
   const planName = status.plan ? PLAN_NAMES[status.plan] ?? status.plan : null;
 
+  const planFoot = planName
+    ? status.currentPeriodEnd
+      ? status.cancelAtPeriodEnd
+        ? `Ends on ${formatDate(status.currentPeriodEnd)}`
+        : `Renews on ${formatDate(status.currentPeriodEnd)}`
+      : status.active
+        ? "Active"
+        : (status.status ?? "").replace("_", " ")
+    : "You don't have a plan yet";
+
   return (
-    <Card size="3">
-      <Flex direction="column" gap="3">
-        <Flex align="center" gap="2">
-          <CreditCard className="size-4 text-[var(--ds-muted)]" aria-hidden />
-          <Heading as="h3" size="3" weight="medium">
-            Billing
-          </Heading>
-        </Flex>
-
-        {planName ? (
-          <Text size="2" color="gray" as="p" style={{ maxWidth: 560 }}>
-            {status.active ? "You're on " : "Your plan: "}
-            <strong>{planName}</strong>
-            {!status.active && status.status ? ` (${status.status.replace("_", " ")})` : ""}
-            {status.currentPeriodEnd
-              ? status.cancelAtPeriodEnd
-                ? `. Ends on ${formatDate(status.currentPeriodEnd)}.`
-                : `. Renews on ${formatDate(status.currentPeriodEnd)}.`
-              : "."}{" "}
-            {status.credits} AI {status.credits === 1 ? "credit" : "credits"} available.
-          </Text>
-        ) : (
-          <Text size="2" color="gray" as="p" style={{ maxWidth: 560 }}>
-            You don't have a plan yet. {status.credits > 0 ? `${status.credits} AI credits available.` : ""}
-          </Text>
-        )}
-
-        <Flex gap="2" wrap="wrap">
+    <SectionCard
+      icon={CreditCard}
+      title="Billing"
+      description={
+        planName
+          ? "Change plan, update your card, download invoices or cancel. Workspace plans can be managed by workspace owners and admins."
+          : "Pick a plan to start drafting, or buy a single letter."
+      }
+      actions={
+        <>
           {planName ? (
             <Button onClick={onManage} disabled={opening}>
               {opening ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ExternalLink className="size-4" aria-hidden />}
               {opening ? "Opening…" : "Manage billing"}
             </Button>
           ) : null}
-          <Button variant="soft" asChild>
+          <Button variant="soft" color="gray" asChild>
             <Link to="/pricing">{planName ? "Compare plans" : "See plans"}</Link>
           </Button>
-        </Flex>
-
-        {planName ? (
-          <Text size="1" color="gray" as="p">
-            Change plan, update your card, download invoices or cancel. Workspace plans can be
-            managed by workspace owners and admins.
-          </Text>
-        ) : null}
-      </Flex>
-    </Card>
+        </>
+      }
+    >
+      <StatTileGrid cols={3} className="lg:grid-cols-3">
+        <StatTile
+          label="Current plan"
+          icon={CreditCard}
+          value={planName ?? "None"}
+          className="col-span-2 lg:col-span-1"
+          foot={
+            <>
+              {planName && !status.active && status.status ? (
+                <StatusPill tone="warn" size="sm">
+                  {status.status.replace("_", " ")}
+                </StatusPill>
+              ) : null}
+              <span className="truncate">{planFoot}</span>
+            </>
+          }
+        />
+        <StatTile
+          label="AI credits left"
+          icon={Sparkles}
+          value={status.credits}
+          foot={status.credits === 1 ? "1 AI credit available" : `${status.credits} AI credits available`}
+        />
+        <StatTile
+          label="Letters this month"
+          icon={FileText}
+          value={lettersThisPeriod}
+          foot="Started on this device"
+        />
+      </StatTileGrid>
+    </SectionCard>
   );
 }

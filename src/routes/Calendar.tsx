@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
+import { Button } from "@radix-ui/themes";
 import { CalendarClock, Download, ArrowUpRight } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/ds";
+import { PageShell, SectionLabel, StatusPill } from "@/components/reports/parts";
+import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft } from "@/lib/letters/types";
@@ -22,24 +24,14 @@ type Event = {
   kind: "tribunal" | "acas_ec" | "advisor" | "remedy" | "appeal" | "acceptance" | "send_by";
 };
 
-const KIND_COLOR: Record<Event["kind"], "red" | "amber" | "blue" | "purple" | "green"> = {
-  tribunal: "red",
-  acas_ec: "amber",
-  advisor: "blue",
-  remedy: "amber",
-  appeal: "purple",
-  acceptance: "green",
-  send_by: "blue",
-};
-
 const KIND_LABEL: Record<Event["kind"], string> = {
-  tribunal: "tribunal",
-  acas_ec: "acas EC",
-  advisor: "advisor",
-  remedy: "remedy",
-  appeal: "appeal",
-  acceptance: "acceptance",
-  send_by: "send by",
+  tribunal: "Tribunal",
+  acas_ec: "ACAS EC",
+  advisor: "Advisor",
+  remedy: "Remedy",
+  appeal: "Appeal",
+  acceptance: "Acceptance",
+  send_by: "Send by",
 };
 
 export function Calendar() {
@@ -53,6 +45,7 @@ export function Calendar() {
   );
   const upcoming = events.filter((e) => e.daysAway >= 0);
   const past = events.filter((e) => e.daysAway < 0);
+  const months = useMemo(() => groupByMonth(upcoming), [upcoming]);
 
   const onExportIcs = () => {
     const ics = buildIcs(events);
@@ -68,80 +61,138 @@ export function Calendar() {
   };
 
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <PageShell>
       <PageHeader
         crumbs={[{ label: "Calendar" }]}
         title="Deadlines"
-        lede="Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off deadlines, and any remedy / acceptance dates from your drafts."
+        lede="Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off deadlines, and any remedy or acceptance dates from your drafts."
         actions={
           <Button onClick={onExportIcs} disabled={events.length === 0}>
-            <Download className="size-3.5" /> Export to .ics
+            <Download className="size-3.5" /> Export to calendar (.ics)
           </Button>
         }
       />
 
       {events.length === 0 && (
-        <EmptyState
-          icon={CalendarClock}
-          title="No deadlines yet"
-          body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance / remedy / advisor date in a wizard."
-          primary={{ label: "Start a letter", to: "/" }}
-        />
+        <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)]">
+          <EmptyState
+            icon={CalendarClock}
+            title="No deadlines yet"
+            body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance, remedy or advisor date in a wizard."
+            primary={{ label: "Start a letter", to: "/" }}
+          />
+        </div>
       )}
 
-      {upcoming.length > 0 && (
-        <Card size="2" mb="4">
-          <Flex align="center" gap="2" mb="3">
-            <CalendarClock className="size-4" />
-            <Heading size="3">Upcoming ({upcoming.length})</Heading>
-          </Flex>
-          <Flex direction="column">
-            {upcoming.map((e, i) => <EventRow key={`u-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} />)}
-          </Flex>
-        </Card>
-      )}
+      <div className="flex flex-col gap-9">
+        {months.map(([month, list]) => (
+          <section key={month}>
+            <SectionLabel hint={list.length === 1 ? "1 deadline" : `${list.length} deadlines`}>
+              {month}
+            </SectionLabel>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {list.map((e, i) => (
+                <EventCard key={`u-${month}-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} />
+              ))}
+            </div>
+          </section>
+        ))}
 
-      {past.length > 0 && (
-        <Card size="2" style={{ opacity: 0.7 }}>
-          <Heading size="3" color="gray" mb="3">Passed ({past.length})</Heading>
-          <Flex direction="column">
-            {past.map((e, i) => <EventRow key={`p-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} past />)}
-          </Flex>
-        </Card>
-      )}
-    </Box>
+        {past.length > 0 && (
+          <section>
+            <SectionLabel hint="Dates that have already gone by.">
+              Passed <span className="ds-mono ml-1 text-[12px] font-normal text-[var(--ds-muted)]">{past.length}</span>
+            </SectionLabel>
+            <div className="flex flex-col">
+              {past.map((e, i) => (
+                <PastRow key={`p-${i}`} ev={e} first={i === 0} onOpen={() => nav(`/editor/${e.draftId}`)} />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </PageShell>
   );
 }
 
-function EventRow({ ev, onOpen, past }: { ev: Event; onOpen: () => void; past?: boolean }) {
-  const bg = past
-    ? undefined
-    : ev.daysAway < 14
-    ? "var(--red-2)"
-    : ev.daysAway < 30
-    ? "var(--amber-2)"
-    : undefined;
+function groupByMonth(list: Event[]): [string, Event[]][] {
+  const out = new Map<string, Event[]>();
+  for (const e of list) {
+    const key = formatDateOnly(e.iso.slice(0, 7) + "-01", { month: "long", year: "numeric" }, "en-GB");
+    const arr = out.get(key) ?? [];
+    arr.push(e);
+    out.set(key, arr);
+  }
+  return [...out.entries()];
+}
+
+function daysLeftLabel(days: number): string {
+  if (days === 0) return "Today";
+  if (days === 1) return "1 day left";
+  return `${days} days left`;
+}
+
+function EventCard({ ev, onOpen }: { ev: Event; onOpen: () => void }) {
+  const urgent = ev.daysAway < 14;
+  const soon = !urgent && ev.daysAway < 30;
   return (
-    <button onClick={onOpen} className="text-left">
-      <Flex
-        align="center"
-        gap="3"
-        px="4"
-        py="3"
-        className="hover:bg-[var(--gray-2)] cursor-pointer border-b border-[var(--gray-5)] last:border-b-0"
-        style={{ background: bg }}
-      >
-        <Text size="1" color="gray" className="tabular-nums w-24">{formatDate(ev.iso)}</Text>
-        <Box className="flex-1 min-w-0">
-          <Text size="2" weight="medium" as="div" className="truncate">{ev.label}</Text>
-          <Text size="1" color="gray" as="div" className="truncate">{ev.basis}</Text>
-        </Box>
-        <Badge color={KIND_COLOR[ev.kind]} variant="soft">{KIND_LABEL[ev.kind]}</Badge>
-        <Text size="1" color="gray" className="tabular-nums hidden sm:inline" style={{ minWidth: 48, textAlign: "right" }}>
-          {ev.daysAway < 0 ? "passed" : `${ev.daysAway}d`}
-        </Text>
-        <ArrowUpRight className="size-3.5 text-[var(--gray-9)] sm:hidden" />
-      </Flex>
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "group flex min-w-0 cursor-pointer flex-col rounded-[var(--ds-r-m)] px-4 pb-4 pt-3.5 text-left transition hover:shadow-[var(--ds-shadow-m)]",
+        urgent ? "bg-[var(--ds-red-bg)]" : soon ? "bg-[var(--ds-amber-bg)]" : "bg-[var(--ds-surface-2)]"
+      )}
+    >
+      <span className="flex items-center justify-between gap-3 text-[12.5px]">
+        <span className="flex min-w-0 items-center gap-1.5 text-[var(--ds-muted)]">
+          <CalendarClock className="size-3.5 shrink-0" aria-hidden />
+          <span className="truncate">{ev.label}</span>
+        </span>
+        <span
+          className={cn(
+            "shrink-0 font-medium",
+            urgent ? "text-[var(--ds-red-fg)]" : soon ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-body)]"
+          )}
+        >
+          {daysLeftLabel(ev.daysAway)}
+        </span>
+      </span>
+      <span className="ds-title mt-2 text-[24px] leading-tight">{formatLongDate(ev.iso)}</span>
+      <span className="mt-1.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">{ev.basis}</span>
+      <span className="mt-3 flex items-center gap-2">
+        <span className="ds-mono inline-flex h-[22px] items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-surface)] px-1.5 text-[11.5px] text-[var(--ds-body)] shadow-[0_0_0_1px_var(--ds-line)]">
+          <span className="grid size-3.5 place-items-center rounded-[3px] bg-[var(--ds-ink)] text-[9px] font-semibold text-[var(--ds-on-accent)]">
+            §
+          </span>
+          {KIND_LABEL[ev.kind]}
+        </span>
+        <ArrowUpRight className="ml-auto size-3.5 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)]" aria-hidden />
+      </span>
+    </button>
+  );
+}
+
+function PastRow({ ev, onOpen, first }: { ev: Event; onOpen: () => void; first: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "relative flex w-full cursor-pointer items-center gap-3 rounded-[var(--ds-r-m)] px-3 py-3 text-left hover:bg-[var(--ds-surface-2)]",
+        !first && "before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--ds-line)]"
+      )}
+    >
+      <span className="ds-mono w-24 shrink-0 text-[12px] text-[var(--ds-muted)]">{formatDate(ev.iso)}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-medium text-[var(--ds-body)]">{ev.label}</span>
+        <span className="block truncate text-[12px] text-[var(--ds-muted)]">{ev.basis}</span>
+      </span>
+      <StatusPill tone="neutral" dot={false} size="sm" className="hidden sm:inline-flex">
+        {KIND_LABEL[ev.kind]}
+      </StatusPill>
+      <span className="hidden text-[12px] text-[var(--ds-faint)] sm:inline">passed</span>
+      <ArrowUpRight className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
     </button>
   );
 }
@@ -160,7 +211,7 @@ function extractEvents(drafts: Draft[]): Event[] {
         draftId: d.id,
         iso: dl.iso,
         daysAway: daysBetween(dl.iso),
-        label: `${label} — limitation expires`,
+        label: `${label}: limitation expires`,
         basis: dl.basis,
         kind: "tribunal",
       });
@@ -170,7 +221,7 @@ function extractEvents(drafts: Draft[]): Event[] {
           draftId: d.id,
           iso: ec,
           daysAway: daysBetween(ec),
-          label: `${label} — ACAS EC by`,
+          label: `${label}: ACAS EC by`,
           basis: "Lodge ACAS Early Conciliation at least 6 weeks before tribunal limitation",
           kind: "acas_ec",
         });
@@ -178,13 +229,13 @@ function extractEvents(drafts: Draft[]): Event[] {
     }
 
     const a = d.answers as Record<string, unknown>;
-    pushIfDate(out, d.id, a.advisorDeadline, `${label} — advisor sign-off`, "Advisor certification deadline (settlement)", "advisor");
-    pushIfDate(out, d.id, a.remedyDeadline, `${label} — remedy by`, "Demanded remedy deadline", "remedy");
-    pushIfDate(out, d.id, a.appealDeadline, `${label} — appeal by`, "Appeal must be lodged by", "appeal");
-    pushIfDate(out, d.id, a.acceptanceDeadline, `${label} — acceptance by`, "Acceptance deadline (offer)", "acceptance");
-    pushIfDate(out, d.id, a.demandDeadline, `${label} — payment by`, "Pay-dispute demand deadline", "remedy");
-    pushIfDate(out, d.id, a.reviewDate, `${label} — performance review`, "PIP / probation review date", "remedy");
-    pushIfDate(out, d.id, a.sendBy, `${label} — send by`, "Target date for the letter to go out", "send_by");
+    pushIfDate(out, d.id, a.advisorDeadline, `${label}: advisor sign-off`, "Advisor certification deadline (settlement)", "advisor");
+    pushIfDate(out, d.id, a.remedyDeadline, `${label}: remedy by`, "Demanded remedy deadline", "remedy");
+    pushIfDate(out, d.id, a.appealDeadline, `${label}: appeal by`, "Appeal must be lodged by", "appeal");
+    pushIfDate(out, d.id, a.acceptanceDeadline, `${label}: acceptance by`, "Acceptance deadline (offer)", "acceptance");
+    pushIfDate(out, d.id, a.demandDeadline, `${label}: payment by`, "Pay-dispute demand deadline", "remedy");
+    pushIfDate(out, d.id, a.reviewDate, `${label}: performance review`, "PIP / probation review date", "remedy");
+    pushIfDate(out, d.id, a.sendBy, `${label}: send by`, "Target date for the letter to go out", "send_by");
   }
   out.sort((a, b) => a.iso.localeCompare(b.iso));
   return out;
@@ -204,8 +255,12 @@ function subtractDays(iso: string, days: number): string {
   return addDaysToDateOnly(iso, -days);
 }
 
+function formatLongDate(iso: string): string {
+  return formatDateOnly(iso, { day: "numeric", month: "long", year: "numeric" }, "en-GB");
+}
+
 function formatDate(iso: string): string {
-  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" });
+  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" }, "en-GB");
 }
 
 function buildIcs(events: Event[]): string {
@@ -225,7 +280,7 @@ function buildIcs(events: Event[]): string {
     // UID must be unique per VEVENT. Several distinct answer fields share a
     // single `kind` (e.g. remedyDeadline, demandDeadline and reviewDate all
     // map to "remedy"), so `draftId-kind` alone collides when a draft has
-    // more than one populated — calendar apps dedupe same-UID events on
+    // more than one populated: calendar apps dedupe same-UID events on
     // import and silently drop the extras. Fold in the date and index.
     lines.push(
       "BEGIN:VEVENT",

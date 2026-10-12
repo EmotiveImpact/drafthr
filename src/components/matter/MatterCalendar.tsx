@@ -5,7 +5,7 @@ import type { EventKind, MatterEvent } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { formatDateOnly, parseDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { StatusPill, type PillTone } from "@/components/reports/parts";
 
 const EVENT_KIND_LABEL: Record<EventKind, string> = {
   meeting: "Meeting",
@@ -14,11 +14,11 @@ const EVENT_KIND_LABEL: Record<EventKind, string> = {
   review: "Review",
 };
 
-const EVENT_KIND_TONE: Record<EventKind, string> = {
-  meeting: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-  hearing: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-  deadline: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
-  review: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
+const EVENT_KIND_TONE: Record<EventKind, PillTone> = {
+  meeting: "info",
+  hearing: "warn",
+  deadline: "danger",
+  review: "ok",
 };
 
 /**
@@ -33,12 +33,13 @@ function formatEventWhen(iso: string): string {
     // Bare "YYYY-MM-DD" parses as UTC midnight via new Date(), so
     // toLocaleDateString renders the prior day west of UTC. Use the
     // local-parse helper which constructs the date from local components.
-    return formatDateOnly(iso, { day: "2-digit", month: "short" });
+    return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" }, "en-GB");
   }
-  return `${d.toLocaleDateString(undefined, {
-    day: "2-digit",
+  return `${d.toLocaleDateString("en-GB", {
+    day: "numeric",
     month: "short",
-  })} ${d.toLocaleTimeString(undefined, {
+    year: "numeric",
+  })}, ${d.toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
   })}`;
@@ -103,13 +104,12 @@ export function MatterCalendar({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut", delay: 0.15 }}
-      className="mb-5"
     >
-      <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--ds-line-2)]">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 flex items-center gap-1.5">
-            <CalendarDays className="size-3" /> Calendar
-            <span className="text-[var(--ds-muted)] font-mono ml-1">
+      <div className="overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5">
+        <div className="flex items-center justify-between px-2.5 pb-1.5 pt-1.5">
+          <h2 className="m-0 flex items-center gap-2 text-[13.5px] font-semibold text-[var(--ds-ink)]">
+            <CalendarDays className="size-3.5 text-[var(--ds-muted)]" aria-hidden /> Events
+            <span className="text-[12px] font-normal text-[var(--ds-muted)]">
               {upcoming.length} upcoming
             </span>
           </h2>
@@ -117,16 +117,16 @@ export function MatterCalendar({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
             >
-              <Plus className="size-3" /> Add event
+              <Plus className="size-3.5" /> Add event
             </button>
           )}
         </div>
 
         {events.length === 0 && !adding ? (
-          <div className="px-4 py-6 text-center">
-            <p className="text-[13px] text-[var(--ds-muted)] m-0 mb-2">
+          <div className="rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--ds-surface-2)] px-4 py-6 text-center">
+            <p className="m-0 mb-3 text-[13px] text-[var(--ds-muted)]">
               No upcoming events
             </p>
             <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
@@ -134,9 +134,9 @@ export function MatterCalendar({
             </Button>
           </div>
         ) : upcoming.length === 0 && !adding ? (
-          <div className="px-4 py-6 text-center">
-            <p className="text-[13px] text-[var(--ds-muted)] m-0 mb-2">
-              No upcoming events — all past
+          <div className="rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--ds-surface-2)] px-4 py-6 text-center">
+            <p className="m-0 mb-3 text-[13px] text-[var(--ds-muted)]">
+              No upcoming events. Every event is in the past.
             </p>
             <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
               <Plus className="size-3.5" /> Add event
@@ -147,28 +147,21 @@ export function MatterCalendar({
             {upcoming.map((ev) => (
               <li
                 key={ev.id}
-                className="flex items-center gap-3 px-4 py-2.5 border-t border-[var(--ds-line-2)] first:border-t-0 group"
+                className="group flex items-center gap-3 rounded-[var(--ds-r-m)] px-2.5 py-2.5 hover:bg-[var(--ds-surface-2)]"
               >
-                <span
-                  className={cn(
-                    "text-[10px] px-1.5 py-[1px] rounded-full font-medium shrink-0",
-                    EVENT_KIND_TONE[ev.kind]
-                  )}
-                >
-                  {EVENT_KIND_LABEL[ev.kind]}
-                </span>
-                <span className="text-[11px] font-mono text-[var(--ds-muted)] tabular-nums shrink-0 min-w-[105px]">
-                  {formatEventWhen(ev.whenISO)}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] text-[var(--ds-ink)] truncate">
-                    {ev.label}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="truncate text-[13.5px] font-medium text-[var(--ds-ink)]">
+                      {ev.label}
+                    </span>
+                    <StatusPill tone={EVENT_KIND_TONE[ev.kind]} size="sm">
+                      {EVENT_KIND_LABEL[ev.kind]}
+                    </StatusPill>
                   </div>
-                  {ev.detail && (
-                    <div className="text-[11px] text-[var(--ds-muted)] truncate">
-                      {ev.detail}
-                    </div>
-                  )}
+                  <div className="mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+                    {formatEventWhen(ev.whenISO)}
+                    {ev.detail && <>, {ev.detail}</>}
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -184,7 +177,7 @@ export function MatterCalendar({
         )}
 
         {adding && (
-          <div className="border-t border-[var(--ds-line-2)] px-4 py-3 bg-[var(--ds-surface-2)]">
+          <div className="mt-1 rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--ds-surface-2)] px-3 py-3">
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">
               <input
                 autoFocus
@@ -192,7 +185,7 @@ export function MatterCalendar({
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 placeholder="Event title (e.g. Witness interview)"
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:ring-2 focus:ring-[var(--ds-line)]"
+                className="text-[13px] px-2.5 py-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:border-[var(--ds-focus)]"
                 onKeyDown={(e) => {
                   if (e.key === "Escape") resetForm();
                 }}
@@ -200,7 +193,7 @@ export function MatterCalendar({
               <select
                 value={kind}
                 onChange={(e) => setKind(e.target.value as EventKind)}
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
+                className="text-[13px] px-2.5 py-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
               >
                 <option value="meeting">Meeting</option>
                 <option value="hearing">Hearing</option>
@@ -211,7 +204,7 @@ export function MatterCalendar({
                 type="datetime-local"
                 value={when}
                 onChange={(e) => setWhen(e.target.value)}
-                className="text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
+                className="text-[13px] px-2.5 py-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none"
               />
             </div>
             <div className="mt-2 flex flex-col sm:flex-row gap-2">
@@ -219,8 +212,8 @@ export function MatterCalendar({
                 type="text"
                 value={detail}
                 onChange={(e) => setDetail(e.target.value)}
-                placeholder="Optional detail (location, participants…)"
-                className="flex-1 text-[13px] px-2.5 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:ring-2 focus:ring-[var(--ds-line)]"
+                placeholder="Optional detail (location, participants)"
+                className="flex-1 text-[13px] px-2.5 py-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] outline-none focus:border-[var(--ds-focus)]"
               />
               <div className="flex gap-2">
                 <Button size="sm" onClick={onSave} disabled={!label.trim() || !when}>

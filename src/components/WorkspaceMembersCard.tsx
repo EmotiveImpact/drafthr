@@ -3,19 +3,21 @@ import {
   Badge,
   Box,
   Button,
-  Card,
   Dialog,
   Flex,
-  Heading,
   IconButton,
   Select,
-  Separator,
   Text,
   TextField,
 } from "@radix-ui/themes";
 import { Copy, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { Avatar } from "@/components/ds";
+import { SectionCard, StatusPill } from "@/components/reports/parts";
+
+const ROW =
+  "relative flex items-center justify-between gap-3 rounded-[var(--ds-r-m)] px-3 py-2.5 hover:bg-[var(--ds-surface-2)] [&+&]:before:absolute [&+&]:before:inset-x-3 [&+&]:before:top-0 [&+&]:before:border-t [&+&]:before:border-[var(--ds-line)] [&+&]:before:content-['']";
 
 /**
  * Settings → Workspace section. Lists members + pending invites with
@@ -89,30 +91,25 @@ export function WorkspaceMembersCard() {
   if (!activeTenant) return null;
 
   return (
-    <Card size="3">
-      <Flex justify="between" align="start" mb="3" gap="3">
-        <Box>
-          <Heading size="3" mb="1">Workspace · {activeTenant.name}</Heading>
-          <Text size="2" color="gray" as="p">
-            People with access to this workspace. Admins can invite, change roles, and remove
-            members.
-          </Text>
-        </Box>
-        {isAdmin && (
+    <SectionCard
+      title={`Workspace: ${activeTenant.name}`}
+      description="People with access to this workspace. Admins can invite, change roles and remove members."
+      actions={
+        isAdmin ? (
           <Button onClick={() => setShowInvite(true)} variant="solid">
             <Plus className="size-4" />
             Invite member
           </Button>
-        )}
-      </Flex>
-
-      <Separator size="4" my="3" />
-
-      <Heading size="2" mb="2" weight="medium">Members ({members.length})</Heading>
-      <Flex direction="column" gap="2">
-        {loading && <Text size="2" color="gray">Loading…</Text>}
+        ) : undefined
+      }
+    >
+      <h3 className="m-0 mb-1 text-[12.5px] font-medium text-[var(--ds-muted)]">
+        Members <span className="ds-mono">{members.length}</span>
+      </h3>
+      <div className="-mx-3 flex flex-col">
+        {loading && <Text size="2" color="gray" className="px-3 py-2">Loading…</Text>}
         {!loading && members.length === 0 && (
-          <Text size="2" color="gray">No members yet.</Text>
+          <Text size="2" color="gray" className="px-3 py-2">No members yet.</Text>
         )}
         {members.map((m) => (
           <MemberRow
@@ -123,24 +120,25 @@ export function WorkspaceMembersCard() {
             onChanged={refresh}
           />
         ))}
-      </Flex>
+      </div>
 
       {isAdmin && invites.length > 0 && (
         <>
-          <Separator size="4" my="3" />
-          <Heading size="2" mb="2" weight="medium">Pending invites ({invites.length})</Heading>
-          <Flex direction="column" gap="2">
+          <h3 className="m-0 mb-1 mt-5 text-[12.5px] font-medium text-[var(--ds-muted)]">
+            Pending invites <span className="ds-mono">{invites.length}</span>
+          </h3>
+          <div className="-mx-3 flex flex-col">
             {invites.map((inv) => (
               <InviteRow key={inv.id} invite={inv} onChanged={refresh} />
             ))}
-          </Flex>
+          </div>
         </>
       )}
 
       {showInvite && (
         <InviteDialog onClose={() => setShowInvite(false)} onInvited={refresh} />
       )}
-    </Card>
+    </SectionCard>
   );
 }
 
@@ -202,16 +200,19 @@ function MemberRow({
   };
 
   return (
-    <Flex justify="between" align="center" gap="3" className="rounded-md border border-[var(--gray-4)] px-3 py-2">
-      <Box className="min-w-0">
-        <Text size="2" weight="medium" className="truncate block">
-          {member.legalName ?? member.email ?? "Unnamed"}
-          {isSelf && <Badge color="gray" ml="2" size="1">you</Badge>}
-        </Text>
-        {member.email && member.email !== member.legalName && (
-          <Text size="1" color="gray" className="truncate block">{member.email}</Text>
-        )}
-      </Box>
+    <Flex justify="between" align="center" gap="3" className={ROW}>
+      <Flex align="center" gap="3" className="min-w-0">
+        <Avatar seed={member.email ?? member.userId} name={member.legalName ?? undefined} email={member.email ?? undefined} size="xl" />
+        <Box className="min-w-0">
+          <Text size="2" weight="medium" className="truncate block text-[var(--ds-ink)]">
+            {member.legalName ?? member.email ?? "Unnamed"}
+            {isSelf && <span className="ml-2 text-[12px] font-normal text-[var(--ds-muted)]">you</span>}
+          </Text>
+          {member.email && member.email !== member.legalName && (
+            <Text className="truncate block text-[12.5px] text-[var(--ds-muted)]">{member.email}</Text>
+          )}
+        </Box>
+      </Flex>
       <Flex align="center" gap="2">
         {isAdmin && !isSelf ? (
           <Select.Root value={member.role} onValueChange={onRoleChange} disabled={busy}>
@@ -223,7 +224,7 @@ function MemberRow({
             </Select.Content>
           </Select.Root>
         ) : (
-          <Badge color="gray">{ROLE_LABELS[member.role] ?? member.role}</Badge>
+          <StatusPill tone="neutral" dot={false}>{ROLE_LABELS[member.role] ?? member.role}</StatusPill>
         )}
         {isAdmin && !isSelf && (
           <IconButton variant="ghost" color="red" onClick={onRemove} disabled={busy} aria-label="Remove member">
@@ -244,7 +245,7 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
       await navigator.clipboard.writeText(link);
       toast.success("Invite link copied");
     } catch {
-      toast.error("Couldn't copy — copy manually: " + link);
+      toast.error("Couldn't copy. Copy it manually: " + link);
     }
   };
 
@@ -270,15 +271,18 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
   };
 
   return (
-    <Flex justify="between" align="center" gap="3" className="rounded-md border border-[var(--gray-4)] px-3 py-2">
-      <Box className="min-w-0">
-        <Text size="2" weight="medium" className="truncate block">{invite.email}</Text>
-        <Text size="1" color="gray">
-          Expires {new Date(invite.expiresAt).toLocaleDateString()}
-        </Text>
-      </Box>
+    <Flex justify="between" align="center" gap="3" wrap="wrap" className={ROW}>
+      <Flex align="center" gap="3" className="min-w-0">
+        <Avatar seed={invite.email} email={invite.email} size="xl" />
+        <Box className="min-w-0">
+          <Text size="2" weight="medium" className="truncate block text-[var(--ds-ink)]">{invite.email}</Text>
+          <Text className="text-[12.5px] text-[var(--ds-muted)]">
+            Expires {new Date(invite.expiresAt).toLocaleDateString("en-GB")}
+          </Text>
+        </Box>
+      </Flex>
       <Flex align="center" gap="2">
-        <Badge color="amber">{ROLE_LABELS[invite.role] ?? invite.role}</Badge>
+        <StatusPill tone="warn">{ROLE_LABELS[invite.role] ?? invite.role}</StatusPill>
         <Button variant="soft" color="gray" size="1" onClick={onCopy}>
           <Copy className="size-3.5" />
           Copy link
@@ -348,7 +352,7 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
           {inviteLink
             ? emailSent
               ? "Email sent. The link is also below if you'd like to share it directly."
-              : "Email delivery isn't configured — share this link with the invitee. It expires in 7 days."
+              : "Email delivery isn't configured. Share this link with the invitee. It expires in 7 days."
             : "We'll email the invite if Resend is configured, and always return a copy-able link as a fallback."}
         </Dialog.Description>
 
@@ -356,7 +360,7 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
           <Flex direction="column" gap="3" mt="3">
             {emailSent !== null && (
               <Badge color={emailSent ? "green" : "amber"} size="2">
-                {emailSent ? "Email sent" : "Couldn't email — copy link manually"}
+                {emailSent ? "Email sent" : "Couldn't email. Copy the link manually"}
               </Badge>
             )}
             <TextField.Root value={inviteLink} readOnly>

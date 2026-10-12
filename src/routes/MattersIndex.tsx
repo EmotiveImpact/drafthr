@@ -7,7 +7,6 @@ import {
   activeMatters,
   closedMatters,
   draftsInMatter,
-  MATTER_COLOR_CLASSES,
   matterInitial,
 } from "@/lib/matters";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
@@ -26,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { MATTER_TINT, PageShell } from "@/components/reports/parts";
 
 /**
  * /matters — the index page that opens when the user clicks the
@@ -52,12 +52,16 @@ export function MattersIndex() {
   );
 
   const active = activeMatters(ownMatters, profileMode);
-  const closed = closedMatters(ownMatters, profileMode);
+  const closedAll = closedMatters(ownMatters, profileMode);
+  const closed = closedAll.filter((m) => m.status === "closed");
+  const archived = closedAll.filter((m) => m.status === "archived");
+  const [tab, setTab] = useState<"active" | "closed" | "archived">("active");
+  const shown = tab === "active" ? active : tab === "closed" ? closed : archived;
 
   const prefix = profileMode === "employer" ? "/hr" : "/me";
 
   return (
-    <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <PageShell>
       <PageHeader
         crumbs={[
           { label: profileMode === "employer" ? "HR / Management" : "Employee", href: prefix },
@@ -66,9 +70,20 @@ export function MattersIndex() {
         title="Matters"
         lede={
           profileMode === "employer"
-            ? "Named cases bundling related letters about a person, hiring round, or HR workstream. Letters not yet in a matter live on Home — promote them with 'Make this a Matter →'."
-            : "Named cases bundling related letters about an employer, claim, or matter. Letters not yet in a matter live on Home — promote them with 'Make this a Matter →'."
+            ? "Named cases bundling related letters about a person, hiring round or HR workstream. Letters not yet in a matter live on Home: promote them with 'Make this a Matter'."
+            : "Named cases bundling related letters about an employer, claim or matter. Letters not yet in a matter live on Home: promote them with 'Make this a Matter'."
         }
+        tabs={
+          ownMatters.length === 0
+            ? undefined
+            : [
+                { id: "active", label: "Active", count: active.length },
+                { id: "closed", label: "Closed", count: closed.length },
+                { id: "archived", label: "Archived", count: archived.length },
+              ]
+        }
+        activeTab={tab}
+        onTabChange={(id) => setTab(id as typeof tab)}
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
@@ -98,8 +113,10 @@ export function MattersIndex() {
 
       {/* Empty state */}
       {ownMatters.length === 0 && (
-        <div className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-8 text-center">
-          <FolderOpen className="size-8 text-[var(--ds-muted)] mx-auto mb-3" />
+        <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center">
+          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-line-2)] text-[var(--ds-muted)]">
+            <FolderOpen className="size-5" />
+          </div>
           <h2 className="text-[15px] font-semibold text-[var(--ds-ink)] m-0">
             No matters yet
           </h2>
@@ -122,59 +139,31 @@ export function MattersIndex() {
         </div>
       )}
 
-      {/* Active section */}
-      {active.length > 0 && (
-        <section className="mb-6">
-          <SectionHeader title="Active" count={active.length} />
-          <div className="space-y-2">
-            {active.map((m) => (
-              <MatterCard
-                key={m.id}
-                matter={m}
-                drafts={allDrafts}
-                onOpen={() => nav(`/matters/${m.id}`)}
-              />
-            ))}
-          </div>
-        </section>
+      {ownMatters.length > 0 && shown.length === 0 && (
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-10 text-center text-[13px] text-[var(--ds-muted)]">
+          {tab === "active" ? "No active matters." : tab === "closed" ? "No closed matters." : "No archived matters."}
+        </div>
       )}
 
-      {/* Closed section */}
-      {closed.length > 0 && (
-        <section className="mb-6">
-          <SectionHeader title="Closed" count={closed.length} />
-          <div className="space-y-2 opacity-75">
-            {closed.map((m) => (
-              <MatterCard
-                key={m.id}
-                matter={m}
-                drafts={allDrafts}
-                onOpen={() => nav(`/matters/${m.id}`)}
-              />
-            ))}
-          </div>
-        </section>
+      {shown.length > 0 && (
+        <div className={cn("grid gap-4 sm:grid-cols-2 xl:grid-cols-3", tab !== "active" && "opacity-90")}>
+          {shown.map((m) => (
+            <MatterCard
+              key={m.id}
+              matter={m}
+              drafts={allDrafts}
+              onOpen={() => nav(`/matters/${m.id}`)}
+            />
+          ))}
+        </div>
       )}
-    </div>
+    </PageShell>
   );
 }
 
 /* ============================================================================
  * Sub-components
  * ==========================================================================*/
-
-function SectionHeader({ title, count }: { title: string; count: number }) {
-  return (
-    <div className="flex items-baseline gap-3 pb-2 border-b border-[var(--ds-line)] mb-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0">
-        {title}
-      </h2>
-      <span className="text-[11px] text-[var(--ds-muted)] font-mono tabular-nums">
-        {count}
-      </span>
-    </div>
-  );
-}
 
 function MatterCard({
   matter,
@@ -185,7 +174,6 @@ function MatterCard({
   drafts: Draft[];
   onOpen: () => void;
 }) {
-  const colors = MATTER_COLOR_CLASSES[matter.color];
   const matterDrafts = useMemo(
     () => draftsInMatter(drafts, matter.id),
     [drafts, matter.id]
@@ -206,102 +194,92 @@ function MatterCard({
   const deadlineUrgent = daysToDeadline !== undefined && daysToDeadline <= 14;
   const deadlinePastDue = daysToDeadline !== undefined && daysToDeadline < 0;
 
+  const [tint, ink] = MATTER_TINT[matter.color];
+
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group block w-full text-left rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:border-[var(--ds-subtle)] hover:shadow-sm transition overflow-hidden"
+      className="group flex min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-left transition hover:-translate-y-px hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)]"
     >
-      <div className="flex items-start gap-3 p-4">
-        <div
-          className={cn(
-            "size-10 rounded-md grid place-items-center text-white font-semibold text-[16px] shrink-0",
-            colors.swatch
-          )}
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
+      {/* 6B tinted top: the matter's colour with a folder and its initial */}
+      <div
+        className="relative mx-1.5 mt-1.5 grid h-[96px] place-items-center rounded-[calc(var(--ds-r-l)-5px)]"
+        style={{ background: tint, color: ink }}
+      >
+        <FolderOpen className="size-10" strokeWidth={1.3} aria-hidden />
+        <span className="ds-title absolute left-3 top-2.5 text-[20px] leading-none" style={{ color: ink }} aria-hidden>
           {matterInitial(matter)}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-[var(--ds-ink)] text-[15px] m-0 leading-tight">
-            {matter.name}
-          </h3>
-          {matter.parties?.primaryName && (
-            <p className="text-[12px] text-[var(--ds-muted)] mt-0.5 m-0">
-              {matter.mode === "employer" ? (
-                <UserRound className="size-3 inline -mt-0.5 mr-1" />
-              ) : (
-                <Briefcase className="size-3 inline -mt-0.5 mr-1" />
-              )}
-              {matter.parties.primaryName}
-              {matter.parties.primaryContext && (
-                <span className="text-[var(--ds-subtle)]"> · {matter.parties.primaryContext}</span>
-              )}
-            </p>
-          )}
-
-          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            <Pill
-              tone={matter.status === "active" ? "green" : "muted"}
-              label={matter.status === "active" ? "Active" : matter.status === "closed" ? "Closed" : "Archived"}
-            />
-            {matter.counselReviewed && (
-              <Pill tone="amber" label="⚠ Counsel-reviewed" />
-            )}
-            <Pill
-              tone="muted"
-              label={`${matterDrafts.length} letter${matterDrafts.length === 1 ? "" : "s"}`}
-            />
-            {deadlineUrgent && !deadlinePastDue && daysToDeadline !== undefined && (
-              <Pill
-                tone="red"
-                label={`⏰ ${matter.deadlineLabel ?? "deadline"} in ${daysToDeadline}d`}
-              />
-            )}
-            {deadlinePastDue && daysToDeadline !== undefined && (
-              <Pill
-                tone="red"
-                label={`⚠ past due by ${Math.abs(daysToDeadline)}d`}
-              />
-            )}
-          </div>
-        </div>
-
+        </span>
         {matter.deadlineISO && (
-          <div className="text-right text-[10px] text-[var(--ds-muted)] shrink-0">
-            <div>{matter.deadlineLabel ?? "Deadline"}</div>
-            <div
-              className={cn(
-                "font-mono text-[13px] font-semibold mt-0.5",
-                deadlinePastDue
-                  ? "text-[var(--ds-red-fg)]"
-                  : deadlineUrgent
-                  ? "text-[var(--ds-amber-fg)]"
-                  : "text-[var(--ds-ink)]"
-              )}
-            >
-              {formatDateOnly(matter.deadlineISO, { dateStyle: "medium" })}
-            </div>
-          </div>
+          <span
+            className={cn(
+              "absolute right-2.5 top-2.5 rounded-full bg-[var(--ds-surface)] px-2 py-0.5 text-[11.5px] font-medium",
+              deadlinePastDue
+                ? "text-[var(--ds-red-fg)]"
+                : deadlineUrgent
+                ? "text-[var(--ds-amber-fg)]"
+                : "text-[var(--ds-body)]"
+            )}
+            title={matter.deadlineLabel ?? "Deadline"}
+          >
+            {formatDateOnly(matter.deadlineISO, { day: "numeric", month: "short", year: "numeric" }, "en-GB")}
+          </span>
         )}
       </div>
 
-      <div className="flex items-center gap-2 px-4 py-2 bg-[var(--ds-surface-2)] border-t border-[var(--ds-line-2)] text-[11px] text-[var(--ds-muted)]">
-        {lastActivity ? (
-          <span className="truncate">
-            Last:{" "}
-            <strong className="text-[var(--ds-body)] font-medium">
-              {lastActivity.letterType.replace(/_/g, " ")}
-            </strong>{" "}
-            · {timeAgo(lastActivity.updatedAt)}
-          </span>
-        ) : (
-          <span className="italic">No letters yet in this matter</span>
+      <div className="flex flex-1 flex-col px-4 pb-3.5 pt-3">
+        <h3 className="m-0 text-[14.5px] font-semibold leading-snug text-[var(--ds-ink)]">
+          {matter.name}
+        </h3>
+        {matter.parties?.primaryName && (
+          <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+            {matter.mode === "employer" ? (
+              <UserRound className="-mt-0.5 mr-1 inline size-3" />
+            ) : (
+              <Briefcase className="-mt-0.5 mr-1 inline size-3" />
+            )}
+            {matter.parties.primaryName}
+            {matter.parties.primaryContext && (
+              <span className="text-[var(--ds-subtle)]">, {matter.parties.primaryContext}</span>
+            )}
+          </p>
         )}
-        <span className="ml-auto inline-flex items-center gap-1 text-[var(--ds-ink)] font-medium group-hover:translate-x-0.5 transition">
-          Open <ArrowRight className="size-3" />
-        </span>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          <Pill
+            tone={matter.status === "active" ? "green" : "muted"}
+            label={matter.status === "active" ? "Active" : matter.status === "closed" ? "Closed" : "Archived"}
+          />
+          {matter.counselReviewed && <Pill tone="amber" label="Counsel-reviewed" />}
+          <Pill
+            tone="muted"
+            label={`${matterDrafts.length} letter${matterDrafts.length === 1 ? "" : "s"}`}
+          />
+          {deadlineUrgent && !deadlinePastDue && daysToDeadline !== undefined && (
+            <Pill
+              tone="red"
+              label={`${matter.deadlineLabel ?? "Deadline"} in ${daysToDeadline}d`}
+            />
+          )}
+          {deadlinePastDue && daysToDeadline !== undefined && (
+            <Pill tone="red" label={`Past due by ${Math.abs(daysToDeadline)}d`} />
+          )}
+        </div>
+
+        <div className="mt-auto flex items-center gap-2 pt-3 text-[12px] text-[var(--ds-muted)]">
+          {lastActivity ? (
+            <span className="truncate">
+              Last: <span className="text-[var(--ds-body)]">{lastActivity.letterType.replace(/_/g, " ")}</span>,{" "}
+              {timeAgo(lastActivity.updatedAt)}
+            </span>
+          ) : (
+            <span>No letters yet in this matter</span>
+          )}
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1 font-medium text-[var(--ds-ink)] transition group-hover:translate-x-0.5">
+            Open <ArrowRight className="size-3" />
+          </span>
+        </div>
       </div>
     </button>
   );
@@ -319,12 +297,12 @@ function Pill({
     amber: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
     red: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
     blue: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-    muted: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
+    muted: "bg-[var(--ds-chip)] text-[var(--ds-body)]",
   }[tone];
   return (
     <span
       className={cn(
-        "inline-flex items-center text-[10px] px-2 py-[1px] rounded-full font-medium",
+        "inline-flex h-5 items-center rounded-full px-2 text-[11.5px] font-medium",
         toneCls
       )}
     >
@@ -408,7 +386,7 @@ function NewMatterDialog({
               id="matter-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={mode === "employer" ? "e.g. Jane Smith — performance" : "e.g. Acme Ltd — constructive dismissal"}
+              placeholder={mode === "employer" ? "e.g. Jane Smith, performance" : "e.g. Acme Ltd, constructive dismissal"}
               autoFocus
             />
           </div>
@@ -468,11 +446,13 @@ function NewMatterDialog({
                   onClick={() => setColor(c)}
                   aria-label={`Colour ${c}`}
                   className={cn(
-                    "size-6 rounded-full border transition",
-                    MATTER_COLOR_CLASSES[c].swatch,
-                    color === c ? "ring-2 ring-offset-1 ring-[var(--ds-ink)]" : "opacity-80 hover:opacity-100"
+                    "grid size-7 place-items-center rounded-full border transition",
+                    color === c ? "ring-2 ring-offset-1 ring-[var(--ds-ink)]" : "hover:ring-1 hover:ring-[var(--ds-line-strong)]"
                   )}
-                />
+                  style={{ background: MATTER_TINT[c][0], borderColor: MATTER_TINT[c][1] }}
+                >
+                  <span className="size-2 rounded-full" style={{ background: MATTER_TINT[c][1] }} />
+                </button>
               ))}
             </div>
           </div>

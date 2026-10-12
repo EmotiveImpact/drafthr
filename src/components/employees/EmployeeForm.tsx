@@ -110,7 +110,7 @@ export function EmployeeForm({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="emp-preferred">Preferred name</Label>
               <Input
@@ -132,14 +132,14 @@ export function EmployeeForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="emp-job-title">Job title</Label>
               <Input
                 id="emp-job-title"
                 value={values.jobTitle ?? ""}
                 onChange={(e) => patch("jobTitle", e.target.value || undefined)}
-                placeholder="Senior Engineer"
+                placeholder="Senior engineer"
               />
             </div>
             <div className="space-y-1.5">
@@ -153,7 +153,7 @@ export function EmployeeForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="emp-start-date">Start date</Label>
               <Input

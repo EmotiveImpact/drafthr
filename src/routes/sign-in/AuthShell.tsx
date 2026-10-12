@@ -20,7 +20,7 @@ import { BrandMark, Wordmark } from "@/components/ds";
 import { AuthSplitShell } from "./AuthSplitShell";
 
 type AuthShellProps = {
-  /** Tiny uppercase eyebrow above the heading ("Sign up", "Reset password"). */
+  /** Small eyebrow above the heading ("Sign up", "Reset password"). */
   eyebrow: string;
   /** Main h1 — should fit ~one line on mobile. */
   heading: string;
@@ -65,20 +65,15 @@ export function AuthShell({
           </Link>
           <section
             aria-labelledby="auth-heading"
-            className="w-full rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_1px_2px_rgba(10,11,13,0.04),0_24px_60px_-30px_rgba(10,11,13,0.18)]"
+            className={`w-full rounded-[var(--ds-r-xl)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-m)] ${withSlideshow ? "lg:border-transparent lg:shadow-none" : ""}`}
           >
           <div className="px-7 pt-8 pb-6 sm:px-9">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
+            <p className="text-[13px] text-[var(--ds-muted)]">
               {eyebrow}
             </p>
             <h1
               id="auth-heading"
-              className="mt-2 text-[var(--ds-ink)] font-semibold"
-              style={{
-                fontSize: "clamp(22px, 3vw, 26px)",
-                lineHeight: 1.15,
-                letterSpacing: 0,
-              }}
+              className="ds-title mt-2 text-[clamp(28px,3.4vw,34px)] leading-[1.12]"
             >
               {heading}
             </h1>
@@ -105,10 +100,6 @@ export function AuthShell({
   return (
     <main
       className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
-      style={{
-        background:
-          "radial-gradient(60% 50% at 88% 0%, rgba(10,11,13,0.035), transparent 70%), linear-gradient(180deg, var(--ds-canvas) 0%, #ffffff 60%, var(--ds-canvas) 100%)",
-      }}
     >
       {inner}
     </main>
@@ -116,7 +107,7 @@ export function AuthShell({
 }
 
 /**
- * Tiny "Authentication by WorkOS — SSO, MFA, and SAML ready" line that
+ * Tiny "Authentication by WorkOS: SSO, MFA and SAML ready" line that
  * sits directly below the form card. Used by SignIn / SignUp / the
  * transactional auth pages to reassure users about identity-provider
  * security right next to where they're typing credentials.
@@ -125,7 +116,7 @@ export function AuthSecurityNote() {
   return (
     <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-[var(--ds-muted)]">
       <ShieldCheck className="size-3.5" aria-hidden />
-      Authentication by WorkOS — SSO, MFA, and SAML ready
+      Authentication by WorkOS: SSO, MFA and SAML ready
     </p>
   );
 }
@@ -176,7 +167,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
     <div>
       <label
         htmlFor={props.id}
-        className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
+        className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
       >
         {props.label}
       </label>
@@ -190,7 +181,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         onChange={(e) => props.onChange(e.target.value)}
         required={props.required}
         disabled={props.disabled}
-        className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+        className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
       />
       {props.hint && (
         <p className="mt-1 text-[11.5px] text-[var(--ds-muted)] leading-snug">{props.hint}</p>
@@ -227,7 +218,7 @@ export function PrimaryButton({
       type={type}
       onClick={onClick}
       disabled={disabled}
-      className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px] shadow-sm hover:-translate-y-px hover:shadow-md transition disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+      className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-accent)]"
     >
       {children}
     </button>

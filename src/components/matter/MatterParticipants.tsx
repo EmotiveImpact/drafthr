@@ -4,6 +4,7 @@ import { UserPlus, Users, X } from "lucide-react";
 import type { MatterParticipant, MatterParticipantRole } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/ds";
 
 /**
  * Strip of participant chips with a real add/remove editor (store-backed).
@@ -23,12 +24,12 @@ const ROLE_LABEL: Record<MatterParticipantRole, string> = {
 
 const ROLE_TONE: Record<MatterParticipantRole, string> = {
   subject: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-  manager: "bg-[var(--ds-line-2)] text-[var(--ds-body)]",
+  manager: "bg-[var(--ds-chip)] text-[var(--ds-body)]",
   accused: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
   complainant: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
   witness: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-  representative: "bg-[var(--ds-line-2)] text-[var(--ds-body)]",
-  other: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
+  representative: "bg-[var(--ds-chip)] text-[var(--ds-body)]",
+  other: "bg-[var(--ds-chip)] text-[var(--ds-muted)]",
 };
 
 const ROLE_ORDER: MatterParticipantRole[] = [
@@ -40,15 +41,6 @@ const ROLE_ORDER: MatterParticipantRole[] = [
   "representative",
   "other",
 ];
-
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 export function MatterParticipants({
   matterId,
@@ -107,19 +99,19 @@ export function MatterParticipants({
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut", delay: 0.05 }}
-      className="mb-5"
+      className="mb-7"
     >
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 flex items-center gap-1.5">
-          <Users className="size-3" /> Participants
+      <div className="mb-2.5 flex items-center justify-between">
+        <h2 className="m-0 flex items-center gap-2 text-[15px] font-semibold text-[var(--ds-ink)]">
+          <Users className="size-3.5 text-[var(--ds-muted)]" aria-hidden /> Participants
         </h2>
         {!adding && (
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] inline-flex items-center gap-1 transition"
+            className="inline-flex items-center gap-1 text-[12.5px] text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
           >
-            <UserPlus className="size-3" /> Add
+            <UserPlus className="size-3.5" /> Add
           </button>
         )}
       </div>
@@ -128,7 +120,7 @@ export function MatterParticipants({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ds-muted)] rounded-md border border-dashed border-[var(--ds-line)] px-3 py-1.5 hover:border-[var(--ds-ink)] hover:text-[var(--ds-ink)] transition"
+          className="inline-flex items-center gap-1.5 rounded-[var(--ds-r-m)] border border-[var(--ds-line)] px-3 py-1.5 text-[12.5px] text-[var(--ds-muted)] transition hover:border-[var(--ds-line-strong)] hover:text-[var(--ds-ink)]"
         >
           <UserPlus className="size-3.5" /> Add a participant
         </button>
@@ -137,18 +129,13 @@ export function MatterParticipants({
           {participants.map((p, i) => (
             <div
               key={`${p.employeeId ?? "x"}-${p.name}-${i}`}
-              className="inline-flex items-center gap-2 rounded-full bg-[var(--ds-surface)] border border-[var(--ds-line)] pl-1 pr-1.5 py-1"
+              className="inline-flex max-w-full items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] py-1 pl-1 pr-1.5"
             >
-              <span
-                className="size-6 rounded-full grid place-items-center text-[10px] font-semibold text-[var(--ds-av-fg)]"
-                style={{ background: `var(--ds-av-${(i % 8) + 1})` }}
-              >
-                {initials(p.name) || "?"}
-              </span>
-              <span className="text-[12px] text-[var(--ds-ink)] font-medium">{p.name}</span>
+              <Avatar name={p.name} seed={p.employeeId ?? p.name} size="md" />
+              <span className="truncate text-[13px] font-medium text-[var(--ds-ink)]">{p.name}</span>
               <span
                 className={cn(
-                  "text-[10px] px-1.5 py-[1px] rounded-full font-medium",
+                  "rounded-full px-1.5 py-[1px] text-[11px] font-medium capitalize",
                   ROLE_TONE[p.role],
                 )}
               >
@@ -158,7 +145,7 @@ export function MatterParticipants({
                 type="button"
                 onClick={() => removeParticipant(matterId, i)}
                 aria-label={`Remove ${p.name}`}
-                className="size-5 grid place-items-center rounded-full text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
+                className="grid size-5 place-items-center rounded-full text-[var(--ds-muted)] transition hover:bg-[var(--ds-chip)] hover:text-[var(--ds-ink)]"
               >
                 <X className="size-3" />
               </button>
@@ -168,11 +155,11 @@ export function MatterParticipants({
       )}
 
       {adding && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-2">
+        <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] p-2.5">
           <select
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            className="h-8 rounded-md border border-[var(--ds-line)] bg-white px-2 text-[12px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+            className="h-8 max-w-full rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12.5px] text-[var(--ds-ink)] focus:border-[var(--ds-focus)] focus:outline-none"
           >
             <option value="">External party…</option>
             {availableEmployees.map((e) => (
@@ -188,14 +175,14 @@ export function MatterParticipants({
               value={externalName}
               onChange={(e) => setExternalName(e.target.value)}
               placeholder="Name"
-              className="h-8 w-40 rounded-md border border-[var(--ds-line)] bg-white px-2 text-[12px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+              className="h-8 w-40 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12.5px] text-[var(--ds-ink)] focus:border-[var(--ds-focus)] focus:outline-none"
             />
           )}
 
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as MatterParticipantRole)}
-            className="h-8 rounded-md border border-[var(--ds-line)] bg-white px-2 text-[12px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+            className="h-8 max-w-full rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[12.5px] text-[var(--ds-ink)] focus:border-[var(--ds-focus)] focus:outline-none"
           >
             {ROLE_ORDER.map((r) => (
               <option key={r} value={r}>
@@ -208,14 +195,14 @@ export function MatterParticipants({
             type="button"
             onClick={onAdd}
             disabled={!canAdd}
-            className="h-8 rounded-md bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="h-8 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3 text-[12.5px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Add
           </button>
           <button
             type="button"
             onClick={resetForm}
-            className="h-8 rounded-md px-2 text-[12px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+            className="h-8 rounded-[var(--ds-r-s)] px-2 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
           >
             Cancel
           </button>

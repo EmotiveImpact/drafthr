@@ -21,7 +21,8 @@
  * downstream outcome.
  */
 import { useState } from "react";
-import { Box, Button, Card, Flex, Heading, Text } from "@radix-ui/themes";
+import { Button, Text } from "@radix-ui/themes";
+import { SectionCard } from "@/components/reports/parts";
 import { KeyRound, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -67,43 +68,34 @@ export function SecurityCard() {
   };
 
   return (
-    <Card size="3">
-      <Flex direction="column" gap="3">
-        <Flex align="center" gap="2">
-          <KeyRound className="size-4 text-[var(--ds-muted)]" aria-hidden />
-          <Heading as="h3" size="3" weight="medium">
-            Security
-          </Heading>
-        </Flex>
-
-        <Text size="2" color="gray" as="p" style={{ maxWidth: 560 }}>
-          We'll email a one-time reset link to{" "}
-          <Text weight="medium" highContrast>
-            {user.email}
-          </Text>
-          . The link expires in a few minutes for safety. Sign-in stays active
-          until you finish the reset on the linked page.
+    <SectionCard icon={KeyRound} title="Security">
+      <p className="m-0 max-w-[560px] text-[13px] leading-relaxed text-[var(--ds-muted)]">
+        We'll email a one-time reset link to{" "}
+        <Text weight="medium" highContrast>
+          {user.email}
         </Text>
+        . The link expires in a few minutes for safety. Sign-in stays active
+        until you finish the reset on the linked page.
+      </p>
 
-        <Box>
-          <Button
-            type="button"
-            onClick={() => void onSendReset()}
-            disabled={sending}
-            highContrast
-          >
-            <Mail className="size-4" aria-hidden />
-            {sending ? "Sending…" : "Send password reset link"}
-          </Button>
-        </Box>
+      <div className="mt-4">
+        <Button
+          type="button"
+          onClick={() => void onSendReset()}
+          disabled={sending}
+          highContrast
+        >
+          <Mail className="size-4" aria-hidden />
+          {sending ? "Sending…" : "Send password reset link"}
+        </Button>
+      </div>
 
-        {lastSentAt && (
-          <Text size="1" color="gray">
-            Last sent {lastSentAt.toLocaleTimeString()}. If the email hasn't
-            arrived in a couple of minutes, check spam, or try again.
-          </Text>
-        )}
-      </Flex>
-    </Card>
+      {lastSentAt && (
+        <p className="m-0 mt-3 text-[12px] text-[var(--ds-muted)]">
+          Last sent {lastSentAt.toLocaleTimeString()}. If the email hasn't
+          arrived in a couple of minutes, check spam, or try again.
+        </p>
+      )}
+    </SectionCard>
   );
 }

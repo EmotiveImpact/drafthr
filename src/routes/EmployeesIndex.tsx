@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronRight, Download, Plus, UsersRound } from "lucide-react";
+import { ChevronRight, Download, Plus, Search, UsersRound } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { matchEmployeeForDraft } from "@/lib/employees";
 import { Avatar, PageHeader } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { PageShell, StatusPill, type PillTone } from "@/components/reports/parts";
 import type { Draft, Employee, EmploymentStatus, Matter } from "@/lib/letters/types";
 import { EmployeeForm } from "@/components/employees/EmployeeForm";
 import { ImportSuggestions } from "@/components/employees/ImportSuggestions";
@@ -91,11 +92,18 @@ export function EmployeesIndex() {
   const isEmpty = allEmployees.length === 0;
 
   return (
-    <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <PageShell>
       <PageHeader
         crumbs={[{ label: "HR / Management", href: "/hr" }, { label: "Employees" }]}
         title="Employees"
-        lede="Everyone tracked in this workspace. Records persist across letters and matters — open a profile to see active matters, letter history, and surfaced risks."
+        lede="Everyone tracked in this workspace. Records persist across letters and matters: open a profile to see active matters, letter history and surfaced risks."
+        tabs={isEmpty ? undefined : STATUS_FILTERS.map((f) => ({
+          id: f.value,
+          label: f.label,
+          count: f.value === "all" ? allEmployees.length : allEmployees.filter((e) => e.status === f.value).length,
+        }))}
+        activeTab={statusFilter}
+        onTabChange={(id) => setStatusFilter(id as StatusFilter)}
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
@@ -110,17 +118,23 @@ export function EmployeesIndex() {
         }
       />
 
-      {/* Toolbar — search, sort, status filter */}
+      {/* Toolbar: count, search, sort */}
       {!isEmpty && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Input
-            placeholder="Search by name, role, or department"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-xs h-9"
-          />
-          <div className="flex items-center gap-1 text-[12px] text-[var(--ds-muted)]">
-            <span>Sort:</span>
+        <div className="mb-2 flex flex-wrap items-center gap-2 sm:pl-3.5">
+          <span className="mr-auto text-[13px] text-[var(--ds-muted)]">
+            {rows.length === 1 ? "1 person" : `${rows.length} people`}
+          </span>
+          <div className="relative order-first min-w-0 basis-full sm:order-none sm:basis-auto sm:flex-none">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-muted)]" />
+            <Input
+              placeholder="Search by name, role or department"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-full border-transparent bg-[var(--ds-surface-2)] pl-8 shadow-none sm:w-[260px]"
+            />
+          </div>
+          <div className="flex items-center gap-0.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] p-0.5 text-[12px] text-[var(--ds-muted)]">
+            <span className="px-1.5">Sort</span>
             <SortPill active={sort === "activity"} onClick={() => setSort("activity")}>
               Last activity
             </SortPill>
@@ -131,17 +145,6 @@ export function EmployeesIndex() {
               Start date
             </SortPill>
           </div>
-          <div className="ml-auto flex items-center gap-1 text-[12px]">
-            {STATUS_FILTERS.map((f) => (
-              <FilterPill
-                key={f.value}
-                active={statusFilter === f.value}
-                onClick={() => setStatusFilter(f.value)}
-              >
-                {f.label}
-              </FilterPill>
-            ))}
-          </div>
         </div>
       )}
 
@@ -151,14 +154,16 @@ export function EmployeesIndex() {
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
-          className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center"
+          className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center"
         >
-          <UsersRound className="size-8 text-[var(--ds-muted)] mx-auto mb-3" />
+          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-line-2)] text-[var(--ds-muted)]">
+            <UsersRound className="size-5" />
+          </div>
           <h2 className="text-[15px] font-semibold text-[var(--ds-ink)] m-0">
             No employees yet
           </h2>
           <p className="text-[13px] text-[var(--ds-muted)] mt-1.5 mb-5 m-0 max-w-md mx-auto">
-            Import from your existing drafts to get started — we'll group
+            Import from your existing drafts to get started. We'll group
             everyone mentioned in your letters into reusable records.
           </p>
           <div className="inline-flex gap-2">
@@ -176,7 +181,7 @@ export function EmployeesIndex() {
 
       {/* Rows */}
       {!isEmpty && rows.length === 0 && (
-        <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] py-10 text-center text-[13px] text-[var(--ds-muted)]">
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-10 text-center text-[13px] text-[var(--ds-muted)]">
           No employees match those filters.
         </div>
       )}
@@ -186,8 +191,16 @@ export function EmployeesIndex() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2 }}
-          className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] divide-y divide-[var(--ds-line)] overflow-hidden m-0 p-0 list-none"
+          className="m-0 list-none p-0 pt-1.5"
         >
+          <li className="hidden min-h-[30px] grid-cols-[40px_minmax(0,1fr)_110px_150px_90px_20px] items-center gap-4 border-b border-[var(--ds-line)] px-3.5 text-[12px] text-[var(--ds-muted)] md:grid" aria-hidden>
+            <span />
+            <span>Person</span>
+            <span>Status</span>
+            <span>Work</span>
+            <span className="text-right">Updated</span>
+            <span />
+          </li>
           {rows.map((row) => (
             <EmployeeRow
               key={row.employee.id}
@@ -225,7 +238,7 @@ export function EmployeesIndex() {
           setImportOpen(false);
         }}
       />
-    </div>
+    </PageShell>
   );
 }
 
@@ -280,50 +293,49 @@ function EmployeeRow({ row, onOpen }: { row: RowSummary; onOpen: () => void }) {
     : employee.legalName;
 
   const subtitleParts = [employee.jobTitle, employee.department].filter(Boolean);
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(" · ") : "No role on file";
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(", ") : "No role on file";
 
   const summary = buildActivitySummary(row);
 
   return (
-    <li className="m-0">
+    <li className="relative m-0 [&+&]:before:absolute [&+&]:before:inset-x-3.5 [&+&]:before:top-0 [&+&]:before:border-t [&+&]:before:border-[var(--ds-line)] [&+&]:before:content-[''] hover:before:border-transparent [&:hover+&]:before:border-transparent">
       <button
         type="button"
         onClick={onOpen}
-        className="group w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-[var(--ds-surface-2)] transition"
+        className="group grid w-full grid-cols-[40px_minmax(0,1fr)_20px] items-center gap-3 rounded-[var(--ds-r-m)] px-3.5 py-3 text-left transition hover:bg-[var(--ds-surface-2)] md:grid-cols-[40px_minmax(0,1fr)_110px_150px_90px_20px] md:gap-4"
       >
         <Avatar name={employee.legalName} seed={employee.id} size="xl" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <h3 className="font-semibold text-[14px] text-[var(--ds-ink)] m-0 truncate">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
               {displayName}
             </h3>
-            <StatusBadge status={employee.status} />
+            <span className="md:hidden">
+              <StatusBadge status={employee.status} />
+            </span>
           </div>
-          <p className="text-[12.5px] text-[var(--ds-muted)] mt-0.5 m-0 truncate">
+          <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
             {subtitle}
-          </p>
-          <p className="text-[11.5px] text-[var(--ds-subtle)] mt-1 m-0 truncate">
-            {summary}
+            <span className="md:hidden">, {summary}</span>
           </p>
         </div>
-        <div className="hidden sm:flex flex-col items-end text-[11px] text-[var(--ds-muted)] shrink-0">
-          {draftCount > 0 && (
-            <span>
-              {draftCount} draft{draftCount === 1 ? "" : "s"}
-            </span>
-          )}
-          {matterCount > 0 && (
-            <span>
-              {matterCount} matter{matterCount === 1 ? "" : "s"}
-            </span>
-          )}
-          {latestDraft && (
-            <span className="font-mono tabular-nums mt-0.5">
-              {timeAgo(latestDraft.updatedAt)}
-            </span>
-          )}
-        </div>
-        <ChevronRight className="size-4 text-[var(--ds-subtle)] group-hover:text-[var(--ds-ink)] transition shrink-0" />
+        <span className="hidden md:block">
+          <StatusBadge status={employee.status} />
+        </span>
+        <span className="hidden truncate text-[12.5px] text-[var(--ds-muted)] md:block">
+          {matterCount > 0 || draftCount > 0
+            ? [
+                matterCount > 0 ? `${matterCount} matter${matterCount === 1 ? "" : "s"}` : null,
+                draftCount > 0 ? `${draftCount} draft${draftCount === 1 ? "" : "s"}` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")
+            : "No activity yet"}
+        </span>
+        <span className="hidden text-right text-[12.5px] text-[var(--ds-muted)] md:block">
+          {latestDraft ? timeAgo(latestDraft.updatedAt) : "None"}
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-[var(--ds-subtle)] transition group-hover:text-[var(--ds-ink)]" />
       </button>
     </li>
   );
@@ -345,19 +357,20 @@ function StatusBadge({ status }: { status: EmploymentStatus }) {
     },
     left: {
       label: "Left",
-      cls: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
+      cls: "bg-[var(--ds-chip)] text-[var(--ds-muted)]",
     },
   };
-  const { label, cls } = config[status];
+  const { label } = config[status];
+  const tone: Record<EmploymentStatus, PillTone> = {
+    active: "ok",
+    notice: "warn",
+    "on-leave": "info",
+    left: "neutral",
+  };
   return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] px-1.5 py-[1px] rounded-full font-medium",
-        cls
-      )}
-    >
+    <StatusPill tone={tone[status]} size="sm">
       {label}
-    </span>
+    </StatusPill>
   );
 }
 
@@ -375,35 +388,10 @@ function SortPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "px-2 py-1 rounded text-[12px] transition",
+        "rounded-[5px] px-2 py-1 text-[12px] transition",
         active
-          ? "text-[var(--ds-ink)] font-medium"
+          ? "bg-[var(--ds-surface-2)] text-[var(--ds-ink)] font-medium"
           : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "px-2.5 py-1 rounded-full text-[11.5px] border transition",
-        active
-          ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-          : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line)] hover:text-[var(--ds-ink)] hover:border-[var(--ds-subtle)]"
       )}
     >
       {children}
@@ -428,7 +416,7 @@ function buildActivitySummary(row: RowSummary): string {
     parts.push(`last touched ${timeAgo(latestDraft.updatedAt)}`);
   }
   if (parts.length === 0) return "No activity yet";
-  return parts.join(" · ");
+  return parts.join(", ");
 }
 
 function timeAgo(ts: number): string {

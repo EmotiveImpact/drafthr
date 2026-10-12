@@ -33,21 +33,21 @@ const HR_STEPS: Step[] = [
     target: '[data-tour="nav-employees"]',
     title: "Your employee directory",
     content:
-      "Imported from existing drafts on day one; grows as you draft new letters. One row per person, every letter they've touched.",
+      "Imported from existing drafts on day one, and it grows as you draft new letters. One row per person, with every letter they've touched.",
     placement: "right",
   },
   {
     target: '[data-tour="nav-matters"]',
     title: "Matters group related letters",
     content:
-      "Cases, investigations, settlement tracks. Risk band auto-derived from health checks. Tasks and events live here.",
+      "Cases, investigations and settlement tracks. The risk band comes from the letter checks, and tasks and events live here too.",
     placement: "right",
   },
   {
     target: '[data-tour="nav-reports"]',
-    title: "HR-Director's-eye view",
+    title: "The HR director's view",
     content:
-      "Workspace-wide compliance score, risk heatmap, letter volume by month. Drill into any tile.",
+      "Workspace-wide compliance score, risk heatmap and letter volume by month. Drill into any tile.",
     placement: "right",
   },
   {
@@ -59,7 +59,7 @@ const HR_STEPS: Step[] = [
     target: "body",
     title: "Start a new letter",
     content:
-      "35 templates across HR and Employee modes. UK + US legal scaffolding baked into every one.",
+      "35 templates across HR and employee modes, with UK and US legal scaffolding in every one.",
     placement: "center",
   },
   {
@@ -76,7 +76,7 @@ const EMPLOYEE_STEPS: Step[] = [
     target: '[data-tour="new-letter-cta"]',
     title: "Pick your letter type",
     content:
-      "Grievance, resignation, tribunal, accommodation, pay dispute. The wizard walks you through every question your letter needs.",
+      "Grievance, resignation, tribunal, accommodation or pay dispute. The wizard walks you through every question your letter needs.",
     placement: "bottom",
   },
   // Wizard intro — described, not anchored. User hasn't opened a wizard yet.
@@ -84,14 +84,14 @@ const EMPLOYEE_STEPS: Step[] = [
     target: "body",
     title: "The wizard does the structural work",
     content:
-      "Each letter type has UK + US legal scaffolding. You answer the questions; we draft each section. Skip anything that doesn't apply.",
+      "Each letter type has UK and US legal scaffolding. You answer the questions and DraftHR drafts each section. Skip anything that doesn't apply.",
     placement: "center",
   },
   {
     target: "body",
-    title: "Refine with the right-rail AI",
+    title: "Refine with DraftHR beside the letter",
     content:
-      "Once your draft is open, the right rail is a chat with the AI focused on the section you're editing. Cursor-style accept/reject for proposed changes.",
+      "Once your draft is open, the side panel is a chat with DraftHR focused on the section you're editing. Accept or reject each proposed change.",
     placement: "center",
   },
   {
@@ -103,9 +103,9 @@ const EMPLOYEE_STEPS: Step[] = [
   },
   {
     target: "body",
-    title: "Export as PDF, DOCX, or audit pack",
+    title: "Export as PDF, Word or an evidence pack",
     content:
-      "Audit ZIP packs every version with timestamps and an integrity manifest. Tribunal-defensibility built in.",
+      "The evidence pack bundles every version with timestamps and an integrity manifest, ready for a tribunal.",
     placement: "center",
   },
 ];
@@ -166,16 +166,16 @@ export function OnboardingTour({ forceRun = false }: OnboardingTourProps) {
   const options = useMemo(
     () => ({
       zIndex: 10_000,
-      primaryColor: "var(--ds-ink)",
+      primaryColor: "var(--ds-accent)",
       backgroundColor: "var(--ds-surface)",
       textColor: "var(--ds-ink)",
       arrowColor: "var(--ds-surface)",
-      overlayColor: "rgba(15, 17, 21, 0.35)",
+      overlayColor: "color-mix(in srgb, var(--ds-ink) 32%, transparent)",
       skipBeacon: true,
       showProgress: true,
       buttons: ["back", "skip", "primary"] as ("back" | "skip" | "primary")[],
       spotlightPadding: 6,
-      spotlightRadius: 8,
+      spotlightRadius: 10,
     }),
     [],
   );
@@ -183,30 +183,32 @@ export function OnboardingTour({ forceRun = false }: OnboardingTourProps) {
   const styles = useMemo(
     () => ({
       tooltip: {
-        borderRadius: 10,
+        borderRadius: 14,
         border: "1px solid var(--ds-line)",
-        boxShadow: "0 18px 48px rgba(15,17,21,0.18)",
-        padding: 18,
+        boxShadow: "var(--ds-shadow-l)",
+        padding: 20,
         fontSize: 13.5,
       },
       tooltipTitle: {
-        fontSize: 15,
-        fontWeight: 600,
+        fontFamily: "var(--font-title)",
+        fontSize: 21,
+        fontWeight: 400,
+        lineHeight: 1.2,
         margin: 0,
-        marginBottom: 6,
+        marginBottom: 8,
       },
       tooltipContent: {
         padding: 0,
         lineHeight: 1.5,
-        color: "var(--ds-body, var(--ds-ink))",
+        color: "var(--ds-muted)",
       },
       buttonPrimary: {
-        backgroundColor: "var(--ds-ink)",
-        color: "#fff",
-        borderRadius: 7,
-        padding: "6px 12px",
+        backgroundColor: "var(--ds-accent)",
+        color: "var(--ds-on-accent)",
+        borderRadius: 8,
+        padding: "7px 14px",
         fontSize: 13,
-        fontWeight: 600,
+        fontWeight: 500,
       },
       buttonBack: {
         color: "var(--ds-muted)",

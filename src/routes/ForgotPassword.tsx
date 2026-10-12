@@ -74,8 +74,8 @@ export function ForgotPassword() {
           <MailCheck className="mt-0.5 size-5 text-[var(--ds-muted)]" aria-hidden />
           <div className="text-[13.5px] leading-relaxed text-[var(--ds-body)]">
             If <span className="font-semibold text-[var(--ds-ink)]">{email.trim()}</span> matches
-            an account, a password-reset link is on its way. The link expires in a few minutes —
-            check your inbox now.
+            an account, a password-reset link is on its way. The link expires in a few minutes,
+            so check your inbox now.
           </div>
         </div>
         <p className="mt-6 text-center text-[12.5px] text-[var(--ds-body)]">

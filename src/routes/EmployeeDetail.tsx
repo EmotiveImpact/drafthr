@@ -15,7 +15,9 @@ import { matchEmployeeForDraft } from "@/lib/employees";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import { formatDateOnly, toDateOnly } from "@/lib/date-only";
-import { Avatar } from "@/components/ds";
+import { avatarColor } from "@/components/ds";
+import { PillTabs } from "@/components/ds/PageHeader";
+import { MATTER_TINT, PaperThumb, StatusPill, type PillTone } from "@/components/reports/parts";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,7 +26,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type {
@@ -70,6 +71,7 @@ function EmployeeDetailBody() {
   const deleteEmployee = useDraftStore((s) => s.deleteEmployee);
 
   const [editOpen, setEditOpen] = useState(false);
+  const [tab, setTab] = useState<"overview" | "matters" | "letters" | "notes">("overview");
   const [dismissedSuggestions, setDismissedSuggestions] = useState(false);
   const [notes, setNotes] = useState(employee?.notes ?? "");
 
@@ -114,17 +116,17 @@ function EmployeeDetailBody() {
     const grievances = has(/grievance/);
     const performance = has(/pip|performance|probation/);
     if (warnings >= 2) {
-      out.push(`${warnings} warning letters on file — consider a formal review`);
+      out.push(`${warnings} warning letters on file: consider a formal review`);
     } else if (warnings === 1) {
-      out.push("A warning letter is on file — track any follow-up");
+      out.push("A warning letter is on file: track any follow-up");
     }
     if (grievances >= 1) {
       out.push(
-        `${grievances} grievance${grievances > 1 ? "s" : ""} recorded — track to resolution`,
+        `${grievances} grievance${grievances > 1 ? "s" : ""} recorded: track to resolution`,
       );
     }
     if (performance >= 1) {
-      out.push("Performance/PIP letter on file — check the review date");
+      out.push("Performance or PIP letter on file: check the review date");
     }
     if (activeMatters.length >= 2) {
       out.push(`${activeMatters.length} active matters open for this person`);
@@ -144,7 +146,7 @@ function EmployeeDetailBody() {
         </p>
         <Link
           to="/employees"
-          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-medium hover:opacity-90 transition"
+          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] text-[12.5px] font-medium hover:bg-[var(--ds-accent-hover)] transition"
         >
           <ArrowLeft className="size-3.5" />
           Back to employees
@@ -155,7 +157,7 @@ function EmployeeDetailBody() {
 
   const headerSubtitle = [employee.jobTitle, employee.department]
     .filter(Boolean)
-    .join(" · ");
+    .join(", ");
 
   const initialForm: EmployeeFormValues = {
     legalName: employee.legalName,
@@ -168,160 +170,165 @@ function EmployeeDetailBody() {
     status: employee.status,
   };
 
+  const tileColor = avatarColor(employee.id);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8"
+      className="w-full min-w-0 max-w-[1180px] px-4 py-6 sm:px-8 sm:py-10 lg:px-11"
     >
-      <div className="mb-4">
-        <Link
-          to="/employees"
-          className="inline-flex items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
-        >
-          <ArrowLeft className="size-3.5" />
-          Employees
-        </Link>
-      </div>
-
-      {/* Hero */}
-      <header className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-6 mb-6 flex items-start gap-5">
-        <div className="shrink-0">
-          <Avatar
-            name={employee.legalName}
-            seed={employee.id}
-            size="xl"
-            className="size-16 text-[20px]"
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h1
-            className="m-0 text-[24px] font-semibold leading-[1.15] text-[var(--ds-ink)] tracking-[-0.01em]"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            {employee.legalName}
-            {employee.preferredName && (
-              <span className="ml-2 text-[15px] font-normal text-[var(--ds-muted)]">
-                ({employee.preferredName})
-              </span>
-            )}
-          </h1>
-          {headerSubtitle && (
-            <p className="mt-1 m-0 text-[13.5px] text-[var(--ds-body)]">
-              {headerSubtitle}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-[var(--ds-muted)]">
-            <StatusBadge status={employee.status} />
-            {employee.startDate && (
-              <span>
-                Started {formatDateOnly(employee.startDate, { dateStyle: "medium" })}
-              </span>
-            )}
-            {employee.workerClass && <span>· {employee.workerClass}</span>}
-            {employee.managerName && <span>· Reports to {employee.managerName}</span>}
-            {employee.email && (
-              <a
-                href={`mailto:${employee.email}`}
-                className="text-[var(--ds-ink)] underline-offset-2 hover:underline"
-              >
-                {employee.email}
-              </a>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-            <Edit3 className="size-3.5" />
-            Edit
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" aria-label="More actions">
-                <MoreHorizontal className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => {
-                  archiveEmployee(employee.id);
-                }}
-              >
-                <Archive className="size-3.5" />
-                Archive (mark as left)
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => {
-                  const ok = window.confirm(
-                    `Delete ${employee.legalName}? This removes the employee record permanently. ` +
-                      `Their letters stay, but they'll be unlinked from any matters. ` +
-                      `To keep the record, use Archive instead.`,
-                  );
-                  if (!ok) return;
-                  deleteEmployee(employee.id);
-                  nav("/employees", { replace: true });
-                }}
-                className="text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
-              >
-                <Trash2 className="size-3.5" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
-
-      {/* Tabs — Active matters / Letter history / Notes */}
-      <Tabs defaultValue="matters">
-        <TabsList variant="line" className="mb-4">
-          <TabsTrigger value="matters">
-            Active matters{activeMatters.length > 0 && ` (${activeMatters.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="letters">
-            Letter history{matchingDrafts.length > 0 && ` (${matchingDrafts.length})`}
-          </TabsTrigger>
-          <TabsTrigger value="notes">Notes</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="matters">
-          <ActiveMattersPanel matters={activeMatters} onOpen={(id) => nav(`/matters/${id}`)} />
-          {!dismissedSuggestions && reviewSignals.length > 0 && (
-            <ReviewPanel
-              signals={reviewSignals}
-              onDismiss={() => setDismissedSuggestions(true)}
-            />
-          )}
-        </TabsContent>
-
-        <TabsContent value="letters">
-          <LetterHistoryPanel drafts={matchingDrafts.slice(0, 5)} totalCount={matchingDrafts.length} />
-        </TabsContent>
-
-        <TabsContent value="notes">
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-            <p className="text-[12px] text-[var(--ds-muted)] m-0 mb-2">
-              Private to you. Never sent to AI or included in exports.
-            </p>
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={6}
-              placeholder="Anything worth remembering about this person — context, conversations, decisions."
-            />
-            <div className="mt-3 flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => updateEmployee(employee.id, { notes: notes.trim() || undefined })}
-                disabled={notes === (employee.notes ?? "")}
-              >
-                Save notes
-              </Button>
+      {/* 2A header with an initial tile, matching the matter page */}
+      <header className="mb-8 min-w-0">
+        <nav aria-label="Breadcrumb" className="mb-2.5 flex items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]">
+          <Link to="/employees" className="inline-flex items-center gap-1 hover:text-[var(--ds-ink)]">
+            <ArrowLeft className="size-3" aria-hidden />
+            Employees
+          </Link>
+        </nav>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-1 basis-[320px] items-center gap-4">
+            <span
+              className="ds-title grid size-12 shrink-0 place-items-center rounded-[var(--ds-r-m)] text-[26px] leading-none"
+              style={{ background: tileColor }}
+              aria-hidden
+            >
+              {employee.legalName.trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <h1 className="ds-title m-0 text-[clamp(28px,4vw,40px)] leading-[1.1] [overflow-wrap:anywhere]">
+                {employee.legalName}
+                {employee.preferredName && (
+                  <span className="ml-2 font-sans text-[15px] text-[var(--ds-muted)]">
+                    ({employee.preferredName})
+                  </span>
+                )}
+              </h1>
+              {headerSubtitle && (
+                <p className="m-0 mt-1 text-[14px] text-[var(--ds-muted)]">{headerSubtitle}</p>
+              )}
             </div>
           </div>
-        </TabsContent>
-      </Tabs>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+              <Edit3 className="size-3.5" />
+              Edit
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" aria-label="More actions">
+                  <MoreHorizontal className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => {
+                    archiveEmployee(employee.id);
+                  }}
+                >
+                  <Archive className="size-3.5" />
+                  Archive (mark as left)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    const ok = window.confirm(
+                      `Delete ${employee.legalName}? This removes the employee record permanently. ` +
+                        `Their letters stay, but they'll be unlinked from any matters. ` +
+                        `To keep the record, use Archive instead.`,
+                    );
+                    if (!ok) return;
+                    deleteEmployee(employee.id);
+                    nav("/employees", { replace: true });
+                  }}
+                  className="text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-[12.5px] text-[var(--ds-muted)]">
+          <StatusBadge status={employee.status} />
+          {employee.startDate && (
+            <span>
+              Started {formatDateOnly(employee.startDate, { dateStyle: "medium" }, "en-GB")}
+            </span>
+          )}
+          {employee.workerClass && <span className="capitalize">{employee.workerClass}</span>}
+          {employee.managerName && <span>Reports to {employee.managerName}</span>}
+          {employee.email && (
+            <a
+              href={`mailto:${employee.email}`}
+              className="text-[var(--ds-ink)] underline-offset-2 hover:underline"
+            >
+              {employee.email}
+            </a>
+          )}
+        </div>
+        <PillTabs
+          tabs={[
+            { id: "overview", label: "Overview" },
+            { id: "matters", label: "Matters", count: activeMatters.length },
+            { id: "letters", label: "Letters", count: matchingDrafts.length },
+            { id: "notes", label: "Notes" },
+          ]}
+          activeTab={tab}
+          onTabChange={(id) => setTab(id as typeof tab)}
+        />
+      </header>
+
+      {tab === "overview" && (
+        <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0">
+            {!dismissedSuggestions && reviewSignals.length > 0 && (
+              <ReviewPanel
+                signals={reviewSignals}
+                onDismiss={() => setDismissedSuggestions(true)}
+              />
+            )}
+            <ActiveMattersPanel matters={activeMatters} onOpen={(id) => nav(`/matters/${id}`)} />
+            <LetterHistoryPanel drafts={matchingDrafts.slice(0, 3)} totalCount={matchingDrafts.length} limit={3} />
+          </div>
+          <aside className="min-w-0">
+            <DetailsCard employee={employee} />
+          </aside>
+        </div>
+      )}
+
+      {tab === "matters" && (
+        <ActiveMattersPanel matters={activeMatters} onOpen={(id) => nav(`/matters/${id}`)} />
+      )}
+
+      {tab === "letters" && (
+        <LetterHistoryPanel drafts={matchingDrafts.slice(0, 5)} totalCount={matchingDrafts.length} />
+      )}
+
+      {tab === "notes" && (
+        <div className="max-w-[720px] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
+          <p className="m-0 mb-3 text-[12.5px] text-[var(--ds-muted)]">
+            Private to you. Never sent to AI or included in exports.
+          </p>
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={6}
+            placeholder="Anything worth remembering about this person: context, conversations, decisions."
+          />
+          <div className="mt-3 flex justify-end">
+            <Button
+              size="sm"
+              onClick={() => updateEmployee(employee.id, { notes: notes.trim() || undefined })}
+              disabled={notes === (employee.notes ?? "")}
+            >
+              Save notes
+            </Button>
+          </div>
+        </div>
+      )}
 
       <EmployeeForm
         open={editOpen}
@@ -352,7 +359,7 @@ function ActiveMattersPanel({
 }) {
   if (matters.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] py-8 text-center mb-4">
+      <div className="mb-8 rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-8 text-center">
         <p className="text-[13px] text-[var(--ds-muted)] m-0">
           No active matters for this person yet.
         </p>
@@ -361,24 +368,31 @@ function ActiveMattersPanel({
   }
 
   return (
-    <section className="mb-4">
+    <section className="mb-8">
       <SectionHeader title="Active matters" />
-      <ul className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] divide-y divide-[var(--ds-line)] m-0 p-0 list-none">
-        {matters.map((m) => (
-          <li key={m.id} className="m-0">
+      <ul className="m-0 list-none p-0">
+        {matters.map((m, i) => (
+          <li key={m.id} className={cn("relative m-0", i > 0 && ROW_RULE)}>
             <button
               type="button"
               onClick={() => onOpen(m.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--ds-surface-2)] transition"
+              className="flex w-full items-center gap-3 rounded-[var(--ds-r-m)] px-3 py-3 text-left transition hover:bg-[var(--ds-surface-2)]"
             >
+              <span
+                className="grid size-9 shrink-0 place-items-center rounded-[var(--ds-r-s)] text-[13px] font-semibold"
+                style={{ background: MATTER_TINT[m.color][0], color: MATTER_TINT[m.color][1] }}
+                aria-hidden
+              >
+                {m.name.trim().charAt(0).toUpperCase()}
+              </span>
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-[14px] text-[var(--ds-ink)] truncate">
+                <div className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">
                   {m.name}
                 </div>
-                <div className="text-[12px] text-[var(--ds-muted)] mt-0.5">
+                <div className="mt-0.5 text-[12.5px] text-[var(--ds-muted)]">
                   {m.deadlineISO
-                    ? `${m.deadlineLabel ?? "Deadline"}: ${formatDateOnly(m.deadlineISO, { dateStyle: "medium" })}`
-                    : `Started ${formatDateOnly(toDateOnly(new Date(m.createdAt)), { dateStyle: "medium" })}`}
+                    ? `${m.deadlineLabel ?? "Deadline"}: ${formatDateOnly(m.deadlineISO, { dateStyle: "medium" }, "en-GB")}`
+                    : `Started ${formatDateOnly(toDateOnly(new Date(m.createdAt)), { dateStyle: "medium" }, "en-GB")}`}
                 </div>
               </div>
               {m.riskBand && <RiskBadge band={m.riskBand} />}
@@ -393,13 +407,15 @@ function ActiveMattersPanel({
 function LetterHistoryPanel({
   drafts,
   totalCount,
+  limit = 5,
 }: {
   drafts: Draft[];
   totalCount: number;
+  limit?: number;
 }) {
   if (drafts.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface-2)] py-8 text-center">
+      <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-8 text-center">
         <p className="text-[13px] text-[var(--ds-muted)] m-0">
           No letters reference this person yet.
         </p>
@@ -413,25 +429,26 @@ function LetterHistoryPanel({
         title="Letter history"
         subtitle={
           totalCount > drafts.length
-            ? `Showing 5 of ${totalCount}`
+            ? `Showing ${limit} of ${totalCount}`
             : undefined
         }
       />
-      <ul className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] divide-y divide-[var(--ds-line)] m-0 p-0 list-none">
-        {drafts.map((d) => {
+      <ul className="m-0 list-none p-0">
+        {drafts.map((d, i) => {
           const meta = getLetterMeta(d.letterType);
           return (
-            <li key={d.id} className="m-0">
+            <li key={d.id} className={cn("relative m-0", i > 0 && ROW_RULE)}>
               <Link
                 to={`/editor/${d.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-[var(--ds-surface-2)] transition"
+                className="flex items-center gap-3 rounded-[var(--ds-r-m)] px-3 py-3 transition hover:bg-[var(--ds-surface-2)]"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-[13.5px] text-[var(--ds-ink)] truncate">
+                <PaperThumb seed={d.letterType} />
+                <div className="ml-1 min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">
                     {briefTitleFor(d)}
                   </div>
-                  <div className="text-[11.5px] text-[var(--ds-muted)] mt-0.5">
-                    {meta.shortTitle} · updated {timeAgo(d.updatedAt)}
+                  <div className="mt-0.5 text-[12.5px] text-[var(--ds-muted)]">
+                    {meta.shortTitle}, updated {timeAgo(d.updatedAt)}
                   </div>
                 </div>
                 <DraftStatusPill draft={d} />
@@ -452,9 +469,9 @@ function ReviewPanel({
   onDismiss: () => void;
 }) {
   return (
-    <section className="mt-2">
+    <section className="mb-8">
       <SectionHeader title="Things to review" />
-      <div className="rounded-lg border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] p-4">
+      <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-amber-bg)] p-4">
         <div className="flex items-start gap-3">
           <AlertTriangle className="size-4 text-[var(--ds-amber-fg)] mt-0.5 shrink-0" />
           <ul className="flex-1 m-0 p-0 list-none space-y-1.5">
@@ -470,7 +487,7 @@ function ReviewPanel({
           <button
             type="button"
             onClick={onDismiss}
-            className="text-[11.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition shrink-0"
+            className="text-[12px] text-[var(--ds-amber-fg)] hover:text-[var(--ds-ink)] transition shrink-0"
           >
             Dismiss
           </button>
@@ -482,87 +499,77 @@ function ReviewPanel({
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="flex items-baseline gap-3 pb-2 border-b border-[var(--ds-line)] mb-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0">
+    <div className="mb-2 flex items-baseline gap-3">
+      <h2 className="m-0 text-[15px] font-semibold text-[var(--ds-ink)]">
         {title}
       </h2>
       {subtitle && (
-        <span className="text-[11px] text-[var(--ds-muted)]">{subtitle}</span>
+        <span className="text-[12.5px] text-[var(--ds-muted)]">{subtitle}</span>
       )}
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: EmploymentStatus }) {
-  const config: Record<EmploymentStatus, { label: string; cls: string }> = {
-    active: {
-      label: "Active",
-      cls: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    },
-    notice: {
-      label: "Notice",
-      cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    },
-    "on-leave": {
-      label: "On leave",
-      cls: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-    },
-    left: {
-      label: "Left",
-      cls: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-    },
+  const config: Record<EmploymentStatus, { label: string; tone: PillTone }> = {
+    active: { label: "Active", tone: "ok" },
+    notice: { label: "Notice", tone: "warn" },
+    "on-leave": { label: "On leave", tone: "info" },
+    left: { label: "Left", tone: "neutral" },
   };
-  const { label, cls } = config[status];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10.5px] px-2 py-[1.5px] rounded-full font-medium",
-        cls
-      )}
-    >
-      {label}
-    </span>
-  );
+  const { label, tone } = config[status];
+  return <StatusPill tone={tone} size="sm">{label}</StatusPill>;
 }
 
 function RiskBadge({ band }: { band: NonNullable<Matter["riskBand"]> }) {
-  const config: Record<NonNullable<Matter["riskBand"]>, { label: string; cls: string }> = {
-    low: { label: "Low", cls: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]" },
-    moderate: { label: "Moderate", cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]" },
-    high: { label: "High", cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]" },
-    critical: { label: "Critical", cls: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]" },
+  const config: Record<NonNullable<Matter["riskBand"]>, { label: string; tone: PillTone }> = {
+    low: { label: "Low risk", tone: "ok" },
+    moderate: { label: "Moderate risk", tone: "warn" },
+    high: { label: "High risk", tone: "warn" },
+    critical: { label: "Critical risk", tone: "danger" },
   };
-  const { label, cls } = config[band];
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-[10.5px] px-2 py-[1.5px] rounded-full font-medium shrink-0",
-        cls
-      )}
-    >
-      <AlertTriangle className="size-3" />
-      {label}
-    </span>
-  );
+  const { label, tone } = config[band];
+  return <StatusPill tone={tone} size="sm">{label}</StatusPill>;
 }
 
 function DraftStatusPill({ draft }: { draft: Draft }) {
   const hasExport = (draft.exports?.length ?? 0) > 0;
-  const label = hasExport ? "Sent" : "Draft";
-  const cls = hasExport
-    ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-    : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] px-2 py-[1px] rounded-full font-medium shrink-0",
-        cls
-      )}
-    >
-      {label}
-    </span>
+  return hasExport ? (
+    <StatusPill tone="ok" size="sm">Sent</StatusPill>
+  ) : (
+    <StatusPill tone="neutral" size="sm">Draft</StatusPill>
   );
 }
+
+function DetailsCard({ employee }: { employee: Employee }) {
+  const rows: [string, string | undefined][] = [
+    ["Job title", employee.jobTitle],
+    ["Department", employee.department],
+    ["Manager", employee.managerName],
+    ["Email", employee.email],
+    ["Start date", employee.startDate ? formatDateOnly(employee.startDate, { dateStyle: "medium" }, "en-GB") : undefined],
+    ["Worker type", employee.workerClass],
+  ];
+  return (
+    <section className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5">
+      <h2 className="m-0 mb-3 text-[15px] font-semibold text-[var(--ds-ink)]">Details</h2>
+      <dl className="m-0 space-y-2.5 text-[13px]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between gap-3">
+            <dt className="shrink-0 text-[var(--ds-muted)]">{k}</dt>
+            <dd className={cn("m-0 min-w-0 truncate text-right", v ? "text-[var(--ds-ink)]" : "text-[var(--ds-faint)]")}>
+              {v || "Not set"}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+const ROW_RULE =
+  "before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--ds-line)] before:content-['']";
+
 
 function timeAgo(ts: number): string {
   const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));

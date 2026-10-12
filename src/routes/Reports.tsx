@@ -9,6 +9,8 @@ import {
   AlertTriangle,
   ArrowRight,
   FileText,
+  Timer,
+  Flame,
 } from "lucide-react";
 import {
   differenceInCalendarDays,
@@ -26,6 +28,12 @@ import type {
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { EmptyState, PageHeader } from "@/components/ds";
+import {
+  DeltaChip,
+  PageShell,
+  StatTile,
+  StatTileGrid,
+} from "@/components/reports/parts";
 import {
   computeHealthScore,
   runHealthChecks,
@@ -84,24 +92,24 @@ export function Reports() {
   // 404, but the surface is meaningless with one self-record so we punt.
   if (profileRole === "employee") {
     return (
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <PageShell>
         <ReportsHeader mode="employee" />
-        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px]">
+        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[var(--ds-r-l)]">
           <EmptyState
             icon={BarChart3}
             title="Reports are an HR portfolio view"
-            body="Switch to HR / Management to see compliance, risk, and operations rolled up across matters."
+            body="Switch to HR / Management to see compliance, risk and operations rolled up across matters."
           />
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   if (realDrafts.length === 0 && allMatters.length === 0) {
     return (
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <PageShell>
         <ReportsHeader mode="employer" />
-        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px]">
+        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[var(--ds-r-l)]">
           <EmptyState
             icon={BarChart3}
             title="Nothing to report yet"
@@ -109,7 +117,7 @@ export function Reports() {
             primary={{ label: "Browse templates", to: "/hr/new" }}
           />
         </div>
-      </div>
+      </PageShell>
     );
   }
 
@@ -120,8 +128,12 @@ export function Reports() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+    <PageShell>
       <ReportsHeader mode="employer" />
+
+      <motion.div {...fade} className="mb-8">
+        <KpiTiles drafts={realDrafts} matters={allMatters} activeMatters={activeMatters} />
+      </motion.div>
 
       <motion.div {...fade} className="mb-5">
         <ComplianceHealthCard drafts={realDrafts} />
@@ -142,7 +154,100 @@ export function Reports() {
       >
         <OperationsCard drafts={realDrafts} matters={allMatters} />
       </motion.div>
-    </div>
+    </PageShell>
+  );
+}
+
+/* ─── 7B headline tiles ───────────────────────────────────────────────── */
+
+function KpiTiles({
+  drafts,
+  matters,
+  activeMatters,
+}: {
+  drafts: Draft[];
+  matters: Matter[];
+  activeMatters: Matter[];
+}) {
+  const compliance = useMemo(() => {
+    let scored = 0;
+    let strong = 0;
+    for (const d of drafts) {
+      try {
+        const score = computeHealthScore(runHealthChecks(d));
+        scored += 1;
+        if (score.band === "strong" && score.failCount === 0) strong += 1;
+      } catch {
+        // skip drafts the scorer can't process
+      }
+    }
+    return { scored, percent: scored ? Math.round((strong / scored) * 100) : 0 };
+  }, [drafts]);
+  const monthly = useMemo(() => lettersByMonth(drafts), [drafts]);
+  const resolution = useMemo(() => timeToResolve(matters), [matters]);
+  const highRisk = useMemo(
+    () =>
+      activeMatters.filter((m) => {
+        const band = effectiveRiskBand(m, draftsInMatter(drafts, m.id)) ?? "low";
+        return band === "high" || band === "critical";
+      }).length,
+    [activeMatters, drafts]
+  );
+  const thisMonth = monthly[monthly.length - 1]?.count ?? 0;
+  const lastMonth = monthly[monthly.length - 2]?.count ?? 0;
+  const delta = thisMonth - lastMonth;
+
+  return (
+    <StatTileGrid>
+      <StatTile
+        label="Compliance score"
+        icon={ShieldCheck}
+        value={compliance.percent}
+        unit="%"
+        tone={compliance.scored === 0 ? undefined : compliance.percent >= 80 ? undefined : "danger"}
+        foot={`${compliance.scored} letter${compliance.scored === 1 ? "" : "s"} scored`}
+      />
+      <StatTile
+        label="Letters this month"
+        icon={FileText}
+        value={thisMonth}
+        series={monthly.map((m) => m.count)}
+        foot={
+          <>
+            <DeltaChip tone={delta < 0 ? "danger" : "ok"}>
+              {delta > 0 ? `+${delta}` : delta}
+            </DeltaChip>
+            <span>on last month</span>
+          </>
+        }
+      />
+      <StatTile
+        label="Median time to resolve"
+        icon={Timer}
+        value={resolution.count === 0 ? "None" : resolution.medianDays}
+        unit={resolution.count === 0 ? undefined : "days"}
+        foot={
+          resolution.count === 0
+            ? "No closed matters yet"
+            : `Across ${resolution.count} closed ${resolution.count === 1 ? "matter" : "matters"}`
+        }
+      />
+      <StatTile
+        label="High-risk matters"
+        icon={Flame}
+        value={highRisk}
+        foot={
+          highRisk > 0 ? (
+            <span className="inline-flex items-center gap-1.5 font-medium text-[var(--ds-red-fg)]">
+              <span className="size-1.5 rounded-full bg-[var(--ds-red-fg)]" aria-hidden />
+              High or critical, still open
+            </span>
+          ) : (
+            `${activeMatters.length} active ${activeMatters.length === 1 ? "matter" : "matters"}`
+          )
+        }
+      />
+    </StatTileGrid>
   );
 }
 
@@ -151,7 +256,6 @@ export function Reports() {
 function ReportsHeader({ mode }: { mode: Mode }) {
   return (
     <PageHeader
-      className="mb-6"
       crumbs={[{ label: mode === "employer" ? "HR / Management" : "Employee" }, { label: "Reports" }]}
       title="Reports"
       lede="Compliance, risk and operations rolled up across the workspace."
@@ -173,14 +277,14 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] p-[18px]">
-      <header className="flex items-baseline justify-between mb-4">
-        <h3 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5">
-          <Icon className="size-3.5" />
+    <section className="min-w-0 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4 sm:p-6">
+      <header className="mb-5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 className="m-0 inline-flex items-center gap-2 text-[15px] font-semibold text-[var(--ds-ink)]">
+          <Icon className="size-4 text-[var(--ds-muted)]" />
           {title}
-        </h3>
+        </h2>
         {subtitle && (
-          <span className="text-[11.5px] text-[var(--ds-muted)] tabular-nums">
+          <span className="text-[12.5px] text-[var(--ds-muted)]">
             {subtitle}
           </span>
         )}
@@ -248,15 +352,12 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
       <div className="grid grid-cols-1 md:grid-cols-[auto_1fr] gap-6 items-start">
         {/* Hero ring */}
         <div className="flex items-center gap-4">
-          <Ring percent={percent} size={84} stroke={9} />
+          <Ring percent={percent} size={84} stroke={8} />
           <div>
-            <div className="text-[11.5px] uppercase tracking-wider text-[var(--ds-muted)] font-semibold">
+            <div className="text-[12.5px] text-[var(--ds-muted)]">
               Strong
             </div>
-            <div
-              className="text-[var(--ds-ink)] font-semibold tabular-nums leading-none mt-1"
-              style={{ fontSize: "28px", letterSpacing: "-0.02em" }}
-            >
+            <div className="ds-title mt-1 text-[34px] leading-none">
               {percent}%
             </div>
             <div className="text-[12px] text-[var(--ds-muted)] mt-1.5 leading-snug">
@@ -277,7 +378,7 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
 
       {topFailing.length > 0 && (
         <div className="mt-5 pt-5 border-t border-[var(--ds-line-2)]">
-          <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5 mb-2.5">
+          <h4 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)] inline-flex items-center gap-1.5 mb-2.5">
             <AlertTriangle className="size-3.5" />
             Letters needing attention
           </h4>
@@ -287,7 +388,7 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
                 <button
                   type="button"
                   onClick={() => nav(`/editor/${item.draft.id}`)}
-                  className="w-full text-left flex items-start gap-3 py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-line-2)]/40 -mx-2 px-2 rounded transition"
+                  className="w-full text-left flex items-start gap-3 py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-surface-2)] -mx-2 px-2 rounded-[var(--ds-r-s)] transition"
                 >
                   <span
                     aria-hidden
@@ -304,7 +405,7 @@ function ComplianceHealthCard({ drafts }: { drafts: Draft[] }) {
                     <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
                       {briefTitleFor(item.draft)}
                       {item.draft.employee.legalName
-                        ? ` · ${item.draft.employee.legalName}`
+                        ? `, ${item.draft.employee.legalName}`
                         : ""}
                     </div>
                   </div>
@@ -348,13 +449,13 @@ function DimensionBar({
         ? { fg: "var(--ds-amber-fg)", bg: "var(--ds-amber-bg)" }
         : { fg: "var(--ds-red-fg)", bg: "var(--ds-red-bg)" };
   return (
-    <div className="rounded-[10px] border border-[var(--ds-line)] p-3">
-      <div className="flex items-baseline justify-between mb-2">
-        <div className="text-[11.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)]">
+    <div className="rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] p-3.5">
+      <div className="flex items-baseline justify-between mb-2.5">
+        <div className="text-[12.5px] text-[var(--ds-muted)]">
           {DIMENSION_LABELS[dimension]}
         </div>
         <div
-          className="text-[15px] font-semibold tabular-nums"
+          className="ds-mono text-[15px] font-semibold"
           style={{ color: tone.fg }}
         >
           {averageScore}
@@ -362,7 +463,7 @@ function DimensionBar({
       </div>
       <div
         className="h-1.5 rounded-full overflow-hidden"
-        style={{ background: "var(--ds-line-2)" }}
+        style={{ background: "var(--ds-surface)" }}
         role="progressbar"
         aria-valuenow={averageScore}
         aria-valuemin={0}
@@ -434,7 +535,7 @@ function FailingChecksList({ drafts }: { drafts: Draft[] }) {
 
   return (
     <div className="mt-5 pt-5 border-t border-[var(--ds-line-2)]">
-      <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5 mb-2.5">
+      <h4 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)] inline-flex items-center gap-1.5 mb-2.5">
         <AlertTriangle className="size-3.5" />
         Failing checks
       </h4>
@@ -465,9 +566,9 @@ function FailingCheckRow({
     <li>
       <button
         type="button"
-        aria-label={`${count} letter${count === 1 ? "" : "s"} failing ${check.label} — open drill-down`}
+        aria-label={`${count} letter${count === 1 ? "" : "s"} failing ${check.label}, open drill-down`}
         onClick={onClick}
-        className="w-full text-left flex items-start gap-3 py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-line-2)]/40 -mx-2 px-2 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
+        className="w-full text-left flex items-start gap-3 py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-surface-2)] -mx-2 px-2 rounded-[var(--ds-r-s)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
       >
         <span
           aria-hidden
@@ -475,7 +576,10 @@ function FailingCheckRow({
         />
         <div className="flex-1 min-w-0">
           <div className="text-[13px] font-semibold text-[var(--ds-ink)] leading-snug truncate">
-            {count} letter{count === 1 ? "" : "s"} · {check.label}
+            {check.label}
+            <span className="ml-2 font-normal text-[var(--ds-muted)]">
+              {count} letter{count === 1 ? "" : "s"}
+            </span>
           </div>
           <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
             {check.description}
@@ -598,20 +702,20 @@ function RiskExposureCard({
           return (
             <div
               key={band}
-              className="rounded-[10px] border border-[var(--ds-line)] overflow-hidden flex flex-col"
+              className="flex min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)]"
             >
               <div
-                className="px-3 py-2 flex items-baseline justify-between"
+                className="mx-1 mt-1 flex items-baseline justify-between rounded-[calc(var(--ds-r-l)-4px)] px-3 py-2.5"
                 style={{ background: tone.bg }}
               >
                 <span
-                  className="text-[10.5px] font-semibold uppercase tracking-wider"
+                  className="text-[12.5px] font-medium capitalize"
                   style={{ color: tone.fg }}
                 >
                   {band}
                 </span>
                 <span
-                  className="text-[14px] font-semibold tabular-nums"
+                  className="ds-title text-[24px] leading-none"
                   style={{ color: tone.fg }}
                 >
                   {list.length}
@@ -619,8 +723,8 @@ function RiskExposureCard({
               </div>
               <div className="flex-1 min-h-[80px] p-2 flex flex-col gap-1.5">
                 {list.length === 0 ? (
-                  <div className="flex-1 grid place-items-center text-[11.5px] text-[var(--ds-subtle)] italic">
-                    none
+                  <div className="flex-1 grid place-items-center text-[12px] text-[var(--ds-faint)]">
+                    None
                   </div>
                 ) : (
                   list.map((m) => (
@@ -629,17 +733,17 @@ function RiskExposureCard({
                       type="button"
                       aria-label={`Open ${m.name} drill-down`}
                       onClick={() => nav(`/reports/matters/${m.id}`)}
-                      className="text-left rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-1.5 hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-line-2)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
+                      className="text-left rounded-[var(--ds-r-s)] bg-[var(--ds-surface-2)] px-2.5 py-2 hover:bg-[var(--ds-surface-3)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
                     >
-                      <div className="text-[12px] font-semibold text-[var(--ds-ink)] truncate leading-snug">
+                      <div className="text-[12.5px] font-semibold text-[var(--ds-ink)] truncate leading-snug">
                         {m.name}
                       </div>
                       {typeof m.exposureGBP === "number" && m.exposureGBP > 0 ? (
-                        <div className="text-[10.5px] text-[var(--ds-muted)] tabular-nums mt-0.5">
+                        <div className="text-[11.5px] text-[var(--ds-muted)] tabular-nums mt-0.5">
                           {formatGBP(m.exposureGBP)}
                         </div>
                       ) : m.parties?.primaryName ? (
-                        <div className="text-[10.5px] text-[var(--ds-muted)] truncate mt-0.5">
+                        <div className="text-[11.5px] text-[var(--ds-muted)] truncate mt-0.5">
                           {m.parties.primaryName}
                         </div>
                       ) : null}
@@ -715,20 +819,20 @@ function OperationsCard({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Letters by month */}
         <div>
-          <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] mb-3">
-            Letters drafted · last 6 months
+          <h4 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)] mb-3">
+            Letters drafted, last 6 months
           </h4>
           <BarChart data={monthly} />
         </div>
 
         {/* Time to resolve */}
         <div>
-          <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] mb-3">
+          <h4 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)] mb-3">
             Time to resolve
           </h4>
           {resolution.count === 0 ? (
             <p className="m-0 text-[13px] text-[var(--ds-muted)] leading-snug">
-              No closed matters yet — close one to see how long matters take
+              No closed matters yet. Close one to see how long matters take
               to resolve.
             </p>
           ) : (
@@ -750,7 +854,7 @@ function OperationsCard({
 
       {/* Volume by letter type */}
       <div className="mt-6 pt-5 border-t border-[var(--ds-line-2)]">
-        <h4 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] mb-3">
+        <h4 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)] mb-3">
           Most-used templates
         </h4>
         {topTypes.length === 0 ? (
@@ -783,7 +887,7 @@ function OperationsCard({
                     }}
                   />
                 </div>
-                <div className="text-[12px] font-semibold text-[var(--ds-ink)] tabular-nums w-7 text-right">
+                <div className="ds-mono text-[12px] font-semibold text-[var(--ds-ink)] w-7 text-right">
                   {t.count}
                 </div>
               </li>
@@ -805,17 +909,14 @@ function Stat({
   detail: string;
 }) {
   return (
-    <div className="rounded-[10px] border border-[var(--ds-line)] p-3">
-      <div className="text-[11.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)]">
+    <div className="min-w-0 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] p-3.5">
+      <div className="text-[12.5px] text-[var(--ds-muted)]">
         {label}
       </div>
-      <div
-        className="text-[var(--ds-ink)] font-semibold tabular-nums leading-none mt-1.5"
-        style={{ fontSize: "22px", letterSpacing: "-0.02em" }}
-      >
+      <div className="ds-title mt-2 text-[30px] leading-none">
         {value}
       </div>
-      <div className="text-[11.5px] text-[var(--ds-muted)] mt-1.5 leading-snug">
+      <div className="text-[12px] text-[var(--ds-muted)] mt-2 leading-snug">
         {detail}
       </div>
     </div>
@@ -853,7 +954,7 @@ function BarChart({ data }: { data: MonthBucket[] }) {
   const H = 120;
   const padX = 8;
   const padBottom = 18;
-  const padTop = 6;
+  const padTop = 16;
   const innerW = W - padX * 2;
   const innerH = H - padBottom - padTop;
   const max = Math.max(1, ...data.map((d) => d.count));
@@ -865,6 +966,7 @@ function BarChart({ data }: { data: MonthBucket[] }) {
       viewBox={`0 0 ${W} ${H}`}
       width="100%"
       preserveAspectRatio="xMidYMid meet"
+      className="block max-w-[420px]"
       role="img"
       aria-label={`Letters drafted across the last ${data.length} months`}
     >

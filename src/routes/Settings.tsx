@@ -1,28 +1,27 @@
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Badge,
   Box,
   Button,
-  Card,
   Flex,
   Grid,
-  Heading,
   Select,
-  Separator,
   Switch,
   Text,
   TextArea,
   TextField,
 } from "@radix-ui/themes";
 import {
-  AlertTriangle,
+  ArrowRight,
   Briefcase,
+  Check,
   Download,
+  Info,
   Save,
   Trash2,
   Upload,
   UserRound,
+  Users,
 } from "lucide-react";
 import {
   useProfileStore,
@@ -38,6 +37,21 @@ import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 import { AuditLogsCard } from "@/components/AuditLogsCard";
 import { SecurityCard } from "@/components/SecurityCard";
 import { BillingCard } from "@/components/billing/BillingCard";
+import { useAuth } from "@/lib/auth";
+import { PageShell, SectionCard, StatusPill } from "@/components/reports/parts";
+import { cn } from "@/lib/utils";
+
+const SETTINGS_TABS = [
+  { id: "profile", label: "Profile" },
+  { id: "company", label: "Company" },
+  { id: "defaults", label: "Defaults" },
+  { id: "team", label: "Team" },
+  { id: "security", label: "Security" },
+  { id: "billing", label: "Billing" },
+  { id: "data", label: "Data" },
+] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number]["id"];
+const ADMIN_ROLES = new Set(["owner", "admin"]);
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -52,6 +66,20 @@ export function Settings() {
   const setWorkspaceRole = useProfileStore((s) => s.setWorkspaceRole);
   const markSetupComplete = useProfileStore((s) => s.markSetupComplete);
   const resetProfile = useProfileStore((s) => s.reset);
+
+  const { activeTenant } = useAuth();
+  const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? "");
+  const [params, setParams] = useSearchParams();
+  const tabParam = params.get("tab");
+  const tab: SettingsTab = SETTINGS_TABS.some((t) => t.id === tabParam)
+    ? (tabParam as SettingsTab)
+    : "profile";
+  const setTab = (id: string) => {
+    const next = new URLSearchParams(params);
+    if (id === "profile") next.delete("tab");
+    else next.set("tab", id);
+    setParams(next, { replace: true });
+  };
 
   const [savedFlash, setSavedFlash] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,54 +149,54 @@ export function Settings() {
   };
 
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <PageShell width="medium">
       <PageHeader
         crumbs={[{ label: "Settings" }]}
-        title="Your profile"
-        lede="Your role and saved details. Used to auto-fill new letters so you don't re-type the same fields every time."
+        title="Settings"
+        lede="Your role and saved details, used to auto-fill new letters so you don't re-type the same fields every time."
+        tabs={SETTINGS_TABS.map((t) => ({ id: t.id, label: t.label }))}
+        activeTab={tab}
+        onTabChange={setTab}
       />
 
       <Flex direction="column" gap="4">
-        {/* Role */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Your role</Heading>
-            <Text size="2" color="gray" as="p">
-              Drives the sidebar, the letter catalogue, and the legal angle of the prompts.
-              Change it any time — your existing drafts keep the role they were created with.
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="3">
-            <RoleCard
-              active={profile.role === "employer"}
-              icon={<Briefcase className="size-5" />}
-              label="HR / Management"
-              hint="I write letters TO employees"
-              onClick={() => setRole("employer")}
-            />
-            <RoleCard
-              active={profile.role === "employee"}
-              icon={<UserRound className="size-5" />}
-              label="Employee"
-              hint="I write letters TO HR / employer"
-              onClick={() => setRole("employee")}
-            />
-          </Grid>
-        </Card>
+        {tab === "profile" && (
+          <>
+            <SectionCard
+              title="Your role"
+              description="Drives the sidebar, the letter catalogue and the legal angle of the prompts. Change it any time: your existing drafts keep the role they were created with."
+            >
+              <Grid columns={{ initial: "1", sm: "2" }} gap="3">
+                <RoleCard
+                  active={profile.role === "employer"}
+                  icon={<Briefcase className="size-[18px]" />}
+                  label="HR / Management"
+                  hint="I write letters to employees"
+                  tint="var(--ds-tint-sky)"
+                  ink="var(--ds-tint-sky-ink)"
+                  onClick={() => setRole("employer")}
+                />
+                <RoleCard
+                  active={profile.role === "employee"}
+                  icon={<UserRound className="size-[18px]" />}
+                  label="Employee"
+                  hint="I write letters to HR or my employer"
+                  tint="var(--ds-tint-mint)"
+                  ink="var(--ds-tint-mint-ink)"
+                  onClick={() => setRole("employee")}
+                />
+              </Grid>
+            </SectionCard>
 
-        {/* Personal */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">
-              {profile.role === "employer" ? "Your details (HR signatory)" : "Your details"}
-            </Heading>
-            <Text size="2" color="gray" as="p">
-              {profile.role === "employer"
-                ? "These appear as the signatory on letters you draft."
-                : "These appear as the sender on letters you draft. Saved to this device only."}
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
+            <SectionCard
+              title={profile.role === "employer" ? "Your details (HR signatory)" : "Your details"}
+              description={
+                profile.role === "employer"
+                  ? "These appear as the signatory on letters you draft."
+                  : "These appear as the sender on letters you draft. Saved to this device only."
+              }
+            >
+              <Grid columns={{ initial: "1", sm: "2" }} gap="4">
             <Field label="Legal name">
               <TextField.Root
                 value={profile.personal.legalName ?? ""}
@@ -221,21 +249,20 @@ export function Settings() {
               </Field>
             )}
           </Grid>
-        </Card>
+            </SectionCard>
+          </>
+        )}
 
-        {/* Employer */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">
-              {profile.role === "employer" ? "Your company" : "Current employer"}
-            </Heading>
-            <Text size="2" color="gray" as="p">
-              {profile.role === "employer"
+        {tab === "company" && (
+          <SectionCard
+            title={profile.role === "employer" ? "Your company" : "Current employer"}
+            description={
+              profile.role === "employer"
                 ? "The legal entity issuing letters."
-                : "The employer letters are addressed to. We'll use this for the recipient block."}
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
+                : "The employer letters are addressed to. We'll use this for the recipient block."
+            }
+          >
+            <Grid columns={{ initial: "1", sm: "2" }} gap="4">
             <Field label="Legal name" full>
               <TextField.Root
                 value={profile.employer.legalName ?? ""}
@@ -294,15 +321,13 @@ export function Settings() {
               </>
             )}
           </Grid>
-        </Card>
+          </SectionCard>
+        )}
 
-        {/* Defaults */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Defaults</Heading>
-            <Text size="2" color="gray" as="p">Pre-selected on every new letter.</Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
+        {tab === "defaults" && (
+          <>
+            <SectionCard title="Defaults" description="Pre-selected on every new letter.">
+              <Grid columns={{ initial: "1", sm: "2" }} gap="4">
             <Field label="Jurisdiction">
               <Select.Root
                 value={profile.defaults.jurisdiction}
@@ -330,7 +355,7 @@ export function Settings() {
                 </Select.Root>
               </Field>
             ) : (
-              <Field label="US state (free text — pick from list in wizard)">
+              <Field label="US state (free text, pick from the list in the wizard)">
                 <TextField.Root
                   value={profile.defaults.usState ?? ""}
                   onChange={(e) => patchDefaults({ usState: e.target.value as "CA" })}
@@ -365,7 +390,7 @@ export function Settings() {
                 <Select.Content>
                   {QWEN_MODEL_OPTIONS.map((m) => (
                     <Select.Item key={m.id} value={m.id}>
-                      {m.label} — <Text color="gray">{m.hint}</Text>
+                      {m.label}: <Text color="gray">{m.hint}</Text>
                     </Select.Item>
                   ))}
                 </Select.Content>
@@ -401,36 +426,60 @@ export function Settings() {
               )}
             </Field>
           </Grid>
-        </Card>
+            </SectionCard>
 
-        {/* Security — in-app password reset (signed-in users only). The
-         * /sign-in/forgot-password page is signed-out only, so without this
-         * surface signed-in users have no path to rotate their password. */}
-        <SecurityCard />
+            <SectionCard
+              title="Auto-fill new letters from this profile"
+              description="When on, the wizard pre-populates with your saved details. You can still edit any field."
+            >
+              <Flex align="center" gap="3" asChild>
+            <label htmlFor="autoFill">
+              <Switch checked={profile.autoFill} onCheckedChange={setAutoFill} id="autoFill" />
+              <Text size="2">{profile.autoFill ? "On" : "Off"}</Text>
+            </label>
+          </Flex>
+            </SectionCard>
+          </>
+        )}
 
-        {/* Billing — current plan and the Stripe Billing Portal. */}
-        <BillingCard />
+        {tab === "team" && (
+          <>
+            {/* Workspace: real members + invites when signed in to a tenant. */}
+            <WorkspaceMembersCard />
 
-        {/* Workspace — real members + invites when signed in to a tenant. */}
-        <WorkspaceMembersCard />
+            {activeTenant && isAdmin && (
+              <SectionCard
+                icon={Users}
+                title="Directory sync"
+                description="Keep your staff list in step with your HR system or identity provider (SCIM, Google Workspace). Admins only."
+                actions={
+                  <Button variant="soft" color="gray" asChild>
+                    <Link to="/settings/directory-sync">
+                      Open directory sync
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </Button>
+                }
+              />
+            )}
 
-        {/* WorkOS Audit Logs mirror status (admin-only) — null for non-admins. */}
-        <AuditLogsCard />
+            {!activeTenant && !import.meta.env.DEV && (
+              <SectionCard
+                icon={Users}
+                title="Team"
+                description="Sign in to a workspace to invite teammates, change roles and manage access."
+              />
+            )}
 
-        {/* Solo / sim role picker — local dev + screencasts only. In a real build
-         * it let any member make themselves owner in the browser, unlocking
-         * approve buttons and approved drafts for client-side export. */}
-        {import.meta.env.DEV && (
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Role (local simulation)</Heading>
-            <Text size="2" color="gray" as="p">
-              Your seat for approval-queue simulation. The real per-workspace role is set above.
-              Use this in local dev / demos to switch between drafter and reviewer behaviour
-              without a second account.
-            </Text>
-          </Box>
-          <Grid columns={{ initial: "1", sm: "2" }} gap="4">
+            {/* Solo / sim role picker: local dev + screencasts only. In a real build
+             * it let any member make themselves owner in the browser, unlocking
+             * approve buttons and approved drafts for client-side export. */}
+            {import.meta.env.DEV && (
+              <SectionCard
+                title="Role (local simulation)"
+                description="Your seat for approval-queue simulation. The real per-workspace role is set above. Use this in local dev and demos to switch between drafter and reviewer behaviour without a second account."
+              >
+                <Grid columns={{ initial: "1", sm: "2" }} gap="4">
             <Field label="Simulated role">
               <Select.Root
                 value={profile.workspaceRole ?? "owner"}
@@ -438,43 +487,61 @@ export function Settings() {
               >
                 <Select.Trigger />
                 <Select.Content>
-                  <Select.Item value="owner">Owner — full access, billing, members</Select.Item>
-                  <Select.Item value="admin">Admin — full access except billing</Select.Item>
-                  <Select.Item value="drafter">Drafter — write + submit for review</Select.Item>
-                  <Select.Item value="reviewer">Reviewer — drafter + approve/request changes</Select.Item>
-                  <Select.Item value="viewer">Viewer — read-only</Select.Item>
+                  <Select.Item value="owner">Owner: full access, billing, members</Select.Item>
+                  <Select.Item value="admin">Admin: full access except billing</Select.Item>
+                  <Select.Item value="drafter">Drafter: write and submit for review</Select.Item>
+                  <Select.Item value="reviewer">Reviewer: drafter, plus approve or request changes</Select.Item>
+                  <Select.Item value="viewer">Viewer: read-only</Select.Item>
                 </Select.Content>
               </Select.Root>
             </Field>
           </Grid>
-        </Card>
+              </SectionCard>
+            )}
+          </>
         )}
 
-        {/* Auto-fill */}
-        <Card size="3">
-          <Box mb="3">
-            <Heading size="3" mb="1">Auto-fill new letters from this profile</Heading>
-            <Text size="2" color="gray" as="p">
-              When on, the wizard pre-populates with your saved details. You can still edit any field.
-            </Text>
-          </Box>
-          <Flex align="center" gap="3" asChild>
-            <label htmlFor="autoFill">
-              <Switch checked={profile.autoFill} onCheckedChange={setAutoFill} id="autoFill" />
-              <Text size="2">{profile.autoFill ? "On" : "Off"}</Text>
-            </label>
-          </Flex>
-        </Card>
+        {tab === "security" && (
+          <>
+            {/* In-app password reset (signed-in users only). The
+             * /sign-in/forgot-password page is signed-out only, so without this
+             * surface signed-in users have no path to rotate their password. */}
+            <SecurityCard />
+            {/* WorkOS Audit Logs mirror status (admin-only): null for non-admins. */}
+            <AuditLogsCard />
+            {!activeTenant && (
+              <SectionCard
+                title="Security"
+                description="Password reset and audit log streaming appear here once you're signed in to a workspace."
+              />
+            )}
+          </>
+        )}
 
-        <Separator size="4" />
+        {tab === "billing" && (
+          /* Current plan and the Stripe Billing Portal. */
+          <BillingCard
+            fallback={
+              <SectionCard
+                title="Billing"
+                description="Billing isn't set up for this workspace yet. You can still compare plans."
+                actions={
+                  <Button variant="soft" color="gray" asChild>
+                    <Link to="/pricing">See plans</Link>
+                  </Button>
+                }
+              />
+            }
+          />
+        )}
 
-        {/* Save / import-export / clear */}
-        <Flex direction={{ initial: "column", sm: "row" }} justify="between" gap="3">
-          <Button variant="ghost" color="red" onClick={onClearAllData}>
-            <Trash2 className="size-4" />
-            Clear all my data on this device
-          </Button>
-          <Flex align="center" gap="2" wrap="wrap">
+        {tab === "data" && (
+          <SectionCard
+            title="Your data"
+            description="Export your profile as a file, import one from another device, or clear everything stored in this browser."
+          >
+            <Flex direction={{ initial: "column", sm: "row" }} justify="between" gap="3">
+              <Flex align="center" gap="2" wrap="wrap">
             <input
               ref={fileInputRef}
               type="file"
@@ -486,34 +553,42 @@ export function Settings() {
                 e.target.value = "";
               }}
             />
-            <Button variant="soft" color="gray" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="size-4" />
-              Import
-            </Button>
-            <Button variant="soft" color="gray" onClick={onExport}>
-              <Download className="size-4" />
-              Export
-            </Button>
-            {savedFlash && <Badge color="green" variant="soft">Saved</Badge>}
+                <Button variant="soft" color="gray" onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="size-4" />
+                  Import
+                </Button>
+                <Button variant="soft" color="gray" onClick={onExport}>
+                  <Download className="size-4" />
+                  Export
+                </Button>
+              </Flex>
+              <Button variant="ghost" color="red" onClick={onClearAllData}>
+                <Trash2 className="size-4" />
+                Clear all my data on this device
+              </Button>
+            </Flex>
+            <div className="mt-5 flex items-start gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] px-3.5 py-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-[var(--ds-muted)]" aria-hidden />
+              <p className="m-0 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                Profile data lives in your browser's local storage. When we wire authentication and
+                server-side persistence (planned), it will move to an encrypted database and become
+                available across devices.
+              </p>
+            </div>
+          </SectionCard>
+        )}
+
+        {(tab === "profile" || tab === "company" || tab === "defaults") && (
+          <Flex align="center" justify="end" gap="2" wrap="wrap" className="pt-1">
+            {savedFlash && <StatusPill tone="ok">Saved</StatusPill>}
             <Button onClick={onSave}>
               <Save className="size-4" />
               Save
             </Button>
           </Flex>
-        </Flex>
-
-        <Card size="2" style={{ background: "var(--amber-2)" }}>
-          <Flex align="start" gap="2">
-            <Box mt="1"><AlertTriangle className="size-4 text-[var(--amber-11)]" /></Box>
-            <Text size="1" color="gray" className="leading-relaxed">
-              Profile data lives in your browser's local storage. When we wire authentication and
-              server-side persistence (planned), it will move to an encrypted database and become
-              available across devices.
-            </Text>
-          </Flex>
-        </Card>
+        )}
       </Flex>
-    </Box>
+    </PageShell>
   );
 }
 
@@ -522,32 +597,46 @@ function RoleCard({
   icon,
   label,
   hint,
+  tint,
+  ink,
   onClick,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
   hint: string;
+  tint: string;
+  ink: string;
   onClick: () => void;
 }) {
   return (
-    <Card
-      asChild
-      size="2"
-      variant={active ? "classic" : "surface"}
-      style={active ? { background: "var(--accent-2)", borderColor: "var(--accent-7)" } : undefined}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-3 rounded-[var(--ds-r-m)] border bg-[var(--ds-surface)] p-3 text-left transition-colors",
+        active
+          ? "border-[var(--ds-ink)] shadow-[0_0_0_1px_var(--ds-ink)]"
+          : "border-[var(--ds-line)] hover:border-[var(--ds-line-strong)]"
+      )}
     >
-      <button type="button" onClick={onClick} className="text-left w-full cursor-pointer">
-        <Flex align="center" gap="2" mb="1">
-          {icon}
-          <Text size="2" weight="medium">{label}</Text>
-          {active && (
-            <Badge color="amber" variant="soft" ml="auto" className="uppercase tracking-wider">Current</Badge>
-          )}
-        </Flex>
-        <Text size="1" color="gray" as="p">{hint}</Text>
-      </button>
-    </Card>
+      <span
+        className="grid size-10 shrink-0 place-items-center rounded-[var(--ds-r-s)]"
+        style={{ background: tint, color: ink }}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] font-medium text-[var(--ds-ink)]">{label}</span>
+        <span className="block text-[12.5px] text-[var(--ds-muted)]">{hint}</span>
+      </span>
+      {active && (
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-[var(--ds-accent)] text-[var(--ds-on-accent)]">
+          <Check className="size-3" aria-label="Current role" />
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -562,7 +651,7 @@ function Field({
 }) {
   return (
     <Box className={full ? "sm:col-span-2" : ""}>
-      <Text as="label" size="1" color="gray" weight="medium" mb="1" className="block">
+      <Text as="label" mb="1" className="block text-[12.5px] font-medium text-[var(--ds-muted)]">
         {label}
       </Text>
       {children}
