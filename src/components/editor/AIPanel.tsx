@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Trash2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical, SquarePen, SlidersHorizontal, Paperclip } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
 import { uid } from "@/lib/utils";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
@@ -13,8 +20,6 @@ import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { regenerateSectionAsPending } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
-import { Avatar, BrandMark } from "@/components/ds";
-import { meIdentity } from "@/lib/comments/identity";
 import { getRecentPrompts, pushRecentPrompt } from "@/lib/recent-prompts";
 
 /**
@@ -66,7 +71,7 @@ const STARTER_PROMPTS: {
     hint: "One-paragraph brief covering risks + remedies.",
     Icon: FileText,
     prompt:
-      "Summarise this letter for counsel — one paragraph covering the legal posture, key risks, remedies sought, and any open factual questions.",
+      "Summarise this letter for counsel: one paragraph covering the legal posture, key risks, remedies sought, and any open factual questions.",
   },
 ];
 
@@ -102,7 +107,7 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   {
     label: "+ Reservation of rights",
     prompt:
-      "Add an explicit reservation-of-rights paragraph to the closing — statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
+      "Add an explicit reservation-of-rights paragraph to the closing: statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
   },
   // summariseForCounsel
   {
@@ -148,6 +153,11 @@ export function AIPanel({
   onPin,
   onUnpin,
   isPinned,
+  variant = "panel",
+  replaceThread,
+  threadKey,
+  onSent,
+  onOpenEvidence,
 }: {
   draft: Draft;
   activeSectionId: string | null;
@@ -163,9 +173,22 @@ export function AIPanel({
    * true, clicking the pin button will call this instead of onPin. */
   onUnpin?: () => void;
   isPinned?: boolean;
+  /** "panel" (default): the 14B side panel. "rail": legacy rail chrome. */
+  variant?: "rail" | "panel";
+  /** When set, replaces the chat thread above the composer (the side
+   * panel's Edits and Progress tabs) so the composer stays pinned on every
+   * tab while the conversation keeps its state. */
+  replaceThread?: ReactNode;
+  /** Identifies what replaceThread shows (the side panel tab). When it
+   * changes the scroller returns to the top, or to the latest message for
+   * the chat thread. */
+  threadKey?: string;
+  /** Called after a message is sent (the side panel switches to Chat). */
+  onSent?: () => void;
+  /** Opens the letter's evidence (the composer's Files button). */
+  onOpenEvidence?: () => void;
 }) {
   const profile = useProfileStore((s) => s.profile);
-  const me = meIdentity(profile);
 
   const updateSection = useDraftStore((s) => s.updateSection);
   const appendToSection = useDraftStore((s) => s.appendToSection);
@@ -367,6 +390,7 @@ export function AIPanel({
     const scoped = `${text}\n[scope: ${resolvedLabel}]${scopePayload}`;
     setInput("");
     setRecentPrompts(pushRecentPrompt(text));
+    onSent?.();
     await sendMessage({ text: scoped });
   };
 
@@ -379,8 +403,9 @@ export function AIPanel({
   const scrollerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
+    if (!el || replaceThread !== undefined) return;
     el.scrollTop = el.scrollHeight;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, status]);
 
   /**
@@ -546,211 +571,209 @@ export function AIPanel({
     });
   }, [addToolResult]);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Grow the composer with its content, up to the cap set in CSS.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
+
+  const scopeChipLabel =
+    scope === "section" && scopeSection
+      ? scopeSection.title
+      : scope === "selection"
+        ? "Selected text"
+        : "Whole letter";
+
+  const showThread = replaceThread === undefined;
+
+  // Switching side panel tabs swaps what the scroller holds: start a
+  // replaced view at its top and the chat at its latest message.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTop = replaceThread === undefined ? el.scrollHeight : 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadKey]);
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Apple-minimal header: single row. Model name + today's date are
-       * collapsed into one badge so the rail header stays under one line.
-       * The Clear action is icon-only and lives at the far right. */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
-        <Wand2 className="size-4 text-[var(--ds-muted)]" />
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">AI agent</span>
-        <span
-          className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)] tabular-nums"
-          title={`Model: ${profile.defaults.qwenModel ?? DEFAULT_MODEL}. The agent has today's date (${runtimeCtx.localDate}, ${runtimeCtx.timeZone}) so it never invents dates.`}
-        >
-          {profile.defaults.qwenModel ?? DEFAULT_MODEL} · {runtimeCtx.localDate}
-        </span>
-        <div className="ml-auto flex items-center gap-1">
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm("Clear this chat thread?")) {
-                  clearAIChat(draft.id);
-                  setMessages([]);
-                }
-              }}
-              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-              aria-label="Clear chat thread"
-              title="Clear chat thread"
-            >
-              <Trash2 className="size-3.5" />
-            </button>
-          )}
-          {(onPin || onUnpin) && (
-            <button
-              type="button"
-              onClick={isPinned ? (onUnpin ?? onPin) : onPin}
-              className={
-                "group inline-flex items-center gap-1 h-6 px-1.5 rounded-md text-[10.5px] font-bold uppercase tracking-[0.04em] border transition-colors " +
-                (isPinned
-                  ? "bg-[var(--ds-violet-bg)] text-[var(--ds-violet-fg)] border-violet-200 hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] hover:border-[var(--ds-line)]"
-                  : "bg-transparent text-[var(--ds-muted)] border-[var(--ds-line-2)] hover:text-[var(--ds-ink)]")
-              }
-              title={isPinned ? "Click to unpin (back to twin pills)" : "Pin Ask AI as the right rail (collapses Evidence)"}
-              aria-pressed={isPinned}
-            >
-              {isPinned ? (
-                <>
-                  <Pin className="size-3 group-hover:hidden" />
-                  <PinOff className="size-3 hidden group-hover:inline" />
-                  <span className="group-hover:hidden">Pinned</span>
-                  <span className="hidden group-hover:inline">Unpin</span>
-                </>
-              ) : (
-                <>
-                  <Pin className="size-3" />
-                  <span>Pin</span>
-                </>
-              )}
-            </button>
-          )}
-          {onCollapse && (
-            <button
-              type="button"
-              onClick={onCollapse}
-              className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
-              aria-label="Hide AI rail"
-              title="Hide AI rail"
-            >
-              <PanelRight className="size-3.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
       <div
         ref={scrollerRef}
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions text"
-        aria-busy={isStreaming}
-        className="flex-1 overflow-auto px-4 py-3 space-y-3 min-h-0"
+        role={showThread ? "log" : undefined}
+        aria-live={showThread ? "polite" : undefined}
+        aria-relevant={showThread ? "additions text" : undefined}
+        aria-busy={showThread ? isStreaming : undefined}
+        className="flex-1 overflow-auto min-h-0"
       >
-        <SuggestionTestStrip
-          draft={draft}
-          activeSectionId={activeSectionId}
-          anyPending={anyPending}
-          onAcceptAll={() => acceptAllSuggestions(draft.id)}
-          onRejectAll={() => rejectAllSuggestions(draft.id)}
-          insertTest={() => insertTestSuggestion(draft, activeSectionId, updateSection)}
-        />
-        {messages.length === 0 && (
-          // Empty state — brand mark + tagline at the top, then a clickable
-          // suggestion grid (one prompt per tool, so the user discovers
-          // what the agent can do without scrolling the composer chips),
-          // then a Recent row if the user has sent prompts before.
-          <div className="px-1 py-4">
-            <div className="flex flex-col items-center text-center px-4 pb-5">
-              <BrandMark size={32} className="mb-3 opacity-60" />
-              <p className="text-[13px] text-[var(--ds-ink)] font-medium">
-                What change do you want?
-              </p>
-              <p className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-relaxed max-w-[28ch]">
-                Pick a starter below or describe your own. I'll show the result before applying it.
-              </p>
+        {!showThread ? (
+          replaceThread
+        ) : (
+          <div className="flex flex-col gap-5 px-4 pb-6 pt-3">
+            {/* Thread header: model and date the agent works with, plus a
+             * fresh thread. Pin and hide only render where a caller wires them. */}
+            <div className="flex items-center gap-2">
+              <span
+                className="ds-mono min-w-0 truncate text-[11px] text-[var(--ds-muted)]"
+                title={`Model: ${profile.defaults.qwenModel ?? DEFAULT_MODEL}. The agent has today's date (${runtimeCtx.localDate}, ${runtimeCtx.timeZone}) so it never invents dates.`}
+              >
+                {profile.defaults.qwenModel ?? DEFAULT_MODEL} · {runtimeCtx.localDate}
+              </span>
+              <div className="ml-auto flex items-center gap-0.5">
+                {messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Clear this chat thread?")) {
+                        clearAIChat(draft.id);
+                        setMessages([]);
+                      }
+                    }}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-[var(--ds-r-s)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    aria-label="Clear chat thread"
+                    title="Start a new thread"
+                  >
+                    <SquarePen className="size-3.5" />
+                    New thread
+                  </button>
+                )}
+                {(onPin || onUnpin) && (
+                  <button
+                    type="button"
+                    onClick={isPinned ? (onUnpin ?? onPin) : onPin}
+                    className="grid size-7 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    title={isPinned ? "Unpin" : "Pin"}
+                    aria-pressed={isPinned}
+                  >
+                    {isPinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+                  </button>
+                )}
+                {onCollapse && (
+                  <button
+                    type="button"
+                    onClick={onCollapse}
+                    className="grid size-7 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    aria-label="Hide AI rail"
+                    title="Hide AI rail"
+                  >
+                    <PanelRight className="size-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-1.5 px-1">
-              {STARTER_PROMPTS.map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => setInput(p.prompt)}
-                  className="text-left rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:bg-[var(--ds-line-2)] hover:border-[var(--ds-line)] transition px-3 py-2 group"
-                >
-                  <div className="flex items-center gap-2">
-                    <p.Icon className="size-3.5 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)] transition" />
-                    <span className="text-[12px] font-medium text-[var(--ds-ink)]">{p.label}</span>
-                  </div>
-                  <p className="text-[11px] text-[var(--ds-muted)] mt-0.5 ml-[22px] leading-snug">
-                    {p.hint}
-                  </p>
-                </button>
-              ))}
-            </div>
+            {(import.meta.env.DEV || variant === "rail") && (
+              <SuggestionTestStrip
+                draft={draft}
+                activeSectionId={activeSectionId}
+                anyPending={anyPending}
+                onAcceptAll={() => acceptAllSuggestions(draft.id)}
+                onRejectAll={() => rejectAllSuggestions(draft.id)}
+                insertTest={() => insertTestSuggestion(draft, activeSectionId, updateSection)}
+              />
+            )}
 
-            {recentPrompts.length > 0 && (
-              <div className="mt-4 px-1">
-                <div className="text-[10px] uppercase tracking-wide text-[var(--ds-muted)] mb-1.5 px-1">
-                  Recent
-                </div>
-                <div className="flex flex-col gap-1">
-                  {recentPrompts.map((p) => (
+            {messages.length === 0 && (
+              // Empty state: what DraftHR can do, one starter per tool, then
+              // the user's recent prompts.
+              <div className="pt-2">
+                <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">What should DraftHR change?</p>
+                <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                  Pick a starter or describe your own. DraftHR shows each change for you to accept.
+                </p>
+                <div className="mt-4 flex flex-col gap-1">
+                  {STARTER_PROMPTS.map((p) => (
                     <button
-                      key={p}
+                      key={p.label}
                       type="button"
-                      onClick={() => setInput(p)}
-                      className="text-left text-[11.5px] text-[var(--ds-body)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] px-2 py-1 rounded transition truncate"
-                      title={p}
+                      onClick={() => {
+                        setInput(p.prompt);
+                        textareaRef.current?.focus();
+                      }}
+                      className="group flex items-start gap-2.5 rounded-[var(--ds-r-m)] px-3 py-2.5 text-left transition hover:bg-[var(--ds-surface-2)]"
                     >
-                      {p}
+                      <p.Icon className="mt-0.5 size-3.5 shrink-0 text-[var(--ds-muted)] transition group-hover:text-[var(--ds-ink)]" />
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-medium text-[var(--ds-ink)]">{p.label}</span>
+                        <span className="mt-0.5 block text-[12px] leading-snug text-[var(--ds-muted)]">{p.hint}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
+
+                {recentPrompts.length > 0 && (
+                  <div className="mt-4">
+                    <div className="mb-1.5 px-1 text-[12px] text-[var(--ds-muted)]">Recent</div>
+                    <div className="flex flex-col gap-0.5">
+                      {recentPrompts.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setInput(p)}
+                          className="truncate rounded-[var(--ds-r-s)] px-2 py-1.5 text-left text-[12.5px] text-[var(--ds-body)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                          title={p}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {messages.map((m) => (
+              <Message
+                key={m.id}
+                message={m}
+                streaming={isStreaming && m === messages[messages.length - 1] && m.role === "assistant"}
+                draft={draft}
+                onApplyRegenerate={applyRegenerate}
+                onApplyAddClause={applyAddClause}
+                onApplyTighten={applyTighten}
+                onApplySummarise={applySummarise}
+              />
+            ))}
+            {error && (
+              <div className="flex items-center gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-red-bg)] px-3 py-2 text-[12.5px] text-[var(--ds-red-fg)]">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span className="flex-1">{agentErrorMessage(error)}</span>
+                <button onClick={() => regenerate()} className="inline-flex items-center gap-1 font-medium hover:underline">
+                  <RotateCw className="size-3" /> Retry
+                </button>
               </div>
             )}
           </div>
         )}
-        {messages.map((m) => (
-          <Message
-            key={m.id}
-            message={m}
-            streaming={isStreaming && m === messages[messages.length - 1] && m.role === "assistant"}
-            me={me}
-            draft={draft}
-            onApplyRegenerate={applyRegenerate}
-            onApplyAddClause={applyAddClause}
-            onApplyTighten={applyTighten}
-            onApplySummarise={applySummarise}
-          />
-        ))}
-        {error && (
-          <div className="rounded-md border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] text-[12px] px-3 py-2 flex items-center gap-2">
-            <AlertCircle className="size-3.5" />
-            <span className="flex-1">{agentErrorMessage(error)}</span>
-            <button onClick={() => regenerate()} className="inline-flex items-center gap-1 hover:underline">
-              <RotateCw className="size-3" /> Retry
-            </button>
-          </div>
-        )}
       </div>
 
-      <form onSubmit={submit} className="shrink-0 border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-3 py-3 space-y-2">
-        {/* Scope chips — small, above the composer (necessary context, not a control). */}
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-[10px] text-[var(--ds-muted)] mr-1">Scope:</span>
-          {(["letter", "section", "selection"] as AIChatScope[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setScope(s)}
-              className={
-                "text-[10px] px-2 py-0.5 rounded-full border transition " +
-                (scope === s
-                  ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                  : "bg-[var(--ds-surface)] text-[var(--ds-muted)] border-[var(--ds-line)] hover:text-[var(--ds-ink)]")
-              }
-            >
-              {SCOPE_LABEL[s]}
-              {s === "section" && scopeSection ? ` · ${scopeSection.title}` : ""}
-            </button>
-          ))}
-        </div>
-
-        {/* Composer — one rounded box with textarea + bottom toolbar + send button INSIDE. */}
+      {/* 3A composer: one soft box with the context chip, the message and a
+       * tool row (saved prompts, files, scope) ending in a dark square send. */}
+      <form onSubmit={submit} className="shrink-0 px-3 pb-3 pt-2">
         <div
-          className={
-            "rounded-lg border bg-[var(--ds-surface)] transition focus-within:ring-2 focus-within:ring-[var(--ds-ink)]/10 " +
-            "focus-within:border-[var(--ds-ink)] border-[var(--ds-line)]"
-          }
+          className="flex cursor-text flex-col gap-2 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] pb-2 pl-3 pr-2.5 pt-[11px] transition focus-within:border-[var(--ds-line-strong)] focus-within:shadow-[var(--ds-shadow-s)]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) textareaRef.current?.focus();
+          }}
         >
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-[var(--ds-r-s)] bg-[var(--ds-surface-3)] py-1 pl-2 pr-2.5 text-[12px] text-[var(--ds-body)]">
+              <FileText className="size-3 shrink-0 text-[var(--ds-muted)]" />
+              <span className="truncate">
+                <span className="font-medium text-[var(--ds-ink)]">{scopeChipLabel}</span>
+              </span>
+            </span>
+          </div>
           <textarea
+            ref={textareaRef}
+            data-ai-composer
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Rewrite a section · Add a clause · Tighten to a word target · Summarise for counsel"
-            rows={3}
-            className="block w-full min-h-[64px] max-h-[240px] resize-none px-3 pt-3 pb-1 rounded-lg bg-transparent text-[14px] leading-relaxed text-[var(--ds-ink)] focus:outline-none placeholder:text-[var(--ds-subtle)]"
+            placeholder="Ask DraftHR anything…"
+            aria-label="Message DraftHR"
+            rows={1}
+            className="block max-h-[120px] min-h-[22px] w-full resize-none border-0 bg-transparent px-0.5 text-[13.5px] leading-[20px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -758,47 +781,101 @@ export function AIPanel({
               }
             }}
           />
-          <div className="flex items-center gap-1 px-2 pb-2 pt-1">
-            {/* Quick-prompt chips on the left (horizontal scroll if many) */}
-            <div className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -my-1 py-1">
-              {QUICK_PROMPTS.map((q) => (
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div className="-ml-1.5 flex min-w-0 items-center gap-0.5 overflow-hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="grid size-7 shrink-0 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)] disabled:opacity-50"
+                    aria-label="Saved prompts"
+                    title="Saved prompts"
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" className="w-[260px]">
+                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Saved prompts</DropdownMenuLabel>
+                  {QUICK_PROMPTS.map((q) => (
+                    <DropdownMenuItem
+                      key={q.label}
+                      onClick={() => {
+                        setInput(q.prompt);
+                        requestAnimationFrame(() => textareaRef.current?.focus());
+                      }}
+                    >
+                      {q.label.replace(/^\+\s*/, "Add ")}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <span className="mx-1 h-4 w-px shrink-0 bg-[var(--ds-line-strong)]" aria-hidden />
+              {onOpenEvidence && (
                 <button
-                  key={q.label}
                   type="button"
-                  onClick={() => setInput(q.prompt)}
-                  disabled={busy}
-                  className="shrink-0 text-[11px] px-2 py-1 rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition disabled:opacity-50"
+                  onClick={onOpenEvidence}
+                  className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--ds-r-s)] px-1.5 text-[12.5px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
+                  title="Evidence and files for this letter"
                 >
-                  {q.label}
+                  <Paperclip className="size-3.5" />
+                  Files
+                  {(draft.evidence?.length ?? 0) > 0 && (
+                    <span className="ds-mono text-[11px] text-[var(--ds-muted)]">{draft.evidence?.length}</span>
+                  )}
                 </button>
-              ))}
+              )}
             </div>
-            {/* Send button — bottom-right inside the composer */}
-            {busy ? (
-              <button
-                type="button"
-                onClick={() => stopAll()}
-                className="size-7 shrink-0 rounded-md bg-[var(--ds-line-2)] text-[var(--ds-ink)] grid place-items-center hover:bg-[var(--ds-line)]"
-                aria-label="Stop"
-                title="Stop"
-              >
-                <Loader2 className="size-3.5 animate-spin" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim()}
-                className="size-7 shrink-0 rounded-md bg-[var(--ds-ink)] text-white grid place-items-center disabled:opacity-25 disabled:bg-[var(--ds-line)] disabled:text-[var(--ds-muted)] transition"
-                aria-label="Send"
-                title="Send (⌘ + Enter)"
-              >
-                <ArrowUp className="size-3.5" />
-              </button>
-            )}
+            <div className="flex shrink-0 items-center gap-0.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="grid size-7 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
+                    aria-label={`Scope: ${SCOPE_LABEL[scope]}`}
+                    title={`Scope: ${SCOPE_LABEL[scope]}`}
+                  >
+                    <SlidersHorizontal className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" className="w-[240px]">
+                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Apply changes to</DropdownMenuLabel>
+                  {(["letter", "section", "selection"] as AIChatScope[]).map((s) => (
+                    <DropdownMenuItem key={s} onClick={() => setScope(s)}>
+                      <span className="flex-1 truncate">
+                        {s === "letter" ? "Whole letter" : s === "section" ? `Section${scopeSection ? `: ${scopeSection.title}` : ""}` : "Selected text"}
+                      </span>
+                      {scope === s && <Check className="size-3.5" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={() => stopAll()}
+                  className="ml-1 grid size-[30px] place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-surface-3)] text-[var(--ds-ink)] hover:bg-[var(--ds-line)]"
+                  aria-label="Stop"
+                  title="Stop"
+                >
+                  <Loader2 className="size-3.5 animate-spin" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!input.trim()}
+                  className="ml-1 grid size-[30px] place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)] disabled:opacity-30"
+                  aria-label="Send"
+                  title="Send (⌘ + Enter)"
+                >
+                  <ArrowUp className="size-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
-        <p className="text-[10px] text-[var(--ds-subtle)] text-center">
-          ⌘ + Enter to send · The AI may propose section changes — review with Apply before they go live.
+        <p className="m-0 mt-1.5 text-center text-[11px] text-[var(--ds-subtle)]">
+          ⌘ Enter to send. DraftHR proposes changes for you to accept.
         </p>
       </form>
     </div>
@@ -825,7 +902,7 @@ function SuggestionTestStrip(props: {
   const isDev = import.meta.env.DEV;
   if (!isDev && !props.anyPending) return null;
   return (
-    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2 text-[11.5px] flex items-center gap-2 flex-wrap">
+    <div className="flex flex-wrap items-center gap-2 rounded-[var(--ds-r-m)] border border-dashed border-[var(--ds-line)] px-3 py-2 text-[12px]">
       <span className="text-[var(--ds-muted)] inline-flex items-center gap-1">
         <FlaskConical className="size-3.5" />
         Track-changes
@@ -837,7 +914,7 @@ function SuggestionTestStrip(props: {
             <button
               type="button"
               onClick={props.onAcceptAll}
-              className="h-6 px-2 rounded-md bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)] hover:opacity-90 transition text-[11px] font-medium"
+              className="h-6 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2 text-[11.5px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
               title="Accept every pending suggestion in this draft"
             >
               Accept all
@@ -845,8 +922,8 @@ function SuggestionTestStrip(props: {
             <button
               type="button"
               onClick={props.onRejectAll}
-              className="h-6 px-2 rounded-md bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] hover:opacity-90 transition text-[11px] font-medium"
-              title="Reject every pending suggestion — text stays, marks mute"
+              className="h-6 rounded-[var(--ds-r-s)] px-2 text-[11.5px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+              title="Reject every pending suggestion. The text stays and the marks fade."
             >
               Reject all
             </button>
@@ -959,7 +1036,6 @@ function stripPendingToolCalls(messages: UIMessage[]): UIMessage[] {
 function Message({
   message,
   streaming,
-  me,
   draft,
   onApplyRegenerate,
   onApplyAddClause,
@@ -968,7 +1044,6 @@ function Message({
 }: {
   message: UIMessage;
   streaming: boolean;
-  me: { initials: string; name: string; email?: string };
   draft: Draft;
   onApplyRegenerate: (toolCallId: string, input: RegenerateInput) => Promise<void>;
   onApplyAddClause: (toolCallId: string, input: AddClauseInput) => Promise<void>;
@@ -979,65 +1054,52 @@ function Message({
   const textOnly = textFromParts(message);
   const { body, scopeChip } = parseScopeFromUserBody(textOnly, isUser);
 
+  if (isUser) {
+    // 3A: the user's turn sits right-aligned in a soft bubble.
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <div className="max-w-[88%] whitespace-pre-wrap rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-3 py-2 text-[13.5px] leading-relaxed text-[var(--ds-ink)] [overflow-wrap:anywhere]">
+          {body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)}
+        </div>
+        {scopeChip && (
+          <span className="max-w-[88%] truncate text-[11px] text-[var(--ds-muted)]">{scopeChip}</span>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex gap-2 items-start">
-      {isUser ? (
-        <Avatar seed={me.email ?? me.name} name={me.name} email={me.email} initials={me.initials} size="md" />
-      ) : (
-        <BrandMark size={24} />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[12px] font-semibold text-[var(--ds-ink)]">
-            {isUser ? "You" : "DRAFTHR"}
-          </span>
-          {scopeChip && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-muted)] truncate max-w-[200px]">
-              {scopeChip}
+    <div className="min-w-0">
+      {/* Assistant: plain text on the panel, no bubble. */}
+      {(body || (streaming && !textOnly)) && (
+        <div className="ai-msg-body text-[var(--ds-body)]">
+          {body ? (
+            <Markdown>{body}</Markdown>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--ds-muted)]">
+              <Loader2 className="size-3 animate-spin" /> Thinking
             </span>
           )}
         </div>
+      )}
 
-        {/* Text bubble (only if there's any text content) */}
-        {(body || (streaming && !textOnly)) && (
-          <div
-            className={
-              "mt-1 rounded-md px-3 py-2 " +
-              (isUser
-                ? "bg-[var(--ds-ink)] text-white text-[13px] leading-relaxed whitespace-pre-wrap"
-                : "ai-msg-body bg-[var(--ds-surface-2)] text-[var(--ds-body)]")
-            }
-          >
-            {isUser ? (
-              body || (streaming && <span className="text-[var(--ds-muted)]">…</span>)
-            ) : body ? (
-              <Markdown>{body}</Markdown>
-            ) : streaming ? (
-              <span className="text-[var(--ds-muted)] text-[13px]">…</span>
-            ) : null}
-          </div>
-        )}
-
-        {/* Tool-call parts — render the right card per tool. */}
-        {!isUser && (
-          <div className="mt-2 space-y-1.5">
-            {message.parts.filter(isToolUIPart).map((p) => {
-              const tp = p as unknown as ToolPart;
-              switch (tp.type) {
-                case "tool-regenerateSection":
-                  return <RegenerateCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyRegenerate} />;
-                case "tool-addClause":
-                  return <AddClauseCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyAddClause} />;
-                case "tool-tightenSection":
-                  return <TightenCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyTighten} />;
-                case "tool-summariseForCounsel":
-                  return <SummariseMarker key={tp.toolCallId} part={tp} onAck={onApplySummarise} />;
-                default:
-                  return null;
-              }
-            })}
-          </div>
-        )}
+      {/* Tool-call parts: render the right card per tool. */}
+      <div className="mt-2 space-y-1.5 empty:hidden">
+        {message.parts.filter(isToolUIPart).map((p) => {
+          const tp = p as unknown as ToolPart;
+          switch (tp.type) {
+            case "tool-regenerateSection":
+              return <RegenerateCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyRegenerate} />;
+            case "tool-addClause":
+              return <AddClauseCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyAddClause} />;
+            case "tool-tightenSection":
+              return <TightenCard key={tp.toolCallId} part={tp} draft={draft} onApply={onApplyTighten} />;
+            case "tool-summariseForCounsel":
+              return <SummariseMarker key={tp.toolCallId} part={tp} onAck={onApplySummarise} />;
+            default:
+              return null;
+          }
+        })}
       </div>
     </div>
   );
@@ -1124,7 +1186,7 @@ function RegenerateCard({
               <button
                 type="button"
                 onClick={() => void onApply(part.toolCallId, input)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+                className="h-7 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
               >
                 Apply
               </button>
@@ -1168,7 +1230,7 @@ function AddClauseCard({
               <button
                 type="button"
                 onClick={() => void onApply(part.toolCallId, input)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+                className="h-7 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
               >
                 Apply
               </button>
@@ -1208,7 +1270,7 @@ function TightenCard({
               <button
                 type="button"
                 onClick={() => void onApply(part.toolCallId, input)}
-                className="text-[11px] px-2 py-1 rounded-md bg-[var(--ds-ink)] text-white hover:opacity-90"
+                className="h-7 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
               >
                 Apply
               </button>
@@ -1302,12 +1364,12 @@ function ToolCard({
   eyebrow?: string;
 }) {
   return (
-    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-2 text-[12px]">
+    <div className="rounded-[var(--ds-r-m)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2.5 text-[12.5px]">
       <div className="flex items-center gap-2">
         <span className="shrink-0">{icon ?? <Sparkles className="size-3 text-[var(--ds-muted)]" />}</span>
         <div className="min-w-0 flex-1">
           {eyebrow && (
-            <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--ds-muted)] truncate">
+            <div className="truncate text-[11.5px] text-[var(--ds-muted)]">
               {eyebrow}
             </div>
           )}
@@ -1316,7 +1378,7 @@ function ToolCard({
         <div className="flex items-center gap-2 shrink-0">{status}</div>
       </div>
       {body && (
-        <div className="text-[11px] text-[var(--ds-muted)] leading-relaxed mt-1 italic">
+        <div className="mt-1.5 text-[12px] leading-relaxed text-[var(--ds-muted)]">
           {body}
         </div>
       )}

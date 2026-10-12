@@ -1,7 +1,7 @@
 import type { Draft, EmployeeTone, Tone } from "@/lib/letters/types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useDraftStore } from "@/lib/store";
-import { Mic2, Check } from "lucide-react";
+import { Mic2, Check, ChevronDown } from "lucide-react";
 
 const EMPLOYER_TONES: { value: Tone; label: string; hint: string }[] = [
   { value: "warm", label: "Warm", hint: "Personable but professional. Offers, promotions." },
@@ -22,7 +22,15 @@ const EMPLOYEE_TONES: { value: EmployeeTone; label: string; hint: string }[] = [
  * Without-Prejudice toggle as a final row on employee-mode drafts —
  * one continuous menu, no sub-sections.
  */
-export function DocumentPopover({ draft }: { draft: Draft }) {
+export function DocumentPopover({
+  draft,
+  variant = "icon",
+}: {
+  draft: Draft;
+  /** "icon" (default): a square icon button. "ribbon": a labelled
+   * "Tone: Formal" control for the document bar's format row. */
+  variant?: "icon" | "ribbon";
+}) {
   const updateAnswers = useDraftStore((s) => s.updateAnswers);
   const setWithoutPrejudice = useDraftStore((s) => s.setWithoutPrejudice);
 
@@ -73,14 +81,28 @@ export function DocumentPopover({ draft }: { draft: Draft }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-          aria-label={`Tone: ${currentMeta?.label ?? current}`}
-          title={`Tone: ${currentMeta?.label ?? current}`}
-        >
-          <Mic2 className="size-3.5" />
-        </button>
+        {variant === "ribbon" ? (
+          <button
+            type="button"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--ds-r-s)] px-2 text-[13px] text-[var(--ds-body)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] data-[state=open]:bg-[var(--ds-surface-2)]"
+            aria-label={`Tone: ${currentMeta?.label ?? current}`}
+            title="Letter tone"
+          >
+            <Mic2 className="size-3.5 text-[var(--ds-muted)]" />
+            <span className="text-[var(--ds-muted)]">Tone:</span>
+            <span className="text-[var(--ds-ink)]">{currentMeta?.label ?? current}</span>
+            <ChevronDown className="size-3 text-[var(--ds-muted)]" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
+            aria-label={`Tone: ${currentMeta?.label ?? current}`}
+            title={`Tone: ${currentMeta?.label ?? current}`}
+          >
+            <Mic2 className="size-3.5" />
+          </button>
+        )}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[300px] p-1">
         <div role="radiogroup" aria-label="Letter tone">
@@ -132,12 +154,12 @@ export function DocumentPopover({ draft }: { draft: Draft }) {
                 <span
                   className={
                     "inline-flex items-center w-7 h-4 rounded-full transition-colors " +
-                    (wpOn ? "bg-[var(--ds-ink)]" : "bg-[var(--ds-line)]")
+                    (wpOn ? "bg-[var(--ds-accent)]" : "bg-[var(--ds-line-strong)]")
                   }
                 >
                   <span
                     className={
-                      "size-3 rounded-full bg-white shadow transition-transform " +
+                      "size-3 rounded-full bg-[var(--ds-surface)] shadow transition-transform " +
                       (wpOn ? "translate-x-3.5" : "translate-x-0.5")
                     }
                   />
@@ -148,8 +170,8 @@ export function DocumentPopover({ draft }: { draft: Draft }) {
                   Without Prejudice
                 </span>
                 <span className="block text-[11px] text-[var(--ds-muted)] leading-relaxed">
-                  Marks the letter "Without Prejudice and Subject to Contract" —
-                  settlement-position language is permissible.
+                  Marks the letter "Without Prejudice and Subject to Contract".
+                  Settlement-position language is permissible.
                 </span>
               </span>
             </button>

@@ -54,19 +54,19 @@ export function InlineSuggestionBanner({ draft }: { draft: Draft }) {
   if (pendingCount === 0) return null;
 
   return (
-    <div className="rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] px-3 py-2 flex items-center gap-3 flex-wrap text-[12px]">
-      <Sparkles className="size-3.5 text-[var(--ds-amber-fg)] shrink-0" />
-      <span className="text-[var(--ds-amber-fg)] font-medium">
-        AI proposed {pendingCount} {pendingCount === 1 ? "change" : "changes"}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-[var(--ds-r-m)] bg-[var(--ds-surface)] px-3 py-2 text-[12.5px] shadow-[var(--ds-shadow-s)]">
+      <Sparkles className="size-3.5 shrink-0 text-[var(--ds-muted)]" />
+      <span className="font-medium text-[var(--ds-ink)]">
+        DraftHR proposed {pendingCount} {pendingCount === 1 ? "change" : "changes"}
       </span>
-      <span className="text-[var(--ds-muted)] hidden sm:inline">
-        · Click an underlined / struck-through phrase to accept it on its own.
+      <span className="hidden text-[var(--ds-muted)] xl:inline">
+        Click a marked phrase to decide on it alone.
       </span>
       <div className="ml-auto flex items-center gap-1">
         <button
           type="button"
           onClick={() => rejectAllSuggestions(draft.id)}
-          className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-[var(--ds-line)] bg-white text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] text-[11.5px]"
+          className="inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] px-2 text-[12px] font-medium text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
           title="Reject every pending suggestion in this draft"
         >
           <X className="size-3" />
@@ -75,7 +75,7 @@ export function InlineSuggestionBanner({ draft }: { draft: Draft }) {
         <button
           type="button"
           onClick={() => acceptAllSuggestions(draft.id)}
-          className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-[var(--ds-green-fg)] text-white hover:brightness-110 text-[11.5px] font-medium"
+          className="inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2.5 text-[12px] font-medium text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]"
           title="Accept every pending suggestion in this draft"
         >
           <Check className="size-3" />
@@ -88,7 +88,7 @@ export function InlineSuggestionBanner({ draft }: { draft: Draft }) {
         <button
           type="button"
           onClick={() => setDiffViewMode(mode === "inline" ? "card" : "inline")}
-          className="ml-1 inline-flex items-center gap-1 h-6 px-2 rounded-md text-[var(--ds-amber-fg)] hover:bg-[var(--ds-amber-fg)]/10 text-[11px]"
+          className="ml-1 inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] px-2 text-[12px] text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
           title={
             mode === "inline"
               ? "Switch future proposals to side-by-side card view"
@@ -98,12 +98,12 @@ export function InlineSuggestionBanner({ draft }: { draft: Draft }) {
           {mode === "inline" ? (
             <>
               <LayoutGrid className="size-3" />
-              Card view
+              Side by side
             </>
           ) : (
             <>
               <AlignLeft className="size-3" />
-              Inline view
+              In the text
             </>
           )}
         </button>

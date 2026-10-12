@@ -22,7 +22,7 @@ type Props = {
 };
 
 /**
- * Item 15 — High-risk export gate. Forces an explicit "qualified reviewer
+ * Item 15: high-risk export gate. Forces an explicit "qualified reviewer
  * confirmed this" attestation before high-risk letters (termination,
  * redundancy, settlement, immigration) can be exported.
  */
@@ -40,7 +40,7 @@ export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
       <Dialog.Content maxWidth="540px">
         <Dialog.Title>
           <Flex align="center" gap="2">
-            <ShieldAlert className="size-4" style={{ color: "var(--red-11)" }} />
+            <ShieldAlert className="size-4" style={{ color: "var(--ds-red-fg)" }} />
             Counsel review required
           </Flex>
         </Dialog.Title>
@@ -54,12 +54,12 @@ export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
           <Box
             p="3"
             style={{
-              background: "var(--red-2)",
-              border: "1px solid var(--red-6)",
-              borderRadius: "var(--radius-3)",
+              background: "var(--ds-red-bg)",
+              border: "1px solid transparent",
+              borderRadius: "var(--ds-r-m)",
             }}
           >
-            <Text size="1" style={{ color: "var(--red-12)" }} className="leading-relaxed">
+            <Text size="1" style={{ color: "var(--ds-ink)" }} className="leading-relaxed">
               {draft.context.jurisdiction === "UK" ? (
                 <>
                   The ACAS Code of Practice and Employment Rights Act 1996
@@ -109,10 +109,10 @@ export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
             align="start"
             gap="2"
             p="3"
-            className="cursor-pointer hover:bg-[var(--gray-2)]"
+            className="cursor-pointer hover:bg-[var(--ds-surface-2)]"
             style={{
-              border: "1px solid var(--gray-5)",
-              borderRadius: "var(--radius-3)",
+              border: "1px solid var(--ds-line)",
+              borderRadius: "var(--ds-r-m)",
             }}
           >
             <label>

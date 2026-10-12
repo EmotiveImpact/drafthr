@@ -1,0 +1,131 @@
+/*
+ * Letter workspace (design 14B): the white letter page in the centre, its
+ * type, the tracked changes on it and the 8A numbered citation markers.
+ *
+ * Every selector is scoped under .lw-paper (the page) or .lw-cite (a marker
+ * rendered outside the page) so nothing leaks into other screens. Colours
+ * come only from the --ds-* tokens in src/styles/globals.css.
+ */
+
+/* ---------- Letter type on the page ---------- */
+.lw-paper .ProseMirror {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ds-ink);
+}
+.lw-paper .ProseMirror p {
+  margin: 0 0 10px;
+  line-height: 1.65;
+}
+.lw-paper .ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+.lw-paper .ProseMirror h1,
+.lw-paper .ProseMirror h2,
+.lw-paper .ProseMirror h3 {
+  font-family: var(--font-sans);
+  color: var(--ds-ink);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.lw-paper .ProseMirror h1 { font-size: 17px; margin: 0 0 12px; font-family: var(--font-serif); }
+.lw-paper .ProseMirror h2 { font-size: 13px; margin: 18px 0 4px; }
+.lw-paper .ProseMirror h3 { font-size: 12.5px; margin: 14px 0 4px; }
+.lw-paper .ProseMirror strong { font-weight: 600; color: var(--ds-ink); }
+.lw-paper .ProseMirror ul,
+.lw-paper .ProseMirror ol { margin: 0 0 10px; padding-left: 1.4em; }
+.lw-paper .ProseMirror li { margin: 2px 0; }
+.lw-paper .ProseMirror p.is-editor-empty:first-child::before {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--ds-faint);
+}
+
+/* ---------- Tracked changes (inline suggestions) on the page ----------
+ * Harvey style: removed words in a quiet grey strike, added words in blue
+ * on a pale blue wash. Rejected marks fade without losing their lineage. */
+.lw-paper ins[data-suggestion-id] {
+  text-decoration: none;
+  color: var(--ds-blue-fg);
+  background: var(--ds-blue-bg);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.lw-paper del[data-suggestion-id] {
+  color: var(--ds-faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--ds-faint);
+  text-decoration-thickness: 1px;
+  background: transparent;
+  padding: 0 1px;
+}
+.lw-paper ins[data-status="rejected"],
+.lw-paper del[data-status="rejected"] {
+  opacity: 0.4;
+  color: inherit;
+  background: transparent;
+  text-decoration: none;
+}
+
+/* ---------- 8A numbered boxed citation markers ----------
+ * A "[See Fig N]" evidence reference keeps its text for copy, export and
+ * screen readers; on the page it shows as a small numbered box. The number
+ * comes from data-cite-n, which the CitationLayer sets from the evidence
+ * item's figure label. */
+.lw-paper .figure-ref[data-cite-n] {
+  font-size: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  color: transparent !important;
+  cursor: pointer;
+}
+.lw-paper .figure-ref[data-cite-n]::after,
+.lw-cite {
+  content: attr(data-cite-n);
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  margin: 0 1px 0 3px;
+  border: 1px solid var(--ds-line-strong);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ds-muted);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1;
+  vertical-align: 0.42em;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.lw-paper .figure-ref[data-cite-n]:hover::after,
+.lw-paper .figure-ref[data-cite-n].is-open::after,
+.lw-cite:hover,
+.lw-cite[data-state="open"] {
+  color: var(--ds-ink);
+  border-color: var(--ds-muted);
+  background: var(--ds-chip);
+}
+.lw-cite:focus-visible {
+  outline: 2px solid var(--ds-focus);
+  outline-offset: 2px;
+}
+
+/* "[See Attachments]" stays a word token, restyled as a quiet chip */
+.lw-paper .attachment-ref {
+  background: var(--ds-chip) !important;
+  color: var(--ds-body) !important;
+  font-family: var(--font-sans);
+  font-size: 12px !important;
+  border-radius: 4px !important;
+}
+
+/* ---------- Section blocks on the page ---------- */
+.lw-paper .lw-section {
+  scroll-margin-top: 5rem;
+}

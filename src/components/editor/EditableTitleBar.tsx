@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Pencil } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle } from "@/lib/letters/display";
@@ -18,7 +19,15 @@ import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle }
  * Recipient + jurisdiction display below the title as muted submeta —
  * same info that used to live in the now-deleted topbar title block.
  */
-export function EditableTitleBar({ draft }: { draft: Draft }) {
+export function EditableTitleBar({
+  draft,
+  variant = "canvas",
+}: {
+  draft: Draft;
+  /** "canvas" (default): the large heading above the sections.
+   * "bar": the 11A document bar's file name, one line with a pencil. */
+  variant?: "canvas" | "bar";
+}) {
   const setTitle = useDraftStore((s) => s.setDraftTitle);
   // Auto-composed default = "Letter type · Recipient name", reused
   // verywhere via displayTitleFor() so the rename input shows the
@@ -73,6 +82,47 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
     ? autoTitle
     : [recipientLabel, draft.context.jurisdiction].filter(Boolean).join(" · ");
 
+  if (variant === "bar") {
+    return (
+      <div className="flex min-w-0 items-center gap-1.5">
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            aria-label="Letter title"
+            placeholder={autoTitle}
+            className="h-7 w-full min-w-0 max-w-[460px] rounded-[var(--ds-r-s)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-2 text-[14px] font-medium text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-muted)]"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="group flex h-7 min-w-0 items-center gap-1.5 rounded-[var(--ds-r-s)] px-1 text-left hover:bg-[var(--ds-surface-2)]"
+            title={subline ? `${displayTitle}. ${subline}. Click to rename.` : "Click to rename"}
+            aria-label={`Letter title: ${displayTitle}. Click to rename.`}
+          >
+            <span className="truncate text-[14px] font-medium text-[var(--ds-ink)]">{displayTitle}</span>
+            <Pencil className="size-3.5 shrink-0 text-[var(--ds-muted)] opacity-70 transition group-hover:opacity-100" aria-hidden />
+          </button>
+        )}
+        {!editing && subline && (
+          <span className="hidden min-w-0 truncate text-[12.5px] text-[var(--ds-muted)] 2xl:inline">{subline}</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="pb-1">
       {editing ? (
@@ -103,8 +153,8 @@ export function EditableTitleBar({ draft }: { draft: Draft }) {
           aria-label={`Letter title: ${displayTitle}. Click to rename.`}
         >
           <span>{displayTitle}</span>
-          <span className="ml-2 align-middle text-[10px] font-normal text-[var(--ds-muted)] uppercase tracking-[0.08em] opacity-0 group-hover:opacity-100 transition">
-            click to rename
+          <span className="ml-2 align-middle text-[11px] font-normal text-[var(--ds-muted)] opacity-0 group-hover:opacity-100 transition">
+            Click to rename
           </span>
         </button>
       )}
