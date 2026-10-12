@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Search, X } from "lucide-react";
+import { FileText, Search, SearchX, Store, X } from "lucide-react";
 import type { Consultant } from "@/components/consultants/types";
 import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import { BookingDialog } from "@/components/consultants/BookingDialog";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
 import { useAuth } from "@/lib/auth";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ds";
+import { BTN_OUTLINE } from "@/components/consultants/ui";
+import { useDraftStore } from "@/lib/store";
+import { displayTitleFor } from "@/lib/letters/display";
 import { toast } from "sonner";
 import type { Booking } from "@/lib/bookings";
 import { listMarketplace, type MarketplaceConsultantDTO } from "@/lib/consultantApi";
@@ -42,9 +45,9 @@ function dtoToConsultant(dto: MarketplaceConsultantDTO): Consultant {
     sla: dto.sla,
     avatarFrom: "from-amber-200",
     avatarTo: "to-amber-300",
-    photoUrl:
-      dto.photoUrl ??
-      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
+    // No stock placeholder: the card shows the expert's initials on a
+    // pastel tint when there is no photo.
+    photoUrl: dto.photoUrl ?? "",
     // Unvalidated server DTO — specialties may be absent; guard the .slice
     // and the copy so a partial payload can't crash the marketplace list.
     specialty: dto.specialty || `${(dto.specialties ?? []).slice(0, 2).join(" & ")} reviews`,
@@ -66,10 +69,8 @@ function profileToConsultant(p: ReturnType<typeof useConsultantStore.getState>["
     sla: p.sla,
     avatarFrom: "from-amber-200",
     avatarTo: "to-amber-300",
-    photoUrl: p.photoUrl ||
-      // Neutral placeholder so the card renders even before the consultant
-      // uploads a photo. Same Unsplash sizing as the hardcoded set.
-      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
+    // Initials on a pastel tint stand in until the consultant uploads a photo.
+    photoUrl: p.photoUrl || "",
     specialty: p.specialty || `${(p.specialties ?? []).slice(0, 2).join(" & ")} reviews`,
     specialties: p.specialties ?? [],
     // Only a published profile is discoverable by HR users; anything else is a
@@ -82,9 +83,9 @@ type SortKey = "rating" | "price-asc" | "price-desc" | "sla";
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "rating", label: "Rating" },
-  { value: "price-asc", label: "Price low–high" },
-  { value: "price-desc", label: "Price high–low" },
-  { value: "sla", label: "SLA fastest first" },
+  { value: "price-asc", label: "Price, low to high" },
+  { value: "price-desc", label: "Price, high to low" },
+  { value: "sla", label: "Fastest turnaround" },
 ];
 
 function sortConsultants(list: Consultant[], key: SortKey): Consultant[] {
@@ -211,6 +212,7 @@ export function ConsultantsIndex() {
     // never appear until the user happens to type or toggle a filter.
   }, [query, activeTags, sortKey, ALL_CONSULTANTS]);
 
+  /** Specialty pills toggle; several can be active at once (AND filter). */
   function toggleTag(tag: string) {
     setActiveTags((prev) => {
       const next = new Set(prev);
@@ -236,55 +238,100 @@ export function ConsultantsIndex() {
         : x.initials === booking.consultantInitials,
     );
     toast.success(
-      `Booking confirmed — ${c?.name ?? "specialist"} will review your letter within ${c?.sla ?? "24h"}.`,
+      `Booking confirmed. ${c?.name ?? "The specialist"} will review your letter within ${c?.sla ?? "24h"}.`,
     );
   }
 
+  const retry = () => {
+    setLoadState("loading");
+    void listMarketplace()
+      .then((res) => {
+        if (!res.ok) return setLoadState("error");
+        setServerConsultants(res.data.consultants.map(dtoToConsultant));
+        setLoadState("ready");
+      })
+      .catch(() => setLoadState("error"));
+  };
+
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      {/* Body. The page no longer renders its own header — the Layout
-       * sidebar provides the brand + nav for signed-in users, and the
-       * page-internal heading below carries the title. */}
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* The Layout sidebar provides the brand and nav; this page renders
+       * the 2A header, the toolbar and the 6B expert cards. */}
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[980px] px-4 py-8 sm:px-6 pb-24">
+        <div className="mx-auto w-full max-w-[1120px] px-4 pb-24 pt-8 sm:px-8 sm:pt-11 lg:px-11">
+          <PageHeader
+            crumbs={[{ label: "Marketplace" }]}
+            title="Employment-law specialists"
+            lede="Get a qualified specialist on your letter. Most reviews come back within 24 hours, at a fraction of what a formal legal instruction costs."
+            className="mb-0"
+          />
 
-          {/* Hero — matches the page-title pattern used across the
-           * consultant surface (eyebrow + clamp heading + lede). */}
-          <div className="mb-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-              Marketplace
-            </p>
-            <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)] leading-[1.1]">
-              Employment-law specialists
-            </h1>
-            <p className="text-[14px] text-[var(--ds-body)] mt-2 max-w-prose leading-relaxed">
-              Get a qualified specialist on your letter. Most reviews come back
-              within 24 hours, at a fraction of what a formal legal instruction
-              costs.
-            </p>
-          </div>
+          {/* Specialty filter: 2A pill look, but each pill toggles so several
+           * can be active (an expert must have all of them). "All" clears.
+           * The track wraps instead of running off the edge. */}
+          {loadState === "ready" && ALL_TAGS.length > 0 && (
+            <div
+              role="group"
+              aria-label="Filter by specialty"
+              className="mt-7 flex w-fit max-w-full flex-wrap gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]"
+            >
+              <FilterPill
+                label="All"
+                count={ALL_CONSULTANTS.length}
+                on={activeTags.size === 0}
+                onClick={() => setActiveTags(new Set())}
+              />
+              {ALL_TAGS.map((tag) => (
+                <FilterPill
+                  key={tag}
+                  label={tag}
+                  count={ALL_CONSULTANTS.filter((c) => c.specialties.includes(tag)).length}
+                  on={activeTags.has(tag)}
+                  onClick={() => toggleTag(tag)}
+                />
+              ))}
+            </div>
+          )}
+          <div className="mb-6" />
 
-          {/* Filters row */}
-          <div className="flex flex-col gap-3 mb-6">
-            {/* Search + sort — canonical input recipe (h-40, rounded-8,
-             * ring-2 focus) so the toolbar matches every other DraftHR
-             * control instead of the bespoke compact h-8 style. */}
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)]" />
+          {draftId && <DraftBanner draftId={draftId} />}
+
+          {/* Toolbar: result count on the left, search and sort on the right
+           * (the 13B list toolbar). */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <p className="m-0 min-w-0 pl-0.5 text-[13px] text-[var(--ds-muted)]">
+              {loadState === "ready" && ALL_CONSULTANTS.length > 0 ? (
+                <>
+                  <span className="ds-mono">{filtered.length}</span> of{" "}
+                  <span className="ds-mono">{ALL_CONSULTANTS.length}</span> specialists
+                  {myCard &&
+                    (myCard.pending ? (
+                      <span className="ml-1.5">· your profile is pending review</span>
+                    ) : (
+                      <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>
+                    ))}
+                </>
+              ) : (
+                <span aria-hidden>&nbsp;</span>
+              )}
+            </p>
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+              <div className="relative min-w-0 basis-full sm:basis-auto sm:w-[240px] sm:flex-none">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-muted)]" />
                 <input
                   type="text"
-                  placeholder="Search by name or role…"
+                  placeholder="Search by name or role"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   aria-label="Search specialists by name or role"
-                  className="w-full h-[40px] pl-9 pr-9 rounded-[8px] border border-[var(--ds-line)] bg-white text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
+                  className="h-8 w-full rounded-[var(--ds-r-s)] border border-transparent bg-[var(--ds-surface-2)] pl-8 pr-8 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] transition focus:border-[var(--ds-line-strong)] focus:bg-[var(--ds-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)]/25"
                 />
                 {query && (
                   <button
                     type="button"
                     onClick={() => setQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
                     aria-label="Clear search"
                   >
                     <X className="size-3.5" />
@@ -292,14 +339,15 @@ export function ConsultantsIndex() {
                 )}
               </div>
 
-              <Select
-                value={sortKey}
-                onValueChange={(v) => setSortKey(v as SortKey)}
-              >
-                <SelectTrigger className="h-[40px] w-[170px] rounded-[8px] border-[var(--ds-line)] bg-white text-[14px] text-[var(--ds-ink)]">
+              <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                <SelectTrigger
+                  aria-label="Sort specialists"
+                  className="!h-8 w-auto shrink-0 gap-1.5 rounded-[var(--ds-r-s)] border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[13px] text-[var(--ds-ink)] shadow-none"
+                >
+                  <span className="text-[var(--ds-muted)]">Sort</span>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent align="end">
                   {SORT_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>
                       {opt.label}
@@ -307,96 +355,45 @@ export function ConsultantsIndex() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
 
-            {/* Tag chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {ALL_TAGS.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => toggleTag(tag)}
-                  className={cn(
-                    "text-[11px] font-semibold px-2.5 py-1 rounded-full border transition",
-                    activeTags.has(tag)
-                      ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-                      : "bg-[var(--ds-surface)] text-[var(--ds-muted)] border-[var(--ds-line)] hover:border-[var(--ds-ink)] hover:text-[var(--ds-ink)]",
-                  )}
-                >
-                  {tag}
-                </button>
-              ))}
               {(activeTags.size > 0 || query) && (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-dashed border-[var(--ds-line)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
-                >
+                <button type="button" onClick={clearFilters} className={BTN_OUTLINE}>
                   Clear all
                 </button>
               )}
             </div>
           </div>
 
-          {/* Results count */}
-          {loadState === "ready" && ALL_CONSULTANTS.length > 0 && (
-            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
-              <p className="text-[11.5px] text-[var(--ds-muted)]">
-                {filtered.length} of {ALL_CONSULTANTS.length} specialists
-                {myCard &&
-                  (myCard.pending ? (
-                    <span className="ml-1.5 text-[var(--ds-muted)]">· your profile is pending review</span>
-                  ) : (
-                    <span className="ml-1.5 text-[var(--ds-ink)]">· you are listed</span>
-                  ))}
-              </p>
-            </div>
-          )}
-
-          {/* Cards grid — loading / error / empty-marketplace / no-match / cards */}
+          {/* Cards grid: loading / error / empty marketplace / no match / cards */}
           {loadState === "loading" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-busy>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy>
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-[220px] rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]/50 animate-pulse"
-                />
+                  className="h-[300px] animate-pulse rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5"
+                >
+                  <div className="h-[128px] rounded-[calc(var(--ds-r-l)-5px)] bg-[var(--ds-surface-2)]" />
+                </div>
               ))}
             </div>
           ) : loadState === "error" ? (
-            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-12 text-center">
-              <p className="text-[13.5px] text-[var(--ds-body)]">
-                We couldn't load the marketplace just now.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setLoadState("loading");
-                  void listMarketplace()
-                    .then((res) => {
-                      if (!res.ok) return setLoadState("error");
-                      setServerConsultants(res.data.consultants.map(dtoToConsultant));
-                      setLoadState("ready");
-                    })
-                    .catch(() => setLoadState("error"));
-                }}
-                className="mt-2 text-[12.5px] font-semibold text-[var(--ds-ink)] underline"
-              >
-                Try again
-              </button>
-            </div>
+            <EmptyPanel
+              icon={<Store className="size-5" />}
+              title="We couldn't load the marketplace just now."
+              action={
+                <button type="button" onClick={retry} className={BTN_OUTLINE}>
+                  Try again
+                </button>
+              }
+            />
           ) : ALL_CONSULTANTS.length === 0 ? (
-            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-12 text-center">
-              <p className="text-[13.5px] font-medium text-[var(--ds-ink)]">
-                No specialists are listed yet.
-              </p>
-              <p className="mt-1 text-[12.5px] text-[var(--ds-body)]">
-                Qualified employment-law specialists will appear here as they join the
-                marketplace. Check back soon.
-              </p>
-            </div>
+            <EmptyPanel
+              icon={<Store className="size-5" />}
+              title="No specialists are listed yet."
+              body="Qualified employment-law specialists will appear here as they join the marketplace. Check back soon."
+            />
           ) : filtered.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((c) => (
                 <ConsultantCard
                   key={c.profileId ?? c.initials}
@@ -406,18 +403,15 @@ export function ConsultantsIndex() {
               ))}
             </div>
           ) : (
-            <div className="rounded-[10px] border border-dashed border-[var(--ds-line)] px-5 py-12 text-center">
-              <p className="text-[13.5px] text-[var(--ds-body)]">
-                No specialists match your filters.
-              </p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-2 text-[12.5px] font-semibold text-[var(--ds-ink)] underline"
-              >
-                Clear filters →
-              </button>
-            </div>
+            <EmptyPanel
+              icon={<SearchX className="size-5" />}
+              title="No specialists match your filters."
+              action={
+                <button type="button" onClick={clearFilters} className={BTN_OUTLINE}>
+                  Clear filters
+                </button>
+              }
+            />
           )}
         </div>
       </main>
@@ -429,6 +423,78 @@ export function ConsultantsIndex() {
         onClose={() => setBookingFor(null)}
         onBooked={handleBooked}
       />
+    </div>
+  );
+}
+
+/** One toggle pill, styled like the 2A PillTabs (raised white when on). */
+function FilterPill({
+  label,
+  count,
+  on,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  on: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      onClick={onClick}
+      className={
+        "inline-flex h-[30px] items-center gap-[7px] whitespace-nowrap rounded-[7px] px-[13px] text-[13.5px] font-medium transition-colors " +
+        (on
+          ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
+          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]")
+      }
+    >
+      {label}
+      <span className={"ds-mono text-[11.5px] " + (on ? "text-[var(--ds-muted)]" : "text-[var(--ds-faint)]")}>
+        {count}
+      </span>
+    </button>
+  );
+}
+
+/** Opened from a letter's Review or Finalise step: say which letter the
+ *  booking will carry, as a 4B-style file chip. */
+function DraftBanner({ draftId }: { draftId: string }) {
+  const draft = useDraftStore((s) => s.drafts[draftId]);
+  const title = draft ? displayTitleFor(draft) : "Your letter";
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] px-4 py-3">
+      <span className="text-[13px] text-[var(--ds-body)]">Booking a review for</span>
+      <span className="inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[12.5px] text-[var(--ds-ink)]">
+        <FileText className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
+        <span className="truncate">{title}</span>
+      </span>
+      <span className="text-[12.5px] text-[var(--ds-muted)]">It is attached to your booking request.</span>
+    </div>
+  );
+}
+
+function EmptyPanel({
+  icon,
+  title,
+  body,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-14 text-center">
+      <span className="mb-3 grid size-10 place-items-center rounded-full bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]">
+        {icon}
+      </span>
+      <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">{title}</p>
+      {body && <p className="m-0 mt-1 max-w-[52ch] text-[13px] leading-relaxed text-[var(--ds-muted)]">{body}</p>}
+      {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }

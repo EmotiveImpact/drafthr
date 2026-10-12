@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Star } from "lucide-react";
+import { Clock, FileText, Star } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -9,12 +9,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import type { Consultant } from "@/components/consultants/types";
+import { BTN_OUTLINE, BTN_PRIMARY, ExpertAvatar, FIELD, tintFor, tintVars } from "@/components/consultants/ui";
 import { useBookingsStore, slaMs, type Booking } from "@/lib/bookings";
 import { pushBookingCreate } from "@/lib/marketplaceSync";
 import { toServerUuid } from "@/lib/remote-ids";
-import { cn } from "@/lib/utils";
+import { useDraftStore } from "@/lib/store";
+import { displayTitleFor } from "@/lib/letters/display";
 
 interface BookingDialogProps {
   /** Consultant to book. When null/undefined the dialog is closed. */
@@ -38,6 +39,9 @@ export function BookingDialog({
   const recordBooking = useBookingsStore((s) => s.recordBooking);
 
   const open = !!consultant;
+  const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const draftTitle = draft ? displayTitleFor(draft) : "Your letter";
+  const tint = tintVars(tintFor(consultant?.profileId || consultant?.name || "?"));
 
   function close() {
     setNote("");
@@ -91,7 +95,7 @@ export function BookingDialog({
       setSubmitting(false);
       if (!ok) {
         // pushBookingCreate already rolled back the optimistic local row.
-        toast.error("Couldn't send your booking request — please try again.");
+        toast.error("Couldn't send your booking request. Please try again.");
         return;
       }
     }
@@ -106,23 +110,32 @@ export function BookingDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden">
+      <DialogContent className="gap-0 overflow-hidden rounded-[var(--ds-r-l)] border-[var(--ds-line)] bg-[var(--ds-surface)] p-0 shadow-[var(--ds-shadow-l)] sm:max-w-[460px]">
         {consultant && (
           <>
-            {/* Header */}
-            <DialogHeader className="px-5 pt-5 pb-0">
-              <div className="flex items-center gap-3 mb-3">
-                <img
-                  src={consultant.photoUrl}
-                  alt={consultant.name}
-                  className="size-12 rounded-full object-cover border-2 border-white shadow"
+            {/* Header: a slim pastel band carrying the expert, as on the 6B card */}
+            <DialogHeader className="gap-0 p-1.5 pb-0 text-left">
+              <div
+                className="flex items-center gap-3.5 rounded-[calc(var(--ds-r-l)-5px)] px-4 py-4"
+                style={{ background: tint.bg }}
+              >
+                <ExpertAvatar
+                  photoUrl={consultant.photoUrl}
+                  name={consultant.name}
+                  initials={consultant.initials}
+                  seed={consultant.profileId || consultant.name}
+                  size={48}
+                  ring
                 />
-                <div>
-                  <DialogTitle className="text-[15px] font-semibold leading-tight text-[var(--ds-ink)]">
+                <div className="min-w-0 pr-6">
+                  <DialogTitle className="truncate text-[15px] font-medium leading-tight text-[var(--ds-ink)]">
                     {consultant.name}
                   </DialogTitle>
-                  <p className="text-[11px] text-[var(--ds-muted)] mt-0.5">
-                    {consultant.role}
+                  <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-body)]">{consultant.role}</p>
+                  <p className="m-0 mt-1 inline-flex items-center gap-1 text-[12px] text-[var(--ds-body)]">
+                    <Star className="size-3 text-[var(--ds-amber-dot)]" fill="currentColor" strokeWidth={0} aria-hidden />
+                    <span className="ds-mono font-medium text-[var(--ds-ink)]">{consultant.rating.toFixed(1)}</span>
+                    <span className="text-[var(--ds-muted)]">({consultant.reviews} reviews)</span>
                   </p>
                 </div>
               </div>
@@ -130,82 +143,69 @@ export function BookingDialog({
                 Confirm your booking with {consultant.name} and add optional
                 focus notes for the review.
               </DialogDescription>
-              {/* Rating row */}
-              <div className="flex items-center gap-1.5 text-[11px] mb-2">
-                <Star className="size-3 text-[var(--ds-amber-fg)]" fill="currentColor" strokeWidth={0} />
-                <span className="font-semibold text-[var(--ds-ink)]">{consultant.rating.toFixed(1)}</span>
-                <span className="text-[var(--ds-muted)]">({consultant.reviews} reviews)</span>
-              </div>
             </DialogHeader>
 
-            <div className="px-5 pb-4 flex flex-col gap-3">
-              {/* Specialty quote */}
-              <div
-                className={cn(
-                  "text-[11.5px] text-[var(--ds-body)] px-3 py-2.5 bg-[var(--ds-canvas)] rounded-[8px] leading-snug",
-                  consultant.top && "border-l-2 border-[var(--ds-ink)]",
+            <div className="flex flex-col gap-4 px-5 pb-5 pt-4">
+              {consultant.specialty && (
+                <p className="m-0 text-[13px] leading-snug text-[var(--ds-body)]">{consultant.specialty}</p>
+              )}
+
+              {/* The letter that travels with the booking, as a 4B file chip */}
+              <div>
+                <p className="m-0 mb-1.5 text-[12px] text-[var(--ds-muted)]">Letter</p>
+                {draftId ? (
+                  <span className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-2.5 text-[12.5px] text-[var(--ds-body)]">
+                    <FileText className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
+                    <span className="truncate">{draftTitle}</span>
+                  </span>
+                ) : (
+                  <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">No letter attached.</p>
                 )}
-              >
-                "{consultant.specialty}"
               </div>
 
               {/* Rate summary. This is the specialist's RATE, not an in-app
-               * charge — DraftHR doesn't process the payment, so we don't
-               * dress the booking up as a checkout. */}
-              <div className="flex flex-col gap-1 px-3 py-2.5 rounded-[8px] bg-[var(--ds-surface-2)] border border-[var(--ds-line)] text-[12px]">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-[var(--ds-ink)] text-[16px]">
-                    {(consultant.currency ?? "£")}{consultant.price}
+               * charge, so we don't dress the booking up as a checkout. */}
+              <div className="flex flex-col gap-1.5 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] px-3.5 py-3">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="ds-mono text-[17px] font-medium text-[var(--ds-ink)]">
+                    {consultant.currency ?? "£"}
+                    {consultant.price}
                   </span>
-                  <span className="text-[var(--ds-muted)]">·</span>
-                  <span className="text-[var(--ds-muted)]">
+                  <span className="inline-flex items-center gap-1 text-[12.5px] text-[var(--ds-muted)]">
+                    <Clock className="size-3" aria-hidden />
                     Expected response in{" "}
-                    <strong className="text-[var(--ds-ink)] font-semibold">
-                      {consultant.sla}
-                    </strong>
+                    <strong className="font-medium text-[var(--ds-ink)]">{consultant.sla}</strong>
                   </span>
                 </div>
-                <span className="text-[11px] text-[var(--ds-muted)] leading-snug">
-                  This is the specialist's rate. You won't be charged here —
-                  this sends a request and you arrange the fee with them directly.
+                <span className="text-[12px] leading-snug text-[var(--ds-muted)]">
+                  This is the specialist's rate. You won't be charged here. This
+                  sends a request and you arrange the fee with them directly.
                 </span>
               </div>
 
               {/* Optional note */}
               <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="booking-note"
-                  className="text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)]"
-                >
-                  Focus notes (optional)
+                <label htmlFor="booking-note" className="text-[12.5px] font-medium text-[var(--ds-ink)]">
+                  Focus notes <span className="font-normal text-[var(--ds-muted)]">(optional)</span>
                 </label>
                 <textarea
                   id="booking-note"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
-                  placeholder="What should they focus on? e.g. 'Check the redundancy selection criteria'"
+                  placeholder="What should they focus on? For example, check the redundancy selection criteria."
                   rows={3}
-                  className="w-full rounded-[8px] border border-[var(--ds-line)] bg-white px-3 py-2 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] resize-none focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
+                  className={`${FIELD} resize-none py-2.5 leading-relaxed`}
                 />
               </div>
             </div>
 
-            <DialogFooter className="px-5 pb-5 flex-col-reverse sm:flex-row gap-2">
-              <Button
-                variant="outline"
-                onClick={close}
-                disabled={submitting}
-                className="flex-1 sm:flex-none text-[13px]"
-              >
+            <DialogFooter className="flex-col-reverse gap-2 border-t border-[var(--ds-line)] px-5 py-3.5 sm:flex-row">
+              <button type="button" onClick={close} disabled={submitting} className={`${BTN_OUTLINE} h-9 px-3.5`}>
                 Cancel
-              </Button>
-              <Button
-                onClick={handleConfirm}
-                disabled={submitting}
-                className="flex-1 sm:flex-none bg-[var(--ds-ink)] text-white hover:-translate-y-px hover:shadow-md text-[13px] font-semibold disabled:opacity-60"
-              >
+              </button>
+              <button type="button" onClick={handleConfirm} disabled={submitting} className={`${BTN_PRIMARY} h-9 px-3.5`}>
                 {submitting ? "Sending…" : "Send booking request"}
-              </Button>
+              </button>
             </DialogFooter>
           </>
         )}
