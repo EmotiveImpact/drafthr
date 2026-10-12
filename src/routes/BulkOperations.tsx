@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ds";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
@@ -319,18 +320,11 @@ export default function BulkOperations() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <header className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Business · Bulk operations
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          Generate letters in bulk
-        </h1>
-        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-          Upload a CSV of employees and we'll create one personalised draft
-          per row. Review and finalise each draft individually before sending.
-        </p>
-      </header>
+      <PageHeader
+        crumbs={[{ label: "Business" }, { label: "Bulk operations" }]}
+        title="Generate letters in bulk"
+        lede="Upload a CSV of employees and we'll create one personalised draft per row. Review and finalise each draft individually before sending."
+      />
 
       {/* Progress chips */}
       {step < 5 && (

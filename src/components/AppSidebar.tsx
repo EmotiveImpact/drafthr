@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -12,10 +12,10 @@ import {
   SidebarHeader,
   SidebarMenu,
   SidebarMenuAction,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
@@ -26,31 +26,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ds/Avatar";
 import { BrandMark, Wordmark } from "@/components/ds";
 import {
   PanelLeftOpen,
-  PanelLeftClose,
-  PlusCircle,
+  PanelLeft,
+  Plus,
   Briefcase,
   UserRound,
-  History,
   ShieldCheck,
   ChevronsUpDown,
+  ChevronDown,
   Settings as SettingsIcon,
   MoreHorizontal,
   Trash2,
   ArrowUpRight,
   LogOut,
-  LayoutDashboard,
+  House,
   Search,
   CalendarDays,
   FileDown,
   Activity as ActivityIcon,
   Bell,
   FolderOpen,
-  ChevronDown,
   FileText,
+  Files,
   Users,
   Layers,
   ClipboardCheck,
@@ -59,37 +59,34 @@ import {
   Inbox,
   Store,
   UserCog,
+  CircleCheck,
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
-import type { Mode } from "@/lib/letters/types";
+import type { Draft, Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { undeleteDraft } from "@/lib/dual-write";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { useAuth } from "@/lib/auth";
 import { deriveNotifications, topSeverity } from "@/lib/notifications";
-import { SidebarMenuBadge } from "@/components/ui/sidebar";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { getLetterMeta } from "@/lib/letters/catalog";
 
 /**
- * App sidebar.
+ * App sidebar, Harvey-style (design option 1A).
  *
- *   Header — brand + bell + trigger.
- *     • Brand is a plain <Link> (NOT a SidebarMenuButton) so the primitive's
- *       size override doesn't shrink the tile when the sidebar collapses —
- *       the 32x32 brand tile is the same size in both states.
- *     • Bell handles all notifications (one surface, not two — there's no
- *       separate "Notifications" nav item).
- *     • Trigger is the explicit collapse/expand button.
- *     • When sidebar is COLLAPSED, clicking the brand tile expands it.
- *     • Layout flips from row → column on collapse so the three controls
- *       stack vertically in the icon strip.
+ *   Header  brand tile + wordmark, search and collapse tools; the workspace
+ *           block (name and team, a switcher when there are several); a
+ *           prominent "New letter" button.
+ *   Body    icon + label navigation. Recent letters nest under "Letters" and
+ *           matters under "Matters". Quiet "Watch" and "Archive" groups.
+ *   Footer  Settings, then the user card with the role / account menu.
  *
- *   Body  — primary nav · recent drafts · platform group.
- *   Footer — user card with role / account / theme dropdown.
+ * Collapses to an icon strip on desktop (⌘B, the collapse button, the rail,
+ * or a click on any empty part of the strip expands it again). On mobile the
+ * shadcn primitive renders it inside a Sheet opened from the topbar.
  */
 /**
  * Sidebar-local mode type — extends the letter-writing Mode with a
@@ -99,6 +96,29 @@ import { getLetterMeta } from "@/lib/letters/catalog";
  * wizard call site — and a consultant doesn't draft.
  */
 export type SidebarMode = Mode | "consultant";
+
+/* Shared row styling, mirroring the prototype's .s1a-item: 34px rows,
+ * muted icons, a soft filled pill for the active page. */
+const NAV_BUTTON =
+  "h-[34px] gap-2.5 rounded-[var(--ds-r-s)] px-[9px] text-[14px] text-sidebar-foreground " +
+  "hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_60%,transparent)] hover:text-[var(--ds-ink)] " +
+  "data-[active=true]:bg-sidebar-accent data-[active=true]:text-[var(--ds-ink)] data-[active=true]:font-medium " +
+  "[&>svg]:text-[var(--ds-subtle)] hover:[&>svg]:text-[var(--ds-ink)] data-[active=true]:[&>svg]:text-[var(--ds-ink)]";
+
+/* Nested rows (recent letters, matters), mirroring .s1a-subitem. */
+const SUB_BUTTON =
+  "h-8 gap-2 rounded-[var(--ds-r-s)] pl-2.5 pr-2 text-[13.5px] text-[var(--ds-muted)] " +
+  "hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_60%,transparent)] hover:text-[var(--ds-ink)] " +
+  "data-[active=true]:bg-sidebar-accent data-[active=true]:text-[var(--ds-ink)] data-[active=true]:font-medium";
+
+/* Count chip, mirroring .s1a-count. */
+const COUNT_BADGE =
+  "ds-mono right-1.5 h-[18px] min-w-[18px] rounded-full px-[5px] text-[11.5px] font-medium " +
+  "bg-[var(--ds-chip)] text-[var(--ds-muted)] peer-hover/menu-button:text-[var(--ds-muted)] peer-data-active/menu-button:text-[var(--ds-muted)] " +
+  "peer-data-[size=default]/menu-button:top-2";
+
+const GROUP_LABEL =
+  "h-7 px-[9px] text-[11.5px] font-medium tracking-[0.02em] text-[var(--ds-subtle)]";
 
 export function AppSidebar() {
   const loc = useLocation();
@@ -123,21 +143,18 @@ export function AppSidebar() {
 
   return (
     <SidebarShell>
-      <SidebarHeader>
+      <SidebarHeader className="gap-0 px-1 pt-1.5 pb-1 group-data-[collapsible=icon]:px-2 in-data-[mobile=true]:px-3 in-data-[mobile=true]:pt-3.5">
         <BrandHeader />
+        <WorkspaceBlock mode={mode} />
+        <NewLetterButton mode={mode} />
       </SidebarHeader>
 
-      <SidebarContent>
-        <SidebarGroup data-tour="workspace-switcher">
-          <SidebarGroupContent>
-            <WorkspaceSwitcher />
-          </SidebarGroupContent>
-        </SidebarGroup>
+      <SidebarContent className="gap-0 px-1 group-data-[collapsible=icon]:px-2 in-data-[mobile=true]:px-3">
         <NavigatePrimary mode={mode} />
-        <NavRecentDrafts mode={mode} />
       </SidebarContent>
 
-      <SidebarFooter>
+      <SidebarFooter className="gap-0 px-1 pb-1 pt-2 group-data-[collapsible=icon]:px-2 in-data-[mobile=true]:px-3 in-data-[mobile=true]:pb-3">
+        <NavFooter />
         <NavUser mode={mode} />
       </SidebarFooter>
 
@@ -147,10 +164,10 @@ export function AppSidebar() {
 }
 
 /**
- * Sidebar wrapper with click-anywhere-to-expand when collapsed (taken from
- * the committed version). Clicking any empty space inside the icon-strip
- * expands the sidebar; clicks on real interactive elements (links, buttons,
- * dropdown items) keep their normal behaviour.
+ * Sidebar wrapper with click-anywhere-to-expand when collapsed. Clicking any
+ * empty space inside the icon-strip expands the sidebar; clicks on real
+ * interactive elements (links, buttons, dropdown items) keep their normal
+ * behaviour.
  */
 function SidebarShell({ children }: { children: React.ReactNode }) {
   const { state, toggleSidebar, isMobile } = useSidebar();
@@ -187,21 +204,22 @@ function SidebarShell({ children }: { children: React.ReactNode }) {
 /*  Header                                                             */
 /* ------------------------------------------------------------------ */
 
+const TOOL_BUTTON =
+  "size-7 grid place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-subtle)] hover:bg-sidebar-accent hover:text-[var(--ds-ink)] shrink-0";
+
 function BrandHeader() {
   const { state, isMobile, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed" && !isMobile;
+  const search = useSearchPaletteToggle();
 
   /*
-   * Two-button row, exactly like the committed version:
-   *   - Brand <Link>: plain anchor, NOT SidebarMenuButton — 32x32 tile stays
-   *     32x32 in both states. When collapsed, hover swaps the icon to
-   *     PanelLeftOpen and click expands. When expanded, click goes to "/".
-   *   - Collapse <button>: visible only when expanded. Sits on the right of
-   *     the brand row. Click → collapse. (When collapsed it disappears, since
-   *     the whole sidebar surface acts as the expand affordance via SidebarShell.)
+   * Brand <Link>: a plain anchor, so the tile keeps its size in both states.
+   * When collapsed, hover swaps the tile for PanelLeftOpen and a click
+   * expands the sidebar. When expanded, a click goes to "/".
+   * Search and collapse tools sit on the right when expanded.
    */
   return (
-    <div className="flex w-full items-center justify-between gap-2">
+    <div className="flex h-8 w-full items-center justify-between gap-2 pl-1 pr-0.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
       <Link
         to="/"
         onClick={(e) => {
@@ -210,52 +228,147 @@ function BrandHeader() {
             toggleSidebar();
           }
         }}
-        aria-label={isCollapsed ? "Expand sidebar" : "DRAFTHR home"}
-        title={isCollapsed ? "Expand sidebar (⌘B)" : "DRAFTHR"}
+        aria-label={isCollapsed ? "Expand sidebar" : "DraftHR home"}
+        title={isCollapsed ? "Expand sidebar (⌘B)" : "DraftHR"}
         className="group/brand flex items-center gap-2 min-w-0 cursor-pointer"
       >
         <div className="relative shrink-0">
           <BrandMark
-            size={40}
+            size={26}
             className={cn(
-              "transition-opacity duration-150",
+              "rounded-[var(--ds-r-s)] transition-opacity duration-150",
               isCollapsed && "group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0"
             )}
           />
           {isCollapsed && (
-            <span className="absolute inset-0 grid place-items-center rounded-md bg-[var(--ds-ink)] text-white opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100">
+            <span className="absolute inset-0 grid place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] opacity-0 transition-opacity duration-150 group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100">
               <PanelLeftOpen className="size-4" />
             </span>
           )}
         </div>
-        {!isCollapsed && (
-          <span className="flex flex-col leading-tight min-w-0 -mt-1">
-            <Wordmark size={19} className="truncate" />
-            <span className="text-[11px] text-[var(--ds-muted)] mt-0.5 truncate">
-              Words that carry weight.
-            </span>
-          </span>
-        )}
+        {!isCollapsed && <Wordmark size={15} className="truncate" />}
       </Link>
 
       {!isCollapsed && (
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label="Collapse sidebar"
-          title="Collapse sidebar (⌘B)"
-          className="size-7 grid place-items-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground shrink-0"
-        >
-          <PanelLeftClose className="size-4" />
-        </button>
+        <span className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => search.setOpen(true)}
+            aria-label="Search"
+            title="Search letters, letter types and pages (⌘K)"
+            className={TOOL_BUTTON}
+          >
+            <Search className="size-[15px]" />
+          </button>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={isMobile ? "Close menu" : "Collapse sidebar"}
+            title={isMobile ? "Close menu" : "Collapse sidebar (⌘B)"}
+            className={TOOL_BUTTON}
+          >
+            <PanelLeft className="size-[15px]" />
+          </button>
+        </span>
       )}
     </div>
+  );
+}
+
+function roleLabelFor(mode: SidebarMode | null): string {
+  return mode === "employer"
+    ? "HR / Management"
+    : mode === "employee"
+    ? "Employee"
+    : mode === "consultant"
+    ? "Consultant"
+    : "Not set";
+}
+
+/**
+ * Workspace name and team, like the prototype's org block. When the user
+ * belongs to several workspaces the whole block is the switcher's trigger;
+ * otherwise it is a static label. Hidden in the icon strip.
+ */
+function WorkspaceBlock({ mode }: { mode: SidebarMode | null }) {
+  const { activeTenant } = useAuth();
+  const orgName = useProfileStore((s) => s.profile.employer.legalName);
+  const name = activeTenant?.name || orgName?.trim() || "DraftHR";
+  const team = mode === "employer" ? "HR team" : roleLabelFor(mode);
+
+  return (
+    <div
+      data-tour="workspace-switcher"
+      className="pt-2.5 pb-3.5 group-data-[collapsible=icon]:hidden"
+    >
+      <WorkspaceSwitcher
+        subtitle={team}
+        fallback={
+          <div className="min-w-0 px-1">
+            <div className="truncate text-[14.5px] font-medium text-[var(--ds-ink)]">{name}</div>
+            <div className="mt-px truncate text-[12px] text-[var(--ds-muted)]">{team}</div>
+          </div>
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * The prominent "New letter" button. Only for the two letter-writing modes;
+ * consultants review letters rather than write them. In the icon strip it
+ * shrinks to a plus.
+ */
+function NewLetterButton({ mode }: { mode: SidebarMode | null }) {
+  const loc = useLocation();
+  const prefix = mode === "employer" ? "/hr" : mode === "employee" ? "/me" : null;
+  if (!prefix) return null;
+  const href = `${prefix}/new`;
+  return (
+    <SidebarMenu className="pb-3">
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          asChild
+          tooltip="New letter"
+          isActive={loc.pathname === href}
+          className={cn(
+            "h-9 justify-center gap-[7px] rounded-[var(--ds-r-s)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[13.5px] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]",
+            "hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:text-[var(--ds-ink)]",
+            "group-data-[collapsible=icon]:border-[var(--ds-line-strong)]"
+          )}
+        >
+          <Link to={href}>
+            <Plus className="size-[15px]" />
+            <span className="group-data-[collapsible=icon]:hidden">New letter</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }
 
 /* ------------------------------------------------------------------ */
 /*  Body — primary navigation                                          */
 /* ------------------------------------------------------------------ */
+
+type NavItem = {
+  href: string | null;
+  label: string;
+  Icon: typeof House;
+  tooltip: string;
+  disabled?: boolean;
+};
+
+function NavRow({ it, isActive }: { it: NavItem; isActive: boolean }) {
+  return (
+    <SidebarMenuButton asChild tooltip={it.tooltip} isActive={isActive} className={NAV_BUTTON}>
+      <Link to={it.href!}>
+        <it.Icon />
+        <span>{it.label}</span>
+      </Link>
+    </SidebarMenuButton>
+  );
+}
 
 function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const loc = useLocation();
@@ -277,6 +390,21 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const prefix = mode === "employer" ? "/hr" : mode === "employee" ? "/me" : null;
   const search = useSearchPaletteToggle();
 
+  // In the icon strip the header's search tool is hidden, so search gets
+  // its own icon row there.
+  const collapsedSearch = (
+    <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+      <SidebarMenuButton
+        tooltip="Search (⌘K)"
+        onClick={() => search.setOpen(true)}
+        className={NAV_BUTTON}
+      >
+        <Search />
+        <span>Search</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+
   /* ─── Consultant sidebar ────────────────────────────────────────────
    * Consultants don't write letters — they review them. Their nav is
    * entirely different from HR/Employee: an inbox of inbound booking
@@ -286,28 +414,19 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
    */
   if (mode === "consultant") {
     const consultantNav: NavItem[] = [
-      { href: "/c", label: "Home", Icon: LayoutDashboard, tooltip: "Dashboard" },
+      { href: "/c", label: "Home", Icon: House, tooltip: "Dashboard" },
       { href: "/c/profile", label: "My profile", Icon: UserCog, tooltip: "Edit your marketplace card" },
       { href: "/consultants", label: "Marketplace", Icon: Store, tooltip: "Browse all specialists" },
     ];
     return (
       <>
-        <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+        <SidebarGroup className="px-0 py-1">
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-px">
+              {collapsedSearch}
               {consultantNav.map((it) => (
                 <SidebarMenuItem key={it.label}>
-                  <SidebarMenuButton
-                    asChild
-                    tooltip={it.tooltip}
-                    isActive={loc.pathname === it.href}
-                  >
-                    <Link to={it.href!}>
-                      <it.Icon />
-                      <span>{it.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
+                  <NavRow it={it} isActive={loc.pathname === it.href} />
                 </SidebarMenuItem>
               ))}
               {/* No standalone "Inbox" row: the booking inbox already renders
@@ -319,37 +438,29 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>At a glance</SidebarGroupLabel>
+        <SidebarGroup className="px-0 py-1">
+          <SidebarGroupLabel className={GROUP_LABEL}>At a glance</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-px">
               <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  tooltip="Notifications"
+                <NavRow
+                  it={{ href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Notifications" }}
                   isActive={loc.pathname === "/notifications"}
-                >
-                  <Link to="/notifications">
-                    <Bell />
-                    <span>Notifications</span>
-                  </Link>
-                </SidebarMenuButton>
+                />
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Activity">
-                  <Link to="/activity">
-                    <ActivityIcon />
-                    <span>Activity</span>
-                  </Link>
-                </SidebarMenuButton>
+                <NavRow
+                  it={{ href: "/activity", label: "Activity", Icon: ActivityIcon, tooltip: "Activity" }}
+                  isActive={loc.pathname === "/activity"}
+                />
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         {!consultantProfile && (
-          <SidebarGroup>
+          <SidebarGroup className="px-0 py-1">
             <SidebarGroupContent>
-              <div className="mx-2 mt-2 rounded-md border border-[var(--ds-amber-fg)]/30 bg-[var(--ds-amber-bg)] px-3 py-2 text-[11.5px] leading-snug text-[var(--ds-amber-fg)] group-data-[collapsible=icon]:hidden">
+              <div className="mx-1 mt-2 rounded-[var(--ds-r-m)] bg-[var(--ds-amber-bg)] px-3 py-2.5 text-[12px] leading-snug text-[var(--ds-amber-fg)] group-data-[collapsible=icon]:hidden">
                 <span className="font-semibold">Profile incomplete.</span>{" "}
                 <Link to="/c/profile" className="underline">Finish your card</Link> to be discoverable.
               </div>
@@ -361,35 +472,22 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   }
 
   if (!prefix) {
+    const starts: NavItem[] = [
+      { href: "/hr", label: "HR / Management", Icon: Briefcase, tooltip: "HR / Management" },
+      { href: "/me", label: "Employee", Icon: UserRound, tooltip: "Employee" },
+      { href: "/c", label: "Consultant", Icon: GraduationCap, tooltip: "Consultant" },
+    ];
     return (
-      <SidebarGroup>
-        <SidebarGroupLabel>Get started</SidebarGroupLabel>
+      <SidebarGroup className="px-0 py-1">
+        <SidebarGroupLabel className={GROUP_LABEL}>Get started</SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="HR / Management">
-                <Link to="/hr">
-                  <Briefcase />
-                  <span>HR / Management</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Employee">
-                <Link to="/me">
-                  <UserRound />
-                  <span>Employee</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild tooltip="Consultant">
-                <Link to="/c">
-                  <GraduationCap />
-                  <span>Consultant</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+          <SidebarMenu className="gap-px">
+            {collapsedSearch}
+            {starts.map((it) => (
+              <SidebarMenuItem key={it.label}>
+                <NavRow it={it} isActive={false} />
+              </SidebarMenuItem>
+            ))}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -397,34 +495,29 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   }
 
   /**
-   * Three logical groups:
-   *  - PRIMARY: the actions you start every session with (Home / New letter
-   *    / Search). Search at the bottom because it's a fallback when you
-   *    can't find a thing — not the first thing you reach for.
+   * Groups:
+   *  - PRIMARY: Home, Letters (recent letters nested), Matters (matters
+   *    nested), then the HR-only portfolio surfaces. "New letter" is the
+   *    button in the header; search is the header tool (and ⌘K).
    *  - WATCH: things that need attention this week (Notifications, then
    *    Calendar). Notifications first so the badge is the most prominent
    *    thing on the rail.
-   *  - ARCHIVE: look-back surfaces (Activity, Exported).
-   *
-   * Recent drafts hangs below all three from NavRecentDrafts.
+   *  - ARCHIVE: look-back surfaces (Activity, Exported, marketplace).
    */
-  const primary: NavItem[] = [
-    { href: prefix, label: "Home", Icon: LayoutDashboard, tooltip: "Dashboard" },
-    { href: `${prefix}/new`, label: "New letter", Icon: PlusCircle, tooltip: "Browse letter types" },
+  const portfolio: NavItem[] =
     // Portfolio-level surfaces — HR mode only (the multi-employee workbench).
     // Employee mode users have one self-record + one matter; these surfaces
     // would be empty noise for them.
-    ...(mode === "employer"
-      ? ([
+    mode === "employer"
+      ? [
           { href: "/employees", label: "Employees", Icon: Users, tooltip: "Workspace employee directory" },
-          { href: "/bulk", label: "Bulk operations", Icon: Layers, tooltip: "CSV → batch drafts" },
-          { href: "/reports", label: "Reports", Icon: BarChart3, tooltip: "Compliance, risk & operations rollup" },
-        ] satisfies NavItem[])
-      : []),
-  ];
+          { href: "/reports", label: "Reports", Icon: BarChart3, tooltip: "Compliance, risk and operations rollup" },
+          { href: "/bulk", label: "Bulk operations", Icon: Layers, tooltip: "CSV to batch drafts" },
+        ]
+      : [];
 
   const watch: NavItem[] = [
-    { href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Deadline reminders & compliance alerts" },
+    { href: "/notifications", label: "Notifications", Icon: Bell, tooltip: "Deadline reminders and compliance alerts" },
     // HR-only — approval queue is a Business-tier feature for HR drafters
     // shipping work to reviewers (HR Director, in-house counsel).
     ...(mode === "employer"
@@ -463,16 +556,11 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
     return (
       <SidebarMenuItem key={it.label} data-tour={tourKey}>
         {it.href && !it.disabled ? (
-          <SidebarMenuButton asChild tooltip={it.tooltip} isActive={loc.pathname === it.href}>
-            <Link to={it.href}>
-              <it.Icon />
-              <span>{it.label}</span>
-            </Link>
-          </SidebarMenuButton>
+          <NavRow it={it} isActive={loc.pathname === it.href} />
         ) : (
           <SidebarMenuButton
             tooltip={it.tooltip}
-            className="text-muted-foreground cursor-not-allowed"
+            className={cn(NAV_BUTTON, "text-[var(--ds-faint)] cursor-not-allowed")}
             aria-disabled
           >
             <it.Icon />
@@ -482,15 +570,22 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
         {showNotifBadge && (
           <SidebarMenuBadge
             className={cn(
-              "px-1 text-[10px] text-white",
-              top === "urgent" ? "bg-rose-500" : "bg-amber-500"
+              COUNT_BADGE,
+              top === "urgent"
+                ? "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)] peer-hover/menu-button:text-[var(--ds-red-fg)] peer-data-active/menu-button:text-[var(--ds-red-fg)]"
+                : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] peer-hover/menu-button:text-[var(--ds-amber-fg)] peer-data-active/menu-button:text-[var(--ds-amber-fg)]"
             )}
           >
             {actionable > 9 ? "9+" : actionable}
           </SidebarMenuBadge>
         )}
         {showApprovalsBadge && (
-          <SidebarMenuBadge className="px-1 text-[10px] text-white bg-amber-500">
+          <SidebarMenuBadge
+            className={cn(
+              COUNT_BADGE,
+              "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] peer-hover/menu-button:text-[var(--ds-amber-fg)] peer-data-active/menu-button:text-[var(--ds-amber-fg)]"
+            )}
+          >
             {inReviewCount > 9 ? "9+" : inReviewCount}
           </SidebarMenuBadge>
         )}
@@ -500,174 +595,99 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
 
   return (
     <>
-      {/* PRIMARY actions — Home / New letter / Search */}
-      <SidebarGroup>
+      {/* PRIMARY */}
+      <SidebarGroup className="px-0 py-1">
         <SidebarGroupContent>
-          <SidebarMenu>
-            {primary.map(renderItem)}
-            {/* Search opens the Cmd+K palette. Lives at the bottom of the
-             * primary group rather than its own row so power-users see
-             * it next to their main entry points. */}
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                tooltip="Search drafts, letter types, pages (⌘K)"
-                onClick={() => search.setOpen(true)}
-              >
-                <Search />
-                <span>Search</span>
-              </SidebarMenuButton>
-              <SidebarMenuBadge className="border border-letter-rule bg-muted text-muted-foreground px-1 text-[10px]">
-                ⌘K
-              </SidebarMenuBadge>
-            </SidebarMenuItem>
+          <SidebarMenu className="gap-px">
+            {collapsedSearch}
+            {renderItem({ href: prefix, label: "Home", Icon: House, tooltip: "Dashboard" })}
+            <NavLetters mode={mode as Mode} />
+            {/* MATTERS — named cases. The row links to /matters; each matter
+             * nests below it and the active matter's letters expand inline. */}
+            <NavMatters mode={mode as Mode} />
+            {portfolio.map(renderItem)}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
 
       {/* WATCH — things that need attention this week */}
-      <SidebarGroup>
-        <SidebarGroupLabel>Watch</SidebarGroupLabel>
+      <SidebarGroup className="px-0 py-1">
+        <SidebarGroupLabel className={GROUP_LABEL}>Watch</SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>{watch.map(renderItem)}</SidebarMenu>
+          <SidebarMenu className="gap-px">{watch.map(renderItem)}</SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
 
       {/* ARCHIVE — look-back surfaces */}
-      <SidebarGroup>
-        <SidebarGroupLabel>Archive</SidebarGroupLabel>
+      <SidebarGroup className="px-0 py-1">
+        <SidebarGroupLabel className={GROUP_LABEL}>Archive</SidebarGroupLabel>
         <SidebarGroupContent>
-          <SidebarMenu>{archive.map(renderItem)}</SidebarMenu>
+          <SidebarMenu className="gap-px">{archive.map(renderItem)}</SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
-
-      {/* MATTERS — named cases. Parent label is clickable → /matters
-       *   sub-items are each matter; the active matter's letters expand
-       *   inline below it. */}
-      <NavMatters mode={mode as Mode} />
     </>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Matters group                                                      */
+/*  Nested lists                                                       */
 /* ------------------------------------------------------------------ */
 
-function NavMatters({ mode }: { mode: Mode }) {
-  const loc = useLocation();
-  const matters = useDraftStore((s) => s.matters);
-  const drafts = useDraftStore((s) => s.drafts);
-
-  const allMatters = activeMatters(Object.values(matters), mode);
-  const allDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
-
-  const onIndexPage = loc.pathname === "/matters";
-  const activeMatterId = loc.pathname.startsWith("/matters/")
-    ? loc.pathname.slice("/matters/".length)
-    : null;
-
+/** The left-ruled list under a parent row, like the prototype's .s1a-sub. */
+function SubList({ children, label }: { children: React.ReactNode; label: string }) {
   return (
-    <SidebarGroup data-tour="nav-matters">
-      <SidebarGroupLabel className="flex items-center gap-1">
-        <Link
-          to="/matters"
-          className={cn(
-            "flex items-center gap-1.5 px-1 py-0.5 -mx-1 rounded hover:text-sidebar-foreground transition",
-            onIndexPage && "text-sidebar-foreground font-semibold"
-          )}
-        >
-          <FolderOpen className="size-3" />
-          <span>Matters</span>
-        </Link>
-        <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-          {allMatters.length}
-        </span>
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {allMatters.length === 0 ? (
-            <SidebarMenuItem className="group-data-[collapsible=icon]:hidden">
-              <div className="px-2 py-1 text-[11px] text-muted-foreground italic">
-                None yet. Promote a Home group →
-              </div>
-            </SidebarMenuItem>
-          ) : (
-            allMatters.map((m) => {
-              const matterHref = `/matters/${m.id}`;
-              const isActive = activeMatterId === m.id;
-              const matterDrafts = draftsInMatter(allDrafts, m.id);
-              return (
-                <div key={m.id}>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      tooltip={m.name}
-                      isActive={isActive}
-                    >
-                      <Link to={matterHref}>
-                        <span
-                          className={cn(
-                            "size-2 rounded-full shrink-0",
-                            MATTER_COLOR_CLASSES[m.color].dot
-                          )}
-                        />
-                        <span className="truncate">{m.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  {/* Inline letters for the active matter — Notion-tree pattern. */}
-                  {isActive && matterDrafts.length > 0 && (
-                    <div className="ml-3 pl-2 border-l border-sidebar-border group-data-[collapsible=icon]:hidden">
-                      {matterDrafts.map((d) => {
-                        const href = `/editor/${d.id}`;
-                        const label = briefTitleFor(d);
-                        return (
-                          <SidebarMenuItem key={d.id}>
-                            <SidebarMenuButton
-                              asChild
-                              size="sm"
-                              isActive={loc.pathname === href}
-                              tooltip={displayTitleFor(d)}
-                            >
-                              <Link to={href}>
-                                <FileText className="size-3 text-muted-foreground" />
-                                <span className="truncate text-[12px]">{label}</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <ul
+      aria-label={label}
+      className="ml-[17px] mt-0.5 mb-2 flex min-w-0 flex-col gap-px border-l border-[var(--ds-line-strong)] pl-[9px] group-data-[collapsible=icon]:hidden"
+    >
+      {children}
+    </ul>
   );
 }
 
-// Mark ChevronDown as used (reserved for future expand/collapse on
-// individual matter rows). The current implementation auto-expands the
-// active matter only, but the chevron will appear when we add per-row
-// expand state.
-void ChevronDown;
+/** Small state marker after a recent letter, like the prototype. */
+function DraftMarker({ d }: { d: Draft }) {
+  if (d.sections.some((s) => s.status === "streaming")) {
+    return (
+      <span
+        title="Drafting"
+        aria-label="Drafting"
+        className="size-3 shrink-0 rounded-full border-[1.5px] border-[var(--ds-line-strong)] border-t-[var(--ds-body)] animate-spin motion-reduce:animate-none"
+      />
+    );
+  }
+  if (d.reviewStatus === "in_review") {
+    return (
+      <span
+        title="In review"
+        aria-label="In review"
+        className="mr-0.5 size-[7px] shrink-0 rounded-full bg-[var(--ds-amber-dot)]"
+      />
+    );
+  }
+  if ((d.exports?.length ?? 0) > 0) {
+    return (
+      <span title="Exported" aria-label="Exported" className="grid shrink-0 text-[var(--ds-faint)]">
+        <CircleCheck className="size-[13px]" />
+      </span>
+    );
+  }
+  return null;
+}
 
-type NavItem = {
-  href: string | null;
-  label: string;
-  Icon: typeof LayoutDashboard;
-  tooltip: string;
-  disabled?: boolean;
-};
-
-function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
-  const { isMobile } = useSidebar();
+/**
+ * "Letters" row with the user's most recent drafts nested beneath it, each
+ * with its Open / Delete (with undo) menu. The row toggles the list; in the
+ * icon strip it expands the sidebar first.
+ */
+function NavLetters({ mode }: { mode: Mode }) {
+  const { isMobile, state, setOpen } = useSidebar();
   const loc = useLocation();
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const deleteDraft = useDraftStore((s) => s.deleteDraft);
+  const [expanded, setExpanded] = useState(true);
+  const isCollapsed = state === "collapsed" && !isMobile;
 
   const list = Object.values(drafts)
     .filter((d) => !d.isTemplateSource)
@@ -675,16 +695,38 @@ function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 8);
 
-  if (list.length === 0) return null;
+  const onEditor = loc.pathname.startsWith("/editor/");
 
   return (
-    <>
-      <SidebarSeparator />
-      <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-        <SidebarGroupLabel>Recent drafts</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {list.map((d) => {
+    <li className="relative" data-sidebar="menu-item">
+      <SidebarMenuButton
+        tooltip="Recent letters"
+        aria-expanded={expanded}
+        onClick={() => {
+          if (isCollapsed) {
+            setOpen(true);
+            setExpanded(true);
+            return;
+          }
+          setExpanded((v) => !v);
+        }}
+        className={cn(NAV_BUTTON, onEditor && "text-[var(--ds-ink)] font-medium [&>svg]:text-[var(--ds-ink)]")}
+      >
+        <Files />
+        <span className="flex-1 truncate">Letters</span>
+        <ChevronDown
+          className={cn(
+            "ml-auto size-3.5! transition-transform duration-150 group-data-[collapsible=icon]:hidden",
+            !expanded && "-rotate-90"
+          )}
+        />
+      </SidebarMenuButton>
+      {expanded && (
+        <SubList label="Recent letters">
+          {list.length === 0 ? (
+            <li className="px-2.5 py-1.5 text-[12.5px] text-[var(--ds-faint)]">No letters yet</li>
+          ) : (
+            list.map((d) => {
               const href = `/editor/${d.id}`;
               const label =
                 d.title?.trim() || getLetterMeta(d.letterType)?.shortTitle || d.letterType.replace(/_/g, " ");
@@ -694,15 +736,19 @@ function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
                   : `to ${d.employer.legalName || "(employer)"}`;
               return (
                 <SidebarMenuItem key={d.id}>
-                  <SidebarMenuButton asChild isActive={loc.pathname === href} tooltip={`${label} · ${sub}`}>
-                    <Link to={href}>
-                      <History />
-                      <span>{label}</span>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={loc.pathname === href}
+                    className={cn(SUB_BUTTON, "group-has-data-[sidebar=menu-action]/menu-item:pr-2 hover:pr-8 focus-within:pr-8")}
+                  >
+                    <Link to={href} title={`${label}, ${sub}`}>
+                      <span className="min-w-0 flex-1 truncate">{label}</span>
+                      <DraftMarker d={d} />
                     </Link>
                   </SidebarMenuButton>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <SidebarMenuAction showOnHover aria-label="Draft actions">
+                      <SidebarMenuAction showOnHover aria-label="Draft actions" className="top-1.5!">
                         <MoreHorizontal />
                       </SidebarMenuAction>
                     </DropdownMenuTrigger>
@@ -752,18 +798,108 @@ function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
                   </DropdownMenu>
                 </SidebarMenuItem>
               );
-            })}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </>
+            })
+          )}
+        </SubList>
+      )}
+    </li>
   );
 }
 
+function NavMatters({ mode }: { mode: Mode }) {
+  const loc = useLocation();
+  const matters = useDraftStore((s) => s.matters);
+  const drafts = useDraftStore((s) => s.drafts);
+
+  const allMatters = activeMatters(Object.values(matters), mode);
+  const allDrafts = Object.values(drafts).filter((d) => !d.isTemplateSource);
+
+  const onIndexPage = loc.pathname === "/matters";
+  const activeMatterId = loc.pathname.startsWith("/matters/")
+    ? loc.pathname.slice("/matters/".length)
+    : null;
+
+  return (
+    <li className="relative" data-tour="nav-matters" data-sidebar="menu-item">
+      <SidebarMenuButton asChild tooltip="Matters" isActive={onIndexPage} className={NAV_BUTTON}>
+        <Link to="/matters">
+          <FolderOpen />
+          <span>Matters</span>
+        </Link>
+      </SidebarMenuButton>
+      <SidebarMenuBadge className={cn(COUNT_BADGE, "top-2")}>{allMatters.length}</SidebarMenuBadge>
+      <SubList label="Matters">
+        {allMatters.length === 0 ? (
+          <li className="px-2.5 py-1.5 text-[12.5px] text-[var(--ds-faint)]">
+            No matters yet
+          </li>
+        ) : (
+          allMatters.map((m) => {
+            const matterHref = `/matters/${m.id}`;
+            const isActive = activeMatterId === m.id;
+            const matterDrafts = draftsInMatter(allDrafts, m.id);
+            return (
+              <SidebarMenuItem key={m.id}>
+                <SidebarMenuButton asChild isActive={isActive} className={SUB_BUTTON}>
+                  <Link to={matterHref} title={m.name}>
+                    <span
+                      className={cn(
+                        "size-2 rounded-full shrink-0",
+                        MATTER_COLOR_CLASSES[m.color].dot
+                      )}
+                    />
+                    <span className="truncate">{m.name}</span>
+                  </Link>
+                </SidebarMenuButton>
+                {/* Inline letters for the active matter — Notion-tree pattern. */}
+                {isActive && matterDrafts.length > 0 && (
+                  <SubList label={`Letters in ${m.name}`}>
+                    {matterDrafts.map((d) => {
+                      const href = `/editor/${d.id}`;
+                      const label = briefTitleFor(d);
+                      return (
+                        <SidebarMenuItem key={d.id}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={loc.pathname === href}
+                            className={cn(SUB_BUTTON, "h-7 text-[12.5px]")}
+                          >
+                            <Link to={href} title={displayTitleFor(d)}>
+                              <FileText className="size-3 text-[var(--ds-subtle)]" />
+                              <span className="truncate">{label}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SubList>
+                )}
+              </SidebarMenuItem>
+            );
+          })
+        )}
+      </SubList>
+    </li>
+  );
+}
 
 /* ------------------------------------------------------------------ */
-/*  Footer — user card                                                 */
+/*  Footer — settings and user card                                    */
 /* ------------------------------------------------------------------ */
+
+function NavFooter() {
+  const loc = useLocation();
+  return (
+    <SidebarMenu className="gap-px">
+      <SidebarMenuItem>
+        <NavRow
+          it={{ href: "/settings", label: "Settings", Icon: SettingsIcon, tooltip: "Profile and settings" }}
+          isActive={loc.pathname === "/settings" || loc.pathname.startsWith("/settings/")}
+        />
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
 
 function NavUser({ mode }: { mode: SidebarMode | null }) {
   const { isMobile, state } = useSidebar();
@@ -785,14 +921,7 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
     .join("")
     .toUpperCase();
 
-  const roleLabel =
-    mode === "employer"
-      ? "HR / Management"
-      : mode === "employee"
-      ? "Employee"
-      : mode === "consultant"
-      ? "Consultant"
-      : "Not set";
+  const roleLabel = roleLabelFor(mode);
 
   // All three roles are switchable from one place. Switching is coherent with
   // the mode derivation (route + profileRole win over the enrolled fallback):
@@ -844,18 +973,25 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
           type="button"
           aria-label={display}
           title={display}
-          className="group/user flex items-center gap-2 min-w-0 w-full rounded-md p-1 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          className={cn(
+            "group/user mt-2 flex w-full min-w-0 items-center gap-2.5 border-t border-[var(--ds-line)] px-2 pt-2.5 pb-1.5 text-left",
+            "hover:[&_.nav-user-name]:text-[var(--ds-ink)] data-[state=open]:[&_.nav-user-name]:text-[var(--ds-ink)]",
+            "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2"
+          )}
         >
-          <Avatar className="size-8 rounded-md shrink-0">
-            <AvatarFallback className="rounded-md text-xs">{initials || "??"}</AvatarFallback>
-          </Avatar>
+          <Avatar
+            seed={profile.personal.email ?? display}
+            initials={initials || "??"}
+            size="lg"
+            className="ring-[1.5px] ring-[var(--sidebar)]"
+          />
           {!isCollapsed && (
             <>
-              <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
-                <span className="truncate font-medium">{display}</span>
-                <span className="truncate text-xs text-muted-foreground">{email || roleLabel}</span>
+              <div className="grid min-w-0 flex-1 leading-tight">
+                <span className="nav-user-name truncate text-[13px] font-medium text-[var(--ds-body)]">{display}</span>
+                <span className="truncate text-[12px] text-[var(--ds-muted)]">{email || roleLabel}</span>
               </div>
-              <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
+              <ChevronsUpDown className="size-3.5 shrink-0 text-[var(--ds-faint)]" />
             </>
           )}
         </button>

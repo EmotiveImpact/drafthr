@@ -2,76 +2,168 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 @import "@fontsource-variable/source-serif-4";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================================
- * DRAFTHR theme — Source-Serif headlines on pure white, monochrome ink-on-paper
- * with status-only color (red / amber / green) on data dots. Aligned to the
- * compliance-table and contract-generator references: minimal, mintlify-ish.
+ * DRAFTHR theme: "Harvey stone". A warm off-white ground (sidebar, frame)
+ * holding a white working panel, hairline borders, soft filled cards, a
+ * near-black primary and status colour only where status is meant. Geist for
+ * UI, Geist Mono for facts and numbers, Source Serif 4 (light) for page titles
+ * and big numbers only. Playfair Display is kept for the wordmark.
+ *
+ * Values mirror the design prototype (design/prototype/core.css, skin A for
+ * light, skin D for night). Components read the --ds-* tokens or shadcn's
+ * variables below; never hard-code a hex in a component.
  * ==========================================================================*/
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.16 0.01 250);
+  /* ---- shadcn variables ---- */
+  --background: #ffffff;
+  --foreground: #141413;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.01 250);
+  --card: #ffffff;
+  --card-foreground: #141413;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.01 250);
+  --popover: #ffffff;
+  --popover-foreground: #141413;
 
-  /* Primary CTA: pure ink (near-black) on white — the "Run compliance check"
-   * and "Generate contract" buttons in the references. */
-  --primary: oklch(0.18 0.008 250);
-  --primary-foreground: oklch(0.99 0 0);
+  /* Primary CTA: near-black with white text. */
+  --primary: #141413;
+  --primary-foreground: #ffffff;
 
-  --secondary: oklch(0.975 0.003 250);
-  --secondary-foreground: oklch(0.18 0.008 250);
+  --secondary: #f1f0ec;
+  --secondary-foreground: #141413;
 
-  --muted: oklch(0.975 0.003 250);
-  --muted-foreground: oklch(0.49 0.012 250);
+  --muted: #f4f3ef;
+  --muted-foreground: #6f6c64;
 
-  --accent: oklch(0.97 0.004 250);
-  --accent-foreground: oklch(0.18 0.008 250);
+  --accent: #f4f3ef;
+  --accent-foreground: #141413;
 
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
+  --destructive: #b4321f;
+  --destructive-foreground: #ffffff;
 
-  --border: oklch(0.93 0.005 250);
-  --input: oklch(0.93 0.005 250);
-  --ring: oklch(0.6 0.012 250);
+  --border: #e9e7e2;
+  --input: #d9d6cf;
+  --ring: #5b4bb7;
 
   --radius: 0.5rem;
 
-  /* DRAFTHR brand — legal-clean, ink-on-cream */
+  /* DRAFTHR letter paper. The letter always renders on light paper. */
   --letter-paper: oklch(0.995 0.002 95);
   --letter-ink: oklch(0.18 0.01 250);
   --letter-rule: oklch(0.92 0.004 250);
   --letter-warning: oklch(0.6 0.18 30);
   --letter-ok: oklch(0.55 0.13 145);
 
-  /* Annotation highlight — soft yellow used by comment-mark text. Theme-neutral. */
+  /* Annotation highlight: soft yellow used by comment-mark text. Theme-neutral. */
   --comment-highlight: oklch(0.94 0.13 90);
   --comment-highlight-strong: oklch(0.86 0.16 80);
 
-  /* Subtle chart palette */
-  --chart-1: oklch(0.872 0.007 219.6);
-  --chart-2: oklch(0.56 0.021 213.5);
-  --chart-3: oklch(0.45 0.017 213.2);
-  --chart-4: oklch(0.378 0.015 216);
-  --chart-5: oklch(0.275 0.011 216.9);
+  /* Stone chart ramp */
+  --chart-1: #d9d6cf;
+  --chart-2: #b3b0a8;
+  --chart-3: #85827a;
+  --chart-4: #3b3a37;
+  --chart-5: #141413;
 
-  /* Sidebar — barely-there grey, one tier below canvas. Borders thin & cool. */
-  --sidebar: oklch(0.985 0.002 250);
-  --sidebar-foreground: oklch(0.32 0.012 250);
-  --sidebar-primary: oklch(0.18 0.008 250);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.965 0.004 250);
-  --sidebar-accent-foreground: oklch(0.18 0.008 250);
-  --sidebar-border: oklch(0.93 0.005 250);
-  --sidebar-ring: oklch(0.6 0.012 250);
+  /* Sidebar sits on the stone ground; the active row is a soft filled pill. */
+  --sidebar: #f6f5f1;
+  --sidebar-foreground: #3b3a37;
+  --sidebar-primary: #141413;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeede8;
+  --sidebar-accent-foreground: #141413;
+  --sidebar-border: #e9e7e2;
+  --sidebar-ring: #5b4bb7;
+
+  /* ---- DRAFTHR design-system tokens (--ds-*) ----
+   * Canonical names consumed across the app. Meanings:
+   *   canvas     outer ground (sidebar, frame, desk behind the letter)
+   *   surface    the white working panel
+   *   surface-2  soft filled card, well, composer
+   *   surface-3  hover / active fill on a soft card
+   *   chip       small pills, kbd, segmented-control track
+   *   line       hairline border      line-2  lighter divider and hover fill
+   *   line-strong  input borders, stronger dividers
+   *   ink        headings, strongest text   body  body text
+   *   muted      secondary text (AA on surface and surface-2)
+   *   subtle     icons, meta text          faint  disabled, placeholders
+   */
+  --ds-canvas: #f6f5f1;
+  /* pagedly desk = the editor canvas, so the pagedly editor surface sits on the
+   * same background as the read-only preview. */
+  --pagedly-desk-background: var(--ds-canvas);
+  --ds-surface: #ffffff;
+  --ds-surface-2: #f4f3ef;
+  --ds-surface-3: #eeede8;
+  --ds-chip: #f1f0ec;
+  --ds-line: #e9e7e2;
+  --ds-line-2: #efede8;
+  --ds-line-strong: #d9d6cf;
+  --ds-ink: #141413;
+  --ds-body: #3b3a37;
+  --ds-muted: #6f6c64;
+  --ds-subtle: #85827a;
+  --ds-faint: #b3b0a8;
+
+  /* Primary action (buttons, send) and its text */
+  --ds-accent: #141413;
+  --ds-accent-hover: #34332f;
+  --ds-on-accent: #ffffff;
+  --ds-focus: #5b4bb7;
+
+  /* Status: only on dots, badges, inline status cells */
+  --ds-red-bg: #fbe9e5;
+  --ds-red-fg: #b4321f;
+  --ds-amber-bg: #fbefcc;
+  --ds-amber-fg: #8a5a00;
+  --ds-amber-dot: #d59a1c;
+  --ds-green-bg: #e5f2ea;
+  --ds-green-fg: #2b7454; /* prototype #2f7d5b, darkened for AA on green-bg */
+  --ds-blue-bg: #e9f0ff;
+  --ds-blue-fg: #2f5bd3;
+  /* Labelled tags (AI suggestions, "Correct the employee's name") */
+  --ds-violet-bg: #ece8f7;
+  --ds-violet-fg: #5b4bb7;
+  --ds-violet-bd: #d9d1f2;
+
+  /* Six pastel tints with an ink partner each. They group things; they never
+   * carry status. */
+  --ds-tint-lavender: #ece8f7; --ds-tint-lavender-ink: #5b4bb7;
+  --ds-tint-mint: #e3f2ea;     --ds-tint-mint-ink: #2e6b4f;
+  --ds-tint-peach: #fbe6da;    --ds-tint-peach-ink: #9a4a22;
+  --ds-tint-butter: #faf0c8;   --ds-tint-butter-ink: #7a5b00;
+  --ds-tint-sky: #e1ecf8;      --ds-tint-sky-ink: #2d5a8c;
+  --ds-tint-rose: #f8e3e6;     --ds-tint-rose-ink: #9b3446;
+
+  /* Initial tiles (workspace and matter logos) */
+  --ds-tile: #3e4a4a;
+  --ds-on-tile: #ffffff;
+
+  /* Avatar palette: the pastel tints plus two stone tones, hash-indexed. */
+  --ds-av-1: var(--ds-tint-butter);
+  --ds-av-2: var(--ds-tint-sky);
+  --ds-av-3: var(--ds-tint-mint);
+  --ds-av-4: var(--ds-tint-lavender);
+  --ds-av-5: var(--ds-tint-rose);
+  --ds-av-6: #e3ebec;
+  --ds-av-7: var(--ds-tint-peach);
+  --ds-av-8: #ebe8e1;
+  --ds-av-fg: #3b3a37;
+
+  /* Shadows, radii, gradients */
+  --ds-shadow-s: 0 1px 2px rgba(20, 20, 19, 0.06);
+  --ds-shadow-m: 0 1px 2px rgba(20, 20, 19, 0.05), 0 8px 24px -8px rgba(20, 20, 19, 0.14);
+  --ds-shadow-l: 0 2px 4px rgba(20, 20, 19, 0.06), 0 24px 48px -16px rgba(20, 20, 19, 0.22);
+  --ds-mist: radial-gradient(120% 140% at 70% 0%, #dfe7e8 0%, #e9eeec 35%, #f3f4f1 70%, #ffffff 100%);
+  --ds-r-s: 6px;
+  --ds-r-m: 10px;
+  --ds-r-l: 14px;
+  --ds-r-xl: 18px;
 }
 
 @theme inline {
@@ -110,56 +202,23 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 
   /* Shadow scale — subtle and warm */
-  --shadow-2xs: 0 1px 0 rgba(15, 23, 42, 0.02);
-  --shadow-xs: 0 1px 2px -1px rgba(15, 23, 42, 0.04);
-  --shadow-sm: 0 1px 3px -1px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 2px 8px -3px rgba(15, 23, 42, 0.07);
-  --shadow-lg: 0 12px 32px -12px rgba(15, 23, 42, 0.16);
-  --shadow-xl: 0 24px 48px -16px rgba(15, 23, 42, 0.20);
+  --shadow-2xs: 0 1px 0 rgba(20, 20, 19, 0.03);
+  --shadow-xs: 0 1px 2px rgba(20, 20, 19, 0.06);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.06);
+  --shadow-md: 0 1px 2px rgba(20, 20, 19, 0.05), 0 8px 24px -8px rgba(20, 20, 19, 0.14);
+  --shadow-lg: 0 2px 4px rgba(20, 20, 19, 0.06), 0 24px 48px -16px rgba(20, 20, 19, 0.22);
+  --shadow-xl: 0 2px 4px rgba(20, 20, 19, 0.08), 0 32px 64px -20px rgba(20, 20, 19, 0.26);
 
   --font-serif: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Facts and numbers: dates, counts, scores, reference numbers. */
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Page titles and big numbers only (see the ds-title utility). */
+  --font-title: "Source Serif 4 Variable", Charter, Georgia, serif;
   --font-heading: var(--font-sans);
   /* Display serif reserved for the brand wordmark. High-contrast transitional
    * serif that pairs with the BrandMark glyph in the lockup. */
   --font-display: "Playfair Display", "Iowan Old Style", "Apple Garamond", Georgia, serif;
-
-  /* DRAFTHR design system tokens. Canonical names mirrored from
-   * /public/design-system.html so React components consume the same vars. */
-  --ds-canvas: oklch(0.987 0.003 250);
-  /* pagedly desk = the editor canvas, so the pagedly editor surface sits on the
-   * same background as the read-only preview (no grey #e8eaed desk mismatch). */
-  --pagedly-desk-background: var(--ds-canvas);
-  --ds-surface: #ffffff;
-  --ds-surface-2: oklch(0.98 0.003 250);
-  --ds-line: oklch(0.93 0.005 250);
-  --ds-line-2: oklch(0.96 0.004 250);
-  --ds-ink: oklch(0.10 0.008 250);
-  --ds-body: oklch(0.30 0.011 250);
-  --ds-muted: oklch(0.50 0.013 250);
-  --ds-subtle: oklch(0.55 0.013 250);
-
-  /* Status — only used on dots, badges, inline status cells */
-  --ds-red-bg: #fef2f2;
-  --ds-red-fg: #b91c1c;
-  --ds-amber-bg: #fffbeb;
-  --ds-amber-fg: #b45309;
-  --ds-green-bg: #f0fdf4;
-  --ds-green-fg: #15803d;
-  --ds-blue-bg: #eff6ff;
-  --ds-blue-fg: #1d4ed8;
-
-  /* Avatar palette — pastel, deterministic, hash-indexed. Ink text on light
-   * backgrounds for readability; matches the soft annotation palette. */
-  --ds-av-1: #f3dca5;  /* warm sand     */
-  --ds-av-2: #c5d8ee;  /* soft blue     */
-  --ds-av-3: #c9e0d1;  /* sage          */
-  --ds-av-4: #ddc9ee;  /* lavender      */
-  --ds-av-5: #f3c9c9;  /* rose          */
-  --ds-av-6: #c2dfe6;  /* mist          */
-  --ds-av-7: #f0d4ad;  /* peach         */
-  --ds-av-8: #ebc6dd;  /* blush         */
-  --ds-av-fg: #3a3a44; /* near-black ink for legibility on pastel chips */
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -191,7 +250,6 @@
     background: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "cv11";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     @apply bg-background text-foreground;
@@ -200,11 +258,7 @@
   /* Display typography — Source Serif 4 for the marquee headlines, geometric
    * sans for everything else. Monochrome with very tight tracking, matching
    * the reference (Compliance Insights / Master Services screens). */
-  .font-serif,
-  [data-radix-themes-heading][data-size="6"],
-  [data-radix-themes-heading][data-size="7"],
-  [data-radix-themes-heading][data-size="8"],
-  [data-radix-themes-heading][data-size="9"] {
+  .font-serif {
     font-family: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.012em;
@@ -437,36 +491,105 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Night (prototype skin D). Applied by the `dark` class on <html>. The app
+ * theme store currently locks the UI to light (src/lib/theme.ts); these
+ * values are ready for when a dark mode ships.
+ * -------------------------------------------------------------------------*/
 .dark {
-  --background: oklch(0.148 0.004 228.8);
-  --foreground: oklch(0.987 0.002 197.1);
-  --card: oklch(0.218 0.008 223.9);
-  --card-foreground: oklch(0.987 0.002 197.1);
-  --popover: oklch(0.218 0.008 223.9);
-  --popover-foreground: oklch(0.987 0.002 197.1);
-  --primary: oklch(0.925 0.005 214.3);
-  --primary-foreground: oklch(0.218 0.008 223.9);
-  --secondary: oklch(0.275 0.011 216.9);
-  --secondary-foreground: oklch(0.987 0.002 197.1);
-  --muted: oklch(0.275 0.011 216.9);
-  --muted-foreground: oklch(0.723 0.014 214.4);
-  --accent: oklch(0.275 0.011 216.9);
-  --accent-foreground: oklch(0.987 0.002 197.1);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.56 0.021 213.5);
-  --chart-1: oklch(0.872 0.007 219.6);
-  --chart-2: oklch(0.56 0.021 213.5);
-  --chart-3: oklch(0.45 0.017 213.2);
-  --chart-4: oklch(0.378 0.015 216);
-  --chart-5: oklch(0.275 0.011 216.9);
-  --sidebar: oklch(0.218 0.008 223.9);
-  --sidebar-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-accent: oklch(0.275 0.011 216.9);
-  --sidebar-accent-foreground: oklch(0.987 0.002 197.1);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.56 0.021 213.5);
+  color-scheme: dark;
+  --background: #181816;
+  --foreground: #f3f1ec;
+  --card: #181816;
+  --card-foreground: #f3f1ec;
+  --popover: #21201d;
+  --popover-foreground: #f3f1ec;
+  --primary: #f3f1ec;
+  --primary-foreground: #141413;
+  --secondary: #262522;
+  --secondary-foreground: #f3f1ec;
+  --muted: #21201d;
+  --muted-foreground: #9a968d;
+  --accent: #2a2926;
+  --accent-foreground: #f3f1ec;
+  --destructive: #ff8f7c;
+  --destructive-foreground: #141413;
+  --border: #2d2c28;
+  --input: #3d3b36;
+  --ring: #c3b8fb;
+  --chart-1: #3d3b36;
+  --chart-2: #6b6861;
+  --chart-3: #9a968d;
+  --chart-4: #d8d5ce;
+  --chart-5: #f3f1ec;
+  --sidebar: #111110;
+  --sidebar-foreground: #d8d5ce;
+  --sidebar-primary: #f3f1ec;
+  --sidebar-primary-foreground: #141413;
+  --sidebar-accent: #2a2926;
+  --sidebar-accent-foreground: #f3f1ec;
+  --sidebar-border: #2d2c28;
+  --sidebar-ring: #c3b8fb;
+
+  --ds-canvas: #111110;
+  --ds-surface: #181816;
+  --ds-surface-2: #21201d;
+  --ds-surface-3: #2a2926;
+  --ds-chip: #262522;
+  --ds-line: #2d2c28;
+  --ds-line-2: #24231f;
+  --ds-line-strong: #3d3b36;
+  --ds-ink: #f3f1ec;
+  --ds-body: #d8d5ce;
+  --ds-muted: #9a968d;
+  --ds-subtle: #8a867e;
+  --ds-faint: #6b6861;
+  --ds-accent: #f3f1ec;
+  --ds-accent-hover: #dcd9d2;
+  --ds-on-accent: #141413;
+  --ds-focus: #c3b8fb;
+  --ds-red-bg: #36191a;
+  --ds-red-fg: #ff8f7c;
+  --ds-amber-bg: #33270f;
+  --ds-amber-fg: #f0be5a;
+  --ds-amber-dot: #f0be5a;
+  --ds-green-bg: #16291f;
+  --ds-green-fg: #6fd0a2;
+  --ds-blue-bg: #1e2740;
+  --ds-blue-fg: #8fb0ff;
+  --ds-violet-bg: #2e2945;
+  --ds-violet-fg: #c3b8fb;
+  --ds-violet-bd: #433b66;
+  --ds-tint-lavender: #2e2945; --ds-tint-lavender-ink: #c3b8fb;
+  --ds-tint-mint: #17302a;     --ds-tint-mint-ink: #8fdcbc;
+  --ds-tint-peach: #3a2419;    --ds-tint-peach-ink: #f6b591;
+  --ds-tint-butter: #352c10;   --ds-tint-butter-ink: #f1d27a;
+  --ds-tint-sky: #182a3d;      --ds-tint-sky-ink: #9cc5f2;
+  --ds-tint-rose: #3a1d25;     --ds-tint-rose-ink: #f5a3b5;
+  --ds-tile: #d8d5ce;
+  --ds-on-tile: #141413;
+  --ds-av-6: #1f2a2b;
+  --ds-av-8: #2a2926;
+  --ds-av-fg: #f3f1ec;
+  --ds-shadow-s: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --ds-shadow-m: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --ds-shadow-l: 0 2px 4px rgba(0, 0, 0, 0.5), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+  --ds-mist: radial-gradient(120% 150% at 72% 0%, #26302f 0%, #1d2221 45%, #181816 100%);
+}
+
+/* ---------------------------------------------------------------------------
+ * Type utilities
+ *   ds-title  Source Serif 4 light, for page titles and big numbers only.
+ *   ds-mono   Geist Mono with tabular figures, for facts and numbers.
+ * -------------------------------------------------------------------------*/
+@utility ds-title {
+  font-family: var(--font-title);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: var(--ds-ink);
+  font-optical-sizing: auto;
+}
+@utility ds-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }

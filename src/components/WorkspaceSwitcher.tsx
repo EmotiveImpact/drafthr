@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { ChevronsUpDown, Check, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -43,7 +43,15 @@ function undoLocalSwap(fromNs: string, toNs: string): void {
   setPersistenceSuspended(false);
 }
 
-export function WorkspaceSwitcher() {
+export function WorkspaceSwitcher({
+  subtitle,
+  fallback = null,
+}: {
+  /** Second line under the workspace name (e.g. "HR team"). */
+  subtitle?: string;
+  /** Rendered instead when there is nothing to switch between. */
+  fallback?: ReactNode;
+} = {}) {
   const { activeTenant, user } = useAuth();
   const { state, isMobile } = useSidebar();
   const isCollapsed = state === "collapsed" && !isMobile;
@@ -130,18 +138,24 @@ export function WorkspaceSwitcher() {
   };
 
   // Solo user — render nothing so the sidebar stays clean for the common case.
-  if (!activeTenant || !workspaces || workspaces.length <= 1) return null;
+  if (!activeTenant || !workspaces || workspaces.length <= 1) return <>{fallback}</>;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <SidebarMenuButton
-          size="sm"
-          className="w-full justify-between gap-2"
+          className="h-auto w-full justify-between gap-2 rounded-[var(--ds-r-s)] px-1 py-1 hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_60%,transparent)] data-[state=open]:bg-sidebar-accent"
           aria-label="Switch workspace"
         >
-          <span className="truncate">{isCollapsed ? activeTenant.name[0] : activeTenant.name}</span>
-          {!isCollapsed && <ChevronsUpDown className="size-3.5 opacity-60" />}
+          <span className="grid min-w-0 text-left leading-tight">
+            <span className="truncate text-[14.5px] font-medium text-[var(--ds-ink)]">
+              {isCollapsed ? activeTenant.name[0] : activeTenant.name}
+            </span>
+            {subtitle && !isCollapsed && (
+              <span className="mt-px truncate text-[12px] text-[var(--ds-muted)]">{subtitle}</span>
+            )}
+          </span>
+          {!isCollapsed && <ChevronsUpDown className="size-3.5 shrink-0 text-[var(--ds-faint)]" />}
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="right" sideOffset={6} className="min-w-56">

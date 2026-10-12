@@ -108,7 +108,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <SidebarProvider defaultOpen>
           <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
           <AppSidebar />
-          <SidebarInset className="min-h-screen flex flex-col">
+          <SidebarInset className="min-h-screen flex flex-col md:min-h-[calc(100svh-1rem)] md:border md:border-[var(--ds-line)] md:rounded-[var(--ds-r-l)] md:shadow-[var(--ds-shadow-s)]">
             <MobileTopbar />
             <main id="main" aria-label="Main content" className="flex-1">{children}</main>
           </SidebarInset>

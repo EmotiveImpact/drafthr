@@ -16,6 +16,8 @@ import "./styles/globals.css";
 // Radix Themes CSS must come AFTER ./styles/globals.css so Tailwind's preflight
 // doesn't strip Radix component backgrounds. (See RADIX-THEMES-MIGRATION.md.)
 import "@radix-ui/themes/styles.css";
+// Stone palette, Geist and radii for Radix Themes. Must follow its styles.
+import "./styles/radix-overrides.css";
 
 bootstrapTheme();
 initSentry();

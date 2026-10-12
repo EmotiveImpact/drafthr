@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ds";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
@@ -86,18 +87,11 @@ export function ConsultantHome() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 sm:py-12">
-      <div className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          Consultant
-        </p>
-        <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          {profile?.fullName ? `Welcome back, ${profile.fullName.split(" ")[0]}.` : "Welcome to DraftHR."}
-        </h1>
-        <p className="mt-2 max-w-[58ch] text-[14.5px] leading-relaxed text-[var(--ds-body)]">
-          You're signed in as a consultant. HR teams discover you via the marketplace,
-          and DraftHR routes review requests directly to your inbox below.
-        </p>
-      </div>
+      <PageHeader
+        crumbs={[{ label: "Consultant" }]}
+        title={profile?.fullName ? `Welcome back, ${profile.fullName.split(" ")[0]}` : "Welcome to DraftHR"}
+        lede="You're signed in as a consultant. HR teams discover you via the marketplace, and DraftHR routes review requests directly to your inbox below."
+      />
 
       {/* ─── Profile-completion banner ───────────────────────────── */}
       <section

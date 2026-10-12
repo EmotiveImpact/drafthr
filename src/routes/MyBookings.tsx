@@ -1,3 +1,4 @@
+import { PageHeader } from "@/components/ds";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
@@ -188,18 +189,11 @@ export function MyBookings() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
-      <header className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--ds-muted)]">
-          Marketplace
-        </p>
-        <h1 className="mt-2 text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          My bookings
-        </h1>
-        <p className="mt-2 max-w-[60ch] text-[14px] leading-relaxed text-[var(--ds-body)]">
-          Every review request you've placed, grouped by status. Delivered
-          reviews wait for a rating below.
-        </p>
-      </header>
+      <PageHeader
+        crumbs={[{ label: "Marketplace", href: "/consultants" }, { label: "My bookings" }]}
+        title="My bookings"
+        lede="Every review request you've placed, grouped by status. Delivered reviews wait for a rating below."
+      />
 
       <div className="space-y-8">
         {STATUS_ORDER.map((status) => {

@@ -25,7 +25,7 @@ import type {
 } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
-import { EmptyState } from "@/components/ds";
+import { EmptyState, PageHeader } from "@/components/ds";
 import {
   computeHealthScore,
   runHealthChecks,
@@ -85,8 +85,7 @@ export function Reports() {
   if (profileRole === "employee") {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <Breadcrumb mode="employee" />
-        <PageTitle />
+        <ReportsHeader mode="employee" />
         <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px]">
           <EmptyState
             icon={BarChart3}
@@ -101,8 +100,7 @@ export function Reports() {
   if (realDrafts.length === 0 && allMatters.length === 0) {
     return (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <Breadcrumb mode="employer" />
-        <PageTitle />
+        <ReportsHeader mode="employer" />
         <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px]">
           <EmptyState
             icon={BarChart3}
@@ -123,8 +121,7 @@ export function Reports() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      <Breadcrumb mode="employer" />
-      <PageTitle />
+      <ReportsHeader mode="employer" />
 
       <motion.div {...fade} className="mb-5">
         <ComplianceHealthCard drafts={realDrafts} />
@@ -151,33 +148,14 @@ export function Reports() {
 
 /* ─── Page chrome ─────────────────────────────────────────────────────── */
 
-function Breadcrumb({ mode }: { mode: Mode }) {
+function ReportsHeader({ mode }: { mode: Mode }) {
   return (
-    <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
-      <span>{mode === "employer" ? "HR / Management" : "Employee"}</span>
-      <span className="opacity-40">/</span>
-      <span className="text-[var(--ds-ink)] font-medium">Reports</span>
-    </div>
-  );
-}
-
-function PageTitle() {
-  return (
-    <header className="mb-6">
-      <h1
-        className="m-0 text-[var(--ds-ink)] font-semibold"
-        style={{
-          fontSize: "clamp(26px, 4vw, 34px)",
-          lineHeight: 1.15,
-          letterSpacing: "-0.02em",
-        }}
-      >
-        Reports.
-      </h1>
-      <p className="m-0 mt-1.5 text-[14.5px] text-[var(--ds-body)]">
-        Compliance, risk, and operations rolled up across the workspace.
-      </p>
-    </header>
+    <PageHeader
+      className="mb-6"
+      crumbs={[{ label: mode === "employer" ? "HR / Management" : "Employee" }, { label: "Reports" }]}
+      title="Reports"
+      lede="Compliance, risk and operations rolled up across the workspace."
+    />
   );
 }
 

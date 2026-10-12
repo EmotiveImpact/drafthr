@@ -89,7 +89,7 @@ function ActionButton({
 }) {
   const cls =
     variant === "primary"
-      ? "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-[var(--ds-ink)] text-white text-[12.5px] font-medium hover:opacity-90 transition"
+      ? "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-[var(--ds-accent)] text-[var(--ds-on-accent)] text-[12.5px] font-medium hover:opacity-90 transition"
       : "inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md border border-[var(--ds-line)] text-[var(--ds-body)] text-[12.5px] font-medium hover:bg-[var(--ds-line-2)] transition";
 
   if (action.to) {
