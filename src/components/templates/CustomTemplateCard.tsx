@@ -1,11 +1,21 @@
-import { ArrowRight, Pencil, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, MoreHorizontal, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { CustomTemplate } from "@/lib/letters/types";
+import { PaperThumb, Pill } from "@/components/finalize/Plan";
+import { tintForCategory, tintStyle } from "./tints";
 
 /**
- * Single card for a user-saved custom template. Mirrors the dimensions
- * of the built-in TemplateCard so both tabs share grid rhythm.
+ * Single 6B card for a user-saved custom template. Mirrors the built-in
+ * template cards so both tabs share grid rhythm. Rename and delete live in
+ * the "..." menu on the card.
  */
 export function CustomTemplateCard({
   template,
@@ -20,80 +30,80 @@ export function CustomTemplateCard({
 }) {
   const meta = getLetterMeta(template.baseLetterType);
   const populatedSections = Object.keys(template.sectionHtml).length;
+  const tint = tintForCategory(meta.category);
 
   return (
-    <article className="group relative flex flex-col rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:border-[var(--ds-subtle)] hover:shadow-sm transition overflow-hidden">
-      {/* Top row: base-letter label + jurisdiction + actions */}
-      <div className="flex items-center justify-between gap-2 px-4 pt-4">
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full bg-[var(--ds-line-2)] text-[var(--ds-body)]">
-          {meta.shortTitle}
-        </span>
-        <div className="flex items-center gap-1">
-          {template.jurisdiction && (
-            <span className="text-[10px] text-[var(--ds-muted)] font-medium">
-              {template.jurisdiction}
-            </span>
-          )}
-          <span className="text-[10px] text-[var(--ds-muted)] font-medium capitalize">
-            · {template.mode}
-          </span>
+    <article
+      style={tintStyle(tint)}
+      className="group/card relative flex min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] transition duration-200 hover:-translate-y-px hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)]"
+    >
+      <div className="relative mx-1.5 mt-1.5">
+        <PaperThumb tint={tint} height={120} />
+        <div className="absolute right-2 top-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Template actions"
+                className="grid size-7 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-surface)] text-[var(--ds-body)] shadow-[var(--ds-shadow-s)] hover:text-[var(--ds-ink)]"
+              >
+                <MoreHorizontal className="size-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={onRename} aria-label="Rename template">
+                <Pencil className="size-3.5" />
+                Rename or describe
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={onDelete}
+                aria-label="Delete template"
+                className="text-[var(--ds-red-fg)] focus:text-[var(--ds-red-fg)]"
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Body */}
-      <div className="px-4 pt-3 pb-4 flex-1 flex flex-col">
-        <h3 className="text-[15px] font-semibold text-[var(--ds-ink)] m-0 leading-tight">
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
+        <h3 className="m-0 truncate text-[14px] font-medium text-[var(--ds-ink)]" title={template.name}>
           {template.name}
         </h3>
         {template.description && (
-          <p className="text-[12.5px] text-[var(--ds-body)] mt-1.5 leading-relaxed m-0 line-clamp-3">
+          <p className="m-0 mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
             {template.description}
           </p>
         )}
 
-        <div className="flex items-center gap-3 mt-3 text-[10.5px] text-[var(--ds-muted)] flex-wrap">
-          <span>
-            {populatedSections} section{populatedSections === 1 ? "" : "s"} pre-filled
-          </span>
-          <span>·</span>
+        <p className="m-0 mt-2.5 text-[12px] text-[var(--ds-muted)]">
+          {populatedSections} section{populatedSections === 1 ? "" : "s"} pre-filled,{" "}
           <span title={new Date(template.updatedAt).toLocaleString()}>
             updated {timeAgo(template.updatedAt)}
           </span>
-        </div>
-      </div>
+        </p>
 
-      {/* Action row */}
-      <div className="flex items-center gap-2 px-4 pb-4 pt-1 mt-auto">
-        <Button
-          size="sm"
-          onClick={onStart}
-          className="flex-1 text-[12px]"
-          title="Start a new draft pre-filled from this template"
-        >
-          <Sparkles className="size-3" />
-          Start drafting
-          <ArrowRight className="size-3" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRename}
-          className="size-8 p-0"
-          aria-label="Rename template"
-          title="Rename"
-        >
-          <Pencil className="size-3.5" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onDelete}
-          className="size-8 p-0 text-[var(--ds-red-fg)]"
-          aria-label="Delete template"
-          title="Delete"
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
+        <div className="mt-3 flex flex-wrap items-center gap-1">
+          <Pill tone="tint">{meta.shortTitle}</Pill>
+          {template.jurisdiction && <Pill>{template.jurisdiction}</Pill>}
+          <Pill className="capitalize">{template.mode}</Pill>
+        </div>
+
+        <div className="mt-auto pt-4">
+          <Button
+            size="sm"
+            onClick={onStart}
+            className="w-full text-[12.5px]"
+            title="Start a new draft pre-filled from this template"
+          >
+            <Sparkles className="size-3.5" />
+            Start drafting
+            <ArrowRight className="size-3.5" />
+          </Button>
+        </div>
       </div>
     </article>
   );

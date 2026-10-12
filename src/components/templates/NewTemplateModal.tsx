@@ -127,7 +127,7 @@ export function NewTemplateModal({
               <div
                 role="tablist"
                 aria-label="Jurisdiction default"
-                className="inline-flex rounded-md border border-[var(--ds-line)] overflow-hidden h-9"
+                className="inline-flex h-9 gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]"
               >
                 {(["UK", "US"] as const).map((j) => (
                   <button
@@ -135,13 +135,13 @@ export function NewTemplateModal({
                     type="button"
                     onClick={() => setJurisdiction(j)}
                     className={
-                      "flex-1 px-3 text-[12px] font-medium transition " +
+                      "flex-1 rounded-[7px] px-3 text-[12.5px] font-medium transition " +
                       (jurisdiction === j
-                        ? "bg-[var(--ds-ink)] text-white"
-                        : "bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]")
+                        ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
+                        : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]")
                     }
                   >
-                    {j === "UK" ? "🇬🇧 UK" : "🇺🇸 US"}
+                    {j}
                   </button>
                 ))}
               </div>

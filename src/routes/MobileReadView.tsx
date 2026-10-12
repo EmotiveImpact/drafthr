@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { X } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { letterBodyHtml } from "@/lib/export/pdf";
 import { getLetterMeta } from "@/lib/letters/catalog";
@@ -38,10 +37,10 @@ export function MobileReadView() {
     return (
       <div
         data-testid="mobile-read-view"
-        className="fixed inset-0 z-50 bg-[var(--ds-canvas)] overflow-y-auto"
+        className="fixed inset-0 z-50 bg-[var(--ds-surface)] overflow-y-auto"
       >
         <div className="mx-auto max-w-md px-6 py-16 text-center">
-          <h1 className="text-base font-medium text-[var(--ds-ink)]">
+          <h1 className="ds-title m-0 text-[28px] leading-tight">
             Draft not found
           </h1>
           <p className="mt-2 text-sm text-[var(--ds-muted)]">
@@ -64,23 +63,21 @@ export function MobileReadView() {
   return (
     <div
       data-testid="mobile-read-view"
-      className="fixed inset-0 z-50 bg-[var(--ds-canvas)] overflow-y-auto"
+      className="fixed inset-0 z-50 bg-[var(--ds-surface)] overflow-y-auto"
     >
-      {/* Top status pill — read-only meta strip. Title + draft status. */}
+      {/* Top strip: the approval pill and Done, nothing else. */}
       <div
-        className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-[var(--ds-line)] bg-[var(--ds-surface)]/95 backdrop-blur"
+        className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--ds-surface)]/95 px-4 py-3 backdrop-blur"
         data-testid="mobile-read-header"
       >
         <span
           className={
-            "inline-flex items-center text-[10px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded-full " +
+            "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium " +
             statusPillClasses(statusLabel)
           }
         >
+          <span aria-hidden className="size-1.5 rounded-full bg-current opacity-80" />
           {statusLabel}
-        </span>
-        <span className="truncate text-[13px] font-medium text-[var(--ds-ink)]">
-          {title}
         </span>
         <button
           type="button"
@@ -92,9 +89,8 @@ export function MobileReadView() {
           }}
           aria-label="Close mobile reader"
           data-testid="mobile-read-done"
-          className="ml-auto inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
+          className="ml-auto inline-flex h-8 items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3 text-[13px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
         >
-          <X className="size-3.5" />
           <span>Done</span>
         </button>
       </div>
@@ -104,7 +100,10 @@ export function MobileReadView() {
        * is rendered as-is; per-element styling is handled by the
        * .mobile-letter scoped block below so we don't drag the A4-export
        * sizing into the screen surface. */}
-      <main className="mx-auto max-w-[720px] px-5 sm:px-8 py-8 pb-24">
+      <main className="mx-auto max-w-[680px] px-5 pb-24 pt-4 sm:px-8 sm:pt-8">
+        <h1 className="ds-title m-0 mb-7 text-[30px] leading-[1.12] [overflow-wrap:anywhere] sm:text-[36px]">
+          {title}
+        </h1>
         <article
           className="mobile-letter text-[var(--ds-ink)]"
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
@@ -151,15 +150,15 @@ function statusPillClasses(label: string): string {
     case "Changes requested":
       return "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]";
     case "Ready":
-      return "bg-[var(--ds-line-2)] text-[var(--ds-ink)]";
+      return "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]";
     default:
-      return "bg-[var(--ds-line-2)] text-[var(--ds-body)]";
+      return "bg-[var(--ds-chip)] text-[var(--ds-body)]";
   }
 }
 
 const mobileLetterStyles = `
 .mobile-letter {
-  font-family: "Iowan Old Style", Georgia, "Times New Roman", serif;
+  font-family: var(--font-serif);
   font-size: 16px;
   line-height: 1.6;
   color: var(--ds-ink);

@@ -1,13 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  ArrowRight,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { ArrowRight, Plus, Search, Sparkles, UserRound, X } from "lucide-react";
 import { PageHeader } from "@/components/ds";
 import {
   LETTER_CATEGORIES,
@@ -23,10 +16,15 @@ import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MyTemplatesGrid } from "@/components/templates/MyTemplatesGrid";
+import { NewTemplateModal } from "@/components/templates/NewTemplateModal";
+import { PaperThumb, Pill } from "@/components/finalize/Plan";
+import { tintForCategory, tintStyle } from "@/components/templates/tints";
+import { cn } from "@/lib/utils";
 
 /**
- * Template library. Categorised grid of every letter type with risk
- * chips, jurisdiction filter, full-text search, and quick-start buttons.
+ * Template library (design 2A + 6B). Serif title, one row of pill tabs
+ * (All, each category, My templates), search and a UK / US filter, then
+ * pastel preview cards with risk, jurisdiction and counsel tags.
  *
  * Notes for future maintainers:
  *  - Categories live in src/lib/letters/catalog.ts (LETTER_CATEGORIES +
@@ -36,18 +34,18 @@ import { MyTemplatesGrid } from "@/components/templates/MyTemplatesGrid";
  *    LETTER_UK + LETTER_US exports. Updates can be made per jurisdiction
  *    without touching the other.
  */
-type TemplatesTab = "drafthr" | "mine";
+type View = "all" | LetterCategoryId | "mine";
 
 export function BrowseLetters({ mode }: { mode: Mode }) {
   const nav = useNavigate();
   const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
-  const [activeCategory, setActiveCategory] = useState<LetterCategoryId | "all">("all");
-  const [activeTab, setActiveTab] = useState<TemplatesTab>(() =>
-    searchParams.get("tab") === "mine" ? "mine" : "drafthr"
+  const [view, setView] = useState<View>(() =>
+    searchParams.get("tab") === "mine" ? "mine" : "all"
   );
+  const [creating, setCreating] = useState(false);
   const createDraft = useDraftStore((s) => s.createDraft);
-  // Surface a count on the My Templates tab without a second selector.
+  // Surface a count on the My templates tab without a second selector.
   const customCount = useDraftStore(
     (s) => Object.values(s.customTemplates).filter((t) => t.mode === mode).length
   );
@@ -61,13 +59,17 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
   };
 
   const catalog = useMemo(() => letterCatalogByMode(mode), [mode]);
+  const activeCategory: LetterCategoryId | "all" = view === "mine" ? "all" : view;
+
+  const inJurisdiction = (l: LetterTypeMeta) =>
+    !(l.jurisdictionScope === "uk_only" && jurisdiction !== "UK") &&
+    !(l.jurisdictionScope === "us_only" && jurisdiction !== "US");
 
   // Filter by jurisdiction scope, search query, category.
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return catalog.filter((l) => {
-      if (l.jurisdictionScope === "uk_only" && jurisdiction !== "UK") return false;
-      if (l.jurisdictionScope === "us_only" && jurisdiction !== "US") return false;
+      if (!inJurisdiction(l)) return false;
       if (activeCategory !== "all" && l.category !== activeCategory) return false;
       if (!t) return true;
       return (
@@ -76,19 +78,21 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
         l.description.toLowerCase().includes(t)
       );
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog, q, activeCategory, jurisdiction]);
 
-  // Count per category so badges show "12" etc.
+  // Count per category for the tab counts.
   const countByCategory = useMemo(() => {
     const map = new Map<string, number>();
     catalog.forEach((l) => {
-      if (l.jurisdictionScope === "uk_only" && jurisdiction !== "UK") return;
-      if (l.jurisdictionScope === "us_only" && jurisdiction !== "US") return;
+      if (!inJurisdiction(l)) return;
       const key = l.category ?? "other";
       map.set(key, (map.get(key) ?? 0) + 1);
     });
     return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog, jurisdiction]);
+  const totalCount = Array.from(countByCategory.values()).reduce((a, b) => a + b, 0);
 
   // Group filtered letters by category for display.
   const byCategory = useMemo(() => {
@@ -103,282 +107,160 @@ export function BrowseLetters({ mode }: { mode: Mode }) {
   }, [filtered]);
 
   const prefix = mode === "employer" ? "/hr" : "/me";
+  const hasProfileDefaults = Boolean(profile.personal.legalName || profile.employer.legalName);
+
+  const tabs = [
+    { id: "all", label: "All", count: totalCount },
+    ...LETTER_CATEGORIES.filter((c) => (countByCategory.get(c.id) ?? 0) > 0).map((c) => ({
+      id: c.id,
+      label: c.label,
+      count: countByCategory.get(c.id),
+    })),
+    { id: "mine", label: "My templates", count: customCount },
+  ];
 
   return (
-    <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-8 sm:py-10">
       <PageHeader
         crumbs={[
-          { label: mode === "employer" ? "HR / Management" : "Employee", href: prefix },
+          { label: mode === "employer" ? "HR team" : "Employee", href: prefix },
           { label: "New letter" },
         ]}
         title="Template library"
         lede={
           mode === "employer"
-            ? "Letter templates for the full HR lifecycle — hiring, performance, departure, immigration. UK + US legal language baked in. Updates land per jurisdiction so the law-of-the-land stays current."
-            : "Letter templates for employees defending or asserting rights — grievances, resignations, accommodation, whistleblowing, tribunal cover. UK + US rights-preservation language baked in."
+            ? "Letters for the full HR lifecycle: hiring, performance, departure and immigration, with UK and US legal language built in and kept current per jurisdiction."
+            : "Letters for employees defending or asserting rights: grievances, resignations, accommodation, whistleblowing and tribunal cover, with UK and US rights-preservation language built in."
         }
-        closeTo={prefix}
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="size-4" />
+            Create a template
+          </Button>
+        }
+        tabs={tabs}
+        activeTab={view}
+        onTabChange={(id) => setView(id as View)}
       />
 
-      {/* Tab strip — DraftHR (built-in) vs My Templates (custom). Sits
-       * between the page header and the filter bar. */}
-      <div
-        role="tablist"
-        aria-label="Template source"
-        className="flex items-center gap-1 border-b border-[var(--ds-line)] mb-4"
-      >
-        <TabButton
-          active={activeTab === "drafthr"}
-          onClick={() => setActiveTab("drafthr")}
-          label="DraftHR"
-        />
-        <TabButton
-          active={activeTab === "mine"}
-          onClick={() => setActiveTab("mine")}
-          label="My Templates"
-          count={customCount}
-        />
-      </div>
-
-      {activeTab === "mine" ? (
-        <MyTemplatesGrid mode={mode} />
+      {view === "mine" ? (
+        <MyTemplatesGrid mode={mode} onCreate={() => setCreating(true)} />
       ) : (
-        <BuiltInBrowser
-          q={q}
-          setQ={setQ}
-          jurisdiction={jurisdiction}
-          setJurisdiction={setJurisdiction}
-          activeCategory={activeCategory}
-          setActiveCategory={setActiveCategory}
-          filtered={filtered}
-          countByCategory={countByCategory}
-          byCategory={byCategory}
-          profile={profile}
-          startFromTemplate={startFromTemplate}
-          nav={nav}
-          prefix={prefix}
-        />
-      )}
-    </div>
-  );
-}
+        <>
+          {/* Search + UK / US filter. Sticky so it stays reachable while
+           * scrolling long category lists. */}
+          <div className="sticky top-0 z-20 -mx-4 mb-6 bg-[var(--ds-surface)] px-4 py-3 sm:-mx-8 sm:px-8">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[200px] flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-muted)]" />
+                <Input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search templates by title or description"
+                  className="h-9 pl-8 pr-8"
+                />
+                {q && (
+                  <button
+                    type="button"
+                    onClick={() => setQ("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                    aria-label="Clear search"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
 
-function BuiltInBrowser({
-  q,
-  setQ,
-  jurisdiction,
-  setJurisdiction,
-  activeCategory,
-  setActiveCategory,
-  filtered,
-  countByCategory,
-  byCategory,
-  profile,
-  startFromTemplate,
-  nav,
-  prefix,
-}: {
-  q: string;
-  setQ: (s: string) => void;
-  jurisdiction: Jurisdiction;
-  setJurisdiction: (j: Jurisdiction) => void;
-  activeCategory: LetterCategoryId | "all";
-  setActiveCategory: (c: LetterCategoryId | "all") => void;
-  filtered: LetterTypeMeta[];
-  countByCategory: Map<string, number>;
-  byCategory: Map<string, LetterTypeMeta[]>;
-  profile: ReturnType<typeof useProfileStore.getState>["profile"];
-  startFromTemplate: (id: LetterTypeId) => void;
-  nav: ReturnType<typeof useNavigate>;
-  prefix: string;
-}) {
-  return (
-    <>
-      {/* Filter bar: search + jurisdiction toggle. Sticky so it stays
-       * visible as the user scrolls through long category lists. */}
-      <div className="sticky top-0 z-20 bg-[var(--ds-canvas)] py-3 mb-4 -mx-4 px-4 sm:-mx-6 sm:px-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] pointer-events-none" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search templates by title or description…"
-              className="pl-8 pr-8 h-9"
-            />
-            {q && (
-              <button
-                type="button"
-                onClick={() => setQ("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-                aria-label="Clear search"
+              {/* Jurisdiction filter pill */}
+              <div
+                role="group"
+                aria-label="Jurisdiction"
+                className="inline-flex h-9 items-center gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]"
               >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Jurisdiction toggle */}
-          <div className="inline-flex rounded-md border border-[var(--ds-line)] overflow-hidden h-9">
-            {(["UK", "US"] as const).map((j) => (
-              <button
-                key={j}
-                type="button"
-                onClick={() => setJurisdiction(j)}
-                className={
-                  "px-3 text-[12px] font-medium transition " +
-                  (jurisdiction === j
-                    ? "bg-[var(--ds-ink)] text-white"
-                    : "bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)]")
-                }
-              >
-                {j === "UK" ? "🇬🇧 UK" : "🇺🇸 US"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Category chips */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-3">
-          <CategoryChip
-            label="All"
-            count={filtered.length}
-            active={activeCategory === "all"}
-            onClick={() => setActiveCategory("all")}
-          />
-          {LETTER_CATEGORIES.map((cat) => {
-            const n = countByCategory.get(cat.id) ?? 0;
-            if (n === 0) return null;
-            return (
-              <CategoryChip
-                key={cat.id}
-                label={cat.label}
-                count={n}
-                active={activeCategory === cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Category sections */}
-      <div className="space-y-8">
-        {LETTER_CATEGORIES.map((cat) => {
-          const letters = byCategory.get(cat.id) ?? [];
-          if (letters.length === 0) return null;
-          if (activeCategory !== "all" && activeCategory !== cat.id) return null;
-
-          return (
-            <section key={cat.id}>
-              <header className="mb-3">
-                <h2 className="text-[16px] font-semibold text-[var(--ds-ink)] m-0">
-                  {cat.label}
-                </h2>
-                <p className="text-[12.5px] text-[var(--ds-muted)] mt-0.5 m-0">
-                  {cat.description} · {letters.length} template{letters.length === 1 ? "" : "s"}
-                </p>
-              </header>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {letters.map((l) => (
-                  <TemplateCard
-                    key={l.id}
-                    letter={l}
-                    jurisdiction={jurisdiction}
-                    profile={profile}
-                    onStart={() => startFromTemplate(l.id)}
-                    onWizard={() => nav(`${prefix}/new/${l.id}`)}
-                  />
+                {(["UK", "US"] as const).map((j) => (
+                  <button
+                    key={j}
+                    type="button"
+                    aria-pressed={jurisdiction === j}
+                    onClick={() => setJurisdiction(j)}
+                    className={cn(
+                      "h-full rounded-[7px] px-3 text-[13px] font-medium transition",
+                      jurisdiction === j
+                        ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
+                        : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                    )}
+                  >
+                    {j === "UK" ? "United Kingdom" : "United States"}
+                  </button>
                 ))}
               </div>
-            </section>
-          );
-        })}
-
-        {/* "Other" — letter types without a category (shouldn't be any
-         * after the catalog map; defensive). */}
-        {byCategory.get("other") && (byCategory.get("other")?.length ?? 0) > 0 && (
-          <section>
-            <h2 className="text-[16px] font-semibold text-[var(--ds-ink)] m-0 mb-3">Other</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {(byCategory.get("other") ?? []).map((l) => (
-                <TemplateCard
-                  key={l.id}
-                  letter={l}
-                  jurisdiction={jurisdiction}
-                  profile={profile}
-                  onStart={() => startFromTemplate(l.id)}
-                  onWizard={() => nav(`${prefix}/new/${l.id}`)}
-                />
-              ))}
             </div>
-          </section>
-        )}
-
-        {filtered.length === 0 && (
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-8 text-center">
-            <p className="text-[14px] text-[var(--ds-muted)] m-0">
-              No templates match {q ? `"${q}"` : "this filter"}.
-            </p>
-            {(q || activeCategory !== "all") && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  setQ("");
-                  setActiveCategory("all");
-                }}
-              >
-                Clear filters
-              </Button>
+            {hasProfileDefaults && (
+              <p className="m-0 mt-2 flex items-center gap-1.5 text-[12px] text-[var(--ds-muted)]">
+                <UserRound className="size-3" />
+                Start drafting pre-fills from your profile defaults.
+              </p>
             )}
           </div>
-        )}
-      </div>
-    </>
-  );
-}
 
-function TabButton({
-  active,
-  onClick,
-  label,
-  count,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  count?: number;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={
-        "relative inline-flex items-center gap-2 px-3 h-9 text-[13px] font-medium transition border-b-2 -mb-px " +
-        (active
-          ? "border-[var(--ds-ink)] text-[var(--ds-ink)]"
-          : "border-transparent text-[var(--ds-muted)] hover:text-[var(--ds-body)]")
-      }
-    >
-      {label}
-      {typeof count === "number" && count > 0 && (
-        <span
-          className={
-            "tabular-nums text-[10.5px] font-semibold rounded-full px-1.5 py-0.5 min-w-[18px] text-center " +
-            (active
-              ? "bg-[var(--ds-ink)] text-white"
-              : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]")
-          }
-        >
-          {count}
-        </span>
+          <div className="space-y-10">
+            {[...LETTER_CATEGORIES, { id: "other", label: "Other", description: "" }].map((cat) => {
+              const letters = byCategory.get(cat.id) ?? [];
+              if (letters.length === 0) return null;
+              return (
+                <section key={cat.id} aria-labelledby={`cat-${cat.id}`}>
+                  {activeCategory === "all" && (
+                    <header className="mb-3.5">
+                      <h2 id={`cat-${cat.id}`} className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
+                        {cat.label}
+                      </h2>
+                      <p className="m-0 mt-0.5 text-[12.5px] text-[var(--ds-muted)]">
+                        {cat.description ? `${cat.description} ` : ""}
+                        {letters.length} template{letters.length === 1 ? "" : "s"}
+                      </p>
+                    </header>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {letters.map((l) => (
+                      <TemplateCard
+                        key={l.id}
+                        letter={l}
+                        jurisdiction={jurisdiction}
+                        onStart={() => startFromTemplate(l.id)}
+                        onWizard={() => nav(`${prefix}/new/${l.id}`)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+
+            {filtered.length === 0 && (
+              <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-10 text-center">
+                <p className="m-0 text-[14px] text-[var(--ds-muted)]">
+                  No templates match {q ? `"${q}"` : "this filter"}.
+                </p>
+                {(q || activeCategory !== "all") && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => {
+                      setQ("");
+                      setView("all");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        </>
       )}
-    </button>
+
+      <NewTemplateModal open={creating} onOpenChange={setCreating} mode={mode} />
+    </div>
   );
 }
 
@@ -386,73 +268,28 @@ function TabButton({
  * Sub-components
  * ==========================================================================*/
 
-function CategoryChip({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={
-        "inline-flex items-center gap-1.5 text-[11.5px] px-2.5 h-7 rounded-full border transition " +
-        (active
-          ? "bg-[var(--ds-ink)] text-white border-[var(--ds-ink)]"
-          : "bg-[var(--ds-surface)] text-[var(--ds-body)] border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]")
-      }
-    >
-      <span className="font-medium">{label}</span>
-      <span
-        className={
-          "tabular-nums " + (active ? "opacity-70" : "text-[var(--ds-muted)]")
-        }
-      >
-        {count}
-      </span>
-    </button>
-  );
-}
-
-const RISK_TONE: Record<string, { bg: string; fg: string; label: string }> = {
-  low: {
-    bg: "bg-[var(--ds-green-bg)]",
-    fg: "text-[var(--ds-green-fg)]",
-    label: "Low risk",
-  },
-  medium: {
-    bg: "bg-[var(--ds-amber-bg)]",
-    fg: "text-[var(--ds-amber-fg)]",
-    label: "Medium risk",
-  },
-  high: {
-    bg: "bg-[var(--ds-red-bg)]",
-    fg: "text-[var(--ds-red-fg)]",
-    label: "High risk",
-  },
+const RISK: Record<string, { tone: "green" | "amber" | "red"; label: string }> = {
+  low: { tone: "green", label: "Low risk" },
+  medium: { tone: "amber", label: "Medium risk" },
+  high: { tone: "red", label: "High risk" },
 };
 
+/** 6B pastel preview card for a built-in letter type. */
 function TemplateCard({
   letter,
   jurisdiction,
-  profile,
   onStart,
   onWizard,
 }: {
   letter: LetterTypeMeta;
   jurisdiction: Jurisdiction;
-  profile: ReturnType<typeof useProfileStore.getState>["profile"];
   onStart: () => void;
   onWizard: () => void;
 }) {
   const templateReady = hasTemplate(letter.id, jurisdiction);
-  const risk = RISK_TONE[letter.riskClass];
+  const risk = RISK[letter.riskClass];
+  const tint = tintForCategory(letter.category);
+  const category = LETTER_CATEGORIES.find((c) => c.id === letter.category);
 
   // Build expected evidence count by spinning up a dummy draft —
   // expectedEvidence lives on the LetterTemplate; we surface a "needs
@@ -471,116 +308,89 @@ function TemplateCard({
     }
   })();
 
+  const jurisdictionPills =
+    letter.jurisdictionScope === "uk_only"
+      ? ["UK only"]
+      : letter.jurisdictionScope === "us_only"
+        ? ["US only"]
+        : ["UK", "US"];
+
   return (
     <article
-      className="group relative flex flex-col rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] hover:border-[var(--ds-subtle)] hover:shadow-sm transition overflow-hidden"
+      style={tintStyle(tint)}
+      className="group/card flex min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] transition duration-200 hover:-translate-y-px hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)]"
     >
-      {/* Top row: risk chip + jurisdiction availability */}
-      <div className="flex items-center justify-between gap-2 px-4 pt-4">
-        <span
-          className={
-            "inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-0.5 rounded-full " +
-            risk.bg +
-            " " +
-            risk.fg
-          }
-        >
-          {letter.riskClass === "high" ? (
-            <ShieldAlert className="size-3" />
-          ) : letter.riskClass === "low" ? (
-            <ShieldCheck className="size-3" />
-          ) : (
-            <ShieldCheck className="size-3" />
-          )}
-          {risk.label}
-        </span>
+      <button
+        type="button"
+        onClick={onWizard}
+        aria-label={`Use the wizard for ${letter.title}`}
+        tabIndex={-1}
+        className="mx-1.5 mt-1.5 block cursor-pointer"
+      >
+        <PaperThumb tint={tint} height={120} />
+      </button>
 
-        <div className="flex items-center gap-1">
-          {letter.jurisdictionScope === "uk_only" && (
-            <span className="text-[10px] text-[var(--ds-muted)] font-medium">UK only</span>
-          )}
-          {letter.jurisdictionScope === "us_only" && (
-            <span className="text-[10px] text-[var(--ds-muted)] font-medium">US only</span>
-          )}
-          {letter.legalReviewRequired && (
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] font-medium"
-              title="Counsel review required before export"
-            >
-              ⚠ Counsel
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div className="px-4 pt-3 pb-4 flex-1 flex flex-col">
-        <h3 className="text-[15px] font-semibold text-[var(--ds-ink)] m-0 leading-tight">
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
+        <h3 className="m-0 truncate text-[14px] font-medium text-[var(--ds-ink)]" title={letter.title}>
           {letter.title}
         </h3>
-        <p className="text-[12.5px] text-[var(--ds-body)] mt-1.5 leading-relaxed m-0 line-clamp-3">
+        <p className="m-0 mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
           {letter.description}
         </p>
 
         {letter.badge && (
-          <p className="text-[11px] text-[var(--ds-amber-fg)] font-medium mt-2 m-0">
-            ⚠ {letter.badge}
-          </p>
+          <p className="m-0 mt-2 text-[12px] font-medium text-[var(--ds-amber-fg)]">{letter.badge}</p>
         )}
 
-        {/* Footer-row: word range + expected evidence + sections count */}
-        <div className="flex items-center gap-3 mt-3 text-[10.5px] text-[var(--ds-muted)] flex-wrap">
-          <span>
-            {letter.wordRange[0]}–{letter.wordRange[1]} words
-          </span>
-          <span>·</span>
-          <span>{letter.defaultSections.length} sections</span>
+        <p className="m-0 mt-2.5 text-[12px] text-[var(--ds-muted)]">
+          {letter.defaultSections.length} sections, {letter.wordRange[0]}–{letter.wordRange[1]} words
           {expectedCount > 0 && (
-            <>
-              <span>·</span>
-              <span title="Number of evidence types this template expects">
-                Needs {expectedCount} evidence
-              </span>
-            </>
+            <span title="Number of evidence types this template expects">
+              , needs {expectedCount} evidence
+            </span>
+          )}
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-1">
+          {category && <Pill tone="tint">{category.label}</Pill>}
+          {jurisdictionPills.map((j) => (
+            <Pill key={j}>{j}</Pill>
+          ))}
+          <Pill tone={risk.tone}>{risk.label}</Pill>
+          {letter.legalReviewRequired && (
+            <Pill tone="amber" title="Counsel review required before export">
+              Counsel review
+            </Pill>
           )}
         </div>
-      </div>
 
-      {/* Action row */}
-      <div className="flex items-center gap-2 px-4 pb-4 pt-1 mt-auto">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onWizard}
-          className="flex-1 text-[12px]"
-          title="Step through the wizard to capture every detail"
-        >
-          Use wizard
-        </Button>
-        <Button
-          size="sm"
-          onClick={onStart}
-          disabled={!templateReady}
-          className="flex-1 text-[12px]"
-          title={
-            templateReady
-              ? `Skip the wizard — use your profile defaults and start drafting on the ${jurisdiction} template now`
-              : `Template not yet available for ${jurisdiction}`
-          }
-        >
-          <Sparkles className="size-3" />
-          Start drafting
-          <ArrowRight className="size-3" />
-        </Button>
-      </div>
-
-      {/* Profile-prefill hint — small footer when the user has set
-       * defaults so they know clicking Start uses them. */}
-      {(profile.personal.legalName || profile.employer.legalName) && (
-        <div className="px-4 py-1.5 text-[10px] text-[var(--ds-muted)] border-t border-[var(--ds-line-2)] bg-[var(--ds-surface-2)]/50">
-          Will pre-fill from your profile defaults.
+        <div className="mt-auto flex items-center gap-2 pt-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onWizard}
+            className="flex-1 text-[12.5px]"
+            title="Step through the wizard to capture every detail"
+          >
+            Use wizard
+          </Button>
+          <Button
+            size="sm"
+            onClick={onStart}
+            disabled={!templateReady}
+            className="flex-1 text-[12.5px]"
+            title={
+              templateReady
+                ? `Skip the wizard: use your profile defaults and start drafting on the ${jurisdiction} template now`
+                : `Template not yet available for ${jurisdiction}`
+            }
+          >
+            <Sparkles className="size-3.5" />
+            Start drafting
+            <ArrowRight className="size-3.5" />
+          </Button>
         </div>
-      )}
+      </div>
     </article>
   );
 }

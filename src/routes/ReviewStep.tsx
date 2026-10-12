@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, MessageSquarePlus, PenLine } from "lucide-react";
 import { toast } from "sonner";
-import { BrandMark } from "@/components/ds";
-import { Wordmark } from "@/components/ds/Wordmark";
+import { PillTabs } from "@/components/ds/PageHeader";
+import { DocBar, DOC_BTN, DOC_BTN_PRIMARY } from "@/components/finalize/DocBar";
+import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
@@ -14,7 +15,8 @@ import { canEditDraft } from "@/lib/permissions";
 import { notifyReviewRequested } from "@/lib/collab-notify";
 import { Button } from "@/components/ui/button";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import { WizardChrome } from "@/components/editor/WizardChrome";
+
+type PanelTab = "edits" | "progress";
 
 type PendingComment = {
   sectionId: string;
@@ -53,6 +55,12 @@ export function ReviewStep() {
   const [suggestFor, setSuggestFor] = useState<{ sectionId: string; quote?: string } | null>(
     null,
   );
+  // Side panel tab (14B). A new comment, a suggestion or a clicked comment
+  // highlight all live in Edits, so bring that tab forward when one arrives.
+  const [panelTab, setPanelTab] = useState<PanelTab>("edits");
+  useEffect(() => {
+    if (pendingComment || suggestFor || focusCommentId) setPanelTab("edits");
+  }, [pendingComment, suggestFor, focusCommentId]);
 
   // On-page selection popover: select any text in the letter → Comment / Suggest.
   // This is the app's own affordance (not pagedly's toolbar) so it is discoverable
@@ -153,7 +161,7 @@ export function ReviewStep() {
     // that already has an open pending change (it would silently replace it).
     const section = draft?.sections.find((s) => s.id === selBubble.sectionId);
     if (section?.pendingChange) {
-      toast("This section already has a pending suggestion — resolve it first.");
+      toast("This section already has a pending suggestion. Resolve it first.");
       setSelBubble(null);
       return;
     }
@@ -222,51 +230,48 @@ export function ReviewStep() {
     toast("Withdrawn from review");
   };
 
+  const openSuggestions = draft.sections.filter((s) => s.pendingChange).length;
+
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      <header className="h-14 shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)] sticky top-0 z-30 flex items-center px-4 gap-2">
-        <Link
-          to="/"
-          aria-label="Home"
-          className="shrink-0 flex items-center gap-2 rounded-md hover:bg-[var(--ds-line-2)] transition px-1.5 py-1 -mx-1.5 h-10 mr-2"
-        >
-          <BrandMark size={36} />
-          <Wordmark size={16} className="hidden sm:inline" />
-        </Link>
-        <span className="text-[13px] font-medium text-[var(--ds-ink)]">Review</span>
-        <span className="text-[12px] text-[var(--ds-muted)] hidden md:inline">· {meta.title}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => nav(`/editor/${draft.id}`)}>
-            <ArrowLeft className="size-3.5 mr-1.5" />
-            Edit
-          </Button>
-          <Button size="sm" onClick={() => nav(`/editor/${draft.id}/finalize`)}>
-            Finalise
-            <ArrowRight className="size-4 ml-1.5" />
-          </Button>
-        </div>
-      </header>
+      <DocBar
+        draft={draft}
+        current="review"
+        title={draft.title ?? meta.title}
+        label="Review"
+        actions={
+          <>
+            <button
+              type="button"
+              className={DOC_BTN}
+              onClick={() => nav(`/editor/${draft.id}`)}
+              aria-label="Back to edit"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span className="hidden sm:inline">Edit</span>
+            </button>
+            <button
+              type="button"
+              className={DOC_BTN_PRIMARY}
+              onClick={() => nav(`/editor/${draft.id}/finalize`)}
+            >
+              Finalise
+              <ArrowRight className="size-3.5" />
+            </button>
+          </>
+        }
+      />
 
-      {/* Three columns: Health sidebar · letter · collaborative Review rail.
-       * The right rail is the review workspace (comment/suggest/approve). Below
-       * lg the page scrolls: the letter first, then health, then the review
-       * rail, so Submit / Approve / comments stay reachable on phones. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:overflow-hidden lg:grid-cols-[300px_minmax(0,1fr)_340px]">
-        <aside className="order-2 flex flex-col border-t border-[var(--ds-line)] bg-[var(--ds-surface)] lg:order-none lg:min-h-0 lg:border-t-0 lg:border-r">
-          <WizardChrome draftId={draft.id} mode={draft.mode} current="review" />
-          <ReviewRail
-            draft={draft}
-            counselReviewedBy={counselReview}
-            unresolvedComments={unresolvedCommentCount}
-            onJumpToSection={(sectionId) => nav(`/editor/${draft.id}?section=${sectionId}`)}
-            onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
-            onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
-          />
-        </aside>
-
+      {/* 14B: the letter in the centre, one side panel with Edits (the
+       * collaborative review: suggestions, comments, approval) and Progress
+       * (health score, Fix this first, all checks). Both panels stay mounted
+       * so composer drafts survive a tab switch. Below lg the page scrolls:
+       * the letter first, then the panel, so Submit / Approve / comments stay
+       * reachable on phones. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 content-start overflow-y-auto lg:content-stretch lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_400px]">
         <main
           ref={canvasRef}
-          className="review-canvas relative order-1 h-[75dvh] min-h-0 overflow-hidden bg-[var(--ds-canvas)] lg:order-none lg:h-auto"
+          className="review-canvas relative h-[75dvh] min-h-0 overflow-hidden bg-[var(--ds-canvas)] lg:h-auto"
         >
           {/* The review surface is the PAGEDLY editor (not the read-only
            * preview): comments + track-change suggestions happen ON the page.
@@ -299,23 +304,48 @@ export function ReviewStep() {
           />
         </main>
 
-        <aside className="order-3 flex flex-col border-t border-[var(--ds-line)] bg-[var(--ds-surface)] lg:order-none lg:min-h-0 lg:border-t-0 lg:border-l">
-          <CollabReviewRail
-            draft={draft}
-            role={role}
-            canResolve={canResolve}
-            onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
-            onWithdraw={onWithdraw}
-            pendingComment={pendingComment}
-            onPendingCommentConsumed={() => setPendingComment(null)}
-            focusCommentId={focusCommentId}
-            onFocusCommentConsumed={() => setFocusCommentId(null)}
-            openSuggest={suggestFor}
-            onOpenSuggestConsumed={() => setSuggestFor(null)}
-          />
+        <aside
+          aria-label="Review panel"
+          className="flex flex-col border-t border-[var(--ds-line)] bg-[var(--ds-surface)] lg:min-h-0 lg:border-l lg:border-t-0"
+        >
+          <div className="flex h-[52px] shrink-0 items-center border-b border-[var(--ds-line-2)] px-3">
+            <PillTabs
+              className="mt-0"
+              activeTab={panelTab}
+              onTabChange={(id) => setPanelTab(id as PanelTab)}
+              tabs={[
+                { id: "edits", label: "Edits", count: openSuggestions + unresolvedCommentCount },
+                { id: "progress", label: "Progress" },
+              ]}
+            />
+          </div>
+          <div className={cn("flex min-h-0 flex-1 flex-col", panelTab !== "edits" && "hidden")}>
+            <CollabReviewRail
+              draft={draft}
+              role={role}
+              canResolve={canResolve}
+              onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
+              onWithdraw={onWithdraw}
+              pendingComment={pendingComment}
+              onPendingCommentConsumed={() => setPendingComment(null)}
+              focusCommentId={focusCommentId}
+              onFocusCommentConsumed={() => setFocusCommentId(null)}
+              openSuggest={suggestFor}
+              onOpenSuggestConsumed={() => setSuggestFor(null)}
+            />
+          </div>
+          <div className={cn("flex min-h-0 flex-1 flex-col", panelTab !== "progress" && "hidden")}>
+            <ReviewRail
+              draft={draft}
+              counselReviewedBy={counselReview}
+              unresolvedComments={unresolvedCommentCount}
+              onJumpToSection={(sectionId) => nav(`/editor/${draft.id}?section=${sectionId}`)}
+              onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
+              onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
+            />
+          </div>
         </aside>
       </div>
-
       {/* On-page selection popover — the discoverable Comment / Suggest bubble.
        * Fixed to the viewport at the selection; onMouseDown preventDefault keeps
        * the selection alive long enough for the click to read it. */}
@@ -330,20 +360,20 @@ export function ReviewStep() {
             transform: "translateX(-50%)",
             zIndex: 50,
           }}
-          className="flex items-center gap-0.5 rounded-lg bg-[var(--ds-ink)] p-0.5 text-white shadow-[0_6px_20px_rgba(0,0,0,0.22)]"
+          className="flex items-center gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-surface)] p-[3px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)] ring-1 ring-[var(--ds-line)]"
         >
           <button
             type="button"
             onClick={commentOnSelection}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium hover:bg-white/15"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
           >
             <MessageSquarePlus className="size-3.5" /> Comment
           </button>
-          <div className="h-4 w-px bg-white/20" />
+          <div className="h-4 w-px bg-[var(--ds-line)]" />
           <button
             type="button"
             onClick={suggestOnSelection}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium hover:bg-white/15"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
           >
             <PenLine className="size-3.5" /> Suggest edit
           </button>

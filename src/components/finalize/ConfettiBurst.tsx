@@ -16,14 +16,15 @@ type Props = {
   onDone: () => void;
 };
 
-const PARTICLE_COUNT = 42;
+// Calmer than a party popper: fewer pieces, the 6B pastel inks.
+const PARTICLE_COUNT = 28;
 const COLOURS = [
-  "var(--ds-green-fg, #16a34a)",
-  "var(--ds-amber-fg, #f59e0b)",
-  "var(--ds-blue-fg, #3b82f6)",
-  "var(--ds-ink, #0f172a)",
-  "#ec4899", // accent pink, no token equivalent
-  "#a855f7", // accent violet
+  "var(--ds-tint-lavender-ink)",
+  "var(--ds-tint-mint-ink)",
+  "var(--ds-tint-peach-ink)",
+  "var(--ds-tint-butter-ink)",
+  "var(--ds-tint-sky-ink)",
+  "var(--ds-tint-rose-ink)",
 ];
 
 type Particle = {
