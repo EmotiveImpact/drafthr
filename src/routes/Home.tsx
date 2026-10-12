@@ -1,71 +1,66 @@
 import { useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { formatDistanceToNowStrict } from "date-fns";
+import { format, formatDistanceToNowStrict, subMonths } from "date-fns";
 import {
-  PlusCircle,
+  Plus,
   FileText,
-  Mail,
-  ShieldAlert,
   ShieldCheck,
-  Scale,
-  FileWarning,
-  FileSearch,
-  ScrollText,
-  Sparkles,
   CalendarClock,
   ArrowRight,
   AlertCircle,
-  Clock,
+  Send,
   TrendingUp,
-  Activity,
   Users,
   X,
+  CircleCheck,
+  BellRing,
+  Activity,
+  Library,
 } from "lucide-react";
-import type {
-  Draft,
-  LetterTypeId,
-  Matter,
-  Mode,
-  RiskBand,
-  Task,
-} from "@/lib/letters/types";
+import type { Draft, Matter, Mode, RiskBand, Task } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
-import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
-import { briefTitleFor } from "@/lib/letters/display";
+import { letterCatalogByMode } from "@/lib/letters/catalog";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
-import { EmptyState } from "@/components/ds";
+import { EmptyState, PageHeader } from "@/components/ds";
 import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
 import { deriveEmployeesFromDrafts } from "@/lib/employees";
 import { draftsInMatter } from "@/lib/matters";
 import { effectiveRiskBand } from "@/lib/matters/risk";
+import { canApprove } from "@/lib/permissions";
+import { AssistantBox } from "@/components/home/AssistantBox";
+import {
+  StatTiles,
+  DeltaChip,
+  FooterDot,
+  weeklySeries,
+  type StatTileProps,
+} from "@/components/home/StatTiles";
+import { TemplateCards } from "@/components/home/TemplateCards";
+import {
+  BTN_OUTLINE,
+  BTN_PRIMARY,
+  HomeGrid,
+  RailBox,
+  SectionHead,
+} from "@/components/home/HomeParts";
+import { LetterRows } from "@/components/letters/LetterRows";
+import { safeLetterMeta } from "@/components/letters/letterView";
 
 const BACKFILL_DISMISS_KEY = "drafthr.hr.employeeBackfillDismissed.v1";
 
 /* ============================================================================
- * Home — the landing dashboard.
+ * Home: the landing page for HR and employee modes.
  *
- * Layout (matches /home-v2-mockup.html):
- *
- *   ┌ breadcrumb
- *   │
- *   ├ HERO ─ eyebrow · serif H1 (greeting + italic accent) · lede · two CTAs
- *   │       Decorative giant "D" watermark in the top-right corner.
- *   │
- *   ├ CATALOG ─ 3×2 grid of flagship letter types as tactile tiles. This is
- *   │           the page's real workhorse — the place a user goes to start.
- *   │
- *   ├ CONTINUE + UPCOMING ─ a quiet two-column row. Rendered only when there
- *   │                       are drafts or deadlines to surface (no
- *   │                       "0 / 0 / 0 / 0" graveyard for new users).
- *   │
- *   └ TRUST FOOTER ─ four legal-coverage chips + "not legal advice".
- *
- * Previous home had a four-up stat row, Matters cards, AutoGroup rows, and a
- * buried "Quick start" section. Those moved to /matters or are gone — the
- * home now exists to start a letter, resume one in progress, or eyeball
- * what's due next.
+ *   ┌ 2A header: breadcrumb, serif greeting, summary line, New letter
+ *   ├ main column
+ *   │   3A assistant box: describe a letter, or pick a suggestion, to open
+ *   │                     that letter type's wizard
+ *   │   7B stat tiles:    real numbers from the drafts and matters in the store
+ *   │   6B cards:         letter types to start from (employee home also lists
+ *   │                     drafts to continue as 13B rows)
+ *   └ rail: what needs you (HR) or deadlines (employee), then history
  * ==========================================================================*/
 
 export function Home({ mode }: { mode: Mode }) {
@@ -75,8 +70,25 @@ export function Home({ mode }: { mode: Mode }) {
   return <EmployeeHome mode={mode} />;
 }
 
+const PAGE = "mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-8 sm:py-10 lg:px-11";
+
+const fade = {
+  initial: { opacity: 0, y: 6 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.35, ease: [0.32, 0.72, 0, 1] as const },
+};
+
+function useGreetingName() {
+  const profile = useProfileStore((s) => s.profile);
+  return (
+    profile.personal.preferredName?.split(/\s+/)[0] ||
+    profile.personal.legalName?.split(/\s+/)[0] ||
+    ""
+  );
+}
+
 /* ============================================================================
- * HR Dashboard — portfolio view for HR/Management mode
+ * HR dashboard
  * ==========================================================================*/
 
 function HrDashboard() {
@@ -87,12 +99,9 @@ function HrDashboard() {
   const employees = useDraftStore((s) => s.employees);
   const createEmployee = useDraftStore((s) => s.createEmployee);
   const profile = useProfileStore((s) => s.profile);
+  const firstName = useGreetingName();
 
   const prefix = "/hr";
-  const firstName =
-    profile.personal.preferredName ||
-    profile.personal.legalName?.split(/\s+/)[0] ||
-    "";
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -161,52 +170,122 @@ function HrDashboard() {
   // COMPLIANCE: roll up health across HR-mode drafts
   const complianceSummary = useMemo(() => deriveComplianceSummary(drafts, "employer"), [drafts]);
 
+  // LETTERS SENT: first export of each HR letter, this month vs last.
+  const sent = useMemo(() => deriveSentSummary(drafts, "employer"), [drafts]);
+
   // RECENT ACTIVITY: flatten draft timelines, sort, take 5
   const recent = useMemo(() => deriveRecentActivity(drafts, "employer"), [drafts]);
 
-  const fade = {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.35, ease: [0.32, 0.72, 0, 1] as const },
-  };
+  const catalog = useMemo(() => letterCatalogByMode("employer"), []);
+  const starters = useMemo(() => {
+    const j = profile.defaults.jurisdiction;
+    return catalog
+      .filter((l) => l.flagshipV1)
+      .filter((l) => !(l.jurisdictionScope === "uk_only" && j !== "UK"))
+      .filter((l) => !(l.jurisdictionScope === "us_only" && j !== "US"))
+      .slice(0, 6);
+  }, [catalog, profile.defaults.jurisdiction]);
+
+  const urgentCount = todayItems.filter((t) => t.urgent).length;
+  const highRisk = riskSummary.bands.high + riskSummary.bands.critical;
+  const now = new Date();
+  const lastMonthName = format(subMonths(now, 1), "MMMM");
+
+  const tiles: StatTileProps[] = [
+    {
+      label: "Letters sent",
+      icon: Send,
+      value: sent.thisMonth,
+      series: sent.weekly,
+      sparkLabel: "Letters sent each week over the last 12 weeks",
+      footer:
+        sent.total === 0 ? (
+          <span>None sent yet</span>
+        ) : sent.delta === 0 ? (
+          <span>Same as {lastMonthName}</span>
+        ) : (
+          <>
+            <DeltaChip delta={sent.delta} />
+            <span className="truncate">on {lastMonthName}</span>
+          </>
+        ),
+    },
+    {
+      label: "Compliance",
+      icon: ShieldCheck,
+      value:
+        complianceSummary.totalDrafts === 0 ? (
+          <span className="text-[var(--ds-faint)]">0%</span>
+        ) : (
+          `${complianceSummary.percent}%`
+        ),
+      footer:
+        complianceSummary.totalDrafts === 0 ? (
+          <TileLink to={`${prefix}/new`}>Browse templates</TileLink>
+        ) : complianceSummary.needsReview > 0 ? (
+          <FooterDot tone="amber">
+            {complianceSummary.needsReview} need{complianceSummary.needsReview === 1 ? "s" : ""} counsel review
+          </FooterDot>
+        ) : (
+          <span className="truncate" title="Letters clearing all health checks">
+            {complianceSummary.strongDrafts} of {complianceSummary.totalDrafts} clear all checks
+          </span>
+        ),
+    },
+    {
+      label: "High-risk matters",
+      icon: TrendingUp,
+      value: highRisk,
+      footer:
+        riskSummary.matterCount === 0 ? (
+          <TileLink to="/matters">Browse matters</TileLink>
+        ) : (
+          <span className="truncate">
+            of {riskSummary.matterCount} active {riskSummary.matterCount === 1 ? "matter" : "matters"}
+          </span>
+        ),
+    },
+    {
+      label: "Needs you",
+      icon: BellRing,
+      value: todayItems.length,
+      footer:
+        urgentCount > 0 ? (
+          <FooterDot tone="red">{urgentCount} urgent</FooterDot>
+        ) : (
+          <span>Nothing urgent</span>
+        ),
+    },
+  ];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
-        <span>HR / Management</span>
-        <span className="opacity-40">/</span>
-        <span className="text-[var(--ds-ink)] font-medium">Dashboard</span>
-      </div>
-
-      {/* Employee backfill — surfaces once when HR has drafts but the
+    <motion.div {...fade} className={PAGE}>
+      {/* Employee backfill: surfaces once when HR has drafts but the
        * normalised employee directory is empty. One click migrates every
        * person mentioned in existing drafts into the workspace directory. */}
       {backfillCount > 0 && (
-        <motion.div
-          {...fade}
-          className="mb-5 rounded-[12px] border border-[var(--ds-line)] bg-gradient-to-r from-[var(--ds-blue-bg)]/40 to-[var(--ds-surface)] px-4 py-3.5 flex items-start gap-3"
-        >
+        <div className="mb-8 flex items-start gap-3 rounded-[var(--ds-r-l)] bg-[var(--ds-tint-sky)] px-4 py-3.5">
           <span
             aria-hidden
-            className="mt-0.5 size-9 shrink-0 rounded-[9px] bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)] grid place-items-center"
+            className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-surface)] text-[var(--ds-tint-sky-ink)]"
           >
-            <Users className="size-[18px]" />
+            <Users className="size-4" />
           </span>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <h3 className="m-0 text-[13.5px] font-semibold text-[var(--ds-ink)]">
               Build your employee directory from existing drafts
             </h3>
-            <p className="m-0 text-[12.5px] text-[var(--ds-body)] mt-0.5 leading-snug">
+            <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-[var(--ds-body)]">
               {backfillCount} unique{" "}
               {backfillCount === 1 ? "person appears" : "people appear"} across your
-              drafts. Import them so future letters, matters, and the new
-              Employees page link to one record per person.
+              drafts. Import them so future letters, matters and the Employees
+              page link to one record per person.
             </p>
-            <div className="flex items-center gap-2 mt-2.5">
+            <div className="mt-2.5 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={onImportEmployees}
-                className="inline-flex items-center gap-1.5 px-3 py-[6px] rounded-[7px] bg-[var(--ds-ink)] text-white font-semibold text-[12px] hover:-translate-y-px transition"
+                className="inline-flex h-8 items-center gap-1.5 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3 text-[12.5px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
               >
                 Import {backfillCount}{" "}
                 {backfillCount === 1 ? "employee" : "employees"}
@@ -214,7 +293,7 @@ function HrDashboard() {
               </button>
               <Link
                 to="/employees"
-                className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--ds-body)] transition hover:text-[var(--ds-ink)]"
               >
                 Open Employees
                 <ArrowRight className="size-3 opacity-70" />
@@ -225,118 +304,95 @@ function HrDashboard() {
             type="button"
             onClick={onDismissBackfill}
             aria-label="Dismiss"
-            className="text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition shrink-0 -m-1 p-1"
+            className="-m-1 shrink-0 p-1 text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
           >
             <X className="size-3.5" />
           </button>
-        </motion.div>
+        </div>
       )}
 
-      {/* Greeting */}
-      <motion.header {...fade} className="mb-6">
-        <h1
-          className="m-0 text-[var(--ds-ink)] font-semibold"
-          style={{
-            fontSize: "clamp(26px, 4vw, 34px)",
-            lineHeight: 1.15,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {greeting}.
-        </h1>
-        <p className="m-0 mt-1.5 text-[14.5px] text-[var(--ds-body)]">
-          You own{" "}
-          <span className="font-semibold text-[var(--ds-ink)]">
-            {activeMatters.length} active {activeMatters.length === 1 ? "matter" : "matters"}
-          </span>
-          {todayItems.length > 0 ? (
-            <>
-              {" · "}
-              <span className="font-semibold text-[var(--ds-amber-fg)]">
-                {todayItems.length} need{todayItems.length === 1 ? "s" : ""} you today
-              </span>
-            </>
-          ) : null}
-        </p>
-      </motion.header>
-
-      {/* Three-panel row */}
-      <motion.div
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.06 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mb-7"
-      >
-        <TodayCard items={todayItems} prefix={prefix} />
-        <RiskRegister summary={riskSummary} />
-        <ComplianceHealth summary={complianceSummary} prefix={prefix} />
-      </motion.div>
-
-      {/* Recent activity */}
-      <motion.section
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.12 }}
-        className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden mb-6"
-      >
-        <header className="flex items-center justify-between px-[18px] py-3.5 border-b border-[var(--ds-line-2)]">
-          <h3 className="m-0 text-[13px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-2">
-            <Activity className="size-3.5" />
-            Recent activity
-          </h3>
-        </header>
-        {recent.length === 0 ? (
-          <div className="px-[18px] py-5 text-[13px] text-[var(--ds-muted)]">
-            Activity will appear here as you draft, edit, and export letters.
-          </div>
-        ) : (
-          <ul className="m-0 p-0 list-none">
-            {recent.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-3 px-[18px] py-2.5 border-b border-[var(--ds-line-2)] last:border-b-0"
-              >
-                <span
-                  aria-hidden
-                  className="w-1.5 h-1.5 rounded-full bg-[var(--ds-subtle)] shrink-0"
-                />
-                <span className="text-[13px] text-[var(--ds-body)] flex-1 min-w-0 truncate">
-                  {r.label}
+      <PageHeader
+        crumbs={[{ label: "HR / Management" }, { label: "Dashboard" }]}
+        title={greeting}
+        lede={
+          <>
+            You own{" "}
+            <span className="font-medium text-[var(--ds-ink)]">
+              {activeMatters.length} active {activeMatters.length === 1 ? "matter" : "matters"}
+            </span>
+            {todayItems.length > 0 ? (
+              <>
+                {", and "}
+                <span className="font-medium text-[var(--ds-amber-fg)]">
+                  {todayItems.length} {todayItems.length === 1 ? "thing needs" : "things need"} you today
                 </span>
-                <span className="text-[11px] text-[var(--ds-muted)] tabular-nums shrink-0">
-                  {r.ago}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </motion.section>
+              </>
+            ) : null}
+            .
+          </>
+        }
+        actions={
+          <>
+            <Link to="/matters" className={BTN_OUTLINE}>
+              <Plus className="size-4" />
+              New matter
+            </Link>
+            <Link to={`${prefix}/new`} className={BTN_PRIMARY} data-tour="new-letter-cta">
+              <Plus className="size-4" />
+              New letter
+            </Link>
+          </>
+        }
+      />
 
-      {/* Footer CTAs */}
-      <motion.div
-        {...fade}
-        transition={{ ...fade.transition, delay: 0.18 }}
-        className="flex flex-wrap items-center gap-2.5 mb-2"
-      >
-        <button
-          type="button"
-          onClick={() => nav("/matters")}
-          className="inline-flex items-center gap-2 px-[16px] py-[10px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px] shadow-sm hover:-translate-y-px hover:shadow-md transition"
-        >
-          <PlusCircle className="size-4" />
-          New matter
-        </button>
-        <Link
-          to={`${prefix}/new`}
-          className="inline-flex items-center gap-2 px-[16px] py-[10px] rounded-[9px] bg-transparent text-[var(--ds-ink)] font-semibold text-[13.5px] border border-[var(--ds-line)] hover:bg-white hover:border-[var(--ds-subtle)] transition"
-        >
-          Browse templates
-          <ArrowRight className="size-3.5 opacity-70" />
-        </Link>
-      </motion.div>
-    </div>
+      <HomeGrid
+        top={
+          <>
+            <AssistantBox mode="employer" jurisdiction={profile.defaults.jurisdiction} />
+            <section aria-label="Your workspace at a glance" className="mt-10">
+              <SectionHead
+                title="Your team this month"
+                sub={`${format(now, "MMMM yyyy")}, from your letters and matters`}
+              />
+              <StatTiles tiles={tiles} />
+              {riskSummary.matterCount > 0 && <RiskStrip summary={riskSummary} />}
+            </section>
+          </>
+        }
+        rail={
+          <>
+            <NeedsYouBox items={todayItems} prefix={prefix} />
+            <HistoryBox items={recent} />
+          </>
+        }
+        bottom={
+          <section aria-label="Start from a template">
+            <SectionHead
+              title="Start from a template"
+              sub="Letters your policies and the law already shape"
+              action={{ label: "Browse templates", to: `${prefix}/new` }}
+            />
+            <TemplateCards letters={starters} prefix={prefix} />
+          </section>
+        }
+      />
+    </motion.div>
   );
 }
 
-/* ─── Dashboard panels ─────────────────────────────────────────────────── */
+function TileLink({ to, children }: { to: string; children: React.ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1 font-medium text-[var(--ds-ink)] hover:underline"
+    >
+      {children}
+      <ArrowRight className="size-3" />
+    </Link>
+  );
+}
+
+/* ─── HR rail and strips ───────────────────────────────────────────────── */
 
 type TodayItem = {
   id: string;
@@ -346,68 +402,123 @@ type TodayItem = {
   dueLabel: string;
   urgent: boolean;
   kind: "task" | "next-action" | "review";
-  /** Deep-link target — set on "review" items so the row jumps to the editor. */
+  /** Deep-link target: set on "review" items so the row jumps to the editor. */
   draftId?: string;
 };
 
-function TodayCard({ items, prefix }: { items: TodayItem[]; prefix: string }) {
+function NeedsYouBox({ items, prefix }: { items: TodayItem[]; prefix: string }) {
   const nav = useNavigate();
   return (
-    <DashboardPanel
-      icon={Clock}
-      title="Today"
-      badge={items.length > 0 ? String(items.length) : undefined}
-    >
+    <RailBox title="Needs you" count={items.length}>
       {items.length === 0 ? (
-        <PanelEmpty
-          body="Nothing due today."
-          ctaLabel="Start your first letter"
-          onClick={() => nav(`${prefix}/new`)}
-        />
+        <div className="rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] px-4 py-4">
+          <p className="m-0 text-[13px] text-[var(--ds-muted)]">Nothing due today.</p>
+          <button
+            type="button"
+            onClick={() => nav(`${prefix}/new`)}
+            className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--ds-ink)] hover:underline"
+          >
+            Start your first letter
+            <ArrowRight className="size-3" />
+          </button>
+        </div>
       ) : (
         <>
-          <ul className="m-0 p-0 list-none flex-1">
+          <ul className="m-0 -mx-2 flex list-none flex-col gap-0.5 p-0">
             {items.slice(0, 5).map((it) => {
               const onClick = it.draftId
                 ? () => nav(`/editor/${it.draftId}`)
                 : it.matterId
                   ? () => nav(`/matters/${it.matterId}`)
                   : undefined;
-              return (
-                <li
-                  key={it.id}
-                  className={`flex items-start gap-2.5 py-2 border-b border-[var(--ds-line-2)] last:border-b-0 ${onClick ? "cursor-pointer hover:bg-[var(--ds-line-2)]/30 -mx-2 px-2 rounded transition" : ""}`}
-                  onClick={onClick}
-                  role={onClick ? "button" : undefined}
-                >
-                  <AlertCircle
-                    className={`size-3.5 mt-0.5 shrink-0 ${
-                      it.urgent ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
-                    }`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold text-[var(--ds-ink)] leading-snug truncate">
+              const body = (
+                <>
+                  <span
+                    aria-hidden
+                    className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-[var(--ds-r-s)]"
+                    style={{
+                      background: it.urgent ? "var(--ds-amber-bg)" : "var(--ds-surface-2)",
+                      color: it.urgent ? "var(--ds-amber-fg)" : "var(--ds-subtle)",
+                    }}
+                  >
+                    <AlertCircle className="size-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] leading-snug text-[var(--ds-ink)]">
                       {it.label}
-                    </div>
-                    <div className="text-[11.5px] text-[var(--ds-muted)] truncate">
+                    </span>
+                    <span className="block truncate text-[12px] text-[var(--ds-muted)]">
                       {it.dueLabel}
-                      {it.matterName ? ` · ${it.matterName}` : ""}
-                    </div>
-                  </div>
+                      {it.matterName ? `, ${it.matterName}` : ""}
+                    </span>
+                  </span>
+                </>
+              );
+              return (
+                <li key={it.id}>
+                  {onClick ? (
+                    <button
+                      type="button"
+                      onClick={onClick}
+                      className="flex w-full items-start gap-2.5 rounded-[var(--ds-r-s)] px-2 py-2 text-left transition hover:bg-[var(--ds-surface-2)]"
+                    >
+                      {body}
+                    </button>
+                  ) : (
+                    <div className="flex items-start gap-2.5 px-2 py-2">{body}</div>
+                  )}
                 </li>
               );
             })}
           </ul>
           {/* Until /today is a thing, "See all tasks" lands on the matters
-           * index — tasks live inside matters today, so it's the right
+           * index: tasks live inside matters today, so it's the right
            * destination by content even if not by name. */}
-          <PanelFooterButton
-            onClick={() => nav('/matters')}
-            label="See all in matters"
-          />
+          <Link
+            to="/matters"
+            className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-medium text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
+          >
+            See all in matters
+            <ArrowRight className="size-3" />
+          </Link>
         </>
       )}
-    </DashboardPanel>
+    </RailBox>
+  );
+}
+
+function HistoryBox({ items }: { items: RecentItem[] }) {
+  return (
+    <RailBox title="History" action={{ label: "View all", to: "/activity" }}>
+      {items.length === 0 ? (
+        <p className="m-0 text-[13px] leading-snug text-[var(--ds-muted)]">
+          Activity will appear here as you draft, edit and export letters.
+        </p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
+          {items.map((r) => (
+            <li key={r.id} className="flex items-start gap-2.5">
+              <span
+                aria-hidden
+                className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-surface-2)] text-[var(--ds-muted)]"
+              >
+                <Activity className="size-3.5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13.5px] leading-snug text-[var(--ds-ink)]">
+                  {r.title}
+                </span>
+                <span className="block truncate text-[12px] text-[var(--ds-muted)]">
+                  {r.letter}
+                  <span className="text-[var(--ds-faint)]"> · </span>
+                  {r.ago}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </RailBox>
   );
 }
 
@@ -418,207 +529,50 @@ type RiskSummary = {
   hasAnyExposure: boolean;
 };
 
-function RiskRegister({ summary }: { summary: RiskSummary }) {
-  const nav = useNavigate();
+/** Risk register under the tiles: exposure, the band heatmap, a way in. */
+function RiskStrip({ summary }: { summary: RiskSummary }) {
   const bands: RiskBand[] = ["low", "moderate", "high", "critical"];
-  // Show the panel when there are matters at all — even with zero
-  // tagged exposure, the derived band heatmap is useful signal.
   return (
-    <DashboardPanel icon={TrendingUp} title="Risk">
-      {summary.matterCount === 0 ? (
-        <PanelEmpty
-          body="Risk register populates as you open matters."
-          ctaLabel="Browse matters"
-          onClick={() => nav('/matters')}
-        />
-      ) : (
-        <>
-          <div className="flex-1">
+    <div className="mt-3 flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] px-4 py-3">
+      <div className="min-w-0 flex-1 basis-[220px]">
+        <div className="text-[13px] font-medium text-[var(--ds-ink)]">
+          {summary.hasAnyExposure ? (
+            <>
+              <span className="ds-mono">{formatGBP(summary.totalExposure)}</span> tribunal-style exposure
+            </>
+          ) : (
+            "Risk register"
+          )}
+        </div>
+        <div className="mt-0.5 text-[12px] leading-snug text-[var(--ds-muted)]">
+          {summary.hasAnyExposure
+            ? `Across ${summary.matterCount} active ${summary.matterCount === 1 ? "case" : "cases"}`
+            : `${summary.matterCount} active ${summary.matterCount === 1 ? "case" : "cases"}. Add exposure on a matter to track £.`}
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-1.5" role="img" aria-label="Risk band heatmap">
+        {bands.map((b) => {
+          const tone = bandTone(b);
+          return (
             <div
-              className="text-[var(--ds-ink)] font-semibold tabular-nums"
-              style={{
-                fontSize: "clamp(22px, 3vw, 28px)",
-                letterSpacing: "-0.02em",
-                lineHeight: 1.1,
-              }}
+              key={b}
+              className="min-w-[58px] rounded-[var(--ds-r-s)] px-1.5 py-1.5 text-center"
+              style={{ background: tone.bg, color: tone.fg }}
             >
-              {summary.hasAnyExposure ? formatGBP(summary.totalExposure) : "—"}
+              <div className="ds-mono text-[13px] leading-none font-semibold">{summary.bands[b]}</div>
+              <div className="mt-1 text-[10.5px] capitalize opacity-85">{b}</div>
             </div>
-            <div className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-snug">
-              {summary.hasAnyExposure
-                ? `tribunal-style exposure across ${summary.matterCount} active ${summary.matterCount === 1 ? "case" : "cases"}`
-                : `${summary.matterCount} active ${summary.matterCount === 1 ? "case" : "cases"} — add exposure on a matter to track £`}
-            </div>
-
-            {/* Tiny heatmap */}
-            <div className="mt-4 grid grid-cols-4 gap-1.5" role="img" aria-label="Risk band heatmap">
-              {bands.map((b) => {
-                const count = summary.bands[b];
-                const tone = bandTone(b);
-                return (
-                  <div
-                    key={b}
-                    className="rounded-[6px] px-1.5 py-1.5 text-center"
-                    style={{ background: tone.bg }}
-                  >
-                    <div
-                      className="text-[13px] font-semibold tabular-nums leading-none"
-                      style={{ color: tone.fg }}
-                    >
-                      {count}
-                    </div>
-                    <div
-                      className="text-[9px] uppercase tracking-wider mt-1"
-                      style={{ color: tone.fg, opacity: 0.85 }}
-                    >
-                      {b}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <PanelFooterButton
-            onClick={() => nav("/matters")}
-            label="Risk register"
-          />
-        </>
-      )}
-    </DashboardPanel>
-  );
-}
-
-type ComplianceSummary = {
-  totalDrafts: number;
-  strongDrafts: number;
-  needsReview: number;
-  percent: number;
-};
-
-function ComplianceHealth({
-  summary,
-  prefix,
-}: {
-  summary: ComplianceSummary;
-  prefix: string;
-}) {
-  const nav = useNavigate();
-  return (
-    <DashboardPanel icon={ShieldCheck} title="Compliance">
-      {summary.totalDrafts === 0 ? (
-        <PanelEmpty
-          body="No letters drafted yet."
-          ctaLabel="Browse templates"
-          onClick={() => nav(`${prefix}/new`)}
-        />
-      ) : (
-        <>
-          <div className="flex-1">
-            <div className="flex items-baseline gap-1.5">
-              <div
-                className="text-[var(--ds-ink)] font-semibold tabular-nums"
-                style={{
-                  fontSize: "clamp(22px, 3vw, 28px)",
-                  letterSpacing: "-0.02em",
-                  lineHeight: 1.1,
-                }}
-              >
-                {summary.percent}%
-              </div>
-              <TrendingUp className="size-3.5 text-[var(--ds-green-fg)]" />
-            </div>
-            <div className="text-[11.5px] text-[var(--ds-muted)] mt-1 leading-snug">
-              {summary.strongDrafts} of {summary.totalDrafts} clearing all health checks
-            </div>
-
-            {summary.needsReview > 0 && (
-              <div className="mt-4 text-[12px] text-[var(--ds-body)] leading-snug bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)] rounded-[8px] px-2.5 py-2 font-medium">
-                {summary.needsReview} letter{summary.needsReview === 1 ? "" : "s"} need counsel
-                review before send
-              </div>
-            )}
-          </div>
-          <PanelFooterButton
-            onClick={() => nav("/activity")}
-            label="Audit log"
-          />
-        </>
-      )}
-    </DashboardPanel>
-  );
-}
-
-/* ─── Panel primitives ─────────────────────────────────────────────────── */
-
-function DashboardPanel({
-  icon: Icon,
-  title,
-  badge,
-  children,
-}: {
-  icon: typeof Clock;
-  title: string;
-  badge?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] p-[18px] flex flex-col min-h-[200px]">
-      <header className="flex items-center justify-between mb-3">
-        <h3 className="m-0 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] inline-flex items-center gap-1.5">
-          <Icon className="size-3.5" />
-          {title}
-        </h3>
-        {badge ? (
-          <span className="text-[11px] text-[var(--ds-muted)] font-semibold tabular-nums bg-[var(--ds-surface-2)] px-2 py-0.5 rounded-full">
-            {badge}
-          </span>
-        ) : null}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function PanelEmpty({
-  body,
-  ctaLabel,
-  onClick,
-}: {
-  body: string;
-  ctaLabel: string;
-  onClick: () => void;
-}) {
-  return (
-    <div className="flex-1 flex flex-col justify-center">
-      <p className="m-0 text-[13px] text-[var(--ds-muted)] leading-snug">{body}</p>
-      <button
-        type="button"
-        onClick={onClick}
-        className="mt-3 self-start inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-ink)] hover:underline"
+          );
+        })}
+      </div>
+      <Link
+        to="/matters"
+        className="inline-flex shrink-0 items-center gap-1 text-[12.5px] font-medium text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)]"
       >
-        {ctaLabel}
+        Risk register
         <ArrowRight className="size-3" />
-      </button>
+      </Link>
     </div>
-  );
-}
-
-function PanelFooterButton({
-  label,
-  onClick,
-}: {
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mt-3 self-start inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
-    >
-      {label}
-      <ArrowRight className="size-3" />
-    </button>
   );
 }
 
@@ -657,12 +611,12 @@ function deriveTodayItems(
         matterId: matter?.id,
         dueLabel:
           days == null
-            ? "due soon"
+            ? "Due soon"
             : days < 0
             ? `${Math.abs(days)}d overdue`
             : days === 0
-            ? "due today"
-            : `due in ${days}d`,
+            ? "Due today"
+            : `Due in ${days}d`,
         urgent,
         kind: "task" as const,
       };
@@ -675,33 +629,32 @@ function deriveTodayItems(
       label: m.nextAction!,
       matterName: m.name,
       matterId: m.id,
-      dueLabel: "next action",
+      dueLabel: "Next action",
       urgent: m.riskBand === "high" || m.riskBand === "critical",
       kind: "next-action" as const,
     }));
 
   // In-review drafts surface to reviewers (and admin/owner who can act as
   // reviewer in the single-user case). Empty for drafter/viewer roles.
-  const reviewItems: TodayItem[] =
-    role && (role === "owner" || role === "admin" || role === "reviewer")
-      ? Object.values(drafts)
-          .filter(
-            (d) =>
-              d.mode === "employer" &&
-              d.reviewStatus === "in_review" &&
-              !d.isTemplateSource
-          )
-          .map((d) => ({
-            id: `review:${d.id}`,
-            label: `Review: ${d.title || d.letterType.replace(/_/g, " ")}`,
-            matterName: d.employee.legalName || undefined,
-            matterId: undefined,
-            dueLabel: "awaiting approval",
-            urgent: true,
-            kind: "review" as const,
-            draftId: d.id,
-          }))
-      : [];
+  const reviewItems: TodayItem[] = canApprove(role)
+    ? Object.values(drafts)
+        .filter(
+          (d) =>
+            d.mode === "employer" &&
+            d.reviewStatus === "in_review" &&
+            !d.isTemplateSource
+        )
+        .map((d) => ({
+          id: `review:${d.id}`,
+          label: `Review: ${d.title || d.letterType.replace(/_/g, " ")}`,
+          matterName: d.employee.legalName || undefined,
+          matterId: undefined,
+          dueLabel: "Awaiting approval",
+          urgent: true,
+          kind: "review" as const,
+          draftId: d.id,
+        }))
+    : [];
 
   return [...reviewItems, ...taskItems, ...matterNextActions];
 }
@@ -728,6 +681,13 @@ function deriveRiskSummary(
     hasAnyExposure,
   };
 }
+
+type ComplianceSummary = {
+  totalDrafts: number;
+  strongDrafts: number;
+  needsReview: number;
+  percent: number;
+};
 
 function deriveComplianceSummary(
   drafts: Record<string, Draft>,
@@ -762,7 +722,28 @@ function deriveComplianceSummary(
   };
 }
 
-type RecentItem = { id: string; label: string; ago: string; ts: number };
+/** When each letter was first exported (sent), with month and weekly counts. */
+function deriveSentSummary(drafts: Record<string, Draft>, mode: Mode) {
+  const firstSent: number[] = [];
+  for (const d of Object.values(drafts)) {
+    if (d.mode !== mode || d.isTemplateSource) continue;
+    const times = (d.exports ?? []).map((e) => e.exportedAt).filter((t) => Number.isFinite(t));
+    if (times.length > 0) firstSent.push(Math.min(...times));
+  }
+  const now = new Date();
+  const thisStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const lastStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+  const thisMonth = firstSent.filter((t) => t >= thisStart).length;
+  const lastMonth = firstSent.filter((t) => t >= lastStart && t < thisStart).length;
+  return {
+    total: firstSent.length,
+    thisMonth,
+    delta: thisMonth - lastMonth,
+    weekly: weeklySeries(firstSent),
+  };
+}
+
+type RecentItem = { id: string; title: string; letter: string; ago: string; ts: number };
 
 function deriveRecentActivity(
   drafts: Record<string, Draft>,
@@ -772,12 +753,13 @@ function deriveRecentActivity(
   for (const d of Object.values(drafts)) {
     if (d.mode !== mode) continue;
     if (d.isTemplateSource) continue;
-    const meta = safeMeta(d.letterType);
+    const meta = safeLetterMeta(d.letterType);
     const title = meta?.shortTitle ?? d.letterType;
     for (const ev of d.timeline ?? []) {
       rows.push({
         id: `${d.id}:${ev.id}`,
-        label: `${ev.title} · ${title}`,
+        title: ev.title,
+        letter: title,
         ts: ev.createdAt,
         ago: formatDistanceToNowStrict(ev.createdAt, { addSuffix: true }),
       });
@@ -819,13 +801,13 @@ function bandTone(band: RiskBand): { bg: string; fg: string } {
 }
 
 /* ============================================================================
- * Employee-mode Home — preserved from prior implementation
+ * Employee home
  * ==========================================================================*/
 
 function EmployeeHome({ mode }: { mode: Mode }) {
-  const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
+  const name = useGreetingName();
 
   const myDrafts = useMemo(
     () =>
@@ -841,11 +823,7 @@ function EmployeeHome({ mode }: { mode: Mode }) {
   const flagship = catalog.filter((l) => l.flagshipV1);
 
   const prefix = "/me";
-  const name =
-    profile.personal.preferredName ||
-    profile.personal.legalName?.split(/\s+/)[0] ||
-    "";
-  const greeting = name ? `Hello, ${name}.` : "Welcome back.";
+  const greeting = name ? `Hello, ${name}` : "Welcome back";
 
   const today = useMemo(
     () =>
@@ -857,320 +835,206 @@ function EmployeeHome({ mode }: { mode: Mode }) {
     []
   );
 
+  const hasWork = myDrafts.length > 0 || deadlines.length > 0;
+
+  const stats = useMemo(() => deriveEmployeeStats(myDrafts), [myDrafts]);
+  const next = deadlines.find((d) => d.daysAway >= 0);
+
+  const tiles: StatTileProps[] = [
+    {
+      label: "Letters",
+      icon: FileText,
+      value: myDrafts.length,
+      series: stats.startedWeekly,
+      sparkLabel: "Letters started each week over the last 12 weeks",
+      footer: <span className="truncate">{stats.startedThisMonth} started this month</span>,
+    },
+    {
+      label: "Ready to send",
+      icon: CircleCheck,
+      value: stats.ready,
+      footer: <span className="truncate">{stats.inProgress} still in progress</span>,
+    },
+    {
+      label: "Sent",
+      icon: Send,
+      value: stats.sent,
+      footer: (
+        <span className="truncate">
+          {stats.lastSentAt ? `Last sent ${formatDistanceToNowStrict(stats.lastSentAt, { addSuffix: true })}` : "None sent yet"}
+        </span>
+      ),
+    },
+    {
+      label: "Deadlines",
+      icon: CalendarClock,
+      value: deadlines.filter((d) => d.daysAway >= 0).length,
+      footer: next ? (
+        next.daysAway < 14 ? (
+          <FooterDot tone="red">Next closes in {next.daysAway} {next.daysAway === 1 ? "day" : "days"}</FooterDot>
+        ) : (
+          <span className="truncate">Next closes in {next.daysAway} days</span>
+        )
+      ) : (
+        <span>None coming up</span>
+      ),
+    },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* Breadcrumb */}
-      <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
-        <span>Employee workspace</span>
-        <span className="opacity-40">/</span>
-        <span className="text-[var(--ds-ink)] font-medium">Home</span>
-      </div>
-
-      <Hero greeting={greeting} today={today} prefix={prefix} catalogCount={catalog.length} />
-
-      <Catalog tiles={flagship.slice(0, 5)} prefix={prefix} hasMore={flagship.length > 5} />
-
-      {(myDrafts.length > 0 || deadlines.length > 0) && (
-        <ContinueAndDeadlines
-          drafts={myDrafts.slice(0, 3)}
-          deadlines={deadlines}
-          onOpenDraft={(id) => nav(`/editor/${id}`)}
-          onOpenNew={() => nav(`${prefix}/new`)}
-        />
-      )}
-
-      <TrustFooter />
-    </div>
-  );
-}
-
-/* ─── Hero ─────────────────────────────────────────────────────────────── */
-
-function Hero({
-  greeting,
-  today,
-  prefix,
-  catalogCount,
-}: {
-  greeting: string;
-  today: string;
-  prefix: string;
-  catalogCount: number;
-}) {
-  return (
-    <section
-      className="relative overflow-hidden rounded-2xl border border-[var(--ds-line)] mb-7 px-7 sm:px-14 py-12 sm:py-14"
-      style={{
-        background:
-          "radial-gradient(80% 60% at 88% -10%, rgba(10,11,13,0.05), transparent 70%), linear-gradient(180deg,#fff 0%,#fbfbfc 100%)",
-      }}
-    >
-      {/* Decorative DraftHR "D" watermark — the real logo at low opacity,
-       * positioned bottom-right so it bleeds off the hero corner. */}
-      <img
-        src="/drafthr-d-mark.png"
-        alt=""
-        aria-hidden
-        className="pointer-events-none absolute select-none hidden sm:block"
-        style={{
-          right: -50,
-          bottom: -60,
-          width: 340,
-          height: 340,
-          opacity: 0.08,
-          objectFit: "contain",
-        }}
+    <motion.div {...fade} className={PAGE}>
+      <PageHeader
+        crumbs={[{ label: "Employee workspace" }, { label: today }]}
+        title={greeting}
+        lede={
+          <>
+            Let's put it in writing. Wizard-guided letters with UK and US legal awareness, for
+            grievance, resignation, settlement, flexible working and more.{" "}
+            <span className="font-medium text-[var(--ds-ink)]">Defensible by default.</span>
+          </>
+        }
+        actions={
+          <>
+            <Link to={`${prefix}/new`} className={BTN_OUTLINE}>
+              <Library className="size-4" />
+              Browse all {catalog.length} letter types
+            </Link>
+            <Link to={`${prefix}/new`} data-tour="new-letter-cta" className={BTN_PRIMARY}>
+              <Plus className="size-4" />
+              New letter
+            </Link>
+          </>
+        }
       />
 
-      <div
-        className="relative z-[1] text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)] mb-3.5 inline-flex items-center gap-2"
-      >
-        <span className="inline-block w-[18px] h-px bg-[var(--ds-subtle)]" />
-        {today}
-      </div>
-
-      <h1
-        className="m-0 mb-1.5 text-[var(--ds-ink)] font-semibold"
-        style={{
-          fontSize: "clamp(32px, 5vw, 44px)",
-          lineHeight: 1.1,
-          letterSpacing: "-0.02em",
-          maxWidth: "22ch",
-        }}
-      >
-        {greeting}
-        <br />
-        <span className="font-medium text-[var(--ds-body)]">Let's put it in writing.</span>
-      </h1>
-
-      <p
-        className="text-[var(--ds-body)] leading-relaxed mt-4 mb-7"
-        style={{ fontSize: "15.5px", maxWidth: "58ch" }}
-      >
-        Wizard-guided HR letters with UK and US legal awareness — grievance, resignation,
-        settlement, flexible working, and more.{" "}
-        <span className="font-semibold text-[var(--ds-ink)]">Defensible by default.</span>
-      </p>
-
-      <div className="flex items-center gap-2.5 flex-wrap relative z-[1]">
-        <Link
-          to={`${prefix}/new`}
-          data-tour="new-letter-cta"
-          className="inline-flex items-center gap-2 px-[18px] py-[11px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[14px] shadow-sm hover:-translate-y-px hover:shadow-md transition"
-        >
-          <PlusCircle className="size-4" />
-          New letter
-        </Link>
-        <Link
-          to={`${prefix}/new`}
-          className="inline-flex items-center gap-2 px-[18px] py-[11px] rounded-[9px] bg-transparent text-[var(--ds-ink)] font-semibold text-[14px] border border-[var(--ds-line)] hover:bg-white hover:border-[var(--ds-subtle)] transition"
-        >
-          Browse all {catalogCount} letter types
-          <ArrowRight className="size-3.5 opacity-70" />
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-/* ─── Letter catalog ───────────────────────────────────────────────────── */
-
-function Catalog({
-  tiles,
-  prefix,
-  hasMore,
-}: {
-  tiles: ReturnType<typeof letterCatalogByMode>;
-  prefix: string;
-  hasMore: boolean;
-}) {
-  return (
-    <>
-      <div className="flex items-baseline justify-between mt-2 mb-4.5">
-        <h2 className="m-0 text-[var(--ds-ink)] text-[18px] font-semibold tracking-[-0.01em]">
-          Start a letter
-        </h2>
-        <Link
-          to={`${prefix}/new`}
-          className="text-[12.5px] text-[var(--ds-muted)] font-medium hover:text-[var(--ds-ink)] transition"
-        >
-          See all letter types →
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 mb-9">
-        {tiles.map((l) => {
-          const Icon = iconForLetter(l.id);
-          const tone = toneForLetter(l.id, l.riskClass);
-          return (
-            <Link
-              key={l.id}
-              to={`${prefix}/new/${l.id}`}
-              className="group relative flex flex-col gap-2.5 p-5 rounded-[12px] bg-[var(--ds-surface)] border border-[var(--ds-line)] hover:border-[var(--ds-ink)] hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-10px_rgba(0,0,0,0.12)] transition min-h-[148px]"
-            >
-              <div
-                className="size-9 rounded-[9px] grid place-items-center"
-                style={{ background: tone.bg, color: tone.fg }}
-              >
-                <Icon className="size-[18px]" />
-              </div>
-              <h3 className="m-0 text-[15px] font-semibold text-[var(--ds-ink)] leading-tight">
-                {l.shortTitle}
-              </h3>
-              <p className="m-0 text-[12.5px] leading-[1.5] text-[var(--ds-muted)] line-clamp-2">
-                {l.description}
-              </p>
-              <span className="absolute bottom-3.5 right-4.5 text-[11.5px] font-semibold text-[var(--ds-ink)] opacity-0 group-hover:opacity-100 transition">
-                Start →
-              </span>
-            </Link>
-          );
-        })}
-
-        {hasMore && (
-          <Link
-            to={`${prefix}/new`}
-            className="flex items-center justify-center text-center rounded-[12px] border border-dashed border-[var(--ds-line)] bg-transparent text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:border-[var(--ds-ink)] transition min-h-[148px] p-5"
-          >
-            <h3 className="m-0 text-[14px] font-semibold">More letter types →</h3>
-          </Link>
-        )}
-      </div>
-    </>
-  );
-}
-
-/* ─── Continue + Upcoming ──────────────────────────────────────────────── */
-
-function ContinueAndDeadlines({
-  drafts,
-  deadlines,
-  onOpenDraft,
-  onOpenNew,
-}: {
-  drafts: ReturnType<typeof useDraftStore.getState>["drafts"][string][];
-  deadlines: ReturnType<typeof deriveDeadlines>;
-  onOpenDraft: (id: string) => void;
-  onOpenNew: () => void;
-}) {
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4 mb-9">
-      {/* Continue where you left off */}
-      <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden">
-        <header className="flex items-center justify-between px-[18px] py-3.5 border-b border-[var(--ds-line-2)]">
-          <h3 className="m-0 text-[14px] font-semibold text-[var(--ds-ink)]">
-            Continue where you left off
-          </h3>
-          {drafts.length > 0 ? (
-            <span className="text-[11px] text-[var(--ds-muted)] font-semibold tracking-wide bg-[var(--ds-surface-2)] px-2 py-0.5 rounded-full">
-              {drafts.length} draft{drafts.length === 1 ? "" : "s"}
-            </span>
-          ) : null}
-        </header>
-        {drafts.length === 0 ? (
-          <EmptyState
-            size="sm"
-            icon={FileText}
-            title="No drafts yet"
-            body="Pick a letter type from the catalogue to start your first draft. It'll appear here as soon as you generate it."
-            primary={{ label: "Browse letters", onClick: onOpenNew }}
-          />
-        ) : (
-          drafts.map((d) => {
-            const status = draftStatus(d);
-            const statusBg =
-              status === "drafting"
-                ? "var(--ds-amber-fg)"
-                : status === "ready"
-                ? "var(--ds-green-fg)"
-                : "var(--ds-subtle)";
-            return (
-              <button
-                key={d.id}
-                onClick={() => onOpenDraft(d.id)}
-                className="w-full text-left flex items-center gap-3 px-[18px] py-3 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-surface-2)] transition"
-              >
-                <span
-                  className="w-1.5 h-1.5 rounded-full shrink-0"
-                  style={{ background: statusBg }}
+      <HomeGrid
+        top={
+          <>
+            <AssistantBox mode={mode} jurisdiction={profile.defaults.jurisdiction} />
+            {myDrafts.length > 0 && (
+              <section aria-label="Your letters at a glance" className="mt-10">
+                <SectionHead title="Your letters" sub="Live from your drafts" />
+                <StatTiles tiles={tiles} />
+              </section>
+            )}
+          </>
+        }
+        rail={hasWork ? <DeadlinesBox deadlines={deadlines} prefix={prefix} /> : undefined}
+        bottom={
+          <>
+            {hasWork && (
+              <section aria-label="Continue where you left off">
+                <SectionHead
+                  title="Continue where you left off"
+                  sub={
+                    myDrafts.length > 0
+                      ? `${myDrafts.length} ${myDrafts.length === 1 ? "letter" : "letters"} in progress or sent`
+                      : undefined
+                  }
+                  action={myDrafts.length > 0 ? { label: "View all", to: "/letters" } : undefined}
                 />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-[var(--ds-ink)] truncate">
-                    {briefTitleFor(d)}
-                  </div>
-                  <div className="text-[11.5px] text-[var(--ds-muted)]">
-                    {statusLabel(status, d.sections.length)}
-                  </div>
-                </div>
-                <span className="text-[11px] text-[var(--ds-subtle)] shrink-0 tabular-nums">
-                  {timeAgo(d.updatedAt)}
-                </span>
-              </button>
-            );
-          })
-        )}
-      </section>
+                {myDrafts.length === 0 ? (
+                  <EmptyState
+                    size="sm"
+                    icon={FileText}
+                    title="No drafts yet"
+                    body="Pick a letter type to start your first draft. It appears here as soon as you generate it."
+                    primary={{ label: "Browse letters", to: `${prefix}/new` }}
+                  />
+                ) : (
+                  <LetterRows drafts={myDrafts.slice(0, 3)} viewerCanApprove={false} showHeader={false} />
+                )}
+              </section>
+            )}
+            <section aria-label="Start a letter">
+              <SectionHead
+                title="Start a letter"
+                sub="The letters people need most, each with a guided wizard"
+                action={{ label: "See all letter types", to: `${prefix}/new` }}
+              />
+              <TemplateCards
+                letters={flagship.slice(0, 5)}
+                prefix={prefix}
+                moreHref={flagship.length > 5 ? `${prefix}/new` : undefined}
+              />
+            </section>
+          </>
+        }
+      />
 
-      {/* Upcoming deadlines */}
-      <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden">
-        <header className="flex items-center justify-between px-[18px] py-3.5 border-b border-[var(--ds-line-2)]">
-          <h3 className="m-0 text-[14px] font-semibold text-[var(--ds-ink)] inline-flex items-center gap-2">
-            <CalendarClock className="size-3.5 text-[var(--ds-subtle)]" />
-            Upcoming
-          </h3>
-          {deadlines.length > 0 && (
-            <span className="text-[11px] text-[var(--ds-muted)] font-semibold tracking-wide bg-[var(--ds-surface-2)] px-2 py-0.5 rounded-full">
-              {deadlines.length} deadline{deadlines.length === 1 ? "" : "s"}
-            </span>
-          )}
-        </header>
-        {deadlines.length === 0 ? (
-          <EmptyState
-            size="sm"
-            icon={CalendarClock}
-            title="No deadlines yet"
-            body="Deadlines appear here when you start a tribunal-bound letter — appeals, grievances, dismissal responses."
-            primary={{ label: "Start a letter", onClick: onOpenNew }}
-          />
-        ) : (
-          deadlines.map((d) => {
-            const urgent = d.daysAway >= 0 && d.daysAway < 14;
+      <TrustFooter />
+    </motion.div>
+  );
+}
+
+/* ─── Employee rail: deadlines ─────────────────────────────────────────── */
+
+function DeadlinesBox({
+  deadlines,
+  prefix,
+}: {
+  deadlines: ReturnType<typeof deriveDeadlines>;
+  prefix: string;
+}) {
+  return (
+    <RailBox
+      title="Deadlines"
+      count={deadlines.length}
+      action={deadlines.length > 0 ? { label: "View all", to: "/calendar" } : undefined}
+    >
+      {deadlines.length === 0 ? (
+        <EmptyState
+          size="sm"
+          icon={CalendarClock}
+          title="No deadlines yet"
+          body="Deadlines appear here when you start a tribunal-bound letter: appeals, grievances, dismissal responses."
+          primary={{ label: "Start a letter", to: `${prefix}/new` }}
+        />
+      ) : (
+        <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+          {deadlines.map((d) => {
             const passed = d.daysAway < 0;
+            const urgent = !passed && d.daysAway < 14;
             return (
-              <div
-                key={d.id}
-                className="flex items-center gap-2.5 px-[18px] py-3 border-b border-[var(--ds-line-2)] last:border-b-0"
-              >
-                <div className="w-9 text-center font-mono shrink-0">
-                  <div
-                    className="text-[18px] font-semibold leading-none"
-                    style={{
-                      color: passed
-                        ? "var(--ds-red-fg)"
-                        : urgent
-                        ? "var(--ds-amber-fg)"
-                        : "var(--ds-ink)",
-                    }}
-                  >
-                    {passed ? "—" : d.daysAway}
-                  </div>
-                  <div className="text-[9px] uppercase tracking-wider text-[var(--ds-muted)] mt-0.5">
-                    {passed ? "passed" : "days"}
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-semibold text-[var(--ds-ink)] truncate">
-                    {d.label}
-                  </div>
-                  <div className="text-[11px] text-[var(--ds-muted)]">{formatDate(d.iso)}</div>
-                </div>
-                {urgent && <AlertCircle className="size-3.5 text-[var(--ds-amber-fg)] shrink-0" />}
-              </div>
+              <li key={d.id}>
+                <Link
+                  to={`/editor/${d.id}`}
+                  className="block rounded-[var(--ds-r-m)] px-4 py-3.5 transition hover:brightness-[0.98]"
+                  style={{ background: urgent ? "var(--ds-red-bg)" : "var(--ds-surface-2)" }}
+                >
+                  <span className="flex items-center justify-between gap-3 text-[12.5px]">
+                    <span className="inline-flex min-w-0 items-center gap-1.5 text-[var(--ds-muted)]">
+                      <CalendarClock className="size-3.5 shrink-0" />
+                      <span className="truncate">{d.label}</span>
+                    </span>
+                    <span
+                      className="shrink-0 font-medium"
+                      style={{
+                        color: passed || urgent ? "var(--ds-red-fg)" : "var(--ds-ink)",
+                      }}
+                    >
+                      {passed
+                        ? "Passed"
+                        : d.daysAway === 0
+                          ? "Today"
+                          : `${d.daysAway} ${d.daysAway === 1 ? "day" : "days"} left`}
+                    </span>
+                  </span>
+                  <span className="ds-title mt-1.5 block text-[24px] leading-tight">
+                    {formatDate(d.iso)}
+                  </span>
+                  {d.basis && (
+                    <span className="mt-1 line-clamp-2 block text-[12px] leading-snug text-[var(--ds-muted)]">
+                      {d.basis}
+                    </span>
+                  )}
+                </Link>
+              </li>
             );
-          })
-        )}
-      </section>
-    </div>
+          })}
+        </ul>
+      )}
+    </RailBox>
   );
 }
 
@@ -1180,26 +1044,24 @@ function TrustFooter() {
   const chips = [
     "UK Employment Rights Act 1996",
     "ACAS Code aware",
-    "US FLSA & state-law variants",
-    "Private — drafts never train models",
+    "US FLSA and state-law variants",
+    "Private: drafts never train models",
   ];
   return (
-    <section className="bg-[var(--ds-surface-2)] border border-[var(--ds-line)] rounded-[12px] px-5 sm:px-7 py-4 sm:py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div className="flex flex-wrap gap-2">
+    <footer className="mt-14 flex flex-col gap-3 border-t border-[var(--ds-line)] pt-5 md:flex-row md:items-center md:justify-between">
+      <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1.5 p-0">
         {chips.map((c) => (
-          <span
-            key={c}
-            className="inline-flex items-center gap-1.5 text-[11.5px] text-[var(--ds-body)] font-medium bg-white px-2.5 py-1 rounded-full border border-[var(--ds-line)]"
-          >
-            <span className="text-[var(--ds-green-fg)] font-bold">✓</span> {c}
-          </span>
+          <li key={c} className="inline-flex items-center gap-1.5 text-[12px] text-[var(--ds-muted)]">
+            <CircleCheck className="size-3.5 text-[var(--ds-green-fg)]" aria-hidden />
+            {c}
+          </li>
         ))}
-      </div>
-      <p className="text-[11.5px] text-[var(--ds-muted)] md:text-right md:max-w-[42ch] m-0 leading-snug">
+      </ul>
+      <p className="m-0 text-[12px] leading-snug text-[var(--ds-muted)] md:max-w-[42ch] md:text-right">
         Not legal advice. High-stakes letters should be reviewed by qualified counsel before
         issuance.
       </p>
-    </section>
+    </footer>
   );
 }
 
@@ -1207,17 +1069,7 @@ function TrustFooter() {
  * Helpers
  * ==========================================================================*/
 
-function safeMeta(id: string) {
-  try {
-    return getLetterMeta(id as Parameters<typeof getLetterMeta>[0]);
-  } catch {
-    return null;
-  }
-}
-
-function deriveDeadlines(
-  drafts: ReturnType<typeof useDraftStore.getState>["drafts"][string][]
-) {
+function deriveDeadlines(drafts: Draft[]) {
   return drafts
     .filter((d) => d.context.protectedDeadline)
     .map((d) => {
@@ -1225,8 +1077,9 @@ function deriveDeadlines(
       const daysAway = daysUntilDateOnly(iso);
       return {
         id: d.id,
-        label: safeMeta(d.letterType)?.shortTitle ?? d.letterType,
+        label: safeLetterMeta(d.letterType)?.shortTitle ?? d.letterType,
         iso,
+        basis: d.context.protectedDeadline!.basis,
         daysAway,
       };
     })
@@ -1236,7 +1089,7 @@ function deriveDeadlines(
 
 function draftStatus(d: {
   sections: { status: string; html: string }[];
-}): "empty" | "drafting" | "ready" | "exported" {
+}): "empty" | "drafting" | "ready" {
   const all = d.sections;
   if (all.length === 0) return "empty";
   if (all.every((s) => s.status === "empty" && !s.html)) return "empty";
@@ -1246,90 +1099,35 @@ function draftStatus(d: {
   return "empty";
 }
 
-function statusLabel(status: ReturnType<typeof draftStatus>, sectionCount: number): string {
-  switch (status) {
-    case "ready":
-      return "Ready to export";
-    case "drafting":
-      return `Drafting · ${sectionCount} section${sectionCount === 1 ? "" : "s"}`;
-    case "exported":
-      return "Exported";
-    default:
-      return "Not started";
+function deriveEmployeeStats(drafts: Draft[]) {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  let ready = 0;
+  let inProgress = 0;
+  let sent = 0;
+  let lastSentAt = 0;
+  for (const d of drafts) {
+    const exported = (d.exports?.length ?? 0) > 0;
+    if (exported) {
+      sent += 1;
+      for (const e of d.exports ?? []) lastSentAt = Math.max(lastSentAt, e.exportedAt);
+      continue;
+    }
+    const s = draftStatus(d);
+    if (s === "ready") ready += 1;
+    else inProgress += 1;
   }
-}
-
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d`;
+  const created = drafts.map((d) => d.createdAt);
+  return {
+    ready,
+    inProgress,
+    sent,
+    lastSentAt: lastSentAt || null,
+    startedThisMonth: created.filter((t) => t >= monthStart).length,
+    startedWeekly: weeklySeries(created),
+  };
 }
 
 function formatDate(iso: string): string {
-  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" });
-}
-
-/* Per-letter tile colour. Keeps the catalog tactile without screaming.
- * Falls back to riskClass mapping for letter types we haven't hand-tuned. */
-function toneForLetter(id: LetterTypeId, riskClass: "low" | "medium" | "high") {
-  const handTuned: Partial<Record<LetterTypeId, { bg: string; fg: string }>> = {
-    grievance: { bg: "var(--ds-amber-bg)", fg: "var(--ds-amber-fg)" },
-    appeal: { bg: "var(--ds-red-bg)", fg: "var(--ds-red-fg)" },
-    resignation_clean: { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" },
-    resignation_with_grievance: { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" },
-    resignation_constructive: { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" },
-    flexible_working_request: { bg: "var(--ds-violet-bg)", fg: "var(--ds-violet-fg)" },
-    offer: { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" },
-    promotion: { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" },
-    salary_increase: { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" },
-    settlement_cover: { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" },
-    settlement_counter_offer: { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" },
-    termination: { bg: "var(--ds-red-bg)", fg: "var(--ds-red-fg)" },
-    warning: { bg: "var(--ds-amber-bg)", fg: "var(--ds-amber-fg)" },
-    subject_access_request: { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" },
-    whistleblowing: { bg: "var(--ds-red-bg)", fg: "var(--ds-red-fg)" },
-    reference: { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" },
-    accommodation_request: { bg: "var(--ds-violet-bg)", fg: "var(--ds-violet-fg)" },
-  };
-  if (handTuned[id]) return handTuned[id]!;
-  if (riskClass === "high") return { bg: "var(--ds-red-bg)", fg: "var(--ds-red-fg)" };
-  if (riskClass === "medium") return { bg: "var(--ds-amber-bg)", fg: "var(--ds-amber-fg)" };
-  return { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" };
-}
-
-function iconForLetter(id: LetterTypeId) {
-  switch (id) {
-    case "offer":
-    case "promotion":
-    case "salary_increase":
-      return Sparkles;
-    case "termination":
-    case "warning":
-      return ShieldAlert;
-    case "reference":
-    case "probation_outcome":
-    case "resignation_clean":
-    case "resignation_with_grievance":
-    case "resignation_constructive":
-      return Mail;
-    case "grievance":
-      return FileWarning;
-    case "appeal":
-      return Scale;
-    case "subject_access_request":
-      return FileSearch;
-    case "whistleblowing":
-      return ShieldAlert;
-    case "flexible_working_request":
-      return CalendarClock;
-    case "accommodation_request":
-      return ShieldCheck;
-    default:
-      return ScrollText;
-  }
+  return formatDateOnly(iso, { day: "numeric", month: "long", year: "numeric" });
 }

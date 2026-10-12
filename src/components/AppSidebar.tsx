@@ -800,6 +800,17 @@ function NavLetters({ mode }: { mode: Mode }) {
               );
             })
           )}
+          {list.length > 0 && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={loc.pathname === "/letters"}
+                className={cn(SUB_BUTTON, "text-[var(--ds-faint)]")}
+              >
+                <Link to="/letters">View all</Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SubList>
       )}
     </li>

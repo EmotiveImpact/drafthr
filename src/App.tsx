@@ -58,6 +58,7 @@ const SettingsDirectorySync = lazyNamed(() => import("@/routes/settings/Director
 const Privacy = lazyNamed(() => import("@/routes/Privacy"), "Privacy");
 const Terms = lazyNamed(() => import("@/routes/Terms"), "Terms");
 const BrowseLetters = lazyNamed(() => import("@/routes/BrowseLetters"), "BrowseLetters");
+const Letters = lazyNamed(() => import("@/routes/Letters"), "Letters");
 const ReviewStep = lazyNamed(() => import("@/routes/ReviewStep"), "ReviewStep");
 const MattersIndex = lazyNamed(() => import("@/routes/MattersIndex"), "MattersIndex");
 const EmployeesIndex = lazyNamed(() => import("@/routes/EmployeesIndex"), "EmployeesIndex");
@@ -384,6 +385,7 @@ export function App() {
         <Route path="/reports/checks/:checkId" element={<Protected roles={["employer"]}><FailingCheckDrillDown /></Protected>} />
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
+        <Route path="/letters" element={<Protected><Letters /></Protected>} />
         <Route path="/exported" element={<Protected><Exported /></Protected>} />
         <Route path="/activity" element={<Protected><Activity /></Protected>} />
         <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
