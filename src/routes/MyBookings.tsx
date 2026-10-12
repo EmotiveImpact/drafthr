@@ -1,7 +1,16 @@
-import { PageHeader } from "@/components/ds";
+import { PageHeader, type PageTab } from "@/components/ds";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Star, FileText, Sparkles } from "lucide-react";
+import { ArrowLeft, Star, FileText, Inbox, Sparkles } from "lucide-react";
+import {
+  BTN_GHOST,
+  BTN_OUTLINE,
+  BTN_PRIMARY,
+  ExpertAvatar,
+  Row,
+  RowList,
+  RowNote,
+} from "@/components/consultants/ui";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import type { Consultant } from "@/components/consultants/types";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
@@ -15,9 +24,9 @@ import { toast } from "sonner";
  * /bookings — HR-side bookings list.
  *
  * Mirrors the consultant inbox but from the requester's perspective.
- * Shows every booking the signed-in HR user has placed, grouped by
- * status. Delivered bookings surface a rating widget so the buyer can
- * close the loop on the consultant.
+ * Shows every booking the signed-in HR user has placed, with one pill tab
+ * per status (2A) over 13B-style rows. Delivered bookings surface a rating
+ * widget so the buyer can close the loop on the consultant.
  *
  * The localStorage store still drives this — the server-side switch
  * will plug into useBookingsStore later (likely via a useBookingsQuery
@@ -40,6 +49,8 @@ const STATUS_ORDER: Booking["status"][] = [
   "declined",
 ];
 
+const PAGE = "mx-auto w-full max-w-[1120px] px-4 pb-24 pt-8 sm:px-8 sm:pt-11 lg:px-11";
+
 export function MyBookings() {
   const nav = useNavigate();
   const bookings = useBookingsStore((s) => s.bookings);
@@ -55,6 +66,8 @@ export function MyBookings() {
   // Whether the marketplace operator has Stripe configured — gates the "Pay"
   // affordance so it only appears when payments are actually available.
   const [paymentsOn, setPaymentsOn] = useState(false);
+  // Selected status tab ("all" or a booking status).
+  const [activeTab, setActiveTab] = useState<string>("all");
 
   const hydrate = useCallback(async () => {
     setHydrating(true);
@@ -89,9 +102,8 @@ export function MyBookings() {
           sla: myProfile.sla,
           avatarFrom: "from-amber-200",
           avatarTo: "to-amber-300",
-          photoUrl:
-            myProfile.photoUrl ||
-            "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
+          // Initials on a tint stand in when there is no photo.
+          photoUrl: myProfile.photoUrl || "",
           specialty: myProfile.specialty,
           specialties: myProfile.specialties,
         } as Consultant)
@@ -107,18 +119,22 @@ export function MyBookings() {
   // to either the real empty state or the list below.
   if (hydrating && bookings.length === 0) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
+      <div className={PAGE}>
         <header className="mb-8">
           <div className="h-3 w-24 animate-pulse rounded bg-[var(--ds-surface-2)]" />
           <div className="mt-3 h-9 w-48 animate-pulse rounded bg-[var(--ds-surface-2)]" />
           <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded bg-[var(--ds-surface-2)]" />
+          <div className="mt-7 h-9 w-[420px] max-w-full animate-pulse rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)]" />
         </header>
         <div className="space-y-2" aria-hidden>
           {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="h-20 animate-pulse rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]"
-            />
+            <div key={i} className="flex items-center gap-4 px-3.5 py-3.5">
+              <div className="size-10 animate-pulse rounded-full bg-[var(--ds-surface-2)]" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3.5 w-48 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+                <div className="h-3 w-72 max-w-full animate-pulse rounded bg-[var(--ds-surface-2)]" />
+              </div>
+            </div>
           ))}
         </div>
         <span className="sr-only">Loading your bookings…</span>
@@ -128,102 +144,101 @@ export function MyBookings() {
 
   if (bookings.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
-        <button
-          type="button"
-          onClick={() => nav(-1)}
-          className="mb-6 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back
-        </button>
-        <h1 className="text-[clamp(28px,3.4vw,40px)] font-semibold tracking-[-0.015em] text-[var(--ds-ink)]">
-          {loadFailed ? "Couldn't load your bookings." : "No bookings yet."}
-        </h1>
-        <p className="mt-3 max-w-[60ch] text-[14.5px] leading-relaxed text-[var(--ds-body)]">
-          {loadFailed
-            ? "Something went wrong fetching your bookings — this doesn't mean they're gone. Check your connection and try again."
-            : "Once you've booked a consultant for a review, every request and its status lands here."}
-        </p>
-        <div className="mt-6 flex gap-2">
-          {loadFailed ? (
-            <button
-              type="button"
-              onClick={() => void hydrate()}
-              className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-            >
-              Try again
+      <div className={PAGE}>
+        <PageHeader
+          crumbs={[{ label: "Marketplace", href: "/consultants" }, { label: "My bookings" }]}
+          title="My bookings"
+        />
+        <div className="flex flex-col items-center rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-16 text-center">
+          <span className="mb-3 grid size-10 place-items-center rounded-full bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]">
+            <Inbox className="size-5" aria-hidden />
+          </span>
+          <h2 className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
+            {loadFailed ? "Couldn't load your bookings." : "No bookings yet."}
+          </h2>
+          <p className="m-0 mt-1.5 max-w-[56ch] text-[13px] leading-relaxed text-[var(--ds-muted)]">
+            {loadFailed
+              ? "Something went wrong fetching your bookings. This doesn't mean they're gone. Check your connection and try again."
+              : "Once you've booked a consultant for a review, every request and its status lands here."}
+          </p>
+          <div className="mt-5 flex gap-2">
+            <button type="button" onClick={() => nav(-1)} className={`${BTN_OUTLINE} h-9 px-3.5`}>
+              <ArrowLeft className="size-3.5" aria-hidden />
+              Back
             </button>
-          ) : (
-            <a
-              href="/consultants"
-              className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-[var(--ds-ink)] px-4 text-[13px] font-semibold text-white shadow-sm transition hover:-translate-y-px hover:shadow-md"
-            >
-              Browse marketplace
-              <Sparkles className="size-3.5" aria-hidden />
-            </a>
-          )}
+            {loadFailed ? (
+              <button type="button" onClick={() => void hydrate()} className={`${BTN_PRIMARY} h-9 px-3.5`}>
+                Try again
+              </button>
+            ) : (
+              <a href="/consultants" className={`${BTN_PRIMARY} h-9 px-3.5`}>
+                Browse marketplace
+                <Sparkles className="size-3.5" aria-hidden />
+              </a>
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
-  // Group by status, keeping STATUS_ORDER for the headings.
-  const grouped: Record<Booking["status"], Booking[]> = {
-    requested: [],
-    accepted: [],
-    delivered: [],
-    completed: [],
-    declined: [],
+  // Order by status (act-on-these-first), newest first within a status.
+  const rank = (s: Booking["status"]) => {
+    const i = STATUS_ORDER.indexOf(s);
+    return i === -1 ? STATUS_ORDER.indexOf("requested") : i;
   };
-  bookings
+  const ordered = bookings
     .slice()
-    .sort((a, b) => b.bookedAt - a.bookedAt)
-    .forEach((b) => {
-      // Defensive: a persisted booking with an unknown/legacy status would
-      // make grouped[b.status] undefined → .push throws → white screen.
-      // The store's migrate normalises these, but guard here too so a
-      // stray status can never take the page down.
-      (grouped[b.status] ?? grouped.requested).push(b);
-    });
+    .sort((a, b) => rank(a.status) - rank(b.status) || b.bookedAt - a.bookedAt);
+  // Defensive: a persisted booking with an unknown/legacy status falls into
+  // "requested", mirroring the store's migrate, so a stray status can never
+  // take the page down.
+  const statusOf = (b: Booking): Booking["status"] =>
+    STATUS_ORDER.includes(b.status) ? b.status : "requested";
+  const countFor = (s: Booking["status"]) => ordered.filter((b) => statusOf(b) === s).length;
+  const tabs: PageTab[] = [
+    { id: "all", label: "All", count: ordered.length },
+    ...STATUS_ORDER.filter((s) => countFor(s) > 0).map((s) => ({
+      id: s,
+      label: STATUS_LABEL[s],
+      count: countFor(s),
+    })),
+  ];
+  const tab = tabs.some((t) => t.id === activeTab) ? activeTab : "all";
+  const visible = tab === "all" ? ordered : ordered.filter((b) => statusOf(b) === tab);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
+    <div className={PAGE}>
       <PageHeader
         crumbs={[{ label: "Marketplace", href: "/consultants" }, { label: "My bookings" }]}
         title="My bookings"
-        lede="Every review request you've placed, grouped by status. Delivered reviews wait for a rating below."
+        lede="Every review request you've placed. Delivered reviews wait for your rating."
+        actions={
+          <a href="/consultants" className={`${BTN_OUTLINE} h-9 px-3.5`}>
+            Browse marketplace
+          </a>
+        }
+        tabs={tabs}
+        activeTab={tab}
+        onTabChange={setActiveTab}
       />
 
-      <div className="space-y-8">
-        {STATUS_ORDER.map((status) => {
-          const list = grouped[status];
-          if (list.length === 0) return null;
-          return (
-            <section key={status}>
-              <h2 className="mb-3 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
-                {STATUS_LABEL[status]} ({list.length})
-              </h2>
-              <div className="space-y-2">
-                {list.map((b) => (
-                  <BookingRow
-                    key={b.id}
-                    booking={b}
-                    paymentsOn={paymentsOn}
-                    consultant={allConsultants.find((c) =>
-                      // Match by stable profile id first (server bookings),
-                      // fall back to initials for local-only seed bookings.
-                      b.consultantProfileId && c.profileId
-                        ? c.profileId === b.consultantProfileId
-                        : c.initials === b.consultantInitials,
-                    )}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+      <RowList>
+        {visible.map((b) => (
+          <BookingRow
+            key={b.id}
+            booking={b}
+            paymentsOn={paymentsOn}
+            consultant={allConsultants.find((c) =>
+              // Match by stable profile id first (server bookings),
+              // fall back to initials for local-only seed bookings.
+              b.consultantProfileId && c.profileId
+                ? c.profileId === b.consultantProfileId
+                : c.initials === b.consultantInitials,
+            )}
+          />
+        ))}
+      </RowList>
     </div>
   );
 }
@@ -305,183 +320,187 @@ function BookingRow({
   const displayRole = booking.consultantRole ?? consultant?.role ?? "Consultant";
   const displayPhoto = booking.consultantPhotoUrl ?? consultant?.photoUrl;
 
+  const awaitingPayment = isAwaitingPayment(booking);
+  const canRate =
+    booking.status === "delivered" &&
+    !submitted &&
+    (!booking.paymentStatus || booking.paymentStatus === "paid");
+  // Prefer the readable local id — the editor store is keyed by it.
+  // booking.draftId becomes a server UUID after sync, which the store
+  // can't resolve, so fall back to it only when no local id exists.
+  const openId = booking.localDraftId ?? booking.draftId;
+  const showOpenDraft = Boolean(openId) && !openId.startsWith("demo-");
+
+  const paymentNote =
+    booking.status === "accepted" && booking.paymentStatus === "processing"
+      ? "Payment processing. Bank payments such as Direct Debit can take a few working days to clear; the specialist starts once it does."
+      : null;
+  const disputeNote =
+    (booking.status === "accepted" || booking.status === "delivered") &&
+    (booking.paymentStatus === "refunded" ||
+      booking.paymentStatus === "disputed" ||
+      booking.paymentStatus === "dispute_lost")
+      ? booking.paymentStatus === "refunded"
+        ? "This booking was refunded."
+        : booking.paymentStatus === "disputed"
+          ? "This payment is under dispute, so work on the booking is paused."
+          : "This payment was reversed after a dispute."
+      : null;
+
   return (
-    <article className="rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3 min-w-0">
-          {displayPhoto && (
-            <img
-              src={displayPhoto}
-              alt=""
-              className="size-10 rounded-full object-cover border border-[var(--ds-line)] flex-shrink-0"
-            />
-          )}
-          <div className="min-w-0">
-            <h3 className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-              {displayName}
-            </h3>
-            <p className="mt-0.5 truncate text-[11.5px] text-[var(--ds-muted)]">
-              {displayRole}
-            </p>
-            {booking.matterTitle && (
-              <p className="mt-1 text-[12.5px] text-[var(--ds-body)]">
-                {booking.matterTitle}
+    <Row attention={(paymentsOn && awaitingPayment) || canRate}>
+      <div className="flex items-start gap-3.5 sm:gap-4">
+        <ExpertAvatar
+          photoUrl={displayPhoto}
+          name={booking.consultantName ?? consultant?.name}
+          initials={booking.consultantInitials}
+          seed={booking.consultantProfileId || displayName}
+          size={40}
+        />
+        <div className="min-w-0 flex-1">
+          <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1 basis-[220px]">
+              <h3 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
+                {displayName}
+              </h3>
+              <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+                {displayRole}
               </p>
-            )}
-          </div>
-        </div>
-        <StatusBadge status={booking.status} />
-      </header>
-
-      {booking.status === "accepted" && booking.paymentStatus === "processing" && (
-        <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
-          Payment processing. Bank payments such as Direct Debit can take a few
-          working days to clear; the specialist starts once it does.
-        </p>
-      )}
-
-      {(booking.status === "accepted" || booking.status === "delivered") &&
-        (booking.paymentStatus === "refunded" ||
-          booking.paymentStatus === "disputed" ||
-          booking.paymentStatus === "dispute_lost") && (
-          <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
-            {booking.paymentStatus === "refunded"
-              ? "This booking was refunded."
-              : booking.paymentStatus === "disputed"
-                ? "This payment is under dispute, so work on the booking is paused."
-                : "This payment was reversed after a dispute."}
-          </p>
-        )}
-
-      {!paymentsOn && isAwaitingPayment(booking) && (
-        <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
-          {booking.status === "delivered"
-            ? "Awaiting payment. Online payment isn't available yet, so this booking can't be completed."
-            : "Awaiting payment. Online payment isn't available yet, so the specialist can't start on this booking."}
-        </p>
-      )}
-
-      {paymentsOn && isAwaitingPayment(booking) && (
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={payForReview}
-            disabled={paying}
-            className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-          >
-            {paying ? "Starting…" : "Pay for review"}
-          </button>
-          <span className="text-[11px] text-[var(--ds-muted)]">
-            {agreedPrice(booking)
-              ? `${agreedPrice(booking)}, as agreed when you booked. Secure checkout via Stripe.`
-              : "Secure checkout via Stripe."}
-            {booking.paymentStatus === "failed" ? " Your last payment didn't go through." : ""}
-          </span>
-        </div>
-      )}
-
-      {booking.responseNote && (
-        <p className="mt-3 text-[12.5px] text-[var(--ds-body)] italic">
-          Specialist note: {booking.responseNote}
-        </p>
-      )}
-
-      {booking.deliveryNote && (
-        <div className="mt-3 rounded-md border border-[var(--ds-green-fg)]/30 bg-[var(--ds-green-bg)] px-3 py-2">
-          <p className="text-[11.5px] font-semibold text-[var(--ds-green-fg)] mb-1">
-            Delivered
-          </p>
-          <p className="text-[12.5px] leading-snug text-[var(--ds-ink)]">
-            {booking.deliveryNote}
-          </p>
-        </div>
-      )}
-
-      {/* Completing needs a paid booking, so rating waits for the payment. */}
-      {booking.status === "delivered" &&
-        !submitted &&
-        (!booking.paymentStatus || booking.paymentStatus === "paid") && (
-        <div className="mt-3 flex items-center gap-3">
-          <span className="text-[12px] font-semibold text-[var(--ds-ink)]">
-            Rate this review:
-          </span>
-          <div
-            role="radiogroup"
-            aria-label="Rate this review out of 5"
-            className="flex gap-1"
-            onMouseLeave={() => setHoverRating(0)}
-          >
-            {[1, 2, 3, 4, 5].map((n) => {
-              const filled = n <= (hoverRating || rating);
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  role="radio"
-                  aria-checked={rating === n}
-                  onClick={() => setRating(n)}
-                  onMouseEnter={() => setHoverRating(n)}
-                  className={`grid size-7 place-items-center rounded-full transition ${
-                    filled ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-subtle)]"
-                  }`}
-                  aria-label={`${n} star${n === 1 ? "" : "s"}`}
-                >
-                  <Star
-                    className="size-4"
-                    fill={filled ? "currentColor" : "none"}
-                    strokeWidth={1.5}
-                  />
+              {booking.matterTitle && (
+                <p className="m-0 mt-1 inline-flex max-w-full items-center gap-1.5 text-[12.5px] text-[var(--ds-body)]">
+                  <FileText className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
+                  <span className="truncate">{booking.matterTitle}</span>
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatusBadge status={booking.status} className="mr-1" />
+              {paymentsOn && awaitingPayment && (
+                <button type="button" onClick={payForReview} disabled={paying} className={BTN_PRIMARY}>
+                  {paying ? "Starting…" : "Pay for review"}
                 </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={rating === 0}
-            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-60"
-          >
-            Submit
-          </button>
-        </div>
-      )}
-
-      {submitted && booking.rating && (
-        <div className="mt-3 flex items-center gap-2 text-[12px]">
-          <span className="text-[var(--ds-muted)]">Your rating:</span>
-          <span className="inline-flex gap-0.5">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Star
-                key={n}
-                className="size-3.5"
-                fill={n <= (booking.rating ?? 0) ? "var(--ds-amber-fg)" : "none"}
-                color={n <= (booking.rating ?? 0) ? "var(--ds-amber-fg)" : "var(--ds-subtle)"}
-                strokeWidth={1.5}
+              )}
+              {showOpenDraft && (
+                <a href={`/editor/${openId}`} className={BTN_GHOST}>
+                  <FileText className="size-3.5" aria-hidden />
+                  Open draft
+                </a>
+              )}
+              <BookingThread
+                booking={booking}
+                perspective="requester"
+                title={displayName}
+                subtitle={booking.matterTitle ?? displayRole}
               />
-            ))}
-          </span>
+            </div>
+          </header>
+
+          {(paymentNote ||
+            disputeNote ||
+            awaitingPayment ||
+            booking.responseNote ||
+            booking.deliveryNote ||
+            canRate ||
+            (submitted && booking.rating)) && (
+            <div className="mt-2.5 flex flex-col gap-2">
+              {paymentNote && <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">{paymentNote}</p>}
+
+              {disputeNote && <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">{disputeNote}</p>}
+
+              {!paymentsOn && awaitingPayment && (
+                <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">
+                  {booking.status === "delivered"
+                    ? "Awaiting payment. Online payment isn't available yet, so this booking can't be completed."
+                    : "Awaiting payment. Online payment isn't available yet, so the specialist can't start on this booking."}
+                </p>
+              )}
+
+              {paymentsOn && awaitingPayment && (
+                <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">
+                  {agreedPrice(booking)
+                    ? `${agreedPrice(booking)}, as agreed when you booked. Secure checkout via Stripe.`
+                    : "Secure checkout via Stripe."}
+                  {booking.paymentStatus === "failed" ? " Your last payment didn't go through." : ""}
+                </p>
+              )}
+
+              {booking.responseNote && (
+                <RowNote label="Specialist note">{booking.responseNote}</RowNote>
+              )}
+
+              {booking.deliveryNote && (
+                <RowNote tone="green" label="Delivered">
+                  {booking.deliveryNote}
+                </RowNote>
+              )}
+
+              {/* Completing needs a paid booking, so rating waits for the payment. */}
+              {canRate && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span className="text-[12.5px] font-medium text-[var(--ds-ink)]">
+                    Rate this review
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-label="Rate this review out of 5"
+                    className="flex gap-0.5"
+                    onMouseLeave={() => setHoverRating(0)}
+                  >
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const filled = n <= (hoverRating || rating);
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          role="radio"
+                          aria-checked={rating === n}
+                          onClick={() => setRating(n)}
+                          onMouseEnter={() => setHoverRating(n)}
+                          className={`grid size-7 place-items-center rounded-[var(--ds-r-s)] transition hover:bg-[var(--ds-surface)] ${
+                            filled ? "text-[var(--ds-amber-dot)]" : "text-[var(--ds-faint)]"
+                          }`}
+                          aria-label={`${n} star${n === 1 ? "" : "s"}`}
+                        >
+                          <Star
+                            className="size-4"
+                            fill={filled ? "currentColor" : "none"}
+                            strokeWidth={1.5}
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={rating === 0}
+                    className={`${BTN_PRIMARY} sm:ml-auto`}
+                  >
+                    Submit
+                  </button>
+                </div>
+              )}
+
+              {submitted && booking.rating && (
+                <div className="flex items-center gap-2 text-[12.5px]">
+                  <span className="text-[var(--ds-muted)]">Your rating</span>
+                  <span className="inline-flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star
+                        key={n}
+                        className="size-3.5"
+                        fill={n <= (booking.rating ?? 0) ? "var(--ds-amber-dot)" : "none"}
+                        color={n <= (booking.rating ?? 0) ? "var(--ds-amber-dot)" : "var(--ds-faint)"}
+                        strokeWidth={1.5}
+                      />
+                    ))}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
-      {(() => {
-        // Prefer the readable local id — the editor store is keyed by it.
-        // booking.draftId becomes a server UUID after sync, which the store
-        // can't resolve, so fall back to it only when no local id exists.
-        const openId = booking.localDraftId ?? booking.draftId;
-        if (!openId || openId.startsWith("demo-")) return null;
-        return (
-          <a
-            href={`/editor/${openId}`}
-            className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-          >
-            <FileText className="size-3.5" aria-hidden />
-            Open draft
-          </a>
-        );
-      })()}
-
-      <BookingThread booking={booking} perspective="requester" />
-    </article>
+      </div>
+    </Row>
   );
 }
-

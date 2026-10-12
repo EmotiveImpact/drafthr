@@ -1,27 +1,50 @@
-import { useState } from "react";
-import { MessageSquare, Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowUp, MessageSquare } from "lucide-react";
 import { useBookingsStore, type Booking, type BookingMessage } from "@/lib/bookings";
 import { pushBookingMessage } from "@/lib/marketplaceSync";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { StatusBadge } from "@/components/consultants/StatusBadge";
+import { BTN_GHOST } from "@/components/consultants/ui";
+import { cn } from "@/lib/utils";
 
 /**
  * Per-booking chat thread. Same component used by:
  *   - ConsultantInbox (perspective: 'consultant' — sends as the consultant)
  *   - MyBookings (perspective: 'requester' — sends as HR)
  *
- * Local-only for now (writes to useBookingsStore). When the server-side
- * thread API lands, perspective stays as the only prop and the store
- * call gets swapped for an API call.
+ * Renders a "Messages" button on the booking row; the thread opens in a
+ * 14B-style side panel with the 3A composer at the bottom.
+ *
+ * Local-first: writes to useBookingsStore and mirrors to the server.
  */
 export function BookingThread({
   booking,
   perspective,
+  title,
+  subtitle,
 }: {
   booking: Booking;
   perspective: "requester" | "consultant";
+  /** Panel heading, e.g. the other party's name or the letter title. */
+  title?: string;
+  subtitle?: string;
 }) {
   const appendMessage = useBookingsStore((s) => s.appendMessage);
   const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(false);
   const messages = booking.messages ?? [];
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) endRef.current?.scrollIntoView({ block: "end" });
+  }, [open, messages.length]);
 
   // The other party gets the "From them" treatment.
   const onSubmit = async (e: React.FormEvent) => {
@@ -52,74 +75,116 @@ export function BookingThread({
     }
   };
 
+  const otherParty = perspective === "consultant" ? "HR" : "Specialist";
+
   return (
-    <details className="mt-3 group rounded-md border border-[var(--ds-line)] open:bg-[var(--ds-surface-2)]">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)]">
-        <span className="inline-flex items-center gap-1.5">
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button type="button" className={BTN_GHOST}>
           <MessageSquare className="size-3.5" aria-hidden />
-          Thread {messages.length > 0 && <span className="font-normal">({messages.length})</span>}
-        </span>
-        <span aria-hidden className="text-[14px] text-[var(--ds-muted)] group-open:rotate-180 transition-transform">▾</span>
-      </summary>
-      <div className="px-3 pb-3">
-        {messages.length === 0 ? (
-          <p className="py-3 text-center text-[12px] italic text-[var(--ds-muted)]">
-            No messages yet — say hello.
-          </p>
-        ) : (
-          <ul className="space-y-2 py-2">
-            {messages.map((m) => (
-              <MessageBubble
-                key={m.id}
-                msg={m}
-                mine={m.from === perspective}
-              />
-            ))}
-          </ul>
-        )}
-        <form onSubmit={onSubmit} className="mt-2 flex gap-2">
-          <input
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={
-              perspective === "consultant"
-                ? "Reply to HR..."
-                : "Reply to the consultant..."
-            }
-            aria-label="Message"
-            maxLength={4000}
-            className="flex-1 h-9 rounded-[6px] border border-[var(--ds-line)] bg-white px-3 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10"
-          />
-          <button
-            type="submit"
-            disabled={!draft.trim()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-[6px] bg-[var(--ds-ink)] px-3 text-[12px] font-semibold text-white disabled:opacity-60"
-          >
-            <Send className="size-3.5" aria-hidden />
-            Send
-          </button>
+          Messages
+          {messages.length > 0 && (
+            <span className="ds-mono text-[11.5px] text-[var(--ds-faint)]">{messages.length}</span>
+          )}
+        </button>
+      </SheetTrigger>
+      <SheetContent
+        side="right"
+        className="w-full gap-0 border-[var(--ds-line)] bg-[var(--ds-surface)] p-0 text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)] sm:max-w-[440px]"
+      >
+        <SheetHeader className="gap-1 border-b border-[var(--ds-line)] px-5 pb-4 pt-5 text-left">
+          <SheetTitle className="pr-8 text-[15px] font-medium leading-snug text-[var(--ds-ink)]">
+            {title ?? "Messages"}
+          </SheetTitle>
+          <SheetDescription asChild>
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[var(--ds-muted)]">
+              <StatusBadge status={booking.status} />
+              {subtitle && <span className="min-w-0 truncate">{subtitle}</span>}
+            </div>
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {messages.length === 0 ? (
+            <div className="grid h-full place-items-center">
+              <p className="m-0 text-center text-[13px] text-[var(--ds-muted)]">
+                No messages yet. Say hello.
+              </p>
+            </div>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {messages.map((m) => (
+                <MessageBubble key={m.id} msg={m} mine={m.from === perspective} theirLabel={otherParty} />
+              ))}
+            </ul>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        {/* 3A composer: soft box, text area, dark square send button */}
+        <form onSubmit={onSubmit} className="px-4 pb-4 pt-1">
+          <div className="flex flex-col gap-2 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3.5 pb-2.5 pt-3 transition focus-within:border-[var(--ds-line-strong)] focus-within:shadow-[var(--ds-shadow-s)]">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  e.currentTarget.form?.requestSubmit();
+                }
+              }}
+              placeholder={
+                perspective === "consultant"
+                  ? "Reply to HR..."
+                  : "Reply to the consultant..."
+              }
+              aria-label="Message"
+              maxLength={4000}
+              rows={2}
+              className="block max-h-[132px] min-h-[44px] w-full resize-none border-0 bg-transparent p-0 text-[14px] leading-[22px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[11.5px] text-[var(--ds-faint)]">Enter to send</span>
+              <button
+                type="submit"
+                disabled={!draft.trim()}
+                aria-label="Send"
+                className="grid size-8 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)] disabled:opacity-30"
+              >
+                <ArrowUp className="size-4" aria-hidden />
+              </button>
+            </div>
+          </div>
         </form>
-      </div>
-    </details>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-function MessageBubble({ msg, mine }: { msg: BookingMessage; mine: boolean }) {
+function MessageBubble({
+  msg,
+  mine,
+  theirLabel,
+}: {
+  msg: BookingMessage;
+  mine: boolean;
+  theirLabel: string;
+}) {
   return (
-    <li className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+    <li className={cn("flex flex-col gap-1", mine ? "items-end" : "items-start")}>
       <div
-        className={`max-w-[80%] rounded-[8px] px-3 py-2 text-[12.5px] leading-snug ${
+        className={cn(
+          "max-w-[85%] whitespace-pre-wrap rounded-[var(--ds-r-m)] px-3 py-2 text-[13.5px] leading-snug",
           mine
-            ? "bg-[var(--ds-ink)] text-white"
-            : "bg-white border border-[var(--ds-line)] text-[var(--ds-ink)]"
-        }`}
+            ? "bg-[var(--ds-surface-3)] text-[var(--ds-ink)]"
+            : "border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)]",
+        )}
       >
-        <p>{msg.text}</p>
-        <p className={`mt-1 text-[10.5px] ${mine ? "text-white/60" : "text-[var(--ds-muted)]"}`}>
-          {new Date(msg.ts).toLocaleString()}
-        </p>
+        {msg.text}
       </div>
+      <p className="m-0 px-1 text-[11px] text-[var(--ds-muted)]">
+        {mine ? "You" : theirLabel}, {new Date(msg.ts).toLocaleString()}
+      </p>
     </li>
   );
 }
