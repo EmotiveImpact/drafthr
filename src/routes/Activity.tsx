@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Box, Flex, Text } from "@radix-ui/themes";
+import { Box, Flex, Text } from "@radix-ui/themes";
 import {
   Bot,
   Calendar as CalendarIcon,
@@ -34,6 +34,7 @@ import {
   type TimelineCategory,
 } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
+import { PageShell, StatusPill } from "@/components/reports/parts";
 
 type Event = DraftTimelineItem & {
   draftId: string;
@@ -231,39 +232,44 @@ export function Activity() {
   }, [selectedDay]);
 
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8" data-activity-section>
+    <PageShell width="medium" className="scroll-mt-4">
+      <div data-activity-section>
       <PageHeader
         crumbs={[{ label: "Activity" }]}
         title="Audit trail"
-        lede="Every draft, regeneration, comment, review, and export — grouped by letter, pinned to one day. Use the picker, prev/next, or chips to scrub."
+        lede="Every draft, regeneration, comment, review and export, grouped by letter and pinned to one day. Use the date picker, previous and next, or the tabs to scrub."
+        tabs={events.length === 0 ? undefined : CATEGORY_FILTERS.map((f) => ({ id: f.id, label: f.label }))}
+        activeTab={filter}
+        onTabChange={(id) => setFilter(id as TimelineCategory | "all")}
       />
 
       {events.length === 0 ? (
-        <EmptyState
-          icon={ActivityIcon}
-          title="No activity yet"
-          body="Start drafting a letter and the audit trail builds itself — every regenerate, export, and attestation is logged here."
-          primary={{ label: "Start a letter", to: "/" }}
-        />
+        <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)]">
+          <EmptyState
+            icon={ActivityIcon}
+            title="No activity yet"
+            body="Start drafting a letter and the audit trail builds itself: every regenerate, export and attestation is logged here."
+            primary={{ label: "Start a letter", to: "/" }}
+          />
+        </div>
       ) : (
         <>
-          {/* ── Toolbar: search + filters + day nav ── */}
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] mb-5">
-            {/* Row 1: Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--ds-muted)] pointer-events-none" />
+          {/* Toolbar: search + day nav */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1 sm:max-w-[320px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-muted)]" />
               <input
                 type="text"
                 placeholder="Search drafts, people, events…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-9 h-10 rounded-t-lg bg-transparent text-[13px] placeholder:text-[var(--ds-muted)] focus:outline-none transition border-b border-[var(--ds-line)]"
+                className="h-9 w-full rounded-[var(--ds-r-s)] bg-[var(--ds-surface-2)] pl-8 pr-8 text-[13px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/30"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+                  className="absolute right-2 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
                   aria-label="Clear search"
                 >
                   <X className="size-3.5" />
@@ -271,84 +277,58 @@ export function Activity() {
               )}
             </div>
 
-            {/* Row 2: Filter chips + day nav */}
-            <div className="flex items-center gap-2 px-3 py-2">
-              {/* Chips */}
-              <div className="flex items-center gap-1 overflow-x-auto">
-                {CATEGORY_FILTERS.map((f) => {
-                  const active = filter === f.id;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setFilter(f.id)}
-                      className={cn(
-                        "shrink-0 inline-flex items-center h-6 px-2.5 rounded-full text-[11px] font-medium transition",
-                        active
-                          ? "bg-[var(--ds-ink)] text-white"
-                          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]",
-                      )}
-                    >
-                      {f.label}
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Day navigation */}
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={goPrev}
+                disabled={!canPrev}
+                className="inline-flex size-8 items-center justify-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Previous active day"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
 
-              {/* Spacer */}
-              <div className="flex-1" />
+              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-3 text-[12.5px] font-medium text-[var(--ds-ink)] transition hover:bg-[var(--ds-surface-2)]"
+                  >
+                    <CalendarIcon className="size-3.5 text-[var(--ds-muted)]" />
+                    <span>{prettyDay(selectedDay)}</span>
+                    <ChevronDown className="size-3.5 text-[var(--ds-muted)]" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-auto rounded-[var(--ds-r-m)] p-0 shadow-[var(--ds-shadow-l)]">
+                  <MonthGrid
+                    selectedDay={selectedDay}
+                    todayIso={today}
+                    activeDays={eventsByDay}
+                    onPick={(iso) => {
+                      setSelectedDay(iso);
+                      setPickerOpen(false);
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
 
-              {/* Day navigation */}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={goPrev}
-                  disabled={!canPrev}
-                  className="inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
-                  aria-label="Previous active day"
-                >
-                  <ChevronLeft className="size-3.5" />
-                </button>
-
-                <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 h-6 px-2 rounded text-[12px] font-medium tabular-nums hover:bg-[var(--ds-line-2)] transition"
-                    >
-                      <CalendarIcon className="size-3 text-[var(--ds-muted)]" />
-                      <span>{prettyDay(selectedDay)}</span>
-                      <ChevronDown className="size-3 text-[var(--ds-muted)]" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="p-0 w-auto">
-                    <MonthGrid
-                      selectedDay={selectedDay}
-                      todayIso={today}
-                      activeDays={eventsByDay}
-                      onPick={(iso) => {
-                        setSelectedDay(iso);
-                        setPickerOpen(false);
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-
-                <button
-                  type="button"
-                  onClick={goNext}
-                  disabled={!canNext}
-                  className="inline-flex items-center justify-center size-6 rounded text-[var(--ds-muted)] disabled:opacity-30 disabled:cursor-not-allowed hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition"
-                  aria-label="Next active day"
-                >
-                  <ChevronRight className="size-3.5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!canNext}
+                className="inline-flex size-8 items-center justify-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-30"
+                aria-label="Next active day"
+              >
+                <ChevronRight className="size-4" />
+              </button>
             </div>
+          </div>
 
-            {/* Row 3: Recent days strip */}
+          {/* Recent days strip */}
+          <div className="mb-5 flex items-center gap-1.5">
             {recentDays.length > 1 && (
-              <div className="flex items-center gap-1 px-3 pb-2.5 overflow-x-auto">
+              <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
                 {recentDays.slice(0, 10).map((day) => {
                   const active = day === selectedDay;
                   const count = eventsByDay.get(day)?.length ?? 0;
@@ -358,29 +338,29 @@ export function Activity() {
                       type="button"
                       onClick={() => setSelectedDay(day)}
                       className={cn(
-                        "shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11px] font-medium tabular-nums transition",
+                        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium transition",
                         active
-                          ? "bg-[var(--ds-ink)] text-white"
-                          : "bg-[var(--ds-line-2)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
+                          ? "bg-[var(--ds-accent)] text-[var(--ds-on-accent)]"
+                          : "bg-[var(--ds-chip)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
                       )}
                     >
                       <span>{relDayLabel(day, today)}</span>
-                      <span className={cn("opacity-60", active && "opacity-80")}>{count}</span>
+                      <span className={cn("ds-mono text-[11px] opacity-60", active && "opacity-80")}>{count}</span>
                     </button>
                   );
                 })}
-                <span className="ml-auto text-[11px] tabular-nums text-[var(--ds-muted)] shrink-0 pl-2">
-                  {draftGroups.length} {draftGroups.length === 1 ? "letter" : "letters"}
-                  {" · "}
-                  {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
-                </span>
               </div>
             )}
+            <span className="ml-auto shrink-0 pl-2 text-[12px] text-[var(--ds-muted)]">
+              {draftGroups.length} {draftGroups.length === 1 ? "letter" : "letters"}
+              {", "}
+              {dayEvents.length} {dayEvents.length === 1 ? "event" : "events"}
+            </span>
           </div>
 
           {/* Draft groups for the selected day */}
           {draftGroups.length === 0 ? (
-            <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] py-10 text-center">
+            <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] py-10 text-center">
               <ActivityIcon className="size-6 mx-auto text-[var(--ds-muted)] mb-2" />
               <Text size="2" color="gray">
                 {filter === "all"
@@ -389,7 +369,7 @@ export function Activity() {
               </Text>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {draftGroups.map((g) => (
                 <DraftGroupCard
                   key={g.draftId}
@@ -403,7 +383,8 @@ export function Activity() {
           )}
         </>
       )}
-    </Box>
+      </div>
+    </PageShell>
   );
 }
 
@@ -423,10 +404,10 @@ function DraftGroupCard({
 }) {
   const summaryParts = buildSummaryParts(group.counts);
   return (
-    <div className="rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-      {/* Card header — click to expand, separate button to open editor */}
-      <div className="flex items-start gap-3 p-3">
-        <div className="mt-0.5 grid place-items-center size-8 rounded-md bg-[var(--ds-line-2)] text-[var(--ds-ink)] shrink-0">
+    <div className="overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)]">
+      {/* Card header: click to expand, separate button to open editor */}
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-surface-2)] text-[var(--ds-body)]">
           <FileText className="size-4" />
         </div>
         <div className="flex-1 min-w-0">
@@ -438,9 +419,9 @@ function DraftGroupCard({
             >
               {group.draftLabel}
             </button>
-            <Badge color="gray" variant="soft">
-              {group.mode === "employer" ? "HR" : "employee"}
-            </Badge>
+            <StatusPill tone="neutral" dot={false} size="sm">
+              {group.mode === "employer" ? "HR" : "Employee"}
+            </StatusPill>
           </div>
           {summaryParts.length > 0 && (
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-[var(--ds-muted)]">
@@ -450,15 +431,14 @@ function DraftGroupCard({
                   <span className="tabular-nums">{p.text}</span>
                 </span>
               ))}
-              <span className="text-[var(--ds-subtle)]">·</span>
-              <span className="tabular-nums">{formatTime(group.lastEvent.createdAt)}</span>
+              <span className="ds-mono text-[11.5px]">{formatTime(group.lastEvent.createdAt)}</span>
             </div>
           )}
         </div>
         <button
           type="button"
           onClick={onToggle}
-          className="shrink-0 inline-flex items-center justify-center size-7 rounded-md text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60 transition"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
           aria-label={expanded ? "Collapse events" : "Expand events"}
           aria-expanded={expanded}
         >
@@ -468,7 +448,7 @@ function DraftGroupCard({
 
       {/* Expanded event list */}
       {expanded && (
-        <div className="border-t border-[var(--ds-line-2)] bg-[var(--ds-line-2)]/30">
+        <div className="border-t border-[var(--ds-line-2)] bg-[var(--ds-surface-2)]">
           {group.events
             .slice()
             .sort((a, b) => b.createdAt - a.createdAt)
@@ -492,7 +472,7 @@ function DraftGroupCard({
                     </Text>
                   )}
                 </Box>
-                <Text size="1" color="gray" className="tabular-nums shrink-0">
+                <Text size="1" color="gray" className="ds-mono shrink-0">
                   {formatTime(e.createdAt)}
                 </Text>
               </Flex>
@@ -602,7 +582,7 @@ function MonthGrid({
                 "relative size-8 rounded-md text-[12px] tabular-nums transition",
                 !c.inMonth && "text-[var(--ds-subtle)]",
                 c.inMonth && !isSelected && "text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)]/60",
-                isSelected && "bg-[var(--ds-ink)] text-white font-semibold",
+                isSelected && "bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-semibold",
                 isToday && !isSelected && "ring-1 ring-[var(--ds-ink)] ring-inset",
               )}
             >
@@ -655,7 +635,7 @@ function iconFor(kind: Event["kind"]) {
   if (kind === "created") return <FilePlus2 className={cls} />;
   if (kind === "section_generated") return <RotateCw className={cls} />;
   if (kind === "exported") return <FileDown className={cls} />;
-  if (kind === "counsel_review") return <ShieldCheck className="size-4 text-[var(--green-11)]" />;
+  if (kind === "counsel_review") return <ShieldCheck className="size-4 text-[var(--ds-green-fg)]" />;
   if (kind.startsWith("comment_")) return <MessageSquare className={cls} />;
   if (kind.startsWith("ai_")) return <Bot className={cls} />;
   if (kind.startsWith("collaborator_")) return <UserPlus className={cls} />;

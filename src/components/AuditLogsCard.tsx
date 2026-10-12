@@ -14,8 +14,9 @@
  * Non-admin members never see this card — gated by activeTenant.role.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Box, Button, Card, Flex, Heading, Separator, Text } from "@radix-ui/themes";
-import { ExternalLink, Send } from "lucide-react";
+import { Button } from "@radix-ui/themes";
+import { SectionCard, StatusPill } from "@/components/reports/parts";
+import { ExternalLink, ScrollText, Send } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 
@@ -97,7 +98,7 @@ export function AuditLogsCard() {
         toast.error(json.error ?? "Failed to send test event");
         return;
       }
-      toast.success(json.message ?? "Test event sent — check your SIEM.");
+      toast.success(json.message ?? "Test event sent. Check your SIEM.");
       void refresh();
     } catch (err) {
       console.warn("[audit-logs] test event failed", err);
@@ -112,49 +113,42 @@ export function AuditLogsCard() {
   const streaming = Boolean(status?.enabled && status?.configured);
 
   return (
-    <Card size="3">
-      <Box mb="3">
-        <Flex align="center" gap="2" mb="1">
-          <Heading size="3">Audit Logs (WorkOS)</Heading>
+    <SectionCard
+      icon={ScrollText}
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          Audit logs (WorkOS)
           {loading ? (
-            <Badge color="gray" variant="soft">Loading…</Badge>
+            <StatusPill tone="neutral" size="sm">Loading…</StatusPill>
           ) : streaming ? (
-            <Badge color="green" variant="soft">Streaming to WorkOS</Badge>
+            <StatusPill tone="ok" size="sm">Streaming to WorkOS</StatusPill>
           ) : status?.configured ? (
-            <Badge color="amber" variant="soft">Configured, mirror disabled</Badge>
+            <StatusPill tone="warn" size="sm">Configured, mirror disabled</StatusPill>
           ) : (
-            <Badge color="gray" variant="soft">Not configured</Badge>
+            <StatusPill tone="neutral" size="sm">Not configured</StatusPill>
           )}
-        </Flex>
-        <Text size="2" color="gray" as="p">
-          Every audit event written to the local tamper-evident chain is also mirrored to
-          WorkOS Audit Logs, so your SOC team can subscribe a SIEM feed. The local chain
-          remains the source of truth.
-        </Text>
-      </Box>
-
-      <Separator size="4" mb="3" />
-
-      <Flex direction="column" gap="2">
-        <Flex justify="between" align="center" wrap="wrap" gap="2">
-          <Text size="2" color="gray">WorkOS organization</Text>
-          <Text size="2">
+        </span>
+      }
+      description="Every audit event written to the local tamper-evident chain is also mirrored to WorkOS Audit Logs, so your SOC team can subscribe a SIEM feed. The local chain remains the source of truth."
+    >
+      <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)] text-[13px]">
+        <div className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+          <dt className="text-[var(--ds-muted)]">WorkOS organisation</dt>
+          <dd className="m-0 text-[var(--ds-ink)]">
             {status?.workosOrgId ? (
-              <code className="text-xs">{status.workosOrgId}</code>
+              <code className="ds-mono text-xs">{status.workosOrgId}</code>
             ) : (
-              <span>Not paired — contact support</span>
+              <span>Not paired, contact support</span>
             )}
-          </Text>
-        </Flex>
-        <Flex justify="between" align="center" wrap="wrap" gap="2">
-          <Text size="2" color="gray">Last successful mirror</Text>
-          <Text size="2">{formatLastSent(status?.lastSentAt ?? null)}</Text>
-        </Flex>
-      </Flex>
+          </dd>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+          <dt className="text-[var(--ds-muted)]">Last successful mirror</dt>
+          <dd className="m-0 text-[var(--ds-ink)]">{formatLastSent(status?.lastSentAt ?? null)}</dd>
+        </div>
+      </dl>
 
-      <Separator size="4" my="3" />
-
-      <Flex gap="2" wrap="wrap">
+      <div className="mt-4 flex flex-wrap gap-2">
         <Button
           variant="soft"
           color="gray"
@@ -172,14 +166,14 @@ export function AuditLogsCard() {
           <Send className="size-4" />
           {testLoading ? "Sending…" : "Send test event"}
         </Button>
-      </Flex>
-    </Card>
+      </div>
+    </SectionCard>
   );
 }
 
 function formatLastSent(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "Never";
   const date = new Date(iso);
-  if (isNaN(date.getTime())) return "—";
+  if (isNaN(date.getTime())) return "Never";
   return date.toLocaleString();
 }

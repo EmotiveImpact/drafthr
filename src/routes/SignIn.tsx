@@ -100,7 +100,7 @@ export function SignIn() {
         throw new Error(
           "Sign-in API didn't respond with JSON. If you're running `npm run dev` " +
             "locally, switch to `vercel dev` so /api/auth/* is served. " +
-            "If you're on production, please report this — it shouldn't happen.",
+            "If you're on production, please report this. It shouldn't happen.",
         );
       }
       const data = (await res.json().catch(() => ({}))) as {
@@ -207,25 +207,20 @@ export function SignIn() {
           </Link>
           <section
             aria-labelledby="signin-heading"
-            className="w-full rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_1px_2px_rgba(10,11,13,0.04),0_24px_60px_-30px_rgba(10,11,13,0.18)]"
+            className="w-full rounded-[var(--ds-r-xl)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-m)] lg:border-transparent lg:shadow-none"
         >
           <div className="px-7 pt-8 pb-6 sm:px-9">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
+            <p className="text-[13px] text-[var(--ds-muted)]">
               Sign in
             </p>
             <h1
               id="signin-heading"
-              className="mt-2 text-[var(--ds-ink)] font-semibold"
-              style={{
-                fontSize: "clamp(22px, 3vw, 26px)",
-                lineHeight: 1.15,
-                letterSpacing: 0,
-              }}
+              className="ds-title mt-2 text-[clamp(28px,3.4vw,34px)] leading-[1.12]"
             >
               Sign in to draft tribunal-grade HR letters.
             </h1>
             <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
-              Pick up where you left off — your drafts, matters, and audit
+              Pick up where you left off. Your drafts, matters and audit
               chain are waiting.
             </p>
           </div>
@@ -276,13 +271,13 @@ export function SignIn() {
                 <div className="flex items-baseline justify-between mb-1.5">
                   <label
                     htmlFor="password"
-                    className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)]"
+                    className="block text-[13px] font-medium text-[var(--ds-ink)]"
                   >
                     Password
                   </label>
                   <Link
                     to="/sign-in/forgot-password"
-                    className="text-[11.5px] font-semibold text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+                    className="text-[12.5px] text-[var(--ds-muted)] underline-offset-2 hover:text-[var(--ds-ink)] hover:underline transition"
                   >
                     Forgot password?
                   </Link>
@@ -296,7 +291,7 @@ export function SignIn() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={isBusy}
-                    className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white pl-3 pr-10 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+                    className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] pl-3 pr-10 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
                   />
                   <button
                     type="button"
@@ -328,7 +323,7 @@ export function SignIn() {
               <button
                 type="submit"
                 disabled={isBusy}
-                className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px] shadow-sm hover:-translate-y-px hover:shadow-md transition disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-sm"
+                className="w-full inline-flex items-center justify-center gap-2 h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-accent)]"
               >
                 {submitting === "password" ? (
                   <>
@@ -382,7 +377,7 @@ const Field = ({
   <div>
     <label
       htmlFor={props.id}
-      className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
+      className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
     >
       {props.label}
     </label>
@@ -396,7 +391,7 @@ const Field = ({
       onChange={(e) => props.onChange(e.target.value)}
       required={props.required}
       disabled={props.disabled}
-      className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+      className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
     />
   </div>
 );
@@ -405,7 +400,7 @@ function Divider({ label }: { label: string }) {
   return (
     <div className="my-5 flex items-center gap-3" aria-hidden>
       <span className="flex-1 h-px bg-[var(--ds-line)]" />
-      <span className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--ds-muted)]">
+      <span className="text-[12px] text-[var(--ds-muted)]">
         {label}
       </span>
       <span className="flex-1 h-px bg-[var(--ds-line)]" />
@@ -444,7 +439,7 @@ function SocialButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={ariaLabel}
-      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[9px] border border-[var(--ds-line)] bg-white text-[var(--ds-ink)] font-semibold text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-white disabled:hover:border-[var(--ds-line)]"
+      className="w-full inline-flex items-center justify-center gap-1.5 h-[40px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] font-medium text-[12.5px] hover:border-[var(--ds-subtle)] hover:bg-[var(--ds-surface-2)] transition disabled:opacity-60 disabled:hover:bg-[var(--ds-surface)] disabled:hover:border-[var(--ds-line)]"
     >
       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Glyph />}
       <span className="truncate">{shortLabel}</span>

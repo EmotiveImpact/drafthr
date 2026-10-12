@@ -152,31 +152,32 @@ export function SignupWorkspace() {
         </Flex>
         <PageHeader
           title={`Set up your workspace${user.firstName ? `, ${user.firstName}` : ""}`}
-          lede="A workspace is your team's shared HR letter library. Drafts, evidence, and audit log are scoped to one workspace. You can belong to several — switch between them in the sidebar."
+          lede="A workspace is your team's shared HR letter library. Drafts, evidence and the audit log are scoped to one workspace. You can belong to several and switch between them in the sidebar."
         />
 
         <Flex direction="column" gap="4">
-          <Flex gap="2">
-            <Button
-              variant={mode === "create" ? "solid" : "soft"}
-              color="gray"
-              onClick={() => setMode("create")}
-            >
-              <Building2 className="size-4" />
-              Create new workspace
-            </Button>
-            <Button
-              variant={mode === "join" ? "solid" : "soft"}
-              color="gray"
-              onClick={() => setMode("join")}
-            >
-              <Mail className="size-4" />
-              Join via invite link
-            </Button>
-          </Flex>
+          {/* Two 6B pastel cards side by side: pick create or join */}
+          <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="How do you want to start?">
+            <ChoiceCard
+              selected={mode === "create"}
+              onSelect={() => setMode("create")}
+              tint="sky"
+              icon={<Building2 className="size-6" strokeWidth={1.5} />}
+              title="Create a workspace"
+              line="Start fresh as the owner and invite your team afterwards."
+            />
+            <ChoiceCard
+              selected={mode === "join"}
+              onSelect={() => setMode("join")}
+              tint="mint"
+              icon={<Mail className="size-6" strokeWidth={1.5} />}
+              title="Join with an invite"
+              line="Paste the link or code your admin shared with you."
+            />
+          </div>
 
           {mode === "create" ? (
-            <Card size="3">
+            <Card size="3" className="!rounded-[var(--ds-r-l)]">
               <Box mb="3">
                 <Heading size="3" mb="1">Create new workspace</Heading>
                 <Text size="2" color="gray" as="p">
@@ -207,9 +208,9 @@ export function SignupWorkspace() {
                     <Select.Trigger placeholder="Select…" />
                     <Select.Content>
                       <Select.Item value="solo">Just me</Select.Item>
-                      <Select.Item value="2-10">2–10</Select.Item>
-                      <Select.Item value="11-50">11–50</Select.Item>
-                      <Select.Item value="51-200">51–200</Select.Item>
+                      <Select.Item value="2-10">2 to 10</Select.Item>
+                      <Select.Item value="11-50">11 to 50</Select.Item>
+                      <Select.Item value="51-200">51 to 200</Select.Item>
                       <Select.Item value="200+">200+</Select.Item>
                     </Select.Content>
                   </Select.Root>
@@ -224,7 +225,7 @@ export function SignupWorkspace() {
               </Flex>
             </Card>
           ) : (
-            <Card size="3">
+            <Card size="3" className="!rounded-[var(--ds-r-l)]">
               <Box mb="3">
                 <Heading size="3" mb="1">Join via invite</Heading>
                 <Text size="2" color="gray" as="p">
@@ -285,7 +286,7 @@ function WorkspaceTopbar({ user }: { user?: AuthUser }) {
       <div className="mx-auto flex h-full max-w-5xl items-center gap-4">
         <div className="ml-auto flex min-w-0 items-center gap-3">
           <div className="hidden min-w-0 text-right sm:block">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--ds-muted)]">
+            <p className="text-[13px] text-[var(--ds-muted)]">
               Workspace setup
             </p>
             {displayName && (
@@ -306,10 +307,59 @@ function WorkspaceFooter() {
         <Link to="/privacy" className="hover:text-[var(--ds-ink)] transition">
           Privacy
         </Link>
-        <span className="hidden opacity-60 sm:inline">·</span>
         <span>&copy; {new Date().getFullYear()} DraftHR. All rights reserved.</span>
       </div>
     </footer>
+  );
+}
+
+const CHOICE_TINTS = {
+  sky: ["var(--ds-tint-sky)", "var(--ds-tint-sky-ink)"],
+  mint: ["var(--ds-tint-mint)", "var(--ds-tint-mint-ink)"],
+} as const;
+
+/** 6B pastel choice card: tinted top with an icon, a title and one line. */
+function ChoiceCard({
+  selected,
+  onSelect,
+  tint,
+  icon,
+  title,
+  line,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  tint: keyof typeof CHOICE_TINTS;
+  icon: React.ReactNode;
+  title: string;
+  line: string;
+}) {
+  const [bg, ink] = CHOICE_TINTS[tint];
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      className={
+        "flex min-w-0 flex-col rounded-[var(--ds-r-l)] border bg-[var(--ds-surface)] p-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)] " +
+        (selected
+          ? "border-[var(--ds-ink)] shadow-[var(--ds-shadow-m)]"
+          : "border-[var(--ds-line)] hover:border-[var(--ds-line-strong)]")
+      }
+    >
+      <span
+        className="grid h-[76px] place-items-center rounded-[calc(var(--ds-r-l)-5px)]"
+        style={{ background: bg, color: ink }}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <span className="px-2.5 pb-2 pt-3">
+        <span className="block text-[15px] font-semibold text-[var(--ds-ink)]">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-[var(--ds-muted)]">{line}</span>
+      </span>
+    </button>
   );
 }
 

@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, AlertTriangle, ShieldCheck } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { AlertTriangle, ShieldCheck } from "lucide-react";
 import { format } from "date-fns";
 
 import type { Draft, Matter } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { EmptyState } from "@/components/ds";
+import { EmptyState, PageHeader } from "@/components/ds";
+import { PageShell, PaperThumb, StatusPill } from "@/components/reports/parts";
 import { briefTitleFor } from "@/lib/letters/display";
 import {
   failingDraftsForCheck,
@@ -51,9 +52,9 @@ export function FailingCheckDrillDown() {
 
   if (!check) {
     return (
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <BackToReports />
-        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px]">
+      <PageShell width="medium">
+        <PageHeader crumbs={[{ label: "Reports", href: "/reports" }, { label: "Failing check" }]} title="Failing check" />
+        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[var(--ds-r-l)]">
           <EmptyState
             icon={AlertTriangle}
             title="Check not found"
@@ -61,47 +62,26 @@ export function FailingCheckDrillDown() {
             primary={{ label: "Back to Reports", to: "/reports" }}
           />
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      <BackToReports />
-
-      <header className="mb-5">
-        <h1
-          className="m-0 text-[var(--ds-ink)] font-semibold inline-flex items-center gap-2.5"
-          style={{
-            fontSize: "clamp(22px, 3.2vw, 28px)",
-            lineHeight: 1.2,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {check.label}
-          <span
-            className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-semibold tabular-nums"
-            style={{
-              background:
-                failing.length === 0
-                  ? "var(--ds-green-bg)"
-                  : "var(--ds-red-bg)",
-              color:
-                failing.length === 0
-                  ? "var(--ds-green-fg)"
-                  : "var(--ds-red-fg)",
-            }}
-            data-testid="failing-count"
-          >
-            {failing.length} failing
+    <PageShell width="medium">
+      <PageHeader
+        crumbs={[{ label: "Reports", href: "/reports" }, { label: "Failing check" }]}
+        title={check.label}
+        lede={check.description}
+        actions={
+          <span data-testid="failing-count">
+            <StatusPill tone={failing.length === 0 ? "ok" : "danger"}>
+              {failing.length} failing
+            </StatusPill>
           </span>
-        </h1>
-        <p className="m-0 mt-2 text-[14px] text-[var(--ds-body)] max-w-[68ch] leading-relaxed">
-          {check.description}
-        </p>
-      </header>
+        }
+      />
 
-      <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden">
+      <section className="min-w-0 bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[var(--ds-r-l)] overflow-hidden">
         {failing.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
@@ -116,25 +96,7 @@ export function FailingCheckDrillDown() {
           />
         )}
       </section>
-    </div>
-  );
-}
-
-/* ─── chrome ─────────────────────────────────────────────────────────── */
-
-function BackToReports() {
-  return (
-    <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
-      <Link
-        to="/reports"
-        className="inline-flex items-center gap-1 hover:text-[var(--ds-ink)] transition"
-      >
-        <ArrowLeft className="size-3" />
-        Reports
-      </Link>
-      <span className="opacity-40">/</span>
-      <span className="text-[var(--ds-ink)] font-medium">Failing check</span>
-    </div>
+    </PageShell>
   );
 }
 
@@ -150,30 +112,30 @@ function FailingTable({
   onRowClick: (draftId: string) => void;
 }) {
   return (
-    <table className="w-full text-[13px] border-collapse">
-      <thead>
-        <tr className="text-left text-[11.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)]">
-          <th className="px-4 py-3 font-semibold">Title</th>
-          <th className="px-4 py-3 font-semibold">Matter</th>
-          <th className="px-4 py-3 font-semibold">Owner</th>
-          <th className="px-4 py-3 font-semibold">Reason this letter is failing</th>
-          <th className="px-4 py-3 font-semibold">Last edited</th>
+    <table className="w-full border-collapse text-[13px] block md:table">
+      <thead className="hidden md:table-header-group">
+        <tr className="text-left text-[12px] text-[var(--ds-muted)] border-b border-[var(--ds-line)]">
+          <th className="px-4 py-2.5 font-normal">Title</th>
+          <th className="px-4 py-2.5 font-normal">Matter</th>
+          <th className="px-4 py-2.5 font-normal">Owner</th>
+          <th className="px-4 py-2.5 font-normal">Reason this letter is failing</th>
+          <th className="px-4 py-2.5 font-normal">Last edited</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className="block md:table-row-group">
         {rows.map(({ draft, reason }) => {
           const matter = draft.matterId ? matters[draft.matterId] : undefined;
           const owner =
             (draft.collaborators ?? []).find((c) => c.role === "owner")?.name ??
             (draft.collaborators ?? []).find((c) => c.role === "owner")?.email ??
             draft.employer?.legalName ??
-            "—";
+            "Unassigned";
           return (
             <tr
               key={draft.id}
               tabIndex={0}
               role="button"
-              aria-label={`Open ${briefTitleFor(draft)} — ${reason}`}
+              aria-label={`Open ${briefTitleFor(draft)}: ${reason}`}
               onClick={() => onRowClick(draft.id)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -181,21 +143,24 @@ function FailingTable({
                   onRowClick(draft.id);
                 }
               }}
-              className="border-t border-[var(--ds-line-2)] cursor-pointer hover:bg-[var(--ds-line-2)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
+              className="relative flex flex-col gap-1 px-4 py-3.5 md:table-row md:p-0 border-t border-[var(--ds-line-2)] first:border-t-0 cursor-pointer hover:bg-[var(--ds-surface-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)]/40 transition"
             >
-              <td className="px-4 py-3 text-[var(--ds-ink)] font-medium">
-                {briefTitleFor(draft)}
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[var(--ds-ink)] font-semibold text-[14px]">
+                <span className="flex min-w-0 items-center gap-3">
+                  <PaperThumb seed={draft.letterType} className="hidden md:block" />
+                  <span className="min-w-0">{briefTitleFor(draft)}</span>
+                </span>
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)]">
-                {matter?.name ?? <span className="text-[var(--ds-subtle)] italic">Unfiled</span>}
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-muted)] md:text-[13px] md:text-[var(--ds-body)]">
+                {matter?.name ?? <span className="text-[var(--ds-subtle)]">Unfiled</span>}
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)] truncate max-w-[160px]">
+              <td className="hidden md:table-cell md:px-4 md:py-3 text-[var(--ds-body)] truncate max-w-[160px]">
                 {owner}
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)] max-w-[320px]">
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-red-fg)] md:max-w-[320px] md:text-[13px]">
                 {reason}
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)] tabular-nums whitespace-nowrap">
+              <td className="hidden md:table-cell md:px-4 md:py-3 ds-mono text-[12px] text-[var(--ds-muted)] whitespace-nowrap">
                 {format(new Date(draft.updatedAt), "yyyy-MM-dd")}
               </td>
             </tr>

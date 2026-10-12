@@ -1,4 +1,4 @@
-import { Card, Box, Text } from "@radix-ui/themes";
+import { Box, Text } from "@radix-ui/themes";
 import { todayDateOnly } from "@/lib/date-only";
 import { PublicLegalShell } from "@/components/PublicLegalShell";
 
@@ -17,7 +17,7 @@ import { PublicLegalShell } from "@/components/PublicLegalShell";
 export function Terms() {
   return (
     <PublicLegalShell
-      title="Terms of Service"
+      title="Terms of service"
       subtitle={
         <>
           Effective date:{" "}
@@ -29,8 +29,8 @@ export function Terms() {
         </>
       }
     >
-      <Card size="3">
-        <Box className="prose prose-sm max-w-none [&_h2]:font-semibold [&_h2]:text-base [&_h2]:mt-6 [&_h2]:mb-2 [&_h3]:font-semibold [&_h3]:text-sm [&_h3]:mt-4 [&_h3]:mb-1 [&_p]:leading-relaxed [&_p]:my-2 [&_ul]:my-2 [&_ul]:pl-5 [&_li]:my-1 [&_strong]:font-semibold">
+      <div>
+        <Box className="min-w-0 text-[15px] leading-[1.7] text-[var(--ds-body)] [overflow-wrap:anywhere] [&_h2]:ds-title [&_h2]:text-[24px] [&_h2]:leading-tight [&_h2]:mt-12 [&_h2]:mb-3 [&_h2:first-child]:mt-0 [&_h3]:font-semibold [&_h3]:text-[15px] [&_h3]:text-[var(--ds-ink)] [&_h3]:mt-6 [&_h3]:mb-1.5 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1.5 [&_strong]:font-semibold [&_strong]:text-[var(--ds-ink)] [&_a]:text-[var(--ds-ink)] [&_a]:underline [&_a]:underline-offset-2 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
           <h2>1. Acceptance</h2>
           <p>
             By creating an account or otherwise accessing the DraftHR service
@@ -304,7 +304,7 @@ export function Terms() {
             privacy-specific enquiries, see the Privacy Policy.
           </p>
         </Box>
-      </Card>
+      </div>
     </PublicLegalShell>
   );
 }

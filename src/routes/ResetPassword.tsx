@@ -50,7 +50,7 @@ export function ResetPassword() {
         <div className="mt-5">
           <Link
             to="/sign-in/forgot-password"
-            className="inline-flex items-center justify-center w-full h-[42px] rounded-[9px] bg-[var(--ds-ink)] text-white font-semibold text-[13.5px]"
+            className="inline-flex items-center justify-center w-full h-[42px] rounded-[var(--ds-r-m)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] font-medium text-[14px] hover:bg-[var(--ds-accent-hover)] transition"
           >
             Request a new reset link
           </Link>
@@ -172,7 +172,7 @@ const RevealField = forwardRef<HTMLInputElement, RevealFieldProps>(function Reve
     <div>
       <label
         htmlFor={props.id}
-        className="block text-[12px] font-semibold tracking-[0.01em] text-[var(--ds-ink)] mb-1.5"
+        className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
       >
         {props.label}
       </label>
@@ -186,7 +186,7 @@ const RevealField = forwardRef<HTMLInputElement, RevealFieldProps>(function Reve
           onChange={(e) => props.onChange(e.target.value)}
           required
           disabled={props.disabled}
-          className="w-full h-[40px] rounded-[8px] border border-[var(--ds-line)] bg-white pl-3 pr-16 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-ink)]/10 disabled:opacity-60"
+          className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] pl-3 pr-16 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
         />
         <button
           type="button"
@@ -194,7 +194,7 @@ const RevealField = forwardRef<HTMLInputElement, RevealFieldProps>(function Reve
           onClick={() => setShow((v) => !v)}
           aria-pressed={show}
           aria-label={show ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-medium text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
         >
           {show ? "Hide" : "Show"}
         </button>

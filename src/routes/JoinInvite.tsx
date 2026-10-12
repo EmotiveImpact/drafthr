@@ -40,10 +40,10 @@ export function JoinInvite() {
   }, [inviteCode, user, isLoaded, nav]);
 
   return (
-    <div className="min-h-screen grid place-items-center px-6">
+    <div className="min-h-screen grid place-items-center bg-[var(--ds-canvas)] px-6">
       <div className="w-full max-w-md space-y-4 text-center">
         <Skeleton className="h-6 w-2/3 mx-auto" />
-        <p className="text-sm text-muted-foreground">Opening invite…</p>
+        <p className="text-[13px] text-[var(--ds-muted)]">Opening invite…</p>
       </div>
     </div>
   );

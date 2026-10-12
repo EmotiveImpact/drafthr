@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, FileText, TrendingUp } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { FileText, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 
 import type { Draft, Matter, RiskBand } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { EmptyState } from "@/components/ds";
+import { EmptyState, PageHeader } from "@/components/ds";
+import { PageShell, PaperThumb } from "@/components/reports/parts";
 import { briefTitleFor } from "@/lib/letters/display";
 import { draftsInMatter } from "@/lib/matters";
 import { effectiveRiskBand } from "@/lib/matters/risk";
@@ -57,9 +58,9 @@ export function MatterDrillDown() {
 
   if (!matter) {
     return (
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <BackToReports />
-        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px]">
+      <PageShell width="medium">
+        <PageHeader crumbs={[{ label: "Reports", href: "/reports" }, { label: "Matter" }]} title="Matter" />
+        <div className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[var(--ds-r-l)]">
           <EmptyState
             icon={TrendingUp}
             title="Matter not found"
@@ -67,13 +68,12 @@ export function MatterDrillDown() {
             primary={{ label: "Back to Reports", to: "/reports" }}
           />
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      <BackToReports />
+    <PageShell width="medium">
       <DrillDownHeader
         matter={matter}
         employeeCount={employeeCount}
@@ -81,7 +81,7 @@ export function MatterDrillDown() {
         riskBand={riskBand}
       />
 
-      <section className="bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[12px] overflow-hidden mt-5">
+      <section className="min-w-0 bg-[var(--ds-surface)] border border-[var(--ds-line)] rounded-[var(--ds-r-l)] overflow-hidden">
         {matterDrafts.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -92,27 +92,11 @@ export function MatterDrillDown() {
           <DraftTable drafts={matterDrafts} onRowClick={(id) => nav(`/editor/${id}`)} />
         )}
       </section>
-    </div>
+    </PageShell>
   );
 }
 
 /* ─── chrome ─────────────────────────────────────────────────────────── */
-
-function BackToReports() {
-  return (
-    <div className="text-[12px] text-[var(--ds-muted)] mb-3.5 flex items-center gap-1.5">
-      <Link
-        to="/reports"
-        className="inline-flex items-center gap-1 hover:text-[var(--ds-ink)] transition"
-      >
-        <ArrowLeft className="size-3" />
-        Reports
-      </Link>
-      <span className="opacity-40">/</span>
-      <span className="text-[var(--ds-ink)] font-medium">Matter</span>
-    </div>
-  );
-}
 
 function DrillDownHeader({
   matter,
@@ -127,35 +111,28 @@ function DrillDownHeader({
 }) {
   const tone = riskTone(riskBand);
   return (
-    <header className="mb-2">
-      <h1
-        className="m-0 text-[var(--ds-ink)] font-semibold"
-        style={{
-          fontSize: "clamp(22px, 3.2vw, 28px)",
-          lineHeight: 1.2,
-          letterSpacing: "-0.02em",
-        }}
-      >
-        {matter.name}
-      </h1>
-      <div className="mt-2 flex items-center flex-wrap gap-3 text-[13px] text-[var(--ds-body)]">
-        <span className="tabular-nums">
-          {draftCount} draft{draftCount === 1 ? "" : "s"}
+    <PageHeader
+      crumbs={[{ label: "Reports", href: "/reports" }, { label: "Matter" }]}
+      title={matter.name}
+      lede={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span>
+            {draftCount} draft{draftCount === 1 ? "" : "s"}
+          </span>
+          <span>
+            {employeeCount} {employeeCount === 1 ? "person" : "people"}
+          </span>
+          <span
+            className="inline-flex h-6 items-center gap-1.5 rounded-full px-[9px] text-[12px] font-medium"
+            style={{ background: tone.bg, color: tone.fg }}
+            data-testid="matter-risk-band"
+          >
+            <span className="size-1.5 rounded-full" style={{ background: tone.fg }} aria-hidden />
+            {riskBand.charAt(0).toUpperCase() + riskBand.slice(1)} risk
+          </span>
         </span>
-        <span className="opacity-40">·</span>
-        <span className="tabular-nums">
-          {employeeCount} {employeeCount === 1 ? "person" : "people"}
-        </span>
-        <span className="opacity-40">·</span>
-        <span
-          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11.5px] font-semibold uppercase tracking-wider"
-          style={{ background: tone.bg, color: tone.fg }}
-          data-testid="matter-risk-band"
-        >
-          {riskBand} risk
-        </span>
-      </div>
-    </header>
+      }
+    />
   );
 }
 
@@ -223,17 +200,17 @@ function DraftTable({
   onRowClick: (draftId: string) => void;
 }) {
   return (
-    <table className="w-full text-[13px] border-collapse">
-      <thead>
-        <tr className="text-left text-[11.5px] font-semibold uppercase tracking-wider text-[var(--ds-muted)]">
-          <th className="px-4 py-3 font-semibold">Title</th>
-          <th className="px-4 py-3 font-semibold">Status</th>
-          <th className="px-4 py-3 font-semibold">Severity</th>
-          <th className="px-4 py-3 font-semibold">Last edited</th>
-          <th className="px-4 py-3 font-semibold">Owner</th>
+    <table className="w-full border-collapse text-[13px] block md:table">
+      <thead className="hidden md:table-header-group">
+        <tr className="text-left text-[12px] text-[var(--ds-muted)] border-b border-[var(--ds-line)]">
+          <th className="px-4 py-2.5 font-normal">Title</th>
+          <th className="px-4 py-2.5 font-normal">Status</th>
+          <th className="px-4 py-2.5 font-normal">Severity</th>
+          <th className="px-4 py-2.5 font-normal">Last edited</th>
+          <th className="px-4 py-2.5 font-normal">Owner</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody className="block md:table-row-group">
         {drafts.map((d) => {
           const sev = severityFor(d);
           const tone = severityTone(sev);
@@ -242,7 +219,7 @@ function DraftTable({
             (d.collaborators ?? []).find((c) => c.role === "owner")?.name ??
             (d.collaborators ?? []).find((c) => c.role === "owner")?.email ??
             d.employer?.legalName ??
-            "—";
+            "Unassigned";
           return (
             <tr
               key={d.id}
@@ -256,15 +233,18 @@ function DraftTable({
                   onRowClick(d.id);
                 }
               }}
-              className="border-t border-[var(--ds-line-2)] cursor-pointer hover:bg-[var(--ds-line-2)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-ink)]/30 transition"
+              className="relative flex flex-col gap-1 px-4 py-3.5 md:table-row md:p-0 border-t border-[var(--ds-line-2)] first:border-t-0 cursor-pointer hover:bg-[var(--ds-surface-2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)]/40 transition"
             >
-              <td className="px-4 py-3 text-[var(--ds-ink)] font-medium">
-                {briefTitleFor(d)}
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[var(--ds-ink)] font-semibold text-[14px]">
+                <span className="flex min-w-0 items-center gap-3">
+                  <PaperThumb seed={d.letterType} className="hidden md:block" />
+                  <span className="min-w-0">{briefTitleFor(d)}</span>
+                </span>
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)]">{status}</td>
-              <td className="px-4 py-3">
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-muted)] md:text-[13px] md:text-[var(--ds-body)]">{status}</td>
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle">
                 <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider"
+                  className="inline-flex h-6 items-center rounded-full px-[9px] text-[12px] font-medium capitalize"
                   style={{ background: tone.bg, color: tone.fg }}
                   data-testid={`severity-${d.id}`}
                   data-severity={sev}
@@ -272,10 +252,10 @@ function DraftTable({
                   {sev}
                 </span>
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)] tabular-nums">
+              <td className="hidden md:table-cell md:px-4 md:py-3 ds-mono text-[12px] text-[var(--ds-muted)]">
                 {format(new Date(d.updatedAt), "yyyy-MM-dd")}
               </td>
-              <td className="px-4 py-3 text-[var(--ds-body)] truncate max-w-[200px]">
+              <td className="hidden md:table-cell md:px-4 md:py-3 text-[var(--ds-body)] truncate max-w-[200px]">
                 {owner}
               </td>
             </tr>

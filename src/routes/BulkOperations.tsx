@@ -1,11 +1,14 @@
-import { PageHeader } from "@/components/ds";
+import { Avatar, PageHeader } from "@/components/ds";
+import { PageShell, PaperThumb, StatusPill } from "@/components/reports/parts";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   AlertTriangle,
+  Archive,
   CheckCircle2,
+  Layers,
   ChevronLeft,
   ChevronRight,
   CircleDot,
@@ -17,13 +20,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
@@ -319,50 +315,15 @@ export default function BulkOperations() {
     (step === 3 && parsed !== null && !parsed.error && parsed.rows.length > 0);
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
+    <PageShell>
       <PageHeader
         crumbs={[{ label: "Business" }, { label: "Bulk operations" }]}
         title="Generate letters in bulk"
         lede="Upload a CSV of employees and we'll create one personalised draft per row. Review and finalise each draft individually before sending."
       />
 
-      {/* Progress chips */}
-      {step < 5 && (
-        <ol className="mb-8 flex flex-wrap items-center gap-2 text-xs">
-          {STEP_LABELS.map((label, idx) => {
-            const stepNum = (idx + 1) as Step;
-            const active = stepNum === step;
-            const done = stepNum < step;
-            return (
-              <li key={label} className="flex items-center gap-2">
-                <span
-                  className={[
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 transition-colors",
-                    active
-                      ? "border-foreground bg-foreground text-background"
-                      : done
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        : "border-border text-muted-foreground",
-                  ].join(" ")}
-                >
-                  {done ? (
-                    <CheckCircle2 className="h-3 w-3" />
-                  ) : (
-                    <CircleDot className="h-3 w-3" />
-                  )}
-                  <span className="font-medium">
-                    {idx + 1} · {label}
-                  </span>
-                </span>
-                {idx < STEP_LABELS.length - 1 && (
-                  <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-
+      <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="min-w-0 lg:order-1 order-2">
       <AnimatePresence mode="wait">
         <motion.div
           key={step}
@@ -415,7 +376,7 @@ export default function BulkOperations() {
       </AnimatePresence>
 
       {step < 5 && (
-        <div className="mt-10 flex items-center justify-between">
+        <div className="mt-8 flex items-center justify-between border-t border-[var(--ds-line)] pt-5">
           <Button
             variant="ghost"
             onClick={() => setStep((s) => (s > 1 ? ((s - 1) as Step) : s))}
@@ -456,11 +417,67 @@ export default function BulkOperations() {
         </div>
       )}
 
-      <p className="mt-12 text-xs text-muted-foreground">
-        <Link to="/" className="underline-offset-2 hover:underline">
-          ← Back to drafts
+      <p className="mt-10 text-[12.5px] text-[var(--ds-muted)]">
+        <Link to="/" className="inline-flex items-center gap-1 underline-offset-2 hover:text-[var(--ds-ink)] hover:underline">
+          <ChevronLeft className="size-3.5" aria-hidden />
+          Back to drafts
         </Link>
       </p>
+      </div>
+
+      <aside className="order-1 min-w-0 lg:order-2">
+        <StepsCard step={step} />
+      </aside>
+      </div>
+    </PageShell>
+  );
+}
+
+/* ---------- 4B step card ---------- */
+
+const ALL_STEPS = [...STEP_LABELS, "Results"] as const;
+
+function StepsCard({ step }: { step: Step }) {
+  const pct = Math.round(((step - 1) / (ALL_STEPS.length - 1)) * 100);
+  return (
+    <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4 lg:sticky lg:top-6">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="m-0 text-[14px] font-semibold text-[var(--ds-ink)]">Steps</h2>
+        <span className="ds-mono text-[12px] text-[var(--ds-muted)]">
+          {Math.min(step, ALL_STEPS.length)} / {ALL_STEPS.length}
+        </span>
+      </div>
+      <div className="mt-3 h-1 overflow-hidden rounded-full bg-[var(--ds-surface-3)]" aria-hidden>
+        <div className="h-full rounded-full bg-[var(--ds-ink)] transition-[width] duration-300" style={{ width: `${pct}%` }} />
+      </div>
+      <ol className="m-0 mt-3 flex list-none flex-wrap gap-1 p-0 lg:flex-col lg:flex-nowrap">
+        {ALL_STEPS.map((label, idx) => {
+          const stepNum = (idx + 1) as Step;
+          const active = stepNum === step;
+          const done = stepNum < step;
+          return (
+            <li
+              key={label}
+              aria-current={active ? "step" : undefined}
+              className={[
+                "flex shrink-0 items-center gap-2.5 rounded-[var(--ds-r-s)] px-2 py-1.5 text-[13px]",
+                active ? "bg-[var(--ds-surface-2)] font-medium text-[var(--ds-ink)]" : done ? "text-[var(--ds-body)]" : "text-[var(--ds-muted)]",
+              ].join(" ")}
+            >
+              {done ? (
+                <CheckCircle2 className="size-4 shrink-0 text-[var(--ds-green-fg)]" aria-hidden />
+              ) : active ? (
+                <CircleDot className="size-4 shrink-0 text-[var(--ds-ink)]" aria-hidden />
+              ) : (
+                <span className="grid size-4 shrink-0 place-items-center rounded-full border border-[var(--ds-line-strong)] text-[9px]" aria-hidden />
+              )}
+              <span className="whitespace-nowrap">
+                {idx + 1}. {label}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -476,23 +493,29 @@ function StepOperation({
 }) {
   return (
     <section>
-      <h2 className="text-lg font-semibold">Choose operation</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">Choose operation</h2>
+      <p className="m-0 mt-1 text-[13px] text-[var(--ds-muted)]">
         What would you like to do in bulk?
       </p>
 
       <RadioGroup
         value={operation}
         onValueChange={(v) => setOperation(v as Operation)}
-        className="mt-6 space-y-3"
+        className="mt-5 grid gap-3 sm:grid-cols-3"
       >
         <OperationOption
           value="generate"
+          icon={FileSpreadsheet}
+          tint="var(--ds-tint-mint)"
+          ink="var(--ds-tint-mint-ink)"
           title="Generate letters from CSV"
           description="Upload a CSV of employees and create one draft per row."
         />
         <OperationOption
           value="mass_update"
+          icon={Layers}
+          tint="var(--ds-tint-sky)"
+          ink="var(--ds-tint-sky-ink)"
           title="Mass-update an existing batch"
           description="Apply the same edit across drafts in a batch."
           disabled
@@ -500,6 +523,9 @@ function StepOperation({
         />
         <OperationOption
           value="bulk_archive"
+          icon={Archive}
+          tint="var(--ds-tint-butter)"
+          ink="var(--ds-tint-butter-ink)"
           title="Bulk-archive closed matters"
           description="Sweep up matters you've finished and tidy your workspace."
           disabled
@@ -516,39 +542,49 @@ function OperationOption({
   description,
   disabled,
   badge,
+  icon: Icon,
+  tint,
+  ink,
 }: {
   value: string;
   title: string;
   description: string;
   disabled?: boolean;
   badge?: string;
+  icon: typeof Upload;
+  tint: string;
+  ink: string;
 }) {
   return (
     <Label
       htmlFor={`op-${value}`}
       className={[
-        "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors",
+        "flex min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-[var(--ds-r-l)] border bg-[var(--ds-surface)] text-left leading-normal transition has-[[data-state=checked]]:border-[var(--ds-ink)] has-[[data-state=checked]]:shadow-[0_0_0_1px_var(--ds-ink)]",
         disabled
-          ? "cursor-not-allowed border-border/60 bg-muted/30 opacity-60"
-          : "border-border hover:border-foreground/40 hover:bg-muted/40",
+          ? "cursor-not-allowed border-[var(--ds-line)] opacity-55"
+          : "cursor-pointer border-[var(--ds-line)] hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)]",
       ].join(" ")}
     >
-      <RadioGroupItem
-        value={value}
-        id={`op-${value}`}
-        disabled={disabled}
-        className="mt-0.5"
-      />
-      <div className="flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{title}</span>
-          {badge && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              {badge}
-            </span>
-          )}
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      <div
+        className="relative mx-1.5 mt-1.5 grid h-[84px] place-items-center rounded-[calc(var(--ds-r-l)-5px)]"
+        style={{ background: tint, color: ink }}
+      >
+        <Icon className="size-8" strokeWidth={1.4} aria-hidden />
+        <RadioGroupItem
+          value={value}
+          id={`op-${value}`}
+          disabled={disabled}
+          className="absolute left-2.5 top-2.5 bg-[var(--ds-surface)]"
+        />
+        {badge && (
+          <span className="absolute right-2 top-2 whitespace-nowrap rounded-full bg-[var(--ds-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--ds-muted)]">
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="px-3.5 pb-3.5 pt-3">
+        <span className="block text-[13.5px] font-semibold text-[var(--ds-ink)]">{title}</span>
+        <p className="m-0 mt-1 text-[12px] font-normal leading-snug text-[var(--ds-muted)]">{description}</p>
       </div>
     </Label>
   );
@@ -566,40 +602,73 @@ function StepTemplate({
   const selected = hrTemplates.find((t) => t.id === letterType);
   return (
     <section>
-      <h2 className="text-lg font-semibold">Pick a template</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">Pick a template</h2>
+      <p className="m-0 mt-1 text-[13px] text-[var(--ds-muted)]">
         Every row in your CSV will use this letter type. You can run bulk
         operations again for other templates.
       </p>
 
-      <div className="mt-6">
-        <Label className="text-xs font-medium text-muted-foreground">
-          HR letter template
-        </Label>
-        <div className="mt-1.5">
-          <Select value={letterType} onValueChange={setLetterType}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Pick a template" />
-            </SelectTrigger>
-            <SelectContent>
-              {hrTemplates.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.shortTitle}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {selected && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            {selected.description}
-          </p>
-        )}
+      <div
+        role="radiogroup"
+        aria-label="HR letter template"
+        className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+      >
+        {hrTemplates.map((t, i) => {
+          const on = t.id === letterType;
+          const [tint, ink] = TEMPLATE_TINTS[i % TEMPLATE_TINTS.length];
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setLetterType(t.id)}
+              className={[
+                "flex min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border bg-[var(--ds-surface)] text-left transition",
+                on
+                  ? "border-[var(--ds-ink)] shadow-[0_0_0_1px_var(--ds-ink)]"
+                  : "border-[var(--ds-line)] hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)]",
+              ].join(" ")}
+            >
+              <span
+                className="relative mx-1.5 mt-1.5 block h-[64px] overflow-hidden rounded-[calc(var(--ds-r-l)-5px)]"
+                style={{ background: tint }}
+              >
+                <span className="absolute -bottom-3 left-1/2 flex h-[58px] w-[54px] -translate-x-1/2 -rotate-[2.5deg] flex-col gap-1 rounded-[3px] bg-[var(--ds-surface)] px-2 pt-2 shadow-[var(--ds-shadow-m)]">
+                  <span className="mb-0.5 size-1.5 rounded-[1.5px]" style={{ background: ink }} />
+                  <span className="h-[3px] w-3/5 rounded bg-[var(--ds-line-strong)]" />
+                  <span className="h-[3px] w-full rounded bg-[var(--ds-line)]" />
+                  <span className="h-[3px] w-full rounded bg-[var(--ds-line)]" />
+                </span>
+                {on && (
+                  <CheckCircle2 className="absolute right-2 top-2 size-4 text-[var(--ds-ink)]" aria-hidden />
+                )}
+              </span>
+              <span className="px-3.5 pb-3 pt-2.5">
+                <span className="block truncate text-[13.5px] font-semibold text-[var(--ds-ink)]">{t.shortTitle}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
+
+      {selected && (
+        <p className="m-0 mt-4 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+          <span className="font-medium text-[var(--ds-body)]">{selected.shortTitle}:</span> {selected.description}
+        </p>
+      )}
     </section>
   );
 }
+
+const TEMPLATE_TINTS: [string, string][] = [
+  ["var(--ds-tint-lavender)", "var(--ds-tint-lavender-ink)"],
+  ["var(--ds-tint-mint)", "var(--ds-tint-mint-ink)"],
+  ["var(--ds-tint-peach)", "var(--ds-tint-peach-ink)"],
+  ["var(--ds-tint-sky)", "var(--ds-tint-sky-ink)"],
+  ["var(--ds-tint-butter)", "var(--ds-tint-butter-ink)"],
+  ["var(--ds-tint-rose)", "var(--ds-tint-rose-ink)"],
+];
 
 function StepUpload({
   dropRef,
@@ -624,24 +693,24 @@ function StepUpload({
 }) {
   return (
     <section>
-      <h2 className="text-lg font-semibold">Upload CSV</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">Upload CSV</h2>
+      <p className="m-0 mt-1 text-[13px] text-[var(--ds-muted)]">
         Header row required. Every row must have a value for
-        <code className="mx-1 rounded bg-muted px-1 py-0.5 text-[11px]">
+        <code className="ds-mono mx-1 rounded bg-[var(--ds-chip)] px-1 py-0.5 text-[11.5px]">
           employee_name
         </code>
-        — other fields are optional.
+        . Other fields are optional.
       </p>
 
       <div
         ref={dropRef}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
-        className="mt-6 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/20 px-6 py-10 text-center transition-colors hover:border-foreground/40"
+        className="mt-5 flex flex-col items-center justify-center rounded-[var(--ds-r-l)] border border-dashed border-[var(--ds-line-strong)] bg-[var(--ds-surface-2)] px-6 py-10 text-center transition-colors hover:border-[var(--ds-ink)]"
       >
-        <Upload className="h-6 w-6 text-muted-foreground" />
-        <p className="mt-3 text-sm font-medium">Drag CSV here</p>
-        <p className="text-xs text-muted-foreground">or</p>
+        <Upload className="size-6 text-[var(--ds-muted)]" />
+        <p className="m-0 mt-3 text-[14px] font-medium text-[var(--ds-ink)]">Drag CSV here</p>
+        <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">or</p>
         <Button variant="outline" className="mt-3" onClick={onPickFile}>
           Choose file
         </Button>
@@ -653,26 +722,26 @@ function StepUpload({
           onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
         />
         {csvFileName && (
-          <p className="mt-4 text-xs text-muted-foreground">
-            <FileSpreadsheet className="mr-1 inline h-3 w-3" />
+          <p className="m-0 mt-4 text-[12.5px] text-[var(--ds-muted)]">
+            <FileSpreadsheet className="mr-1 inline size-3.5" />
             {csvFileName}
             {parsed && !parsed.error && (
-              <> · {parsed.rows.length} row{parsed.rows.length === 1 ? "" : "s"}</>
+              <>, {parsed.rows.length} row{parsed.rows.length === 1 ? "" : "s"}</>
             )}
           </p>
         )}
         {parsed?.error && (
-          <p className="mt-3 max-w-sm text-xs text-red-600 dark:text-red-400">
+          <p className="m-0 mt-3 max-w-sm text-[12.5px] text-[var(--ds-red-fg)]">
             {parsed.error}
           </p>
         )}
       </div>
 
-      <div className="mt-6 rounded-xl border border-border bg-muted/20 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium">Sample CSV header for this template</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+      <div className="mt-4 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="m-0 text-[13px] font-medium text-[var(--ds-ink)]">Sample CSV header for this template</p>
+            <p className="m-0 mt-1 text-[12.5px] text-[var(--ds-muted)]">
               Use these column names so we can map every field automatically.
             </p>
           </div>
@@ -686,8 +755,8 @@ function StepUpload({
             Download sample
           </Button>
         </div>
-        <div className="mt-3 overflow-x-auto rounded-md border border-border bg-background p-2">
-          <code className="block whitespace-nowrap text-[11px] text-muted-foreground">
+        <div className="mt-3 overflow-x-auto rounded-[var(--ds-r-s)] bg-[var(--ds-surface-2)] p-2.5">
+          <code className="ds-mono block whitespace-nowrap text-[11.5px] text-[var(--ds-body)]">
             {sampleHeaders.join(", ")}
           </code>
         </div>
@@ -724,8 +793,8 @@ function StepPreview({
   if (parsed.rows.length === 0 && parsed.warnings.length === 0) {
     return (
       <section>
-        <h2 className="text-lg font-semibold">Preview</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">Preview</h2>
+        <p className="m-0 mt-1 text-[13px] text-[var(--ds-muted)]">
           Upload a CSV to see preview.
         </p>
       </section>
@@ -734,19 +803,19 @@ function StepPreview({
 
   return (
     <section aria-busy={generating}>
-      <h2 className="text-lg font-semibold">Preview</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {parsed.rows.length} row{parsed.rows.length === 1 ? "" : "s"} ready ·
+      <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">Preview</h2>
+      <p className="m-0 mt-1 text-[13px] text-[var(--ds-muted)]">
+        {parsed.rows.length} row{parsed.rows.length === 1 ? "" : "s"} ready,
         {" "}
-        {parsed.warnings.length} warning{parsed.warnings.length === 1 ? "" : "s"}
+        {parsed.warnings.length} warning{parsed.warnings.length === 1 ? "" : "s"}.
         {" "}
-        · estimated time: instant (stub)
+        Estimated time: instant (stub)
       </p>
 
       {missing.length > 0 && (
         <div
           role="alert"
-          className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+          className="mt-4 rounded-[var(--ds-r-l)] bg-[var(--ds-amber-bg)] px-4 py-3 text-[13px] text-[var(--ds-amber-fg)]"
         >
           <p className="flex items-center gap-2 font-medium">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" aria-hidden />
@@ -771,35 +840,51 @@ function StepPreview({
         </div>
       )}
 
-      <ul className="mt-6 divide-y divide-border overflow-hidden rounded-xl border border-border">
-        {visibleRows.map((row, i) => (
-          <li key={i} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-            <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-500" />
-            <span className="font-medium">{row.employee_name}</span>
-            <span className="text-xs text-muted-foreground">
-              {[
-                row.employee_job_title,
-                row.probation_outcome ?? row.probationOutcome,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-          </li>
-        ))}
+      <ul className="m-0 mt-5 list-none p-0">
+        {visibleRows.map((row, i) => {
+          const rowMissing = missing.find((m) => m.rowNumber === (parsed.rowNumbers?.[i] ?? i + 2));
+          return (
+            <li
+              key={i}
+              className={[
+                "relative flex items-center gap-3 rounded-[var(--ds-r-m)] px-3 py-2.5 hover:bg-[var(--ds-surface-2)]",
+                i > 0 ? "before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--ds-line)]" : "",
+              ].join(" ")}
+            >
+              <Avatar seed={row.employee_name} name={row.employee_name} size="xl" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-semibold text-[var(--ds-ink)]">{row.employee_name}</span>
+                <span className="block truncate text-[12.5px] text-[var(--ds-muted)]">
+                  {[
+                    row.employee_job_title,
+                    row.probation_outcome ?? row.probationOutcome,
+                  ]
+                    .filter(Boolean)
+                    .join(", ") || "No extra fields"}
+                </span>
+              </span>
+              {rowMissing ? (
+                <StatusPill tone="warn" size="sm">
+                  {rowMissing.fields.length} missing
+                </StatusPill>
+              ) : (
+                <StatusPill tone="ok" size="sm">Ready</StatusPill>
+              )}
+            </li>
+          );
+        })}
         {parsed.warnings.map((w) => (
           <li
             key={`w-${w.rowIndex}`}
-            className="flex items-center gap-3 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400"
+            className="flex items-center gap-3 rounded-[var(--ds-r-m)] bg-[var(--ds-amber-bg)] px-3 py-2.5 text-[var(--ds-amber-fg)]"
           >
-            <span aria-hidden className="text-base leading-none">
-              ⚠
-            </span>
-            <span className="text-xs">{w.message}</span>
+            <AlertTriangle className="size-4 shrink-0" aria-hidden />
+            <span className="text-[12.5px]">{w.message}</span>
           </li>
         ))}
         {overflow > 0 && (
-          <li className="px-4 py-2.5 text-xs text-muted-foreground">
-            +{overflow} more rows…
+          <li className="px-3 py-2.5 text-[12.5px] text-[var(--ds-muted)]">
+            {overflow} more rows
           </li>
         )}
       </ul>
@@ -829,20 +914,20 @@ function StepResults({
     const pct = Math.round(((state.sectionIndex + 1) / state.sectionCount) * 100);
     return (
       <section aria-busy>
-        <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
-          <Sparkles className="mx-auto h-10 w-10 text-foreground/70" />
-          <h2 className="mt-4 text-xl font-semibold">Drafting template letter…</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-8 text-center">
+          <Sparkles className="mx-auto size-9 text-[var(--ds-muted)]" />
+          <h2 className="m-0 mt-4 text-[17px] font-semibold text-[var(--ds-ink)]">Drafting template letter…</h2>
+          <p className="m-0 mt-2 text-[13px] text-[var(--ds-muted)]">
             One AI call drafts the master template. We'll personalise N copies
-            from it in a moment — no extra API cost.
+            from it in a moment, at no extra API cost.
           </p>
-          <p className="mt-4 text-xs text-muted-foreground">
-            Section {state.sectionIndex + 1} of {state.sectionCount} ·{" "}
-            <span className="font-medium text-foreground">{state.sectionTitle}</span>
+          <p className="m-0 mt-4 text-[12.5px] text-[var(--ds-muted)]">
+            Section {state.sectionIndex + 1} of {state.sectionCount}:{" "}
+            <span className="font-medium text-[var(--ds-ink)]">{state.sectionTitle}</span>
           </p>
-          <div className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-muted">
+          <div className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-[var(--ds-surface-3)]">
             <div
-              className="h-full rounded-full bg-foreground/80 transition-[width] duration-300"
+              className="h-full rounded-full bg-[var(--ds-ink)] transition-[width] duration-300"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -864,21 +949,21 @@ function StepResults({
         : Math.round((state.doneRows / state.totalRows) * 100);
     return (
       <section aria-busy>
-        <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
-          <Loader2 className="mx-auto h-10 w-10 animate-spin text-foreground/70" />
-          <h2 className="mt-4 text-xl font-semibold">
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-8 text-center">
+          <Loader2 className="mx-auto size-9 animate-spin text-[var(--ds-muted)]" />
+          <h2 className="m-0 mt-4 text-[17px] font-semibold text-[var(--ds-ink)]">
             Personalising {state.totalRows} letter{state.totalRows === 1 ? "" : "s"}…
           </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="m-0 mt-2 text-[13px] text-[var(--ds-muted)]">
             Substituting placeholders with each row's values. This is instant
             and runs entirely on your device.
           </p>
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="m-0 mt-4 text-[12.5px] text-[var(--ds-muted)]">
             {state.doneRows} of {state.totalRows} done
           </p>
-          <div className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-muted">
+          <div className="mx-auto mt-3 h-1.5 max-w-xs overflow-hidden rounded-full bg-[var(--ds-surface-3)]">
             <div
-              className="h-full rounded-full bg-foreground/80 transition-[width] duration-300"
+              className="h-full rounded-full bg-[var(--ds-ink)] transition-[width] duration-300"
               style={{ width: `${pct}%` }}
             />
           </div>
@@ -891,10 +976,10 @@ function StepResults({
   if (state.phase === "error") {
     return (
       <section>
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-8 text-center">
-          <AlertTriangle className="mx-auto h-10 w-10 text-red-500" />
-          <h2 className="mt-4 text-xl font-semibold">Generation failed</h2>
-          <p className="mt-2 max-w-md mx-auto text-sm text-muted-foreground">
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-red-bg)] p-8 text-center">
+          <AlertTriangle className="mx-auto size-9 text-[var(--ds-red-fg)]" />
+          <h2 className="m-0 mt-4 text-[17px] font-semibold text-[var(--ds-ink)]">Generation failed</h2>
+          <p className="m-0 mt-2 max-w-md mx-auto text-[13px] text-[var(--ds-body)]">
             {state.message}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -912,10 +997,10 @@ function StepResults({
   if (generated.length === 0) {
     return (
       <section>
-        <div className="rounded-2xl border border-border bg-muted/20 p-8 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-8 text-center">
+          <p className="m-0 text-[13px] text-[var(--ds-muted)]">
             Generation cancelled. Any letters created before you stopped are
-            saved in your Drafts — check there before running the batch again so
+            saved in your Drafts. Check there before running the batch again so
             you don't create duplicates.
           </p>
           <div className="mt-4">
@@ -934,22 +1019,22 @@ function StepResults({
 
   return (
     <section>
-      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6">
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="h-6 w-6 flex-shrink-0 text-emerald-500" />
+      <div>
+        <div className="flex items-start gap-3 rounded-[var(--ds-r-l)] bg-[var(--ds-green-bg)] p-5">
+          <CheckCircle2 className="size-6 flex-shrink-0 text-[var(--ds-green-fg)]" />
           <div>
-            <h2 className="text-xl font-semibold">
+            <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">
               Created {generated.length} draft{generated.length === 1 ? "" : "s"}
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="m-0 mt-1 text-[13px] text-[var(--ds-body)]">
               One AI call drafted the template; the rest is instant client-side
               substitution. Each draft is ready to review and finalise.
               {incompleteCount > 0 && (
                 <>
                   {" "}
-                  <span className="font-medium text-amber-700 dark:text-amber-400">
+                  <span className="font-medium text-[var(--ds-amber-fg)]">
                     {incompleteCount} row{incompleteCount === 1 ? " has" : "s have"}{" "}
-                    unfilled placeholders — flagged below.
+                    unfilled placeholders, flagged below.
                   </span>
                 </>
               )}
@@ -957,44 +1042,49 @@ function StepResults({
           </div>
         </div>
 
-        <ul className="mt-6 divide-y divide-emerald-500/15 overflow-hidden rounded-xl border border-emerald-500/20 bg-background">
-          {visible.map((g) => (
+        <ul className="m-0 mt-5 list-none p-0">
+          {visible.map((g, i) => (
             <li
               key={g.draftId}
-              className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+              className={[
+                "relative flex items-center justify-between gap-3 rounded-[var(--ds-r-m)] px-3 py-2.5",
+                g.unresolved.length > 0 ? "bg-[var(--ds-amber-bg)]" : "hover:bg-[var(--ds-surface-2)]",
+                i > 0 && g.unresolved.length === 0 ? "before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--ds-line)]" : "",
+              ].join(" ")}
             >
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-3">
+                <PaperThumb seed={g.title} />
                 {g.unresolved.length > 0 ? (
                   <span
                     aria-label="Has unfilled placeholders"
                     title={`Missing: ${g.unresolved.join(", ")}`}
-                    className="h-2 w-2 flex-shrink-0 rounded-full bg-amber-500"
+                    className="size-2 flex-shrink-0 rounded-full bg-[var(--ds-amber-dot)]"
                   />
                 ) : (
                   <span
                     aria-label="Ready"
-                    className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500"
+                    className="size-2 flex-shrink-0 rounded-full bg-[var(--ds-green-fg)]"
                   />
                 )}
-                <span className="truncate font-medium">{g.title}</span>
+                <span className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">{g.title}</span>
                 {g.unresolved.length > 0 && (
-                  <span className="text-xs text-amber-700 dark:text-amber-400">
-                    · missing {g.unresolved.length} field
+                  <StatusPill tone="warn" size="sm">
+                    Missing {g.unresolved.length} field
                     {g.unresolved.length === 1 ? "" : "s"}
-                  </span>
+                  </StatusPill>
                 )}
               </div>
               <Link
                 to={`/editor/${g.draftId}`}
-                className="text-xs font-medium text-foreground/70 hover:underline"
+                className="shrink-0 text-[12.5px] font-medium text-[var(--ds-body)] hover:text-[var(--ds-ink)] hover:underline"
               >
                 Open
               </Link>
             </li>
           ))}
           {overflow > 0 && (
-            <li className="px-4 py-2.5 text-xs text-muted-foreground">
-              +{overflow} more draft{overflow === 1 ? "" : "s"}…
+            <li className="px-3 py-2.5 text-[12.5px] text-[var(--ds-muted)]">
+              {overflow} more draft{overflow === 1 ? "" : "s"}
             </li>
           )}
         </ul>

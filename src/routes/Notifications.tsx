@@ -1,7 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Badge, Box, Card, Flex, Heading, Text } from "@radix-ui/themes";
-import { PageHeader } from "@/components/ds";
+import { PageHeader, EmptyState } from "@/components/ds";
 import {
   Bell,
   ArrowUpRight,
@@ -23,22 +22,33 @@ import {
   type NotificationKind,
   type NotificationSeverity,
 } from "@/lib/notifications";
+import { PageShell } from "@/components/reports/parts";
+import { cn } from "@/lib/utils";
 
-const SEVERITY_COLOR: Record<NotificationSeverity, "red" | "amber" | "gray"> = {
-  urgent: "red",
-  warn: "amber",
-  info: "gray",
+const SEVERITY_DOT: Record<NotificationSeverity, string> = {
+  urgent: "bg-[var(--ds-red-fg)]",
+  warn: "bg-[var(--ds-amber-dot)]",
+  info: "bg-[var(--ds-faint)]",
 };
 
-const SEVERITY_BG: Record<NotificationSeverity, string | undefined> = {
-  urgent: "var(--red-2)",
-  warn: "var(--amber-2)",
-  info: undefined,
+const SEVERITY_ICON_BG: Record<NotificationSeverity, string> = {
+  urgent: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
+  warn: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
+  info: "bg-[var(--ds-chip)] text-[var(--ds-muted)]",
 };
+
+const SEVERITY_LABEL: Record<NotificationSeverity, string> = {
+  urgent: "Urgent",
+  warn: "Action recommended",
+  info: "Heads up",
+};
+
+type Tab = "all" | NotificationSeverity;
 
 export function Notifications() {
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
+  const [tab, setTab] = useState<Tab>("all");
 
   const list = useMemo(
     () =>
@@ -54,76 +64,99 @@ export function Notifications() {
   const info = list.filter((n) => n.severity === "info");
 
   return (
-    <Box className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <PageShell width="medium">
       <PageHeader
         crumbs={[{ label: "Notifications" }]}
         title="What needs your attention"
-        lede="Derived from your drafts and profile — tribunal deadlines, ACAS Early Conciliation windows, missing required clauses, counsel-review-pending exports, and stale drafts."
+        lede="Derived from your drafts and profile: tribunal deadlines, ACAS Early Conciliation windows, missing required clauses, exports waiting on counsel review, and stale drafts."
+        tabs={[
+          { id: "all", label: "All", count: list.length },
+          { id: "urgent", label: "Urgent", count: urgent.length },
+          { id: "warn", label: "Action recommended", count: warn.length },
+          { id: "info", label: "Heads up", count: info.length },
+        ]}
+        activeTab={tab}
+        onTabChange={(id) => setTab(id as Tab)}
       />
 
       {list.length === 0 && (
-        <Card size="3">
-          <Flex direction="column" align="center" gap="2" py="6">
-            <Bell className="size-5 text-[var(--gray-9)]" />
-            <Text size="2" weight="medium" as="p">All clear.</Text>
-            <Text size="1" color="gray" align="center" as="p">
-              You'll see deadline reminders, compliance gaps, and counsel-review prompts here.
-            </Text>
-          </Flex>
-        </Card>
+        <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)]">
+          <EmptyState
+            icon={Bell}
+            title="All clear"
+            body="You'll see deadline reminders, compliance gaps and counsel-review prompts here."
+          />
+        </div>
       )}
 
-      <Flex direction="column" gap="3">
-        {urgent.length > 0 && <Section title="Urgent" count={urgent.length} items={urgent} />}
-        {warn.length > 0 && <Section title="Action recommended" count={warn.length} items={warn} />}
-        {info.length > 0 && <Section title="Heads up" count={info.length} items={info} />}
-      </Flex>
-    </Box>
+      <div className="flex flex-col gap-8">
+        {(tab === "all" || tab === "urgent") && urgent.length > 0 && (
+          <Section title="Urgent" items={urgent} />
+        )}
+        {(tab === "all" || tab === "warn") && warn.length > 0 && (
+          <Section title="Action recommended" items={warn} />
+        )}
+        {(tab === "all" || tab === "info") && info.length > 0 && (
+          <Section title="Heads up" items={info} />
+        )}
+        {tab !== "all" && list.length > 0 && list.every((n) => n.severity !== tab) && (
+          <p className="m-0 py-10 text-center text-[13px] text-[var(--ds-muted)]">
+            Nothing in {SEVERITY_LABEL[tab]} right now.
+          </p>
+        )}
+      </div>
+    </PageShell>
   );
 }
 
-function Section({ title, count, items }: { title: string; count: number; items: Notification[] }) {
+function Section({ title, items }: { title: string; items: Notification[] }) {
   const nav = useNavigate();
   return (
-    <Card size="2">
-      <Flex align="center" gap="2" mb="3">
-        <Heading size="3">{title}</Heading>
-        <Badge color="gray" variant="soft">{count}</Badge>
-      </Flex>
-      <Flex direction="column">
-        {items.map((n) => (
+    <section>
+      <h2 className="m-0 mb-2 flex items-center gap-2 text-[15px] font-semibold text-[var(--ds-ink)]">
+        {title}
+        <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">{items.length}</span>
+      </h2>
+      <div className="flex flex-col">
+        {items.map((n, i) => (
           <button
             key={n.id}
+            type="button"
             onClick={() => n.actionHref && nav(n.actionHref)}
-            className="text-left"
+            className={cn(
+              "group relative flex w-full cursor-pointer items-start gap-3 rounded-[var(--ds-r-m)] px-3 py-3.5 text-left hover:bg-[var(--ds-surface-2)]",
+              i > 0 &&
+                "before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--ds-line)] hover:before:border-transparent"
+            )}
           >
-            <Flex
-              px="4"
-              py="3"
-              gap="3"
-              align="start"
-              className="hover:bg-[var(--gray-2)] cursor-pointer border-b border-[var(--gray-5)] last:border-b-0"
-              style={{ background: SEVERITY_BG[n.severity] }}
-            >
-              <Box mt="1">{iconFor(n)}</Box>
-              <Box className="flex-1 min-w-0">
-                <Flex align="center" gap="2" wrap="wrap">
-                  <Text size="2" weight="medium">{n.title}</Text>
-                  <Badge color={SEVERITY_COLOR[n.severity]} variant="soft">{n.severity}</Badge>
-                </Flex>
-                <Text size="1" color="gray" mt="1" as="p" className="leading-relaxed">{n.description}</Text>
-              </Box>
-              {n.actionLabel && (
-                <Flex align="center" gap="1" className="shrink-0">
-                  <Text size="1" color="gray">{n.actionLabel}</Text>
-                  <ArrowUpRight className="size-3 text-[var(--gray-9)]" />
-                </Flex>
+            <span
+              className={cn(
+                "mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--ds-r-s)]",
+                SEVERITY_ICON_BG[n.severity]
               )}
-            </Flex>
+            >
+              {iconFor(n)}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className={cn("size-1.5 shrink-0 rounded-full", SEVERITY_DOT[n.severity])} aria-hidden />
+                <span className="text-[14px] font-semibold text-[var(--ds-ink)]">{n.title}</span>
+                <span className="sr-only">{n.severity}</span>
+              </span>
+              <span className="mt-1 block text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                {n.description}
+              </span>
+            </span>
+            {n.actionLabel && (
+              <span className="mt-1 flex shrink-0 items-center gap-1 text-[12.5px] text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)]">
+                <span className="hidden sm:inline">{n.actionLabel}</span>
+                <ArrowUpRight className="size-3.5" />
+              </span>
+            )}
           </button>
         ))}
-      </Flex>
-    </Card>
+      </div>
+    </section>
   );
 }
 
@@ -138,5 +171,5 @@ function iconFor(n: Notification) {
     wp_no_header: ShieldCheck,
   };
   const Icon = map[n.kind] ?? (n.severity === "urgent" ? AlertCircle : n.severity === "warn" ? AlertTriangle : Info);
-  return <Icon className="size-4 text-[var(--gray-9)]" />;
+  return <Icon className="size-4" />;
 }

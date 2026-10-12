@@ -167,7 +167,7 @@ export function WorkspaceSwitcher({
             disabled={switching}
           >
             <span className="flex-1 truncate">{w.name}</span>
-            <span className="ml-2 text-[10px] uppercase tracking-wider opacity-60">
+            <span className="ml-2 text-[11.5px] capitalize text-[var(--ds-muted)]">
               {w.role}
             </span>
             {w.isActive && <Check className="ml-2 size-3.5" />}

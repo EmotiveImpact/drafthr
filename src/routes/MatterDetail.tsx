@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Plus, Settings2, Archive, Trash2, FolderPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, Plus, Archive, Trash2, FolderPlus, MoreHorizontal, UsersRound, CalendarClock, History, X } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore, prefillsFromProfile } from "@/lib/profile";
-import { draftsInMatter, MATTER_COLOR_CLASSES, matterInitial } from "@/lib/matters";
+import { draftsInMatter, matterInitial } from "@/lib/matters";
 import { effectiveRiskBand } from "@/lib/matters/risk";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
 import type { Draft, LetterTypeId, MatterType } from "@/lib/letters/types";
-import { PageHeader } from "@/components/ds";
+import { AvatarStack } from "@/components/ds";
+import { PillTabs } from "@/components/ds/PageHeader";
 import { Button } from "@/components/ui/button";
 import { MatterRiskBadge } from "@/components/matter/MatterRiskBadge";
 import { NextActionBanner } from "@/components/matter/NextActionBanner";
@@ -24,12 +25,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { MATTER_TINT, PageShell, PaperThumb, StatusPill, type PillTone } from "@/components/reports/parts";
 
 /**
- * /matters/:matterId — single matter detail. Hero with parties +
- * countdown + counsel-review chip + status chip, followed by the
- * letters list and a matter timeline aggregated from each draft's
- * timeline events.
+ * /matters/:matterId: single matter detail. 2A header (tinted initial tile,
+ * parties, pills, people) with Overview, Letters, Deadlines and History tabs.
+ * The timeline is aggregated from each draft's timeline events.
  */
 export function MatterDetail() {
   const { matterId } = useParams<{ matterId: string }>();
@@ -71,22 +72,28 @@ export function MatterDetail() {
   );
 
   const [showAddLetter, setShowAddLetter] = useState(false);
+  const [tab, setTab] = useState<"overview" | "letters" | "deadlines" | "history">("overview");
+  const historyCount = useMemo(
+    () => matterDrafts.reduce((n, d) => n + (d.timeline?.length ?? 0), 0),
+    [matterDrafts]
+  );
 
   if (!matter) {
     return (
-      <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-        <p className="text-sm text-[var(--ds-muted)] m-0">Matter not found.</p>
+      <PageShell width="medium">
+        <h1 className="ds-title m-0 text-[32px] leading-[1.1]">Matter not found</h1>
+        <p className="m-0 mt-2 text-[14px] text-[var(--ds-muted)]">It may have been deleted, or the link is out of date.</p>
         <Link
           to="/matters"
           className="inline-flex items-center gap-1.5 mt-4 text-[13px] text-[var(--ds-ink)] hover:underline"
         >
           <ArrowLeft className="size-3.5" /> Back to all matters
         </Link>
-      </div>
+      </PageShell>
     );
   }
 
-  const colors = MATTER_COLOR_CLASSES[matter.color];
+  const [tint, tintInk] = MATTER_TINT[matter.color];
   const daysToDeadline = matter.deadlineISO
     ? daysUntilDateOnly(matter.deadlineISO)
     : undefined;
@@ -117,21 +124,78 @@ export function MatterDetail() {
     }
   };
 
+  const participants = matter.participants ?? [];
+  const statusLabel =
+    matter.status === "active" ? "Active" : matter.status === "closed" ? "Closed" : "Archived";
+  const deadlineTone: PillTone = deadlinePastDue ? "danger" : deadlineUrgent ? "warn" : "neutral";
+  const deadlineText =
+    daysToDeadline === undefined
+      ? undefined
+      : daysToDeadline < 0
+      ? `${Math.abs(daysToDeadline)} day${Math.abs(daysToDeadline) === 1 ? "" : "s"} overdue`
+      : daysToDeadline === 0
+      ? "Due today"
+      : `${daysToDeadline} day${daysToDeadline === 1 ? "" : "s"} left`;
+
+  const letters = (
+    <LettersList
+      drafts={matterDrafts}
+      onOpen={(id) => nav(`/editor/${id}`)}
+      onRemove={(id) => assignDraftToMatter(id, null)}
+    />
+  );
+
   return (
-    <div className="max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-      <PageHeader
-        crumbs={[
-          { label: matter.mode === "employer" ? "HR / Management" : "Employee", href: prefix },
-          { label: "Matters", href: "/matters" },
-          { label: matter.name },
-        ]}
-        title={matter.name}
-        actions={
-          <div className="flex items-center gap-2">
+    <PageShell>
+      {/* 2A matter header: crumb line, tinted initial tile, people and pills */}
+      <header className="mb-8 min-w-0">
+        <nav
+          aria-label="Breadcrumb"
+          className="mb-2.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]"
+        >
+          <Link to={prefix} className="hidden hover:text-[var(--ds-ink)] sm:inline">
+            {matter.mode === "employer" ? "HR / Management" : "Employee"}
+          </Link>
+          <ChevronRight className="hidden size-3 text-[var(--ds-faint)] sm:inline" aria-hidden />
+          <Link to="/matters" className="inline-flex items-center gap-1 hover:text-[var(--ds-ink)]">
+            <ArrowLeft className="size-3 sm:hidden" aria-hidden />
+            Matters
+          </Link>
+          {matter.type && (
+            <>
+              <ChevronRight className="size-3 shrink-0 text-[var(--ds-faint)]" aria-hidden />
+              <span className="truncate">{matterTypeLabel(matter.type)} matter</span>
+            </>
+          )}
+        </nav>
+
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="flex min-w-0 flex-1 basis-[320px] items-center gap-3.5">
+            <span
+              className="ds-title grid size-11 shrink-0 place-items-center rounded-[var(--ds-r-s)] text-[24px] italic leading-none"
+              style={{ background: tint, color: tintInk }}
+              aria-hidden
+            >
+              {matterInitial(matter)}
+            </span>
+            <h1 className="ds-title m-0 min-w-0 text-[clamp(28px,4vw,40px)] leading-[1.1] [overflow-wrap:anywhere]">
+              {matter.name}
+            </h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {participants.length > 0 && (
+              <span className="mr-1 hidden sm:inline-flex">
+                <AvatarStack
+                  people={participants.map((p) => ({ name: p.name, seed: p.employeeId ?? p.name }))}
+                  max={3}
+                  size="lg"
+                />
+              </span>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Settings2 className="size-3.5" />
+                <Button variant="outline" size="sm" aria-label="Manage matter">
+                  <MoreHorizontal className="size-4" />
                   <span className="hidden sm:inline">Manage</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -181,105 +245,58 @@ export function MatterDetail() {
             </DropdownMenu>
             <Button size="sm" onClick={() => setShowAddLetter((v) => !v)}>
               <Plus className="size-3.5" />
-              Add letter
+              Add a letter
             </Button>
           </div>
-        }
-      />
-
-      {/* Hero card */}
-      <div className="rounded-xl border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 mb-5 flex items-start gap-4">
-        <div
-          className={cn(
-            "size-12 rounded-lg grid place-items-center text-white font-semibold text-[20px] shrink-0",
-            colors.swatch
-          )}
-          style={{ fontFamily: "var(--font-serif)" }}
-        >
-          {matterInitial(matter)}
         </div>
-        <div className="flex-1 min-w-0">
+
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
           {matter.parties?.primaryName && (
-            <p className="text-[13px] text-[var(--ds-body)] m-0">
-              {matter.parties.primaryName}
-              {matter.parties.primaryContext && (
-                <span className="text-[var(--ds-muted)]">
-                  {" "}
-                  · {matter.parties.primaryContext}
-                </span>
-              )}
-            </p>
+            <span className="mr-1 inline-flex h-[26px] min-w-0 max-w-full items-center gap-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line-strong)] px-2.5 text-[12.5px] text-[var(--ds-body)]">
+              <UsersRound className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
+              <span className="truncate">
+                {matter.parties.primaryName}
+                {matter.parties.primaryContext && (
+                  <span className="text-[var(--ds-muted)]">, {matter.parties.primaryContext}</span>
+                )}
+              </span>
+            </span>
           )}
-          {matter.description && (
-            <p className="text-[13px] text-[var(--ds-muted)] mt-2 m-0">{matter.description}</p>
+          <StatusPill tone={matter.status === "active" ? "ok" : "neutral"}>{statusLabel}</StatusPill>
+          {matter.counselReviewed && <StatusPill tone="warn">Counsel-reviewed</StatusPill>}
+          {matter.type && (
+            <StatusPill tone="info" dot={false}>
+              {matterTypeLabel(matter.type)}
+            </StatusPill>
           )}
-          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
-            <Pill
-              tone={matter.status === "active" ? "green" : "muted"}
-              label={
-                matter.status === "active"
-                  ? "Active"
-                  : matter.status === "closed"
-                  ? "Closed"
-                  : "Archived"
-              }
-            />
-            {matter.counselReviewed && <Pill tone="amber" label="⚠ Counsel-reviewed" />}
-            {matter.type && <Pill tone="blue" label={matterTypeLabel(matter.type)} />}
-            <MatterRiskBadge band={effectiveRiskBand(matter, matterDrafts)} />
-            <Pill
-              tone="muted"
-              label={`${matterDrafts.length} letter${matterDrafts.length === 1 ? "" : "s"}`}
-            />
-            {matter.mode === "employer" && (
-              <Pill tone="muted" label="HR / Management" />
-            )}
-          </div>
+          <MatterRiskBadge band={effectiveRiskBand(matter, matterDrafts)} />
+          {matter.deadlineISO && deadlineText && (
+            <StatusPill tone={deadlineTone}>
+              {matter.deadlineLabel ?? "Deadline"}: {deadlineText}
+            </StatusPill>
+          )}
         </div>
-
-        {matter.deadlineISO && (
-          <div className="text-right shrink-0">
-            <div className="text-[11px] text-[var(--ds-muted)]">
-              {matter.deadlineLabel ?? "Deadline"}
-            </div>
-            <div
-              className={cn(
-                "font-mono text-[26px] font-bold leading-none mt-1",
-                deadlinePastDue
-                  ? "text-[var(--ds-red-fg)]"
-                  : deadlineUrgent
-                  ? "text-[var(--ds-amber-fg)]"
-                  : "text-[var(--ds-ink)]"
-              )}
-            >
-              {daysToDeadline !== undefined
-                ? daysToDeadline < 0
-                  ? `+${Math.abs(daysToDeadline)}d`
-                  : `${daysToDeadline}d`
-                : "—"}
-            </div>
-            <div className="text-[10px] text-[var(--ds-muted)] mt-1">
-              {formatDateOnly(matter.deadlineISO, { dateStyle: "medium" })}
-            </div>
-          </div>
+        {matter.description && (
+          <p className="m-0 mt-3 max-w-[640px] text-[14px] leading-relaxed text-[var(--ds-muted)]">
+            {matter.description}
+          </p>
         )}
-      </div>
 
-      {/* Next-action banner — derived from matter.nextAction or soonest open task */}
-      <NextActionBanner
-        matter={matter}
-        tasks={matterTasks}
-        onGenerate={() => setShowAddLetter(true)}
-      />
-
-      {/* Participants */}
-      <MatterParticipants matterId={matter.id} participants={matter.participants ?? []} />
-
-      {/* Tasks */}
-      <MatterTasks matterId={matter.id} tasks={matterTasks} />
-
-      {/* Calendar */}
-      <MatterCalendar matterId={matter.id} events={matterEvents} />
+        <PillTabs
+          tabs={[
+            { id: "overview", label: "Overview" },
+            { id: "letters", label: "Letters", count: matterDrafts.length },
+            {
+              id: "deadlines",
+              label: "Deadlines",
+              count: matterEvents.length + (matter.deadlineISO ? 1 : 0),
+            },
+            { id: "history", label: "History", count: historyCount || undefined },
+          ]}
+          activeTab={tab}
+          onTabChange={(id) => setTab(id as typeof tab)}
+        />
+      </header>
 
       {/* Add letter quick picker */}
       {showAddLetter && (
@@ -290,36 +307,70 @@ export function MatterDetail() {
         />
       )}
 
-      {/* Letters */}
-      <section className="mb-5">
-        <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 mb-2">
-          Letters
-        </h2>
-        {matterDrafts.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[var(--ds-line)] bg-[var(--ds-surface)] p-6 text-center">
-            <FolderPlus className="size-7 text-[var(--ds-muted)] mx-auto mb-2" />
-            <p className="text-[13px] text-[var(--ds-muted)] m-0">
-              No letters in this matter yet. Click <strong>Add letter</strong> above to start one.
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
-            {matterDrafts.map((draft, i) => (
-              <LetterRow
-                key={draft.id}
-                draft={draft}
-                isFirst={i === 0}
-                onOpen={() => nav(`/editor/${draft.id}`)}
-                onRemove={() => assignDraftToMatter(draft.id, null)}
+      {tab === "overview" && (
+        <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0">
+            {/* Next-action banner: derived from matter.nextAction or soonest open task */}
+            <NextActionBanner
+              matter={matter}
+              tasks={matterTasks}
+              onGenerate={() => setShowAddLetter(true)}
+            />
+
+            <MatterParticipants matterId={matter.id} participants={participants} />
+
+            <section className="mb-6">
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <h2 className="m-0 text-[15px] font-semibold text-[var(--ds-ink)]">Letters</h2>
+                {matterDrafts.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setTab("letters")}
+                    className="inline-flex items-center gap-1 text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                  >
+                    View all {matterDrafts.length} <ArrowRight className="size-3" />
+                  </button>
+                )}
+              </div>
+              <LettersList
+                drafts={matterDrafts.slice(0, 3)}
+                onOpen={(id) => nav(`/editor/${id}`)}
+                onRemove={(id) => assignDraftToMatter(id, null)}
               />
-            ))}
+            </section>
           </div>
-        )}
-      </section>
+
+          <aside className="min-w-0 space-y-5">
+            {matter.deadlineISO && (
+              <DeadlineBox
+                label={matter.deadlineLabel ?? "Deadline"}
+                dateISO={matter.deadlineISO}
+                days={daysToDeadline}
+              />
+            )}
+            <MatterTasks matterId={matter.id} tasks={matterTasks} />
+          </aside>
+        </div>
+      )}
+
+      {tab === "letters" && <section className="min-w-0">{letters}</section>}
+
+      {tab === "deadlines" && (
+        <div className="grid min-w-0 max-w-[820px] gap-5">
+          {matter.deadlineISO && (
+            <DeadlineBox
+              label={matter.deadlineLabel ?? "Deadline"}
+              dateISO={matter.deadlineISO}
+              days={daysToDeadline}
+            />
+          )}
+          <MatterCalendar matterId={matter.id} events={matterEvents} />
+        </div>
+      )}
 
       {/* Timeline (aggregated from draft.timeline) */}
-      <MatterTimeline drafts={matterDrafts} />
-    </div>
+      {tab === "history" && <MatterTimeline drafts={matterDrafts} />}
+    </PageShell>
   );
 }
 
@@ -327,40 +378,60 @@ export function MatterDetail() {
  * Sub-components
  * ==========================================================================*/
 
-function Pill({
-  tone,
-  label,
+function LettersList({
+  drafts,
+  onOpen,
+  onRemove,
 }: {
-  tone: "green" | "amber" | "red" | "muted" | "blue";
-  label: string;
+  drafts: Draft[];
+  onOpen: (id: string) => void;
+  onRemove: (id: string) => void;
 }) {
-  const toneCls = {
-    green: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    amber: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    red: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]",
-    blue: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-    muted: "bg-[var(--ds-line-2)] text-[var(--ds-muted)]",
-  }[tone];
+  if (drafts.length === 0) {
+    return (
+      <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-10 text-center">
+        <div className="mx-auto mb-3 grid size-11 place-items-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-muted)]">
+          <FolderPlus className="size-4" />
+        </div>
+        <p className="m-0 text-[13px] text-[var(--ds-muted)]">
+          No letters in this matter yet. Use <strong className="font-medium text-[var(--ds-ink)]">Add a letter</strong> above to start one.
+        </p>
+      </div>
+    );
+  }
   return (
-    <span
-      className={cn(
-        "inline-flex items-center text-[10px] px-2 py-[1px] rounded-full font-medium",
-        toneCls
-      )}
-    >
-      {label}
-    </span>
+    <div className="min-w-0">
+      <div
+        className="hidden min-h-[30px] grid-cols-[44px_minmax(0,1fr)_110px_80px_70px_16px] items-center gap-4 border-b border-[var(--ds-line)] px-3.5 text-[12px] text-[var(--ds-muted)] md:grid"
+        aria-hidden
+      >
+        <span />
+        <span>Letter</span>
+        <span>Status</span>
+        <span className="text-right">Updated</span>
+        <span />
+        <span />
+      </div>
+      <ul className="m-0 list-none p-0 pt-1">
+        {drafts.map((draft) => (
+          <LetterRow
+            key={draft.id}
+            draft={draft}
+            onOpen={() => onOpen(draft.id)}
+            onRemove={() => onRemove(draft.id)}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function LetterRow({
   draft,
-  isFirst,
   onOpen,
   onRemove,
 }: {
   draft: Draft;
-  isFirst: boolean;
   onOpen: () => void;
   onRemove: () => void;
 }) {
@@ -372,59 +443,121 @@ function LetterRow({
     .filter(Boolean).length;
   const hasUnresolvedComments = (draft.comments ?? []).some((c) => !c.resolved);
   const isExported = (draft.exports ?? []).length > 0;
+  const isReady = draft.sections.some((s) => s.status === "ready");
+  const tone: PillTone = isExported ? "ok" : isReady ? "info" : "neutral";
+  const label = isExported ? "Sent" : isReady ? "Ready" : "Draft";
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-3 px-4 py-3 hover:bg-[var(--ds-line-2)] transition cursor-pointer",
-        !isFirst && "border-t border-[var(--ds-line-2)]"
-      )}
-      onClick={onOpen}
-    >
-      <span
-        className="grid place-items-center size-6 rounded-md bg-[var(--ds-line-2)] text-[10px] text-[var(--ds-muted)] font-mono font-semibold shrink-0"
-        title={draft.letterType}
+    <li className="relative m-0 [&+&]:before:absolute [&+&]:before:inset-x-3.5 [&+&]:before:top-0 [&+&]:before:border-t [&+&]:before:border-[var(--ds-line)] [&+&]:before:content-['']">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        className={cn(
+          "group grid cursor-pointer grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 rounded-[var(--ds-r-m)] px-3.5 py-3 transition hover:bg-[var(--ds-surface-2)] md:grid-cols-[44px_minmax(0,1fr)_110px_80px_70px_16px] md:gap-4",
+          hasUnresolvedComments && "bg-[var(--ds-amber-bg)] hover:bg-[var(--ds-amber-bg)]"
+        )}
       >
-        {meta.shortTitle.split(/\s+/)[0]?.[0]?.toUpperCase() ?? "L"}
-      </span>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-[var(--ds-ink)] text-[13px] truncate">
+        <PaperThumb seed={draft.id} />
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">
             {briefTitleFor(draft)}
+          </div>
+          <div className="mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+            {meta.shortTitle}, {draft.sections.length} sections, {wordCount} words
+            {hasUnresolvedComments && (
+              <span className="text-[var(--ds-amber-fg)]">, open comments</span>
+            )}
+            <span className="md:hidden">, {timeAgoShort(draft.updatedAt)}</span>
+          </div>
+        </div>
+        <span className="hidden md:block">
+          <StatusPill tone={tone} size="sm">
+            {label}
+          </StatusPill>
+        </span>
+        <span className="hidden text-right text-[12.5px] text-[var(--ds-muted)] md:block">
+          {timeAgoShort(draft.updatedAt)}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="inline-flex items-center gap-1 justify-self-end rounded-[var(--ds-r-s)] px-1.5 py-1 text-[12px] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface)] hover:text-[var(--ds-red-fg)]"
+          title="Remove this letter from the matter (keeps the draft)"
+        >
+          <X className="size-3 md:hidden" aria-hidden />
+          <span className="sr-only md:not-sr-only">Remove</span>
+        </button>
+        <ArrowRight className="hidden size-3.5 text-[var(--ds-subtle)] transition group-hover:text-[var(--ds-ink)] md:block" />
+      </div>
+    </li>
+  );
+}
+
+/** Home "Deadlines" box style: tinted by urgency, serif date, days left. */
+function DeadlineBox({
+  label,
+  dateISO,
+  days,
+}: {
+  label: string;
+  dateISO: string;
+  days: number | undefined;
+}) {
+  const pastDue = days !== undefined && days < 0;
+  const urgent = days !== undefined && days <= 14;
+  const soon = days !== undefined && days <= 30;
+  return (
+    <section className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5">
+      <div className="flex items-center gap-2 px-2.5 pb-2 pt-1.5 text-[13.5px] font-semibold text-[var(--ds-ink)]">
+        <CalendarClock className="size-3.5 text-[var(--ds-muted)]" aria-hidden />
+        Deadline
+      </div>
+      <div
+        className={cn(
+          "rounded-[calc(var(--ds-r-l)-5px)] px-3.5 py-3",
+          urgent || pastDue
+            ? "bg-[var(--ds-red-bg)]"
+            : soon
+            ? "bg-[var(--ds-amber-bg)]"
+            : "bg-[var(--ds-surface-2)]"
+        )}
+      >
+        <div className="text-[13.5px] font-medium text-[var(--ds-ink)]">{label}</div>
+        <div className="mt-1 flex items-baseline justify-between gap-3">
+          <span className="ds-title text-[20px] leading-tight">
+            {formatDateOnly(dateISO, { day: "numeric", month: "long", year: "numeric" }, "en-GB")}
           </span>
-          {hasUnresolvedComments && (
-            <span className="text-[10px] text-[var(--ds-amber-fg)]">
-              ●  comments
+          {days !== undefined && (
+            <span
+              className={cn(
+                "shrink-0 text-[12.5px] font-medium",
+                urgent || pastDue
+                  ? "text-[var(--ds-red-fg)]"
+                  : soon
+                  ? "text-[var(--ds-amber-fg)]"
+                  : "text-[var(--ds-muted)]"
+              )}
+            >
+              {pastDue
+                ? `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} overdue`
+                : days === 0
+                ? "Today"
+                : `${days} day${days === 1 ? "" : "s"} left`}
             </span>
           )}
         </div>
-        <div className="text-[11px] text-[var(--ds-muted)] mt-0.5">
-          {draft.sections.length} sections · {wordCount} words · {timeAgoShort(draft.updatedAt)}
-        </div>
       </div>
-      <Pill
-        tone={
-          isExported
-            ? "green"
-            : draft.sections.some((s) => s.status === "ready")
-            ? "blue"
-            : "amber"
-        }
-        label={isExported ? "Sent" : draft.sections.some((s) => s.status === "ready") ? "Ready" : "Draft"}
-      />
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        className="text-[10px] text-[var(--ds-muted)] hover:text-[var(--ds-red-fg)] hover:underline shrink-0"
-        title="Remove this letter from the matter (keeps the draft)"
-      >
-        Remove
-      </button>
-      <ArrowRight className="size-3.5 text-[var(--ds-muted)] shrink-0" />
-    </div>
+    </section>
   );
 }
 
@@ -439,29 +572,29 @@ function AddLetterPicker({
 }) {
   const prefix = mode === "employer" ? "/hr" : "/me";
   return (
-    <div className="mb-5 rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4">
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0">
+    <div className="mb-6 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-4 shadow-[var(--ds-shadow-s)] sm:p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="m-0 text-[15px] font-semibold text-[var(--ds-ink)]">
           Add a letter to this matter
         </h3>
         <button
           type="button"
           onClick={onCancel}
-          className="text-[11px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+          className="text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
         >
           Cancel
         </button>
       </div>
-      <p className="text-[12px] text-[var(--ds-muted)] m-0 mt-1">
-        Pick a letter type to create — it'll be created and linked to this matter automatically.
+      <p className="m-0 mt-1 text-[13px] leading-relaxed text-[var(--ds-muted)]">
+        Pick a letter type. It will be created and linked to this matter automatically.
         <br />
         Or browse the full template library:{" "}
         <Link
           to={`${prefix}/new`}
-          className="text-[var(--ds-ink)] underline"
+          className="text-[var(--ds-ink)] underline underline-offset-2"
           onClick={onCancel}
         >
-          Open template library →
+          Open template library
         </Link>
       </p>
       <div className="flex flex-wrap gap-2 mt-3">
@@ -527,38 +660,46 @@ function MatterTimeline({ drafts }: { drafts: Draft[] }) {
     return all.sort((a, b) => b.ts - a.ts).slice(0, 20);
   }, [drafts]);
 
-  if (events.length === 0) return null;
+  if (events.length === 0) {
+    return (
+      <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-10 text-center text-[13px] text-[var(--ds-muted)]">
+        <History className="mx-auto mb-2 size-5" aria-hidden />
+        Nothing has happened on this matter's letters yet.
+      </div>
+    );
+  }
 
   return (
-    <section>
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ds-muted)] m-0 mb-2">
+    <section className="max-w-[820px] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5">
+      <h2 className="m-0 flex items-center gap-2 px-2.5 pb-2 pt-1.5 text-[13.5px] font-semibold text-[var(--ds-ink)]">
+        <History className="size-3.5 text-[var(--ds-muted)]" aria-hidden />
         Matter timeline
       </h2>
-      <div className="rounded-lg border border-[var(--ds-line)] bg-[var(--ds-surface)] overflow-hidden">
+      <ol className="m-0 list-none p-0">
         {events.map((ev, i) => (
-          <div
+          <li
             key={i}
-            className={cn(
-              "px-4 py-2 text-[12px] text-[var(--ds-body)]",
-              i > 0 && "border-t border-[var(--ds-line-2)]"
-            )}
+            className="flex gap-3 rounded-[var(--ds-r-m)] px-2.5 py-2.5 text-[13px] text-[var(--ds-body)] hover:bg-[var(--ds-surface-2)]"
           >
-            <div className="flex items-baseline gap-2">
-              <span className="text-[10px] font-mono text-[var(--ds-muted)] tabular-nums shrink-0 w-[80px]">
-                {timeAgoShort(ev.ts)}
-              </span>
-              <span className="font-medium text-[var(--ds-ink)]">{ev.title}</span>
-              <span className="text-[var(--ds-muted)]">— {ev.draftName}</span>
-            </div>
-            {(ev.sectionTitle || ev.detail) && (
-              <div className="text-[11px] text-[var(--ds-muted)] mt-0.5 ml-[88px]">
-                {ev.sectionTitle ? `${ev.sectionTitle}: ` : ""}
-                {ev.detail}
+            <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[var(--ds-faint)]" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <span className="font-medium text-[var(--ds-ink)]">{ev.title}</span>
+                <span className="text-[var(--ds-muted)]">{ev.draftName}</span>
               </div>
-            )}
-          </div>
+              {(ev.sectionTitle || ev.detail) && (
+                <div className="mt-0.5 text-[12.5px] text-[var(--ds-muted)]">
+                  {ev.sectionTitle ? `${ev.sectionTitle}: ` : ""}
+                  {ev.detail}
+                </div>
+              )}
+            </div>
+            <span className="shrink-0 text-[12px] tabular-nums text-[var(--ds-muted)]">
+              {timeAgoShort(ev.ts)}
+            </span>
+          </li>
         ))}
-      </div>
+      </ol>
     </section>
   );
 }
