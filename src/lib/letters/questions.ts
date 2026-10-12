@@ -120,7 +120,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
     id: "jurisdiction",
     title: "Jurisdiction",
     description:
-      "We tailor the legal language by country and region — your selection drives every clause and disclaimer.",
+      "We tailor the legal language by country and region. Your selection drives every clause and disclaimer.",
     questions: [
       {
         id: "jurisdiction",
@@ -298,7 +298,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
       {
         id: "employeeEmail",
         type: "text",
-        label: "Email (work or personal — your call)",
+        label: "Email (work or personal, your call)",
       },
       {
         id: "employeeStartDate",
@@ -318,7 +318,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
         type: "date",
         label: "Effective date of the action",
         required: true,
-        help: "When does this letter take effect — start date, termination date, etc.",
+        help: "When does this letter take effect: start date, termination date, etc.",
       },
       {
         id: "tone",
@@ -331,7 +331,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
           { value: "formal", label: "Formal" },
           { value: "firm", label: "Firm" },
         ],
-        help: "Some letter types constrain tone — terminations cannot be 'warm', for example.",
+        help: "Some letter types constrain tone: terminations cannot be 'warm', for example.",
       },
       {
         id: "confidentiality",
@@ -376,7 +376,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
         type: "boolean",
         label: "Is the employee currently in a legally protected situation?",
         help:
-          "Pregnancy, parental leave, long-term sickness, whistleblower, trade union representative, current grievance — any of these triggers a counsel-review gate before export.",
+          "Pregnancy, parental leave, long-term sickness, whistleblower, trade union representative, current grievance. Any of these triggers a counsel-review gate before export.",
       },
       {
         id: "grievanceLast90Days",
@@ -439,7 +439,7 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
           ],
         },
         { id: "bonusStructure", type: "textarea", label: "Bonus / commission structure (optional)" },
-        { id: "equityGrant", type: "textarea", label: "Equity grant (shares, vesting, cliff — optional)" },
+        { id: "equityGrant", type: "textarea", label: "Equity grant (shares, vesting, cliff, optional)" },
         { id: "signOnBonus", type: "textarea", label: "Sign-on bonus & clawback terms (optional)" },
       ],
     },
@@ -544,7 +544,7 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
           id: "factualFindings",
           type: "repeater",
           label: "Factual findings (numbered)",
-          help: "One row per finding. Tribunal-grade dismissal letters list discrete findings of fact — each tied to evidence — rather than a single prose summary.",
+          help: "One row per finding. Tribunal-grade dismissal letters list discrete findings of fact, each tied to evidence, rather than a single prose summary.",
           required: true,
           repeater: {
             itemLabel: "Finding",
@@ -727,9 +727,9 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
           label: "Outcome",
           required: true,
           options: [
-            { value: "pass", label: "Pass — confirm employment" },
+            { value: "pass", label: "Pass: confirm employment" },
             { value: "extend", label: "Extend probation" },
-            { value: "fail", label: "Fail — terminate" },
+            { value: "fail", label: "Fail: terminate" },
           ],
         },
         { id: "reviewMeetingDate", type: "date", label: "Probation review meeting date", required: true },
@@ -737,7 +737,7 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
           id: "strengths",
           type: "repeater",
           label: "Strengths observed",
-          help: "Concrete evidence-based strengths the letter will list — each as a specific, dated example, not adjectives.",
+          help: "Concrete evidence-based strengths the letter will list, each as a specific, dated example, not adjectives.",
           required: true,
           repeater: {
             itemLabel: "Strength",
@@ -798,7 +798,7 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
           id: "selectionCriteria",
           type: "repeater",
           label: "Selection criteria",
-          help: "Each criterion separately. Tribunal-grade redundancy letters expose the criteria and how they were scored — vague criteria are the #1 unfair-dismissal trap.",
+          help: "Each criterion separately. Tribunal-grade redundancy letters expose the criteria and how they were scored. Vague criteria are the #1 unfair-dismissal trap.",
           required: true,
           repeater: {
             itemLabel: "Criterion",

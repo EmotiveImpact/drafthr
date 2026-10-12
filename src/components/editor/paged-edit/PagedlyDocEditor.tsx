@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { toast } from "sonner";
 import {
   LetterEditor,
@@ -12,6 +12,11 @@ import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { toLetterDraft } from "@/lib/letters/toLetterDraft";
 import type { PagedEditorActions } from "./types";
+
+/** pagedly lays out an A4 page at 794px; below this container width it is
+ *  zoomed down to fit (see the effect in the component). */
+const A4_PAGE_PX = 794;
+const A4_FIT_WIDTH = A4_PAGE_PX + 32;
 
 /**
  * Edit-on-page engine, backed by the vendored **pagedly** library. This is the
@@ -322,12 +327,33 @@ export function PagedlyDocEditor({
   // raw <ins>/<del> carry no id/author, don't surface in the rail, and are
   // stripped wholesale on export — so suggestions stay in the rail's attributed,
   // export-safe pendingChange system, the app's single suggestion path.
+  // Fit the A4 page (794px) to narrow screens. Without this a phone shows
+  // the page's left two thirds and cuts the rest off at the right edge.
+  // Wider containers keep zoom 1, so desktop layout is untouched.
+  const [pageZoom, setPageZoom] = useState(1);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const w = el.clientWidth;
+      setPageZoom(w > 0 && w < A4_FIT_WIDTH ? Math.max(0.4, (w - 16) / A4_PAGE_PX) : 1);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const enableComments = reviewMode && !readOnly;
   const features = enableComments ? { ...FEATURES, comments: true } : FEATURES;
   void suggesting; // reserved; app owns suggestions in the rail (see above)
 
   return (
-    <div ref={wrapRef} className="h-full min-h-0">
+    <div
+      ref={wrapRef}
+      className="h-full min-h-0 [&_.pagedly-ce-footer]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-ce-page]:[zoom:var(--dhr-page-zoom,1)]"
+      style={{ "--dhr-page-zoom": pageZoom } as CSSProperties}
+    >
       <LetterEditor
         key={`${draftId}:${mountVersion}`}
         draft={mapped}

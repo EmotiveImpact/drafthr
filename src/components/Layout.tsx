@@ -87,14 +87,20 @@ export function Layout({ children }: { children: ReactNode }) {
     return (
       <TooltipProvider delayDuration={150}>
         <SearchPaletteContext.Provider value={{ open, setOpen }}>
-          {/* The editor is locked to viewport height. h-dvh handles mobile
-           * URL-bar resize correctly; h-screen as fallback. Inner flex/grid
-           * children scroll independently so the chat composer + sections
-           * list stay sticky on screen at any letter length. */}
-          <div className="h-screen h-dvh flex flex-col overflow-hidden">
+          {/* The letter workspace sits beside the app sidebar, as in the
+           * design, starting as the icon rail so the letter and its side panel
+           * keep their room (the person can expand it). It is locked to viewport height (h-dvh handles the mobile
+           * URL bar; h-screen is the fallback) so inner panes scroll on their
+           * own and the composer stays on screen at any letter length. Below
+           * md the sidebar is a sheet, so phones still get the full-bleed
+           * editor with its own back button. */}
+          <SidebarProvider defaultOpen={false} className="h-screen h-dvh min-h-0 overflow-hidden">
             <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
-            <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
-          </div>
+            <AppSidebar />
+            <SidebarInset className="min-h-0 min-w-0 flex flex-col overflow-hidden">
+              <main id="main" aria-label="Main content" className="flex-1 flex flex-col min-h-0">{children}</main>
+            </SidebarInset>
+          </SidebarProvider>
           <SearchPalette open={open} onOpenChange={setOpen} />
           <Onboarding />
         </SearchPaletteContext.Provider>

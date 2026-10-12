@@ -172,7 +172,7 @@ export function DocumentBar(p: DocumentBarProps) {
   return (
     <div className="shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface)]">
       {/* Row 1: file name, status, Versions / Share / Export, overflow */}
-      <div className="flex h-12 min-w-0 items-center gap-1 px-2 sm:gap-1.5 sm:px-3">
+      <div className="@container/docbar flex h-12 min-w-0 items-center gap-1 px-2 sm:gap-1.5 sm:px-3">
         <Link
           to={p.backTo}
           aria-label="Back to letters"
@@ -190,7 +190,7 @@ export function DocumentBar(p: DocumentBarProps) {
           <PanelLeft className="size-4" />
         </IconBtn>
         <div className="ml-0.5 min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
             <EditableTitleBar draft={draft} variant="bar" />
             <StatusPills {...p} reviewStatus={reviewStatus} />
             {p.streaming && (
@@ -223,7 +223,7 @@ export function DocumentBar(p: DocumentBarProps) {
             )}
           >
             <Paperclip className="size-3.5" />
-            <span className="hidden xl:inline">Evidence</span>
+            <span className="hidden @3xl/docbar:inline">Evidence</span>
             {evidenceCount > 0 && <span className="ds-mono text-[11.5px] text-[var(--ds-muted)]">{evidenceCount}</span>}
           </button>
 
@@ -237,7 +237,7 @@ export function DocumentBar(p: DocumentBarProps) {
                 title="Versions and timeline"
               >
                 <History className="size-4" />
-                <span className="hidden lg:inline">Versions</span>
+                <span className="hidden @2xl/docbar:inline">Versions</span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[260px]">
@@ -274,7 +274,7 @@ export function DocumentBar(p: DocumentBarProps) {
                 title="Share and invite people"
               >
                 <UserPlus className="size-3.5" />
-                <span className="hidden sm:inline">Share</span>
+                <span className="hidden @xl/docbar:inline">Share</span>
               </button>
             }
           />
@@ -418,7 +418,7 @@ function StatusPills(p: DocumentBarProps & { reviewStatus: string }) {
           ) : (
             <MessageSquareWarning className="size-3" />
           )}
-          <span className="hidden md:inline">
+          <span className="hidden @2xl/docbar:inline">
             {reviewStatus === "approved" ? "Approved" : reviewStatus === "in_review" ? "In review" : "Changes requested"}
           </span>
         </button>
@@ -440,7 +440,7 @@ function StatusPills(p: DocumentBarProps & { reviewStatus: string }) {
           }
         >
           <ShieldCheck className="size-3" />
-          <span className="hidden md:inline">{p.counselReview ? "Reviewed" : "Needs review"}</span>
+          <span className="hidden @2xl/docbar:inline">{p.counselReview ? "Reviewed" : "Needs review"}</span>
         </button>
       )}
     </>

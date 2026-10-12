@@ -35,12 +35,14 @@ export function DocBar({
           <Link
             to="/"
             aria-label="Home"
-            className="-mx-1 mr-0.5 flex size-9 shrink-0 items-center justify-center rounded-[var(--ds-r-s)] transition hover:bg-[var(--ds-surface-2)]"
+            className="-mx-1 mr-0.5 flex size-9 shrink-0 items-center justify-center rounded-[var(--ds-r-s)] transition hover:bg-[var(--ds-surface-2)] md:hidden"
           >
             <BrandMark size={26} />
           </Link>
         )}
-        <span aria-hidden className="mx-1 hidden h-5 w-px bg-[var(--ds-line)] sm:block" />
+        {/* The app sidebar carries the brand from md up, so the home mark
+         * and its divider only show on phones and small tablets. */}
+        <span aria-hidden className={leading ? "mx-1 hidden h-5 w-px bg-[var(--ds-line)] sm:block" : "mx-1 hidden h-5 w-px bg-[var(--ds-line)] sm:block md:hidden"} />
         <div className="flex min-w-0 flex-1 items-center gap-2 md:flex-none md:basis-auto">
           <FileText className="hidden size-4 shrink-0 text-[var(--ds-muted)] sm:block" aria-hidden />
           <span className="truncate text-[13.5px] font-medium text-[var(--ds-ink)] md:max-w-[34vw]">{title}</span>
