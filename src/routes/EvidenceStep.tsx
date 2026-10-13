@@ -96,7 +96,7 @@ export function EvidenceStep() {
   if (!draft || !draftId) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
-        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found</h1>
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
         <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
           This letter isn't in this workspace, or it was deleted.
         </p>
