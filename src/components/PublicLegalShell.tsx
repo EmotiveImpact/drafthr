@@ -4,7 +4,7 @@ import { BrandMark, Wordmark } from "@/components/ds";
 
 /**
  * Chromeless wrapper used by public legal pages (/privacy, /terms). Mirrors
- * the visual register of the auth-shell pages — same BrandMark + Wordmark
+ * the visual register of the auth-shell pages: same BrandMark + Wordmark
  * lockup as /sign-in, same DraftHR token palette.
  *
  * Auth chrome (sidebar, topbar) is suppressed for the matching prefixes in
@@ -50,7 +50,7 @@ export function PublicLegalShell({
         </div>
       </header>
 
-      {/* Narrow reading column on the warm off-white ground, 10A serif title. */}
+      {/* Narrow reading column on the cool grey ground, 10A serif title. */}
       <div className="mx-auto w-full max-w-[720px] flex-1 px-4 pb-8 pt-8 sm:px-8 sm:pt-14">
         <h1 className="ds-title m-0 text-[clamp(34px,5vw,46px)] leading-[1.08]">{title}</h1>
         {subtitle ? (
@@ -62,8 +62,8 @@ export function PublicLegalShell({
       </div>
 
       {/* Polished two-row footer:
-       *  Row 1 — brand lockup + tagline on the left, link nav on the right.
-       *  Row 2 — copyright line, separated by a hairline rule.
+       *  Row 1: brand lockup + tagline on the left, link nav on the right.
+       *  Row 2: copyright line, separated by a hairline rule.
        * Stacks on mobile (single column, left-aligned) and lays out
        * horizontally on sm+. */}
       <footer className="mt-12 border-t border-[var(--ds-line)]">
@@ -110,7 +110,7 @@ export function PublicLegalShell({
                 href="mailto:privacy@drafthr.io"
                 className="text-[var(--ds-body)] hover:text-[var(--ds-ink)] transition-colors"
               >
-                Contact
+                privacy@drafthr.io
               </a>
             </nav>
           </div>

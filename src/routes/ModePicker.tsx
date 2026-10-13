@@ -5,7 +5,9 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
 import { BrandMark, Wordmark } from "@/components/ds";
-import { PaperThumb } from "@/components/reports/parts";
+import { letterCatalogByMode, LETTER_CATALOG } from "@/lib/letters/catalog";
+import { tintForLetter, tintStyle } from "@/components/templates/tints";
+import { plainLabel } from "@/components/wizard/kit";
 
 export function ModePicker() {
   const nav = useNavigate();
@@ -63,7 +65,7 @@ export function ModePicker() {
             icon={<Briefcase className="size-7" strokeWidth={1.5} />}
             title="I'm in HR or management"
             description="Drafting letters to an employee: offers, terminations, warnings, redundancies and references. DraftHR helps you comply with ACAS, s.98 ERA, WARN, OWBPA, COBRA and state final-pay rules."
-            meta="14 letter types, UK and US, counsel review on high-risk letters"
+            meta={`${letterCatalogByMode("employer").length} letter types, UK and US, counsel review on high-risk letters`}
             onClick={() => choose("employer")}
           />
           <RoleCard
@@ -71,7 +73,7 @@ export function ModePicker() {
             icon={<UserRound className="size-7" strokeWidth={1.5} />}
             title="I'm an employee"
             description="Drafting letters to HR or your employer: grievances, resignations, flexible working requests, SARs, appeals, whistleblowing and accommodation requests. DraftHR helps you protect your rights and keep future claims open."
-            meta="21 letter types, UK and US, tribunal deadline tracking"
+            meta={`${letterCatalogByMode("employee").length} letter types, UK and US, tribunal deadline tracking`}
             onClick={() => choose("employee")}
           />
           <RoleCard
@@ -86,7 +88,7 @@ export function ModePicker() {
 
         {recent.length > 0 && (
           <section className="mt-10">
-            <h2 className="m-0 mb-2 text-[15px] font-semibold text-[var(--ds-ink)]">
+            <h2 className="m-0 mb-2.5 text-[15.5px] font-medium text-[var(--ds-ink)]">
               Or jump back into a recent draft
             </h2>
             <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-3">
@@ -95,12 +97,12 @@ export function ModePicker() {
                   <button
                     type="button"
                     onClick={() => nav(`/editor/${d.id}`)}
-                    className="flex w-full min-w-0 items-center gap-3 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-3 text-left transition hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-s)]"
+                    className="flex w-full min-w-0 items-center gap-3 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-3 text-left transition-colors duration-[120ms] hover:border-[var(--ds-line-strong)] hover:bg-[var(--ds-hover)]"
                   >
-                    <PaperThumb seed={d.id} />
+                    <MiniPaper letterType={d.letterType} />
                     <span className="min-w-0">
-                      <span className="block truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-                        {sentenceCase(d.letterType.replace(/_/g, " "))}
+                      <span className="block truncate text-[14px] font-medium text-[var(--ds-ink)]">
+                        {letterTitle(d.letterType)}
                       </span>
                       <span className="mt-0.5 block truncate text-[12.5px] text-[var(--ds-muted)]">
                         {d.mode === "employer" ? "HR" : "Employee"}, {d.context.jurisdiction}
@@ -144,29 +146,50 @@ function RoleCard({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full min-w-0 flex-col overflow-hidden rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5 text-left transition hover:-translate-y-px hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-m)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)]"
+      className="group flex w-full min-w-0 flex-col overflow-hidden rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-1.5 text-left transition-[border-color,box-shadow] duration-[120ms] hover:border-[var(--ds-line-strong)] hover:shadow-[var(--ds-shadow-s)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
     >
       <span
-        className="grid h-[108px] place-items-center rounded-[calc(var(--ds-r-l)-5px)]"
+        className="grid h-[108px] place-items-center rounded-[12px]"
         style={{ background: bg, color: ink }}
         aria-hidden
       >
         {icon}
       </span>
       <span className="flex flex-1 flex-col px-3 pb-3 pt-3.5">
-        <span className="text-[16px] font-semibold text-[var(--ds-ink)]">{title}</span>
+        <span className="text-[16px] font-medium text-[var(--ds-ink)]">{title}</span>
         <span className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
           {description}
         </span>
         <span className="mt-auto flex items-center justify-between gap-3 pt-4 text-[12.5px] text-[var(--ds-muted)]">
           <span>{meta}</span>
-          <ArrowRight className="size-4 shrink-0 text-[var(--ds-subtle)] transition group-hover:translate-x-0.5 group-hover:text-[var(--ds-ink)]" />
+          <ArrowRight className="size-4 shrink-0 text-[var(--ds-subtle)] transition-colors duration-[120ms] group-hover:text-[var(--ds-ink)]" />
         </span>
       </span>
     </button>
   );
 }
 
-function sentenceCase(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function letterTitle(letterType: string): string {
+  const meta = LETTER_CATALOG.find((l) => l.id === letterType);
+  if (meta) return plainLabel(meta.shortTitle || meta.title);
+  const t = letterType.replace(/_/g, " ");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/** A small pastel paper for the recent-draft rows. */
+function MiniPaper({ letterType }: { letterType: string }) {
+  return (
+    <span
+      aria-hidden
+      style={tintStyle(tintForLetter(letterType))}
+      className="grid h-12 w-10 shrink-0 place-items-center rounded-[8px] bg-[var(--tint)]"
+    >
+      <span className="flex h-9 w-7 flex-col gap-[3px] rounded-[2px] bg-[var(--ds-surface)] p-1.5 shadow-[var(--ds-shadow-s)]">
+        <span className="h-[2px] w-3/4 rounded-full bg-[var(--ds-surface-3)]" />
+        <span className="h-[2px] w-full rounded-full bg-[var(--ds-surface-3)]" />
+        <span className="h-[2px] w-full rounded-full bg-[var(--ds-surface-3)]" />
+        <span className="h-[2px] w-2/3 rounded-full bg-[var(--ds-surface-3)]" />
+      </span>
+    </span>
+  );
 }

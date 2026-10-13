@@ -111,13 +111,16 @@ export function Onboarding() {
               <Sparkles className="size-3.5" aria-hidden />
               Welcome to DraftHR
             </div>
+            <p className="m-0 mt-2 text-[13px] font-medium text-[var(--ds-ink)] sm:hidden">
+              {`Step ${step + 1} of ${totalSteps}: ${STEP_LABELS[step]}`}
+            </p>
             <div className="mt-3 h-1 overflow-hidden rounded-full bg-[var(--ds-line)]" aria-hidden>
               <div
                 className="h-full rounded-full bg-[var(--ds-ink)] transition-[width]"
                 style={{ width: `${((step + 1) / totalSteps) * 100}%` }}
               />
             </div>
-            <ol className="m-0 mt-4 flex list-none gap-3 p-0 sm:flex-col sm:gap-1">
+            <ol className="m-0 mt-4 hidden list-none p-0 sm:flex sm:flex-col sm:gap-1">
               {STEP_LABELS.map((label, i) => {
                 const state = i < step ? "done" : i === step ? "current" : "todo";
                 return (
@@ -228,7 +231,7 @@ export function Onboarding() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="England & Wales">England &amp; Wales</SelectItem>
+                      <SelectItem value="England & Wales">England and Wales</SelectItem>
                       <SelectItem value="Scotland">Scotland</SelectItem>
                       <SelectItem value="Northern Ireland">Northern Ireland</SelectItem>
                     </SelectContent>

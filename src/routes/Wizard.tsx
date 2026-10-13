@@ -335,6 +335,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
           <button
             type="button"
             onClick={() => setLineVisible(false)}
+            aria-label="Dismiss"
             className="ml-2 rounded-[4px] text-[13.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
           >
             Dismiss

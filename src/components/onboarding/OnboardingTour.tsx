@@ -10,16 +10,17 @@ import {
 
 import { useProfileStore } from "@/lib/profile";
 import { hasSeenTour, markTourSeen, resetTour } from "@/lib/onboarding";
+import { LETTER_CATALOG } from "@/lib/letters/catalog";
 
 /**
  * First-sign-in tour. Anchored to stable `data-tour="..."` selectors in the
  * sidebar + Home hero. Role-aware: HR mode tours portfolio surfaces
  * (Employees / Matters / Reports), Employee mode tours the letter pipeline.
  *
- * Employee mode steps 2–5 describe surfaces that live on routes the user
+ * Employee mode steps 2 to 5 describe surfaces that live on routes the user
  * hasn't visited yet (wizard, editor, evidence, export). Rather than wait
- * to re-anchor across navigation — fragile, and tours-on-rails feel
- * patronising — we render those as centred cards. The user gets the mental
+ * to re-anchor across navigation (fragile, and tours-on-rails feel
+ * patronising) we render those as centred cards. The user gets the mental
  * map; the actual UI teaches itself when they get there.
  *
  * Replay handle: in dev, `window.__drafthr.startTour()` clears the seen
@@ -54,12 +55,11 @@ const HR_STEPS: Step[] = [
     // Un-anchored: the HR dashboard has no [data-tour="new-letter-cta"] element
     // (that anchor lives only on the Employee home), so anchoring here fired
     // TARGET_NOT_FOUND and silently skipped this step for employers. Describe it
-    // centered instead — the same pattern EMPLOYEE_STEPS uses for its
+    // centred instead, the same pattern EMPLOYEE_STEPS uses for its
     // un-anchored intro steps.
     target: "body",
     title: "Start a new letter",
-    content:
-      "35 templates across HR and employee modes, with UK and US legal scaffolding in every one.",
+    content: `${LETTER_CATALOG.length} templates across HR and employee modes, with UK and US legal scaffolding in every one.`,
     placement: "center",
   },
   {
@@ -197,10 +197,16 @@ export function OnboardingTour({ forceRun = false }: OnboardingTourProps) {
         margin: 0,
         marginBottom: 8,
       },
+      tooltipContainer: {
+        textAlign: "left" as const,
+      },
       tooltipContent: {
         padding: 0,
         lineHeight: 1.5,
         color: "var(--ds-muted)",
+      },
+      tooltipFooter: {
+        marginTop: 16,
       },
       buttonPrimary: {
         backgroundColor: "var(--ds-accent)",
