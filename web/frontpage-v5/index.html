@@ -345,7 +345,7 @@ html[data-theme=light] .btn-line:hover{background:rgba(12,12,10,.11)}
 html[data-theme=light] .plan .pop{background:#0C0C0A;color:#fff}
 html[data-theme=light] .ch-pic img{box-shadow:0 40px 80px -30px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.06)}
 /* Sections that sit on photographs keep the dark palette */
-html[data-theme=light] .nav,html[data-theme=light] .hero,html[data-theme=light] .statement,html[data-theme=light] .close,html[data-theme=light] .who-card,html[data-theme=light] .plan.pro{
+html[data-theme=light] .nav,html[data-theme=light] .hero,html[data-theme=light] .statement,html[data-theme=light] .close,html[data-theme=light] .plan.pro{
   --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
   --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
   --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
@@ -428,8 +428,7 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 .plan .pop{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:6px 10px}
 .juris span{font:500 11.5px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;padding:7px 12px}
 /* Black and white photographs below the hero (the hero story keeps its colour) */
-.who-card .ph{filter:grayscale(1) contrast(1.05)}
-.ch-pic,.statement,.close{background-color:#6f6f6f;background-blend-mode:luminosity}
+/* Photos stay in full colour (Edem) */
 
 /* Who: stat cards, photo on top */
 .who-top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:48px;flex-wrap:wrap}
@@ -447,6 +446,50 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 .who-card:hover .go{background:var(--white);color:var(--bg)}
 .who-card:hover .ph{transform:none}
 @media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card:last-child{grid-column:auto}}
+
+
+/* ===== Levels: three panels, one colour stepping stronger (Edem's reference, DraftHR colours) ===== */
+.lv-head{display:grid;grid-template-columns:1.25fr 1fr;gap:clamp(32px,5vw,80px);align-items:start;margin-bottom:clamp(48px,6vw,80px)}
+.lv-head h2{font-size:clamp(44px,5.6vw,80px);line-height:.98;max-width:12ch;margin-top:20px}
+.lv-head .intro{color:var(--mute);font-size:clamp(17px,1.5vw,20px);line-height:1.5;padding-top:44px;max-width:40ch}
+.lv-head .intro p+p{margin-top:18px}
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:4px;overflow:hidden}
+.lvl{position:relative;display:flex;flex-direction:column;min-height:640px;padding:36px 32px 0;overflow:hidden;color:#16140F;
+  --ink:#16140F;--ink-2:rgba(22,20,15,.72)}
+.lvl:nth-child(1){background:#F3EDDC}
+.lvl:nth-child(2){background:#EADCB3}
+.lvl:nth-child(3){background:#DEC47A}
+.lvl .ln{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin-bottom:22px}
+.lvl h3{font-weight:600;font-size:clamp(26px,2.4vw,34px);line-height:1.05;letter-spacing:-.05em;color:var(--ink);margin-bottom:22px;max-width:14ch}
+.lvl p{font-size:16px;line-height:1.5;color:var(--ink);max-width:36ch}
+.lvl p+p{margin-top:14px;color:var(--ink-2)}
+.lvl .shot{position:relative;margin-top:auto;padding-top:40px;height:340px}
+.lvl .shot img{position:absolute;left:0;top:44px;width:128%;max-width:none;border-radius:10px 10px 0 0;box-shadow:0 30px 60px -25px rgba(40,30,0,.45),0 0 0 1px rgba(0,0,0,.06)}
+.lvl:nth-child(2) .shot img{width:112%}
+.lvl .pill{position:absolute;left:-6px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:10px;background:#16140F;color:#fff;border-radius:12px;padding:12px 16px;font-size:13.5px;box-shadow:0 14px 30px -12px rgba(0,0,0,.5),0 0 0 6px rgba(255,255,255,.35)}
+.lvl .pill b{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:500}
+@media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:320px}.lvl .shot img{width:100%}}
+@media (max-width:600px){.lvl{padding:28px 22px 0}.lvl .shot{height:240px}.lvl .shot img{width:150%}}
+
+/* ===== Footer (Edem's reference): black, grouped columns, quiet bottom row ===== */
+footer{background:#000;border-top:0;padding:72px 0 0;margin-top:clamp(96px,10vw,140px);
+  --white:#fff;--text:rgba(255,255,255,.92);--soft:rgba(255,255,255,.62);--mute:rgba(255,255,255,.5);--line:rgba(255,255,255,.12)}
+html[data-theme=light] footer{margin-top:clamp(96px,10vw,140px)}
+.fcols{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;align-items:start}
+.fcols .logo{opacity:.85}
+.fgroup+.fgroup{margin-top:36px}
+.fgroup h6{font:500 14.5px/1 var(--font);color:#fff;margin-bottom:14px;letter-spacing:-.005em;text-transform:none}
+.fgroup ul{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:14px;color:var(--soft)}
+.fgroup a:hover{color:#fff}
+.fbottom{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;border-top:1px solid var(--line);margin-top:96px;padding:40px 0 48px}
+.fbottom h6{font:500 14px/1 var(--font);color:#fff;margin-bottom:10px;text-transform:none;letter-spacing:0}
+.fbottom p{font-size:16px;color:var(--mute)}
+.fbottom .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#D4B144;margin-right:8px;vertical-align:1px}
+footer .mark{color:#fff;opacity:.06;margin-top:0;padding-bottom:8px}
+@media (max-width:1000px){.fcols,.fbottom{grid-template-columns:1fr 1fr}.fcols>div:first-child,.fbottom>div:first-child{grid-column:1/-1}}
+
+html[data-theme=light] .who-card{background:#fff;box-shadow:0 1px 0 rgba(12,12,10,.04),0 20px 40px -30px rgba(12,12,10,.25)}
+html[data-theme=light] .who-card p{color:var(--soft)}
 
 /* Reveal */
 .js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
@@ -523,34 +566,25 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
     </div>
   </div></section>
 
-  <!-- How it works: one letter, four chapters -->
+  <!-- How it works: three levels of care -->
   <section id="how"><div class="wrap">
-    <div class="head">
-      <span class="tag g rv">How it works</span>
-      <h2 class="rv">From blank page to sent, in four steps.</h2>
-      <p class="sub rv">A deliberate process for letters that may be read again later, by a manager, a tribunal or a court.</p>
+    <div class="lv-head">
+      <div><span class="tag rv">How it works</span><h2 class="rv">Every letter, checked at every step.</h2></div>
+      <div class="intro rv"><p>Some letters need a quick first draft. Some need a second pair of eyes. Some need a manager to sign them off.</p><p>Whatever the letter, DraftHR drafts it in the right structure, brings in the right people, and keeps a record of who decided what.</p></div>
     </div>
-    <div class="chapters">
-      <article class="ch">
-        <div class="ch-pic rv" style="background-image:url(img/story-2-sign.jpg);background-position:85% 35%"><img src="img/app-f1-draft.jpg" alt="Drafting a letter in DraftHR"></div>
-        <div class="rv"><div class="ch-n">01 Draft</div><h3>Answer a few plain questions.</h3><p>Pick one of 35 letters for the UK or the US. DraftHR writes the first version, section by section, in the structure a fair process expects.</p>
-          <ul><li>Every AI change waits as a proposal until you accept it</li><li>Edit any section yourself, at any point</li></ul></div>
-      </article>
-      <article class="ch">
-        <div class="ch-pic rv" style="background-image:url(img/hr-team.jpg);background-position:0% 30%"><img src="img/app-f5-back.jpg" alt="A letter back from review"></div>
-        <div class="rv"><div class="ch-n">02 Review</div><h3>Ask someone you trust to read it.</h3><p>Send it to a teammate, someone outside your organisation, or an HR expert from the marketplace. Go back and forth until it is right.</p>
-          <ul><li>Comments sit beside the words they are about</li><li>Experts are matched to the letter you are writing</li></ul></div>
-      </article>
-      <article class="ch">
-        <div class="ch-pic rv" style="background-image:url(img/h-hr-manager.jpg);background-position:50% 25%"><img src="img/app-f6-approve.jpg" alt="Approving a letter"></div>
-        <div class="rv"><div class="ch-n">03 Approve</div><h3>Signed off by the right person.</h3><p>Route the finished letter to whoever needs to approve it. Teams get an approval queue, and every sign-off is recorded.</p>
-          <ul><li>Who drafted, reviewed and approved, and when</li><li>Nothing is sent until it is approved</li></ul></div>
-      </article>
-      <article class="ch">
-        <div class="ch-pic rv" style="background-image:url(img/h-envelope.jpg);background-position:80% 55%"><img src="img/app-sent-crop.jpg" alt="A sent letter with its record" style="width:88%"></div>
-        <div class="rv"><div class="ch-n">04 Send</div><h3>Send it your way, with the record kept.</h3><p>Download it and send it yourself, or email it from DraftHR. The letter, its replies and its deadlines stay with the matter.</p>
-          <ul><li>Appeal windows and hearings go in your calendar</li><li>Evidence packs when you need them</li></ul></div>
-      </article>
+    <div class="levels">
+      <article class="lvl rv"><div class="ln">01 Draft</div><h3>Drafted in the right structure</h3>
+        <p>Pick one of 35 letters for the UK or the US and answer a few plain questions.</p>
+        <p>DraftHR writes it section by section. Every AI change waits as a proposal until you accept it.</p>
+        <div class="shot"><span class="pill"><b>DraftHR</b>Suggested 1 change. Accept or reject.</span><img src="img/lv-draft.jpg" alt="A letter being drafted in DraftHR, with a suggested change"></div></article>
+      <article class="lvl rv"><div class="ln">02 Review</div><h3>Read by someone you trust</h3>
+        <p>Send it to a teammate, someone outside your organisation, or an HR expert from the marketplace.</p>
+        <p>Their suggestions come back beside the words they are about. Go back and forth until it is right.</p>
+        <div class="shot"><span class="pill"><b>Review</b>Claire sent it back with 3 suggestions.</span><img src="img/lv-review.jpg" alt="Suggestions from a reviewer beside the letter"></div></article>
+      <article class="lvl rv"><div class="ln">03 Approve and send</div><h3>Signed off, sent and on record</h3>
+        <p>The right person approves it. Then download it and send it yourself, or email it from DraftHR.</p>
+        <p>Appeal windows go in your calendar, and the record stays with the matter.</p>
+        <div class="shot"><span class="pill"><b>Sent</b>Approved by Priya. Appeal window set.</span><img src="img/lv-send.jpg" alt="A sent letter with its activity record and next steps"></div></article>
     </div>
   </div></section>
 
@@ -654,14 +688,26 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 
 <!-- 9. Footer -->
 <footer><div class="wrap">
-  <div class="fgrid">
-    <div><a class="logo" href="#top"><img src="img/logo-mark.png" alt="">DraftHR</a><p>AI drafting for UK and US HR letters, for HR teams, employees and consultants.</p></div>
-    <div><h6>Product</h6><ul><li><a href="#how">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#">Experts</a></li></ul></div>
-    <div><h6>Letters</h6><ul><li><a href="#letters">Grievance and dispute</a></li><li><a href="#letters">Departure</a></li><li><a href="#letters">Leave and sickness</a></li><li><a href="#letters">All 35 letters</a></li></ul></div>
-    <div><h6>Company</h6><ul><li><a href="#">About</a></li><li><a href="#faq">Questions</a></li><li><a href="#">Contact</a></li></ul></div>
-    <div><h6>Legal</h6><ul><li><a href="#">Terms</a></li><li><a href="#">Privacy</a></li></ul></div>
+  <div class="fcols">
+    <div><a class="logo" href="#top"><img src="img/logo-mark.png" alt="">DraftHR</a></div>
+    <div>
+      <div class="fgroup"><h6>DraftHR</h6><ul><li><a href="#how">How it works</a></li><li><a href="#letters">Letters</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#">Experts marketplace</a></li></ul></div>
+      <div class="fgroup"><h6>Built for</h6><ul><li><a href="#">Employees</a></li><li><a href="#">HR teams</a></li><li><a href="#">HR consultants</a></li></ul></div>
+    </div>
+    <div>
+      <div class="fgroup"><h6>Letters</h6><ul><li><a href="#letters">Grievance and dispute</a></li><li><a href="#letters">Departure</a></li><li><a href="#letters">Performance and conduct</a></li><li><a href="#letters">Leave and sickness</a></li><li><a href="#letters">Pay and terms</a></li><li><a href="#letters">All 35 letters</a></li></ul></div>
+      <div class="fgroup"><h6>Company</h6><ul><li><a href="#">About us</a></li><li><a href="#">Contact us</a></li><li><a href="#faq">Questions</a></li></ul></div>
+    </div>
+    <div>
+      <div class="fgroup"><h6>Legal</h6><ul><li><a href="#">Terms of service</a></li><li><a href="#">Privacy policy</a></li></ul></div>
+    </div>
   </div>
-  <div class="legal"><span>DraftHR drafts, you decide. Not legal advice.</span><span>© 2026 DraftHR</span></div>
+  <div class="fbottom">
+    <div></div>
+    <div><h6>Jurisdictions</h6><p>United Kingdom, United States</p></div>
+    <div><h6>Before you send</h6><p><span class="dot"></span>DraftHR drafts, you decide. Not legal advice.</p></div>
+    <div><h6>DraftHR</h6><p>© 2026 DraftHR</p></div>
+  </div>
   <div class="mark" aria-hidden="true">DraftHR</div>
 </div></footer>
 
