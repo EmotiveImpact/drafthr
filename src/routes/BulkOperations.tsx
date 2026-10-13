@@ -1,8 +1,10 @@
-import { Avatar, PageHeader } from "@/components/ds";
-import { PageShell, PaperThumb, StatusPill } from "@/components/reports/parts";
+import { Avatar, Pill } from "@/components/ds";
+import { ListHeader } from "@/components/letters/ListHeader";
+import { PaperIcon, usePageTitle } from "@/components/letters/parts";
+import { tintForLetterType, type Tint } from "@/components/letters/letterView";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -81,6 +83,8 @@ type GeneratedDraftSummary = {
 };
 
 export default function BulkOperations() {
+  usePageTitle("Bulk letters");
+  const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
   const createDraft = useDraftStore((s) => s.createDraft);
   const updateSection = useDraftStore((s) => s.updateSection);
@@ -315,21 +319,21 @@ export default function BulkOperations() {
     (step === 3 && parsed !== null && !parsed.error && parsed.rows.length > 0);
 
   return (
-    <PageShell>
-      <PageHeader
-        crumbs={[{ label: "Business" }, { label: "Bulk operations" }]}
-        title="Generate letters in bulk"
+    <div className="min-w-0">
+      <ListHeader
+        crumbs={[{ label: "Letters", href: "/letters" }, { label: "Bulk letters" }]}
+        title="Bulk letters"
         lede="Upload a CSV of employees and we'll create one personalised draft per row. Review and finalise each draft individually before sending."
       />
 
-      <div className="grid min-w-0 gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid min-w-0 gap-6 px-4 pb-12 pt-6 md:px-12 md:pt-[30px] lg:grid-cols-[minmax(0,1fr)_280px] lg:gap-9">
       <div className="min-w-0 lg:order-1 order-2">
       <AnimatePresence mode="wait">
         <motion.div
           key={step}
-          initial={{ opacity: 0, x: 24 }}
+          initial={{ opacity: 0, x: reduceMotion ? 0 : 12 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -24 }}
+          exit={{ opacity: 0, x: reduceMotion ? 0 : -12 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
         >
           {step === 1 && (
@@ -362,13 +366,14 @@ export default function BulkOperations() {
             <StepResults
               state={generateState}
               generated={generated}
+              tint={tintForLetterType(letterType as LetterTypeId)}
               onCancel={() => abortRef.current?.abort()}
               onReset={reset}
               onOpenFirst={() => {
                 const first = generated[0];
                 if (first) navigate(`/editor/${first.draftId}`);
               }}
-              onOpenDrafts={() => navigate("/")}
+              onOpenDrafts={() => navigate("/letters")}
               onRetry={() => void handleGenerate()}
             />
           )}
@@ -418,9 +423,9 @@ export default function BulkOperations() {
       )}
 
       <p className="mt-10 text-[12.5px] text-[var(--ds-muted)]">
-        <Link to="/" className="inline-flex items-center gap-1 underline-offset-2 hover:text-[var(--ds-ink)] hover:underline">
+        <Link to="/letters" className="inline-flex items-center gap-1 rounded-[4px] underline-offset-2 outline-none hover:text-[var(--ds-ink)] hover:underline focus-visible:shadow-[var(--ds-focus-ring)]">
           <ChevronLeft className="size-3.5" aria-hidden />
-          Back to drafts
+          Back to letters
         </Link>
       </p>
       </div>
@@ -429,7 +434,7 @@ export default function BulkOperations() {
         <StepsCard step={step} />
       </aside>
       </div>
-    </PageShell>
+    </div>
   );
 }
 
@@ -808,8 +813,6 @@ function StepPreview({
         {parsed.rows.length} row{parsed.rows.length === 1 ? "" : "s"} ready,
         {" "}
         {parsed.warnings.length} warning{parsed.warnings.length === 1 ? "" : "s"}.
-        {" "}
-        Estimated time: instant (stub)
       </p>
 
       {missing.length > 0 && (
@@ -864,11 +867,9 @@ function StepPreview({
                 </span>
               </span>
               {rowMissing ? (
-                <StatusPill tone="warn" size="sm">
-                  {rowMissing.fields.length} missing
-                </StatusPill>
+                <Pill tone="amber">{rowMissing.fields.length} missing</Pill>
               ) : (
-                <StatusPill tone="ok" size="sm">Ready</StatusPill>
+                <Pill tone="green">Ready</Pill>
               )}
             </li>
           );
@@ -895,6 +896,7 @@ function StepPreview({
 function StepResults({
   state,
   generated,
+  tint,
   onCancel,
   onReset,
   onOpenFirst,
@@ -903,6 +905,7 @@ function StepResults({
 }: {
   state: GenerateState;
   generated: GeneratedDraftSummary[];
+  tint: Tint;
   onCancel: () => void;
   onReset: () => void;
   onOpenFirst: () => void;
@@ -1053,7 +1056,7 @@ function StepResults({
               ].join(" ")}
             >
               <div className="flex min-w-0 items-center gap-3">
-                <PaperThumb seed={g.title} />
+                <PaperIcon tint={tint} />
                 {g.unresolved.length > 0 ? (
                   <span
                     aria-label="Has unfilled placeholders"
@@ -1068,10 +1071,10 @@ function StepResults({
                 )}
                 <span className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">{g.title}</span>
                 {g.unresolved.length > 0 && (
-                  <StatusPill tone="warn" size="sm">
+                  <Pill tone="amber" title={`Missing: ${g.unresolved.join(", ")}`}>
                     Missing {g.unresolved.length} field
                     {g.unresolved.length === 1 ? "" : "s"}
-                  </StatusPill>
+                  </Pill>
                 )}
               </div>
               <Link

@@ -12,7 +12,7 @@ import {
   type LetterCategoryId,
   type LetterTypeMeta,
 } from "@/lib/letters/catalog";
-import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
+import { computeHealthScore, runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
 
 export type Tint = "lavender" | "mint" | "peach" | "butter" | "sky" | "rose";
 
@@ -37,6 +37,25 @@ export function tintStyle(tint: Tint): React.CSSProperties {
 export function tintForLetterType(id: LetterTypeId): Tint {
   const cat = categoryOf(id);
   return cat ? TINT_BY_CATEGORY[cat] : "sky";
+}
+
+/**
+ * The short type word shown before the detail in list rows
+ * ("Conduct · 2 checks to fix") and offered by the Type filter.
+ */
+const SHORT_CATEGORY: Record<LetterCategoryId, string> = {
+  onboarding: "Hiring",
+  performance_conduct: "Conduct",
+  departure: "Leaving",
+  leave: "Absence",
+  compensation: "Pay",
+  dispute: "Grievance",
+  tribunal_legal: "Legal",
+};
+
+export function shortTypeLabel(id: LetterTypeId): string {
+  const cat = categoryOf(id);
+  return cat ? SHORT_CATEGORY[cat] : "Other";
 }
 
 export function categoryLabel(id: LetterTypeId): string | undefined {
@@ -114,10 +133,10 @@ export function letterStatus(d: Draft, viewerCanApprove: boolean): LetterStatus 
 }
 
 /** 0-100 health score, or null while there is nothing written to score. */
-export function letterHealth(d: Draft): number | null {
+export function letterHealth(d: Draft, checks?: HealthCheck[]): number | null {
   if (writingState(d) === "empty") return null;
   try {
-    return computeHealthScore(runHealthChecks(d)).score;
+    return computeHealthScore(checks ?? runHealthChecks(d)).score;
   } catch {
     return null;
   }
@@ -128,6 +147,27 @@ export function letterIsLong(d: Draft): boolean {
   let chars = 0;
   for (const s of d.sections) chars += s.html?.length ?? 0;
   return chars > 3200;
+}
+
+/**
+ * The Updated column (f9-letters): "Just now", "4 min ago", "2 hours ago"
+ * for the last few hours, the time ("14:32") earlier today, "Yesterday",
+ * then the date with the year ("9 Oct 2026").
+ */
+export function updatedColumnLabel(ts: number, now = Date.now()): string {
+  const diff = Math.max(0, now - ts);
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m} min ago`;
+  const d = new Date(ts);
+  const today = new Date(now);
+  const sameDay = d.toDateString() === today.toDateString();
+  const h = Math.floor(m / 60);
+  if (sameDay) return h < 6 ? `${h} ${h === 1 ? "hour" : "hours"} ago` : format(d, "HH:mm");
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return format(d, "d MMM yyyy");
 }
 
 /** "Just now", "4 min ago", "3 hr ago", "Yesterday", "3 Oct". */

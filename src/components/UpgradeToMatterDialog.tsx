@@ -12,16 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDraftStore } from "@/lib/store";
-import {
-  MATTER_COLOR_CLASSES,
-  suggestColorForGroup,
-} from "@/lib/matters";
+import { suggestColorForGroup } from "@/lib/matters";
+import { MATTER_TINT } from "@/components/matter/model";
 import type { AutoGroup } from "@/lib/matters";
 import type { Mode, MatterColor } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 
 /**
- * Dialog that promotes an auto-group (Home's "Make this a Matter →") into
+ * Dialog that promotes an auto-group (Home's "Make this a matter") into
  * a named Matter in one click. Pre-fills:
  *   - name = primaryName of the group ("Acme Holdings Ltd" → "Acme Holdings")
  *   - color = suggestion from suggestColorForGroup
@@ -88,7 +86,7 @@ export function UpgradeToMatterDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Make this a Matter</DialogTitle>
+          <DialogTitle>Make this a matter</DialogTitle>
           <DialogDescription>
             Bundle{" "}
             <strong className="text-[var(--ds-ink)]">
@@ -102,7 +100,7 @@ export function UpgradeToMatterDialog({
 
         <form onSubmit={onSubmit} className="space-y-4 pt-1">
           <div>
-            <Label htmlFor="matter-name" className="text-[12px] font-medium mb-1.5 block">
+            <Label htmlFor="matter-name" className="mb-1.5 block">
               Matter name
             </Label>
             <Input
@@ -111,14 +109,14 @@ export function UpgradeToMatterDialog({
               onChange={(e) => setName(e.target.value)}
               placeholder={
                 mode === "employer"
-                  ? "James O'Connor — PIP 2026 Q2"
+                  ? "James O'Connor, PIP 2026 Q2"
                   : "Acme discrimination 2026"
               }
               autoFocus
               required
             />
             {group?.primaryName && (
-              <p className="text-[11px] text-[var(--ds-muted)] mt-1">
+              <p className="mt-1.5 text-[12.5px] text-[var(--ds-muted)]">
                 {mode === "employer" ? "Person" : "Employer"}: {group.primaryName}
                 {group.primaryContext && ` · ${group.primaryContext}`}
               </p>
@@ -126,31 +124,30 @@ export function UpgradeToMatterDialog({
           </div>
 
           <div>
-            <Label className="text-[12px] font-medium mb-1.5 block">Colour</Label>
-            <div className="flex gap-1.5">
-              {(["red", "amber", "blue", "violet", "green", "slate"] as MatterColor[]).map(
-                (c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setColor(c)}
-                    aria-label={`Colour ${c}`}
-                    className={cn(
-                      "size-7 rounded-md transition ring-offset-1",
-                      MATTER_COLOR_CLASSES[c].swatch,
-                      color === c
-                        ? "ring-2 ring-[var(--ds-ink)] scale-110"
-                        : "ring-1 ring-black/10"
-                    )}
-                  />
-                )
-              )}
+            <Label className="mb-1.5 block">Colour</Label>
+            <div className="flex items-center gap-2">
+              {(["blue", "green", "amber", "red", "violet", "slate"] as MatterColor[]).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  aria-label={`Colour ${c}`}
+                  aria-pressed={color === c}
+                  className={cn(
+                    "grid size-8 place-items-center rounded-full border outline-none transition-shadow duration-[120ms] focus-visible:shadow-[var(--ds-focus-ring)]",
+                    color === c ? "shadow-[0_0_0_2px_var(--ds-surface),0_0_0_4px_var(--ds-ink)]" : "hover:shadow-[0_0_0_1px_var(--ds-line-strong)]"
+                  )}
+                  style={{ background: MATTER_TINT[c][0], borderColor: MATTER_TINT[c][1] }}
+                >
+                  <span className="size-2 rounded-full" style={{ background: MATTER_TINT[c][1] }} />
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="matter-deadline" className="text-[12px] font-medium mb-1.5 block">
+              <Label htmlFor="matter-deadline" className="mb-1.5 block">
                 Deadline (optional)
               </Label>
               <Input
@@ -161,7 +158,7 @@ export function UpgradeToMatterDialog({
               />
             </div>
             <div>
-              <Label htmlFor="matter-deadline-label" className="text-[12px] font-medium mb-1.5 block">
+              <Label htmlFor="matter-deadline-label" className="mb-1.5 block">
                 Deadline label
               </Label>
               <Input

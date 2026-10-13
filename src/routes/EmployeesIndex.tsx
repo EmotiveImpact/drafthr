@@ -1,215 +1,368 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { ChevronRight, Download, Plus, Search, UsersRound } from "lucide-react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  Archive,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ArrowUpRight,
+  Building2,
+  Download,
+  FileText,
+  Folder,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+  Upload,
+  UserPlus,
+  UsersRound,
+} from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { matchEmployeeForDraft } from "@/lib/employees";
-import { Avatar, PageHeader } from "@/components/ds";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import type { Employee, EmploymentStatus } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
-import { PageShell, StatusPill, type PillTone } from "@/components/reports/parts";
-import type { Draft, Employee, EmploymentStatus, Matter } from "@/lib/letters/types";
-import { EmployeeForm } from "@/components/employees/EmployeeForm";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ListHeader } from "@/components/letters/ListHeader";
+import { BulkBar, FilterMenu, NoMatch, NumberPager, SearchField, SortMenu, usePage, type BulkAction } from "@/components/letters/toolbar";
+import { downloadText, Initials, MENU_MOTION, TickBox, todayStamp, useOrgName, usePageTitle } from "@/components/letters/parts";
+import { EmployeeForm, type EmployeeFormValues } from "@/components/employees/EmployeeForm";
 import { ImportSuggestions } from "@/components/employees/ImportSuggestions";
+import { ImportCsvDialog } from "@/components/employees/ImportCsvDialog";
+import { NewLetterForPerson } from "@/components/employees/NewLetterForPerson";
+import { DirectorySyncStrip } from "@/components/employees/DirectorySyncStrip";
+import { DeleteEmployeeDialog, EmployeeStatusPill } from "@/components/employees/parts";
+import { displayName, employeesCsv, startDateLabel, useEmployeeRows, type EmployeeRow } from "@/components/employees/model";
 
 /**
- * /employees — the workspace-level directory of every Employee record.
- *
- * Reads `useDraftStore.employees` as the source of truth and surfaces
- * a per-row summary derived from the related Matters + Drafts so HR
- * can see "where is this person turning up" at a glance.
+ * /employees: the workspace directory (employees mock). Every Employee
+ * record with the letters about them and the matters they are part of,
+ * status tabs, search, a department filter, an open-matter toggle, sorts,
+ * Directory Sync status, tick boxes with bulk archive and CSV export, and
+ * Add employee, Import from drafts and Import CSV.
  */
-type StatusFilter = "all" | EmploymentStatus;
+type TabId = "all" | "active" | "notice" | "on-leave" | "leavers";
+type SortId = "name-asc" | "name-desc" | "activity" | "started";
 
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "notice", label: "Notice" },
-  { value: "on-leave", label: "On leave" },
-  { value: "left", label: "Left" },
+const TABS: { id: TabId; label: string; status?: EmploymentStatus }[] = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active", status: "active" },
+  { id: "notice", label: "Notice", status: "notice" },
+  { id: "on-leave", label: "On leave", status: "on-leave" },
+  { id: "leavers", label: "Leavers", status: "left" },
 ];
 
-type SortKey = "activity" | "name" | "started";
+const SORTS: { value: SortId; label: string }[] = [
+  { value: "name-asc", label: "Name, A to Z" },
+  { value: "name-desc", label: "Name, Z to A" },
+  { value: "activity", label: "Last activity" },
+  { value: "started", label: "Start date" },
+];
+
+const PAGE = 25;
+const COLS = ["40px", "27%", "19%", "11%", "11%", "11%", "8%", "11%", "40px"];
+const norm = (s?: string) => (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+
+function readTab(v: string | null): TabId {
+  if (v === "left") return "leavers";
+  return TABS.some((t) => t.id === v) ? (v as TabId) : "all";
+}
 
 export function EmployeesIndex() {
+  usePageTitle("Employees");
   const nav = useNavigate();
-  const employees = useDraftStore((s) => s.employees);
+  const org = useOrgName();
+  const rows = useEmployeeRows();
   const drafts = useDraftStore((s) => s.drafts);
-  const matters = useDraftStore((s) => s.matters);
   const createEmployee = useDraftStore((s) => s.createEmployee);
+  const updateEmployee = useDraftStore((s) => s.updateEmployee);
+  const archiveEmployee = useDraftStore((s) => s.archiveEmployee);
+  const deleteEmployee = useDraftStore((s) => s.deleteEmployee);
 
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [sort, setSort] = useState<SortKey>("activity");
+  const [params, setParams] = useSearchParams();
+  const tab = readTab(params.get("tab"));
+  const setTab = (t: TabId) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        if (t === "all") next.delete("tab");
+        else next.set("tab", t);
+        return next;
+      },
+      { replace: true }
+    );
+
+  const [q, setQ] = useState("");
+  const [dept, setDept] = useState<string | null>(null);
+  const [openOnly, setOpenOnly] = useState(false);
+  const [sort, setSort] = useState<SortId>("name-asc");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [editing, setEditing] = useState<Employee | null>(null);
+  const [deleting, setDeleting] = useState<Employee | null>(null);
+  const [letterFor, setLetterFor] = useState<Employee | null>(null);
 
-  const allEmployees = useMemo(() => Object.values(employees), [employees]);
-  const allDrafts = useMemo(
-    () => Object.values(drafts).filter((d) => !d.isTemplateSource),
-    [drafts]
-  );
-  const allMatters = useMemo(() => Object.values(matters), [matters]);
+  const counts = useMemo(() => {
+    const c: Record<TabId, number> = { all: rows.length, active: 0, notice: 0, "on-leave": 0, leavers: 0 };
+    for (const r of rows) {
+      const t = TABS.find((x) => x.status === r.employee.status);
+      if (t) c[t.id] += 1;
+    }
+    return c;
+  }, [rows]);
 
-  const rows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const filtered = allEmployees.filter((e) => {
-      if (statusFilter !== "all" && e.status !== statusFilter) return false;
-      if (!q) return true;
-      const haystack = [e.legalName, e.preferredName, e.jobTitle, e.department]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
+  const departments = useMemo(() => {
+    const m = new Map<string, { label: string; count: number }>();
+    for (const r of rows) {
+      const d = r.employee.department?.trim();
+      if (!d) continue;
+      const k = norm(d);
+      const v = m.get(k) ?? { label: d, count: 0 };
+      v.count += 1;
+      m.set(k, v);
+    }
+    return [...m.entries()].map(([value, v]) => ({ value, label: v.label, count: v.count })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [rows]);
+  const deptCount = new Set(rows.map((r) => norm(r.employee.department)).filter(Boolean)).size;
+  const withMatter = rows.filter((r) => r.openMatters.length > 0).length;
 
-    const enriched = filtered.map((e) => buildRowSummary(e, allDrafts, allMatters));
-
-    enriched.sort((a, b) => {
-      if (sort === "name") return a.employee.legalName.localeCompare(b.employee.legalName);
-      if (sort === "started") {
-        const av = a.employee.startDate ?? "";
-        const bv = b.employee.startDate ?? "";
-        return bv.localeCompare(av);
+  const shown = useMemo(() => {
+    const status = TABS.find((t) => t.id === tab)?.status;
+    const query = norm(q);
+    const list = rows.filter((r) => {
+      const e = r.employee;
+      if (status && e.status !== status) return false;
+      if (dept && norm(e.department) !== dept) return false;
+      if (openOnly && r.openMatters.length === 0) return false;
+      if (query) {
+        const hay = norm([e.legalName, e.preferredName, e.jobTitle, e.department, e.email].filter(Boolean).join(" "));
+        if (!hay.includes(query)) return false;
       }
+      return true;
+    });
+    const byName = (a: EmployeeRow, b: EmployeeRow) => a.employee.legalName.localeCompare(b.employee.legalName);
+    list.sort((a, b) => {
+      if (sort === "name-asc") return byName(a, b);
+      if (sort === "name-desc") return byName(b, a);
+      if (sort === "started") return (b.employee.startDate ?? "").localeCompare(a.employee.startDate ?? "") || byName(a, b);
       return b.lastActivityAt - a.lastActivityAt;
     });
+    return list;
+  }, [rows, tab, q, dept, openOnly, sort]);
 
-    return enriched;
-  }, [allEmployees, allDrafts, allMatters, search, statusFilter, sort]);
+  const { page, pages, setPage } = usePage(shown.length, PAGE, `${tab}|${q}|${dept}|${openOnly}|${sort}`);
+  const pageRows = shown.slice(page * PAGE, page * PAGE + PAGE);
 
-  const existingNames = useMemo(
-    () =>
-      new Set(
-        allEmployees.map((e) =>
-          e.legalName.trim().toLowerCase().replace(/\s+/g, " ")
-        )
-      ),
-    [allEmployees]
-  );
+  // Keep the selection to people on this page.
+  const pageIds = pageRows.map((r) => r.employee.id).join(",");
+  useEffect(() => {
+    setSelected((prev) => {
+      const ids = new Set(pageIds.split(",").filter(Boolean));
+      const next = new Set([...prev].filter((id) => ids.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [pageIds]);
 
-  const isEmpty = allEmployees.length === 0;
+  const filtersSet = !!(q.trim() || dept || openOnly);
+  const clearFilters = () => {
+    setQ("");
+    setDept(null);
+    setOpenOnly(false);
+  };
+
+  const existingNames = useMemo(() => new Set(rows.map((r) => norm(r.employee.legalName))), [rows]);
+  const isEmpty = rows.length === 0;
+
+  const archive = (people: Employee[]) => {
+    const live = people.filter((e) => e.status !== "left");
+    if (live.length === 0) return;
+    const before = live.map((e) => ({ id: e.id, status: e.status, endDate: e.endDate }));
+    for (const e of live) archiveEmployee(e.id);
+    setSelected(new Set());
+    toast.success(live.length === 1 ? `${live[0].legalName} marked as left` : `${live.length} people marked as left`, {
+      duration: 6000,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          for (const b of before) updateEmployee(b.id, { status: b.status, endDate: b.endDate });
+        },
+      },
+    });
+  };
+
+  const exportCsv = (list: EmployeeRow[]) => {
+    downloadText(`drafthr-employees-${todayStamp()}.csv`, employeesCsv(list));
+    toast.success(`Exported ${list.length} ${list.length === 1 ? "person" : "people"}`);
+  };
+
+  const selectedRows = pageRows.filter((r) => selected.has(r.employee.id));
+  const bulkActions: BulkAction[] = [
+    {
+      id: "archive",
+      label: "Archive (mark as left)",
+      icon: Archive,
+      onClick: () => archive(selectedRows.map((r) => r.employee)),
+      disabledReason: selectedRows.every((r) => r.employee.status === "left") ? "Everyone ticked has already left" : null,
+    },
+    { id: "export", label: "Export CSV", icon: Download, onClick: () => exportCsv(selectedRows) },
+  ];
+
+  const allTicked = pageRows.length > 0 && pageRows.every((r) => selected.has(r.employee.id));
+  const someTicked = pageRows.some((r) => selected.has(r.employee.id));
+  const selection = {
+    selected,
+    toggle: (id: string) =>
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    toggleAll: (on: boolean) => setSelected(on ? new Set(pageRows.map((r) => r.employee.id)) : new Set()),
+    header: (allTicked ? true : someTicked ? "mixed" : false) as boolean | "mixed",
+  };
+
+  const menu = {
+    open: (e: Employee) => nav(`/employees/${e.id}`),
+    edit: (e: Employee) => setEditing(e),
+    newLetter: (e: Employee) => setLetterFor(e),
+    archive: (e: Employee) => archive([e]),
+    remove: (e: Employee) => setDeleting(e),
+  };
 
   return (
-    <PageShell>
-      <PageHeader
-        crumbs={[{ label: "HR / Management", href: "/hr" }, { label: "Employees" }]}
+    <div className="min-w-0">
+      <ListHeader
+        crumbs={[{ label: org }, { label: "People" }]}
         title="Employees"
-        lede="Everyone tracked in this workspace. Records persist across letters and matters: open a profile to see active matters, letter history and surfaced risks."
-        tabs={isEmpty ? undefined : STATUS_FILTERS.map((f) => ({
-          id: f.value,
-          label: f.label,
-          count: f.value === "all" ? allEmployees.length : allEmployees.filter((e) => e.status === f.value).length,
-        }))}
-        activeTab={statusFilter}
-        onTabChange={(id) => setStatusFilter(id as StatusFilter)}
+        lede={
+          isEmpty ? (
+            "Everyone tracked in this workspace, with their letters and matters."
+          ) : (
+            <>
+              <b>
+                {rows.length} {rows.length === 1 ? "person" : "people"}
+              </b>{" "}
+              across {deptCount} {deptCount === 1 ? "department" : "departments"}. <b>{withMatter}</b> {withMatter === 1 ? "has" : "have"} an open matter.
+            </>
+          )
+        }
         actions={
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
-              <Download className="size-3.5" />
+          <>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Sparkles className="size-[17px]" />
               Import from drafts
             </Button>
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus className="size-3.5" />
+            <Button variant="outline" onClick={() => setCsvOpen(true)}>
+              <Upload className="size-[17px]" />
+              Import CSV
+            </Button>
+            <Button onClick={() => setAddOpen(true)}>
+              <UserPlus className="size-[17px]" />
               Add employee
             </Button>
-          </div>
+          </>
         }
+        tabs={isEmpty ? undefined : TABS.map((t) => ({ id: t.id, label: t.label, count: counts[t.id] }))}
+        activeTab={tab}
+        onTabChange={(id) => setTab(id as TabId)}
+        countStyle="chip"
+        tabsLabel="Employees"
       />
 
-      {/* Toolbar: count, search, sort */}
-      {!isEmpty && (
-        <div className="mb-2 flex flex-wrap items-center gap-2 sm:pl-3.5">
-          <span className="mr-auto text-[13px] text-[var(--ds-muted)]">
-            {rows.length === 1 ? "1 person" : `${rows.length} people`}
-          </span>
-          <div className="relative order-first min-w-0 basis-full sm:order-none sm:basis-auto sm:flex-none">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--ds-muted)]" />
-            <Input
-              placeholder="Search by name, role or department"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 w-full border-transparent bg-[var(--ds-surface-2)] pl-8 shadow-none sm:w-[260px]"
-            />
+      <section aria-label="People" className="min-w-0 px-4 pb-12 pt-5 md:px-12 md:pt-[22px]">
+        {isEmpty ? (
+          <div className="flex flex-col items-center px-6 py-14 text-center">
+            <div className="mb-4 grid size-11 place-items-center rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)]">
+              <UsersRound className="size-5" />
+            </div>
+            <h2 className="m-0 text-[16px] font-medium text-[var(--ds-ink)]">No employees yet</h2>
+            <p className="m-0 mt-1.5 max-w-[52ch] text-[13.5px] text-[var(--ds-muted)]">
+              Import from your existing drafts to get started. We'll group everyone mentioned in your letters into reusable records.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2.5">
+              <Button onClick={() => setImportOpen(true)}>
+                <Sparkles className="size-[17px]" />
+                Import from drafts
+              </Button>
+              <Button variant="outline" onClick={() => setCsvOpen(true)}>
+                <Upload className="size-[17px]" />
+                Import CSV
+              </Button>
+              <Button variant="outline" onClick={() => setAddOpen(true)}>
+                <Plus className="size-[17px]" />
+                Add manually
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-0.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] p-0.5 text-[12px] text-[var(--ds-muted)]">
-            <span className="px-1.5">Sort</span>
-            <SortPill active={sort === "activity"} onClick={() => setSort("activity")}>
-              Last activity
-            </SortPill>
-            <SortPill active={sort === "name"} onClick={() => setSort("name")}>
-              Name
-            </SortPill>
-            <SortPill active={sort === "started"} onClick={() => setSort("started")}>
-              Start date
-            </SortPill>
-          </div>
-        </div>
-      )}
+        ) : (
+          <>
+            <div className="mb-4 flex min-w-0 flex-wrap items-center gap-2.5">
+              <SearchField
+                value={q}
+                onChange={setQ}
+                label="Search employees"
+                placeholder="Search by name, job title or email"
+                size="lg"
+                className="md:w-[300px] md:flex-none"
+              />
+              <FilterMenu
+                variant="button"
+                label="Department"
+                allLabel="All"
+                icon={Building2}
+                options={departments}
+                value={dept}
+                onChange={setDept}
+                emptyText="No departments on file yet"
+              />
+              <button
+                type="button"
+                aria-pressed={openOnly}
+                onClick={() => setOpenOnly((v) => !v)}
+                className={cn(
+                  "inline-flex h-[38px] items-center gap-[7px] whitespace-nowrap rounded-[10px] border px-3 text-[13.5px] outline-none transition-colors duration-[120ms] focus-visible:shadow-[var(--ds-focus-ring)]",
+                  openOnly
+                    ? "border-[var(--ds-ink)] bg-[var(--ds-ink)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)]"
+                    : "border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)]"
+                )}
+              >
+                <Folder className={cn("size-[15px]", openOnly ? "text-[var(--ds-on-accent)]" : "text-[var(--ds-subtle)]")} />
+                Has open matter
+              </button>
+              <span className="hidden flex-1 md:block" />
+              <SortMenu variant="button" buttonLabel="Sort" options={SORTS} value={sort} onChange={setSort} />
+            </div>
 
-      {/* Empty state */}
-      {isEmpty && (
-        <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-          className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-10 text-center"
-        >
-          <div className="mx-auto mb-4 grid size-14 place-items-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-line-2)] text-[var(--ds-muted)]">
-            <UsersRound className="size-5" />
-          </div>
-          <h2 className="text-[15px] font-semibold text-[var(--ds-ink)] m-0">
-            No employees yet
-          </h2>
-          <p className="text-[13px] text-[var(--ds-muted)] mt-1.5 mb-5 m-0 max-w-md mx-auto">
-            Import from your existing drafts to get started. We'll group
-            everyone mentioned in your letters into reusable records.
-          </p>
-          <div className="inline-flex gap-2">
-            <Button size="sm" onClick={() => setImportOpen(true)}>
-              <Download className="size-3.5" />
-              Import from drafts
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
-              <Plus className="size-3.5" />
-              Add manually
-            </Button>
-          </div>
-        </motion.div>
-      )}
+            <DirectorySyncStrip />
 
-      {/* Rows */}
-      {!isEmpty && rows.length === 0 && (
-        <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-10 text-center text-[13px] text-[var(--ds-muted)]">
-          No employees match those filters.
-        </div>
-      )}
+            {shown.length === 0 ? (
+              filtersSet ? (
+                <NoMatch onClear={clearFilters}>No employees match those filters.</NoMatch>
+              ) : (
+                <NoMatch>{tab === "leavers" ? "No leavers yet." : `No one is ${TABS.find((t) => t.id === tab)?.label.toLowerCase()} right now.`}</NoMatch>
+              )
+            ) : (
+              <EmployeesTable rows={pageRows} selection={selection} sort={sort} onSort={setSort} menu={menu} />
+            )}
 
-      {!isEmpty && rows.length > 0 && (
-        <motion.ul
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-          className="m-0 list-none p-0 pt-1.5"
-        >
-          <li className="hidden min-h-[30px] grid-cols-[40px_minmax(0,1fr)_110px_150px_90px_20px] items-center gap-4 border-b border-[var(--ds-line)] px-3.5 text-[12px] text-[var(--ds-muted)] md:grid" aria-hidden>
-            <span />
-            <span>Person</span>
-            <span>Status</span>
-            <span>Work</span>
-            <span className="text-right">Updated</span>
-            <span />
-          </li>
-          {rows.map((row) => (
-            <EmployeeRow
-              key={row.employee.id}
-              row={row}
-              onOpen={() => nav(`/employees/${row.employee.id}`)}
-            />
-          ))}
-        </motion.ul>
-      )}
+            <BulkBar count={selectedRows.length} actions={bulkActions} onClear={() => setSelected(new Set())} />
+
+            {shown.length > 0 && (
+              <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 pt-1 text-[13px] text-[var(--ds-muted)]">
+                <span aria-live="polite">
+                  Showing {page * PAGE + 1} to {Math.min(shown.length, page * PAGE + PAGE)} of {shown.length}
+                </span>
+                <NumberPager page={page} pages={pages} onPage={setPage} />
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
       <EmployeeForm
         open={addOpen}
@@ -220,9 +373,21 @@ export function EmployeesIndex() {
         onSubmit={(values) => {
           createEmployee(values);
           setAddOpen(false);
+          toast.success(`${values.legalName} added`);
         }}
       />
-
+      <EmployeeForm
+        open={!!editing}
+        onOpenChange={(v) => !v && setEditing(null)}
+        initial={editing ? formValues(editing) : undefined}
+        title="Edit employee"
+        description="Update this person's workspace record. Changes apply across all letters and matters."
+        submitLabel="Save changes"
+        onSubmit={(values) => {
+          if (editing) updateEmployee(editing.id, values);
+          setEditing(null);
+        }}
+      />
       <ImportSuggestions
         open={importOpen}
         onOpenChange={setImportOpen}
@@ -236,201 +401,253 @@ export function EmployeesIndex() {
             createEmployee(rest);
           }
           setImportOpen(false);
+          toast.success(`${chosen.length} ${chosen.length === 1 ? "record" : "records"} created`);
         }}
       />
-    </PageShell>
+      <ImportCsvDialog
+        open={csvOpen}
+        onOpenChange={setCsvOpen}
+        existingNames={rows.map((r) => r.employee.legalName)}
+        onImport={(people) => {
+          for (const p of people) createEmployee(p);
+        }}
+      />
+      <DeleteEmployeeDialog
+        employee={deleting}
+        open={!!deleting}
+        onOpenChange={(v) => !v && setDeleting(null)}
+        onConfirm={() => {
+          if (!deleting) return;
+          deleteEmployee(deleting.id);
+          toast.success(`${deleting.legalName} deleted`);
+          setDeleting(null);
+        }}
+      />
+      <NewLetterForPerson employee={letterFor} open={!!letterFor} onOpenChange={(v) => !v && setLetterFor(null)} />
+    </div>
   );
 }
 
-/* ============================================================================
- * Row summary derivation
- * ==========================================================================*/
+function formValues(e: Employee): EmployeeFormValues {
+  return {
+    legalName: e.legalName,
+    preferredName: e.preferredName,
+    jobTitle: e.jobTitle,
+    department: e.department,
+    email: e.email,
+    startDate: e.startDate,
+    workerClass: e.workerClass,
+    status: e.status,
+  };
+}
 
-type RowSummary = {
-  employee: Employee;
-  draftCount: number;
-  matterCount: number;
-  latestDraft?: Draft;
-  lastActivityAt: number;
+/* ─── Table ──────────────────────────────────────────────────────────── */
+
+type Menu = Record<"open" | "edit" | "newLetter" | "archive" | "remove", (e: Employee) => void>;
+type Sel = {
+  selected: Set<string>;
+  toggle: (id: string) => void;
+  toggleAll: (on: boolean) => void;
+  header: boolean | "mixed";
 };
 
-function buildRowSummary(
-  employee: Employee,
-  drafts: Draft[],
-  matters: Matter[]
-): RowSummary {
-  // Match drafts by normalized legalName.
-  const empMap: Record<string, Employee> = { [employee.id]: employee };
-  const linkedDrafts = drafts.filter(
-    (d) => matchEmployeeForDraft(d, empMap) === employee.id
-  );
-  const sortedDrafts = [...linkedDrafts].sort((a, b) => b.updatedAt - a.updatedAt);
-  const latestDraft = sortedDrafts[0];
+const INTERACTIVE = "a,button,[role=menuitem],[role=checkbox],[data-radix-popper-content-wrapper]";
 
-  const matterCount = matters.filter((m) =>
-    m.participants?.some((p) => p.employeeId === employee.id)
-  ).length;
-
-  const lastActivityAt = latestDraft?.updatedAt ?? employee.updatedAt;
-
-  return {
-    employee,
-    draftCount: linkedDrafts.length,
-    matterCount,
-    latestDraft,
-    lastActivityAt,
+function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: EmployeeRow[]; selection: Sel; sort: SortId; onSort: (s: SortId) => void; menu: Menu }) {
+  const nav = useNavigate();
+  const open = (e: MouseEvent, id: string) => {
+    if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
+    nav(`/employees/${id}`);
   };
-}
-
-/* ============================================================================
- * Sub-components
- * ==========================================================================*/
-
-function EmployeeRow({ row, onOpen }: { row: RowSummary; onOpen: () => void }) {
-  const { employee, draftCount, matterCount, latestDraft } = row;
-  const displayName = employee.preferredName
-    ? `${employee.legalName} (${employee.preferredName})`
-    : employee.legalName;
-
-  const subtitleParts = [employee.jobTitle, employee.department].filter(Boolean);
-  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(", ") : "No role on file";
-
-  const summary = buildActivitySummary(row);
-
+  const byName = sort === "name-asc" || sort === "name-desc";
+  const th = "whitespace-nowrap border-b border-[var(--ds-line)] px-3 pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)]";
   return (
-    <li className="relative m-0 [&+&]:before:absolute [&+&]:before:inset-x-3.5 [&+&]:before:top-0 [&+&]:before:border-t [&+&]:before:border-[var(--ds-line)] [&+&]:before:content-[''] hover:before:border-transparent [&:hover+&]:before:border-transparent">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="group grid w-full grid-cols-[40px_minmax(0,1fr)_20px] items-center gap-3 rounded-[var(--ds-r-m)] px-3.5 py-3 text-left transition hover:bg-[var(--ds-surface-2)] md:grid-cols-[40px_minmax(0,1fr)_110px_150px_90px_20px] md:gap-4"
-      >
-        <Avatar name={employee.legalName} seed={employee.id} size="xl" />
-        <div className="min-w-0">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
-              {displayName}
-            </h3>
-            <span className="md:hidden">
-              <StatusBadge status={employee.status} />
-            </span>
-          </div>
-          <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
-            {subtitle}
-            <span className="md:hidden">, {summary}</span>
-          </p>
-        </div>
-        <span className="hidden md:block">
-          <StatusBadge status={employee.status} />
-        </span>
-        <span className="hidden truncate text-[12.5px] text-[var(--ds-muted)] md:block">
-          {matterCount > 0 || draftCount > 0
-            ? [
-                matterCount > 0 ? `${matterCount} matter${matterCount === 1 ? "" : "s"}` : null,
-                draftCount > 0 ? `${draftCount} draft${draftCount === 1 ? "" : "s"}` : null,
-              ]
-                .filter(Boolean)
-                .join(", ")
-            : "No activity yet"}
-        </span>
-        <span className="hidden text-right text-[12.5px] text-[var(--ds-muted)] md:block">
-          {latestDraft ? timeAgo(latestDraft.updatedAt) : "None"}
-        </span>
-        <ChevronRight className="size-4 shrink-0 text-[var(--ds-subtle)] transition group-hover:text-[var(--ds-ink)]" />
-      </button>
-    </li>
+    <div className="min-w-0 animate-in fade-in-0 duration-200">
+      <table aria-label="Employees" className="hidden w-full table-fixed border-separate border-spacing-0 lg:table">
+        <colgroup>
+          {COLS.map((w, i) => (
+            <col key={i} style={{ width: w }} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col" className={cn(th, "pl-3")}>
+              <TickBox checked={selection.header} onChange={selection.toggleAll} label="Select everyone on this page" />
+            </th>
+            <th scope="col" className={th} aria-sort={byName ? (sort === "name-asc" ? "ascending" : "descending") : "none"}>
+              <button
+                type="button"
+                onClick={() => onSort(sort === "name-asc" ? "name-desc" : "name-asc")}
+                className="-mx-1 inline-flex items-center gap-1 rounded-[6px] px-1 font-medium text-[var(--ds-ink)] outline-none hover:bg-[var(--ds-surface-2)] focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                Name
+                {!byName ? (
+                  <ArrowUpDown aria-hidden className="size-3 text-[var(--ds-subtle)]" />
+                ) : sort === "name-asc" ? (
+                  <ArrowDown aria-hidden className="size-3 text-[var(--ds-muted)]" />
+                ) : (
+                  <ArrowUp aria-hidden className="size-3 text-[var(--ds-muted)]" />
+                )}
+                <span className="sr-only">{byName ? (sort === "name-asc" ? ", A to Z. Sort Z to A" : ", Z to A. Sort A to Z") : ". Sort by name"}</span>
+              </button>
+            </th>
+            {["Job title", "Department", "Start date", "Open matters", "Letters", "Status"].map((h) => (
+              <th key={h} scope="col" className={th}>
+                {h}
+              </th>
+            ))}
+            <th scope="col" className={th}>
+              <span className="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const e = r.employee;
+            const on = selection.selected.has(e.id);
+            const td = cn(
+              "whitespace-nowrap border-b border-[var(--ds-line-2)] px-3 py-[11px] align-middle text-[13.5px] text-[var(--ds-body)] transition-colors duration-[120ms]",
+              on ? "bg-[var(--ds-surface-2)]" : "group-hover/row:bg-[var(--ds-hover)]"
+            );
+            return (
+              <tr key={e.id} data-employee-id={e.id} onClick={(ev) => open(ev, e.id)} className="group/row cursor-pointer">
+                <td className={td}>
+                  <TickBox checked={on} onChange={() => selection.toggle(e.id)} label={`Select ${e.legalName}`} />
+                </td>
+                <td className={td}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Initials name={e.legalName} seed={e.id} size={32} />
+                    <div className="min-w-0">
+                      <Link
+                        to={`/employees/${e.id}`}
+                        className="block truncate rounded-[4px] text-[14px] font-medium leading-[1.3] text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                      >
+                        {displayName(e)}
+                      </Link>
+                      {e.email && <div className="truncate text-[12.5px] leading-[1.3] text-[var(--ds-muted)]">{e.email}</div>}
+                    </div>
+                  </div>
+                </td>
+                <td className={td}>
+                  <Cell value={e.jobTitle} />
+                </td>
+                <td className={td}>
+                  <Cell value={e.department} />
+                </td>
+                <td className={td}>
+                  <Cell value={startDateLabel(e.startDate)} />
+                </td>
+                <td className={td}>
+                  <Count n={r.openMatters.length} icon={Folder} label="open matters" />
+                </td>
+                <td className={td}>
+                  <Count n={r.letters.length} icon={FileText} label="letters" />
+                </td>
+                <td className={td}>
+                  <EmployeeStatusPill status={e.status} />
+                </td>
+                <td className={cn(td, "px-1 text-right")}>
+                  <EmployeeRowMenu employee={e} menu={menu} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <ul aria-label="Employees" className="m-0 list-none border-t border-[var(--ds-line-2)] p-0 lg:hidden">
+        {rows.map((r) => {
+          const e = r.employee;
+          const sub = [e.jobTitle, e.department].filter(Boolean).join(" · ");
+          return (
+            <li
+              key={e.id}
+              data-employee-id={e.id}
+              onClick={(ev) => open(ev, e.id)}
+              className="flex min-w-0 cursor-pointer items-start gap-3 border-b border-[var(--ds-line-2)] py-3 transition-colors duration-[120ms] hover:bg-[var(--ds-hover)]"
+            >
+              <Initials name={e.legalName} seed={e.id} size={36} />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Link to={`/employees/${e.id}`} className="min-w-0 truncate rounded-[4px] text-[14.5px] font-medium text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]">
+                    {displayName(e)}
+                  </Link>
+                  <EmployeeStatusPill status={e.status} />
+                </div>
+                <div className="truncate text-[13px] text-[var(--ds-muted)]">{sub || "No role on file"}</div>
+                <div className="mt-1 flex items-center gap-4 text-[12.5px] text-[var(--ds-muted)]">
+                  <Count n={r.openMatters.length} icon={Folder} label={r.openMatters.length === 1 ? "open matter" : "open matters"} showLabel />
+                  <Count n={r.letters.length} icon={FileText} label={r.letters.length === 1 ? "letter" : "letters"} showLabel />
+                </div>
+              </div>
+              <EmployeeRowMenu employee={e} menu={menu} />
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
-function StatusBadge({ status }: { status: EmploymentStatus }) {
-  const config: Record<EmploymentStatus, { label: string; cls: string }> = {
-    active: {
-      label: "Active",
-      cls: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]",
-    },
-    notice: {
-      label: "Notice",
-      cls: "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]",
-    },
-    "on-leave": {
-      label: "On leave",
-      cls: "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]",
-    },
-    left: {
-      label: "Left",
-      cls: "bg-[var(--ds-chip)] text-[var(--ds-muted)]",
-    },
-  };
-  const { label } = config[status];
-  const tone: Record<EmploymentStatus, PillTone> = {
-    active: "ok",
-    notice: "warn",
-    "on-leave": "info",
-    left: "neutral",
-  };
+function Cell({ value }: { value?: string }) {
+  return value ? <span className="block truncate">{value}</span> : <span className="text-[var(--ds-faint)]">-</span>;
+}
+
+function Count({ n, icon: Icon, label, showLabel }: { n: number; icon: typeof Folder; label: string; showLabel?: boolean }) {
+  if (n === 0)
+    return (
+      <span className="text-[var(--ds-faint)]">
+        0{showLabel ? ` ${label}` : <span className="sr-only"> {label}</span>}
+      </span>
+    );
   return (
-    <StatusPill tone={tone[status]} size="sm">
-      {label}
-    </StatusPill>
+    <span className="inline-flex items-center gap-1.5 text-[var(--ds-ink)]">
+      <Icon aria-hidden className="size-[14px] text-[var(--ds-muted)]" />
+      {n}
+      {showLabel ? <span className="text-[var(--ds-muted)]">{label}</span> : <span className="sr-only">{label}</span>}
+    </span>
   );
 }
 
-function SortPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function EmployeeRowMenu({ employee: e, menu }: { employee: Employee; menu: Menu }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-[5px] px-2 py-1 text-[12px] transition",
-        active
-          ? "bg-[var(--ds-surface-2)] text-[var(--ds-ink)] font-medium"
-          : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-      )}
-    >
-      {children}
-    </button>
+    <span className="contents" onClick={(ev) => ev.stopPropagation()}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Actions for ${e.legalName}`}
+            className="grid size-8 shrink-0 place-items-center rounded-[8px] text-[var(--ds-subtle)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] data-[state=open]:bg-[var(--ds-surface-3)]"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className={cn("w-56", MENU_MOTION)}>
+          <DropdownMenuItem onSelect={() => menu.open(e)}>
+            <ArrowUpRight />
+            Open
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => menu.edit(e)}>
+            <Pencil />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => menu.newLetter(e)}>
+            <Plus />
+            New letter
+          </DropdownMenuItem>
+          {e.status !== "left" && (
+            <DropdownMenuItem onSelect={() => menu.archive(e)}>
+              <Archive />
+              Archive (mark as left)
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={() => menu.remove(e)}>
+            <Trash2 />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </span>
   );
 }
-
-/* ============================================================================
- * Helpers
- * ==========================================================================*/
-
-function buildActivitySummary(row: RowSummary): string {
-  const { draftCount, matterCount, latestDraft } = row;
-  const parts: string[] = [];
-  if (matterCount > 0) {
-    parts.push(`${matterCount} matter${matterCount === 1 ? "" : "s"}`);
-  }
-  if (draftCount > 0) {
-    parts.push(`${draftCount} draft${draftCount === 1 ? "" : "s"}`);
-  }
-  if (latestDraft) {
-    parts.push(`last touched ${timeAgo(latestDraft.updatedAt)}`);
-  }
-  if (parts.length === 0) return "No activity yet";
-  return parts.join(", ");
-}
-
-function timeAgo(ts: number): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
-
-// Re-export the link helper for consumers that want to deep-link.
-export const employeesIndexPath = "/employees";
