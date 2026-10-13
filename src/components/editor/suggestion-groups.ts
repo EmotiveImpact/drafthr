@@ -178,7 +178,10 @@ export function recordDecision(draftId: string, edits: SuggestedEdit[], accept: 
       // (the section proposal's id, else its first mark).
       const key = edit.pending?.id ?? edit.ids[0];
       if (!key) continue;
-      if ([edit.pending?.id, ...edit.ids].some((id) => id && inRound.has(id))) rs.decide(review.id, key, accept ? "accepted" : "rejected");
+      const ids = [edit.pending?.id, ...edit.ids].filter((id): id is string => !!id);
+      // Already decided from Progress under the point's own id: one record.
+      if (ids.some((id) => round.decisions?.[id])) continue;
+      if (ids.some((id) => inRound.has(id))) rs.decide(review.id, key, accept ? "accepted" : "rejected");
     }
   }
 }

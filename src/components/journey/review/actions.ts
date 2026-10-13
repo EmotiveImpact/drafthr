@@ -30,7 +30,7 @@ import {
 import type { Teammate } from "./people";
 import { defaultApproverName, useSavedReviewers } from "./people";
 import type { Expert } from "./experts";
-import { acceptWithSettle, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { acceptWithSettle, decideEdit, suggestedEdits, type SuggestedEdit } from "@/components/editor/suggestion-groups";
 import { collectReviewerWork, reviewPoints, shareableEvidence, openPoints, type ReviewPoint } from "./model";
 import {
   askAgain,
@@ -420,23 +420,50 @@ export async function messageTheReviewer(review: ReviewRequest, text: string, me
 
 export function acceptPoint(review: ReviewRequest, point: ReviewPoint, opts: { animate?: boolean } = {}): void {
   if (point.kind !== "suggestion" || !point.sectionId) return;
+  keepSnapshot(review, point);
   useReviewStore.getState().decide(review.id, point.id, "accepted");
   // Felt motion (letter-live): the struck words fade, the new words settle
   // from lilac to ink, then the change is applied through the same accept
   // path. Instant with reduced motion, and for Accept all (REVIEW-74).
-  const draft = useDraftStore.getState().drafts[review.draftId];
-  const edit =
-    opts.animate !== false && draft
-      ? suggestedEdits(draft).find((e) => e.section.id === point.sectionId && e.kind === "section" && e.ids.length > 0)
-      : undefined;
-  if (edit) acceptWithSettle(review.draftId, edit);
+  const edit = editFor(review.draftId, point);
+  if (edit && opts.animate !== false) acceptWithSettle(review.draftId, edit);
+  else if (edit) decideEdit(review.draftId, edit, true);
   else useDraftStore.getState().acceptSectionPending(review.draftId, point.sectionId);
 }
 
 export function rejectPoint(review: ReviewRequest, point: ReviewPoint): void {
   if (point.kind !== "suggestion" || !point.sectionId) return;
-  useDraftStore.getState().rejectSectionPending(review.draftId, point.sectionId);
+  keepSnapshot(review, point);
+  const edit = editFor(review.draftId, point);
+  if (edit) decideEdit(review.draftId, edit, false);
+  else useDraftStore.getState().rejectSectionPending(review.draftId, point.sectionId);
   useReviewStore.getState().decide(review.id, point.id, "rejected");
+}
+
+/** The reviewer's edit on the page that a point stands for (its marks, else
+ *  the reviewer's change in that section). */
+function editFor(draftId: string, point: ReviewPoint): SuggestedEdit | undefined {
+  const draft = useDraftStore.getState().drafts[draftId];
+  if (!draft) return undefined;
+  const mine = suggestedEdits(draft).filter((e) => !e.ai && e.section.id === point.sectionId);
+  const marks = new Set(point.markIds ?? []);
+  return (
+    mine.find((e) => e.pending?.id === point.id) ??
+    mine.find((e) => e.ids.some((id) => marks.has(id) || id === point.id)) ??
+    mine[0]
+  );
+}
+
+/** Keep what the point said once it leaves the text, so the rounds history
+ *  and the list still name it ("Tie this to the written standard"). */
+function keepSnapshot(review: ReviewRequest, point: ReviewPoint): void {
+  const live = useReviewStore.getState().requests[review.id] ?? review;
+  const rounds = live.rounds.slice();
+  const last = rounds[rounds.length - 1];
+  if (!last || (last.points ?? []).some((p) => p.id === point.id)) return;
+  const { id, kind, sectionId, title, where } = point;
+  rounds[rounds.length - 1] = { ...last, points: [...(last.points ?? []), { id, kind, sectionId, title, where }] };
+  useReviewStore.getState().updateReview(review.id, { rounds });
 }
 
 export function resolvePoint(review: ReviewRequest, point: ReviewPoint, resolved = true): void {

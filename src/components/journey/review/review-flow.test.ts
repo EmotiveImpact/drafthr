@@ -75,6 +75,19 @@ describe("the review loop, end to end in the stores", () => {
     expect(useDraftStore.getState().drafts.d1.sections[0].pendingChange).toBeUndefined();
   });
 
+  it("keeps the change's name once accepted, even without a snapshot, and records it once", () => {
+    const id = danaWorks();
+    const r = useReviewStore.getState().requests[id];
+    const w = collectReviewerWork(useDraftStore.getState().drafts.d1, r.reviewer, currentRound(r)!.sentAt);
+    useReviewStore.getState().markBack(id, { verdict: "ready-with-changes", suggestionIds: w.suggestionIds, commentIds: w.commentIds });
+    const back = useReviewStore.getState().requests[id];
+    const point = reviewPoints(useDraftStore.getState().drafts.d1, back).find((p) => p.kind === "suggestion")!;
+    acceptPoint(back, point, { animate: false });
+    const after = useReviewStore.getState().requests[id];
+    const rows = reviewPoints(useDraftStore.getState().drafts.d1, after).filter((p) => p.kind === "suggestion");
+    expect(rows.map((p) => [p.title, p.state])).toEqual([["Name the Attendance Policy", "accepted"]]);
+  });
+
   it("withdraws the teammate's suggestion when the review is recalled, and keeps comments (REVIEW-X2)", async () => {
     const id = danaWorks();
     await recallReview(useReviewStore.getState().requests[id]);
