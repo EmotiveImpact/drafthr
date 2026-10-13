@@ -156,6 +156,45 @@ describe("runPlaybook", () => {
     expect(run.missing.map((m) => m.key)).not.toContain("employeeName");
   });
 
+  it("feeds an earlier rule's date into a later rule, taking the earliest", () => {
+    const chained: Playbook = {
+      ...mini,
+      facts: [
+        ...mini.facts,
+        { key: "dismissalDate", label: "Dismissal", type: "date", priority: { hr: "should" }, question: "When?" },
+        { key: "actDate", label: "Act", type: "date", priority: { hr: "should" }, question: "When?" },
+        { key: "dayA", label: "Day A", type: "date", priority: { hr: "nice" }, question: "Day A?" },
+        { key: "dayB", label: "Day B", type: "date", priority: { hr: "nice" }, question: "Day B?" },
+      ],
+      rules: [
+        { id: "ud", label: "UD", rule: "uk.tribunalTimeLimit", inputs: { claimType: { value: "unfair_dismissal" }, relevantDate: { fact: "dismissalDate" } } },
+        { id: "disc", label: "Disc", rule: "uk.tribunalTimeLimit", inputs: { claimType: { value: "discrimination" }, relevantDate: { fact: "actDate" } } },
+        {
+          id: "ec",
+          label: "EC",
+          rule: "uk.earlyConciliation",
+          inputs: { limitDate: { deadline: ["ud", "disc"] }, dayA: { fact: "dayA" }, dayB: { fact: "dayB" } },
+        },
+      ],
+    };
+    expect(validatePlaybook(chained)).toEqual([]);
+
+    const h = historyBuilder("2026-10-13T09:00:00Z").open("disciplinary", "hr", ENGLAND);
+    h.answer("dayA", "2026-11-02").answer("dayB", "2026-11-20");
+    const before = runPlaybook(rebuildCaseFile("c1", h.events), chained, "2026-10-13");
+    expect(before.deadlines.find((d) => d.ruleUseId === "ec")).toMatchObject({ date: null, missing: ["limitDate"] });
+
+    h.answer("dismissalDate", "2026-10-05").answer("actDate", "2026-09-01");
+    const after = runPlaybook(rebuildCaseFile("c1", h.events), chained, "2026-10-13");
+    const dates = Object.fromEntries(after.deadlines.map((d) => [d.ruleUseId, d.date]));
+    expect(dates.disc! < dates.ud!).toBe(true);
+    expect(after.deadlines.find((d) => d.ruleUseId === "ec")?.date).toBeTruthy();
+    expect(after.deadlines.find((d) => d.ruleUseId === "ec")?.missing).toEqual([]);
+
+    const backwards = { ...chained, rules: [chained.rules[2], chained.rules[0], chained.rules[1]] };
+    expect(validatePlaybook(backwards).join(" ")).toMatch(/must name an earlier rule use/);
+  });
+
   it("leaves out steps for other lenses", () => {
     const h = historyBuilder("2026-10-13T09:00:00Z").open("disciplinary", "employee", ENGLAND);
     const run = runPlaybook(rebuildCaseFile("c1", h.events), mini, "2026-10-13");

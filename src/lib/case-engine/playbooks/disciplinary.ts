@@ -210,13 +210,22 @@ const GRIEVANCE_PAUSE: Gate = {
   when: {
     all: [
       isTrue("grievanceDuringProcess"),
-      { not: { fact: "grievanceHandling", in: ["deal_with_together", "grievance_decided"] } },
+      { not: { known: "grievanceHandling" } },
     ],
   },
   reason: {
     hr: "Paused: a grievance has been raised (C15). Record whether to deal with it first or together with the disciplinary.",
     consultant:
       "Paused: a grievance has been raised (C15). Record whether your client will deal with it first or together with the disciplinary.",
+  },
+};
+
+const GRIEVANCE_HELD: Gate = {
+  when: { all: [isTrue("grievanceDuringProcess"), { fact: "grievanceHandling", is: "pause_until_grievance_decided" }] },
+  reason: {
+    hr: "Paused until the grievance is decided. Hear the grievance first, with a manager it does not name.",
+    consultant:
+      "Paused until the grievance is decided. Your client should hear the grievance first, with a manager it does not name.",
   },
 };
 
@@ -299,6 +308,7 @@ const DISMISSAL_NOT_FLAGGED: Gate = {
 const OUTCOME_GATES: Gate[] = [
   CONSULTANT_SIGN_OFF,
   GRIEVANCE_PAUSE,
+  GRIEVANCE_HELD,
   DECIDER_NAMED,
   PREGNANCY_PAUSE,
   HEALTH_PAUSE,
@@ -1684,7 +1694,7 @@ export const disciplinaryPlaybook: Playbook = {
     {
       id: "C15",
       level: "act_now",
-      when: { all: [UK, isTrue("grievanceDuringProcess")] },
+      when: { all: [UK, isTrue("grievanceDuringProcess"), { not: { known: "grievanceHandling" } }] },
       message: {
         hr: "Decide whether to pause the disciplinary to deal with the grievance, or deal with both together if they are related. See the grievance playbook.",
         employee:
@@ -2119,7 +2129,7 @@ export const disciplinaryPlaybook: Playbook = {
         ],
       },
       needs: ["employeeName", "allegationSummary", "investigator"],
-      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, HEALTH_PAUSE],
+      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, GRIEVANCE_HELD, HEALTH_PAUSE],
     },
     // Step 3 (decision after investigation) has no letter: caseToAnswer decides between 4 and 5a.
     {
@@ -2136,7 +2146,7 @@ export const disciplinaryPlaybook: Playbook = {
       },
       after: ["investigation_invite"],
       needs: ["employeeName", "allegationSummary", "decisionMaker", "evidenceHeld", "hearingDate", "hearingDetails"],
-      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, DECIDER_NAMED, PREGNANCY_PAUSE, HEALTH_PAUSE, NO_INVESTIGATION],
+      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, GRIEVANCE_HELD, DECIDER_NAMED, PREGNANCY_PAUSE, HEALTH_PAUSE, NO_INVESTIGATION],
     },
     // Step 4r: companion unavailable (C12, date from R6) or employee unable to attend (C14).
     {
@@ -2157,7 +2167,7 @@ export const disciplinaryPlaybook: Playbook = {
       },
       after: ["hearing_invite"],
       needs: ["employeeName", "allegationSummary", "decisionMaker", "evidenceHeld", "hearingDetails"],
-      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, DECIDER_NAMED, PREGNANCY_PAUSE],
+      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, GRIEVANCE_HELD, DECIDER_NAMED, PREGNANCY_PAUSE],
     },
     {
       id: "outcome_no_action",
@@ -2238,7 +2248,7 @@ export const disciplinaryPlaybook: Playbook = {
       lens: EMPLOYER,
       when: { all: [isTrue("appealLodged"), APPEAL_AVAILABLE] },
       needs: ["employeeName", "appealGrounds", "appealManager", "appealHearingDate"],
-      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE],
+      blockedIf: [CONSULTANT_SIGN_OFF, GRIEVANCE_PAUSE, GRIEVANCE_HELD],
     },
     {
       id: "appeal_outcome",
