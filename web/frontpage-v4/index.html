@@ -6,7 +6,7 @@
 <title>DraftHR Front Page</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@300;400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&display=swap" rel="stylesheet">
 <style>
 /* Novera's form, Asset's skin: near-black canvas, graphite panels, white type in Host Grotesk,
    painted landscapes behind real product, one coloured capsule per section label. */
@@ -14,7 +14,7 @@
   --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
   --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
   --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
-  --font:"Host Grotesk",system-ui,sans-serif;
+  --font:"Host Grotesk",system-ui,sans-serif; --serif:"Newsreader",Georgia,serif;
   --wrap:1200px; --gut:clamp(16px,4vw,40px);
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -29,14 +29,15 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 
 /* Type */
 h1,h2,h3{font-weight:400;color:var(--white)}
-h1{font-size:clamp(42px,5.2vw,64px);line-height:1.04;letter-spacing:-.045em}
-h2{font-size:clamp(32px,3.4vw,48px);line-height:1.1;letter-spacing:-.04em}
+h1{font-family:var(--serif);font-weight:300;font-size:clamp(48px,6vw,80px);line-height:1;letter-spacing:-.03em}
+h1 em,h2 em{font-style:italic;font-weight:300}
+h2{font-family:var(--serif);font-weight:300;font-size:clamp(36px,3.8vw,54px);line-height:1.06;letter-spacing:-.025em}
 h3{font-size:20px;line-height:1.25;letter-spacing:-.02em}
 .sub{color:var(--soft);font-size:16px;max-width:46ch}
 .tag{display:inline-flex;align-items:center;gap:9px;font-size:13px;color:var(--soft)}
 .tag::before{content:"";width:14px;height:7px;border-radius:99px;background:var(--c,var(--gold))}
 .tag.g{--c:var(--green)}.tag.c{--c:var(--cyan)}.tag.v{--c:var(--violet)}
-.head{max-width:620px;margin-bottom:56px}
+.head{max-width:660px;margin-bottom:64px}
 .head .tag{margin-bottom:22px}
 .head h2{margin-bottom:18px}
 .center{text-align:center;margin-left:auto;margin-right:auto}.center .sub{margin:0 auto}
@@ -69,21 +70,30 @@ section{padding:clamp(96px,11vw,150px) 0}
 .hero .acts{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .hero .note{margin-top:22px;font-size:13px;color:var(--mute)}
 
+
+/* Hero options (mockup round): photo, headline and line change together */
+.hero{transition:background-image .6s ease}
+.hero-pick{position:absolute;right:clamp(16px,4vw,56px);bottom:clamp(24px,4vh,40px);z-index:3;display:flex;gap:4px;background:rgba(8,10,9,.6);backdrop-filter:blur(10px);border:1px solid var(--line-2);border-radius:99px;padding:4px}
+.hero-pick button{height:32px;min-width:32px;padding:0 12px;border-radius:99px;font-size:13px;color:var(--soft)}
+.hero-pick button[aria-pressed=true]{background:var(--white);color:#08090A}
+@media (max-width:600px){.hero-pick{left:16px;right:16px;bottom:16px;justify-content:center}.hero .wrap{padding-bottom:96px}}
+
 /* 2. Who it is for (where Novera puts its logo strip) */
 .for{padding:24px 0 0}
 .for p{text-align:center;color:var(--mute);font-size:14px;margin-bottom:28px}
-.for ul{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.for li{background:var(--panel);border:1px solid var(--line);border-radius:4px;height:78px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:17px;letter-spacing:-.01em;color:var(--white)}
+.for ul{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 0}
+.for li:first-child{border-left:0}
+.for li{border-left:1px solid var(--line);height:56px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:17px;letter-spacing:-.01em;color:var(--white)}
 .for svg{width:20px;height:20px;stroke:var(--soft);fill:none;stroke-width:1.4}
 
 /* 3. Capabilities: painted canvas with real UI, dark caption panel */
 .caps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .cap{background:var(--panel);border-radius:4px;overflow:hidden;border:1px solid var(--line)}
-.cap .canvas{position:relative;aspect-ratio:4/3;background:#6b5a3a center/cover;overflow:hidden}
+.cap .canvas{position:relative;aspect-ratio:4/3;background:#1a1612 center/cover;overflow:hidden}
 .cap .canvas img{position:absolute;border-radius:6px;box-shadow:0 24px 50px -20px rgba(0,0,0,.6),0 0 0 1px rgba(0,0,0,.08)}
-.cap:nth-child(1) .canvas{background-image:url(img/paint-a.jpg)}
-.cap:nth-child(2) .canvas{background-image:url(img/paint-b.jpg)}
-.cap:nth-child(3) .canvas{background-image:url(img/paint-c.jpg)}
+.cap:nth-child(1) .canvas{background-image:url(img/bd-study.jpg)}
+.cap:nth-child(2) .canvas{background-image:url(img/bd-glass.jpg)}
+.cap:nth-child(3) .canvas{background-image:url(img/bd-dusk.jpg)}
 .cap:nth-child(1) .canvas img{left:12%;top:14%;width:96%}
 .cap:nth-child(2) .canvas img{left:20%;top:12%;width:70%}
 .cap:nth-child(3) .canvas img{left:20%;top:12%;width:70%}
@@ -95,7 +105,7 @@ section{padding:clamp(96px,11vw,150px) 0}
 
 /* 4. How it works: big canvas left, tab list right (Novera), steps from the app */
 .how-grid{display:grid;grid-template-columns:1fr 340px;gap:40px;align-items:start}
-.stage{position:relative;aspect-ratio:16/11;border-radius:6px;overflow:hidden;background:#6b5a3a url(img/paint-wide.jpg) center/cover;border:1px solid var(--line)}
+.stage{position:relative;aspect-ratio:16/11;border-radius:6px;overflow:hidden;background:#1a1612 url(img/bd-dusk-wide.jpg) center/cover;border:1px solid var(--line)}
 .stage img{position:absolute;left:8%;top:9%;width:118%;max-width:none;border-radius:8px;box-shadow:0 40px 80px -30px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.1);opacity:0;transform:translateY(10px);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
 .stage img.on{opacity:1;transform:none}
 .tabs{display:flex;flex-direction:column;gap:8px}
@@ -135,7 +145,7 @@ section{padding:clamp(96px,11vw,150px) 0}
 .nums{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);margin-top:64px}
 .num{padding:32px 24px 0 0}
 .num+.num{padding-left:24px;border-left:1px solid var(--line)}
-.num b{display:block;font-weight:300;font-size:clamp(44px,4.6vw,64px);line-height:1;letter-spacing:-.05em;color:var(--white)}
+.num b{display:block;font:300 clamp(48px,5vw,72px)/1 var(--serif);letter-spacing:-.03em;color:var(--white)}
 .num small{display:block;font-size:13px;color:var(--mute);margin:14px 0 6px}
 .num p{font-size:14.5px;color:var(--soft);max-width:24ch}
 .records{display:grid;grid-template-columns:repeat(4,1fr);gap:32px;margin-top:64px}
@@ -157,7 +167,7 @@ section{padding:clamp(96px,11vw,150px) 0}
 .plan .top h3{font-size:20px}
 .plan .pop{font-size:12px;background:var(--white);color:#08090A;padding:4px 10px;border-radius:99px}
 .plan .price{display:flex;align-items:baseline;gap:6px}
-.plan .price b{font-weight:400;font-size:48px;letter-spacing:-.05em;color:var(--white)}
+.plan .price b{font:300 54px/1 var(--serif);letter-spacing:-.03em;color:var(--white)}
 .plan .price span{color:var(--mute);font-size:14px}
 .plan .fit{color:var(--soft);font-size:14.5px;margin:12px 0 22px;min-height:44px}
 .plan .btn{width:100%;margin-bottom:26px}
@@ -188,7 +198,7 @@ details p{padding:0 22px 22px;color:var(--soft);font-size:15px;max-width:60ch}
 .cta h2{margin:20px 0 16px;max-width:13ch}
 .cta .sub{margin-bottom:30px}
 .cta .acts{display:flex;gap:10px;flex-wrap:wrap}
-.cta .pic{position:relative;background:#6b5a3a url(img/paint-b.jpg) center/cover;margin:20px 20px 20px 0;border-radius:4px;overflow:hidden}
+.cta .pic{position:relative;background:#1a1612 url(img/bd-glass.jpg) center 30%/cover;margin:20px 20px 20px 0;border-radius:4px;overflow:hidden}
 .cta .pic img{position:absolute;left:12%;top:12%;width:150%;max-width:none;border-radius:8px;box-shadow:0 30px 60px -25px rgba(0,0,0,.7)}
 
 /* 10. Footer */
@@ -226,7 +236,8 @@ footer{border-top:1px solid var(--line);padding:64px 0 40px;margin-top:clamp(96p
   .hero{background-position:78% 40%}
   .hero::after{background:linear-gradient(0deg,rgba(8,10,9,1) 0%,rgba(8,10,9,.75) 40%,rgba(8,10,9,.35) 75%,rgba(8,10,9,.55) 100%)}
   .hero .sub{font-size:16px}
-  .for li{height:64px;font-size:15px}
+  .for li{height:52px;font-size:15px}
+  .for li:nth-child(3){border-left:0}
   .caps,.letters{grid-template-columns:1fr}
   .caps .cap:last-child{grid-column:auto}
   .stage{aspect-ratio:4/3.6}.stage img{width:170%}
@@ -248,14 +259,15 @@ footer{border-top:1px solid var(--line);padding:64px 0 40px;margin-top:clamp(96p
 
 <main id="top">
   <!-- 1. Top of page -->
-  <section class="hero" style="padding:0">
+  <section class="hero" style="padding:0" data-hero="0">
     <div class="wrap">
-      <span class="tag rv">AI drafting for UK and US HR letters</span>
-      <h1 class="rv">HR letters that stand up to scrutiny.</h1>
-      <p class="sub rv">For HR teams, and for employees raising a concern. DraftHR writes each letter in the right structure, and you approve every word before it is sent.</p>
+      <span class="tag rv" data-k="tag">AI drafting for UK and US HR letters</span>
+      <h1 class="rv" data-k="h">HR letters that stand up to <em>scrutiny.</em></h1>
+      <p class="sub rv" data-k="p">For HR teams, and for employees raising a concern. DraftHR writes each letter in the right structure, and you approve every word before it is sent.</p>
       <div class="acts rv"><a class="btn btn-white" href="#">Start a letter</a><a class="btn btn-line" href="#how">See how it works</a></div>
       <p class="note rv">From £9.99 a letter. DraftHR drafts, you decide. Not legal advice.</p>
     </div>
+    <div class="hero-pick" role="group" aria-label="Hero options"></div>
   </section>
 
   <div class="for"><div class="wrap">
@@ -440,6 +452,26 @@ document.documentElement.classList.add('js');
     var y=sw.getAttribute('aria-checked')!=='true';sw.setAttribute('aria-checked',y);
     document.querySelectorAll('[data-m][data-y]').forEach(function(el){el.textContent=el.dataset[y?'y':'m']});
   });
+})();
+
+// Hero options: each pairs a photograph with its own headline
+(function(){
+  var H=[
+    {img:'img/hero-dusk.jpg',pos:'70% 50%',tag:'AI drafting for UK and US HR letters',h:'HR letters that stand up to <em>scrutiny.</em>',p:'For HR teams, and for employees raising a concern. DraftHR writes each letter in the right structure, and you approve every word before it is sent.'},
+    {img:'img/hero-letter.jpg',pos:'60% 38%',tag:'For the letters that matter',h:'Some letters are hard to write. <em>Write them well.</em>',p:'A grievance, a warning, a reply to an offer. DraftHR helps you set it out clearly and fairly, in the right structure for the UK or the US.'},
+    {img:'img/hero-glass.jpg',pos:'60% 40%',tag:'Fair to both sides',h:'Every letter will be read <em>twice.</em>',p:'Once when it arrives, and again if things go further. DraftHR drafts it with the care a manager, a tribunal or a court would expect, and nothing is sent until you approve it.'}
+  ];
+  var hero=document.querySelector('.hero'),pick=document.querySelector('.hero-pick');
+  window.DRAFTHR_HEROES=H;
+  function show(i){
+    var d=H[i];hero.style.backgroundImage='url('+d.img+')';hero.style.backgroundPosition=d.pos;
+    hero.querySelector('[data-k=tag]').textContent=d.tag;
+    hero.querySelector('[data-k=h]').innerHTML=d.h;
+    hero.querySelector('[data-k=p]').textContent=d.p;
+    pick.querySelectorAll('button').forEach(function(b,j){b.setAttribute('aria-pressed',j===i)});
+  }
+  H.forEach(function(_,i){var b=document.createElement('button');b.textContent='Hero '+(i+1);b.addEventListener('click',function(){show(i)});pick.appendChild(b)});
+  var q=(location.hash.match(/hero=(\d)/)||[])[1];show(q?Math.min(+q-1,H.length-1):0);
 })();
 </script>
 </body>
