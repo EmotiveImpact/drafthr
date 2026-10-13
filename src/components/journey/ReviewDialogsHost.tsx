@@ -1,95 +1,429 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { matchPath, useLocation, useNavigate } from "react-router-dom";
+import { Send } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { ReviewDialog } from "@/components/editor/ReviewDialog";
 import { useJourneyUI } from "@/components/journey/ui-store";
-import { REVIEW_KIND_LABELS, useReviewStore, type ReviewKind } from "@/lib/journey/reviews";
+import { useDraftStore } from "@/lib/store";
+import { useBookingsStore } from "@/lib/bookings";
+import { notifyReviewRequested } from "@/lib/collab-notify";
+import { currentRound, firstName, useReviewStore, type ReviewRequest } from "@/lib/journey/reviews";
+import { ReviewerPicker } from "./review/ReviewerPicker";
+import { RoundsList } from "./review/parts";
+import { useReviewUI } from "./review/review-ui";
+import { bookingFor, finishReview, isAskerOf, recallReview, sendBackToReviewer, useMe } from "./review/actions";
+import { useAssignedReviews, useReviewSync } from "./review/sync";
+import { openPoints, plural, reviewPoints } from "./review/model";
 
 /**
- * Hosts the review dialogs (the "Who should review this letter?" picker and
- * the rest). Mounted once by JourneyPanel; open them through useJourneyUI.
+ * Hosts the review loop's dialogs: "Who should review this letter?" (opened
+ * through useJourneyUI().openReviewPicker), the Recall and Finish review
+ * confirmations, the "Send back to <name>" composer, the rounds history and
+ * the approval picker for "Skip review" when there is no usual approver.
+ * Also: the return from the marketplace (`?review=expert&expert=<id>`), the
+ * "sent it back" toast, and keeping the open review in step with the server.
  *
- * Working minimal placeholder from the foundation: pick the kind of
- * reviewer, name them, say what to look at, and send. The review builder
- * owns this file and replaces the body with the full picker (mock f2).
+ * Mounted by JourneyPanel and may be mounted again by the letter screen;
+ * only the first mounted copy renders, so nothing opens twice.
  */
+
+/* One live host at a time. */
+let owners: string[] = [];
+const listeners = new Set<() => void>();
+const ownerStore = {
+  subscribe(fn: () => void) {
+    listeners.add(fn);
+    return () => listeners.delete(fn);
+  },
+  get: () => owners[0] ?? null,
+  claim(id: string) {
+    owners = [...owners, id];
+    listeners.forEach((l) => l());
+  },
+  release(id: string) {
+    owners = owners.filter((o) => o !== id);
+    listeners.forEach((l) => l());
+  },
+};
+
 export function ReviewDialogsHost() {
-  const picker = useJourneyUI((s) => s.reviewPicker);
-  const close = useJourneyUI((s) => s.closeReviewPicker);
-  const createReview = useReviewStore((s) => s.createReview);
-  const [kind, setKind] = useState<ReviewKind>("team");
-  const [name, setName] = useState("");
-  const [ask, setAsk] = useState("");
-
+  const id = useId();
   useEffect(() => {
-    if (!picker) return;
-    setKind(picker.preset?.kind ?? "team");
-    setName("");
-    setAsk("");
-  }, [picker]);
+    ownerStore.claim(id);
+    return () => ownerStore.release(id);
+  }, [id]);
+  const owner = useSyncExternalStore(ownerStore.subscribe, ownerStore.get, ownerStore.get);
+  if (owner !== id) return null;
+  return <HostBody />;
+}
 
-  const send = () => {
-    if (!picker || !name.trim()) return;
-    createReview({
-      draftId: picker.draftId,
-      kind,
-      reviewer: { name: name.trim(), consultantId: kind === "expert" ? picker.preset?.expertId : undefined },
-      ask,
-      dueAt: picker.preset?.dueAt,
-    });
-    close();
-  };
+function HostBody() {
+  const picker = useJourneyUI((s) => s.reviewPicker);
+  const closePicker = useJourneyUI((s) => s.closeReviewPicker);
+  const pickerDraft = useDraftStore((s) => (picker ? s.drafts[picker.draftId] : undefined));
+  const pickerAllowed = !!pickerDraft && !pickerDraft.isTemplateSource;
 
   return (
-    <Dialog open={!!picker} onOpenChange={(open) => !open && close()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Who should review this letter?</DialogTitle>
-          <DialogDescription>Editing pauses while it is out for review.</DialogDescription>
-        </DialogHeader>
+    <>
+      {picker && pickerAllowed && (
+        <ReviewerPicker
+          key={`${picker.draftId}:${picker.preset?.kind ?? ""}:${picker.preset?.expertId ?? ""}:${picker.preset?.from ?? ""}`}
+          draftId={picker.draftId}
+          preset={picker.preset}
+          onClose={closePicker}
+        />
+      )}
+      <RecallConfirm />
+      <FinishConfirm />
+      <SendBackComposer />
+      <RoundsHistory />
+      <ApprovalPicker />
+      <MarketplaceReturn />
+      <RouteDraftWatcher />
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  The open review on a draft                                         */
+/* ------------------------------------------------------------------ */
+
+function useOpenReview(draftId: string | null): ReviewRequest | null {
+  const requests = useReviewStore((s) => s.requests);
+  return useMemo(() => {
+    if (!draftId) return null;
+    return (
+      Object.values(requests)
+        .filter((r) => r.draftId === draftId && (r.status === "out" || r.status === "back"))
+        .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null
+    );
+  }, [requests, draftId]);
+}
+
+function useLatestFor(draftId: string | null): ReviewRequest | null {
+  const requests = useReviewStore((s) => s.requests);
+  return useMemo(() => {
+    if (!draftId) return null;
+    return (
+      Object.values(requests)
+        .filter((r) => r.draftId === draftId && r.status !== "recalled")
+        .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null
+    );
+  }, [requests, draftId]);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Recall                                                             */
+/* ------------------------------------------------------------------ */
+
+function RecallConfirm() {
+  const draftId = useReviewUI((s) => s.recallFor);
+  const set = useReviewUI((s) => s.set);
+  const review = useOpenReview(draftId);
+  const bookings = useBookingsStore((s) => s.bookings);
+  const booking = bookingFor(review, bookings);
+  const [busy, setBusy] = useState(false);
+  const open = !!draftId && !!review && review.status === "out";
+  const close = () => set({ recallFor: null });
+
+  useEffect(() => {
+    // Nothing to recall (it came back meanwhile): close quietly.
+    if (draftId && (!review || review.status !== "out")) set({ recallFor: null });
+  }, [draftId, review, set]);
+
+  if (!open || !review) return null;
+  const who = firstName(review.reviewer.name) || "the reviewer";
+  const started = review.kind === "expert" && (booking?.paymentStatus === "paid" || !!booking?.acceptedAt);
+  return (
+    <Dialog open onOpenChange={(o) => !o && close()}>
+      <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-recall-confirm">
+        <DialogTitle className="text-[20px]">Recall it from {who}?</DialogTitle>
+        <DialogDescription className="mt-2 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
+          {review.kind === "trusted"
+            ? `${who}'s secure link stops working at once and you can edit the letter again.`
+            : review.kind === "expert"
+              ? `${who} can no longer open the letter and you can edit it again.`
+              : `${who} can no longer suggest changes or send it back, and you can edit the letter again.`}
+          {started ? " Once a review has started, the fee isn't refunded." : ""}
+        </DialogDescription>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={close} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await recallReview(review);
+              } finally {
+                setBusy(false);
+                close();
+              }
+            }}
+          >
+            {busy ? "Recalling…" : "Recall"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Finish review                                                      */
+/* ------------------------------------------------------------------ */
+
+function FinishConfirm() {
+  const draftId = useReviewUI((s) => s.finishFor);
+  const set = useReviewUI((s) => s.set);
+  const review = useOpenReview(draftId);
+  const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const left = useMemo(() => (draft && review ? openPoints(reviewPoints(draft, review)) : []), [draft, review]);
+  const close = () => set({ finishFor: null });
+  const ran = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!draftId) {
+      ran.current = null;
+      return;
+    }
+    if (!review || review.status !== "back") {
+      set({ finishFor: null });
+      return;
+    }
+    // Nothing left to decide: finish at once.
+    if (left.length === 0 && ran.current !== review.id) {
+      ran.current = review.id;
+      set({ finishFor: null });
+      void finishReview(review);
+    }
+  }, [draftId, review, left.length, set]);
+
+  if (!draftId || !review || review.status !== "back" || left.length === 0) return null;
+  const suggestions = left.filter((p) => p.kind === "suggestion").length;
+  const comments = left.length - suggestions;
+  const what = [
+    suggestions > 0 ? `${plural(suggestions, "suggestion")} ${suggestions === 1 ? "stays" : "stay"} in the letter for you to accept or reject later` : "",
+    comments > 0 ? `${plural(comments, "comment")} ${comments === 1 ? "stays" : "stay"} open` : "",
+  ]
+    .filter(Boolean)
+    .join(", and ");
+  return (
+    <Dialog open onOpenChange={(o) => !o && close()}>
+      <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-finish-confirm">
+        <DialogTitle className="text-[20px]">Finish with {plural(left.length, "point")} left?</DialogTitle>
+        <DialogDescription className="mt-2 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
+          You haven't decided on {left.length === 1 ? "one of" : `${left.length} of`}{" "}
+          {firstName(review.reviewer.name) || "the reviewer"}'s points. If you finish now, {what}. The letter moves on to approval.
+        </DialogDescription>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={close}>
+            Keep deciding
+          </Button>
+          <Button
+            onClick={() => {
+              close();
+              void finishReview(review);
+            }}
+          >
+            Finish review
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Send back with a question                                          */
+/* ------------------------------------------------------------------ */
+
+function SendBackComposer() {
+  const draftId = useReviewUI((s) => s.sendBackFor);
+  const set = useReviewUI((s) => s.set);
+  const review = useOpenReview(draftId);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (draftId) setText("");
+  }, [draftId]);
+  if (!draftId || !review || review.status !== "back") return null;
+  const who = firstName(review.reviewer.name) || "the reviewer";
+  const round = currentRound(review);
+  const close = () => set({ sendBackFor: null });
+  const submit = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    try {
+      await sendBackToReviewer(review, text);
+      close();
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && close()}>
+      <DialogContent className="w-[480px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[480px]" data-testid="review-send-back">
+        <DialogTitle className="text-[20px]">Send back to {who}</DialogTitle>
+        <DialogDescription className="mt-1.5 mb-3 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
+          This starts round {(round?.n ?? 1) + 1}. {who} sees your question at the top of their review, and the letter is locked again until it's back.
+        </DialogDescription>
         <form
-          className="flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
-            send();
+            void submit();
           }}
         >
-          <RadioGroup value={kind} onValueChange={(v) => setKind(v as ReviewKind)} className="gap-2.5">
-            {(Object.keys(REVIEW_KIND_LABELS) as ReviewKind[]).map((k) => (
-              <Label key={k} className="flex items-center gap-2.5 font-normal">
-                <RadioGroupItem value={k} />
-                {REVIEW_KIND_LABELS[k]}
-              </Label>
-            ))}
-          </RadioGroup>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="review-name">Reviewer's name</Label>
-            <Input id="review-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="review-ask">What should they look at?</Label>
-            <Textarea id="review-ask" value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} />
-          </div>
-          <DialogFooter>
+          <label htmlFor="send-back-question" className="mb-1.5 block text-[13px] font-medium text-[var(--ds-ink)]">
+            Your question or note
+          </label>
+          <textarea
+            id="send-back-question"
+            autoFocus
+            required
+            rows={4}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="For example: is it fair to name the June absences, or should we leave dates out?"
+            className="block min-h-[96px] w-full resize-y rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2.5 text-[13.5px] leading-[1.5] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-subtle)] focus-visible:shadow-[var(--ds-focus-ring)]"
+          />
+          <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={close}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!name.trim()}>
-              Send for review
+            <Button type="submit" disabled={!text.trim() || busy}>
+              <Send className="size-[15px]" strokeWidth={1.7} />
+              {busy ? "Sending…" : `Send to ${who}`}
             </Button>
-          </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Rounds history (rv-done)                                           */
+/* ------------------------------------------------------------------ */
+
+function RoundsHistory() {
+  const draftId = useReviewUI((s) => s.roundsFor);
+  const set = useReviewUI((s) => s.set);
+  const review = useLatestFor(draftId);
+  const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  if (!draftId || !review || !draft) return null;
+  return (
+    <Dialog open onOpenChange={(o) => !o && set({ roundsFor: null })}>
+      <DialogContent className="max-h-[calc(100dvh-32px)] w-[560px] max-w-[calc(100vw-32px)] gap-0 overflow-y-auto rounded-[16px] p-6 sm:max-w-[560px]" data-testid="review-rounds-dialog">
+        <DialogTitle className="text-[22px]">How the review went</DialogTitle>
+        <DialogDescription className="mt-1 mb-4 text-[13.5px] text-[var(--ds-muted)]">
+          {plural(review.rounds.length, "round")} with {review.reviewer.name || "the reviewer"}
+        </DialogDescription>
+        <RoundsList draft={draft} review={review} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Skip review without a usual approver                               */
+/* ------------------------------------------------------------------ */
+
+function ApprovalPicker() {
+  const draftId = useReviewUI((s) => s.approvalFor);
+  const set = useReviewUI((s) => s.set);
+  if (!draftId) return null;
+  return (
+    <ReviewDialog
+      open
+      kind="submit"
+      onOpenChange={(o) => !o && set({ approvalFor: null })}
+      onSubmit={(input) => {
+        useDraftStore.getState().submitForReview(draftId, input.reviewerName, input.body);
+        if (input.reviewerUserId) notifyReviewRequested(draftId, input.reviewerUserId, input.body || undefined);
+        toast.success("Submitted for approval");
+        set({ approvalFor: null });
+      }}
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Back from the marketplace: /editor/:id?review=expert&expert=<id>    */
+/* ------------------------------------------------------------------ */
+
+function useRouteDraftId(): string | null {
+  const { pathname } = useLocation();
+  const m = matchPath({ path: "/editor/:draftId", end: false }, pathname);
+  return m?.params.draftId ?? null;
+}
+
+function MarketplaceReturn() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const draftId = useRouteDraftId();
+  const openReviewPicker = useJourneyUI((s) => s.openReviewPicker);
+  const handled = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!draftId) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("review") !== "expert") return;
+    const key = `${draftId}${location.search}`;
+    if (handled.current === key) return;
+    handled.current = key;
+    const expertId = params.get("expert") ?? undefined;
+    const due = params.get("due");
+    const dueAt = due && !Number.isNaN(Date.parse(due)) && Date.parse(due) > Date.now() ? new Date(due).toISOString() : undefined;
+    // Only the person who can send it for review gets the dialog; a review
+    // already out is left alone.
+    const open = Object.values(useReviewStore.getState().requests).some(
+      (r) => r.draftId === draftId && (r.status === "out" || r.status === "back")
+    );
+    if (!open) openReviewPicker(draftId, { kind: "expert", expertId, dueAt, from: "marketplace" });
+    params.delete("review");
+    params.delete("expert");
+    params.delete("due");
+    const rest = params.toString();
+    navigate({ pathname: location.pathname, search: rest ? `?${rest}` : "", hash: location.hash }, { replace: true, state: location.state });
+  }, [draftId, location, navigate, openReviewPicker]);
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The letter on screen: sync, and "<name> sent it back"               */
+/* ------------------------------------------------------------------ */
+
+function RouteDraftWatcher() {
+  const draftId = useRouteDraftId();
+  const review = useOpenReview(draftId);
+  const me = useMe();
+  const asker = !!review && isAskerOf(review, me);
+  useReviewSync(review, asker);
+  // A teammate asked you on their device: fetch it so the review shows here
+  // (only on letters you were invited to).
+  const invited = useDraftStore((s) => {
+    const email = (me.email ?? "").toLowerCase();
+    return !!email && !!draftId && (s.drafts[draftId]?.collaborators ?? []).some((c) => c.email.toLowerCase() === email);
+  });
+  useAssignedReviews(draftId, !!me.userId && invited && !asker);
+
+  const seen = useRef<Record<string, string>>({});
+  useEffect(() => {
+    if (!review) return;
+    const prev = seen.current[review.id];
+    const now = `${review.status}:${review.rounds.length}`;
+    seen.current[review.id] = now;
+    if (!asker || !prev) return;
+    if (prev.startsWith("out:") && review.status === "back") {
+      toast(`${firstName(review.reviewer.name) || "Your reviewer"} sent it back`, { position: "bottom-right" });
+      useReviewUI.getState().set({ justBack: { draftId: review.draftId, at: Date.now() } });
+    }
+  }, [review, asker]);
+
+  return null;
 }
