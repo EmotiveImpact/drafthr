@@ -6,15 +6,15 @@
 <title>DraftHR Front Page</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&family=Inter+Tight:wght@500;600&family=Inter:wght@400;500&family=Cal+Sans&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Novera's form, Asset's skin: near-black canvas, graphite panels, white type in Host Grotesk,
+/* Novera's form, Asset's skin: near-black canvas, graphite panels, type in Manrope throughout,
    painted landscapes behind real product, one coloured capsule per section label. */
 :root{
   --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
   --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
   --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
-  --font:"Host Grotesk",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --font:"Manrope",system-ui,sans-serif; --mono:"Manrope",system-ui,sans-serif;
   --wrap:1200px; --gut:clamp(16px,4vw,40px);
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -490,23 +490,14 @@ html[data-theme=light] .who-card{background:#fff;box-shadow:0 1px 0 rgba(12,12,1
 html[data-theme=light] .who-card p{color:var(--soft)}
 
 
-/* ===== Font sets (switcher for choosing; the final site keeps one) ===== */
+/* ===== Type: Manrope throughout ===== */
 :root{--font-h:var(--font);--hw:600;--hls:-.058em}
-html[data-font=geist]{--font:"Geist",system-ui,sans-serif;--font-h:"Geist",system-ui,sans-serif;--mono:"Geist Mono",ui-monospace,monospace;--hw:600;--hls:-.05em}
-html[data-font=inter]{--font:"Inter",system-ui,sans-serif;--font-h:"Inter Tight","Inter",system-ui,sans-serif;--mono:"Inter",system-ui,sans-serif;--hw:600;--hls:-.045em}
-html[data-font=cal]{--font:"Inter",system-ui,sans-serif;--font-h:"Cal Sans","Inter",system-ui,sans-serif;--mono:"Inter",system-ui,sans-serif;--hw:400;--hls:-.02em}
 html[data-font=manrope]{--font:"Manrope",system-ui,sans-serif;--font-h:"Manrope",system-ui,sans-serif;--mono:"Manrope",system-ui,sans-serif;--hw:700;--hls:-.045em}
 body{font-family:var(--font)}
 h1,h2,h3,.who-card .stat,.num b,.plan .price b,.logo,.cat h3{font-family:var(--font-h)}
 h1,h2,.lv-head h2,.statement h2,.close h2,.lvl h3,.who-card .stat{font-weight:var(--hw);letter-spacing:var(--hls)}
 .num b,.plan .price b{letter-spacing:var(--hls)}
-html:is([data-font=inter],[data-font=cal],[data-font=manrope]) :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .top h3,.bill .off,.plan .pop,.juris span,.who-card .go){letter-spacing:.06em;font-weight:600}
-.fontsw{position:fixed;left:16px;bottom:16px;z-index:50;display:flex;align-items:center;gap:2px;padding:4px;border-radius:99px;background:rgba(20,20,22,.88);backdrop-filter:blur(10px);box-shadow:0 10px 30px -10px rgba(0,0,0,.5);font-family:system-ui,sans-serif}
-.fontsw span{font-size:12px;color:rgba(255,255,255,.55);padding:0 10px 0 12px}
-.fontsw button{height:36px;padding:0 14px;border-radius:99px;font-size:13.5px;color:rgba(255,255,255,.75)}
-.fontsw button[aria-pressed=true]{background:#fff;color:#08090A}
-@media (max-width:600px){.fontsw{left:8px;right:8px;bottom:64px;overflow-x:auto}.fontsw span{display:none}}
-
+html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .top h3,.bill .off,.plan .pop,.juris span,.who-card .go){letter-spacing:.06em;font-weight:600}
 /* Reveal */
 .js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
 .js .rv.in{opacity:1;transform:none}
@@ -726,17 +717,9 @@ html:is([data-font=inter],[data-font=cal],[data-font=manrope]) :is(.tag,.btn,.ch
   </div>
 </div></footer>
 
-<div class="fontsw" role="group" aria-label="Font"><span>Font</span><button type="button" data-f="geist" aria-pressed="false">1 Geist</button><button type="button" data-f="inter" aria-pressed="false">2 Inter</button><button type="button" data-f="cal" aria-pressed="false">3 Cal Sans</button><button type="button" data-f="manrope" aria-pressed="true">4 Manrope</button><button type="button" data-f="host" aria-pressed="false">Current</button></div>
 <div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
 <script>
 document.documentElement.classList.add('js');
-(function(){
-  var root=document.documentElement,bs=document.querySelectorAll('.fontsw button');
-  function set(f){root.setAttribute('data-font',f);bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.f===f)});try{localStorage.setItem('drafthr-font',f)}catch(e){}}
-  var q=(location.hash.match(/font=(\w+)/)||[])[1],saved=null;try{saved=localStorage.getItem('drafthr-font')}catch(e){}
-  set(q||saved||'manrope');
-  bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset.f)})});
-})();
 
 (function(){
   var root=document.documentElement,bs=document.querySelectorAll('.theme button');
