@@ -1,8 +1,9 @@
 import type { Condition, Playbook } from "../types";
 
 /**
- * Redundancy (individual and collective), version 0.1, from the draft
- * playbook dated 13 October 2026 (draft for legal review, not for customers).
+ * Redundancy (individual and collective), version 0.2, from the draft
+ * playbook dated 13 October 2026 and updated with the Great Britain, Northern
+ * Ireland and US region reviews (draft for legal review, not for customers).
  *
  * Source tags such as "S1" point to section 11 of the draft. Dates, periods
  * and money are never worked out here: rule uses name a rule and the facts
@@ -12,6 +13,11 @@ import type { Condition, Playbook } from "../types";
  * yes-or-no signals the Reader can pull from a story so the draft's checks,
  * branches and hand-offs can be written as conditions. Most are `nice`, so
  * the interviewer never asks for them.
+ *
+ * Messages vary by lens only, not by nation. Where Great Britain and Northern
+ * Ireland differ in level or trigger, the Northern Ireland version is its own
+ * check (noAppealNI, familyLeaveNIOnLeave, underTwoYearsNI, timeOffJobSearchNI);
+ * where only the wording differs, one message carries both, each labelled.
  */
 
 // ---------------------------------------------------------------------------
@@ -48,40 +54,40 @@ const ABSENCE_MAY_BE_LINKED: Condition = {
 };
 
 /**
- * Inside the family leave priority period. GB: pregnant, on leave, or back
- * from leave while the rules code says the protected period has not ended
- * (no date yet counts as protected). NI: during maternity leave only [S40].
+ * Inside the family leave priority period in Great Britain: pregnant, on
+ * leave, or back from leave while the rules code says the protected period
+ * has not ended (no date yet counts as protected). The rules code applies the
+ * six consecutive weeks rule for shared parental, neonatal care and bereaved
+ * partner's paternity leave [S18, S72, S73].
  */
-const FAMILY_PROTECTED: Condition = {
-  any: [
+const FAMILY_PROTECTED_GB: Condition = {
+  all: [
+    GB,
     {
-      all: [
-        GB,
+      any: [
+        { fact: "familyLeaveStatus", in: ["pregnant", "on_leave"] },
         {
-          any: [
-            { fact: "familyLeaveStatus", in: ["pregnant", "on_leave"] },
-            {
-              all: [
-                { fact: "familyLeaveStatus", is: "returned" },
-                { not: { deadline: "family_leave_protection", withinDays: -1 } },
-              ],
-            },
+          all: [
+            { fact: "familyLeaveStatus", is: "returned" },
+            { not: { deadline: "family_leave_protection", withinDays: -1 } },
           ],
         },
       ],
     },
-    {
-      all: [
-        NI,
-        { fact: "familyLeaveStatus", is: "on_leave" },
-        { fact: "familyLeaveType", is: "maternity" },
-      ],
-    },
   ],
 };
+/** Northern Ireland: only while on maternity, adoption or shared parental leave [S40, S84]. */
+const FAMILY_PROTECTED_NI: Condition = {
+  all: [
+    NI,
+    { fact: "familyLeaveStatus", is: "on_leave" },
+    { fact: "familyLeaveType", in: ["maternity", "adoption", "shared_parental"] },
+  ],
+};
+const FAMILY_PROTECTED: Condition = { any: [FAMILY_PROTECTED_GB, FAMILY_PROTECTED_NI] };
 
 /** A protected person, a vacancy that may be suitable, and no offer or recorded reason. */
-const FAMILY_VACANCY_MISSED: Condition = {
+const FAMILY_VACANCY_OPEN: Condition = {
   all: [
     FAMILY_PROTECTED,
     VACANCY_EXISTS,
@@ -113,6 +119,86 @@ const AT_OUTCOME: Condition = {
   ],
 };
 const NOTICE_STAGE: Condition = { fact: "processStage", in: ["notice_given", "ended"] };
+
+const LISTED_CONCERNS = [
+  "grievance",
+  "whistleblowing",
+  "health_and_safety",
+  "discrimination_complaint",
+  "flexible_working",
+  "pay_complaint",
+  "representative",
+];
+
+/**
+ * Closest safe version of "less than 2 years' service": the Condition
+ * language cannot read the rules code's detail.qualifies or compare a fact
+ * with a rules-code date, so it is written as at most 728 days from start to
+ * end. Two years beginning with the start day end 729 or 730 days later, so
+ * this never fires for someone with 2 years, but misses the last day or two
+ * before the 2-year point.
+ */
+const SERVICE_UNDER_TWO_YEARS: Condition = {
+  any: [
+    { fact: "employmentEndDate", withinDays: 728, from: { fact: "serviceStartDate" } },
+    {
+      all: [
+        { not: { known: "employmentEndDate" } },
+        { fact: "firstDismissalDate", withinDays: 728, from: { fact: "serviceStartDate" } },
+      ],
+    },
+  ],
+};
+/**
+ * Notice given with 2 years' service. Closest safe version, as above: fires
+ * only from 730 days after the start, so never before 2 years but a day late
+ * in some years; it tests service at the notice date, not at the end of notice.
+ */
+const NOTICE_WITH_TWO_YEARS: Condition = {
+  all: [
+    { known: "noticeDate" },
+    { known: "serviceStartDate" },
+    { fact: "noticeDate", onOrAfter: { fact: "serviceStartDate" } },
+    { not: { fact: "noticeDate", withinDays: 729, from: { fact: "serviceStartDate" } } },
+  ],
+};
+
+// United States. The case's state is a code ("TX"). The state rules run for
+// one state: usState when it is given, or else the case's state (the rules
+// code's default). usStates lists every state where affected staff work.
+
+/** The state the state rules run for is one of these codes. */
+const STATE_IS = (codes: string[]): Condition => ({
+  any: [{ fact: "usState", in: codes }, { all: [{ not: { known: "usState" } }, { state: codes }] }],
+});
+/** Anyone affected may work in one of these states (codes and names, as usStates is free text). */
+const ANYONE_IN = (codes: string[], names: string[]): Condition => ({
+  any: [STATE_IS(codes), { fact: "usStates", in: [...codes, ...names] }],
+});
+const ANYONE_IN_STATE_WARN_STATE = ANYONE_IN(["CA", "NY", "IL"], ["California", "New York", "Illinois"]);
+
+/** The rule use has a date. A passed date counts, as for any `deadline` test. */
+const HAS_DATE = (ruleUseId: string): Condition => ({ deadline: ruleUseId, withinDays: 36500 });
+/** Fewer than 100 full-time staff, and the 4,000-hour test not shown to be met. */
+const WARN_TOO_SMALL: Condition = {
+  all: [{ fact: "usEmployerHeadcount", below: 100 }, { not: { fact: "usEmployer4000Hours", is: true } }],
+};
+/**
+ * Federal WARN applies, or may apply on the counts given: the rules code
+ * returns no date only when the counts show it does not apply [S48, S52].
+ */
+const WARN_FEDERAL: Condition = { all: [US, HAS_DATE("warn_notice"), { not: WARN_TOO_SMALL }] };
+/** A California, New York or Illinois layoff notice law applies, or may apply [S55, S56, S58]. */
+const WARN_STATE: Condition = { all: [US, HAS_DATE("us_state_warn_notice")] };
+const WARN_DUE: Condition = { any: [WARN_FEDERAL, WARN_STATE] };
+
+/** From `from` up to, but not including, `to`. */
+const BETWEEN = (fact: string, from: number, to: number): Condition => ({
+  all: [
+    { fact, atLeast: from },
+    { fact, below: to },
+  ],
+});
 
 /** First-turn must facts: "no letter without it" (part 3, levels). */
 const EMPLOYER_FIRST = [
@@ -150,7 +236,7 @@ const NOT_REDUNDANCY_BLOCK = {
 export const redundancyPlaybook: Playbook = {
   id: "redundancy",
   name: "Redundancy (individual and collective)",
-  version: "0.1",
+  version: "0.2",
   status: "draft",
 
   recognise: {
@@ -488,7 +574,8 @@ export const redundancyPlaybook: Playbook = {
         employee: "Have you been told how people will be chosen? Please share anything in writing.",
         consultant: "What criteria will your client use to choose between people?",
       },
-      askIf: { fact: "rolesRemaining", atLeast: 1 },
+      // US cases ask usSelectionCriteria instead (part 3 G).
+      askIf: { all: [UK, { fact: "rolesRemaining", atLeast: 1 }] },
       why: "Criteria must be objective, applied the same way to all, and non-discriminatory.",
     },
     {
@@ -621,7 +708,7 @@ export const redundancyPlaybook: Playbook = {
       },
       askIf: UK,
       specialCategory: true,
-      why: "These people have priority for suitable alternative vacancies.",
+      why: "These people have priority for suitable alternative vacancies. Great Britain: from when the employer is told of a pregnancy, during these leaves, and for a period after maternity or adoption leave, or after six or more consecutive weeks of shared parental, neonatal care or bereaved partner's paternity leave; ordinary paternity leave is not covered. Northern Ireland: only while on maternity, adoption or shared parental leave.",
     },
     // The draft's familyLeaveDates, split into the inputs the rules code takes.
     {
@@ -683,17 +770,64 @@ export const redundancyPlaybook: Playbook = {
     },
     {
       key: "familyLeaveBirthDate",
-      label: "Date of birth or placement",
+      label: "Date of birth",
       type: "date",
       priority: { hr: "must", employee: "must", consultant: "must" },
       question: {
-        hr: "What was the date of birth or placement?",
-        employee: "What was the birth or placement date?",
-        consultant: "What was the date of birth or placement?",
+        hr: "What was the date of birth (or of placement, if the leave follows an adoption)?",
+        employee: "What was the birth date (or the placement date, if your leave follows an adoption)?",
+        consultant: "What was the date of birth (or of placement, if the leave follows an adoption)?",
       },
-      askIf: { fact: "familyLeaveStatus", in: ["on_leave", "returned"] },
+      // Great Britain only: in Northern Ireland the protection ends with the leave.
+      askIf: {
+        all: [
+          GB,
+          { fact: "familyLeaveStatus", in: ["on_leave", "returned"] },
+          { not: { fact: "familyLeaveType", is: "adoption" } },
+        ],
+      },
       specialCategory: true,
       why: "The extended protected period runs from the birth or placement.",
+    },
+    {
+      // Split from the draft's familyLeaveDates: the rules code takes the
+      // adoption placement date as its own input.
+      key: "familyLeavePlacementDate",
+      label: "Adoption placement date",
+      type: "date",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "What was the placement date (or, for an overseas adoption, the date the child entered Great Britain)?",
+        employee:
+          "What was the placement date (or, for an overseas adoption, the date the child entered Great Britain)?",
+        consultant:
+          "What was the placement date (or, for an overseas adoption, the date the child entered Great Britain)?",
+      },
+      askIf: {
+        all: [
+          GB,
+          { fact: "familyLeaveStatus", in: ["on_leave", "returned"] },
+          { fact: "familyLeaveType", is: "adoption" },
+        ],
+      },
+      specialCategory: true,
+      why: "The protected period after adoption leave runs from the placement.",
+    },
+    {
+      key: "familyLeaveSixWeeks",
+      label: "Six or more consecutive weeks of leave taken",
+      type: "boolean",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "Did they take six or more consecutive weeks of this leave?",
+        employee: "Did you take six weeks or more of this leave in one go?",
+        consultant: "Did they take six or more consecutive weeks of this leave?",
+      },
+      askIf: {
+        all: [GB, { fact: "familyLeaveType", in: ["shared_parental", "neonatal", "bereaved_partner"] }],
+      },
+      specialCategory: true,
+      why: "After shared parental, neonatal care or bereaved partner's paternity leave, the protection runs on for 18 months only after six or more consecutive weeks of it.",
     },
     {
       key: "familyLeaveBirthNotified",
@@ -705,7 +839,7 @@ export const redundancyPlaybook: Playbook = {
         employee: "Have you told your employer the date of birth?",
         consultant: "Has the birth date been notified to your client?",
       },
-      askIf: { known: "familyLeaveBirthDate" },
+      askIf: { all: [{ known: "familyLeaveBirthDate" }, { fact: "familyLeaveType", is: "maternity" }] },
       specialCategory: true,
       why: "If the birth date was not notified, the period runs from the expected week of childbirth instead.",
     },
@@ -780,7 +914,7 @@ export const redundancyPlaybook: Playbook = {
         consultant:
           "In the last 12 months, has anyone in your client's pool raised a grievance, a whistleblowing concern, a health and safety concern, a discrimination complaint or a flexible working or pay complaint, or acted as a union or employee representative? When?",
       },
-      why: "Selecting someone for those reasons can be automatically unfair.",
+      why: "Selecting someone for some of these reasons is automatically unfair or victimisation.",
     },
     {
       // Reader signal from the draft's T4 and the protectedReasonSelection check.
@@ -809,7 +943,7 @@ export const redundancyPlaybook: Playbook = {
         consultant: "Is anyone in your client's pool part-time or on a fixed-term contract?",
       },
       askIf: UK,
-      why: "Selecting someone for that reason can be automatically unfair.",
+      why: "Selecting someone for that reason is unlawful unless objectively justified.",
     },
 
     // F. Process and outcome
@@ -1141,53 +1275,166 @@ export const redundancyPlaybook: Playbook = {
       why: "Hands off to the tribunal playbook.",
     },
 
-    // G. United States (outline only)
+    // G. United States (part 3 G, from the US review)
     {
       key: "usStates",
       label: "US states of affected employees",
       type: "list",
       priority: { hr: "must", employee: "must", consultant: "must" },
       question: {
-        hr: "In which states do the affected employees work?",
-        employee: "In which state do you work?",
-        consultant: "In which states do your client's affected employees work?",
+        hr: "In which state does each affected employee work? For remote staff, which state do they work from?",
+        employee: "Which state do you work in, or work from if you are remote?",
+        consultant:
+          "In which state does each of your client's affected employees work? For remote staff, which state do they work from?",
       },
       askIf: US,
-      why: "State layoff laws differ.",
+      why: "Sets the state layoff notice law, final pay, separation notices and state agency. DraftHR covers California, New York, Texas, Florida and Illinois; other states get the federal baseline only.",
+    },
+    {
+      // Added: the state rules run for one state (the rules agent's report).
+      // Without an answer they use the case's own state.
+      key: "usState",
+      label: "State the state-law dates follow",
+      type: "choice",
+      choices: ["CA", "NY", "TX", "FL", "IL", "other"],
+      priority: { hr: "should", consultant: "should" },
+      question: {
+        hr: "Which one state should the state-law dates in this case follow (layoff notice, final pay, separation notices)? Use the state where the affected employees work; if they work in several, choose one and run another case for each of the others.",
+        consultant:
+          "Which one state should the state-law dates in this case follow (layoff notice, final pay, separation notices)? Use the state where your client's affected employees work; if they work in several, choose one and run another case for each of the others.",
+      },
+      askIf: US,
+      why: "State rules run for one state at a time. Without an answer, the case's own state is used.",
+    },
+    {
+      key: "usPublicEmployer",
+      label: "Government employer",
+      type: "boolean",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "Is the employer a federal, state or local government body?",
+        employee: "Do you work for a government body?",
+        consultant: "Is your client a federal, state or local government body?",
+      },
+      askIf: US,
+      why: "Government employers follow different rules and are out of scope for now.",
     },
     {
       key: "usEmployerHeadcount",
-      label: "US employer full-time headcount",
+      label: "US employer headcount, not counting part-time staff",
       type: "number",
       priority: { hr: "must", consultant: "must" },
-      question: "How many full-time employees does the employer have in total, leaving out part-time staff?",
+      question: {
+        hr: "How many employees does the employer have in the US, not counting part-time staff? Part-time means working on average under 20 hours a week, or employed for under 6 of the last 12 months.",
+        consultant:
+          "How many employees does your client have in the US, not counting part-time staff? Part-time means working on average under 20 hours a week, or employed for under 6 of the last 12 months.",
+      },
       askIf: US,
-      why: "WARN covers employers with 100 or more employees.",
+      why: "Federal WARN covers employers with 100 or more employees not counting part-time staff, or 100 or more working 4,000 hours a week in total.",
     },
     {
       key: "usEmployerPartTime",
       label: "US employer part-time headcount",
       type: "number",
       priority: { hr: "must", consultant: "must" },
-      question: "How many part-time employees does the employer have?",
+      question: {
+        hr: "How many part-time employees does the employer have in the US?",
+        consultant: "How many part-time employees does your client have in the US?",
+      },
       askIf: US,
-      why: "Part-time staff are counted separately for WARN.",
+      why: "Part-time staff are counted separately for WARN, but still get notice.",
+    },
+    {
+      // Split from the draft's usEmployerHeadcount, which asks three things.
+      // Only asked when the full-time count alone does not settle coverage.
+      key: "usEmployer4000Hours",
+      label: "100 or more employees working 4,000 hours a week",
+      type: "boolean",
+      priority: { hr: "must", consultant: "must" },
+      question: {
+        hr: "Counting part-time staff, do you have 100 or more employees who together work at least 4,000 hours a week, not counting overtime?",
+        consultant:
+          "Counting part-time staff, does your client have 100 or more employees who together work at least 4,000 hours a week, not counting overtime?",
+      },
+      askIf: { all: [US, { fact: "usEmployerHeadcount", below: 100 }] },
+      why: "An employer with fewer than 100 full-time employees is still covered by WARN if this test is met.",
+    },
+    {
+      key: "usStateHeadcount",
+      label: "Employees in California, New York or Illinois",
+      type: "number",
+      priority: { hr: "must", consultant: "must" },
+      question: {
+        hr: "How many employees do you have in that state? New York and Illinois: full-time staff only. California: full and part-time staff at the establishment with 6 of the last 12 months' service.",
+        consultant:
+          "How many employees does your client have in that state? New York and Illinois: full-time staff only. California: full and part-time staff at the establishment with 6 of the last 12 months' service.",
+      },
+      askIf: { all: [US, ANYONE_IN_STATE_WARN_STATE] },
+      why: "State laws start lower than federal WARN: New York 50, California 75 (part-time included), Illinois 75.",
+    },
+    {
+      // Split from the draft's usSiteHeadcount, which asks for the address and
+      // the headcount together.
+      key: "usSiteAddress",
+      label: "Address of each affected site",
+      type: "text",
+      priority: { hr: "must", consultant: "must" },
+      question: {
+        hr: "For each site with affected employees: the address, city and county.",
+        consultant: "For each of your client's sites with affected employees: the address, city and county.",
+      },
+      askIf: US,
+      why: "The city and county decide which local official gets the WARN notice.",
     },
     {
       key: "usSiteHeadcount",
       label: "Full-time headcount at the site",
       type: "number",
       priority: { hr: "must", consultant: "must" },
-      question: "How many full-time employees work at the affected site, leaving out part-time staff?",
+      question: {
+        hr: "For each site with affected employees, how many full-time employees work there? Leave out part-time staff, but include anyone on temporary layoff or leave who expects to be recalled.",
+        consultant:
+          "For each of your client's sites with affected employees, how many full-time employees work there? Leave out part-time staff, but include anyone on temporary layoff or leave who expects to be recalled.",
+      },
       askIf: US,
-      why: "Decides whether the losses are a mass layoff.",
+      why: "The plant closing and mass layoff tests apply site by site.",
+    },
+    {
+      // Added: the draft folds this into usRemoteAssignedSite's condition.
+      key: "usRemoteStaff",
+      label: "Affected employees who work remotely",
+      type: "boolean",
+      priority: { hr: "must", employee: "should", consultant: "must" },
+      question: {
+        hr: "Do any affected employees work remotely?",
+        employee: "Do you work remotely?",
+        consultant: "Do any of your client's affected employees work remotely?",
+      },
+      askIf: US,
+      why: "Which site a remote employee counts at is not settled, and it can change the WARN result.",
+    },
+    {
+      key: "usRemoteAssignedSite",
+      label: "Site each remote employee is assigned to",
+      type: "text",
+      priority: { hr: "must", consultant: "must" },
+      question: {
+        hr: "For each remote employee: which site do they report to, or which site assigns their work?",
+        consultant: "For each of your client's remote employees: which site do they report to, or which site assigns their work?",
+      },
+      askIf: { all: [US, { fact: "usRemoteStaff", is: true }] },
+      why: "Decides which site's numbers they count in; the law on this is not settled.",
     },
     {
       key: "usLossesIn30Days",
       label: "Job losses at the site within 30 days",
       type: "number",
       priority: { hr: "must", consultant: "must" },
-      question: "How many employees at the site lose their jobs within any 30-day period?",
+      question: {
+        hr: "At each site, how many people will lose their jobs, be laid off for more than 6 months, or have their hours cut by more than half in each month of a 6-month period, within 30 days of the first separation?",
+        consultant:
+          "At each of your client's sites, how many people will lose their jobs, be laid off for more than 6 months, or have their hours cut by more than half in each month of a 6-month period, within 30 days of the first separation?",
+      },
       askIf: US,
       why: "Plant closing and mass layoff tests count losses in 30 days.",
     },
@@ -1196,27 +1443,89 @@ export const redundancyPlaybook: Playbook = {
       label: "Job losses at the site within 90 days",
       type: "number",
       priority: { hr: "must", consultant: "must" },
-      question: "How many employees at the site lose their jobs within 90 days, counting later groups and their dates?",
+      question: {
+        hr: "And how many at each site within 90 days before or after the first separation, counting later groups?",
+        consultant:
+          "And how many at each of your client's sites within 90 days before or after the first separation, counting later groups?",
+      },
       askIf: US,
       why: "Groups within 90 days can be added together.",
     },
     {
-      key: "usRemoteAssignedSite",
-      label: "Site each remote employee is assigned to",
-      type: "text",
-      priority: { hr: "should", consultant: "should" },
-      question: "Which site is each remote employee assigned to or reports to?",
+      key: "usSeparationDates",
+      label: "Separation dates for each group",
+      type: "list",
+      priority: { hr: "must", consultant: "must" },
+      question: {
+        hr: "What is the first separation date, and the date (or the first day of the 14-day window) for each later group?",
+        consultant:
+          "What is your client's first separation date, and the date (or the first day of the 14-day window) for each later group?",
+      },
       askIf: US,
-      why: "Remote staff may count towards a site.",
+      why: "Every notice deadline runs from these dates, and each later group needs its own 60 days.",
+    },
+    {
+      key: "usTransferOffers",
+      label: "Transfers to another site",
+      type: "text",
+      priority: { hr: "should", employee: "should", consultant: "should" },
+      question: {
+        hr: "Will anyone be offered a job at another site? Is it within commuting distance? Say none if not.",
+        employee: "Have you been offered a job at another site?",
+        consultant: "Will your client offer anyone a job at another site? Is it within commuting distance? Say none if not.",
+      },
+      askIf: US,
+      why: "Some transfer offers mean there is no employment loss.",
     },
     {
       key: "usUnion",
       label: "Union (US)",
       type: "boolean",
-      priority: { hr: "should", employee: "should", consultant: "should" },
-      question: "Are any affected employees represented by a union?",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "Are any affected employees covered by a union agreement?",
+        employee: "Are you covered by a union agreement?",
+        consultant: "Are any of your client's affected employees covered by a union agreement?",
+      },
       askIf: US,
-      why: "WARN notice then goes to the union representative.",
+      why: "Notice goes to the union, not to each employee. The agreement may set seniority and recall rules.",
+    },
+    {
+      key: "usUnionOfficer",
+      label: "Union's chief elected officer",
+      type: "text",
+      priority: { hr: "must", consultant: "must" },
+      question: "What are the name and address of the union's chief elected officer?",
+      askIf: { all: [US, { fact: "usUnion", is: true }] },
+      why: "The WARN notice is served on the chief elected officer.",
+    },
+    {
+      // A yes-or-no version of the draft's text and date: the check needs to
+      // know only whether an exception is claimed.
+      key: "usWarnExceptionClaimed",
+      label: "WARN exception claimed",
+      type: "boolean",
+      priority: { hr: "should", consultant: "should" },
+      question: {
+        hr: "Are you relying on a WARN exception because the reason was sudden or unforeseen (for example a lost client, lost funding or a natural disaster)?",
+        consultant:
+          "Is your client relying on a WARN exception because the reason was sudden or unforeseen (for example a lost client, lost funding or a natural disaster)?",
+      },
+      askIf: { all: [US, WARN_DUE] },
+      why: "An exception may shorten notice. Counsel must confirm it.",
+    },
+    {
+      key: "usSelectionCriteria",
+      label: "How people were chosen (US)",
+      type: "text",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "How were people chosen? List the criteria, the data used and who applied them.",
+        employee: "Do you know how people were chosen?",
+        consultant: "How did your client choose people? List the criteria, the data used and who applied them.",
+      },
+      askIf: US,
+      why: "Selection must not be because of age or another protected characteristic, or a complaint.",
     },
     {
       key: "usReleaseOffered",
@@ -1224,12 +1533,12 @@ export const redundancyPlaybook: Playbook = {
       type: "boolean",
       priority: { hr: "must", employee: "must", consultant: "must" },
       question: {
-        hr: "Does severance depend on signing a release of claims?",
-        employee: "Do you have to sign a release to get severance?",
-        consultant: "Does your client's severance depend on signing a release of claims?",
+        hr: "Will severance be paid only if the employee signs a release of claims? What is offered?",
+        employee: "Have you been offered severance if you sign something?",
+        consultant: "Will your client pay severance only if the employee signs a release of claims? What is offered?",
       },
       askIf: US,
-      why: "A release brings in the OWBPA rules for anyone aged 40 or over.",
+      why: "OWBPA and state release rules apply.",
     },
     {
       // Added: the us.owbpa rule takes "group programme" as an input.
@@ -1237,12 +1546,12 @@ export const redundancyPlaybook: Playbook = {
       label: "Release offered to a group",
       type: "boolean",
       priority: { hr: "should", consultant: "should" },
-      question: "Is the release offered to a group of employees as part of the layoff?",
+      question: "Is the release offered to two or more employees as part of the layoff?",
       askIf: { all: [US, { fact: "usReleaseOffered", is: true }] },
-      why: "A group programme has 45 days to consider and needs disclosures.",
+      why: "A group programme has 45 days to consider and needs written information.",
     },
     {
-      // Added: the draft's usAgesInUnit applies only when people aged 40 or over are affected.
+      // Added: the usOwbpa check applies only when people aged 40 or over are affected.
       key: "usOver40Affected",
       label: "People aged 40 or over affected",
       type: "boolean",
@@ -1256,16 +1565,12 @@ export const redundancyPlaybook: Playbook = {
       label: "Job titles and ages in the decisional unit",
       type: "text",
       priority: { hr: "must", consultant: "must" },
-      question: "For everyone in the decisional unit, list job titles and ages, and who was and was not selected.",
+      question:
+        "For the part of the organisation from which people were chosen: the job title and age of everyone selected and everyone not selected.",
       askIf: {
-        all: [
-          US,
-          { fact: "usReleaseOffered", is: true },
-          { fact: "usGroupProgramme", is: true },
-          { fact: "usOver40Affected", is: true },
-        ],
+        all: [US, { fact: "usReleaseOffered", is: true }, { fact: "usGroupProgramme", is: true }],
       },
-      why: "OWBPA requires written disclosure of job titles and ages for a group programme.",
+      why: "OWBPA written information for a group programme; also used for the age impact check. Kept without names.",
     },
     {
       // Added: input to the us.owbpa rule.
@@ -1274,9 +1579,9 @@ export const redundancyPlaybook: Playbook = {
       type: "date",
       priority: { hr: "should", employee: "should", consultant: "should" },
       question: {
-        hr: "When was, or will, the release be given to employees?",
-        employee: "When were you given the release?",
-        consultant: "When was, or will, your client give the release to employees?",
+        hr: "When were the agreement and any written information given, or when will they be?",
+        employee: "When were you given the agreement?",
+        consultant: "When were your client's agreement and any written information given, or when will they be?",
       },
       askIf: { all: [US, { fact: "usReleaseOffered", is: true }] },
       why: "The consideration period runs from this day.",
@@ -1289,6 +1594,62 @@ export const redundancyPlaybook: Playbook = {
       question: "When was the release signed?",
       askIf: { all: [US, { fact: "usReleaseOffered", is: true }] },
       why: "The revocation period runs from signing.",
+    },
+    {
+      key: "usSeveranceAlreadyPromised",
+      label: "Severance already promised in writing",
+      type: "text",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "Is severance promised in a written policy, handbook or contract? Please upload it, or say none.",
+        employee: "Does your handbook or contract mention severance?",
+        consultant: "Is severance promised in your client's written policy, handbook or contracts? Please upload it, or say none.",
+      },
+      askIf: { all: [US, { fact: "usReleaseOffered", is: true }] },
+      why: "A release needs something beyond what is already owed. Texas enforces written severance promises.",
+    },
+    {
+      key: "usNextPayday",
+      label: "Next regular payday after separation",
+      type: "date",
+      priority: { hr: "must", employee: "must", consultant: "must" },
+      question: {
+        hr: "When is the first regular payday after the separation date?",
+        employee: "When is your next payday after your last day?",
+        consultant: "When is your client's first regular payday after the separation date?",
+      },
+      askIf: US,
+      why: "Final pay deadlines differ by state, and some run to the next regular payday.",
+    },
+    {
+      key: "usIncentives",
+      label: "State or local economic development incentives",
+      type: "boolean",
+      priority: { hr: "nice", consultant: "nice" },
+      question: "Does the employer receive state or local economic development incentives?",
+      askIf: US,
+      why: "Illinois: a copy of the notice goes to the Governor and others. New York: incentive terms may require more notice.",
+    },
+    {
+      // Added for the usPostponement check: the history cannot yet compare an
+      // old and a new date.
+      key: "usSeparationMoved",
+      label: "A notified separation date has moved later",
+      type: "boolean",
+      priority: { hr: "should", consultant: "should" },
+      question: "Has any separation date given in a WARN notice moved later?",
+      askIf: { all: [US, { any: [{ drafted: "us_warn_union" }, { drafted: "us_warn_notices" }] }] },
+      why: "A later date needs additional notice, or a new notice if it moves by 60 days or more.",
+    },
+    {
+      // Added: unlocks the US final pay claim, once the final pay date has passed.
+      key: "usFinalPayLate",
+      label: "Final pay late",
+      type: "boolean",
+      priority: { employee: "should" },
+      question: "Is any of your final pay still unpaid?",
+      askIf: { all: [US, { deadline: "us_final_pay", withinDays: -1 }] },
+      why: "Late final pay can be claimed in writing, and through the state's wage claim process.",
     },
   ],
 
@@ -1309,8 +1670,8 @@ export const redundancyPlaybook: Playbook = {
       level: "act_now",
       when: { all: [NI, { fact: "rolesAtEstablishment", atLeast: 20 }] },
       message:
-        "20 or more redundancies are proposed at one site within 90 days in Northern Ireland. Minimum consultation periods are 30 days, or 90 days for 100 or more. Notify the Department for the Economy using the NI online HR1.",
-      sources: ["S35", "S43"],
+        "20 or more redundancies are proposed at one site within 90 days in Northern Ireland. Minimum consultation periods are 30 days, or 90 days for 100 or more (ERNIO art. 216). Notify the Department for the Economy in writing, using the HR1 online form run by NISRA, before any notice of dismissal is given and at least 30 or 90 days before the first dismissal takes effect. Copy it to the representatives (ERNIO art. 221). Failing to notify is an offence (art. 222).",
+      sources: ["S35", "S82", "S86", "S43"],
     },
     {
       id: "noRepresentatives",
@@ -1345,8 +1706,8 @@ export const redundancyPlaybook: Playbook = {
         ],
       },
       message:
-        "Notices of dismissal are planned before the HR1 or before collective consultation. The HR1 must come before any notice of dismissal. Notices given while consultation is still open also carry risk.",
-      sources: ["S3", "S26"],
+        "Notices of dismissal are planned before the HR1 or before collective consultation. The HR1 must come before any notice of dismissal (Northern Ireland: ERNIO art. 221). Notices given while consultation is still open also carry risk; whether notices may be given before collective consultation ends is still to be confirmed.",
+      sources: ["S3", "S26", "S82"],
       toVerify: true,
     },
     {
@@ -1380,7 +1741,7 @@ export const redundancyPlaybook: Playbook = {
         ],
       },
       message:
-        "The first dismissal date is earlier than the rules allow. Move the date, or explain the special circumstances in writing.",
+        "The first dismissal date is earlier than the rules allow. Move the date. Special circumstances are a narrow defence, and the employer must still do all it reasonably can; record them in writing.",
       sources: ["S1"],
     },
     {
@@ -1399,7 +1760,7 @@ export const redundancyPlaybook: Playbook = {
         ],
       },
       message:
-        "If collective consultation is late, short or missing, a tribunal may award up to 180 days' pay per affected employee for dismissals taking effect on or after 6 April 2026. In Northern Ireland the maximum is 90 days.",
+        "If collective consultation is late, short or missing, a tribunal may award pay for each affected employee. Great Britain: up to 180 days' pay for dismissals taking effect on or after 6 April 2026, and each dismissal's own date decides which maximum applies (SI 2026/323 reg 5). Northern Ireland: up to 90 days' pay.",
       sources: ["S2", "S22", "S29", "S36"],
     },
     {
@@ -1407,7 +1768,7 @@ export const redundancyPlaybook: Playbook = {
       level: "worth_checking",
       when: {
         all: [
-          UK,
+          GB,
           {
             any: [
               {
@@ -1422,7 +1783,7 @@ export const redundancyPlaybook: Playbook = {
         ],
       },
       message:
-        "Check whether separate proposals fall in one 90-day period and together reach 20. The Employment Rights Act 2025 adds a second, employer-wide threshold to be set by regulations; it is not yet set.",
+        "Check whether separate proposals fall in one 90-day period and together reach 20. The Employment Rights Act 2025 adds a second, employer-wide threshold to be set by regulations; it is not yet set, and it cannot be below 20 (TULRCA s.195A(3)).",
       sources: ["S5", "S24"],
     },
     {
@@ -1430,16 +1791,16 @@ export const redundancyPlaybook: Playbook = {
       // the user has said there are none.
       id: "agencyDisclosure",
       level: "for_information",
-      when: { all: [COLLECTIVE_GB, { not: { fact: "agencyWorkers", is: "none" } }] },
+      when: { all: [COLLECTIVE, { not: { fact: "agencyWorkers", is: "none" } }] },
       message:
-        "If there are agency workers at the site, disclose their numbers, where they work and the work they do to the representatives.",
-      sources: ["S1"],
+        "If there are agency workers at the site, disclose their numbers, where they work and the work they do to the representatives (Great Britain: TULRCA s.188(4); Northern Ireland: ERNIO art. 216(6)).",
+      sources: ["S1", "S35"],
     },
     {
       id: "poolOfOne",
       level: "worth_checking",
       when: {
-        any: [{ fact: "poolSize", is: 1 }, { fact: "poolLimitedToOneTeam", is: true }],
+        all: [UK, { any: [{ fact: "poolSize", is: 1 }, { fact: "poolLimitedToOneTeam", is: true }] }],
       },
       message: {
         hr: "The pool is one person, or limited to one team or shift. Record why similar roles elsewhere are outside the pool. Acas says to include all roles that are the same or similar.",
@@ -1453,7 +1814,7 @@ export const redundancyPlaybook: Playbook = {
     {
       id: "subjectiveCriteria",
       level: "worth_checking",
-      when: { fact: "selectionCriteria", in: ["attitude", "fit", "potential"] },
+      when: { all: [UK, { fact: "selectionCriteria", in: ["attitude", "fit", "potential"] }] },
       message: {
         hr: "A criterion such as attitude, fit or potential has no clear measure. Make every criterion objective and measurable, with evidence.",
         employee:
@@ -1466,117 +1827,101 @@ export const redundancyPlaybook: Playbook = {
     {
       id: "absenceDisability",
       level: "act_now",
-      when: { all: [ATTENDANCE_SCORED, ABSENCE_MAY_BE_LINKED] },
+      when: { all: [UK, ATTENDANCE_SCORED, ABSENCE_MAY_BE_LINKED] },
       message: {
-        hr: "Attendance is scored and some absence may be linked to disability, pregnancy or maternity. Remove that absence from scoring. Counting it risks discrimination arising from disability (in Northern Ireland the equivalent law is still to be confirmed). The disability playbook runs alongside.",
+        hr: "Attendance is scored and some absence may be linked to disability, pregnancy or maternity. Remove that absence from scoring. Great Britain: counting it risks discrimination arising from disability, and the employer has a defence only if it did not know, and could not reasonably have known, of the disability, so ask early. Northern Ireland: removing or discounting the absence is the reasonable adjustment to consider (Disability Discrimination Act 1995 s4A), and less favourable treatment for a reason related to the disability needs justification (s3A(1), (3)). Where it is unclear whether the absence is linked to a disability, take advice. The disability playbook runs alongside.",
         employee:
           "Attendance is being scored and some of your absence may be linked to a health condition. You can ask for absence linked to a disability, pregnancy or maternity to be left out of your score.",
         consultant:
-          "Attendance is scored and some absence may be linked to disability, pregnancy or maternity. Your client should remove that absence from scoring. Counting it risks discrimination arising from disability (in Northern Ireland the equivalent law is still to be confirmed). The disability playbook runs alongside.",
+          "Attendance is scored and some absence may be linked to disability, pregnancy or maternity. Your client should remove that absence from scoring. Great Britain: counting it risks discrimination arising from disability, and the employer has a defence only if it did not know, and could not reasonably have known, of the disability, so ask early. Northern Ireland: removing or discounting the absence is the reasonable adjustment to consider (Disability Discrimination Act 1995 s4A), and less favourable treatment for a reason related to the disability needs justification (s3A(1), (3)). Where it is unclear whether the absence is linked to a disability, take advice. The disability playbook runs alongside.",
       },
-      sources: ["S30", "S17"],
+      sources: ["S30", "S17", "S89"],
+      // Unclear disability, and how far the NI s3A(1) test reaches (question 12).
+      toVerify: true,
     },
     {
       id: "familyLeavePriority",
       level: "act_now",
-      when: {
-        all: [
-          GB,
-          {
-            any: [
-              { fact: "familyLeaveStatus", in: ["pregnant", "on_leave"] },
-              {
-                all: [
-                  { fact: "familyLeaveStatus", is: "returned" },
-                  { not: { deadline: "family_leave_protection", withinDays: -1 } },
-                ],
-              },
-            ],
-          },
-        ],
-      },
+      when: FAMILY_PROTECTED_GB,
       message: {
-        hr: "Someone is pregnant, on family leave, or inside the protected period after it. They must be offered a suitable alternative vacancy, where one exists, ahead of others. Failing to do so may make the dismissal automatically unfair. The family leave playbook runs alongside.",
+        hr: "Someone is pregnant (and has told you), on maternity, adoption, shared parental, neonatal care or bereaved partner's paternity leave, or inside the protected period after it. Ordinary paternity leave does not count. They must be offered a suitable alternative vacancy, where one exists, ahead of others. For maternity, failing to do so makes the dismissal automatically unfair (MPL Regs reg 20(1)(b)). The family leave playbook runs alongside.",
         employee:
           "Because you are pregnant, on family leave or recently back, you have priority for any suitable alternative vacancy. Your employer must offer it to you ahead of others.",
         consultant:
-          "Someone in your client's pool is pregnant, on family leave, or inside the protected period after it. They must be offered a suitable alternative vacancy, where one exists, ahead of others. Failing to do so may make the dismissal automatically unfair. The family leave playbook runs alongside.",
+          "Someone in your client's pool is pregnant (and has told your client), on maternity, adoption, shared parental, neonatal care or bereaved partner's paternity leave, or inside the protected period after it. Ordinary paternity leave does not count. They must be offered a suitable alternative vacancy, where one exists, ahead of others. For maternity, failing to do so makes the dismissal automatically unfair (MPL Regs reg 20(1)(b)). The family leave playbook runs alongside.",
       },
-      sources: ["S18", "S33"],
+      sources: ["S18", "S33", "S71"],
     },
     {
+      // Great Britain only (NI review R29); in Northern Ireland the outcome
+      // step is blocked instead, alongside familyLeaveNIOnLeave.
       id: "familyLeaveVacancyMissed",
       level: "act_now",
-      when: FAMILY_VACANCY_MISSED,
+      when: { all: [GB, FAMILY_VACANCY_OPEN] },
       message: {
-        hr: "A person with family leave priority has not been offered a vacancy that may be suitable. Their outcome letter is blocked until the vacancy is offered, or you record why it is not suitable and appropriate.",
+        hr: "A person with family leave priority has not been offered a vacancy that may be suitable. Their outcome letter is blocked until the vacancy is offered, or you record why it is not suitable and appropriate. Any new contract must start immediately when the old one ends, on terms not substantially less favourable (reg 10(2), (3)).",
         employee:
-          "There is a vacancy that may suit you and it has not been offered to you. You can ask for it to be offered to you first.",
+          "There is a vacancy that may suit you and it has not been offered to you. You can ask for it to be offered to you first. The new job should start straight after your current one ends, on terms not substantially less favourable.",
         consultant:
-          "A person with family leave priority has not been offered a vacancy that may be suitable. Their outcome letter is blocked until your client offers the vacancy, or records why it is not suitable and appropriate.",
+          "A person with family leave priority has not been offered a vacancy that may be suitable. Their outcome letter is blocked until your client offers the vacancy, or records why it is not suitable and appropriate. Any new contract must start immediately when the old one ends, on terms not substantially less favourable (reg 10(2), (3)).",
       },
       sources: ["S18"],
     },
     {
+      // For information when no one is on a covered leave; familyLeaveNIOnLeave
+      // is the act now version (a check has one level).
       id: "familyLeaveNI",
       level: "for_information",
-      when: { all: [NI, FAMILY_LEAVE_ANY] },
+      when: { all: [NI, FAMILY_LEAVE_ANY, { not: FAMILY_PROTECTED_NI }] },
       message:
-        "In Northern Ireland, priority for alternative vacancies applies during maternity leave only; the 2023 Act extends to Great Britain only. Still check that scoring does not penalise pregnancy or leave.",
-      sources: ["S19", "S40"],
-      toVerify: true,
+        "In Northern Ireland, priority for a suitable alternative vacancy applies only while the employee is on maternity, adoption or shared parental leave, and ends when the leave ends. There is no protection from notification of pregnancy and no 18-month extension; the 2023 Act extends to Great Britain only. A redundancy dismissal that breaches the priority is automatically unfair (reg 20). Still check that scoring does not penalise pregnancy or leave, which risks sex or pregnancy discrimination.",
+      sources: ["S40", "S84", "S19", "S90"],
     },
     {
       id: "disability",
       level: "worth_checking",
       when: { fact: "healthOrDisability", is: true },
       message: {
-        hr: "Someone may be disabled or has had long or repeated health absence. Consider adjustments to meetings, scoring and alternative roles. The disability playbook runs alongside.",
+        hr: "Someone may be disabled or has had long or repeated health absence. Consider adjustments to meetings, scoring and alternative roles. Northern Ireland: a person who has cancer, HIV infection or multiple sclerosis is treated as disabled from diagnosis, unless a prescribed exception applies (Disability Discrimination Act 1995 Sch 1 para 6A). The disability playbook runs alongside.",
         employee:
-          "You can ask for adjustments to meetings, scoring or alternative roles because of your health. We can help you ask.",
+          "You can ask for adjustments to meetings, scoring or alternative roles because of your health. We can help you ask. In Northern Ireland, cancer, HIV infection and multiple sclerosis count as a disability from diagnosis.",
         consultant:
-          "Someone in your client's pool may be disabled or has had long or repeated health absence. Consider adjustments to meetings, scoring and alternative roles. The disability playbook runs alongside.",
+          "Someone in your client's pool may be disabled or has had long or repeated health absence. Consider adjustments to meetings, scoring and alternative roles. Northern Ireland: a person who has cancer, HIV infection or multiple sclerosis is treated as disabled from diagnosis, unless a prescribed exception applies (Disability Discrimination Act 1995 Sch 1 para 6A). The disability playbook runs alongside.",
       },
+      sources: ["S89"],
     },
     {
       id: "protectedReasonSelection",
       level: "worth_checking",
       when: {
-        any: [
+        all: [
+          UK,
           {
-            fact: "recentConcernsRaised",
-            in: [
-              "grievance",
-              "whistleblowing",
-              "health_and_safety",
-              "discrimination_complaint",
-              "flexible_working",
-              "pay_complaint",
-              "representative",
+            any: [
+              { fact: "recentConcernsRaised", in: LISTED_CONCERNS },
+              { fact: "grievanceAllegedDiscrimination", is: true },
             ],
           },
-          { fact: "grievanceAllegedDiscrimination", is: true },
         ],
       },
       message: {
-        hr: "Someone raised a concern or was a representative in the last 12 months. Selection for a listed reason is automatically unfair, and the usual qualifying period does not apply. A grievance that alleged discrimination may also be a protected act.",
+        hr: "Someone raised a concern or was a representative in the last 12 months. Check what each concern was about. Selection is automatically unfair if the main reason is a listed one, such as a health and safety concern, a protected disclosure, asserting a statutory right, or acting as a representative, and no qualifying period applies. A grievance that alleged discrimination is a protected act, so selection because of it may be victimisation (Equality Act s27; in Northern Ireland, the NI equality Orders). Any other grievance is not a listed reason, but selection because of it can still be unfair.",
         employee:
-          "You raised a concern in the last year. Being selected because of a listed concern is automatically unfair, whatever your length of service. A grievance about discrimination may also be protected.",
+          "You raised a concern in the last year. Being selected mainly because of a listed reason, such as a health and safety concern, whistleblowing, asserting a legal right, or acting as a representative, is automatically unfair, whatever your length of service. If your grievance said you were treated badly because of something like a health condition, your sex, race or age, being selected because of it may be victimisation. An ordinary grievance is not a listed reason, but being selected because of it can still be unfair.",
         consultant:
-          "Someone in your client's pool raised a concern or was a representative in the last 12 months. Selection for a listed reason is automatically unfair, and the usual qualifying period does not apply. A grievance that alleged discrimination may also be a protected act.",
+          "Someone in your client's pool raised a concern or was a representative in the last 12 months. Check what each concern was about. Selection is automatically unfair if the main reason is a listed one, such as a health and safety concern, a protected disclosure, asserting a statutory right, or acting as a representative, and no qualifying period applies. A grievance that alleged discrimination is a protected act, so selection because of it may be victimisation (Equality Act s27; in Northern Ireland, the NI equality Orders). Any other grievance is not a listed reason, but selection because of it can still be unfair.",
       },
-      sources: ["S8", "S9"],
-      toVerify: true,
+      sources: ["S8", "S9", "S70"],
     },
     {
       // "Featured in selection" has no fact of its own; this fires whenever
       // someone is part-time or fixed-term, as a reminder.
       id: "partTimeFixedTerm",
       level: "worth_checking",
-      when: { fact: "partTimeOrFixedTerm", is: true },
+      when: { all: [UK, { fact: "partTimeOrFixedTerm", is: true }] },
       message:
-        "Someone is part-time or on a fixed-term contract. Selection for that reason can be automatically unfair. Make sure it plays no part in selection.",
-      sources: ["S8", "S30"],
+        "Someone is part-time or on a fixed-term contract. Selecting someone because they are part-time or fixed-term is unlawful unless objectively justified (Part-time Workers Regulations 2000 reg 5; Fixed-term Employees Regulations 2002 reg 3). Selecting them because they asserted those rights is automatically unfair. Make sure it plays no part in selection.",
+      sources: ["S77", "S8", "S30"],
     },
     {
       id: "noMeeting",
@@ -1594,7 +1939,7 @@ export const redundancyPlaybook: Playbook = {
     {
       id: "predetermined",
       level: "act_now",
-      when: { fact: "outcomeDecided", is: true },
+      when: { all: [UK, { fact: "outcomeDecided", is: true }] },
       message: {
         hr: "The decision looks final, or names were chosen, before consultation. Reopen the process: consultation must be genuine.",
         employee:
@@ -1607,87 +1952,75 @@ export const redundancyPlaybook: Playbook = {
     {
       id: "replacement",
       level: "act_now",
-      when: REPLACED_BY_OTHERS,
+      when: { all: [GB, REPLACED_BY_OTHERS] },
       message:
-        "Someone will be hired, or agency workers or a contractor engaged, to do the same work. This may be a sham redundancy. Under the Employment Rights Act 2025, dismissal to replace an employee with a non-employee doing the same work will be automatically unfair once in force.",
-      sources: ["S21"],
+        "Someone will be hired, or agency workers or a contractor engaged, to do the same work. This may be a sham redundancy. Under the Employment Rights Act 2025, dismissal to replace an employee with a non-employee doing the same work will be automatically unfair once in force (new ERA 1996 s104K, inserted by ERA 2025 s28). It is expected in January 2027; no commencement regulations had been made by 13 October 2026, so the date is still to be confirmed.",
+      sources: ["S21", "S24"],
       toVerify: true,
     },
     {
       id: "outsourcingTUPE",
       level: "worth_checking",
-      when: { fact: "replacementPlanned", in: ["outside_provider", "business_sold"] },
+      when: { all: [UK, { fact: "replacementPlanned", in: ["outside_provider", "business_sold"] }] },
       message:
-        "Work is moving to an outside provider, or part of the business is being sold. TUPE may apply, and staff may transfer instead of being made redundant. Check TUPE first.",
+        "Work is moving to an outside provider, or part of the business is being sold. TUPE may apply, and staff may transfer instead of being made redundant. Check TUPE first. There is no service provision change where the activities are wholly or mainly the supply of goods for the client's use (TUPE reg 3(3)(b)); whether that applies here depends on the facts and is still to be confirmed.",
+      sources: ["S78"],
+      toVerify: true,
     },
     {
       id: "termsOnly",
       level: "worth_checking",
-      when: { fact: "jobsContinue", is: true },
+      when: { all: [GB, { fact: "jobsContinue", is: true }] },
       message:
         "The jobs stay but terms change. Use the contract change playbook. Employment Rights Act 2025 fire and rehire protections are due in January 2027.",
       sources: ["S24"],
     },
     {
-      // Closest safe version: the Condition language cannot read the rules
-      // code's detail.qualifies or compare a fact with a rules-code date, so
-      // "less than 2 years" is written as at most 728 days from start to end.
-      // Two years beginning with the start day end 729 or 730 days later, so
-      // this never fires for someone with 2 years, but misses the last day
-      // or two before the 2-year point.
       id: "underTwoYears",
       level: "for_information",
+      when: { all: [GB, SERVICE_UNDER_TWO_YEARS] },
+      message:
+        "Less than 2 years' continuous service: no statutory redundancy pay. Unfair dismissal needs 2 years where employment ends before 1 January 2027, and 6 months where the effective date of termination is on or after that date, even if notice was given earlier (SI 2026/559 reg 4). Automatically unfair reasons and discrimination have no qualifying period.",
+      sources: ["S14", "S9", "S24", "S74"],
+    },
+    {
+      id: "trialPeriod",
+      level: "for_information",
+      when: { all: [UK, { any: [{ fact: "offerResponse", is: "accepted" }, { known: "trialStartDate" }] }] },
+      message:
+        "Where the new role is on different terms, there is a statutory trial period of four weeks from starting work in it (Northern Ireland: ERNIO art. 173(3), (6)). It can be longer only for retraining, agreed in writing before the new job starts, with an end date. If the offer is accepted during maternity leave, when the trial runs is still to be confirmed.",
+      sources: ["S11", "S31", "S82"],
+      toVerify: true,
+    },
+    {
+      id: "refusalOfOffer",
+      level: "worth_checking",
       when: {
         all: [
           UK,
           {
             any: [
-              { fact: "employmentEndDate", withinDays: 728, from: { fact: "serviceStartDate" } },
+              { fact: "offerResponse", is: "declined" },
               {
                 all: [
-                  { not: { known: "employmentEndDate" } },
-                  { fact: "firstDismissalDate", withinDays: 728, from: { fact: "serviceStartDate" } },
+                  { lens: "employee" },
+                  { known: "alternativeOffer" },
+                  { not: { fact: "offerResponse", is: "accepted" } },
                 ],
               },
             ],
           },
         ],
       },
-      message:
-        "Less than 2 years' continuous service: no statutory redundancy pay. Unfair dismissal needs 2 years now, and 6 months for dismissals from 1 January 2027 according to the government timeline. Automatically unfair reasons and discrimination have no qualifying period.",
-      sources: ["S14", "S9", "S24"],
-    },
-    {
-      id: "trialPeriod",
-      level: "for_information",
-      when: { any: [{ fact: "offerResponse", is: "accepted" }, { known: "trialStartDate" }] },
-      message:
-        "Where the new role is on different terms, there is a statutory trial period of four weeks from starting work in it. It can be longer only for retraining, agreed in writing before the new job starts, with an end date.",
-      sources: ["S11", "S31"],
-    },
-    {
-      id: "refusalOfOffer",
-      level: "worth_checking",
-      when: {
-        any: [
-          { fact: "offerResponse", is: "declined" },
-          {
-            all: [
-              { lens: "employee" },
-              { known: "alternativeOffer" },
-              { not: { fact: "offerResponse", is: "accepted" } },
-            ],
-          },
-        ],
-      },
       message: {
-        hr: "Redundancy pay can be withheld only if the offer was suitable and the refusal unreasonable, and the employer must prove both.",
+        hr: "Redundancy pay can be withheld only if the offer was suitable and the refusal unreasonable, and the employer must prove both. Northern Ireland: ERNIO art. 176, whose text is still to be confirmed.",
         employee:
-          "You lose redundancy pay by refusing only if the job offered was suitable and your refusal was unreasonable, and your employer has to prove that.",
+          "You lose redundancy pay by refusing only if the job offered was suitable and your refusal was unreasonable, and your employer has to prove that. In Northern Ireland the rule is in ERNIO art. 176, whose text is still to be confirmed.",
         consultant:
-          "Your client can withhold redundancy pay only if the offer was suitable and the refusal unreasonable, and it must prove both.",
+          "Your client can withhold redundancy pay only if the offer was suitable and the refusal unreasonable, and it must prove both. Northern Ireland: ERNIO art. 176, whose text is still to be confirmed.",
       },
-      sources: ["S13", "S31"],
+      sources: ["S13", "S31", "S82"],
+      toVerify: true,
     },
     {
       id: "noAppeal",
@@ -1700,11 +2033,12 @@ export const redundancyPlaybook: Playbook = {
         ],
       },
       message: {
-        hr: "No appeal is offered yet. Acas treats an appeal as good practice.",
+        hr: "No appeal is offered yet. Acas treats an appeal as good practice. The Acas Code does not apply to redundancy dismissals, so there is no Code uplift, but an appeal still helps show the process was fair.",
         employee: "You have not been offered an appeal. Acas treats an appeal as good practice, and you can still ask for one.",
-        consultant: "Your client has not offered an appeal yet. Acas treats an appeal as good practice.",
+        consultant:
+          "Your client has not offered an appeal yet. Acas treats an appeal as good practice. The Acas Code does not apply to redundancy dismissals, so there is no Code uplift, but an appeal still helps show the process was fair.",
       },
-      sources: ["S32"],
+      sources: ["S32", "S79"],
     },
     {
       // The draft's noAppeal is act now in Northern Ireland; a check has one
@@ -1726,41 +2060,30 @@ export const redundancyPlaybook: Playbook = {
         consultant:
           "In Northern Ireland the statutory procedure requires an appeal for most non-collective dismissals. Your client must offer one.",
       },
-      sources: ["S38", "S39"],
+      sources: ["S38", "S39", "S83"],
     },
     {
       id: "niStatutoryProcedure",
       level: "act_now",
       when: { all: [NI, NOT_COLLECTIVE] },
       message:
-        "In Northern Ireland the statutory dismissal procedure applies: a written statement, a meeting and an appeal. Not completing it through the employer's fault makes the dismissal unfair. It does not apply where the collective duty applies.",
-      sources: ["S38", "S39"],
-      toVerify: true,
+        "In Northern Ireland the statutory dismissal procedure applies (Employment (NI) Order 2003 Sch 1; SR 2004/521 regs 3 and 4). It needs: a written statement of the grounds with an invitation to a meeting; the basis for the grounds, meaning the selection criteria and the employee's own scores, given before the meeting; the meeting; the decision with notice of the right to appeal; and an appeal meeting if the employee asks for one. If it is not completed wholly or mainly because of the employer, the dismissal is automatically unfair (ERNIO art. 130A), awards rise by 10 to 50 per cent (2003 Order Art 17), and the basic award is at least four weeks' pay (art. 154(1A)). It does not apply where the collective duty applies (20 or more redundancies proposed at the site within 90 days).",
+      sources: ["S38", "S39", "S83"],
     },
     {
-      // Closest safe version, as for underTwoYears: fires only from 730 days
-      // after the start, so never before 2 years but a day late in some years.
       id: "timeOffJobSearch",
       level: "for_information",
-      when: {
-        all: [
-          GB,
-          { known: "noticeDate" },
-          { known: "serviceStartDate" },
-          { fact: "noticeDate", onOrAfter: { fact: "serviceStartDate" } },
-          { not: { fact: "noticeDate", withinDays: 729, from: { fact: "serviceStartDate" } } },
-        ],
-      },
+      when: { all: [GB, NOTICE_WITH_TWO_YEARS] },
       message:
-        "With notice given and 2 years' service, there is a right to reasonable paid time off to look for work or arrange training.",
-      sources: ["S6"],
-      toVerify: true,
+        "With notice given and 2 years' service by the end of the notice, there is a right to reasonable paid time off to look for work or arrange training. A tribunal award for refusing it is capped at 40 per cent of a week's pay (ERA s.53(5)).",
+      sources: ["S6", "S69"],
     },
     {
       id: "deadlineClose",
       level: "act_now",
       when: {
         all: [
+          UK,
           { lens: "employee" },
           {
             any: [
@@ -1776,7 +2099,7 @@ export const redundancyPlaybook: Playbook = {
         ],
       },
       message:
-        "A date that matters is close. If it is a tribunal time limit, the first step is Acas early conciliation, and we show the date first. If it is a meeting, prepare now.",
+        "A date that matters is close. If it is a tribunal time limit, the first step is early conciliation (Acas in Great Britain, the LRA in Northern Ireland), and we show the date first. If it is a meeting, prepare now.",
     },
     {
       id: "settlement",
@@ -1785,43 +2108,237 @@ export const redundancyPlaybook: Playbook = {
       message: "A settlement or package is mentioned. The settlement playbook takes this part.",
     },
     {
+      // Now covers all of Great Britain (GB review R29). The id is kept.
       id: "scotlandContract",
       level: "for_information",
       when: {
         all: [
-          { nation: "scotland" },
+          GB,
           {
             any: [{ known: "noticeDate" }, { known: "employmentEndDate" }, { known: "firstDismissalDate" }],
           },
         ],
       },
       message:
-        "In Scotland, the time limit for breach of contract claims (for example unpaid notice) moves to 6 months from 9 November 2026.",
-      sources: ["S24"],
+        "A tribunal claim for breach of contract (for example unpaid notice) is possible only after employment ends, and awards are capped at £25,000. England and Wales: 6 months where the effective date of termination is on or after 1 October 2026 (SI 2026/759). Scotland: 6 months where the effective date of termination is on or after 9 November 2026, if the Scottish order is made as drafted; otherwise 3 months.",
+      sources: ["S24", "S76"],
+      // Whether the Scottish order is made as drafted (question 27).
+      toVerify: true,
     },
     {
       id: "usWarn",
       level: "act_now",
-      when: { all: [US, { not: { fact: "usEmployerHeadcount", below: 100 } }] },
+      when: WARN_FEDERAL,
       message:
-        "The employer may have 100 or more employees. Check WARN coverage, the plant closing and mass layoff tests, and 60 days' notice. Check state laws too.",
-      sources: ["S48"],
-      toVerify: true,
+        "Federal WARN notice is due, or may be on the counts so far (the WARN date shows which). Notice must arrive at least 60 days before each group's separation date. It goes to the union, or to each affected employee (part-time staff included), and to the state dislocated worker unit and the chief elected official of the local government.",
+      sources: ["S48", "S51", "S52"],
     },
     {
       id: "usOwbpa",
       level: "act_now",
       when: {
+        all: [US, { fact: "usReleaseOffered", is: true }, { fact: "usOver40Affected", is: true }],
+      },
+      message:
+        "A release of claims is sought and people aged 40 or over are affected. Individual: a plain-language agreement that refers to the ADEA, waives no future claims, gives something beyond what is already owed, advises in writing to consult an attorney, and allows at least 21 days to consider and 7 days to revoke. Group (offered to two or more): 45 days to consider, and at the start of the 45 days written information on who is covered, the eligibility factors, the time limits, and the job titles and ages of those selected and not selected in the decisional unit.",
+      sources: ["S50", "S53"],
+    },
+
+    // New in 0.2
+    {
+      // In code the suppression itself is the GB gate on each Great Britain
+      // check; this check only tells the user.
+      id: "niGate",
+      level: "for_information",
+      when: NI,
+      message:
+        "This case is in Northern Ireland, which has its own employment law. Checks that apply only in Great Britain are not shown: the coming employer-wide collective threshold, replacement by non-employees, fire and rehire, contract claim time limits, and the 18-month family leave priority (the Northern Ireland family leave check applies instead). Where a check covers both, follow its Northern Ireland line. Early conciliation is with the Labour Relations Agency (LRA), not Acas.",
+    },
+    {
+      // The act now half of the draft's familyLeaveNI (a check has one level).
+      id: "familyLeaveNIOnLeave",
+      level: "act_now",
+      when: FAMILY_PROTECTED_NI,
+      message: {
+        hr: "Someone is on maternity, adoption or shared parental leave in Northern Ireland. While the leave lasts, they must be offered a suitable alternative vacancy, where one exists, ahead of others, and a redundancy dismissal that breaches this is automatically unfair (reg 20). The priority ends when the leave ends. Their outcome letter is blocked until the vacancy is offered, or you record why it is not suitable and appropriate.",
+        employee:
+          "Because you are on maternity, adoption or shared parental leave, you have priority for any suitable alternative vacancy while your leave lasts. Your employer must offer it to you ahead of others.",
+        consultant:
+          "Someone in your client's pool is on maternity, adoption or shared parental leave in Northern Ireland. While the leave lasts, they must be offered a suitable alternative vacancy, where one exists, ahead of others, and a redundancy dismissal that breaches this is automatically unfair (reg 20). The priority ends when the leave ends. Their outcome letter is blocked until your client offers the vacancy, or records why it is not suitable and appropriate.",
+      },
+      sources: ["S40", "S84"],
+    },
+    {
+      id: "underTwoYearsNI",
+      level: "for_information",
+      when: { all: [NI, SERVICE_UNDER_TWO_YEARS] },
+      message:
+        "Less than 2 years' continuous service: no statutory redundancy pay (ERNIO art. 190). In Northern Ireland unfair dismissal needs one year (art. 140(1)), with statutory notice added to the termination date (art. 129(2)); the Great Britain six-month change does not apply. Automatically unfair reasons and discrimination have no qualifying period.",
+      sources: ["S37", "S82"],
+    },
+    {
+      id: "timeOffJobSearchNI",
+      level: "for_information",
+      when: { all: [NI, NOTICE_WITH_TWO_YEARS] },
+      message:
+        "With notice given and 2 years' service, there is likely to be a right to reasonable paid time off to look for work or arrange training, as in Great Britain. For Northern Ireland the article, the service condition and the pay limit are still to be confirmed.",
+      // Question 9(a).
+      toVerify: true,
+    },
+    {
+      id: "usStateWarn",
+      level: "act_now",
+      when: WARN_STATE,
+      message:
+        "A state layoff notice law applies, or may on the counts so far, and it can apply when federal WARN does not. New York: 90 days, to more recipients. California: 60 days, part-time staff counted, no percentage test, any closure. Illinois: 60 days, to the Department of Commerce and Economic Opportunity (DCEO) and local officials.",
+      sources: ["S55", "S56", "S58"],
+    },
+    {
+      // "Close" is within 10% below a threshold (Proposal). The Condition
+      // language cannot compare two facts, so "more losses within 90 days"
+      // is approximated as 90-day losses reaching 50 while 30-day losses do not.
+      id: "usWarnNearMiss",
+      level: "worth_checking",
+      when: {
         all: [
           US,
-          { fact: "usReleaseOffered", is: true },
-          { fact: "usOver40Affected", is: true },
-          { fact: "usGroupProgramme", is: true },
+          {
+            any: [
+              BETWEEN("usEmployerHeadcount", 90, 100),
+              BETWEEN("usLossesIn30Days", 45, 50),
+              BETWEEN("usLossesIn90Days", 45, 50),
+              BETWEEN("usLossesIn30Days", 450, 500),
+              BETWEEN("usLossesIn90Days", 450, 500),
+              { all: [{ fact: "usLossesIn30Days", below: 50 }, { fact: "usLossesIn90Days", atLeast: 50 }] },
+              { all: [STATE_IS(["NY"]), BETWEEN("usStateHeadcount", 45, 50)] },
+              { all: [STATE_IS(["CA", "IL"]), BETWEEN("usStateHeadcount", 68, 75)] },
+              {
+                all: [
+                  ANYONE_IN(["NY", "IL"], ["New York", "Illinois"]),
+                  {
+                    any: [
+                      BETWEEN("usLossesIn30Days", 23, 25),
+                      BETWEEN("usLossesIn90Days", 23, 25),
+                      BETWEEN("usLossesIn30Days", 225, 250),
+                      BETWEEN("usLossesIn90Days", 225, 250),
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
       message:
-        "A release is required and people aged 40 or over are affected in a group programme: 45 days to consider, 7 days to revoke, and written disclosure of job titles and ages.",
-      sources: ["S50"],
+        "The numbers are close to a federal or state WARN threshold, or more losses fall within 90 days of the first. Recount on the date the first notice is due, test the 30 and 90-day aggregation, and think about giving notice anyway. Close means within 10% of the threshold, a DraftHR choice.",
+      sources: ["S52"],
+      proposal: true,
+    },
+    {
+      id: "usWarnException",
+      level: "act_now",
+      when: { all: [US, { fact: "usWarnExceptionClaimed", is: true }] },
+      message:
+        "A WARN exception is claimed. A shorter notice period may apply (faltering company, unforeseeable business circumstances or natural disaster), but notice must still be given as early as possible, with a brief statement of why it is short. DraftHR does not decide that an exception applies: involve counsel.",
+      sources: ["S52"],
+    },
+    {
+      id: "usRemoteSite",
+      level: "worth_checking",
+      when: { all: [US, { fact: "usRemoteStaff", is: true }] },
+      message:
+        "Some affected employees work remotely. Which site a remote employee counts at for WARN is not settled. Count them at the site they report to, or that assigns their work, and check the result with and without them.",
+      sources: ["S52", "S65"],
+      // Question 17.
+      toVerify: true,
+    },
+    {
+      id: "usPostponement",
+      level: "worth_checking",
+      when: { all: [US, { fact: "usSeparationMoved", is: true }] },
+      message:
+        "A separation date given in a WARN notice has moved later. If it moves by less than 60 days, give additional notice as soon as possible. If it moves by 60 days or more, give a new notice.",
+      sources: ["S52"],
+    },
+    {
+      id: "usUnion",
+      level: "act_now",
+      when: { all: [US, { fact: "usUnion", is: true }] },
+      message:
+        "Affected employees are covered by a union agreement. Serve the WARN notice on the union's chief elected officer, with job titles and the names of the workers in affected jobs. Check the agreement for seniority, recall and consultation terms, and involve counsel on any duty to bargain.",
+      sources: ["S52"],
+      // Question 24.
+      toVerify: true,
+    },
+    {
+      id: "usSelectionImpact",
+      level: "worth_checking",
+      when: {
+        all: [
+          US,
+          { known: "usSelectionCriteria" },
+          {
+            any: [
+              { fact: "usOver40Affected", is: true },
+              { fact: "recentConcernsRaised", in: LISTED_CONCERNS },
+            ],
+          },
+        ],
+      },
+      message:
+        "Check the selection. It must not be because of age, race, colour, religion, sex, national origin, disability or genetic information, or because of a complaint. A criterion that falls harder on older workers is lawful only if it rests on a reasonable factor other than age. Record the business reason for each criterion.",
+      sources: ["S59"],
+    },
+    {
+      // The sexual harassment limb of the draft's trigger needs a fact of its
+      // own; the federal sentence is in the message.
+      id: "usStateRelease",
+      level: "act_now",
+      when: {
+        all: [US, { fact: "usReleaseOffered", is: true }, ANYONE_IN(["CA", "NY"], ["California", "New York"])],
+      },
+      message:
+        "A release is offered to staff in California or New York. California: tell the employee in writing they may consult an attorney and give at least 5 business days; any clause limiting disclosure carries the set wording on unlawful acts. New York: if the release settles a discrimination, harassment or retaliation claim, keep the facts confidential only if the employee prefers it, with up to 21 days to consider and 7 days to revoke. Federal: pre-dispute confidentiality, non-disparagement and arbitration terms cannot be enforced in sexual harassment or assault disputes. Wording for staff covered by the National Labor Relations Act is still to be confirmed.",
+      sources: ["S63"],
+      // Question 23.
+      toVerify: true,
+    },
+    {
+      id: "usSeverance",
+      level: "for_information",
+      when: US,
+      message:
+        "Federal law does not require severance pay, so DraftHR works out none. A written severance promise can be enforced (in Texas, only a written one). Whether a severance plan is an employee benefit plan, and continued group health cover, are still to be confirmed.",
+      sources: ["S60"],
+      // Question 25.
+      toVerify: true,
+    },
+    {
+      id: "usFinalPay",
+      level: "act_now",
+      when: { all: [US, { known: "firstDismissalDate" }] },
+      message:
+        "Final pay has a state deadline, shown with the other dates. Texas: within 6 calendar days of a layoff. New York: by the regular payday for the period in which employment ended. Illinois: by the next regular payday at the latest, with earned vacation. California: pay in full on the last day (still to be confirmed for layoffs). Florida: no state rule found.",
+      sources: ["S61"],
+      // California layoffs (question 20).
+      toVerify: true,
+    },
+    {
+      id: "usSeparationNotice",
+      level: "act_now",
+      when: { all: [US, { known: "firstDismissalDate" }] },
+      message:
+        "State separation notices are due, shown with the other dates. New York: form IA 12.3, and written notice of the end date and the date benefits end within 5 working days. Illinois: the IDES unemployment insurance pamphlet. Texas: notice of the right to claim unemployment. California: written notice immediately.",
+      sources: ["S62"],
+    },
+    {
+      // "An employee says selection was discriminatory" is read from the date
+      // of the act complained of, which also feeds the charge deadlines.
+      id: "usAgencyDeadlines",
+      level: "worth_checking",
+      when: { all: [US, { known: "actComplainedOfDate" }] },
+      message:
+        "Selection may have been discriminatory. The EEOC and state agency deadlines are shown with the other dates. All five covered states are 300-day states for an EEOC charge (employers with 15 or more employees; 20 or more for age). Texas: 180 days to the Texas Workforce Commission Civil Rights Division, shorter than the EEOC's 300.",
     },
   ],
 
@@ -1900,6 +2417,9 @@ export const redundancyPlaybook: Playbook = {
         expectedWeekStart: { fact: "familyLeaveExpectedWeek" },
         notifiedPregnancyDate: { fact: "familyLeaveNotifiedDate" },
         leaveEndDate: { fact: "familyLeaveEndDate" },
+        placementDate: { fact: "familyLeavePlacementDate" },
+        sixConsecutiveWeeks: { fact: "familyLeaveSixWeeks" },
+        birthNotified: { fact: "familyLeaveBirthNotified" },
       },
       when: { all: [UK, FAMILY_LEAVE_ANY] },
     },
@@ -1999,11 +2519,85 @@ export const redundancyPlaybook: Playbook = {
       when: { all: [UK, { known: "acasNotifiedDate" }] },
     },
     {
+      // With the counts, the rules code also tests coverage, a plant closing
+      // or mass layoff, and 90-day aggregation; its date is null only when
+      // the counts show WARN does not apply. There is no closure fact, so a
+      // plant closing is left open when the losses reach 50.
       id: "warn_notice",
       label: "Latest day for WARN notice",
       rule: "us.warnNotice",
-      inputs: { firstSeparationDate: { fact: "firstDismissalDate" } },
+      inputs: {
+        firstSeparationDate: { fact: "firstDismissalDate" },
+        separationDates: { fact: "usSeparationDates" },
+        employerFullTime: { fact: "usEmployerHeadcount" },
+        employer4000Hours: { fact: "usEmployer4000Hours" },
+        siteFullTimeHeadcount: { fact: "usSiteHeadcount" },
+        siteLosses30: { fact: "usLossesIn30Days" },
+        siteLosses90: { fact: "usLossesIn90Days" },
+      },
       when: US,
+    },
+    {
+      // Run only where the state these rules follow is California, New York
+      // or Illinois: Texas and Florida have no state law, and other states
+      // are not held.
+      id: "us_state_warn_notice",
+      label: "Latest day for state layoff notice",
+      rule: "us.stateWarnNotice",
+      inputs: {
+        state: { fact: "usState" },
+        firstSeparationDate: { fact: "firstDismissalDate" },
+        stateHeadcount: { fact: "usStateHeadcount" },
+        siteLosses30: { fact: "usLossesIn30Days" },
+        siteLosses90: { fact: "usLossesIn90Days" },
+        siteFullTimeHeadcount: { fact: "usSiteHeadcount" },
+      },
+      when: { all: [US, STATE_IS(["CA", "NY", "IL"])] },
+    },
+    {
+      id: "us_final_pay",
+      label: "Latest day for final pay",
+      rule: "us.finalPay",
+      inputs: {
+        state: { fact: "usState" },
+        separationDate: { fact: "firstDismissalDate" },
+        separationType: { value: "layoff" },
+        nextPayday: { fact: "usNextPayday" },
+      },
+      when: US,
+    },
+    {
+      id: "us_separation_notice",
+      label: "Latest day for the state separation notice",
+      rule: "us.separationNotice",
+      inputs: {
+        state: { fact: "usState" },
+        separationDate: { fact: "firstDismissalDate" },
+        separationType: { value: "layoff" },
+      },
+      when: US,
+    },
+    {
+      // Employer size is left out: usEmployerHeadcount leaves out part-time
+      // staff, who count for the EEOC's 15 and 20 employee tests.
+      id: "eeoc_charge",
+      label: "EEOC charge deadline",
+      rule: "us.eeocCharge",
+      inputs: {
+        actDate: { fact: "actComplainedOfDate" },
+        state: { fact: "usState" },
+      },
+      when: { all: [US, { known: "actComplainedOfDate" }] },
+    },
+    {
+      id: "state_agency_charge",
+      label: "State fair employment agency deadline",
+      rule: "us.stateAgencyDeadline",
+      inputs: {
+        actDate: { fact: "actComplainedOfDate" },
+        state: { fact: "usState" },
+      },
+      when: { all: [US, { known: "actComplainedOfDate" }] },
     },
     {
       id: "owbpa_consideration",
@@ -2107,6 +2701,21 @@ export const redundancyPlaybook: Playbook = {
       when: UK,
       after: ["at_risk"],
       needs: ["atRiskDate", "nextMeetingDate"],
+      blockedIf: [
+        {
+          // NI statutory procedure: the basis for the grounds comes before the meeting.
+          when: {
+            all: [
+              NI,
+              NOT_COLLECTIVE,
+              { fact: "rolesRemaining", atLeast: 1 },
+              { any: [{ not: { known: "selectionCriteria" } }, { not: { known: "scoringMethod" } }] },
+            ],
+          },
+          reason:
+            "In Northern Ireland, give the employee the basis for selection, including the criteria and their own scores, before the meeting. Record the criteria and how they are scored first.",
+        },
+      ],
     },
     {
       id: "alternative_offer",
@@ -2160,9 +2769,16 @@ export const redundancyPlaybook: Playbook = {
       ],
       blockedIf: [
         {
-          when: FAMILY_VACANCY_MISSED,
+          when: { all: [GB, FAMILY_VACANCY_OPEN] },
           reason:
             "Offer the vacancy to the person with family leave priority first, or record why it is not suitable and appropriate.",
+        },
+        {
+          // NI review R29: familyLeaveVacancyMissed is Great Britain only, so
+          // the Northern Ireland block goes with familyLeaveNIOnLeave.
+          when: { all: [NI, FAMILY_VACANCY_OPEN] },
+          reason:
+            "Offer the vacancy first to the person on maternity, adoption or shared parental leave, or record why it is not suitable and appropriate.",
         },
         TUPE_BLOCK,
         NOT_REDUNDANCY_BLOCK,
@@ -2241,35 +2857,80 @@ export const redundancyPlaybook: Playbook = {
       title: "Settlement cover letter",
       letter: "employer/settlement_cover",
       lens: ["hr", "consultant"],
-      when: { fact: "settlementOffered", is: true },
+      // Not used in US cases: a US release is us_release.
+      when: { all: [UK, { fact: "settlementOffered", is: true }] },
     },
-    // United States (outline)
+    // United States (part 6, US route tables). UK-only steps are not offered.
+    {
+      id: "us_warn_union",
+      title: {
+        hr: "WARN notice to the union",
+        consultant: "WARN notice to the union (for the client to sign)",
+      },
+      letter: "new:warn_notice",
+      lens: ["hr", "consultant"],
+      when: { all: [WARN_DUE, { fact: "usUnion", is: true }] },
+      needs: [...EMPLOYER_FIRST, "firstDismissalDate", "usSiteAddress", "usUnionOfficer"],
+    },
     {
       id: "us_warn_notices",
-      title:
-        "WARN notices to employees or their representative, the state dislocated worker unit and the chief elected local official",
-      letter: "new:us_warn_notice",
+      title: {
+        hr: "WARN notice to each affected employee (part-time staff included)",
+        consultant: "WARN notice to each affected employee, part-time staff included (for the client to sign)",
+      },
+      letter: "new:warn_notice",
       lens: ["hr", "consultant"],
-      when: { all: [US, { not: { fact: "usEmployerHeadcount", below: 100 } }] },
-      needs: [...EMPLOYER_FIRST, "firstDismissalDate", "usLossesIn30Days"],
+      when: { all: [WARN_DUE, { not: { fact: "usUnion", is: true } }] },
+      needs: [...EMPLOYER_FIRST, "firstDismissalDate", "usLossesIn30Days", "usSeparationDates"],
+    },
+    {
+      id: "us_warn_government",
+      title: {
+        hr: "WARN notice to the state dislocated worker unit and the chief elected local official",
+        consultant:
+          "WARN notice to the state dislocated worker unit and the chief elected local official (for the client to sign)",
+      },
+      letter: "new:warn_notice",
+      lens: ["hr", "consultant"],
+      when: WARN_DUE,
+      needs: [...EMPLOYER_FIRST, "firstDismissalDate", "usSiteAddress"],
+    },
+    {
+      id: "us_warn_additional",
+      title: {
+        hr: "Additional WARN notice for a later date",
+        consultant: "Additional WARN notice for a later date (for the client to sign)",
+      },
+      letter: "new:warn_notice",
+      lens: ["hr", "consultant"],
+      when: { all: [US, { fact: "usSeparationMoved", is: true }] },
+      after: ["us_warn_union", "us_warn_notices"],
     },
     {
       id: "us_layoff",
-      title: "Layoff letter (US form)",
+      title: {
+        hr: "Layoff letter (US form)",
+        consultant: "Layoff letter, US form (for the client to sign)",
+      },
       letter: "employer/redundancy",
       lens: ["hr", "consultant"],
       when: US,
-      after: ["us_warn_notices"],
-      needs: [...EMPLOYER_FIRST, "firstDismissalDate", "usStates"],
+      after: ["us_warn_union", "us_warn_notices", "us_warn_government"],
+      needs: [...EMPLOYER_FIRST, "firstDismissalDate", "usStates", "usNextPayday"],
     },
     {
+      // Proposal: whether DraftHR drafts US releases at all is question 18.
       id: "us_release",
-      title: "Release with OWBPA disclosure",
-      letter: "new:us_owbpa_disclosure",
+      title: {
+        hr: "Separation agreement and release (OWBPA terms; for a group, an exhibit of job titles and ages)",
+        consultant:
+          "Separation agreement and release, with OWBPA terms and any group exhibit of job titles and ages (for the client and its counsel)",
+      },
+      letter: "new:us_separation_agreement",
       lens: ["hr", "consultant"],
       when: { all: [US, { fact: "usReleaseOffered", is: true }] },
       after: ["us_layoff"],
-      needs: ["usReleaseGivenDate"],
+      needs: ["usReleaseGivenDate", "usSeveranceAlreadyPromised"],
       blockedIf: [
         {
           when: {
@@ -2283,6 +2944,15 @@ export const redundancyPlaybook: Playbook = {
         },
       ],
     },
+    {
+      // A checklist, like the HR1 checklist, not a letter.
+      id: "us_separation_checklist",
+      title: "State separation notices checklist",
+      letter: "new:us_separation_checklist",
+      lens: ["hr", "consultant"],
+      when: { all: [US, { known: "firstDismissalDate" }] },
+      needs: [...EMPLOYER_FIRST, "firstDismissalDate"],
+    },
 
     // Employee
     {
@@ -2290,7 +2960,7 @@ export const redundancyPlaybook: Playbook = {
       title: "Consultation response",
       letter: "employee/redundancy_consultation_response",
       lens: ["employee"],
-      when: { not: NOTICE_STAGE },
+      when: { all: [UK, { not: NOTICE_STAGE }] },
       needs: [...EMPLOYEE_FIRST],
     },
     {
@@ -2298,7 +2968,7 @@ export const redundancyPlaybook: Playbook = {
       title: "Subject access request for scores and notes",
       letter: "employee/subject_access_request",
       lens: ["employee"],
-      when: { fact: "nextStepsWanted", is: "see_scores_or_notes" },
+      when: { all: [UK, { fact: "nextStepsWanted", is: "see_scores_or_notes" }] },
       needs: [...EMPLOYEE_FIRST],
     },
     {
@@ -2310,6 +2980,8 @@ export const redundancyPlaybook: Playbook = {
       needs: [...EMPLOYEE_FIRST],
     },
     {
+      // US: the internal complaint variant, with the EEOC and state agency
+      // dates from the grievance playbook.
       id: "selection_grievance",
       title: "Grievance about selection",
       letter: "employee/grievance",
@@ -2318,19 +2990,23 @@ export const redundancyPlaybook: Playbook = {
       needs: [...EMPLOYEE_FIRST],
     },
     {
+      // The statutory appeal is a UK letter; it is not offered in US cases.
       id: "appeal",
       title: "Appeal",
       letter: "employee/appeal",
       lens: ["employee"],
-      when: { any: [NOTICE_STAGE, { known: "noticeDate" }] },
+      when: { all: [UK, { any: [NOTICE_STAGE, { known: "noticeDate" }] }] },
       needs: [...EMPLOYEE_FIRST, "noticeDate"],
     },
     {
+      // US: a release offered with severance, via the settlement playbook (US variant).
       id: "settlement_counter",
       title: "Settlement counter-offer",
       letter: "employee/settlement_counter_offer",
       lens: ["employee"],
-      when: { fact: "settlementOffered", is: true },
+      when: {
+        any: [{ fact: "settlementOffered", is: true }, { all: [US, { fact: "usReleaseOffered", is: true }] }],
+      },
       needs: [...EMPLOYEE_FIRST],
     },
     {
@@ -2358,6 +3034,24 @@ export const redundancyPlaybook: Playbook = {
       after: ["acas_ec"],
       needs: [...EMPLOYEE_FIRST],
     },
+    // Employee, United States
+    {
+      // Proposal (US route, employee step 1).
+      id: "us_layoff_questions",
+      title: "Questions about the layoff",
+      letter: "new:us_layoff_questions",
+      lens: ["employee"],
+      when: US,
+      needs: [...EMPLOYEE_FIRST],
+    },
+    {
+      id: "us_final_pay_claim",
+      title: "Final pay claim",
+      letter: "employee/pay_dispute",
+      lens: ["employee"],
+      when: { all: [US, { fact: "usFinalPayLate", is: true }] },
+      needs: [...EMPLOYEE_FIRST, "firstDismissalDate"],
+    },
   ],
 
   // -------------------------------------------------------------------------
@@ -2369,7 +3063,7 @@ export const redundancyPlaybook: Playbook = {
       to: "grievance",
       when: { fact: "processGrievance", is: true },
       message:
-        "Grievance about selection or process. Redundancy does not pause by default: the user chooses to deal with it inside consultation or appeal, or to pause that person's outcome until the grievance ends. Passes across the pool, criteria, scores and meeting notes.",
+        "Grievance about selection or process. Redundancy does not pause by default: the user chooses to deal with it inside consultation or appeal, or to pause that person's outcome until the grievance ends. No rule requiring a pause was found, and the Acas Code does not apply to redundancy dismissals; whether the law ever requires a pause is still to be confirmed. Passes across the pool, criteria, scores and meeting notes.",
     },
     {
       id: "family_leave",
@@ -2414,16 +3108,15 @@ export const redundancyPlaybook: Playbook = {
     {
       id: "settlement",
       to: "expert",
-      when: {
-        any: [{ fact: "settlementOffered", is: true }, { fact: "usReleaseOffered", is: true }],
-      },
+      // A US release has its own hand-off, us_settlement.
+      when: { fact: "settlementOffered", is: true },
       message:
-        "Settlement playbook. The individual route pauses while terms are discussed; collective duties do not pause. Passes across pay, notice and redundancy pay figures, and the claims in issue.",
+        "Settlement playbook. The individual route pauses while terms are discussed; collective duties do not pause. In Northern Ireland the agreement is a compromise agreement (ERNIO art. 245), and ERA 1996 s.111A does not apply, so take legal advice before raising an exit. Passes across pay, notice and redundancy pay figures, and the claims in issue.",
     },
     {
       id: "tupe",
       to: "expert",
-      when: TUPE_OPEN,
+      when: { all: [UK, TUPE_OPEN] },
       message:
         "TUPE playbook. Redundancy stops until TUPE is ruled out. Passes across a description of the transfer, dates and the staff list.",
     },
@@ -2438,13 +3131,20 @@ export const redundancyPlaybook: Playbook = {
       to: "disciplinary",
       when: { fact: "concernIsPerformance", is: true },
       message:
-        "Capability or disciplinary playbook. Exit with a note: possible sham redundancy. Passes across the story and dates.",
+        "Capability or disciplinary playbook. Exit with a note: possible sham redundancy. If the real reason is conduct or performance, the Acas Code applies. Passes across the story and dates.",
     },
     {
       id: "tribunal",
       to: "expert",
       when: { any: [{ fact: "tribunalClaimStarted", is: true }, { drafted: "tribunal_cover" }] },
       message: "Tribunal playbook. The internal process may continue. Passes across the full case file.",
+    },
+    {
+      id: "us_settlement",
+      to: "expert",
+      when: { all: [US, { fact: "usReleaseOffered", is: true }] },
+      message:
+        "Settlement playbook (US variant) for the release. WARN notice duties do not pause. Passes across the separation dates, severance terms, the OWBPA list of job titles and ages without names, and the state.",
     },
   ],
 

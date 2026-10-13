@@ -1,15 +1,16 @@
 import type { Condition, Playbook, RouteStep } from "../types";
 
 /**
- * Grievance playbook, translated from the draft 0.1 for legal review
- * (case-engine/playbooks/grievance.md, written 13 October 2026).
+ * Grievance playbook, translated from draft 0.2 for legal review
+ * (case-engine/playbooks/grievance.md), which folds in the Great Britain,
+ * Northern Ireland and United States region reviews.
  *
  * Check ids keep the draft's K numbers. Where one draft check has a different
- * level for different lenses or situations, it is split and the extra check
- * gets a suffix (for example K1 and K1-hr). Route step ids are descriptive;
- * the comment on each step gives the draft's step code (E1, H2 and so on).
- * Facts the draft asks as one compound question (a yes-no plus a date) are
- * split into one fact per value, next to each other.
+ * level or wording for different lenses or regions, it is split and the extra
+ * check gets a suffix (for example K1 and K1-hr, K24 and K24-ni). Route step
+ * ids are descriptive; the comment on each step gives the draft's step code
+ * (E1, H2, US-E1 and so on). Facts the draft asks as one compound question (a
+ * yes-no plus a date) are split into one fact per value, next to each other.
  */
 
 type Block = NonNullable<RouteStep["blockedIf"]>[number];
@@ -26,6 +27,10 @@ const US: Condition = { country: "us" };
 const EMPLOYEE: Condition = { lens: "employee" };
 const EMPLOYER_SIDE: Condition = { lens: ["hr", "consultant"] };
 
+/**
+ * UK characteristics, then the Northern Ireland and US additions (draft 3.2):
+ * federal grounds, then California and Illinois grounds.
+ */
 const CHARACTERISTICS: string[] = [
   "age",
   "disability",
@@ -38,6 +43,16 @@ const CHARACTERISTICS: string[] = [
   "sex",
   "sexual_orientation",
   "political_opinion",
+  "colour",
+  "genetic_information",
+  "gender_identity",
+  "ancestry",
+  "medical_condition",
+  "marital_status",
+  "military_veteran",
+  "reproductive_health",
+  "arrest_record",
+  "conviction_record",
 ];
 
 /** `protectedCharacteristicLink` names any characteristic, or "not sure". */
@@ -70,11 +85,22 @@ const PAST_ARRANGING: string[] = [
 
 const FAMILY_LEAVE: Condition = { fact: "familyLeaveStatus", in: ["pregnant", "on_leave", "returned"] };
 const ROLE_CHANGING: Condition = { fact: "roleChange", in: ["changed", "at_risk_of_redundancy", "removed"] };
+/** A redundancy is in play: only this opens the redundancy priority window (GB G11, G47). */
+const ROLE_AT_RISK: Condition = { fact: "roleChange", in: ["at_risk_of_redundancy", "removed"] };
 const RESIGNATION_IN_PLAY: Condition = {
   fact: "resignationIntent",
   in: ["thinking_about_it", "decided", "already_resigned"],
 };
+const RESIGNATION_CONSIDERED: Condition = { fact: "resignationIntent", in: ["thinking_about_it", "decided"] };
 const PAY: Condition = { fact: "complaintCategories", is: "pay" };
+const HARASSMENT: Condition = { fact: "complaintCategories", in: ["harassment", "sexual_harassment"] };
+const SEXUAL_HARASSMENT: Condition = {
+  any: [{ fact: "complaintCategories", is: "sexual_harassment" }, { fact: "sexualConduct", is: true }],
+};
+/** Government employees are out of scope in the US in v0.1 (draft 5.3). */
+const GOVERNMENT_EMPLOYER: Condition = { fact: "federalEmployee", is: true };
+/** The five states with a state agency table (draft 5.3, shared table T2). */
+const AGENCY_STATES: Condition = { state: ["CA", "NY", "TX", "FL", "IL"] };
 
 /** Interim protection is expected: harassment, bullying, threats or ongoing contact. */
 const INTERIM_NEEDED: Condition = {
@@ -129,7 +155,22 @@ const CLAIM_LIMITS: string[] = [
   "tribunal_detriment",
   "tribunal_unfair_dismissal",
   "tribunal_companion",
+  "tribunal_breach_of_contract",
 ];
+
+/** The US agency filing deadlines, in rule use ids (K30). */
+const US_LIMITS: string[] = [
+  "eeoc_charge",
+  "eeoc_charge_180",
+  "state_agency",
+  "state_agency_harassment",
+  "state_agency_sexual_harassment",
+];
+
+/** A US agency deadline is 60 days away or less, or has passed (K30, Proposal). */
+const US_LIMIT_WITHIN_60: Condition = {
+  any: US_LIMITS.map((id): Condition => ({ deadline: id, withinDays: 60 })),
+};
 
 /** The earliest claim deadline is 28 days away or less (passed deadlines included). */
 const LIMIT_WITHIN_28: Condition = {
@@ -174,6 +215,19 @@ const RESIGNATION_WARNING_UNREAD: Block = {
   reason: "Read the warning about resigning (K12) and confirm you have read it before resignation letters unlock.",
 };
 
+/** Draft 6.4 and question 28: R1 to R3 are not offered in the US. */
+const NOT_OFFERED_IN_US: Block = {
+  when: US,
+  reason: "Resignation letters are not offered for US cases yet (question 28). Take advice before resigning.",
+};
+
+/** Draft 5.3 and US review G4: every US step stops for a government employer. */
+const GOVERNMENT_OUT_OF_SCOPE: Block = {
+  when: GOVERNMENT_EMPLOYER,
+  reason:
+    "Government employees are out of scope in v0.1. Take advice: federal employees generally must contact an agency EEO counsellor within 45 days.",
+};
+
 // ---------------------------------------------------------------------------
 
 const US_STATES: string[] = [
@@ -185,7 +239,7 @@ const US_STATES: string[] = [
 export const grievancePlaybook: Playbook = {
   id: "grievance",
   name: "Grievance",
-  version: "0.1",
+  version: "0.2",
   status: "draft",
 
   // Part 2
@@ -293,7 +347,7 @@ export const grievancePlaybook: Playbook = {
         hr: "Is the person an employee, worker, agency worker or contractor?",
         consultant: "Is the person an employee, worker, agency worker or contractor?",
       },
-      why: "The right to be accompanied covers workers; constructive dismissal needs an employee.",
+      why: "The right to be accompanied covers workers; constructive dismissal, and any Acas Code uplift, need an employee.",
     },
     {
       key: "stillEmployed",
@@ -310,13 +364,15 @@ export const grievancePlaybook: Playbook = {
     {
       // The date half of the draft's `stillEmployed` and of `resignationDates`.
       key: "terminationDate",
-      label: "Date employment ended or ends",
+      label: "Effective date of termination",
       type: "date",
       priority: { employee: "must", hr: "must", consultant: "must" },
       question: {
-        employee: "When did your job end, or when is your last day?",
-        hr: "When did employment end, or what is the termination date?",
-        consultant: "When did employment end, or what is the termination date?",
+        employee:
+          "When did your job end, or when is your last day? If you resigned with notice, this is the day your notice runs out.",
+        hr: "What is the effective date of termination? For a resignation with notice, it is the day the notice runs out.",
+        consultant:
+          "What is the effective date of termination? For a resignation with notice, it is the day the notice runs out.",
       },
       askIf: {
         any: [
@@ -324,7 +380,7 @@ export const grievancePlaybook: Playbook = {
           { fact: "resignationIntent", is: "already_resigned" },
         ],
       },
-      why: "The time limit for an unfair or constructive dismissal claim runs from the end of employment.",
+      why: "It decides both the time limit for an unfair or constructive dismissal claim and the qualifying period. For a resignation with notice, it is the day the notice runs out.",
     },
     {
       key: "employmentStartDate",
@@ -337,7 +393,7 @@ export const grievancePlaybook: Playbook = {
         consultant: "What is the employee's start date?",
       },
       askIf: { any: [EMPLOYEE, RESIGNATION_IN_PLAY] },
-      why: "Length of service matters for constructive dismissal.",
+      why: "Length of service matters for constructive dismissal: Great Britain 2 years, or 6 months where employment ends on or after 1 January 2027; Northern Ireland 1 year.",
     },
 
     // 3.2 What happened
@@ -485,7 +541,67 @@ export const grievancePlaybook: Playbook = {
         consultant: "Does the grievance suggest the treatment is linked to a protected characteristic?",
       },
       specialCategory: true,
-      why: "A link opens discrimination and harassment law and protects the complaint itself against victimisation. Northern Ireland adds political opinion; the US list includes national origin.",
+      // Questions vary by lens only, so the Northern Ireland and US wording of
+      // draft 3.2 is carried here for the interviewer.
+      why: "A link opens discrimination and harassment law and protects the complaint itself against victimisation (retaliation in the US). Northern Ireland: ask about religious belief and political opinion in place of religion or belief. US: ask about race, colour, religion, sex (including pregnancy, sexual orientation or gender identity), national origin, age (40 or over), disability or genetic information, and once the state is known its own grounds (California: ancestry, medical condition, marital status, military or veteran status, reproductive health decisions; Illinois: arrest record, conviction record).",
+    },
+    {
+      // US only (draft 3.6).
+      key: "harasserRole",
+      label: "Role of the person complained about (US)",
+      type: "choice",
+      choices: ["supervisor", "co_worker", "non_employee"],
+      priority: { employee: "must", hr: "must", consultant: "must" },
+      question: {
+        employee:
+          "Is the person a supervisor or manager who can hire, fire, promote, demote or move you, a co-worker, or someone from outside, such as a customer?",
+        hr: "Is the person complained about a supervisor who can hire, fire, promote, demote or move the employee, a co-worker, or someone from outside, such as a customer?",
+        consultant:
+          "Is the person complained about a supervisor who can hire, fire, promote, demote or move the employee, a co-worker, or someone from outside, such as a customer?",
+      },
+      askIf: { all: [US, HARASSMENT] },
+      why: "Decides the employer's liability rule and whether it has a defence.",
+    },
+    {
+      key: "tangibleAction",
+      label: "Job changed by the supervisor",
+      type: "boolean",
+      priority: { employee: "must", hr: "must", consultant: "must" },
+      question: {
+        employee:
+          "Has anything changed in your job because of this person, such as being fired, demoted, moved, or losing pay or shifts?",
+        hr: "Has the person complained about taken or recommended any action affecting the employee's job?",
+        consultant: "Has the person complained about taken or recommended any action affecting the employee's job?",
+      },
+      askIf: { all: [US, { fact: "harasserRole", is: "supervisor" }] },
+      why: "There is no employer defence if the harassment ends in a tangible employment action; it may also be retaliation.",
+    },
+    {
+      // The text half of the draft's `tangibleAction`.
+      key: "tangibleActionDetail",
+      label: "What changed in the job",
+      type: "text",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "What changed, and when?",
+        hr: "What action was taken or recommended, and when?",
+        consultant: "What action was taken or recommended, and when?",
+      },
+      askIf: { fact: "tangibleAction", is: true },
+      why: "Shows whether it was a significant change in employment status.",
+    },
+    {
+      key: "internalComplaintRoute",
+      label: "Complaint route in the handbook used",
+      type: "boolean",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "Does your handbook say how to report harassment? Did you use it, and when?",
+        hr: "What complaint routes does the policy give, and were they used?",
+        consultant: "What complaint routes does the client's policy give, and were they used?",
+      },
+      askIf: { all: [US, HARASSMENT] },
+      why: "The federal defence turns on the complaint route; New York does not let a failure to complain decide liability.",
     },
     {
       key: "sexualConduct",
@@ -730,7 +846,23 @@ export const grievancePlaybook: Playbook = {
         consultant: "Is the employee pregnant, on family leave, or recently back?",
       },
       specialCategory: true,
-      why: "Extra protections apply, including redundancy priority until 18 months after birth.",
+      why: "Extra protections apply, including priority for suitable vacancies in a redundancy until the day before the child's 18-month anniversary. Northern Ireland: that priority applies only while the employee is on maternity, adoption or shared parental leave.",
+    },
+    {
+      // The rule input leaveType for the redundancy priority window.
+      key: "familyLeaveType",
+      label: "Kind of family leave",
+      type: "choice",
+      choices: ["maternity", "adoption", "shared_parental", "other"],
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "What kind of leave is it: maternity, adoption, shared parental, or another kind?",
+        hr: "What kind of family leave is it: maternity, adoption, shared parental, or another kind?",
+        consultant: "What kind of family leave is it: maternity, adoption, shared parental, or another kind?",
+      },
+      askIf: FAMILY_LEAVE,
+      specialCategory: true,
+      why: "The redundancy priority rules differ by kind of leave.",
     },
     {
       // The date half of the draft's `familyLeaveStatus`.
@@ -760,7 +892,7 @@ export const grievancePlaybook: Playbook = {
         consultant: "Is the employee's role being changed, put at risk of redundancy, or removed?",
       },
       askIf: FAMILY_LEAVE,
-      why: "A role change while protected makes the family leave check urgent and opens the redundancy priority window.",
+      why: "A role change while protected makes the family leave check urgent. Only a role at risk of redundancy, or removed, opens the redundancy priority window.",
     },
     {
       key: "childBirthDate",
@@ -770,12 +902,41 @@ export const grievancePlaybook: Playbook = {
       question: {
         employee:
           "If you are happy to say, what is your child's date of birth? We only ask because it sets how long your redundancy protection lasts.",
-        hr: "What is the child's date of birth? We only ask because a role change or redundancy is in play.",
-        consultant: "What is the child's date of birth? We only ask because a role change or redundancy is in play.",
+        hr: "What is the child's date of birth? We only ask because a redundancy is in play.",
+        consultant: "What is the child's date of birth? We only ask because a redundancy is in play.",
       },
-      askIf: { all: [{ fact: "familyLeaveStatus", in: ["on_leave", "returned"] }, ROLE_CHANGING] },
+      askIf: { all: [GB, { fact: "familyLeaveStatus", in: ["on_leave", "returned"] }, ROLE_AT_RISK] },
       specialCategory: true,
-      why: "Redundancy priority lasts until 18 months after the birth.",
+      why: "Redundancy priority lasts until the day before the child's 18-month anniversary.",
+    },
+    {
+      key: "expectedWeekStart",
+      label: "First day of the expected week of childbirth",
+      type: "date",
+      priority: { employee: "nice", hr: "nice", consultant: "nice" },
+      question: {
+        employee: "If you know it, what was the first day of the week your baby was due?",
+        hr: "What was the first day of the expected week of childbirth?",
+        consultant: "What was the first day of the expected week of childbirth?",
+      },
+      askIf: { all: [GB, FAMILY_LEAVE, ROLE_AT_RISK] },
+      specialCategory: true,
+      why: "Used for the redundancy priority window when the birth date was not given to the employer.",
+    },
+    {
+      // Northern Ireland: the priority lasts only while the leave lasts (NI review G4).
+      key: "familyLeaveEndDate",
+      label: "Date the family leave ends",
+      type: "date",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "When does your leave end, or when did it end?",
+        hr: "When does the employee's leave end, or when did it end?",
+        consultant: "When does the employee's leave end, or when did it end?",
+      },
+      askIf: { all: [NI, FAMILY_LEAVE, ROLE_AT_RISK] },
+      specialCategory: true,
+      why: "In Northern Ireland, redundancy priority applies only while the leave lasts.",
     },
     {
       key: "healthImpact",
@@ -827,7 +988,8 @@ export const grievancePlaybook: Playbook = {
       question: {
         employee: "Before we draft anything about leaving, please read the warning about resigning. Have you read it?",
       },
-      askIf: { fact: "resignationIntent", in: ["thinking_about_it", "decided"] },
+      // K12 and the resignation letters are UK only (draft 6.4, question 28).
+      askIf: { all: [UK, RESIGNATION_CONSIDERED] },
       why: "Resignation letters stay locked until you confirm.",
     },
     {
@@ -931,13 +1093,17 @@ export const grievancePlaybook: Playbook = {
       why: "A union representative can accompany; collective grievances follow another route.",
     },
     {
+      // Bands in the form the rules read ("15 to 19" counts as 15). Must in the
+      // US only; in Great Britain and Northern Ireland it is nice, which is
+      // never listed, so it is asked only in the US.
       key: "organisationSize",
       label: "Number of people employed",
-      type: "number",
-      priority: { employee: "nice", hr: "nice", consultant: "nice" },
-      question: "Roughly how many people work there?",
-      askIf: { any: [US, { known: "intendedHearer" }] },
-      why: "Small employers may need an outside hearer; US laws have size thresholds (to verify).",
+      type: "choice",
+      choices: ["1 to 4", "5 to 14", "15 to 19", "20 to 49", "50 or more"],
+      priority: { employee: "must", hr: "must", consultant: "must" },
+      question: "Roughly how many people work for the employer in total, counting part-time staff?",
+      askIf: US,
+      why: "Small employers may need an outside hearer. In the US, federal laws apply only from 15 employees (Title VII, ADA, PWFA), 20 (ADEA) or 50 (FMLA); state laws reach smaller employers: California 5 (harassment, any size), New York all, Illinois 1, Texas 15 (sexual harassment, 1), Florida 15.",
     },
     {
       // K22 needs it.
@@ -1088,8 +1254,9 @@ export const grievancePlaybook: Playbook = {
         consultant:
           "Before this, what had your client done to prevent sexual harassment: policy, training, risk assessment, reporting routes? When were they last reviewed?",
       },
+      // Asked in Northern Ireland too (NI review G10).
       askIf: { fact: "sexualConduct", is: true },
-      why: "Tests the employer's duty to prevent sexual harassment.",
+      why: "Tests the employer's duty to prevent sexual harassment. In Northern Ireland there is no such duty, but prevention steps are the employer's defence (Sex Discrimination (NI) Order 1976 Art 42(3)).",
     },
     {
       // The disciplinary hand-off needs it.
@@ -1118,7 +1285,7 @@ export const grievancePlaybook: Playbook = {
       why: "The appeal outcome waits for the hearing.",
     },
 
-    // 3.6 United States only (outline)
+    // 3.6 United States only
     {
       key: "usState",
       label: "US state",
@@ -1126,25 +1293,120 @@ export const grievancePlaybook: Playbook = {
       choices: US_STATES,
       priority: { employee: "must", hr: "must", consultant: "must" },
       question: {
-        employee: "Which state do you work in?",
+        employee: "Which state do you work in? If you work remotely, which state do you work from?",
         hr: "Which state does the employee work in?",
         consultant: "Which state does the employee work in?",
       },
       askIf: US,
-      why: "Sets the 180 or 300 day EEOC deadline and any state agency.",
+      why: "Sets the 180 or 300 day EEOC deadline, the state agency and its deadline, and the state's harassment rules.",
     },
     {
+      // Key kept from 0.1; it now covers any government employer.
       key: "federalEmployee",
-      label: "Federal employee",
+      label: "Government employer",
       type: "boolean",
       priority: { employee: "must", hr: "must", consultant: "must" },
       question: {
-        employee: "Do you work for a federal government agency?",
-        hr: "Does the employee work for a federal government agency?",
-        consultant: "Does the employee work for a federal government agency?",
+        employee: "Do you work for a federal, state or local government body?",
+        hr: "Is the employer a government body?",
+        consultant: "Is the employer a government body?",
       },
       askIf: US,
-      why: "Federal employees must contact an EEO counsellor within 45 days.",
+      why: "Government employees follow different routes and are out of scope in v0.1. Federal employees generally must contact an agency EEO counsellor within 45 days.",
+    },
+    {
+      key: "arbitrationAgreement",
+      label: "Arbitration agreement signed",
+      type: "boolean",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "Have you signed an agreement to settle disputes by arbitration?",
+        hr: "Do employees sign arbitration agreements?",
+        consultant: "Do the client's employees sign arbitration agreements?",
+      },
+      askIf: US,
+      why: "For sexual harassment the employee can still choose court; for other claims this is not yet confirmed (question 22).",
+    },
+    {
+      key: "unionRepresented",
+      label: "Covered by a union agreement",
+      type: "boolean",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "Are you covered by a union agreement?",
+        hr: "Is the employee covered by a union agreement?",
+        consultant: "Is the employee covered by a union agreement?",
+      },
+      askIf: US,
+      specialCategory: true,
+      why: "The union agreement may have its own grievance route and deadlines.",
+    },
+    {
+      key: "groupComplaint",
+      label: "Complaint made with or for co-workers",
+      type: "boolean",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "Are you raising this with, or for, co-workers?",
+        hr: "Is this complaint made with or for other employees, about pay, hours or conditions?",
+        consultant: "Is this complaint made with or for other employees, about pay, hours or conditions?",
+      },
+      askIf: US,
+      why: "Protected concerted activity under the National Labor Relations Act, union or not.",
+    },
+    {
+      key: "agencyFiled",
+      label: "Filed with the EEOC or a state agency",
+      type: "boolean",
+      priority: { employee: "must", hr: "must", consultant: "must" },
+      question: {
+        employee: "Have you already filed with the EEOC or a state agency?",
+        hr: "Has the employee filed with the EEOC or a state agency?",
+        consultant: "Has the employee filed with the EEOC or a state agency?",
+      },
+      askIf: US,
+      why: "New York: filing with the Division can rule out court. Illinois: the EEOC determination must be sent to the state agency within 30 days. The EEOC deadline can shorten after a state agency closes a case.",
+    },
+    {
+      // The first date of the draft's `agencyFiled`.
+      key: "agencyFiledDate",
+      label: "Date filed with the agency",
+      type: "date",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "On what date did you file, and with which agency?",
+        hr: "On what date did the employee file, and with which agency?",
+        consultant: "On what date did the employee file, and with which agency?",
+      },
+      askIf: { fact: "agencyFiled", is: true },
+      why: "In Illinois an EEOC charge filed in time counts as filed with the state agency.",
+    },
+    {
+      // The second date of the draft's `agencyFiled`.
+      key: "agencyClosedDate",
+      label: "Date of the state agency's closure notice",
+      type: "date",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "Has the state agency closed your case? If so, on what date did you get the notice?",
+        hr: "Has the state agency closed the case? If so, on what date did the employee get the notice?",
+        consultant: "Has the state agency closed the case? If so, on what date did the employee get the notice?",
+      },
+      askIf: { fact: "agencyFiled", is: true },
+      why: "The EEOC deadline can become 30 days from that notice, if that is earlier.",
+    },
+    {
+      key: "rightToSueNoticeDate",
+      label: "Date of the EEOC notice of right to sue",
+      type: "date",
+      priority: { employee: "should", hr: "should", consultant: "should" },
+      question: {
+        employee: "Have you had a notice of right to sue from the EEOC? On what date?",
+        hr: "Has the employee had a notice of right to sue from the EEOC? On what date?",
+        consultant: "Has the employee had a notice of right to sue from the EEOC? On what date?",
+      },
+      askIf: { fact: "agencyFiled", is: true },
+      why: "A lawsuit must be filed within 90 days of the notice.",
     },
   ],
 
@@ -1184,7 +1446,8 @@ export const grievancePlaybook: Playbook = {
     {
       id: "K3",
       level: "for_information",
-      when: { all: [EMPLOYEE, CLAIM_POSSIBLE] },
+      // K27: in the US, K3 is replaced (K30).
+      when: { all: [UK, EMPLOYEE, CLAIM_POSSIBLE] },
       message: "Your grievance and any appeal do not change the deadline for a claim.",
       sources: ["S8"],
     },
@@ -1216,7 +1479,7 @@ export const grievancePlaybook: Playbook = {
         ],
       },
       message:
-        "What happened may run across 1 October 2026, when most time limits went from 3 to 6 months. Which applies depends on the \"relevant date\": for most claims the act or the last act in a series, and for Equality Act claims the end of conduct over a period. The deadline is worked out again if a later act is reported. Plan to the earlier date until a lawyer confirms.",
+        "What happened may run across 1 October 2026, when most time limits went from 3 to 6 months. Which applies depends on the \"relevant date\": for most claims the act or the last act in a series, and for Equality Act claims the end of conduct over a period. The deadline is worked out again if a later act is reported. Where it is unclear whether the incidents are one course of conduct, plan to the earlier date until a lawyer confirms.",
       sources: ["S39", "S40"],
       toVerify: true,
     },
@@ -1247,13 +1510,17 @@ export const grievancePlaybook: Playbook = {
       sources: ["S19", "S21", "S31", "S42", "S45", "S46"],
     },
     {
-      // Part 5.2 and T3: in Northern Ireland K6 is a good-practice note only.
+      // Part 5.2: no statutory duty in Northern Ireland, but the same steps as risk management.
       id: "K6-ni",
       level: "for_information",
       when: { all: [{ fact: "sexualConduct", is: true }, EMPLOYER_SIDE, NI] },
-      message:
-        "The Great Britain duty to prevent sexual harassment does not extend to Northern Ireland, and whether an equivalent duty exists there is not yet confirmed. DraftHR still recommends the same good practice: interim protection, an independent handler, support for those involved, and records.",
-      sources: ["S23", "S31"],
+      message: {
+        hr: "Northern Ireland has no statutory duty to prevent sexual harassment. But you are liable for harassment by your staff unless you took reasonably practicable steps to prevent it (Sex Discrimination (NI) Order 1976 Art 42(3)), and can be liable for third-party sex harassment once you know of two earlier incidents (Art 8(2B) to (2D)). So the same steps matter: interim protection, an independent handler, support for those involved, records, and a review of prevention measures afterwards.",
+        consultant:
+          "Northern Ireland has no statutory duty to prevent sexual harassment. But your client is liable for harassment by its staff unless it took reasonably practicable steps to prevent it (Sex Discrimination (NI) Order 1976 Art 42(3)), and can be liable for third-party sex harassment once it knows of two earlier incidents (Art 8(2B) to (2D)). So the same steps matter: interim protection, an independent handler, support for those involved, records, and a review of prevention measures afterwards.",
+      },
+      sources: ["S23", "S31", "S130", "SDO 1976 Arts 8, 42"],
+      // That the Order's articles, written for a woman, apply to men too (question 14).
       toVerify: true,
     },
     {
@@ -1263,6 +1530,15 @@ export const grievancePlaybook: Playbook = {
       message:
         "This sounds very hard, and support is available. Your employer has a legal duty to prevent sexual harassment. Whether to go to the police is your choice, and there is no pressure either way. Since 6 April 2026, reporting sexual harassment can also count as a whistleblowing disclosure, if the other conditions are met.",
       sources: ["S19", "S24", "S34"],
+    },
+    {
+      // NI review G11: no 6 April 2026 sentence; Art 67B has no sexual harassment category.
+      id: "K7-ni",
+      level: "worth_checking",
+      when: { all: [{ fact: "sexualConduct", is: true }, EMPLOYEE, NI] },
+      message:
+        "This sounds very hard, and support is available. Your employer is responsible for harassment by its staff unless it took reasonably practicable steps to prevent it. Whether to go to the police is your choice, and there is no pressure either way. In Northern Ireland, whistleblowing law has no sexual harassment category, so a report of it is protected only if it fits another category.",
+      sources: ["S130", "S131"],
     },
     {
       id: "K8",
@@ -1276,6 +1552,22 @@ export const grievancePlaybook: Playbook = {
           "The complaint involves someone outside the organisation. From 30 October 2026 your client must not permit a third party to harass its employees, and fails only if it did not take all reasonable steps. Before that date, third-party sexual harassment is covered only by the duty to prevent sexual harassment.",
       },
       sources: ["S32", "S42", "S45"],
+      toVerify: true,
+    },
+    {
+      // NI review G10: Sex Discrimination (NI) Order 1976 Art 8(2B) to (2D).
+      id: "K8-ni",
+      level: "worth_checking",
+      when: { all: [{ fact: "complainedAboutRole", is: "third_party" }, NI] },
+      message: {
+        employee:
+          "Part of your complaint is about someone outside the organisation. In Northern Ireland your employer is treated as harassing you if a third party harasses you at work, your employer knows of at least two earlier incidents of third-party harassment of you, and it failed to take reasonably practicable steps to prevent it.",
+        hr: "The complaint involves someone outside the organisation. In Northern Ireland you are treated as harassing the employee if a third party harasses them at work, you know of at least two earlier incidents of third-party harassment of them, and you failed to take reasonably practicable steps to prevent it (Sex Discrimination (NI) Order 1976 Art 8(2B) to (2D)).",
+        consultant:
+          "The complaint involves someone outside the organisation. In Northern Ireland your client is treated as harassing the employee if a third party harasses them at work, it knows of at least two earlier incidents of third-party harassment of them, and it failed to take reasonably practicable steps to prevent it (Sex Discrimination (NI) Order 1976 Art 8(2B) to (2D)).",
+      },
+      sources: ["S130"],
+      // That the article, written for a woman, applies to men too (question 14).
       toVerify: true,
     },
     {
@@ -1303,56 +1595,81 @@ export const grievancePlaybook: Playbook = {
     {
       id: "K11",
       level: "worth_checking",
-      when: FAMILY_LEAVE,
+      when: { all: [GB, FAMILY_LEAVE] },
       message: {
         employee:
-          "Because you are pregnant, on family leave or recently back, this may be pregnancy and maternity discrimination, or sex discrimination; which applies after you return is not yet settled. If your role is changing or at risk, you have priority for suitable alternative work until 18 months after the birth.",
-        hr: "The employee is pregnant, on family leave or recently back. Treat this as a possible pregnancy and maternity, or sex, discrimination complaint. If their role is changing or at risk, redundancy priority applies until 18 months after the birth.",
+          "Because you are pregnant, on family leave or recently back, this may be pregnancy and maternity discrimination: treatment because you took maternity leave, or because of the pregnancy, is covered even after you return. If your role is at risk of redundancy, you have priority for suitable vacancies until the day before your child's 18-month anniversary. A role change that is not a redundancy does not give that priority, but it may still be discrimination.",
+        hr: "The employee is pregnant, on family leave or recently back. Treat this as a possible pregnancy and maternity discrimination complaint: after a return, treatment because they took maternity leave falls under Equality Act s18(4), and treatment because of the pregnancy under s18(2). Sex discrimination (s13) is for other reasons only; when to flag it instead is not yet settled. If their role is at risk of redundancy, they have priority for suitable vacancies until the day before the child's 18-month anniversary. A role change that is not a redundancy does not trigger the priority.",
         consultant:
-          "The employee is pregnant, on family leave or recently back. Your client should treat this as a possible pregnancy and maternity, or sex, discrimination complaint. If the role is changing or at risk, redundancy priority applies until 18 months after the birth.",
+          "The employee is pregnant, on family leave or recently back. Your client should treat this as a possible pregnancy and maternity discrimination complaint: after a return, treatment because they took maternity leave falls under Equality Act s18(4), and treatment because of the pregnancy under s18(2). Sex discrimination (s13) is for other reasons only; when to flag it instead is not yet settled. If the role is at risk of redundancy, they have priority for suitable vacancies until the day before the child's 18-month anniversary. A role change that is not a redundancy does not trigger the priority.",
       },
-      sources: ["S11", "S17"],
+      sources: ["S11", "S17", "S107", "S108", "Equality Act 2010 s18", "MPL Regs 1999 reg 10", "SI 2024/264"],
       toVerify: true,
     },
     {
-      // The draft's K11: "Level is act now if a role is being removed." T1 applies it to a role change.
+      // The draft's K11: "Level is act now if a role is being removed." T1 applies it, as a
+      // product choice, to a role removed in substance (GB review G47).
       id: "K11-role",
       level: "act_now",
-      when: { all: [FAMILY_LEAVE, ROLE_CHANGING] },
+      when: { all: [GB, FAMILY_LEAVE, ROLE_CHANGING] },
       message: {
         employee:
-          "Your role is being changed or removed while you are protected. This needs attention now: your priority for suitable alternative work lasts until 18 months after the birth, and we will ask for your child's date of birth to work out that date.",
-        hr: "A role is being changed or removed for someone who is pregnant, on family leave or recently back. Act now: check the reasons, and remember redundancy priority for suitable alternative work lasts until 18 months after the birth.",
+          "Your role is being changed or removed while you are protected. This needs attention now. If your role becomes redundant, you have priority for suitable vacancies until the day before your child's 18-month anniversary, and we will ask for your child's date of birth to work out that date.",
+        hr: "A role is being changed or removed for someone who is pregnant, on family leave or recently back. Act now: check the reasons. If the role becomes redundant, they have priority for suitable vacancies until the day before the child's 18-month anniversary.",
         consultant:
-          "A role is being changed or removed for someone who is pregnant, on family leave or recently back. Your client should act now: check the reasons, and remember redundancy priority for suitable alternative work lasts until 18 months after the birth.",
+          "A role is being changed or removed for someone who is pregnant, on family leave or recently back. Your client should act now: check the reasons. If the role becomes redundant, they have priority for suitable vacancies until the day before the child's 18-month anniversary.",
       },
-      sources: ["S11", "S17"],
+      sources: ["S11", "S17", "S107"],
+    },
+    {
+      // NI review G4: the priority lasts only while the leave lasts.
+      id: "K11-ni",
+      level: "worth_checking",
+      when: { all: [NI, FAMILY_LEAVE] },
+      message: {
+        employee:
+          "Because you are pregnant, on family leave or recently back, this may be pregnancy and maternity discrimination. In Northern Ireland, priority for suitable vacancies in a redundancy applies only while you are on maternity, adoption or shared parental leave; it does not continue after you return.",
+        hr: "The employee is pregnant, on family leave or recently back. Treat this as a possible pregnancy and maternity, or sex, discrimination complaint. In Northern Ireland, redundancy priority for suitable vacancies applies only while the employee is on maternity, adoption or shared parental leave; there is no 18-month extension.",
+        consultant:
+          "The employee is pregnant, on family leave or recently back. Your client should treat this as a possible pregnancy and maternity, or sex, discrimination complaint. In Northern Ireland, redundancy priority for suitable vacancies applies only while the employee is on maternity, adoption or shared parental leave; there is no 18-month extension.",
+      },
+      sources: ["S125"],
     },
     {
       id: "K12",
       level: "act_now",
-      when: { all: [EMPLOYEE, { fact: "resignationIntent", in: ["thinking_about_it", "decided"] }] },
+      when: { all: [GB, EMPLOYEE, RESIGNATION_CONSIDERED] },
       message:
-        "Please do not resign without advice. Constructive dismissal needs a serious breach of contract by your employer. You usually need 2 years' service to claim, with some exceptions; for dismissals from 1 January 2027 this becomes 6 months. Raise a grievance first if you can. Signing a settlement agreement ends the claim. Please confirm you have read this before we draft any resignation letter.",
-      sources: ["S10", "S25", "S36", "S43", "S44"],
+        "Please do not resign without advice. Constructive dismissal needs a serious breach of contract by your employer. You usually need 2 years' service to claim, with some exceptions, for example where you are treated badly for asserting a statutory right such as the right not to have pay deducted unlawfully. Where employment ends on or after 1 January 2027, 6 months is enough; if you resign with notice, employment ends when the notice runs out. Raise a grievance first if you can. Signing a settlement agreement ends the claim. Please confirm you have read this before we draft any resignation letter.",
+      sources: ["S10", "S25", "S36", "S43", "S44", "S102", "S103", "SI 2026/559 reg 4", "ERA 1996 s97"],
+      toVerify: true,
+    },
+    {
+      // NI review G6: one year's service, Art 129(2) notice add-on, no six-month change.
+      id: "K12-ni",
+      level: "act_now",
+      when: { all: [NI, EMPLOYEE, RESIGNATION_CONSIDERED] },
+      message:
+        "Please do not resign without advice. Constructive dismissal needs a serious breach of contract by your employer. In Northern Ireland you usually need one year's service to claim, with some exceptions; the statutory minimum notice is added to your end date for this test. Raise a grievance first if you can. Signing a settlement (compromise) agreement ends the claim. Please confirm you have read this before we draft any resignation letter.",
+      sources: ["S10", "S126", "S127"],
       toVerify: true,
     },
     {
       id: "K13",
       level: "act_now",
-      when: { all: [EMPLOYEE, { fact: "resignationIntent", is: "already_resigned" }] },
+      when: { all: [UK, EMPLOYEE, { fact: "resignationIntent", is: "already_resigned" }] },
       message:
-        "You have already resigned. Tell us your last day of employment: the time limit for a claim runs from it. If your resignation did not set out your reasons, we can draft a resignation with grievance letter.",
+        "You have already resigned. Tell us your termination date: the unfair dismissal time limit runs from it. Other claims keep their own dates. If your resignation did not set out your reasons, we can draft a resignation with grievance letter.",
       sources: ["S8", "S26"],
     },
     {
       id: "K14",
       level: "worth_checking",
-      when: { all: [EMPLOYER_SIDE, RESIGNATION_IN_PLAY] },
+      when: { all: [UK, EMPLOYER_SIDE, RESIGNATION_IN_PLAY] },
       message: {
-        hr: "The employee has mentioned resigning, or has resigned. There is a constructive dismissal risk. Keep dealing with the grievance. Whether the Acas Code still applies once employment has ended is not yet settled.",
+        hr: "The employee has mentioned resigning, or has resigned. There is a constructive dismissal risk. Keep dealing with the grievance: answer it in writing, without unreasonable delay. Whether the Acas Code still applies once employment has ended is not yet settled.",
         consultant:
-          "The employee has mentioned resigning, or has resigned. There is a constructive dismissal risk for your client. Keep dealing with the grievance. Whether the Acas Code still applies once employment has ended is not yet settled.",
+          "The employee has mentioned resigning, or has resigned. There is a constructive dismissal risk for your client. Keep dealing with the grievance: answer it in writing, without unreasonable delay. Whether the Acas Code still applies once employment has ended is not yet settled.",
       },
       sources: ["S10"],
       toVerify: true,
@@ -1371,9 +1688,10 @@ export const grievancePlaybook: Playbook = {
       sources: ["S1 para 46", "S4"],
     },
     {
+      // Wording never says a report "is" protected (question 20).
       id: "K16",
       level: "worth_checking",
-      when: POSSIBLE_DISCLOSURE,
+      when: { all: [GB, POSSIBLE_DISCLOSURE] },
       message: {
         employee:
           "This may also be a protected disclosure (whistleblowing), if you reasonably believe it is in the public interest and it shows a listed failure such as a crime, a breach of a legal obligation, danger to health or safety, or sexual harassment. That gives separate protection from detriment and dismissal.",
@@ -1382,6 +1700,22 @@ export const grievancePlaybook: Playbook = {
           "The complaint may also be a protected disclosure (whistleblowing), if the employee reasonably believes it is in the public interest and it shows a listed failure, which since 6 April 2026 includes sexual harassment. The employee would then have separate protection from detriment and dismissal.",
       },
       sources: ["S24"],
+      toVerify: true,
+    },
+    {
+      // NI review G11: Employment Rights (NI) Order 1996 Art 67B, no sexual harassment category.
+      id: "K16-ni",
+      level: "worth_checking",
+      when: { all: [NI, { fact: "publicInterestElement", is: true }] },
+      message: {
+        employee:
+          "This may also be a protected disclosure (whistleblowing), if you reasonably believe it is in the public interest and it shows a listed failure, such as a crime, a breach of a legal obligation, or danger to health or safety. That gives separate protection from detriment and dismissal. Northern Ireland law has no sexual harassment category.",
+        hr: "The complaint may also be a protected disclosure (whistleblowing) under the Employment Rights (NI) Order 1996 Art 67B, if the employee reasonably believes it is in the public interest and it shows a listed failure. Northern Ireland has no sexual harassment category. The employee would then have separate protection from detriment and dismissal.",
+        consultant:
+          "The complaint may also be a protected disclosure (whistleblowing) under the Employment Rights (NI) Order 1996 Art 67B, if the employee reasonably believes it is in the public interest and it shows a listed failure. Northern Ireland has no sexual harassment category. The employee would then have separate protection from detriment and dismissal.",
+      },
+      sources: ["S131"],
+      toVerify: true,
     },
     {
       id: "K17",
@@ -1397,30 +1731,40 @@ export const grievancePlaybook: Playbook = {
       sources: ["S5"],
     },
     {
+      // K35 is its US form (K27).
       id: "K18",
       level: "act_now",
-      when: { fact: "retaliationSinceRaising", is: true },
+      when: { all: [UK, { fact: "retaliationSinceRaising", is: true }] },
       message: {
         employee:
-          "Something has happened to you since you complained. That may be victimisation (if your complaint was about discrimination or harassment) or a whistleblowing detriment. It may also be a new last act, which can change your deadline, so tell us when it happened.",
-        hr: "The employee says they have been treated badly since complaining. That may be victimisation or a whistleblowing detriment. Stop it now and record the date: it may be a new last act.",
+          "Something has happened to you since you complained. That may be victimisation (if your complaint was about discrimination or harassment) or a whistleblowing detriment. If your complaint was not about discrimination, it may still be protected as whistleblowing, or as asserting a statutory right such as the right not to have pay deducted unlawfully. It may also be a new last act, which can change your deadline, so tell us when it happened.",
+        hr: "The employee says they have been treated badly since complaining. That may be victimisation or a whistleblowing detriment. If the complaint did not raise discrimination, check whistleblowing (K16) and assertion of a statutory right (K46). Stop it now and record the date: it may be a new last act.",
         consultant:
-          "The employee says they have been treated badly since complaining. That may be victimisation or a whistleblowing detriment. Your client should stop it now and record the date: it may be a new last act.",
+          "The employee says they have been treated badly since complaining. That may be victimisation or a whistleblowing detriment. If the complaint did not raise discrimination, check whistleblowing (K16) and assertion of a statutory right (K46). Your client should stop it now and record the date: it may be a new last act.",
       },
       sources: ["S18"],
     },
     {
       id: "K19",
       level: "for_information",
-      when: { all: [EMPLOYEE, { fact: "grievanceInWriting", is: false }] },
+      when: { all: [GB, EMPLOYEE, { fact: "grievanceInWriting", is: false }] },
       message:
         "Put your grievance in writing. The Code expects it, and an unreasonable failure to follow the Code can reduce an award by up to 25%.",
       sources: ["S1 para 32", "S15"],
     },
     {
+      // NI review G7: Industrial Relations (NI) Order 1992 Art 90AA.
+      id: "K19-ni",
+      level: "for_information",
+      when: { all: [NI, EMPLOYEE, { fact: "grievanceInWriting", is: false }] },
+      message:
+        "Put your grievance in writing. The LRA Code expects it, and a tribunal may increase or reduce an award by up to 50% for an unreasonable failure to follow the Code.",
+      sources: ["S47", "S128"],
+    },
+    {
       id: "K20",
       level: "worth_checking",
-      when: { all: [EMPLOYEE, AWAITING_REPLY] },
+      when: { all: [GB, EMPLOYEE, AWAITING_REPLY] },
       message:
         "If 10 working days have passed with no acknowledgement, or 20 with no meeting, chase your employer in writing. The Code expects a meeting without unreasonable delay, and Acas suggests ideally within 5 working days. An unreasonable failure by your employer can increase an award by up to 25%.",
       sources: ["S1 para 33", "S5", "S15"],
@@ -1429,7 +1773,7 @@ export const grievancePlaybook: Playbook = {
     {
       id: "K20-hr",
       level: "act_now",
-      when: { all: [EMPLOYER_SIDE, AWAITING_REPLY] },
+      when: { all: [GB, EMPLOYER_SIDE, AWAITING_REPLY] },
       message: {
         hr: "Acknowledge the grievance within 10 working days of receipt and hold the meeting within 20. The Code expects a meeting without unreasonable delay; Acas suggests ideally within 5 working days. An unreasonable failure can increase an award by up to 25%.",
         consultant:
@@ -1439,22 +1783,60 @@ export const grievancePlaybook: Playbook = {
       proposal: true,
     },
     {
+      // NI review G7: the LRA Code and Art 90AA.
+      id: "K20-ni",
+      level: "worth_checking",
+      when: { all: [NI, EMPLOYEE, AWAITING_REPLY] },
+      message:
+        "If 10 working days have passed with no acknowledgement, or 20 with no meeting, chase your employer in writing. The LRA Code expects a meeting without unreasonable delay. A tribunal may increase or reduce an award by up to 50% for an unreasonable failure to follow the Code.",
+      sources: ["S47", "S128"],
+      proposal: true,
+    },
+    {
+      id: "K20-hr-ni",
+      level: "act_now",
+      when: { all: [NI, EMPLOYER_SIDE, AWAITING_REPLY] },
+      message: {
+        hr: "Acknowledge the grievance within 10 working days of receipt and hold the meeting within 20. The LRA Code expects a meeting without unreasonable delay. A tribunal may increase or reduce an award by up to 50% for an unreasonable failure to follow the Code.",
+        consultant:
+          "Your client should acknowledge the grievance within 10 working days of receipt and hold the meeting within 20. The LRA Code expects a meeting without unreasonable delay. A tribunal may increase or reduce an award by up to 50% for an unreasonable failure to follow the Code.",
+      },
+      sources: ["S47", "S128"],
+      proposal: true,
+    },
+    {
       id: "K21",
       level: "worth_checking",
-      when: { fact: "companionRefused", is: true },
+      when: { all: [GB, { fact: "companionRefused", is: true }] },
       message: {
         employee:
-          "Your employer must let you bring a permitted companion. If your companion cannot come on the date proposed, the meeting must move to a reasonable time within 5 working days. A tribunal can award up to 2 weeks' pay if this right is refused.",
-        hr: "Allow a permitted companion. If they cannot come on the date proposed, postpone to a reasonable time within 5 working days. Refusing can lead to an award of up to 2 weeks' pay.",
+          "Your employer must let you bring a permitted companion. If your companion cannot come on the date proposed, the meeting must move to a reasonable time within 5 working days. A tribunal can award up to 2 weeks' pay if this right is refused, each week capped (£751 for a failure on or after 6 April 2026).",
+        hr: "Allow a permitted companion. If they cannot come on the date proposed, postpone to a reasonable time within 5 working days. Refusing can lead to an award of up to 2 weeks' pay, each week capped (£751 for a failure on or after 6 April 2026).",
         consultant:
-          "Your client must allow a permitted companion. If they cannot come on the date proposed, postpone to a reasonable time within 5 working days. Refusing can lead to an award of up to 2 weeks' pay.",
+          "Your client must allow a permitted companion. If they cannot come on the date proposed, postpone to a reasonable time within 5 working days. Refusing can lead to an award of up to 2 weeks' pay, each week capped (£751 for a failure on or after 6 April 2026).",
       },
-      sources: ["S12", "S13"],
+      sources: ["S12", "S13", "S122"],
+    },
+    {
+      // NI review G8: Employment Relations (NI) Order 1999 Arts 12, 13 and 15(6).
+      id: "K21-ni",
+      level: "worth_checking",
+      when: { all: [NI, { fact: "companionRefused", is: true }] },
+      message: {
+        employee:
+          "Your employer must let you bring a permitted companion. If your companion cannot come on the date proposed, the meeting must move to a reasonable time within 5 working days. A tribunal can award up to 2 weeks' pay if this right is refused, capped at £783 a week for a failure on or after 6 April 2026. The claim must be made within three months of the refusal.",
+        hr: "Allow a permitted companion (Employment Relations (NI) Order 1999 Art 12). If they cannot come on the date proposed, postpone to a reasonable time within 5 working days. Refusing can lead to an award of up to 2 weeks' pay, capped at £783 a week for a failure on or after 6 April 2026, claimed within three months.",
+        consultant:
+          "Your client must allow a permitted companion (Employment Relations (NI) Order 1999 Art 12). If they cannot come on the date proposed, postpone to a reasonable time within 5 working days. Refusing can lead to an award of up to 2 weeks' pay, capped at £783 a week for a failure on or after 6 April 2026, claimed within three months.",
+      },
+      sources: ["S47", "S129"],
+      // Which NI bank holidays count, and refusing a permitted companion (question 14).
+      toVerify: true,
     },
     {
       id: "K22",
       level: "for_information",
-      when: { all: [EMPLOYER_SIDE, { fact: "collectiveGrievance", is: true }] },
+      when: { all: [UK, EMPLOYER_SIDE, { fact: "collectiveGrievance", is: true }] },
       message: {
         hr: "This grievance is raised by a union or representative for two or more employees. The Acas Code does not apply; follow your collective procedure.",
         consultant:
@@ -1466,17 +1848,22 @@ export const grievancePlaybook: Playbook = {
       id: "K23",
       level: "worth_checking",
       when: {
-        any: [
-          { fact: "grievanceDate", onOrAfter: { fact: "terminationDate" } },
-          { fact: "dateReceived", onOrAfter: { fact: "terminationDate" } },
+        all: [
+          UK,
+          {
+            any: [
+              { fact: "grievanceDate", onOrAfter: { fact: "terminationDate" } },
+              { fact: "dateReceived", onOrAfter: { fact: "terminationDate" } },
+            ],
+          },
         ],
       },
       message: {
         employee:
-          "You raised this after your employment ended. Your former employer should still reply in writing. Time limits keep running. Whether the Acas Code applies is not yet settled.",
-        hr: "The grievance was raised after employment ended. Still respond in writing. Time limits keep running. Whether the Acas Code applies is not yet settled.",
+          "You raised this after your employment ended. Your former employer should still reply in writing, without unreasonable delay. Time limits keep running. Whether the Acas Code applies is not yet settled.",
+        hr: "The grievance was raised after employment ended. Still respond in writing, without unreasonable delay. Time limits keep running. Whether the Acas Code applies is not yet settled.",
         consultant:
-          "The grievance was raised after employment ended. Your client should still respond in writing. Time limits keep running. Whether the Acas Code applies is not yet settled.",
+          "The grievance was raised after employment ended. Your client should still respond in writing, without unreasonable delay. Time limits keep running. Whether the Acas Code applies is not yet settled.",
       },
       sources: ["Open question 5"],
       toVerify: true,
@@ -1484,15 +1871,29 @@ export const grievancePlaybook: Playbook = {
     {
       id: "K24",
       level: "worth_checking",
-      when: PAY,
+      when: { all: [GB, PAY] },
       message: {
         employee:
-          "Pay is part of your complaint, so you may have an unlawful deductions claim. The time limit runs from the payment date, or the last payment in a series. We can draft a pay dispute letter alongside your grievance.",
-        hr: "Pay is part of the complaint: a possible unlawful deductions claim. The time limit runs from the payment date, or the last payment in a series.",
+          "Pay is part of your complaint, so you may have an unlawful deductions claim. The time limit runs from the payment date, or the last payment in a series, and deductions more than two years before the claim cannot be recovered. While you are still employed, that is the tribunal route: a breach of contract claim in a tribunal is only possible once employment has ended, and is capped at £25,000. We can draft a pay dispute letter alongside your grievance.",
+        hr: "Pay is part of the complaint: a possible unlawful deductions claim. The time limit runs from the payment date, or the last payment in a series, and deductions more than two years before the claim cannot be recovered. A breach of contract claim in a tribunal is only possible once employment has ended (capped at £25,000).",
         consultant:
-          "Pay is part of the complaint: a possible unlawful deductions claim against your client. The time limit runs from the payment date, or the last payment in a series.",
+          "Pay is part of the complaint: a possible unlawful deductions claim against your client. The time limit runs from the payment date, or the last payment in a series, and deductions more than two years before the claim cannot be recovered. A breach of contract claim in a tribunal is only possible once employment has ended (capped at £25,000).",
       },
-      sources: ["S16", "S40"],
+      sources: ["S16", "S40", "S118", "S119"],
+    },
+    {
+      // NI review G24, G29: Employment Rights (NI) Order 1996 Art 55.
+      id: "K24-ni",
+      level: "worth_checking",
+      when: { all: [NI, PAY] },
+      message: {
+        employee:
+          "Pay is part of your complaint, so you may have an unlawful deductions claim. In Northern Ireland the time limit is three months from the payment date, or the last deduction in a series, with no two-year limit on what can be recovered. We can draft a pay dispute letter alongside your grievance.",
+        hr: "Pay is part of the complaint: a possible unlawful deductions claim under the Employment Rights (NI) Order 1996 Art 55. The time limit is three months from the payment date, or the last deduction in a series, with no two-year limit of the Great Britain kind.",
+        consultant:
+          "Pay is part of the complaint: a possible unlawful deductions claim against your client under the Employment Rights (NI) Order 1996 Art 55. The time limit is three months from the payment date, or the last deduction in a series, with no two-year limit of the Great Britain kind.",
+      },
+      sources: ["S140"],
     },
     {
       id: "K25",
@@ -1510,32 +1911,46 @@ export const grievancePlaybook: Playbook = {
     {
       id: "K26",
       level: "for_information",
+      // NI review G31: the Great Britain items it switches off are gated to GB above.
       when: NI,
       message:
-        "Northern Ireland rules apply: the LRA Code instead of the Acas Code, awards adjustable by up to 50%, early conciliation through the LRA, time limits that stay at 3 months, and no statutory duty to prevent sexual harassment under the Equality Act.",
-      sources: ["S23", "S38", "S47 to S50"],
-      toVerify: true,
+        "Northern Ireland rules apply: the LRA Code instead of the Acas Code; awards adjustable by up to 50 per cent; early conciliation through the LRA; three-month time limits unchanged (the Fair Employment Tribunal rule differs); and a one-year qualifying period for unfair dismissal. There is no statutory duty to prevent sexual harassment, but an employer can be liable for third-party sex harassment once it knows of two earlier incidents, and its defence for harassment by its staff depends on having taken reasonably practicable steps, so prevention measures still matter.",
+      sources: ["S23", "S38", "S47 to S50", "S126", "S128", "S130"],
     },
     {
       id: "K27",
       level: "for_information",
       when: US,
       message:
-        "This is a US case, which DraftHR covers in outline only. An internal complaint does not extend the deadline for a charge with the EEOC or a state agency.",
+        "This is a US case, which DraftHR covers in outline only. Internal complaints, arbitration and mediation generally do not extend the deadline for a charge with the EEOC, and state agency deadlines keep running too. US checks replace the UK ones.",
       sources: ["S55", "S56"],
     },
     {
       id: "K28",
       level: "worth_checking",
-      when: { fact: "settlementMentioned", is: true },
+      when: { all: [GB, { fact: "settlementMentioned", is: true }] },
       message: {
         employee:
-          "Keep settlement talks separate from your open grievance. New law makes some confidentiality terms about harassment and discrimination void; it is only partly in force, with regulations due in 2027.",
-        hr: "Keep settlement talks separate from the open grievance, with a settlement cover letter. New law makes some confidentiality terms about harassment and discrimination void; it is only partly in force, with regulations due in 2027.",
+          "Keep settlement talks separate from your open grievance. A term that stops you making a protected disclosure (whistleblowing) is already void, and since 6 April 2026 that can include reporting sexual harassment. A wider rule on confidentiality terms about harassment and discrimination has been passed but is not yet in force; the government expects it in 2027.",
+        hr: "Keep settlement talks separate from the open grievance, with a settlement cover letter. A term that stops a worker making a protected disclosure is already void, and since 6 April 2026 that can include reporting sexual harassment. A wider rule on confidentiality terms about harassment and discrimination has been passed but is not yet in force; the government expects it in 2027.",
         consultant:
-          "Your client should keep settlement talks separate from the open grievance, with a settlement cover letter. New law makes some confidentiality terms about harassment and discrimination void; it is only partly in force, with regulations due in 2027.",
+          "Your client should keep settlement talks separate from the open grievance, with a settlement cover letter. A term that stops a worker making a protected disclosure is already void, and since 6 April 2026 that can include reporting sexual harassment. A wider rule on confidentiality terms about harassment and discrimination has been passed but is not yet in force; the government expects it in 2027.",
       },
-      sources: ["S35", "S44"],
+      sources: ["ERA 1996 ss43B(1)(da), 43J", "ERA 2025 s24", "S24", "S35", "S44", "S109"],
+    },
+    {
+      // NI review G30: a compromise agreement; ERA 1996 s111A does not apply.
+      id: "K28-ni",
+      level: "worth_checking",
+      when: { all: [NI, { fact: "settlementMentioned", is: true }] },
+      message: {
+        employee:
+          "Keep settlement talks separate from your open grievance. In Northern Ireland a settlement is made by a compromise agreement (Employment Rights (NI) Order 1996 Art 245), and the Great Britain rule that keeps some pre-termination talks out of evidence does not apply.",
+        hr: "Keep settlement talks separate from the open grievance, with a settlement cover letter. In Northern Ireland the agreement is a compromise agreement (Employment Rights (NI) Order 1996 Art 245); ERA 1996 s111A (pre-termination negotiations) does not apply.",
+        consultant:
+          "Your client should keep settlement talks separate from the open grievance, with a settlement cover letter. In Northern Ireland the agreement is a compromise agreement (Employment Rights (NI) Order 1996 Art 245); ERA 1996 s111A (pre-termination negotiations) does not apply.",
+      },
+      sources: ["S141"],
     },
     {
       id: "K29",
@@ -1545,6 +1960,257 @@ export const grievancePlaybook: Playbook = {
         "It looks as though you are the person the grievance is about. DraftHR does not use the grievance playbook to help the person complained about, so we will move you to the right place.",
       sources: ["Part 2"],
     },
+
+    // United States only (K30 to K45, draft part 4 and part 5.3)
+    {
+      id: "K30",
+      level: "act_now",
+      when: { all: [US, EMPLOYEE, US_LIMIT_WITHIN_60] },
+      message:
+        "Your deadline to file a charge with the EEOC or the state agency is 60 days away or less, or has passed. Your internal complaint does not pause it. You can contact the EEOC or the state agency now, alongside your complaint.",
+      sources: ["S55", "S64"],
+      proposal: true,
+    },
+    {
+      id: "K30-hr",
+      level: "worth_checking",
+      when: { all: [US, EMPLOYER_SIDE, US_LIMIT_WITHIN_60] },
+      message: {
+        hr: "The employee's deadline to file with the EEOC or the state agency is 60 days away or less, or has passed. The internal complaint does not pause it, so a charge may be filed while the complaint is open.",
+        consultant:
+          "The employee's deadline to file with the EEOC or the state agency is 60 days away or less, or has passed. The internal complaint does not pause it, so your client may receive a charge while the complaint is open.",
+      },
+      sources: ["S55", "S64"],
+      proposal: true,
+    },
+    {
+      id: "K31",
+      level: "act_now",
+      when: { all: [EMPLOYEE, { state: ["TX", "FL", "NY", "IL", "CA"] }] },
+      message:
+        "Your state has its own trap to watch. Texas: the state complaint deadline is 180 days (300 for sexual harassment), shorter than the EEOC's. Florida: filing with the Florida Commission on Human Relations is required before court; after a no-cause finding, ask for a hearing within 35 days or the claim is barred. New York: filing with the Division of Human Rights generally rules out going to court later. Illinois: if you file with the EEOC, send the Illinois Department of Human Rights the EEOC's determination within 30 days. California: get a right-to-sue notice from the Civil Rights Department before suing, then sue within 1 year of it.",
+      sources: ["S57", "S83", "S87", "S91", "S93", "S94", "S95"],
+    },
+    {
+      id: "K31-hr",
+      level: "for_information",
+      when: { all: [EMPLOYER_SIDE, { state: ["TX", "FL", "NY", "IL", "CA"] }] },
+      message:
+        "The employee's state has its own trap. Texas: the state complaint deadline is 180 days (300 for sexual harassment), shorter than the EEOC's. Florida: filing with the Florida Commission on Human Relations is required before court; after a no-cause finding, a hearing must be asked for within 35 days. New York: filing with the Division of Human Rights generally rules out a court action later. Illinois: after an EEOC filing, the EEOC's determination must be sent to the Illinois Department of Human Rights within 30 days. California: a right-to-sue notice from the Civil Rights Department comes before any suit, which must follow within 1 year of it.",
+      sources: ["S57", "S83", "S87", "S91", "S93", "S94", "S95"],
+    },
+    {
+      id: "K32",
+      level: "worth_checking",
+      when: { all: [US, { fact: "harasserRole", is: "supervisor" }] },
+      message:
+        "If harassment by a supervisor led to a tangible employment action (firing, demotion, reassignment to significantly different duties, or a significant change in pay or benefits), the employer is liable with no defence. Otherwise it can defend itself only by showing it took reasonable care to prevent and promptly correct harassment, and that the employee unreasonably failed to use the complaint route. State law can be stricter.",
+      sources: ["S56", "S71", "S72", "S73"],
+    },
+    {
+      id: "K33",
+      level: "act_now",
+      when: { all: [US, EMPLOYER_SIDE, { fact: "harasserRole", in: ["co_worker", "non_employee"] }] },
+      message: {
+        hr: "The employer is liable for harassment by a co-worker if it knew or should have known and failed to take prompt and appropriate corrective action; for someone from outside, such as a customer, where it has control over them. You now know, so act promptly.",
+        consultant:
+          "The employer is liable for harassment by a co-worker if it knew or should have known and failed to take prompt and appropriate corrective action; for someone from outside, such as a customer, where it has control over them. Your client now knows, so it should act promptly.",
+      },
+      sources: ["S56"],
+    },
+    {
+      id: "K33-employee",
+      level: "worth_checking",
+      when: { all: [US, EMPLOYEE, { fact: "harasserRole", in: ["co_worker", "non_employee"] }] },
+      message:
+        "Your employer is responsible for harassment by a co-worker if it knew or should have known and failed to take prompt and appropriate action to stop it; for someone from outside, such as a customer, where it has control over them. Your complaint means it now knows.",
+      sources: ["S56"],
+    },
+    {
+      id: "K34",
+      level: "for_information",
+      when: { state: ["NY", "CA", "IL", "TX"] },
+      message:
+        "State law is stricter here. New York: harassment need not be severe or pervasive, and not complaining is not decisive. California: harassment law covers employers of any size, and employers must take all reasonable steps to prevent harassment. Illinois: the rules are stricter for managers and supervisors than for co-workers. Texas: sexual harassment law covers employers with one employee.",
+      sources: ["S82", "S87", "S91", "S95"],
+      // The Illinois supervisor rule (question 23).
+      toVerify: true,
+    },
+    {
+      // The draft also covers an adverse change to a witness; record it as retaliationSinceRaising.
+      id: "K35",
+      level: "act_now",
+      when: { all: [US, { fact: "retaliationSinceRaising", is: true }] },
+      message: {
+        employee:
+          "Something has changed for you since you complained. That may be retaliation: a change that might put a reasonable worker off complaining, including a worse schedule, a transfer or a poor review. It is a new act with its own deadline, so tell us when it happened.",
+        hr: "The employee says something changed for them after they complained. That may be retaliation: a change that might dissuade a reasonable worker from complaining, including a worse schedule, a transfer or a poor review. Treat it as a new act with its own deadline, and pause or reverse the change until it is reviewed.",
+        consultant:
+          "The employee says something changed for them after they complained. That may be retaliation: a change that might dissuade a reasonable worker from complaining, including a worse schedule, a transfer or a poor review. Treat it as a new act with its own deadline; your client should pause or reverse the change until it is reviewed.",
+      },
+      sources: ["S59", "S65", "S74"],
+    },
+    {
+      // The latest act came within 90 days after the complaint.
+      id: "K36",
+      level: "worth_checking",
+      when: {
+        all: [
+          { state: "CA" },
+          { fact: "retaliationSinceRaising", is: true },
+          {
+            any: [
+              { fact: "lastActDate", withinDays: 90, from: { fact: "grievanceDate" } },
+              { fact: "lastActDate", withinDays: 90, from: { fact: "dateReceived" } },
+            ],
+          },
+        ],
+      },
+      message:
+        "In California, an adverse action within 90 days of some kinds of protected activity can raise a presumption of retaliation (Labor Code 98.6). Whether an internal harassment complaint counts is not yet confirmed.",
+      sources: ["S86"],
+      toVerify: true,
+    },
+    {
+      id: "K37",
+      level: "for_information",
+      when: { all: [EMPLOYER_SIDE, { state: ["NY", "IL", "CA"] }, SEXUAL_HARASSMENT] },
+      message:
+        "Check the policy and training that applied, and record any gap. New York: a policy meeting the state model with a complaint form, annual interactive training, and notice at hire in English and the employee's primary language. Illinois: annual training for all employees and a written policy. California (5 or more employees): training every two years, 2 hours for supervisors and 1 hour for others.",
+      sources: ["S81", "S89", "S95", "S97"],
+    },
+    {
+      id: "K38",
+      level: "act_now",
+      when: {
+        all: [
+          US,
+          EMPLOYER_SIDE,
+          {
+            any: [
+              LINKED_TO_CHARACTERISTIC,
+              { fact: "complaintCategories", in: ["harassment", "sexual_harassment", "discrimination"] },
+              { fact: "retaliationSinceRaising", is: true },
+            ],
+          },
+        ],
+      },
+      message: {
+        hr: "Investigate promptly, thoroughly and impartially. Interview the complainant, the person complained about and witnesses; review documents; keep it confidential as far as possible; make findings of fact on the balance of the evidence; take prompt and appropriate corrective action; and protect everyone involved from retaliation.",
+        consultant:
+          "Your client should investigate promptly, thoroughly and impartially: interview the complainant, the person complained about and witnesses; review documents; keep it confidential as far as possible; make findings of fact on the balance of the evidence; take prompt and appropriate corrective action; and protect everyone involved from retaliation.",
+      },
+      sources: ["S56", "S70", "S71", "S85"],
+      proposal: true,
+    },
+    {
+      id: "K39",
+      level: "worth_checking",
+      when: { all: [US, EMPLOYER_SIDE, { fact: "groupComplaint", is: true }] },
+      message: {
+        hr: "This may be protected concerted activity under the National Labor Relations Act, with or without a union (not for supervisors). Do not discipline for it or tell staff they may not discuss pay. Charges to the NLRB must be filed within 6 months.",
+        consultant:
+          "This may be protected concerted activity under the National Labor Relations Act, with or without a union (not for supervisors). Your client must not discipline for it or tell staff they may not discuss pay. Charges to the NLRB must be filed within 6 months.",
+      },
+      sources: ["S77"],
+    },
+    {
+      id: "K40",
+      level: "for_information",
+      when: { all: [US, { fact: "arbitrationAgreement", is: true }] },
+      message:
+        "For sexual harassment or sexual assault, the employee can choose to go to court despite an arbitration agreement. For other claims, the effect of the agreement is not yet confirmed.",
+      sources: ["S79"],
+      toVerify: true,
+    },
+    {
+      id: "K41",
+      level: "worth_checking",
+      when: { all: [US, PAY, LINKED_TO_CHARACTERISTIC] },
+      message:
+        "Each paycheck from a discriminatory pay decision restarts the Title VII clock. The Equal Pay Act route needs no charge: a lawsuit within 2 years of the last paycheck, or 3 if wilful. Asking colleagues about pay to uncover discrimination is protected.",
+      sources: ["S55", "S60", "S65"],
+    },
+    {
+      id: "K42",
+      level: "for_information",
+      when: {
+        all: [
+          US,
+          {
+            any: [
+              { fact: "organisationSize", in: ["1 to 4", "5 to 14"] },
+              {
+                all: [
+                  { fact: "organisationSize", is: "15 to 19" },
+                  { fact: "protectedCharacteristicLink", is: "age" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      message:
+        "With fewer than 15 employees (20 for age discrimination), there is no EEOC route on that basis. Use the state agency instead.",
+      sources: ["S58", "S61"],
+    },
+    {
+      id: "K43",
+      level: "act_now",
+      when: { all: [US, EMPLOYEE, { fact: "agencyFiled", is: true }] },
+      message:
+        "You have already filed with an agency. New York: check the effect on going to court before any court step, because filing with the Division generally rules it out. Illinois: send the Illinois Department of Human Rights the EEOC's determination within 30 days. If a state agency closed your case, the EEOC deadline may now be 30 days from the closure notice.",
+      sources: ["S60", "S87", "S95"],
+    },
+    {
+      id: "K44",
+      level: "worth_checking",
+      when: { all: [US, { fact: "settlementMentioned", is: true }] },
+      message:
+        "Keep settlement apart from the open complaint. Federal law: a confidentiality or non-disparagement clause agreed before a sexual harassment dispute cannot be enforced. California: agreements must say the employee can still discuss unlawful acts at work, and separation agreements give at least 5 business days to consult an attorney. New York: confidentiality about the facts of a discrimination claim only if the complainant prefers it, with 21 days to consider and 7 to revoke. Age 40 or over: the Older Workers Benefit Protection Act terms apply (disciplinary playbook, check C47).",
+      sources: ["S80", "S84", "S90"],
+    },
+    {
+      // No category of its own: a transfer or schedule change is recorded as contract_or_hours.
+      id: "K45",
+      level: "worth_checking",
+      when: {
+        all: [
+          US,
+          {
+            any: [
+              { fact: "complaintCategories", is: "contract_or_hours" },
+              { fact: "roleChange", is: "changed" },
+            ],
+          },
+        ],
+      },
+      message:
+        "A transfer, schedule or duties change made for a protected reason is discrimination if it causes some harm to a term or condition of employment; the harm need not be significant. If it followed a complaint, it may also be retaliation (K35).",
+      sources: ["S75"],
+    },
+
+    // Great Britain (GB review proposed it as K30; given the next free id)
+    {
+      id: "K46",
+      level: "worth_checking",
+      when: {
+        all: [
+          GB,
+          { fact: "grievanceStage", in: RAISED_STAGES },
+          { any: [PAY, { fact: "complaintCategories", is: "contract_or_hours" }] },
+          { any: [{ fact: "retaliationSinceRaising", is: true }, RESIGNATION_IN_PLAY] },
+        ],
+      },
+      message: {
+        employee:
+          "Your grievance complained that your employer broke a statutory right, for example by deducting from your pay. If you are dismissed, or resign and claim constructive dismissal, mainly because you made that complaint, the dismissal is automatically unfair and you do not need any qualifying service. The complaint must be made in good faith; it does not matter whether the right was in fact broken.",
+        hr: "The employee's grievance asserts a statutory right (for example, no unlawful deductions from pay). A dismissal, including a constructive dismissal, mainly because of that complaint is automatically unfair and needs no qualifying service. The claim to the right must be made in good faith; it does not matter whether the right was in fact infringed.",
+        consultant:
+          "The employee's grievance asserts a statutory right (for example, no unlawful deductions from pay). A dismissal by your client, including a constructive dismissal, mainly because of that complaint is automatically unfair and needs no qualifying service. The claim to the right must be made in good faith; it does not matter whether the right was in fact infringed.",
+      },
+      sources: ["ERA 1996 ss104, 108(3)(g)", "S114", "S120"],
+    },
   ],
 
   // Parts 5 and 9. Dates come from the rules code only.
@@ -1553,7 +2219,12 @@ export const grievancePlaybook: Playbook = {
       id: "tribunal_discrimination",
       label: "Last day for a discrimination or harassment claim, before early conciliation",
       rule: "uk.tribunalTimeLimit",
-      inputs: { claimType: { value: "discrimination" }, relevantDate: { fact: "lastActDate" } },
+      // ground: in Northern Ireland each characteristic has its own law; other values are ignored.
+      inputs: {
+        claimType: { value: "discrimination" },
+        relevantDate: { fact: "lastActDate" },
+        ground: { fact: "protectedCharacteristicLink" },
+      },
       when: {
         all: [
           UK,
@@ -1568,12 +2239,12 @@ export const grievancePlaybook: Playbook = {
       },
     },
     {
-      // Northern Ireland deductions are not in v0.1 (part 9, T3).
+      // Northern Ireland too from draft 0.2 (ERO 1996 Art 55, NI review G24).
       id: "tribunal_deduction",
       label: "Last day for an unlawful deductions claim, before early conciliation",
       rule: "uk.tribunalTimeLimit",
       inputs: { claimType: { value: "deduction" }, relevantDate: { fact: "lastDeductionDate" } },
-      when: { all: [GB, PAY] },
+      when: { all: [UK, PAY] },
     },
     {
       id: "tribunal_detriment",
@@ -1603,7 +2274,24 @@ export const grievancePlaybook: Playbook = {
       when: { all: [UK, { fact: "companionRefused", is: true }] },
     },
     {
-      // limitDate is the earliest of the claim deadlines above.
+      // GB review G31, G50: a tribunal contract claim only once employment has ended,
+      // from the effective date of termination. The Scottish 6-month date has a toVerify.
+      id: "tribunal_breach_of_contract",
+      label: "Last day for a breach of contract claim (only once employment has ended), before early conciliation",
+      rule: "uk.tribunalTimeLimit",
+      inputs: { claimType: { value: "breach_of_contract" }, relevantDate: { fact: "terminationDate" } },
+      when: {
+        all: [
+          GB,
+          PAY,
+          { any: [{ fact: "stillEmployed", is: false }, { fact: "resignationIntent", is: "already_resigned" }] },
+        ],
+      },
+    },
+    {
+      // limitDate is the earliest of the claim deadlines above. Northern Ireland uses
+      // the same formula (ERO 1996 Art 249B); ground holds back the extension there
+      // for age, sexual orientation and fair employment claims (question 14).
       id: "early_conciliation",
       label: "Claim deadline after the early conciliation extension",
       rule: "uk.earlyConciliation",
@@ -1615,12 +2303,14 @@ export const grievancePlaybook: Playbook = {
             "tribunal_detriment",
             "tribunal_unfair_dismissal",
             "tribunal_companion",
+            "tribunal_breach_of_contract",
           ],
         },
         dayA: { fact: "earlyConciliationDayA" },
         dayB: { fact: "earlyConciliationDayB" },
+        ground: { fact: "protectedCharacteristicLink" },
       },
-      when: { all: [GB, { fact: "earlyConciliation", is: true }] },
+      when: { all: [UK, { fact: "earlyConciliation", is: true }] },
     },
     {
       id: "companion_postponement",
@@ -1633,7 +2323,12 @@ export const grievancePlaybook: Playbook = {
       id: "qualifying_service",
       label: "Date the qualifying service for constructive dismissal is met",
       rule: "uk.qualifyingService",
-      inputs: { startDate: { fact: "employmentStartDate" }, terminationDate: { fact: "terminationDate" } },
+      // Always a resignation here, so ERA 1996 s97(4) (or ERO 1996 Art 129(2)) applies.
+      inputs: {
+        startDate: { fact: "employmentStartDate" },
+        terminationDate: { fact: "terminationDate" },
+        resignation: { value: true },
+      },
       when: { all: [UK, RESIGNATION_IN_PLAY] },
     },
     {
@@ -1645,42 +2340,108 @@ export const grievancePlaybook: Playbook = {
       when: { all: [GB, { fact: "sexualConduct", is: true }] },
     },
     {
-      // The draft's maternityRedundancyWindow: maternity only, and only when a role change is in play.
+      // The draft's maternityRedundancyWindow: only when a redundancy is in play (GB G11,
+      // G47). The kind of leave comes from familyLeaveType; in Northern Ireland the
+      // protection ends with the leave (leaveEndDate).
       id: "maternity_redundancy_window",
       label: "End of redundancy priority protection",
       rule: "uk.familyLeaveProtectedPeriod",
-      inputs: { leaveType: { value: "maternity" }, birthDate: { fact: "childBirthDate" } },
-      when: { all: [UK, FAMILY_LEAVE, ROLE_CHANGING] },
+      inputs: {
+        leaveType: { fact: "familyLeaveType" },
+        birthDate: { fact: "childBirthDate" },
+        expectedWeekStart: { fact: "expectedWeekStart" },
+        leaveEndDate: { fact: "familyLeaveEndDate" },
+      },
+      when: {
+        all: [UK, FAMILY_LEAVE, ROLE_AT_RISK, { not: { fact: "familyLeaveType", is: "other" } }],
+      },
     },
     {
-      // California has a state agency, so 300 days. A table of other states is to verify.
+      // The five states in shared table T2 have a state agency, so 300 days.
+      // basis is left out: the characteristic is a list, and an age-only claim at
+      // 15 to 19 employees is covered by K42.
       id: "eeoc_charge",
-      label: "Last day to file an EEOC charge (300 days: California has a state agency)",
+      label: "Last day to file an EEOC charge (300 days: the state has a fair employment agency)",
       rule: "us.eeocCharge",
-      inputs: { actDate: { fact: "lastActDate" }, deferralState: { value: true } },
-      when: { all: [{ state: "CA" }, { not: { fact: "federalEmployee", is: true } }] },
+      inputs: {
+        actDate: { fact: "lastActDate" },
+        deferralState: { value: true },
+        employerHeadcount: { fact: "organisationSize" },
+        stateAgencyEndDate: { fact: "agencyClosedDate" },
+      },
+      when: { all: [AGENCY_STATES, { not: GOVERNMENT_EMPLOYER }] },
     },
     {
-      // The safe, earlier date for every other state until the state agency table exists.
+      // The safe, earlier date for every other state.
       id: "eeoc_charge_180",
-      label: "Last day to file an EEOC charge (180 days until a state agency is confirmed)",
+      label: "Last day to file an EEOC charge (180 days: state agency not covered in v0.1)",
       rule: "us.eeocCharge",
-      inputs: { actDate: { fact: "lastActDate" }, deferralState: { value: false } },
-      when: { all: [US, { not: { state: "CA" } }, { not: { fact: "federalEmployee", is: true } }] },
+      inputs: {
+        actDate: { fact: "lastActDate" },
+        deferralState: { value: false },
+        employerHeadcount: { fact: "organisationSize" },
+        stateAgencyEndDate: { fact: "agencyClosedDate" },
+      },
+      when: { all: [US, { not: AGENCY_STATES }, { not: GOVERNMENT_EMPLOYER }] },
+    },
+    // State agency (shared table T2). basis changes the Texas deadline and the size
+    // covered, and takes one value, so there is one rule use per basis.
+    {
+      id: "state_agency",
+      label: "Last day to file with the state fair employment agency",
+      rule: "us.stateAgencyDeadline",
+      inputs: {
+        actDate: { fact: "lastActDate" },
+        employerHeadcount: { fact: "organisationSize" },
+        eeocFiledDate: { fact: "agencyFiledDate" },
+      },
+      when: { all: [AGENCY_STATES, { not: GOVERNMENT_EMPLOYER }, { not: HARASSMENT }, { not: SEXUAL_HARASSMENT }] },
     },
     {
-      id: "ca_civil_rights",
-      label: "Last day to file with the California Civil Rights Department",
-      rule: "us.caCivilRights",
+      id: "state_agency_harassment",
+      label: "Last day to file a harassment complaint with the state fair employment agency",
+      rule: "us.stateAgencyDeadline",
+      inputs: {
+        actDate: { fact: "lastActDate" },
+        basis: { value: "harassment" },
+        employerHeadcount: { fact: "organisationSize" },
+        eeocFiledDate: { fact: "agencyFiledDate" },
+      },
+      when: { all: [AGENCY_STATES, { not: GOVERNMENT_EMPLOYER }, HARASSMENT, { not: SEXUAL_HARASSMENT }] },
+    },
+    {
+      id: "state_agency_sexual_harassment",
+      label: "Last day to file a sexual harassment complaint with the state fair employment agency",
+      rule: "us.stateAgencyDeadline",
+      inputs: {
+        actDate: { fact: "lastActDate" },
+        basis: { value: "sexual_harassment" },
+        employerHeadcount: { fact: "organisationSize" },
+        eeocFiledDate: { fact: "agencyFiledDate" },
+      },
+      when: { all: [AGENCY_STATES, { not: GOVERNMENT_EMPLOYER }, SEXUAL_HARASSMENT] },
+    },
+    {
+      id: "eeoc_suit",
+      label: "Last day to sue after the EEOC notice of right to sue",
+      rule: "us.eeocSuitDeadline",
+      inputs: { noticeDate: { fact: "rightToSueNoticeDate" } },
+      when: { all: [US, { known: "rightToSueNoticeDate" }] },
+    },
+    {
+      id: "nlrb_charge",
+      label: "Last day to file a charge with the NLRB",
+      rule: "us.nlrbChargeLimit",
       inputs: { actDate: { fact: "lastActDate" } },
-      when: { state: "CA" },
+      when: { all: [US, { fact: "groupComplaint", is: true }] },
     },
   ],
 
   // Part 6. Steps with no letter (E0, E4, H0) are folded into the `needs`
   // and `blockedIf` of the letter that follows them.
   route: [
-    // 6.1 Employee route
+    // 6.1 Employee route (Great Britain; Northern Ireland as 6.4). The US has its
+    // own steps below, because `needs` cannot vary by jurisdiction.
     {
       // E1. Also a further grievance when something new has happened since the first one.
       id: "grievance",
@@ -1688,9 +2449,14 @@ export const grievancePlaybook: Playbook = {
       letter: "employee/grievance",
       lens: ["employee"],
       when: {
-        any: [
-          { fact: "grievanceStage", is: "not_raised" },
-          { fact: "lastActDate", onOrAfter: { fact: "grievanceDate" } },
+        all: [
+          UK,
+          {
+            any: [
+              { fact: "grievanceStage", is: "not_raised" },
+              { fact: "lastActDate", onOrAfter: { fact: "grievanceDate" } },
+            ],
+          },
         ],
       },
       needs: [
@@ -1712,7 +2478,7 @@ export const grievancePlaybook: Playbook = {
       title: "Pay dispute letter",
       letter: "employee/pay_dispute",
       lens: ["employee"],
-      when: PAY,
+      when: { all: [UK, PAY] },
       needs: ["complaintSummary", "lastDeductionDate", "desiredOutcome"],
       blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT],
     },
@@ -1722,7 +2488,7 @@ export const grievancePlaybook: Playbook = {
       title: "Grievance follow-up",
       letter: "new:grievance_follow_up",
       lens: ["employee"],
-      when: AWAITING_REPLY,
+      when: { all: [UK, AWAITING_REPLY] },
       needs: ["grievanceDate"],
       blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT],
     },
@@ -1734,6 +2500,7 @@ export const grievancePlaybook: Playbook = {
       lens: ["employee"],
       when: {
         all: [
+          UK,
           { known: "outcomeDate" },
           { not: { fact: "satisfiedWithOutcome", is: true } },
           { not: { fact: "grievanceStage", in: ["appealed", "appeal_decided"] } },
@@ -1741,6 +2508,74 @@ export const grievancePlaybook: Playbook = {
       },
       needs: ["outcomeDate"],
       blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT],
+    },
+
+    // 6.4 United States, employee route. US-E0 (safety and timing) and US-E6
+    // (agency filing, no letter) are folded into the checks and deadlines.
+    {
+      // US-E1: the US variant of the grievance, addressed to HR or the handbook route.
+      id: "us_grievance",
+      title: "Complaint to HR (US)",
+      letter: "employee/grievance",
+      lens: ["employee"],
+      when: {
+        all: [
+          US,
+          {
+            any: [
+              { fact: "grievanceStage", is: "not_raised" },
+              { fact: "lastActDate", onOrAfter: { fact: "grievanceDate" } },
+            ],
+          },
+        ],
+      },
+      needs: ["usState", "organisationSize", "complaintSummary", "lastActDate"],
+      blockedIf: [
+        NOT_FOR_PERSON_COMPLAINED_ABOUT,
+        GOVERNMENT_OUT_OF_SCOPE,
+        {
+          // The draft's "(if harassment) harasserRole"; `needs` cannot be conditional.
+          when: { all: [HARASSMENT, { not: { known: "harasserRole" } }] },
+          reason: "Tell us first whether the person is a supervisor, a co-worker or someone from outside.",
+        },
+      ],
+    },
+    {
+      // US-E1a: unpaid wages or final pay. Pay discrimination goes in US-E1.
+      id: "us_pay_dispute",
+      title: "Pay dispute letter (US)",
+      letter: "employee/pay_dispute",
+      lens: ["employee"],
+      when: { all: [US, PAY] },
+      needs: ["usState", "complaintSummary", "desiredOutcome"],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, GOVERNMENT_OUT_OF_SCOPE],
+    },
+    {
+      // US-E3 (new letter type, suggested): no response, or new incidents.
+      id: "us_grievance_follow_up",
+      title: "Complaint follow-up (US)",
+      letter: "new:grievance_follow_up",
+      lens: ["employee"],
+      when: { all: [US, { any: [AWAITING_REPLY, { fact: "retaliationSinceRaising", is: true }] }] },
+      needs: ["grievanceDate", "grievanceStage"],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, GOVERNMENT_OUT_OF_SCOPE],
+    },
+    {
+      // US-E5: the appeal does not pause agency deadlines.
+      id: "us_appeal",
+      title: "Appeal against the complaint outcome (US)",
+      letter: "employee/appeal",
+      lens: ["employee"],
+      when: {
+        all: [
+          US,
+          { known: "outcomeDate" },
+          { not: { fact: "satisfiedWithOutcome", is: true } },
+          { not: { fact: "grievanceStage", in: ["appealed", "appeal_decided"] } },
+        ],
+      },
+      needs: ["outcomeDate"],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, GOVERNMENT_OUT_OF_SCOPE],
     },
     {
       // E6. Recommended now when K1 fires or the appeal ends unresolved.
@@ -1808,7 +2643,7 @@ export const grievancePlaybook: Playbook = {
       },
       after: ["grievance"],
       needs: ["stillEmployed", "complaintSummary"],
-      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, RESIGNATION_WARNING_UNREAD],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, NOT_OFFERED_IN_US, RESIGNATION_WARNING_UNREAD],
     },
     {
       // R2. K13 also offers it after resignation if the reasons were not set out.
@@ -1818,7 +2653,7 @@ export const grievancePlaybook: Playbook = {
       lens: ["employee"],
       when: { fact: "resignationIntent", in: ["decided", "already_resigned"] },
       needs: ["complaintSummary", "lastActDate"],
-      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, RESIGNATION_WARNING_UNREAD],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, NOT_OFFERED_IN_US, RESIGNATION_WARNING_UNREAD],
     },
     {
       // R3. Strong recommendation to take legal advice first.
@@ -1829,7 +2664,7 @@ export const grievancePlaybook: Playbook = {
       when: { fact: "resignationIntent", is: "decided" },
       after: ["grievance"],
       needs: ["complaintSummary", "lastActDate"],
-      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, RESIGNATION_WARNING_UNREAD],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, NOT_OFFERED_IN_US, RESIGNATION_WARNING_UNREAD],
     },
     {
       // E2. Optional, any time after the grievance. Placed last among the
@@ -1851,7 +2686,7 @@ export const grievancePlaybook: Playbook = {
       title: "Grievance acknowledgement",
       letter: "new:grievance_acknowledgement",
       lens: ["hr", "consultant"],
-      when: { not: { fact: "grievanceStage", in: PAST_ARRANGING } },
+      when: { all: [UK, { not: { fact: "grievanceStage", in: PAST_ARRANGING } }] },
       needs: ["dateReceived", "complaintSummary", "intendedHearer", "disciplinaryInProgress"],
       blockedIf: [
         NOT_FOR_PERSON_COMPLAINED_ABOUT,
@@ -1863,12 +2698,13 @@ export const grievancePlaybook: Playbook = {
       ],
     },
     {
-      // H1b (new letter type, suggested): before investigation interviews.
+      // H1b (new letter type, suggested): before investigation interviews. The draft
+      // asks the letter to offer a companion as good practice (question 12).
       id: "notice_to_person_complained_about",
       title: "Notice to the person complained about",
       letter: "new:notice_to_person_complained_about",
       lens: ["hr", "consultant"],
-      when: { known: "personComplainedAbout" },
+      when: { all: [UK, { known: "personComplainedAbout" }] },
       after: ["acknowledgement"],
       needs: ["personComplainedAbout"],
       blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, CLIENT_SIGNER_NEEDED],
@@ -1879,7 +2715,7 @@ export const grievancePlaybook: Playbook = {
       title: "Grievance meeting invitation",
       letter: "new:grievance_meeting_invite",
       lens: ["hr", "consultant"],
-      when: { not: { fact: "grievanceStage", in: PAST_ARRANGING } },
+      when: { all: [UK, { not: { fact: "grievanceStage", in: PAST_ARRANGING } }] },
       after: ["acknowledgement"],
       needs: ["intendedHearer", "meetingDate"],
       blockedIf: [
@@ -1901,7 +2737,9 @@ export const grievancePlaybook: Playbook = {
       title: "Grievance outcome",
       letter: "new:grievance_outcome",
       lens: ["hr", "consultant"],
-      when: { not: { fact: "grievanceStage", in: ["outcome_received", "appealed", "appeal_decided"] } },
+      when: {
+        all: [UK, { not: { fact: "grievanceStage", in: ["outcome_received", "appealed", "appeal_decided"] } }],
+      },
       after: ["meeting_invite"],
       needs: ["complaintSummary", "intendedHearer"],
       blockedIf: [
@@ -1914,6 +2752,74 @@ export const grievancePlaybook: Playbook = {
         },
       ],
     },
+
+    // 6.4 United States, HR team route (consultant: same steps, drafted for the
+    // client). US-H0 (triage) is folded into the acknowledgement's needs and blocks.
+    {
+      // US-H1: the US form of H1. No statutory companion right in the US.
+      id: "us_acknowledgement",
+      title: "Complaint acknowledgement (US)",
+      letter: "new:complaint_acknowledgement",
+      lens: ["hr", "consultant"],
+      when: { all: [US, { not: { fact: "grievanceStage", in: PAST_ARRANGING } }] },
+      needs: ["dateReceived", "complaintSummary", "intendedHearer"],
+      blockedIf: [
+        NOT_FOR_PERSON_COMPLAINED_ABOUT,
+        CLIENT_SIGNER_NEEDED,
+        GOVERNMENT_OUT_OF_SCOPE,
+        {
+          when: { all: [INTERIM_NEEDED, { not: { known: "interimMeasures" } }] },
+          reason:
+            "Record what has been done to protect the employee while this is looked at first, in a way that does not disadvantage them (K35).",
+        },
+      ],
+    },
+    {
+      // US-H1b (new letter type, suggested): before interviews.
+      id: "us_notice_to_person_complained_about",
+      title: "Notice to the person complained about (US)",
+      letter: "new:notice_to_person_complained_about",
+      lens: ["hr", "consultant"],
+      when: { all: [US, { known: "personComplainedAbout" }] },
+      after: ["us_acknowledgement"],
+      needs: ["personComplainedAbout"],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, CLIENT_SIGNER_NEEDED, GOVERNMENT_OUT_OF_SCOPE],
+    },
+    {
+      // US-H2: the US form of H2.
+      id: "us_interview_invite",
+      title: "Interview invitation (US)",
+      letter: "new:interview_invite",
+      lens: ["hr", "consultant"],
+      when: { all: [US, { not: { fact: "grievanceStage", in: PAST_ARRANGING } }] },
+      after: ["us_acknowledgement"],
+      needs: ["intendedHearer", "meetingDate"],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, CLIENT_SIGNER_NEEDED, GOVERNMENT_OUT_OF_SCOPE],
+    },
+    {
+      // US-H3: the US form of H3, once the investigation is finished.
+      id: "us_outcome",
+      title: "Complaint outcome (US)",
+      letter: "new:complaint_outcome",
+      lens: ["hr", "consultant"],
+      when: {
+        all: [US, { not: { fact: "grievanceStage", in: ["outcome_received", "appealed", "appeal_decided"] } }],
+      },
+      after: ["us_interview_invite"],
+      needs: ["complaintSummary", "intendedHearer"],
+      blockedIf: [
+        NOT_FOR_PERSON_COMPLAINED_ABOUT,
+        CLIENT_SIGNER_NEEDED,
+        GOVERNMENT_OUT_OF_SCOPE,
+        {
+          when: { not: { fact: "grievanceStage", is: "meeting_held" } },
+          reason:
+            "No outcome until the interviews are held and the investigation is finished. A reply that decides the complaint before then prejudges it.",
+        },
+      ],
+    },
+
+    // H4 and H5 serve the US too (US-H4 and US-H5: "As 6.2").
     {
       // H4: appeal received. Heard by someone not previously involved, where possible.
       id: "appeal_hearing_invite",
@@ -1921,11 +2827,12 @@ export const grievancePlaybook: Playbook = {
       letter: "new:appeal_hearing_invite",
       lens: ["hr", "consultant"],
       when: { all: [{ fact: "grievanceStage", is: "appealed" }, { not: { fact: "appealHearingHeld", is: true } }] },
-      after: ["outcome"],
-      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, CLIENT_SIGNER_NEEDED],
+      after: ["outcome", "us_outcome"],
+      blockedIf: [NOT_FOR_PERSON_COMPLAINED_ABOUT, CLIENT_SIGNER_NEEDED, GOVERNMENT_OUT_OF_SCOPE],
     },
     {
-      // H5: appeal hearing held.
+      // H5: appeal hearing held. The draft asks the letter to say the internal process
+      // has ended only if the policy has no further stage (GB review G40).
       id: "appeal_outcome",
       title: "Appeal outcome",
       letter: "new:appeal_outcome",
@@ -1935,6 +2842,7 @@ export const grievancePlaybook: Playbook = {
       blockedIf: [
         NOT_FOR_PERSON_COMPLAINED_ABOUT,
         CLIENT_SIGNER_NEEDED,
+        GOVERNMENT_OUT_OF_SCOPE,
         {
           when: { not: { fact: "appealHearingHeld", is: true } },
           reason: "No appeal outcome until the appeal hearing has been held.",
@@ -2008,7 +2916,7 @@ export const grievancePlaybook: Playbook = {
       to: "expert",
       when: FAMILY_LEAVE,
       message:
-        "Pregnancy and family leave playbook: leave dates pass across, and the birth date only if needed. The grievance does not pause.",
+        "Pregnancy and family leave playbook: the kind of leave and the leave dates pass across (in Northern Ireland, the date the leave ends), and the birth date only if needed. The grievance does not pause.",
     },
     {
       id: "whistleblowing",

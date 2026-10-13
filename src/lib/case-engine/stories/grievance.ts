@@ -2,8 +2,8 @@ import type { StoryFixture } from "./types";
 
 /**
  * The five grievance test stories from part 9 of the grievance playbook draft
- * (draft 0.1, 13 October 2026). Story text is copied exactly; deadlines are
- * the draft's, before any early conciliation extension.
+ * (draft 0.2, with the region reviews folded in). Story text is copied
+ * exactly; deadlines are the draft's, before any early conciliation extension.
  */
 export const grievanceStories: StoryFixture[] = [
   {
@@ -55,22 +55,21 @@ export const grievanceStories: StoryFixture[] = [
         "disciplinaryInProgress",
         "resignationIntent",
         "firstActDate",
-        "childBirthDate",
       ],
+      missingExcludes: ["childBirthDate"],
       checksInclude: ["K3", "K4", "K5", "K11", "K11-role"],
       deadlines: {
         tribunal_discrimination: "2026-12-21",
-        maternity_redundancy_window: null,
       },
       nextLetter: null,
       blocked: [],
       handOffs: ["pregnancy_family_leave", "flexible_working"],
     },
     notes: [
-      "The draft lists protectedCharacteristicLink (\"Reader proposes, user confirms\") and grievanceStage (\"confirm no written complaint\") as still missing. The engine has no \"inferred, please confirm\" state: a fact the Reader records counts as known and is not asked. The story states both plainly, so the Reader records them (pregnancy and maternity only; sex is the alternative legal framing in open question 8) and they are left out of missingIncludes. K5 needs the link to fire.",
-      "K11 \"at act now level\" is two checks here: K11 (worth checking) and K11-role (act now, when the role is changing).",
-      "firstActDate and childBirthDate are should-level in part 3, though part 9 lists them with the must-ask facts.",
-      "maternity_redundancy_window is null until childBirthDate is given; this assumes uk.familyLeaveProtectedPeriod returns no date with neither a birth date nor an expected week.",
+      "The draft lists protectedCharacteristicLink (\"Reader proposes, user confirms\") and grievanceStage (\"confirm no written complaint\") as still missing. The engine has no \"inferred, please confirm\" state: a fact the Reader records counts as known and is not asked. The story states both plainly, so the Reader records them (pregnancy and maternity only, framed under Equality Act s18(4); sex is the alternative framing in open question 8) and they are left out of missingIncludes. K5 needs the link to fire.",
+      "K11 \"at act now level\" is two checks here: K11 (worth checking) and K11-role (act now, as a product choice, because her role is being removed in substance).",
+      "firstActDate is should-level in part 3, though part 9 lists it with the must-ask facts.",
+      "Draft 0.2: the redundancy priority window and the child's birth date apply only when the role is at risk of redundancy or removed, and roleChange here is \"changed\", so childBirthDate is not asked and maternity_redundancy_window does not run (it was expected as null in 0.1).",
       "Leeds is not in the story text, so the jurisdiction fact stays missing (the case itself is England and Wales).",
       "No next letter yet: E1 grievance still needs facts, E2 waits for E1, and E6 is only offered when K1 fires (the deadline is 70 days away). The draft's \"E6 available now\" has no route status of its own.",
       "The refused 4-day request goes to the flexible working hand-off.",
@@ -117,7 +116,7 @@ export const grievanceStories: StoryFixture[] = [
       { key: "sexualConduct", value: true, quote: "he put his hand on her thigh under the table" },
       { key: "physicalHarmOrThreat", value: true, quote: "put his hand on her thigh" },
       { key: "hearerConflict", value: true, quote: "Normally Mark would hear grievances for his team." },
-      { key: "organisationSize", value: 120, quote: "We're about 120 people" },
+      { key: "organisationSize", value: "50 or more", quote: "We're about 120 people" },
       {
         key: "policyDocument",
         value: "Dignity at work policy from 2019",
@@ -155,6 +154,7 @@ export const grievanceStories: StoryFixture[] = [
       "No next letter yet: H1 acknowledgement is blocked until interim measures are recorded (H0 triage) and needs the hearer; H2 is blocked by K9 (Mark would hear it); H3 is blocked until a meeting is held.",
       "K20-hr also fires the day after receipt, because the Condition language cannot count working days since a date.",
       "The disciplinary hand-off for Mark waits for caseToAnswer. Glasgow is not in the story text, so the jurisdiction fact stays missing.",
+      "Draft 0.2 makes organisationSize a choice of bands, so the Reader records \"about 120\" as \"50 or more\".",
     ].join(" "),
   },
   {
@@ -172,7 +172,7 @@ export const grievanceStories: StoryFixture[] = [
         quote: "Client is a 40-person M&E contractor in Belfast, no in-house HR.",
       },
       { key: "jurisdiction", value: "northern_ireland", quote: "contractor in Belfast" },
-      { key: "organisationSize", value: 40, quote: "40-person M&E contractor" },
+      { key: "organisationSize", value: "20 to 49", quote: "40-person M&E contractor" },
       { key: "dateReceived", value: "2026-10-16", quote: "Site technician Ciara emailed a grievance on 16 Oct." },
       { key: "receivedHow", value: "email", quote: "emailed a grievance on 16 Oct" },
       { key: "grievanceStage", value: "raised_waiting", quote: "emailed a grievance on 16 Oct" },
@@ -210,10 +210,11 @@ export const grievanceStories: StoryFixture[] = [
         "familyLeaveStatus",
         "clientDecisionMaker",
       ],
-      checksInclude: ["K5", "K10", "K24", "K26"],
-      checksExclude: ["K6", "K8"],
+      checksInclude: ["K5", "K10", "K24-ni", "K26"],
+      checksExclude: ["K6", "K8", "K8-ni", "K24"],
       deadlines: {
         tribunal_discrimination: "2027-01-13",
+        tribunal_deduction: null,
       },
       nextLetter: "client_advice_note",
       blocked: ["acknowledgement", "notice_to_person_complained_about", "meeting_invite", "outcome"],
@@ -222,7 +223,9 @@ export const grievanceStories: StoryFixture[] = [
     notes: [
       "The draft expects K9 at act now as well as K10. K9's own condition is that the hearer is the person complained about, was involved, or reports to them; the story shows Paul has prejudged it (K10) and normally hears grievances, but not that he was involved, so hearerConflict is not recorded and K9 is left out. Either K10 should be act now when the prejudged person is the usual hearer, or the user confirms Paul's involvement.",
       "The draft lists K18 (\"watch for victimisation\"); nothing has happened since Ciara complained, so it is left out (the rota change came before the grievance).",
-      "13 January 2027 depends on uk.tribunalTimeLimit applying the Northern Ireland 3-month limit from the case jurisdiction; there is no separate tribunalTimeLimitNI rule. The deductions rule use is switched off in Northern Ireland, as the draft asks.",
+      "13 January 2027 depends on uk.tribunalTimeLimit applying the Northern Ireland 3-month limit from the case jurisdiction (ground \"sex\": Sex Discrimination (NI) Order 1976 Art 76, extended by LRA early conciliation under Art 249B); there is no separate tribunalTimeLimitNI rule.",
+      "Draft 0.2: unlawful deductions now run in Northern Ireland (Employment Rights (NI) Order 1996 Art 55), so K24-ni fires in place of K24, and tribunal_deduction has no date until the first payday without the allowance is known.",
+      "K8-ni does not fire: no client or customer is involved. Draft 0.2 makes organisationSize a choice of bands, so the Reader records the 40-person firm as \"20 to 49\".",
       "The \"banter\" reply is the grievance outcome, which is blocked until a meeting is held. Every letter the client signs is also blocked until clientDecisionMaker is confirmed, so the next letter is the advice note to the client (risk of up to 50% adjustment, outside hearer).",
       "complainedAboutRole is not recorded: \"site manager\" does not say whether Gary is her line manager.",
       "The disciplinary hand-off for Gary waits for caseToAnswer.",
@@ -281,7 +284,7 @@ export const grievanceStories: StoryFixture[] = [
         "familyLeaveStatus",
         "resignationAdviceRead",
       ],
-      checksInclude: ["K3", "K12", "K17", "K18", "K20", "K24"],
+      checksInclude: ["K3", "K12", "K17", "K18", "K20", "K24", "K46"],
       deadlines: {
         tribunal_deduction: "2026-12-24",
         tribunal_unfair_dismissal: null,
@@ -297,6 +300,7 @@ export const grievanceStories: StoryFixture[] = [
       "K20 is approximated: it fires when the grievance is raised and waiting and was sent before today (11 working days here).",
       "The next letter is the grievance follow-up (E3, a new letter type) that chases the 29 September grievance and adds 9 October; the draft says \"E1 as a further grievance, or E3 when it exists\". E1 still needs facts.",
       "tribunal_unfair_dismissal and qualifying_service have no date until the termination date and the exact start date are known. The example of a 23 October 2026 payment giving 22 April 2027 needs a later answer and is not encoded. The next payday (a should-ask in the draft) has no fact of its own; lastDeductionDate takes the latest short payment.",
+      "Draft 0.2 adds K46: her 29 September grievance asserted a statutory right (no unlawful deductions), so a dismissal mainly for it needs no qualifying service; a resignation this week (16 October 2026, or 23 October 2026 with s97(4) notice) otherwise falls short under SI 2026/559 reg 4. tribunal_breach_of_contract does not run while she is still employed.",
     ].join(" "),
   },
   {
@@ -318,12 +322,13 @@ export const grievanceStories: StoryFixture[] = [
       },
       {
         key: "complaintCategories",
-        value: ["harassment", "discrimination"],
-        quote: `making fun of my accent for months and calls me "border boy"`,
+        value: ["harassment", "discrimination", "contract_or_hours"],
+        quote: `making fun of my accent for months and calls me "border boy" in front of the crew. I emailed HR about it on November 2. On November 6 he moved me to nights`,
       },
       { key: "protectedCharacteristicLink", value: ["national_origin"], quote: "making fun of my accent" },
       { key: "personComplainedAbout", value: ["Rick"], quote: "My supervisor Rick" },
       { key: "complainedAboutRole", value: ["line_manager"], quote: "My supervisor Rick" },
+      { key: "harasserRole", value: "supervisor", quote: "My supervisor Rick" },
       { key: "grievanceDate", value: "2026-11-02", quote: "I emailed HR about it on November 2." },
       { key: "grievanceInWriting", value: true, quote: "I emailed HR about it" },
       { key: "lastActDate", value: "2026-11-06", quote: "On November 6 he moved me to nights" },
@@ -335,11 +340,24 @@ export const grievanceStories: StoryFixture[] = [
     ],
     answers: [],
     expect: {
-      missingIncludes: ["usState", "federalEmployee", "employmentStatus", "isContinuing", "desiredOutcome", "grievanceStage"],
-      checksInclude: ["K3", "K5", "K18", "K27"],
+      missingIncludes: [
+        "usState",
+        "federalEmployee",
+        "organisationSize",
+        "tangibleAction",
+        "employmentStatus",
+        "isContinuing",
+        "desiredOutcome",
+        "grievanceStage",
+        "agencyFiled",
+        "arbitrationAgreement",
+        "internalComplaintRoute",
+      ],
+      checksInclude: ["K5", "K27", "K32", "K34", "K35", "K36", "K45"],
+      checksExclude: ["K3", "K18", "K30"],
       deadlines: {
         eeoc_charge: "2027-09-02",
-        ca_civil_rights: "2029-11-06",
+        state_agency_harassment: "2029-11-06",
       },
       nextLetter: null,
       blocked: [],
@@ -347,9 +365,11 @@ export const grievanceStories: StoryFixture[] = [
     },
     notes: [
       "lastActDate is recorded as 6 November 2026 (the night-shift move), which the draft's deadlines use; the draft also lists lastActDate for the harassment itself as still missing, which the engine cannot show for a known fact.",
-      "The 300-day EEOC date comes from eeoc_charge, a California-only rule use with deferralState true. Other states get eeoc_charge_180 until a state agency table exists; it does not run here. The fixture cannot assert that the 180-day date (5 May 2027) is absent, only that eeoc_charge gives 2 September 2027.",
+      "The 300-day EEOC date comes from eeoc_charge, which runs for the five states with a state agency (deferralState true). organisationSize is not known, so the rule still gives the 300-day date. Other states get eeoc_charge_180, which does not run here. The fixture cannot assert that the 180-day date (5 May 2027) is absent.",
       "usState stays missing: the case is US-CA but the story does not name the state, and the draft asks to confirm California.",
-      "No next letter yet: the US grievance (E1, adding the retaliation) still needs facts. UK-only letters (acas_ec_notification, tribunal_cover, subject_access_request) are switched off for US cases; the fixture has no field to assert \"not offered\".",
+      "No next letter yet: the US grievance (us_grievance, US-E1, adding the retaliation) still needs usState and organisationSize, and the US follow-up needs grievanceStage. UK-only letters (acas_ec_notification, tribunal_cover, subject_access_request) are switched off for US cases; the fixture has no field to assert \"not offered\".",
+      "Draft 0.2: K3 and K18 are UK only, and the US checks replace them (K35 is the US form of K18). The draft lists harasserRole as still to ask but also expects K32; the Reader records \"supervisor\" from \"My supervisor Rick\" so K32 fires, as G4 does for retaliationSinceRaising, and tangibleAction is then asked. The night-shift move is recorded as a change to hours (contract_or_hours), so K45 fires. K36 fires because the move came 4 days after the complaint. K30 does not fire: the EEOC date is about 300 days away.",
+      "The California Civil Rights Department date now comes from state_agency_harassment (us.stateAgencyDeadline with basis harassment, because the complaint includes harassment), in place of ca_civil_rights.",
     ].join(" "),
   },
 ];
