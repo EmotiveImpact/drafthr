@@ -3,10 +3,10 @@ import { cn } from "@/lib/utils";
 export type StatusTone = "neutral" | "red" | "amber" | "green" | "blue";
 
 const TONE: Record<StatusTone, string> = {
-  neutral: "bg-[var(--ds-muted)]",
-  red: "bg-[var(--ds-red-fg)]",
-  amber: "bg-[var(--ds-amber-fg)]",
-  green: "bg-[var(--ds-green-fg)]",
+  neutral: "bg-[var(--ds-subtle)]",
+  red: "bg-[var(--ds-red-solid)]",
+  amber: "bg-[var(--ds-amber-dot)]",
+  green: "bg-[var(--ds-green-solid)]",
   blue: "bg-[var(--ds-blue-fg)]",
 };
 
@@ -36,7 +36,7 @@ export function StatusDot({
   inheritColor?: boolean;
   className?: string;
 }) {
-  const dim = size === "sm" ? "size-1.5" : "size-2";
+  const dim = size === "sm" ? "size-1.5" : "size-[7px]";
   return (
     <span
       className={cn(

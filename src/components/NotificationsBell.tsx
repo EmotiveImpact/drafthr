@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
@@ -12,13 +12,13 @@ import { useProfileStore } from "@/lib/profile";
 import { deriveNotifications, topSeverity } from "@/lib/notifications";
 
 const PILL: Record<string, string> = {
-  urgent: "bg-[var(--ds-red-fg)] text-white",
-  warn: "bg-[var(--ds-amber-dot)] text-white",
-  info: "bg-[var(--ds-muted)] text-white",
+  urgent: "bg-[var(--ds-red-solid)] text-white",
+  warn: "bg-[var(--ds-red-solid)] text-white",
+  info: "bg-[var(--ds-subtle)] text-white",
 };
 
 const DOT: Record<string, string> = {
-  urgent: "bg-[var(--ds-red-fg)]",
+  urgent: "bg-[var(--ds-red-solid)]",
   warn: "bg-[var(--ds-amber-dot)]",
   info: "bg-[var(--ds-faint)]",
 };
@@ -30,10 +30,19 @@ const LABEL: Record<string, string> = {
 };
 
 /**
- * Bell icon for the topbar. Badge shows the urgent/warn count.
+ * The bell. In the sidebar's top row it is a quiet 30px icon with a small
+ * amber (or red, when urgent) dot; in the phone top bar it is a 38px icon
+ * with a red count badge, as in the phone-home mock.
  * Click → popover preview of the top 4. "View all" jumps to /notifications.
  */
-export function NotificationsBell() {
+export function NotificationsBell({
+  variant = "dot",
+  className,
+}: {
+  /** "dot" for the sidebar, "count" for the phone top bar. */
+  variant?: "dot" | "count";
+  className?: string;
+} = {}) {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const profile = useProfileStore((s) => s.profile);
@@ -61,32 +70,57 @@ export function NotificationsBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-8 relative" aria-label="Notifications">
-          <Bell className="size-4" />
-          {actionable > 0 && top && (
+        <button
+          type="button"
+          aria-label={actionable > 0 ? `Notifications, ${actionable} need you` : "Notifications"}
+          title="Notifications"
+          className={cn(
+            "relative grid shrink-0 place-items-center transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] data-[state=open]:bg-[var(--ds-surface-2)]",
+            variant === "count"
+              ? "size-[38px] rounded-[10px] text-[var(--ds-ink)]"
+              : "size-[30px] rounded-[8px] text-[var(--ds-subtle)]",
+            className
+          )}
+        >
+          <Bell className={variant === "count" ? "size-[19px]" : "size-[17px]"} aria-hidden />
+          {actionable > 0 && top && variant === "dot" && (
             <span
-              className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] rounded-full text-[10px] grid place-items-center px-1 font-medium ${PILL[top]}`}
+              aria-hidden
+              className={cn(
+                "absolute top-[6px] right-[7px] size-[7px] rounded-full border-[1.5px] border-[var(--ds-surface)]",
+                DOT[top]
+              )}
+            />
+          )}
+          {actionable > 0 && top && variant === "count" && (
+            <span
+              aria-hidden
+              className={cn(
+                "absolute top-1 right-1 grid h-4 min-w-4 place-items-center rounded-full border-2 border-[var(--ds-surface)] px-[3px] text-[9.5px] font-semibold",
+                PILL[top]
+              )}
             >
               {actionable > 9 ? "9+" : actionable}
             </span>
           )}
-        </Button>
+        </button>
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-80 overflow-hidden rounded-[var(--ds-r-m)] border-[var(--ds-line)] bg-[var(--ds-surface)] p-0 shadow-[var(--ds-shadow-l)]"
+        className="w-[340px] max-w-[calc(100vw-24px)] overflow-hidden rounded-[var(--ds-r-l)] border-[var(--ds-line)] bg-[var(--ds-surface)] p-0 shadow-[var(--ds-shadow-l)]"
       >
-        <div className="flex items-center justify-between border-b border-[var(--ds-line)] px-3.5 py-3">
-          <span className="text-[13.5px] font-semibold text-[var(--ds-ink)]">Notifications</span>
+        <div className="flex items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
+          <span className="ds-heading text-[19px]">Notifications</span>
           <button
-            className="text-[12.5px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+            type="button"
+            className="rounded-[6px] px-1 text-[13px] text-[var(--ds-ink)] hover:underline underline-offset-[3px]"
             onClick={() => go("/notifications")}
           >
             View all
           </button>
         </div>
         {list.length === 0 ? (
-          <div className="px-3 py-8 text-center text-[12.5px] text-[var(--ds-muted)]">
+          <div className="px-4 py-8 text-center text-[13px] text-[var(--ds-muted)]">
             All clear. Nothing needs your attention.
           </div>
         ) : (
@@ -96,14 +130,14 @@ export function NotificationsBell() {
                 <button
                   type="button"
                   onClick={() => n.actionHref && go(n.actionHref)}
-                  className="w-full cursor-pointer px-3.5 py-3 text-left hover:bg-[var(--ds-surface-2)]"
+                  className="w-full cursor-pointer px-4 py-3 text-left transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)]"
                 >
                   <div className="mb-0.5 flex items-center gap-2">
                     <span className={`size-1.5 shrink-0 rounded-full ${DOT[n.severity]}`} aria-hidden />
-                    <span className="flex-1 truncate text-[13px] font-medium text-[var(--ds-ink)]">{n.title}</span>
-                    <span className="shrink-0 text-[11px] text-[var(--ds-muted)]">{LABEL[n.severity] ?? n.severity}</span>
+                    <span className="flex-1 truncate text-[14px] text-[var(--ds-ink)]">{n.title}</span>
+                    <span className="shrink-0 text-[12px] text-[var(--ds-subtle)]">{LABEL[n.severity] ?? n.severity}</span>
                   </div>
-                  <p className="m-0 line-clamp-2 pl-3.5 text-[12px] leading-relaxed text-[var(--ds-muted)]">
+                  <p className="m-0 mt-0.5 line-clamp-2 pl-3.5 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
                     {n.description}
                   </p>
                 </button>
@@ -113,7 +147,7 @@ export function NotificationsBell() {
               <li>
                 <button
                   type="button"
-                  className="w-full cursor-pointer px-3 py-2.5 text-center text-[12.5px] text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                  className="w-full cursor-pointer px-4 py-2.5 text-center text-[13px] text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
                   onClick={() => go("/notifications")}
                 >
                   {list.length - preview.length} more

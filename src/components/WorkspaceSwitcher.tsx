@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { ChevronsUpDown, Check, Plus } from "lucide-react";
+import { ChevronDown, Check, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarMenuButton, useSidebar } from "@/components/ui/sidebar";
+import { useSidebar } from "@/components/ui/sidebar";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import {
   clearTenantScopedLocalData,
@@ -131,7 +131,7 @@ export function WorkspaceSwitcher({
       void load();
     } catch {
       if (swapped && fromNs && toNs) undoLocalSwap(fromNs, toNs);
-      toast.error("Couldn't switch workspace — you appear to be offline.");
+      toast.error("Couldn't switch workspace. You appear to be offline.");
     } finally {
       setSwitching(false);
     }
@@ -143,22 +143,19 @@ export function WorkspaceSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <SidebarMenuButton
-          className="h-auto w-full justify-between gap-2 rounded-[var(--ds-r-s)] px-1 py-1 hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_60%,transparent)] data-[state=open]:bg-sidebar-accent"
+        <button
+          type="button"
+          className="group/ws inline-flex h-8 max-w-full min-w-0 items-center gap-1 rounded-[8px] px-1.5 text-left transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)] data-[state=open]:bg-[var(--ds-surface-2)]"
           aria-label="Switch workspace"
+          title={subtitle ? `${activeTenant.name}, ${subtitle}` : activeTenant.name}
         >
-          <span className="grid min-w-0 text-left leading-tight">
-            <span className="truncate text-[14.5px] font-medium text-[var(--ds-ink)]">
-              {isCollapsed ? activeTenant.name[0] : activeTenant.name}
-            </span>
-            {subtitle && !isCollapsed && (
-              <span className="mt-px truncate text-[12px] text-[var(--ds-muted)]">{subtitle}</span>
-            )}
+          <span className="truncate text-[15px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">
+            {isCollapsed ? activeTenant.name[0] : activeTenant.name}
           </span>
-          {!isCollapsed && <ChevronsUpDown className="size-3.5 shrink-0 text-[var(--ds-faint)]" />}
-        </SidebarMenuButton>
+          {!isCollapsed && <ChevronDown aria-hidden className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />}
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="right" sideOffset={6} className="min-w-56">
+      <DropdownMenuContent align="start" side="bottom" sideOffset={6} className="min-w-60">
         <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
         {workspaces.map((w) => (
           <DropdownMenuItem
@@ -167,7 +164,7 @@ export function WorkspaceSwitcher({
             disabled={switching}
           >
             <span className="flex-1 truncate">{w.name}</span>
-            <span className="ml-2 text-[11.5px] capitalize text-[var(--ds-muted)]">
+            <span className="ml-2 text-[12px] capitalize text-[var(--ds-subtle)]">
               {w.role}
             </span>
             {w.isActive && <Check className="ml-2 size-3.5" />}
@@ -176,7 +173,7 @@ export function WorkspaceSwitcher({
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link to="/signup/workspace" className="cursor-pointer">
-            <Plus className="size-3.5 mr-2" />
+            <Plus className="size-4" />
             Create workspace
           </Link>
         </DropdownMenuItem>

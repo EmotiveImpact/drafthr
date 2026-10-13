@@ -1,169 +1,229 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/newsreader/opsz.css";
 @import "@fontsource-variable/geist-mono";
-@import "@fontsource-variable/source-serif-4";
 
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================================
- * DRAFTHR theme: "Harvey stone". A warm off-white ground (sidebar, frame)
- * holding a white working panel, hairline borders, soft filled cards, a
- * near-black primary and status colour only where status is meant. Geist for
- * UI, Geist Mono for facts and numbers, Source Serif 4 (light) for page titles
- * and big numbers only. Playfair Display is kept for the wordmark.
+ * DRAFTHR theme: the calm redesign (phase 3). Cool neutral greys on white,
+ * hairline borders, a near-black primary, and status colour only where status
+ * is meant: amber needs you, lilac is with someone else (or the reviewer),
+ * green is done, red is errors and failing checks only, blue is neutral info.
+ * Inter for the whole UI, Newsreader (serif) for page titles, card headings,
+ * big numbers and the letter itself. Geist Mono stays for code.
  *
- * Values mirror the design prototype (design/prototype/core.css, skin A for
- * light, skin D for night). Components read the --ds-* tokens or shadcn's
- * variables below; never hard-code a hex in a component.
+ * Values mirror the approved mocks (design/hifi/base.css and kit.html).
+ * Components read the --ds-* tokens or shadcn's variables below; never
+ * hard-code a hex in a component. Small grey text never goes lighter than
+ * --ds-subtle (#74747a) so it keeps 4.5:1 on white.
  * ==========================================================================*/
 
 :root {
   /* ---- shadcn variables ---- */
   --background: #ffffff;
-  --foreground: #141413;
+  --foreground: #111110;
 
   --card: #ffffff;
-  --card-foreground: #141413;
+  --card-foreground: #111110;
 
   --popover: #ffffff;
-  --popover-foreground: #141413;
+  --popover-foreground: #111110;
 
   /* Primary CTA: near-black with white text. */
-  --primary: #141413;
+  --primary: #111110;
   --primary-foreground: #ffffff;
 
-  --secondary: #f1f0ec;
-  --secondary-foreground: #141413;
+  --secondary: #f5f5f6;
+  --secondary-foreground: #111110;
 
-  --muted: #f4f3ef;
-  --muted-foreground: #6f6c64;
+  --muted: #f5f5f6;
+  --muted-foreground: #6b6b70;
 
-  --accent: #f4f3ef;
-  --accent-foreground: #141413;
+  --accent: #f5f5f6;
+  --accent-foreground: #111110;
 
-  --destructive: #b4321f;
+  --destructive: #a8321f;
   --destructive-foreground: #ffffff;
 
-  --border: #e9e7e2;
-  --input: #d9d6cf;
-  --ring: #5b4bb7;
+  --border: #e8e8ea;
+  --input: #e8e8ea;
+  --ring: #6f95d6;
 
-  --radius: 0.5rem;
+  --radius: 0.5625rem; /* 9px: buttons and fields */
 
   /* DRAFTHR letter paper. The letter always renders on light paper. */
-  --letter-paper: oklch(0.995 0.002 95);
-  --letter-ink: oklch(0.18 0.01 250);
-  --letter-rule: oklch(0.92 0.004 250);
-  --letter-warning: oklch(0.6 0.18 30);
-  --letter-ok: oklch(0.55 0.13 145);
+  --letter-paper: #ffffff;
+  --letter-ink: #1d1c1a;
+  --letter-rule: #ececee;
+  --letter-warning: #a8321f;
+  --letter-ok: #26704f;
 
-  /* Annotation highlight: soft yellow used by comment-mark text. Theme-neutral. */
-  --comment-highlight: oklch(0.94 0.13 90);
-  --comment-highlight-strong: oklch(0.86 0.16 80);
+  /* Annotation highlight: soft amber used by comment-mark text. */
+  --comment-highlight: #fbf0d2;
+  --comment-highlight-strong: #e2c068;
 
-  /* Stone chart ramp */
-  --chart-1: #d9d6cf;
-  --chart-2: #b3b0a8;
-  --chart-3: #85827a;
-  --chart-4: #3b3a37;
-  --chart-5: #141413;
+  /* Cool grey chart ramp */
+  --chart-1: #dcdce0;
+  --chart-2: #b9b9be;
+  --chart-3: #74747a;
+  --chart-4: #2b2a28;
+  --chart-5: #111110;
 
-  /* Sidebar sits on the stone ground; the active row is a soft filled pill. */
-  --sidebar: #f6f5f1;
-  --sidebar-foreground: #3b3a37;
-  --sidebar-primary: #141413;
+  /* The sidebar is white with a hairline; the active row is a soft fill. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #2b2a28;
+  --sidebar-primary: #111110;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eeede8;
-  --sidebar-accent-foreground: #141413;
-  --sidebar-border: #e9e7e2;
-  --sidebar-ring: #5b4bb7;
+  --sidebar-accent: #f5f5f6;
+  --sidebar-accent-foreground: #111110;
+  --sidebar-border: #e8e8ea;
+  --sidebar-ring: #6f95d6;
 
   /* ---- DRAFTHR design-system tokens (--ds-*) ----
    * Canonical names consumed across the app. Meanings:
-   *   canvas     outer ground (sidebar, frame, desk behind the letter)
-   *   surface    the white working panel
-   *   surface-2  soft filled card, well, composer
-   *   surface-3  hover / active fill on a soft card
-   *   chip       small pills, kbd, segmented-control track
-   *   line       hairline border      line-2  lighter divider and hover fill
-   *   line-strong  input borders, stronger dividers
+   *   canvas     the desk behind the letter and other recessed grounds
+   *   surface    white panels (pages, cards, the sidebar)
+   *   surface-2  soft fill: wells, quiet tiles, hover on white, active nav row
+   *   surface-3  the next fill step: pressed, selected, track
+   *   chip       small pills, counts, segmented-control track
+   *   line       hairline border      line-2  lighter divider
+   *   line-strong  hovered field borders, checkbox and radio rims
    *   ink        headings, strongest text   body  body text
    *   muted      secondary text (AA on surface and surface-2)
-   *   subtle     icons, meta text          faint  disabled, placeholders
+   *   subtle     icons, meta text, the smallest grey text (AA on white)
+   *   faint      disabled text, placeholders on fills, decorative strokes
    */
-  --ds-canvas: #f6f5f1;
+  --ds-canvas: #f6f6f7;
   /* pagedly desk = the editor canvas, so the pagedly editor surface sits on the
    * same background as the read-only preview. */
   --pagedly-desk-background: var(--ds-canvas);
   --ds-surface: #ffffff;
-  --ds-surface-2: #f4f3ef;
-  --ds-surface-3: #eeede8;
-  --ds-chip: #f1f0ec;
-  --ds-line: #e9e7e2;
-  --ds-line-2: #efede8;
-  --ds-line-strong: #d9d6cf;
-  --ds-ink: #141413;
-  --ds-body: #3b3a37;
-  --ds-muted: #6f6c64;
-  --ds-subtle: #85827a;
-  --ds-faint: #b3b0a8;
+  --ds-surface-2: #f5f5f6;
+  --ds-surface-3: #efeff1;
+  --ds-chip: #efeff1;
+  --ds-hover: #f9f9fa;
+  --ds-line: #e8e8ea;
+  --ds-line-2: #f0f0f2;
+  --ds-line-strong: #dcdce0;
+  --ds-line-hover: #d4d4d8;
+  --ds-ink: #111110;
+  --ds-body: #2b2a28;
+  --ds-muted: #6b6b70;
+  --ds-subtle: #74747a;
+  --ds-faint: #b9b9be;
 
-  /* Primary action (buttons, send) and its text */
-  --ds-accent: #141413;
-  --ds-accent-hover: #34332f;
+  /* Primary action (buttons, send) and its text. Press is one shade darker
+   * on light buttons and one step lighter on the black one; nothing moves. */
+  --ds-accent: #111110;
+  --ds-accent-hover: #2c2c2a;
+  --ds-accent-press: #3a3a37;
   --ds-on-accent: #ffffff;
-  --ds-focus: #5b4bb7;
+  --ds-focus: #6f95d6;
+  --ds-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #6f95d6;
+  /* Dim behind dialogs and sheets. */
+  --ds-scrim: rgba(17, 17, 16, 0.24);
 
-  /* Status: only on dots, badges, inline status cells */
-  --ds-red-bg: #fbe9e5;
-  --ds-red-fg: #b4321f;
-  --ds-amber-bg: #fbefcc;
-  --ds-amber-fg: #8a5a00;
+  /* Status: only on dots, pills, notice strips and status cells.
+   *   amber  needs you        lilac  someone else has it, the reviewer
+   *   green  done             red    errors and failing checks only
+   *   blue   neutral info */
+  --ds-red-bg: #fbe6e2;
+  --ds-red-fg: #a8321f;
+  --ds-red-solid: #c2412b;
+  --ds-red-bd: #f0d0ca;
+  --ds-red-soft: #fbebe7;
+  --ds-red-line: #d9705c;
+  --ds-amber-bg: #fbf0d2;
+  --ds-amber-fg: #865a05;
   --ds-amber-dot: #d59a1c;
-  --ds-green-bg: #e5f2ea;
-  --ds-green-fg: #2b7454; /* prototype #2f7d5b, darkened for AA on green-bg */
-  --ds-blue-bg: #e9f0ff;
-  --ds-blue-fg: #2f5bd3;
-  /* Labelled tags (AI suggestions, "Correct the employee's name") */
-  --ds-violet-bg: #ece8f7;
-  --ds-violet-fg: #5b4bb7;
-  --ds-violet-bd: #d9d1f2;
+  --ds-amber-solid: #e2a83a;
+  --ds-amber-bd: #efd9a0;
+  --ds-amber-ring: #e2b54a;
+  --ds-amber-soft: #fbf3dd;
+  --ds-amber-row: #fbf1d6;
+  --ds-amber-row-hover: #f8eac4;
+  --ds-amber-chip: #fdf6e6;
+  --ds-amber-chip-bd: #f1e2bd;
+  --ds-amber-chip-fg: #7a5410;
+  --ds-green-bg: #e4f2ea;
+  --ds-green-fg: #26704f;
+  --ds-green-solid: #2f8a5f;
+  --ds-green-soft: #eef6f1;
+  --ds-green-bd: #cfe5d8;
+  --ds-green-ink: #1e4d36;
+  --ds-green-line: #6fb08d;
+  --ds-blue-bg: #e8eef9;
+  --ds-blue-fg: #2b4f8c;
+  --ds-blue-soft: #eef3fa;
+  /* Lilac: someone else has it; the reviewer's colour. */
+  --ds-lilac-bg: #efebfa;
+  --ds-lilac-fg: #5b4bb7;
+  --ds-lilac-soft: #f4f2fc;
+  --ds-lilac-bd: #dcd6f4;
+  --ds-lilac-ink: #3a2f80;
+  --ds-lilac-line: #8b7fd6;
+  --ds-lilac-ring: #9d92de;
+  --ds-lilac-quote: #c9c1ee;
+  /* Older name for lilac, kept so existing screens follow. */
+  --ds-violet-bg: var(--ds-lilac-bg);
+  --ds-violet-fg: var(--ds-lilac-fg);
+  --ds-violet-bd: var(--ds-lilac-bd);
 
-  /* Six pastel tints with an ink partner each. They group things; they never
-   * carry status. */
-  --ds-tint-lavender: #ece8f7; --ds-tint-lavender-ink: #5b4bb7;
-  --ds-tint-mint: #e3f2ea;     --ds-tint-mint-ink: #2e6b4f;
-  --ds-tint-peach: #fbe6da;    --ds-tint-peach-ink: #9a4a22;
-  --ds-tint-butter: #faf0c8;   --ds-tint-butter-ink: #7a5b00;
-  --ds-tint-sky: #e1ecf8;      --ds-tint-sky-ink: #2d5a8c;
-  --ds-tint-rose: #f8e3e6;     --ds-tint-rose-ink: #9b3446;
+  /* Letter health: green 85 and above, amber 70 to 84, red below 70. */
+  --ds-health-good: #2f8a5f;
+  --ds-health-mid: #c98a12;
+  --ds-health-low: #c2412b;
+  --ds-health-track: #ececef;
+
+  /* Six pastel tints with an ink partner each. Letter-type marks and paper
+   * icons only; they never carry status. */
+  --ds-tint-lavender: #efebfa; --ds-tint-lavender-ink: #5b4bb7;
+  --ds-tint-mint: #e4f2ea;     --ds-tint-mint-ink: #2e6b4f;
+  --ds-tint-peach: #fbe9de;    --ds-tint-peach-ink: #a4532b;
+  --ds-tint-butter: #faf1cf;   --ds-tint-butter-ink: #8a6a00;
+  --ds-tint-sky: #e4eef9;      --ds-tint-sky-ink: #2d5a8c;
+  --ds-tint-rose: #f8e6ea;     --ds-tint-rose-ink: #9b3550;
 
   /* Initial tiles (workspace and matter logos) */
-  --ds-tile: #3e4a4a;
+  --ds-tile: #111110;
   --ds-on-tile: #ffffff;
 
-  /* Avatar palette: the pastel tints plus two stone tones, hash-indexed. */
-  --ds-av-1: var(--ds-tint-butter);
-  --ds-av-2: var(--ds-tint-sky);
-  --ds-av-3: var(--ds-tint-mint);
-  --ds-av-4: var(--ds-tint-lavender);
-  --ds-av-5: var(--ds-tint-rose);
-  --ds-av-6: #e3ebec;
-  --ds-av-7: var(--ds-tint-peach);
-  --ds-av-8: #ebe8e1;
-  --ds-av-fg: #3b3a37;
+  /* Avatar palette: soft cool tones, each with its own ink, hash-indexed. */
+  --ds-av-1: #e9eef6; --ds-av-1-fg: #29436b;
+  --ds-av-2: #f6ebef; --ds-av-2-fg: #7a2f4b;
+  --ds-av-3: #f3ece2; --ds-av-3-fg: #6b4a1f;
+  --ds-av-4: var(--ds-tint-lavender); --ds-av-4-fg: var(--ds-tint-lavender-ink);
+  --ds-av-5: var(--ds-tint-mint); --ds-av-5-fg: var(--ds-tint-mint-ink);
+  --ds-av-6: #eef0f3; --ds-av-6-fg: #3b3a37;
+  --ds-av-7: var(--ds-tint-sky); --ds-av-7-fg: var(--ds-tint-sky-ink);
+  --ds-av-8: var(--ds-tint-peach); --ds-av-8-fg: var(--ds-tint-peach-ink);
+  --ds-av-fg: #2b2a28;
 
-  /* Shadows, radii, gradients */
-  --ds-shadow-s: 0 1px 2px rgba(20, 20, 19, 0.06);
-  --ds-shadow-m: 0 1px 2px rgba(20, 20, 19, 0.05), 0 8px 24px -8px rgba(20, 20, 19, 0.14);
-  --ds-shadow-l: 0 2px 4px rgba(20, 20, 19, 0.06), 0 24px 48px -16px rgba(20, 20, 19, 0.22);
-  --ds-mist: radial-gradient(120% 140% at 70% 0%, #dfe7e8 0%, #e9eeec 35%, #f3f4f1 70%, #ffffff 100%);
-  --ds-r-s: 6px;
-  --ds-r-m: 10px;
-  --ds-r-l: 14px;
-  --ds-r-xl: 18px;
+  /* Shadows (soft, only on floating things), radii, gradients */
+  --ds-shadow-s: 0 1px 2px rgba(17, 17, 16, 0.05);
+  --ds-shadow-thumb: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --ds-shadow-m: 0 1px 2px rgba(17, 17, 16, 0.04), 0 14px 34px -16px rgba(17, 17, 16, 0.22);
+  --ds-shadow-l: 0 2px 4px rgba(17, 17, 16, 0.04), 0 16px 40px -12px rgba(17, 17, 16, 0.22);
+  --ds-shadow-xl: 0 24px 64px -20px rgba(17, 17, 16, 0.35);
+  --ds-shadow-ask: 0 1px 2px rgba(17, 17, 16, 0.04), 0 10px 30px -14px rgba(17, 17, 16, 0.12);
+  --ds-shadow-paper: 0 0 0 1px rgba(17, 17, 16, 0.05), 0 2px 4px rgba(17, 17, 16, 0.04), 0 18px 40px -18px rgba(17, 17, 16, 0.18);
+  /* The header band's soft mist wash (design/hifi/base.css .band). */
+  --ds-mist: radial-gradient(120% 140% at 78% -10%, #e1e7f0 0%, #f1f4f8 40%, #ffffff 75%);
+  --ds-mist-phone: radial-gradient(130% 120% at 85% -10%, #e1e7f0 0%, #f1f4f8 45%, #ffffff 80%);
+  /* Corners: 7 pills and tags, 9 buttons and fields, 12 menus and toasts,
+   * 16 cards and panels. */
+  --ds-r-s: 7px;
+  --ds-r-m: 9px;
+  --ds-r-l: 12px;
+  --ds-r-xl: 16px;
+
+  /* Motion: quiet everywhere, felt when something lands. */
+  --ds-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ds-dur-quiet: 120ms;
+  --ds-dur-open: 180ms;
 }
 
 @theme inline {
@@ -201,20 +261,20 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  /* Shadow scale — subtle and warm */
-  --shadow-2xs: 0 1px 0 rgba(20, 20, 19, 0.03);
-  --shadow-xs: 0 1px 2px rgba(20, 20, 19, 0.06);
-  --shadow-sm: 0 1px 2px rgba(20, 20, 19, 0.06);
-  --shadow-md: 0 1px 2px rgba(20, 20, 19, 0.05), 0 8px 24px -8px rgba(20, 20, 19, 0.14);
-  --shadow-lg: 0 2px 4px rgba(20, 20, 19, 0.06), 0 24px 48px -16px rgba(20, 20, 19, 0.22);
-  --shadow-xl: 0 2px 4px rgba(20, 20, 19, 0.08), 0 32px 64px -20px rgba(20, 20, 19, 0.26);
+  /* Shadow scale: soft, cool, only on floating things */
+  --shadow-2xs: 0 1px 0 rgba(17, 17, 16, 0.03);
+  --shadow-xs: 0 1px 2px rgba(17, 17, 16, 0.05);
+  --shadow-sm: 0 1px 2px rgba(17, 17, 16, 0.05);
+  --shadow-md: 0 1px 2px rgba(17, 17, 16, 0.04), 0 14px 34px -16px rgba(17, 17, 16, 0.22);
+  --shadow-lg: 0 2px 4px rgba(17, 17, 16, 0.04), 0 16px 40px -12px rgba(17, 17, 16, 0.22);
+  --shadow-xl: 0 24px 64px -20px rgba(17, 17, 16, 0.35);
 
-  --font-serif: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  /* Facts and numbers: dates, counts, scores, reference numbers. */
+  --font-serif: "Newsreader Variable", "Newsreader", Georgia, serif;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Code only. Facts and numbers use Inter with tabular figures (ds-mono). */
   --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  /* Page titles and big numbers only (see the ds-title utility). */
-  --font-title: "Source Serif 4 Variable", Charter, Georgia, serif;
+  /* Page titles, card headings and big numbers (see the ds-title utility). */
+  --font-title: "Newsreader Variable", "Newsreader", Georgia, serif;
   --font-heading: var(--font-sans);
   /* Display serif reserved for the brand wordmark. High-contrast transitional
    * serif that pairs with the BrandMark glyph in the lockup. */
@@ -248,23 +308,30 @@
   }
   body {
     background: var(--background);
-    color: var(--foreground);
+    color: var(--ds-body);
     font-family: var(--font-sans);
+    font-size: 14.5px;
+    letter-spacing: -0.006em;
+    font-feature-settings: "cv11", "ss03";
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    @apply bg-background text-foreground;
+    @apply bg-background;
   }
 
-  /* Display typography — Source Serif 4 for the marquee headlines, geometric
-   * sans for everything else. Monochrome with very tight tracking, matching
-   * the reference (Compliance Insights / Master Services screens). */
+  /* Newsreader for the letter, page titles and card headings; Inter for
+   * everything else. */
   .font-serif {
-    font-family: "Source Serif 4 Variable", "Source Serif Pro", Charter, Georgia, serif;
-    font-weight: 600;
+    font-family: var(--font-serif);
     letter-spacing: -0.012em;
   }
   h1, h2, h3 {
     letter-spacing: -0.018em;
+  }
+
+  /* One focus ring everywhere: a white gap and a soft blue ring (kit.html). */
+  :where(a, button, [role="button"], [role="tab"], [role="menuitem"], [role="option"], summary):focus-visible {
+    outline: none;
+    box-shadow: var(--ds-focus-ring);
   }
 
   /* Tailwind v4 dropped the legacy default `cursor: pointer` on
@@ -398,26 +465,25 @@
     background: var(--ds-red-fg);
   }
 
-  /* Cards: subtle, warm shadow rather than the default Tailwind stack */
+  /* Cards sit flat with a hairline; shadows are only for floating things. */
   [data-slot="card"] {
-    box-shadow: var(--shadow-2xs);
-    transition: box-shadow 200ms ease, border-color 200ms ease;
-  }
-  [data-slot="card"]:hover {
-    box-shadow: var(--shadow-xs);
+    box-shadow: none;
   }
 
-  /* Popover / dropdown / dialog: a touch more elevation */
+  /* Menus and popovers share one shadow; dialogs and sheets a deeper one. */
   [data-slot="popover-content"],
   [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"] {
+    box-shadow: var(--ds-shadow-l) !important;
+  }
   [data-slot="dialog-content"],
   [data-slot="sheet-content"] {
-    box-shadow: var(--shadow-lg) !important;
+    box-shadow: var(--ds-shadow-xl) !important;
   }
 
 }
 
-/* Letter "page" surface — a4-ish, cream paper, ink type */
+/* Letter "page" surface: white A4-ish paper, Newsreader, ink type */
 .letter-page {
   background: var(--letter-paper);
   color: var(--letter-ink);
@@ -425,9 +491,9 @@
   font-size: 11pt;
   line-height: 1.55;
   padding: 4.5rem 4rem;
-  border: 1px solid var(--letter-rule);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md), 0 24px 64px -32px rgba(15, 23, 42, 0.12);
+  border: 0;
+  border-radius: 3px;
+  box-shadow: var(--ds-shadow-paper);
 }
 .letter-page h1, .letter-page h2, .letter-page h3 {
   font-family: var(--font-serif);
@@ -584,12 +650,109 @@
  * -------------------------------------------------------------------------*/
 @utility ds-title {
   font-family: var(--font-title);
-  font-weight: 300;
-  letter-spacing: -0.02em;
+  font-weight: 400;
+  letter-spacing: -0.022em;
   color: var(--ds-ink);
   font-optical-sizing: auto;
 }
+/* Facts and numbers: dates, counts, scores. Inter with tabular figures, so
+ * columns line up without the look of code. */
 @utility ds-mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
+}
+/* Serif card and section heading (22px in the mocks; size set at the call). */
+@utility ds-heading {
+  font-family: var(--font-title);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--ds-ink);
+}
+@utility ds-focus {
+  outline: none;
+  box-shadow: var(--ds-focus-ring);
+}
+
+/* ---------------------------------------------------------------------------
+ * Motion (letter-live.html). Quiet: hover and press shade, menus fade.
+ * Felt: a tick draws, a number counts up. Deep, only on send: the seal draws
+ * onto the letter and the page glows once. No bounce. Reduced motion shows
+ * the end state straight away.
+ * -------------------------------------------------------------------------*/
+@keyframes ds-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes ds-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ds-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ds-glow {
+  0% {
+    box-shadow: var(--ds-shadow-paper), 0 0 0 0 rgba(47, 138, 95, 0);
+  }
+  35% {
+    box-shadow: var(--ds-shadow-paper), 0 0 0 6px rgba(47, 138, 95, 0.12);
+  }
+  100% {
+    box-shadow: var(--ds-shadow-paper), 0 0 0 0 rgba(47, 138, 95, 0);
+  }
+}
+.ds-seal .ds-seal-ring {
+  stroke-dasharray: 277;
+  stroke-dashoffset: 277;
+}
+.ds-seal .ds-seal-tick {
+  stroke-dasharray: 46;
+  stroke-dashoffset: 46;
+}
+.ds-seal[data-drawn="true"] .ds-seal-ring,
+.ds-seal[data-drawn="true"] .ds-seal-tick {
+  stroke-dashoffset: 0;
+}
+.ds-seal[data-animate="true"] .ds-seal-ring {
+  animation: ds-draw 0.8s var(--ds-ease) forwards;
+}
+.ds-seal[data-animate="true"] .ds-seal-tick {
+  animation: ds-draw 0.4s ease-out 0.6s forwards;
+}
+.ds-seal[data-animate="true"] .ds-seal-label {
+  opacity: 0;
+  animation: ds-fade-in 0.4s ease 0.9s forwards;
+}
+.ds-glow-once {
+  animation: ds-glow 1.6s ease-out 1;
+}
+.ds-rise-in {
+  animation: ds-rise-in 0.4s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-seal .ds-seal-ring,
+  .ds-seal .ds-seal-tick {
+    stroke-dashoffset: 0 !important;
+    animation: none !important;
+  }
+  .ds-seal .ds-seal-label {
+    opacity: 1 !important;
+    animation: none !important;
+  }
+  .ds-glow-once,
+  .ds-rise-in {
+    animation: none !important;
+  }
 }

@@ -1,5 +1,5 @@
 /* ============================================================================
- * Radix Themes, neutralised to the DRAFTHR stone palette.
+ * Radix Themes, neutralised to the DRAFTHR cool grey palette.
  *
  * Imported AFTER @radix-ui/themes/styles.css (see src/main.tsx) so equal
  * specificity selectors here win. Radix still wraps the app and ~30 files use
@@ -9,22 +9,22 @@
  * ==========================================================================*/
 
 .radix-themes {
-  /* Fonts: Geist for UI, Geist Mono for code, Source Serif for em/quote. */
+  /* Fonts: Inter for UI, Geist Mono for code, Newsreader for em/quote. */
   --default-font-family: var(--font-sans);
   --heading-font-family: var(--font-sans);
   --strong-font-family: var(--font-sans);
   --code-font-family: var(--font-mono);
   --em-font-family: var(--font-serif);
   --quote-font-family: var(--font-serif);
-  /* Harvey sets headings and strong text at 600, not 700. */
+  /* The design sets headings and strong text at 600, not 700. */
   --font-weight-bold: 600;
 
-  /* Radii: 6 to 10px on controls and cards, like the prototype. */
-  --radius-1: 4px;
-  --radius-2: 6px;
-  --radius-3: 8px;
-  --radius-4: 10px;
-  --radius-5: 14px;
+  /* Radii: 7 pills, 9 controls, 12 menus, 16 cards (kit.html). */
+  --radius-1: 5px;
+  --radius-2: 7px;
+  --radius-3: 9px;
+  --radius-4: 12px;
+  --radius-5: 16px;
   --radius-6: 18px;
 
   /* Surfaces */
@@ -33,13 +33,14 @@
   --color-panel-translucent: var(--ds-surface);
   --color-surface: var(--ds-surface);
   --focus-8: var(--ds-focus);
+  --cursor-button: pointer;
 
   color: var(--ds-ink);
 }
 
-/* Stone gray scale. Radix: 1-2 backgrounds, 3-5 element fills, 6-8 borders,
+/* Cool gray scale. Radix: 1-2 backgrounds, 3-5 element fills, 6-8 borders,
  * 9-10 solids, 11 low-contrast text, 12 high-contrast text. The alpha steps
- * reuse the solid stone values (they sit on white or stone panels). */
+ * reuse the solid values (they sit on white or soft grey panels). */
 .radix-themes,
 .radix-themes:where([data-gray-color]) {
   --gray-1: var(--ds-surface);
@@ -84,12 +85,12 @@
   --accent-track: var(--ds-ink);
 }
 
-/* Secondary buttons in the app accent read as Harvey's quiet buttons: ink
+/* Secondary buttons in the app accent read as the design's quiet buttons: ink
  * text on a white panel with a hairline, or on a soft chip. */
 .rt-BaseButton:is(:not([data-accent-color]), [data-accent-color='gray']):where(.rt-variant-outline, .rt-variant-surface) {
   color: var(--ds-ink);
   background-color: var(--ds-surface);
-  box-shadow: inset 0 0 0 1px var(--ds-line-strong);
+  box-shadow: inset 0 0 0 1px var(--ds-line);
 }
 .rt-BaseButton:is(:not([data-accent-color]), [data-accent-color='gray']):where(.rt-variant-outline, .rt-variant-surface):where(:hover) {
   background-color: var(--ds-surface-2);
@@ -114,9 +115,17 @@
   --card-background-color: var(--ds-surface);
 }
 
-/* Large Radix headings are page titles: Source Serif 4 light. */
+/* Large Radix headings are page titles: Newsreader regular. */
 .rt-Heading:where(.rt-r-size-7, .rt-r-size-8, .rt-r-size-9) {
   font-family: var(--font-title);
-  font-weight: 300;
-  letter-spacing: -0.02em;
+  font-weight: 400;
+  letter-spacing: -0.022em;
+}
+
+/* Press: one shade darker, nothing moves. */
+.rt-BaseButton:where(.rt-variant-solid):where(:active:not([data-disabled])) {
+  background-color: var(--ds-accent-press);
+}
+.rt-BaseButton:is(:not([data-accent-color]), [data-accent-color='gray']):where(.rt-variant-outline, .rt-variant-surface, .rt-variant-soft, .rt-variant-ghost):where(:active:not([data-disabled])) {
+  background-color: var(--ds-surface-3);
 }

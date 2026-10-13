@@ -16,7 +16,7 @@ import "./styles/globals.css";
 // Radix Themes CSS must come AFTER ./styles/globals.css so Tailwind's preflight
 // doesn't strip Radix component backgrounds. (See RADIX-THEMES-MIGRATION.md.)
 import "@radix-ui/themes/styles.css";
-// Stone palette, Geist and radii for Radix Themes. Must follow its styles.
+// Cool grey palette, Inter and radii for Radix Themes. Must follow its styles.
 import "./styles/radix-overrides.css";
 
 bootstrapTheme();
@@ -49,18 +49,20 @@ createRoot(document.getElementById("root")!).render(
           appearance="inherit"
         >
           <App />
-          {/* Global toast surface — top-right, theme-aware, swipe-dismiss.
+          {/* Global toast surface — top-right, light, swipe to dismiss.
            * Used for accept/reject pending, regen done, comment resolved,
            * export complete, etc. Single mount keeps the stack consistent. */}
           <Toaster
             position="top-right"
-            theme="system"
+            theme="light"
             richColors
             closeButton
             toastOptions={{
               classNames: {
                 toast:
-                  "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] shadow-lg",
+                  "rounded-[var(--ds-r-l)]! border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[14px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)]",
+                description: "text-[13px] text-[var(--ds-muted)]",
+                actionButton: "rounded-[7px]! bg-[var(--ds-accent)]! text-[var(--ds-on-accent)]! font-medium!",
               },
             }}
           />

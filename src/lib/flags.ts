@@ -15,14 +15,18 @@
  * don't want hot updates to flip rendering mid-edit.
  */
 
-type FlagKey = "pixelPerfectEdit";
+export type FlagKey = "pixelPerfectEdit" | "trustedReviewLinks" | "emailLetters";
 
 const ENV_KEY: Record<FlagKey, string> = {
   pixelPerfectEdit: "VITE_FEATURE_PIXEL_PERFECT_EDIT",
+  trustedReviewLinks: "VITE_FEATURE_TRUSTED_REVIEW_LINKS",
+  emailLetters: "VITE_FEATURE_EMAIL_LETTERS",
 };
 
 const STORAGE_KEY: Record<FlagKey, string> = {
   pixelPerfectEdit: "drafthr.flag.pixel-perfect-edit",
+  trustedReviewLinks: "drafthr.flag.trusted-review-links",
+  emailLetters: "drafthr.flag.email-letters",
 };
 
 /**
@@ -32,9 +36,17 @@ const STORAGE_KEY: Record<FlagKey, string> = {
  * pixelPerfectEdit ships on. Set the localStorage key to "0" to flip
  * back to V1 (legacy single-page editor) without a redeploy if a
  * regression surfaces.
+ *
+ * trustedReviewLinks: "Someone you trust" review option (a secure, expiring
+ * link for the person's own solicitor or HR consultant, no account needed).
+ * emailLetters: "Email it from DraftHR" on the Send step.
+ * Both ship on. The server side behind each must fail softly with a clear
+ * message when it is not ready (for example an unmigrated table).
  */
 const DEFAULTS: Record<FlagKey, boolean> = {
   pixelPerfectEdit: true,
+  trustedReviewLinks: true,
+  emailLetters: true,
 };
 
 function parseBool(raw: string | null | undefined): boolean | null {

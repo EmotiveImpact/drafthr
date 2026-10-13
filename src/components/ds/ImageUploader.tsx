@@ -46,7 +46,7 @@ export function ImageUploader({
       return;
     }
     if (file.size > MAX_BYTES) {
-      alert(`That file is ${(file.size / 1024 / 1024).toFixed(1)} MB — please use one under 1 MB.`);
+      alert(`That file is ${(file.size / 1024 / 1024).toFixed(1)} MB. Please use one under 1 MB.`);
       return;
     }
     const reader = new FileReader();

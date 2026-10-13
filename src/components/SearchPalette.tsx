@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Command,
   CommandDialog,
@@ -15,6 +15,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
 import { briefTitleFor } from "@/lib/letters/display";
+import { resetTour } from "@/lib/onboarding";
 import {
   History,
   PlusCircle,
@@ -24,11 +25,73 @@ import {
   FileDown,
   Activity as ActivityIcon,
   Bell,
-  LayoutDashboard,
+  House,
   ScrollText,
   FileText,
+  Files,
+  Folder,
+  Users,
+  LibraryBig,
+  Scale,
+  Inbox,
+  ChartColumn,
+  ClipboardCheck,
+  Layers,
+  UserCog,
+  Compass,
   MessageSquare,
 } from "lucide-react";
+
+type PageLink = { href: string; label: string; Icon: typeof House; keywords: string[] };
+
+/** Every page in the app frame for the current role, so each stays reachable. */
+function pagesFor(role: "employer" | "employee" | null | undefined, consultant: boolean): PageLink[] {
+  const shared: PageLink[] = [
+    { href: "/calendar", label: "Calendar", Icon: CalendarDays, keywords: ["deadlines"] },
+    { href: "/notifications", label: "Notifications", Icon: Bell, keywords: ["alerts", "deadlines"] },
+    { href: "/activity", label: "Activity", Icon: ActivityIcon, keywords: ["audit", "history"] },
+    { href: "/exported", label: "Exported", Icon: FileDown, keywords: ["sent", "downloads"] },
+    { href: "/settings", label: "Settings and profile", Icon: Settings, keywords: ["profile", "role", "account"] },
+    { href: "/privacy", label: "Privacy and data", Icon: ShieldCheck, keywords: ["data"] },
+    { href: "/terms", label: "Terms of service", Icon: FileText, keywords: ["legal"] },
+    { href: "/pick-role", label: "Role picker", Icon: ScrollText, keywords: ["role", "switch"] },
+  ];
+  if (consultant) {
+    return [
+      { href: "/c", label: "Home", Icon: House, keywords: ["dashboard", "requests"] },
+      { href: "/c/profile", label: "My profile", Icon: UserCog, keywords: ["card", "marketplace"] },
+      { href: "/consultants", label: "Marketplace", Icon: Scale, keywords: ["experts"] },
+      ...shared,
+    ];
+  }
+  if (role === "employer") {
+    return [
+      { href: "/hr", label: "Home", Icon: House, keywords: ["dashboard"] },
+      { href: "/hr/new", label: "New letter", Icon: PlusCircle, keywords: ["new", "browse"] },
+      { href: "/letters", label: "Letters", Icon: Files, keywords: ["drafts", "all letters"] },
+      { href: "/matters", label: "Matters", Icon: Folder, keywords: ["cases"] },
+      { href: "/employees", label: "Employees", Icon: Users, keywords: ["people", "directory"] },
+      { href: "/hr/new", label: "Templates", Icon: LibraryBig, keywords: ["letter types"] },
+      { href: "/consultants", label: "Experts", Icon: Scale, keywords: ["marketplace", "review"] },
+      { href: "/bookings", label: "My bookings", Icon: Inbox, keywords: ["experts", "reviews"] },
+      { href: "/reports", label: "Reports", Icon: ChartColumn, keywords: ["compliance", "risk"] },
+      { href: "/approvals", label: "Approvals", Icon: ClipboardCheck, keywords: ["sign off", "review"] },
+      { href: "/bulk", label: "Bulk letters", Icon: Layers, keywords: ["csv", "batch", "bulk operations"] },
+      ...shared,
+    ].filter((p, i, all) => all.findIndex((q) => q.href === p.href && q.label === p.label) === i);
+  }
+  if (role === "employee") {
+    return [
+      { href: "/me", label: "Home", Icon: House, keywords: ["dashboard"] },
+      { href: "/me/new", label: "New letter", Icon: PlusCircle, keywords: ["new", "browse"] },
+      { href: "/letters", label: "Letters", Icon: Files, keywords: ["drafts"] },
+      { href: "/matters", label: "Matters", Icon: Folder, keywords: ["cases"] },
+      { href: "/me/new", label: "Templates", Icon: LibraryBig, keywords: ["letter types"] },
+      ...shared,
+    ];
+  }
+  return shared;
+}
 
 /**
  * Cmd+K command palette. Searches across:
@@ -40,6 +103,8 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const role = useProfileStore((s) => s.profile.role);
+  const loc = useLocation();
+  const consultant = loc.pathname === "/c" || loc.pathname.startsWith("/c/");
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -151,21 +216,23 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
 
   const prefix = role === "employer" ? "/hr" : role === "employee" ? "/me" : "";
 
+  const pages = useMemo(() => pagesFor(role, consultant), [role, consultant]);
+
   const go = (href: string) => {
     onOpenChange(false);
     nav(href);
   };
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find a draft, letter type, or page">
+    <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find a letter, letter type or page">
       <Command>
         <CommandInput
-          placeholder="Search drafts, letter types, or pages…"
+          placeholder="Search letters, letter types or pages"
           value={query}
           onValueChange={setQuery}
         />
         <CommandList>
-        <CommandEmpty>No results for "{query}".</CommandEmpty>
+        <CommandEmpty>Nothing matches "{query}".</CommandEmpty>
 
         {sectionMatches.length > 0 && (
           <>
@@ -184,7 +251,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                     });
                   }}
                 >
-                  <FileText className="size-4" />
+                  <FileText />
                   <div className="flex flex-col min-w-0">
                     <span className="truncate text-[13px]">
                       {s.draftTitle}: {s.sectionTitle}
@@ -215,7 +282,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                     });
                   }}
                 >
-                  <MessageSquare className="size-4" />
+                  <MessageSquare />
                   <div className="flex flex-col min-w-0">
                     <span className="truncate text-[13px]">
                       {c.author} on {c.draftTitle}
@@ -231,7 +298,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
 
         {draftRows.length > 0 && (
           <>
-            <CommandGroup heading={`Drafts (${draftRows.length})`}>
+            <CommandGroup heading={`Letters (${draftRows.length})`}>
               {draftRows.slice(0, 8).map((d) => (
                 <CommandItem
                   key={d.id}
@@ -239,10 +306,10 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                   keywords={[d.keywords]}
                   onSelect={() => go(`/editor/${d.id}`)}
                 >
-                  <History className="size-4" />
+                  <History />
                   <span className="truncate">{d.title}</span>
                   {d.recipient && (
-                    <span className="text-[12px] text-[var(--ds-muted)] truncate">{d.recipient}</span>
+                    <span className="truncate text-[12.5px] text-[var(--ds-muted)]">{d.recipient}</span>
                   )}
                   <CommandShortcut>{d.jurisdiction}</CommandShortcut>
                 </CommandItem>
@@ -262,9 +329,9 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
                   keywords={[l.keywords]}
                   onSelect={() => go(`${prefix}/new/${l.id}`)}
                 >
-                  <PlusCircle className="size-4" />
+                  <PlusCircle />
                   <span className="truncate">{l.shortTitle}</span>
-                  <span className="text-[12px] text-[var(--ds-muted)] truncate">{l.title}</span>
+                  <span className="truncate text-[12.5px] text-[var(--ds-muted)]">{l.title}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -273,38 +340,30 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
         )}
 
         <CommandGroup heading="Pages">
-          {prefix && (
-            <>
-              <CommandItem onSelect={() => go(prefix)} keywords={["dashboard", "home"]}>
-                <LayoutDashboard className="size-4" /> Home
-              </CommandItem>
-              <CommandItem onSelect={() => go(`${prefix}/new`)} keywords={["new", "browse", "letters"]}>
-                <PlusCircle className="size-4" /> New letter
-              </CommandItem>
-            </>
-          )}
-          <CommandItem onSelect={() => go("/calendar")} keywords={["deadlines", "calendar"]}>
-            <CalendarDays className="size-4" /> Calendar
-          </CommandItem>
-          <CommandItem onSelect={() => go("/exported")} keywords={["sent", "exported"]}>
-            <FileDown className="size-4" /> Exported
-          </CommandItem>
-          <CommandItem onSelect={() => go("/activity")} keywords={["activity", "audit"]}>
-            <ActivityIcon className="size-4" /> Activity
-          </CommandItem>
-          <CommandItem onSelect={() => go("/notifications")} keywords={["notifications", "alerts", "deadlines"]}>
-            <Bell className="size-4" /> Notifications
-          </CommandItem>
-          <CommandItem onSelect={() => go("/settings")} keywords={["settings", "profile", "role"]}>
-            <Settings className="size-4" /> Settings & profile
-          </CommandItem>
-          <CommandItem onSelect={() => go("/privacy")} keywords={["privacy", "data"]}>
-            <ShieldCheck className="size-4" /> Privacy & data
-          </CommandItem>
-          <CommandItem onSelect={() => go("/pick-role")} keywords={["role", "switch", "picker"]}>
-            <ScrollText className="size-4" /> Role picker
-          </CommandItem>
+          {pages.map((pg) => (
+            <CommandItem key={`${pg.href}-${pg.label}`} value={`page-${pg.label}`} onSelect={() => go(pg.href)} keywords={[pg.label, ...pg.keywords]}>
+              <pg.Icon /> {pg.label}
+            </CommandItem>
+          ))}
         </CommandGroup>
+        {prefix && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Help">
+              <CommandItem
+                value="help-tour"
+                keywords={["help", "tour", "guide", "onboarding"]}
+                onSelect={() => {
+                  onOpenChange(false);
+                  resetTour();
+                  window.location.assign(prefix);
+                }}
+              >
+                <Compass /> Replay the guided tour
+              </CommandItem>
+            </CommandGroup>
+          </>
+        )}
         </CommandList>
       </Command>
     </CommandDialog>

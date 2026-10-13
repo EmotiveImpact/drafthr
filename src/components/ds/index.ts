@@ -1,7 +1,9 @@
 export { BrandMark } from "./BrandMark";
 export { Wordmark } from "./Wordmark";
-export { Avatar, AvatarStack, avatarColor, avatarInitials, type AvatarSize } from "./Avatar";
-export { PageHeader, PillTabs, type Crumb, type PageTab } from "./PageHeader";
+export { Avatar, AvatarStack, avatarColor, avatarInk, avatarInitials, type AvatarSize } from "./Avatar";
+export { PageHeader, PillTabs, UnderlineTabs, type Crumb, type PageTab } from "./PageHeader";
+export { Pill, Count, Tag, type PillTone } from "./Pill";
+export { HealthRing, healthTone, type HealthTone } from "./HealthRing";
 export { StatusDot, type StatusTone } from "./StatusDot";
 export { DataTable, type Column } from "./DataTable";
 export { ImageUploader } from "./ImageUploader";
