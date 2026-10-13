@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Children, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpDown, Check, ChevronDown, Eye, FileText, Info, Plus, SearchX, Store } from "lucide-react";
 import { toast } from "sonner";
@@ -164,11 +164,17 @@ export function ConsultantsIndex() {
   );
 
   /* ─── Filters ────────────────────────────────────────────────── */
+  // The letter's own specialties, in the order the letter wants them.
   const arrival = useMemo(() => {
     if (!letterMode) return [] as string[];
-    const wanted = specialtiesForLetter(forDraft).map((s) => s.toLowerCase());
-    return tags.filter((t) => wanted.includes(t.toLowerCase()));
+    return specialtiesForLetter(forDraft)
+      .map((w) => tags.find((t) => t.toLowerCase() === w.toLowerCase()))
+      .filter((t): t is string => !!t);
   }, [letterMode, forDraft, tags]);
+  // Choosing for a letter, its specialties lead the row right after "All"
+  // (mk-market), so the preselected chips sit together and stay in view on
+  // a phone's sideways row. The order does not change as chips are toggled.
+  const rowTags = useMemo(() => [...arrival, ...tags.filter((t) => !arrival.includes(t))], [arrival, tags]);
   const [chosenSpecialties, setChosenSpecialties] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
   const [price, setPrice] = useState<PriceBand>("any");
@@ -340,7 +346,9 @@ export function ConsultantsIndex() {
               )}
               <div className="flex flex-col gap-2.5 rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] py-2.5 pl-3.5 pr-3 sm:flex-row sm:items-center sm:gap-3">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-                  <span className="text-[13px] text-[var(--ds-muted)]">Booking a review for</span>
+                  <span className="text-[13px] text-[var(--ds-muted)]">
+                    {contextFacts?.sent ? "Booking appeal help for" : "Booking a review for"}
+                  </span>
                   {contextFacts ? (
                     <span className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-[8px] bg-[var(--ds-surface-2)] px-2.5 py-[5px] text-[13px] font-medium text-[var(--ds-ink)]">
                       <FileText className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
@@ -377,7 +385,7 @@ export function ConsultantsIndex() {
             <div className={cn("flex flex-col gap-2.5", letterMode || !isConsultant ? "mt-[18px]" : "mt-1")}>
               <FilterRow label="Specialty" fill>
                 <SpecialtyPills
-                  tags={tags}
+                  tags={rowTags}
                   chosen={specialties}
                   onAll={() => setChosenSpecialties([])}
                   onToggle={toggleSpecialty}
@@ -385,7 +393,16 @@ export function ConsultantsIndex() {
                   onMoreOpen={setMoreOpen}
                 />
               </FilterRow>
-              <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:gap-[22px]">
+              {/* Price with Turnaround (or Back by) beside it once the column
+                  has room for both on one line, stacked before that. */}
+              <div
+                className={cn(
+                  "flex flex-col gap-2.5",
+                  letterMode
+                    ? "@[760px]:flex-row @[760px]:items-center @[760px]:gap-[22px]"
+                    : "@[1060px]:flex-row @[1060px]:items-center @[1060px]:gap-[22px]",
+                )}
+              >
                 <FilterRow label="Price">
                   {PRICE_OPTIONS.map((o) => (
                     <FilterPill key={o.id} on={price === o.id} onClick={() => setPrice(o.id)}>
@@ -394,7 +411,7 @@ export function ConsultantsIndex() {
                   ))}
                 </FilterRow>
                 {letterMode ? (
-                  <FilterRow label="Back by" narrow>
+                  <FilterRow label="Back by" inlineAt="mid">
                     <FilterPill on={!backBy || dueMs == null} onClick={() => setBackBy(false)}>
                       Any
                     </FilterPill>
@@ -405,7 +422,7 @@ export function ConsultantsIndex() {
                     )}
                   </FilterRow>
                 ) : (
-                  <FilterRow label="Turnaround" narrow>
+                  <FilterRow label="Turnaround" inlineAt="wide">
                     {TURN_OPTIONS.map((o) => (
                       <FilterPill key={o.id} on={turnaround === o.id} onClick={() => setTurnaround(o.id)}>
                         {o.label}
@@ -538,11 +555,14 @@ export function ConsultantsIndex() {
   );
 }
 
-/** One column on phones, two from about 640px windows (a 500px content
- *  column, also with the 268px sidebar beside it at 900px), three at desktop
- *  widths (a 1440 window gives about 1076px). Three is the most, as in the
- *  mock. */
-const GRID = "grid grid-cols-1 gap-4 @[500px]:grid-cols-2 @[960px]:grid-cols-3";
+/** One column on phones, two from about 640px windows up to desktop, three
+ *  at desktop widths (a 1440 window gives about 1076px). Three is the most,
+ *  as in the mock. The two-column step is the content column, not the
+ *  window: with the 268px sidebar on from 768 the column is only about 400
+ *  to 600px wide, so two columns start at 400px and the cards tighten their
+ *  footer below about 250px (ConsultantCard). A phone's column (about 360px)
+ *  stays one. */
+const GRID = "grid grid-cols-1 gap-4 @[400px]:grid-cols-2 @[960px]:grid-cols-3";
 
 const PILL =
   "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13px] text-[var(--ds-body)] transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]";
@@ -714,36 +734,106 @@ function SpecialtyPills({
 }
 
 /** One labelled filter group: label on the left (above on phones), pills
- *  that wrap on desktop and scroll sideways in their own row on phones. */
+ *  that wrap on desktop and scroll sideways in their own row on phones.
+ *
+ *  Every row's pills start at the same 76px column while the rows are
+ *  stacked; only once Turnaround or Back by sits beside Price on one line
+ *  ("inlineAt", the same container widths as the wrapper above) does that
+ *  label shrink to its words. When
+ *  a short row of pills (Price, Turnaround, Reviewer) cannot fit on one line
+ *  beside the sidebar, it breaks evenly into two lines of two rather than
+ *  leaving one pill alone on the second line. The specialty row ("fill")
+ *  fits its own line with "+ N more" instead. */
+const INLINE_LABEL = {
+  mid: "@[760px]:mr-1 @[760px]:w-auto",
+  wide: "@[1060px]:mr-1 @[1060px]:w-auto",
+} as const;
+
 function FilterRow({
   label,
-  narrow = false,
+  inlineAt,
   fill = false,
   children,
 }: {
   label: string;
-  narrow?: boolean;
+  /** Sits beside Price from this content width (its label then shrinks). */
+  inlineAt?: keyof typeof INLINE_LABEL;
   /** The pills take the rest of the line (the specialty row measures it). */
   fill?: boolean;
   children: React.ReactNode;
 }) {
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const [split, setSplit] = useState(false);
+  useLayoutEffect(() => {
+    const box = pillsRef.current;
+    if (fill || !box) return;
+    const compute = () => {
+      // Phones scroll the row sideways, so there is no line to fit.
+      if (!window.matchMedia("(min-width: 640px)").matches) {
+        setSplit(false);
+        return;
+      }
+      const row = box.parentElement;
+      // Beside Price on one line there is room by design (see the wrapper).
+      if (row?.parentElement && getComputedStyle(row.parentElement).flexDirection === "row") {
+        setSplit(false);
+        return;
+      }
+      const pills = Array.from(box.querySelectorAll("button"));
+      const GAP = 8;
+      const oneLine = pills.reduce((sum, el) => sum + el.offsetWidth, 0) + GAP * Math.max(0, pills.length - 1);
+      // The room the pills have: the row less its label and gap.
+      const labelEl = row?.firstElementChild as HTMLElement | null;
+      const room = (row?.clientWidth ?? 0) - (labelEl?.offsetWidth ?? 0) - GAP;
+      setSplit(pills.length > 2 && oneLine > room + 0.5);
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    if (box.parentElement) ro.observe(box.parentElement);
+    if (box.parentElement?.parentElement) ro.observe(box.parentElement.parentElement);
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    let live = true;
+    void fonts?.ready.then(() => live && compute());
+    fonts?.addEventListener?.("loadingdone", compute);
+    return () => {
+      live = false;
+      ro.disconnect();
+      fonts?.removeEventListener?.("loadingdone", compute);
+    };
+  }, [fill]);
+
   return (
     <div role="group" aria-label={`Filter by ${label.toLowerCase()}`} className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
       <span
         aria-hidden
-        className={cn("shrink-0 text-[12.5px] text-[var(--ds-subtle)] sm:leading-8", narrow ? "sm:mr-1 sm:w-auto" : "sm:w-[76px]")}
+        className={cn("shrink-0 text-[12.5px] text-[var(--ds-subtle)] sm:w-[76px] sm:leading-8", inlineAt && INLINE_LABEL[inlineAt])}
       >
         {label}
       </span>
       <div
+        ref={pillsRef}
+        data-split={split || undefined}
         className={cn(
           "no-scrollbar -mx-4 flex min-w-0 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0",
           fill && "sm:flex-1",
+          split && "sm:flex-col",
         )}
       >
-        {children}
+        {split ? <SplitPills>{children}</SplitPills> : children}
       </div>
     </div>
+  );
+}
+
+/** The pills in two even lines (the first half, then the rest). */
+function SplitPills({ children }: { children: React.ReactNode }) {
+  const items = Children.toArray(children);
+  const half = Math.ceil(items.length / 2);
+  return (
+    <>
+      <div className="flex gap-2">{items.slice(0, half)}</div>
+      <div className="flex gap-2">{items.slice(half)}</div>
+    </>
   );
 }
 

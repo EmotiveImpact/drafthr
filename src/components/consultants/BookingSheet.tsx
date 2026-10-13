@@ -17,7 +17,7 @@ import {
 import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { LetterPicker } from "@/components/consultants/LetterPicker";
 import { letterMeta, openReviewNote, useLetterFacts } from "@/components/consultants/letters";
-import { NEEDS, bookExpertFromMarketplace, type BookResult } from "@/components/consultants/booking";
+import { APPEAL_NEEDS, NEEDS, bookExpertFromMarketplace, type BookResult } from "@/components/consultants/booking";
 import { useMe } from "@/components/journey/review/actions";
 import { VAT_RATE_CHARGED, bookingTotals, firstNameOf, money, turnaroundWords } from "@/components/consultants/market";
 import { useDraftStore } from "@/lib/store";
@@ -29,6 +29,10 @@ import { cn } from "@/lib/utils";
  * turnaround, the price, when you pay, and a preview of the row that will
  * appear once the expert accepts. Sending creates the booking through the
  * existing flow and puts the letter into Review (booking.ts).
+ *
+ * A letter that has already been sent is locked, so for it the sheet books
+ * help with an appeal instead ("Ask <expert>" from What's next): the expert
+ * reads the letter and advises by message, and the letter stays sent.
  *
  * Only the expert's standard rate exists (profiles have one price and one
  * turnaround), so only Standard shows. No VAT is added at checkout, so the
@@ -80,6 +84,10 @@ export function BookingSheet({
 
   if (!c) return null;
   const first = firstNameOf(c.name) || "The expert";
+  // A sent letter: appeal help, not a review of the letter (SEND-X35).
+  const appeal = !!letter?.sent;
+  const needOptions: readonly string[] = appeal ? APPEAL_NEEDS : NEEDS;
+  const employeeFirst = firstNameOf(letter?.employee ?? "") || "they";
   const symbol = c.currency ?? "£";
   const totals = bookingTotals(c.price);
   const seed = c.profileId || c.name;
@@ -89,7 +97,13 @@ export function BookingSheet({
   const send = async () => {
     if (sending) return;
     setSending(true);
-    const res = await bookExpertFromMarketplace({ consultant: c, draft: draft ?? null, needs, note, asker: me });
+    const res = await bookExpertFromMarketplace({
+      consultant: c,
+      draft: draft ?? null,
+      needs: needs.filter((n) => needOptions.includes(n)),
+      note,
+      asker: me,
+    });
     setSending(false);
     if (!res.ok) {
       toast.error("Couldn't send your booking request. Please try again.");
@@ -108,15 +122,19 @@ export function BookingSheet({
         onOpenChange={(o) => !o && !sending && onClose()}
         onEscapeBlocked={sending}
         returnFocusTo={returnFocusTo}
-        label="Book a review"
-        description={`Book a review with ${c.name}.`}
+        label={appeal ? "Get help with an appeal" : "Book a review"}
+        description={appeal ? `Book ${c.name} to help you prepare for an appeal.` : `Book a review with ${c.name}.`}
         width={540}
         header={
           <div className="flex items-start justify-between gap-4 px-4 pt-[22px] sm:px-[26px]">
             <div className="min-w-0">
-              <h2 className="ds-heading m-0 text-[28px] leading-[1.1] tracking-[-0.02em]">Book a review</h2>
+              <h2 className="ds-heading m-0 text-[28px] leading-[1.1] tracking-[-0.02em]">
+                {appeal ? "Get help with an appeal" : "Book a review"}
+              </h2>
               <p className="m-0 mt-[5px] text-[13.5px] text-[var(--ds-muted)]">
-                They suggest changes in the letter. You decide what to keep.
+                {appeal
+                  ? `${first} helps you prepare. The letter stays as it was sent.`
+                  : "They suggest changes in the letter. You decide what to keep."}
               </p>
             </div>
             <SheetClose outlined />
@@ -184,10 +202,12 @@ export function BookingSheet({
             {letter ? (
               <p className="m-0 mt-[7px] flex items-start gap-1.5 text-[12px] leading-[1.45] text-[var(--ds-subtle)]">
                 <Lock className="mt-[2px] size-3 shrink-0" aria-hidden />
-                {first} can suggest and comment on this letter and the files you share. Editing pauses until it's back.
+                {appeal
+                  ? `This letter has been sent, so it stays locked. ${first} can read it and the files you share, and advises you by message.`
+                  : `${first} can suggest and comment on this letter and the files you share. Editing pauses until it's back.`}
               </p>
             ) : null}
-            {letter?.activeReview && (
+            {letter?.activeReview && !appeal && (
               <p className="m-0 mt-2 flex items-start gap-1.5 rounded-[9px] bg-[var(--ds-amber-soft)] px-3 py-2 text-[12.5px] leading-[1.45] text-[var(--ds-amber-fg)]">
                 <CircleAlert className="mt-[2px] size-3.5 shrink-0" aria-hidden />
                 {openReviewNote(letter.activeReview, "long")}
@@ -198,7 +218,7 @@ export function BookingSheet({
           {/* What do you need? */}
           <Q label="What do you need?">
             <div className="flex flex-wrap gap-2" role="group" aria-label="What do you need?">
-              {NEEDS.map((n) => {
+              {needOptions.map((n) => {
                 const on = needs.includes(n);
                 return (
                   <button
@@ -231,7 +251,11 @@ export function BookingSheet({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               aria-label="What should they look at?"
-              placeholder={`What should ${first} look at? For example: is the appeal section fair, and is anything missing?`}
+              placeholder={
+                appeal
+                  ? `What should ${first} help with? For example: what ${employeeFirst} might appeal on, and how to run the hearing.`
+                  : `What should ${first} look at? For example: is the appeal section fair, and is anything missing?`
+              }
               maxLength={3500}
               rows={2}
               className="mt-[9px] block min-h-16 w-full resize-y rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-[13px] py-[11px] text-[13.5px] leading-[1.5] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:border-[var(--ds-line-strong)] focus:border-[var(--ds-line-hover)] focus:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
@@ -263,7 +287,7 @@ export function BookingSheet({
           {/* Summary */}
           <div className="mt-[17px] rounded-[12px] bg-[var(--ds-surface-2)] px-3.5 py-[11px]">
             <div className="flex justify-between text-[13.5px] leading-5 text-[var(--ds-muted)]">
-              <span>Review fee, standard</span>
+              <span>{appeal ? "Expert fee, standard" : "Review fee, standard"}</span>
               <b className="ds-mono font-medium text-[var(--ds-ink)]">{money(totals.fee, symbol)}</b>
             </div>
             <div className="flex justify-between text-[13.5px] leading-5 text-[var(--ds-muted)]">
@@ -286,7 +310,7 @@ export function BookingSheet({
           {/* What it will look like */}
           <div data-testid="booking-preview" className="mt-4 border-t border-[var(--ds-line-2)] pt-3" aria-hidden>
             <p className="m-0 mb-2 text-[12px] text-[var(--ds-subtle)]">
-              {letter
+              {letter && !appeal
                 ? `Once ${first} accepts, the letter moves to Review and shows here too`
                 : `Once ${first} accepts, it shows in My bookings like this`}
             </p>

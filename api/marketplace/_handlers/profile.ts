@@ -315,7 +315,7 @@ export async function DELETE(req: Request): Promise<Response> {
     .limit(1);
   if (existingBooking) {
     return jsonError(
-      "Cannot delete a profile with existing bookings — contact support to close your account",
+      "You can't delete a profile that has bookings. Contact support to close your account.",
       409,
     );
   }

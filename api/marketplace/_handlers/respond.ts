@@ -220,7 +220,7 @@ export async function POST(req: Request): Promise<Response> {
     )
     .returning();
   if (!next) {
-    return jsonError("Booking already transitioned — please refresh.", 409);
+    return jsonError("This booking has already moved on. Refresh to see where it is now.", 409);
   }
 
   // A booking paid before it was accepted (checkout used to allow it) never

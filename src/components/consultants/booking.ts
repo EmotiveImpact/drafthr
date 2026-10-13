@@ -2,7 +2,8 @@
  * Booking an expert from the sidebar's Experts page (mk-book). Goes through
  * the existing bookings flow (recordBooking, then pushBookingCreate for a
  * server expert, with the letter id mapped to the server's uuid as before),
- * and, when a letter is attached, puts that letter into the Review step
+ * and, when a letter that is not yet sent is attached, puts that letter into
+ * the Review step
  * through reviews.ts, exactly as booking from the letter's reviewer dialog
  * does: an expert review request linked to the booking, with the ask, the
  * due date from the turnaround and the price.
@@ -18,14 +19,34 @@ import { letterTitle } from "@/components/consultants/letters";
 import { useReviewStore } from "@/lib/journey/reviews";
 import { letterSnapshot, sharedEvidence, type Me } from "@/components/journey/review/actions";
 import { createReviewLink } from "@/components/journey/review/trusted-api";
+import { getJourney } from "@/lib/journey/stage";
 import { bookingTotals, planHours } from "./market";
 
 export const NEEDS = ["Legal check", "Tone and fairness", "Matches our policy"] as const;
 export type Need = (typeof NEEDS)[number];
 
-/** The message the expert sees: the chosen checks, then the free text. */
-export function bookingMessage(needs: readonly string[], note: string): string | undefined {
+/** What you can ask for about a letter that has already been sent: help
+ *  with an appeal against it, not changes to it. */
+export const APPEAL_NEEDS = ["Appeal grounds", "The hearing", "Outcome letter"] as const;
+
+/** The first line of an appeal booking's message, so the expert knows the
+ *  letter is final and what the booking is for. */
+export const APPEAL_PURPOSE = "This letter has been sent. I'd like help preparing for an appeal against it.";
+
+/**
+ * True when the letter has been marked as sent. A sent letter is locked:
+ * booking an expert for it is help with an appeal, and does not put it back
+ * into the Review step (SEND-X35).
+ */
+export function isSentLetter(draft: Draft | null | undefined): boolean {
+  return !!draft && getJourney(draft, null).stage === "sent";
+}
+
+/** The message the expert sees: the purpose (appeal help), the chosen
+ *  checks, then the free text. */
+export function bookingMessage(needs: readonly string[], note: string, purpose?: string): string | undefined {
   const parts: string[] = [];
+  if (purpose) parts.push(purpose);
   if (needs.length) parts.push(`What I need: ${needs.join(", ")}.`);
   if (note.trim()) parts.push(note.trim());
   return parts.length ? parts.join("\n\n") : undefined;
@@ -47,7 +68,10 @@ export async function bookExpertFromMarketplace({
   /** The person booking (the review's asker), as from useMe(). */
   asker?: Me;
 }): Promise<BookResult> {
-  const message = bookingMessage(needs, note);
+  // A sent letter is final: the booking is appeal help, carried with the
+  // letter so the expert can read it, and no review request is made.
+  const appeal = isSentLetter(draft);
+  const message = bookingMessage(needs, note, appeal ? APPEAL_PURPOSE : undefined);
   const expectedDeliveryAt = Date.now() + planHours(c.sla) * 3600_000;
   const title = draft ? letterTitle(draft) : undefined;
   const store = useBookingsStore.getState();
@@ -96,7 +120,7 @@ export async function bookExpertFromMarketplace({
   }
 
   let reviewId: string | undefined;
-  if (draft) {
+  if (draft && !appeal) {
     reviewId = useReviewStore.getState().createReview({
       draftId: draft.id,
       kind: "expert",

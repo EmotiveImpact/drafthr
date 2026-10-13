@@ -27,15 +27,25 @@ export type LetterFacts = {
   activeReview: ReviewRequest | null;
 };
 
+/** A warning's level in words, as the warning question offers it. */
+const WARNING_NAMES: Record<string, string> = {
+  verbal: "Verbal warning",
+  written: "First written warning",
+  final_written: "Final written warning",
+};
+
 /**
  * The letter's name as the rest of the app shows it, in sentence case:
  * "Offer letter · Priya Shah" (the short letter name and the employee), not
- * the catalogue's Title Case "Offer of Employment". A name the person gave
- * the letter is kept as they wrote it.
+ * the catalogue's Title Case "Offer of Employment". A warning carries its
+ * level once it is chosen ("Final written warning · Jordan Hale", as in the
+ * mk-* designs), so two warnings for the same person read apart. A name the
+ * person gave the letter is kept as they wrote it.
  */
 export function letterTitle(draft: Draft): string {
   if (hasCustomTitle(draft)) return displayTitleFor(draft);
-  const name = sentenceCaseTitle(briefTitleFor(draft));
+  const level = draft.letterType === "warning" ? String((draft.answers as Record<string, unknown>)?.warningLevel ?? "") : "";
+  const name = WARNING_NAMES[level] ?? sentenceCaseTitle(briefTitleFor(draft));
   const who = recipientNameFor(draft);
   return who ? `${name} · ${who}` : name;
 }

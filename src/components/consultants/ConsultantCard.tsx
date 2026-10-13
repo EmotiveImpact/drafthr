@@ -65,7 +65,9 @@ export function ConsultantCard({
     <article
       data-expert-id={c.profileId}
       className={cn(
-        "flex min-w-0 flex-col overflow-hidden rounded-[16px] border bg-[var(--ds-surface)] transition-colors duration-[120ms]",
+        // A size container: two columns beside the sidebar make the card
+        // about 190 to 250px wide, and its footer then stacks (below).
+        "@container flex min-w-0 flex-col overflow-hidden rounded-[16px] border bg-[var(--ds-surface)] transition-colors duration-[120ms]",
         picked
           ? "border-[var(--ds-ink)] shadow-[inset_0_0_0_1px_var(--ds-ink)]"
           : "border-[var(--ds-line)] hover:border-[var(--ds-line-hover)]",
@@ -82,7 +84,9 @@ export function ConsultantCard({
           ring
           className="absolute left-[18px] top-6 text-[17px]"
         />
-        <AvailabilityBadge pill={pill} />
+        {/* On a narrow card the pill would be cut short beside the avatar,
+            so it moves under the rating as a plain line (below). */}
+        <AvailabilityBadge pill={pill} className="@max-[260px]:hidden" />
       </div>
 
       <div className="min-w-0 flex-1 px-[18px] pt-7">
@@ -120,9 +124,12 @@ export function ConsultantCard({
             <span>No reviews yet</span>
           )}
         </div>
+        <AvailabilityLine pill={pill} className="mt-1.5 hidden @max-[260px]:flex" />
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-[var(--ds-line-2)] py-3 pl-[18px] pr-3.5">
+      {/* Price and turnaround on the left, the action on the right; on a
+          narrow card the action goes under them at full width. */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-[var(--ds-line-2)] py-3 pl-[18px] pr-3.5 @max-[260px]:flex-col @max-[260px]:items-stretch @max-[260px]:gap-y-2.5 @max-[260px]:pr-[18px]">
         <div className="min-w-0">
           <div className="text-[15.5px] font-semibold tracking-[-0.01em] text-[var(--ds-ink)]">
             <span className="ds-mono">
@@ -137,7 +144,7 @@ export function ConsultantCard({
           </div>
         </div>
         {mode === "choose" ? (
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 @max-[260px]:[&>button]:flex-1">
             <button
               ref={profileButtonRef}
               type="button"
@@ -169,7 +176,7 @@ export function ConsultantCard({
             aria-label={`Book a review with ${c.name}`}
             className={cn(
               BTN_OUTLINE,
-              "h-[34px] text-[13.5px] max-sm:h-10",
+              "h-[34px] text-[13.5px] max-sm:h-10 @max-[260px]:w-full",
               inert && "pointer-events-none",
               disabledReason && "cursor-not-allowed",
             )}
@@ -179,6 +186,25 @@ export function ConsultantCard({
         )}
       </div>
     </article>
+  );
+}
+
+/** The availability as a plain line, for cards too narrow for the pill:
+ *  the same words and colours, free to wrap. */
+function AvailabilityLine({ pill, className }: { pill: AvailabilityPill; className?: string }) {
+  return (
+    <p
+      className={cn(
+        "m-0 items-start gap-1.5 text-[12px] font-medium leading-[16px]",
+        pill.tone === "live" && "text-[var(--ds-green-fg)]",
+        pill.tone === "quiet" && "text-[var(--ds-muted)]",
+        (pill.tone === "late" || pill.tone === "pending") && "text-[var(--ds-amber-fg)]",
+        className,
+      )}
+    >
+      {pill.tone === "live" && <span aria-hidden className="mt-[5px] size-1.5 shrink-0 rounded-full bg-[var(--ds-green-solid)]" />}
+      <span className="min-w-0">{pill.label}</span>
+    </p>
   );
 }
 

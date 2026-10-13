@@ -39,7 +39,8 @@ export function BookingThreadPanel({
 }: {
   booking: Booking;
   perspective: "requester" | "consultant";
-  /** The other party: the expert (requester side) or "HR" (consultant side). */
+  /** The other party: the expert (requester side) or the HR person who
+   *  booked, "HR" when the server did not name them (consultant side). */
   otherName: string;
   otherRole?: string;
   otherPhotoUrl?: string;
@@ -229,7 +230,9 @@ function threadItems(b: Booking, perspective: "requester" | "consultant"): Threa
   if (b.message?.trim()) out.push({ kind: "msg", key: "request", ts: b.bookedAt, msg: { id: "request", from: "requester", text: b.message.trim(), ts: b.bookedAt } });
   ev("accepted", b.acceptedAt, "Accepted");
   ev("delivered", b.deliveredAt, "Delivered");
-  ev("completed", b.completedAt, perspective === "requester" ? "Completed" : "Completed by HR");
+  // The expert sees who closed it: the HR person by name when the server
+  // sent it ("Completed by Ruth Adeyemi"), else "the HR team".
+  ev("completed", b.completedAt, perspective === "requester" ? "Completed" : `Completed by ${b.requesterName?.trim() || "the HR team"}`);
   for (const m of b.messages ?? []) out.push({ kind: "msg", key: m.id, ts: m.ts, msg: m });
   // Time order; at the same moment keep the order above (requested, then
   // the request, then accepted, and so on).
@@ -275,7 +278,9 @@ export function BookingThread({
 }) {
   const [open, setOpen] = useState(false);
   const count = booking.messages?.length ?? 0;
-  const other = title ?? (perspective === "consultant" ? "HR" : "Specialist");
+  const other =
+    title?.trim() ||
+    (perspective === "consultant" ? booking.requesterName?.trim() || "HR" : booking.consultantName?.trim() || "Specialist");
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={BTN_GHOST} data-testid={testId}>

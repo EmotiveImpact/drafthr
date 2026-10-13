@@ -38,7 +38,7 @@ export async function GET(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant)
-    return jsonError("No active tenant — bookings are tenant-scoped", 412);
+    return jsonError("Choose a workspace first. Bookings belong to a workspace.", 412);
 
   const url = new URL(req.url);
   const filterConsultantProfileId = url.searchParams.get("consultant");
@@ -109,7 +109,7 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant)
-    return jsonError("No active tenant — bookings are tenant-scoped", 412);
+    return jsonError("Choose a workspace first. Bookings belong to a workspace.", 412);
 
   const parsed = await readJsonRequest<CreateBookingInput>(req);
   if (!parsed.ok) return parsed.response;

@@ -122,7 +122,7 @@ export async function POST(req: Request): Promise<Response> {
     // payment intent), so a retry re-applies cleanly with no double-charge or
     // double-grant, and no paid event is ever silently dropped.
     console.error("[billing-webhook] handler error — will retry", event.type, err);
-    return jsonError("Processing failed — retry", 500);
+    return jsonError("Processing failed. Retry.", 500);
   }
 
   // Success: record the event so redeliveries fast-path out. Best-effort — if

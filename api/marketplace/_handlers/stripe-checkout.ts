@@ -168,7 +168,7 @@ export async function POST(req: Request): Promise<Response> {
             currency,
             unit_amount: amount,
             product_data: {
-              name: `Specialist letter review${profile.fullName ? ` — ${profile.fullName}` : ""}`,
+              name: `Specialist letter review${profile.fullName ? ` with ${profile.fullName}` : ""}`,
               description: booking.matterTitle ?? undefined,
             },
           },

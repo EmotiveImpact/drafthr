@@ -228,30 +228,42 @@ export function ConsultantAdminReview() {
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <StatusPill status={p.status} />
+                        {/* Only the moves that change something: the pill
+                            already says where the profile is, so a published
+                            profile offers Reject and a rejected one offers
+                            Approve and publish, never a greyed-out repeat. */}
                         {p.status !== "published" || showAll ? (
                           <>
-                            <button
-                              type="button"
-                              disabled={acting === p.id || p.status === "published"}
-                              onClick={() => review(p.id, "approve")}
-                              className={`${BTN_PRIMARY} ml-1`}
-                            >
-                              {acting === p.id ? (
-                                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                              ) : (
-                                <CheckCircle2 className="size-3.5" aria-hidden />
-                              )}
-                              {p.status === "published" ? "Published" : "Approve and publish"}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={acting === p.id || p.status === "rejected"}
-                              onClick={() => review(p.id, "reject")}
-                              className={`${BTN_OUTLINE} text-[var(--ds-red-fg)] hover:border-[var(--ds-red-fg)]/40 hover:bg-[var(--ds-red-bg)]`}
-                            >
-                              <XCircle className="size-3.5" aria-hidden />
-                              {p.status === "rejected" ? "Rejected" : "Reject"}
-                            </button>
+                            {p.status !== "published" && (
+                              <button
+                                type="button"
+                                disabled={acting === p.id}
+                                onClick={() => review(p.id, "approve")}
+                                className={`${BTN_PRIMARY} ml-1`}
+                              >
+                                {acting === p.id ? (
+                                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                ) : (
+                                  <CheckCircle2 className="size-3.5" aria-hidden />
+                                )}
+                                Approve and publish
+                              </button>
+                            )}
+                            {p.status !== "rejected" && (
+                              <button
+                                type="button"
+                                disabled={acting === p.id}
+                                onClick={() => review(p.id, "reject")}
+                                className={`${BTN_OUTLINE} ${p.status === "published" ? "ml-1 " : ""}text-[var(--ds-red-fg)] hover:border-[var(--ds-red-fg)]/40 hover:bg-[var(--ds-red-bg)]`}
+                              >
+                                {acting === p.id && p.status === "published" ? (
+                                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                ) : (
+                                  <XCircle className="size-3.5" aria-hidden />
+                                )}
+                                Reject
+                              </button>
+                            )}
                           </>
                         ) : null}
                       </div>

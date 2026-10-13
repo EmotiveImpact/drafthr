@@ -70,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
   // personal Employee Plus never blocks a workspace HR-plan subscribe. One-off
   // purchases are always allowed.
   if (entry.mode === "subscription" && (await subjectHasActiveSubscription(subjectType, subjectId))) {
-    return jsonError("You already have an active plan — manage it from billing instead.", 409);
+    return jsonError("You already have an active plan. Manage it from Billing in Settings instead.", 409);
   }
 
   const meta = {

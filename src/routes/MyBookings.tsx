@@ -219,7 +219,12 @@ export function MyBookings() {
         <div className="md:flex md:min-h-0 md:flex-1">
           <section
             aria-label="My bookings"
-            className="min-w-0 flex-1 px-4 pb-16 pt-[22px] sm:px-8 md:overflow-y-auto md:pb-[30px] md:pl-12 md:pr-8"
+            className={cn(
+              "min-w-0 flex-1 px-4 pb-16 pt-[22px] sm:px-8 md:overflow-y-auto md:pb-[30px] md:pl-12",
+              // The content column ends where the band's does (48px in);
+              // beside the open thread panel the gap to its border is 32px.
+              desktop && panel ? "md:pr-8" : "md:pr-12",
+            )}
           >
             {firstLoad ? (
               <BookingsSkeleton />
