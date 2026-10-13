@@ -202,7 +202,12 @@ export type RuleId =
   | "us.warnNotice"
   | "us.owbpa";
 
-export type RuleInputSpec = { fact: string } | { value: FactValue };
+/**
+ * Where a rule input comes from: a fact, a fixed value, or the date an earlier
+ * rule use worked out. `deadline` with several ids takes the earliest known
+ * date, so a chained rule always works from the safer date.
+ */
+export type RuleInputSpec = { fact: string } | { value: FactValue } | { deadline: string | string[] };
 
 /** One use of a rule inside a playbook, with the facts that feed it. */
 export type RuleUse = {

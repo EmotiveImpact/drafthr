@@ -53,6 +53,7 @@ export function validatePlaybook(playbook: Playbook): string[] {
   for (const check of playbook.checks) checkCondition(`check ${check.id}`, check.when);
   for (const handOff of playbook.handOffs) checkCondition(`hand-off ${handOff.id}`, handOff.when);
 
+  const earlierUses = new Set<string>();
   for (const use of playbook.rules) {
     const where = `rule use ${use.id}`;
     const contract = RULE_INPUTS[use.rule];
@@ -72,8 +73,14 @@ export function validatePlaybook(playbook: Playbook): string[] {
       if ("fact" in spec && !factKeys.has(spec.fact)) {
         problems.push(`${where}: input "${name}" uses unknown fact "${spec.fact}"`);
       }
+      if ("deadline" in spec) {
+        for (const id of [spec.deadline].flat()) {
+          if (!earlierUses.has(id)) problems.push(`${where}: input "${name}" must name an earlier rule use, not "${id}"`);
+        }
+      }
     }
     if (use.when) checkCondition(where, use.when);
+    earlierUses.add(use.id);
   }
 
   const earlier = new Set<string>();

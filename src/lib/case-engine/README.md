@@ -73,8 +73,10 @@ listed. Forgotten facts are never listed. `nextQuestion` is the first entry.
   false on a US case and `state` is false on a UK case.
 
 **Rule uses.** A rule use runs when its `when` holds and its `lens` (if
-given) includes the case's lens. Inputs come from facts (`{ fact }`) or
-literals (`{ value }`). A missing required input gives a deadline with
+given) includes the case's lens. Inputs come from facts (`{ fact }`),
+literals (`{ value }`) or the dates of earlier rule uses (`{ deadline }`,
+one id or several; with several the earliest known date is used, so early
+conciliation always extends the safer limit). A missing required input gives a deadline with
 `date: null` and the input names in `missing`. Rule uses that do not run do
 not appear in `deadlines`.
 
