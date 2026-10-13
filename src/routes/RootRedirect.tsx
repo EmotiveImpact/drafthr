@@ -1,5 +1,4 @@
 import { Navigate } from "react-router-dom";
-import { Box, Flex } from "@radix-ui/themes";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { useProfileStore } from "@/lib/profile";
 import { useConsultantStore } from "@/lib/consultantProfile";
@@ -71,12 +70,12 @@ export function RootRedirect() {
 
 function CenteredLoadingScreen() {
   return (
-    <Box className="min-h-screen grid place-items-center px-6">
-      <Flex direction="column" gap="3" className="w-full max-w-md">
-        <Skeleton className="h-8 w-1/2" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-5/6" />
-      </Flex>
-    </Box>
+    <div role="status" aria-label="Loading" className="grid min-h-screen place-items-center bg-[var(--ds-canvas)] px-6">
+      <div className="flex w-full max-w-md flex-col gap-3">
+        <Skeleton className="h-8 w-1/2 rounded-[10px] bg-[var(--ds-surface-2)]" />
+        <Skeleton className="h-4 w-full rounded-full bg-[var(--ds-surface-2)]" />
+        <Skeleton className="h-4 w-5/6 rounded-full bg-[var(--ds-surface-2)]" />
+      </div>
+    </div>
   );
 }

@@ -3,10 +3,18 @@ import { Check, ChevronDown, Search, UserRound, X } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import type { Employee } from "@/lib/letters/types";
 import { Avatar } from "@/components/ds/Avatar";
+import { Pill } from "@/components/ds/Pill";
 import { cn } from "@/lib/utils";
 
+const STATUS_LABEL: Record<Employee["status"], string> = {
+  active: "Active",
+  notice: "On notice",
+  "on-leave": "On leave",
+  left: "Left",
+};
+
 /**
- * "Pick from your employees" affordance — shown on the HR-mode wizard's
+ * "Pick from your employees", shown on the HR-mode wizard's
  * employee step when the directory has any records. Selecting a row
  * populates the wizard answers with the canonical employee fields plus
  * `linkedEmployeeId` so the editor can later resolve a profile chip.
@@ -104,7 +112,7 @@ export function EmployeePicker({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="flex w-full items-center gap-2.5 rounded-[var(--ds-r-s)] px-2.5 py-2 text-left text-[13px] font-medium text-[var(--ds-ink)] hover:bg-[var(--ds-surface-3)]"
+          className="flex w-full items-center gap-2.5 rounded-[var(--ds-r-s)] px-2.5 py-2 text-left text-[13px] font-medium text-[var(--ds-ink)] hover:bg-[var(--ds-surface-3)] transition-colors duration-[120ms]"
         >
           <UserRound className="size-4 text-[var(--ds-muted)]" />
           Pick from your employees ({list.length})
@@ -124,7 +132,7 @@ export function EmployeePicker({
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search employees"
                 aria-label="Search employees"
-                className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-faint)]"
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-subtle)]"
               />
             </label>
           )}
@@ -148,9 +156,9 @@ export function EmployeePicker({
                       </span>
                     </span>
                     {e.status !== "active" && (
-                      <span className="shrink-0 rounded-full bg-[var(--ds-chip)] px-2 py-0.5 text-[11.5px] capitalize text-[var(--ds-muted)]">
-                        {e.status}
-                      </span>
+                      <Pill tone={e.status === "left" ? "grey" : "amber"} className="shrink-0">
+                        {STATUS_LABEL[e.status]}
+                      </Pill>
                     )}
                     {on && <Check className="size-3.5 shrink-0 text-[var(--ds-ink)]" />}
                   </button>

@@ -426,7 +426,7 @@ export function CheckYourEmail({
   return (
     <AuthShell eyebrow="Check your email" heading={heading ?? "Verify your email."}>
       <div className="mt-1 flex items-start gap-3 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)]/60 p-4">
-        <MailCheck className="mt-0.5 size-5 text-[var(--ds-muted)]" aria-hidden />
+        <MailCheck className="mt-0.5 size-[18px] shrink-0 text-[var(--ds-muted)]" aria-hidden />
         <div className="text-[13.5px] leading-relaxed text-[var(--ds-body)]">
           {blurb ? (
             <>{blurb} </>
@@ -462,7 +462,7 @@ export function CheckYourEmail({
         </div>
 
         {verifyError && <ErrorAlert message={verifyError} />}
-        {!userId && (
+        {!hasContext && (
           <ErrorAlert
             message="If you already have an account, sign in instead. No new code was sent."
           />

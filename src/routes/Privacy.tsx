@@ -1,9 +1,8 @@
-import { Box, Text } from "@radix-ui/themes";
 import { todayDateOnly } from "@/lib/date-only";
 import { PublicLegalShell } from "@/components/PublicLegalShell";
 
 /**
- * STARTER TEMPLATE — must be reviewed by counsel before going live to
+ * STARTER TEMPLATE: must be reviewed by counsel before going live to
  * paying or enterprise customers. The clauses below are written in
  * good faith but DraftHR is not a law firm; do NOT treat this file
  * as legal advice. Update [VERIFY WITH COUNSEL] flags as needed.
@@ -21,16 +20,16 @@ export function Privacy() {
       subtitle={
         <>
           Effective date:{" "}
-          <Text weight="medium" highContrast>
+          <strong className="font-medium text-[var(--ds-ink)]">
             {todayDateOnly()}
-          </Text>
+          </strong>
           . This policy explains how DraftHR collects, processes, and stores
           personal data in connection with drafting HR correspondence.
         </>
       }
     >
       <div>
-        <Box className="min-w-0 text-[15px] leading-[1.7] text-[var(--ds-body)] [overflow-wrap:anywhere] [&_h2]:ds-title [&_h2]:text-[24px] [&_h2]:leading-tight [&_h2]:mt-12 [&_h2]:mb-3 [&_h2:first-child]:mt-0 [&_h3]:font-semibold [&_h3]:text-[15px] [&_h3]:text-[var(--ds-ink)] [&_h3]:mt-6 [&_h3]:mb-1.5 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1.5 [&_strong]:font-semibold [&_strong]:text-[var(--ds-ink)] [&_a]:text-[var(--ds-ink)] [&_a]:underline [&_a]:underline-offset-2 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
+        <div className="min-w-0 text-[15px] leading-[1.7] text-[var(--ds-body)] [overflow-wrap:anywhere] [&_h2]:ds-title [&_h2]:text-[24px] [&_h2]:leading-tight [&_h2]:mt-12 [&_h2]:mb-3 [&_h2:first-child]:mt-0 [&_h3]:font-semibold [&_h3]:text-[15px] [&_h3]:text-[var(--ds-ink)] [&_h3]:mt-6 [&_h3]:mb-1.5 [&_p]:my-3 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1.5 [&_strong]:font-semibold [&_strong]:text-[var(--ds-ink)] [&_a]:text-[var(--ds-ink)] [&_a]:underline [&_a]:underline-offset-2 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
           <h2>1. Who we are</h2>
           <p>
             <strong>DraftHR</strong> ("we", "us", "our") provides an AI-assisted
@@ -40,7 +39,7 @@ export function Privacy() {
             process to deliver the service to you. For data-protection enquiries,
             contact{" "}
             <a href="mailto:privacy@drafthr.io">privacy@drafthr.io</a>. Registered
-            address: <em>Address available on request — contact privacy@drafthr.io</em>.
+            address: <em>Address available on request: contact privacy@drafthr.io</em>.
           </p>
           <p>
             This policy is effective from the date shown above and replaces any
@@ -79,16 +78,16 @@ export function Privacy() {
           <h2>3. Why we collect it</h2>
           <ul>
             <li>
-              <strong>To deliver the service</strong> (contract performance) —
+              <strong>To deliver the service</strong> (contract performance):
               we cannot draft your letter without the content you put in it.
             </li>
             <li>
               <strong>To operate and improve the platform</strong> (legitimate
-              interest) — error tracking, fraud and abuse prevention,
+              interest): error tracking, fraud and abuse prevention,
               capacity planning, and product analytics on aggregated usage.
             </li>
             <li>
-              <strong>To meet our legal obligations</strong> — retention of
+              <strong>To meet our legal obligations</strong>: retention of
               audit metadata, response to lawful requests, and tax / accounting
               record-keeping where applicable.
             </li>
@@ -100,19 +99,19 @@ export function Privacy() {
           </p>
           <ul>
             <li>
-              Art. 6(1)(b) — performance of a contract to which you are a
+              Art. 6(1)(b): performance of a contract to which you are a
               party (delivering the drafting service you signed up for).
             </li>
             <li>
-              Art. 6(1)(f) — our legitimate interests in securing, operating,
+              Art. 6(1)(f): our legitimate interests in securing, operating,
               and improving the platform, balanced against your rights.
             </li>
             <li>
-              Art. 6(1)(c) — compliance with legal obligations (audit trails,
+              Art. 6(1)(c): compliance with legal obligations (audit trails,
               tax records).
             </li>
             <li>
-              Art. 9(2)(b) — processing of special category data for purposes
+              Art. 9(2)(b): processing of special category data for purposes
               of carrying out obligations in employment, social security, and
               social protection law, where you (or the employer you act for)
               enter such data into a draft.
@@ -132,7 +131,7 @@ export function Privacy() {
             <strong>Anthropic Claude</strong> for drafting and critique. We use
             Sonnet 4.6 by default; Opus 4.7 and Haiku 4.5 are selectable in
             Settings → Generation model. Anthropic operates a zero-retention
-            policy for API traffic — your prompts and completions are not used
+            policy for API traffic: your prompts and completions are not used
             to train Anthropic models. Prompt caching is enabled with a 5-minute
             time-to-live to reduce cost and latency; cached content lives on
             Anthropic's infrastructure only for that window.
@@ -152,37 +151,37 @@ export function Privacy() {
           </p>
           <ul>
             <li>
-              <strong>Anthropic PBC</strong> (United States) — large-language-
+              <strong>Anthropic PBC</strong> (United States): large-language-
               model inference for drafting and critique.
             </li>
             <li>
-              <strong>WorkOS Inc.</strong> (United States) — authentication,
+              <strong>WorkOS Inc.</strong> (United States): authentication,
               single sign-on, and identity management.
             </li>
             <li>
-              <strong>Neon</strong> (a Databricks company, United States) —
+              <strong>Neon</strong> (a Databricks company, United States):
               managed Postgres database hosting.
             </li>
             <li>
-              <strong>Vercel Inc.</strong> (United States) — application hosting
+              <strong>Vercel Inc.</strong> (United States): application hosting
               and serverless compute.
             </li>
             <li>
-              <strong>Resend</strong> (United States) — transactional email
+              <strong>Resend</strong> (United States): transactional email
               delivery (verification codes, password resets, notifications).
             </li>
             <li>
-              <strong>AWS KMS</strong> (Amazon Web Services, eu-west-2 region) —
+              <strong>AWS KMS</strong> (Amazon Web Services, eu-west-2 region):
               cryptographic signing keys backing PAdES-B-T style export-pack
               manifests.
             </li>
             <li>
-              <strong>FreeTSA</strong> — RFC 3161 timestamp authority for
+              <strong>FreeTSA</strong>: RFC 3161 timestamp authority for
               export-pack timestamps.
             </li>
             <li>
-              <strong>Sentry / Functional Software Inc.</strong> (United States)
-              — error tracking and observability.
+              <strong>Sentry / Functional Software Inc.</strong> (United States):
+              error tracking and observability.
             </li>
           </ul>
           <p>
@@ -206,24 +205,24 @@ export function Privacy() {
           <h2>8. Retention</h2>
           <ul>
             <li>
-              <strong>Drafts</strong> — 90 days after the draft was last edited,
+              <strong>Drafts</strong>: 90 days after the draft was last edited,
               then auto-purged from active storage.
             </li>
             <li>
-              <strong>Audit metadata</strong> — 24 months from the relevant
+              <strong>Audit metadata</strong>: 24 months from the relevant
               event (export, share, signature).
             </li>
             <li>
-              <strong>Account data</strong> — for as long as you have an active
+              <strong>Account data</strong>: for as long as you have an active
               account, then deleted on request or within 90 days of account
               closure.
             </li>
             <li>
-              <strong>Support tickets and correspondence</strong> — 24 months.
+              <strong>Support tickets and correspondence</strong>: 24 months.
             </li>
             <li>
-              <strong>Billing and tax records</strong> (when paid plans launch)
-              — retained for the period required by UK / US tax law (typically
+              <strong>Billing and tax records</strong> (when paid plans launch):
+              retained for the period required by UK / US tax law (typically
               6 / 7 years).
             </li>
           </ul>
@@ -326,7 +325,7 @@ export function Privacy() {
             within the statutory timeframe (one month under UK / EU GDPR, 45
             days under CCPA / CPRA, extendable where permitted).
           </p>
-        </Box>
+        </div>
       </div>
     </PublicLegalShell>
   );

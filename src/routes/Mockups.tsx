@@ -81,7 +81,7 @@ const FLAGSHIP_LETTERS = [
   { id: "resignation_clean", name: "Resignation", risk: "low" as const, icon: Mail, hint: "Standard, gracious. Last day + thanks." },
   { id: "resignation_constructive", name: "Constructive resignation", risk: "high" as const, icon: Mail, hint: "Resigning in response to fundamental breach." },
   { id: "flexible_working_request", name: "Flexible working", risk: "low" as const, icon: CalendarClock, hint: "Day-one statutory right (UK, Apr 2024)." },
-  { id: "subject_access_request", name: "Subject Access Request", risk: "low" as const, icon: FileSearch, hint: "UK GDPR Art. 15 — 1-month response." },
+  { id: "subject_access_request", name: "Subject Access Request", risk: "low" as const, icon: FileSearch, hint: "UK GDPR Art. 15, 1-month response." },
   { id: "appeal", name: "Appeal letter", risk: "high" as const, icon: Scale, hint: "Four canonical grounds." },
   { id: "whistleblowing", name: "Whistleblowing", risk: "high" as const, icon: ShieldAlert, hint: "PIDA / s.43A ERA 1996." },
   { id: "accommodation_request", name: "Accommodation request", risk: "medium" as const, icon: ShieldCheck, hint: "Equality Act / ADA interactive process." },
@@ -111,7 +111,7 @@ export function Mockups() {
         <h1 className="text-3xl font-semibold tracking-tight mb-1">Pick a direction.</h1>
         <p className="text-sm text-muted-foreground">
           Three concrete layouts rendered at full size with sample data. Tab through them, then
-          tell me which one to apply across the app — or which bits to mix.
+          tell me which one to apply across the app, or which bits to mix.
         </p>
       </div>
 
@@ -124,7 +124,7 @@ export function Mockups() {
 
         <TabsContent value="a">
           <UxNote
-            title="A · Documents — clean and content-first"
+            title="A · Documents: clean and content-first"
             tradeoff="Best when the user comes here knowing what letter they want. Sidebar holds discovery + history; main column is mostly your draft surface. Closest to current direction."
           />
           <VariantA />
@@ -132,7 +132,7 @@ export function Mockups() {
 
         <TabsContent value="b">
           <UxNote
-            title="B · Workspace — sidebar-07 carries the chrome"
+            title="B · Workspace: sidebar-07 carries the chrome"
             tradeoff="Sidebar is wider and more capable (role switcher, recent drafts with actions, user card). Topbar disappears entirely on most screens. Feels like Linear / Notion."
           />
           <VariantB />
@@ -140,7 +140,7 @@ export function Mockups() {
 
         <TabsContent value="c">
           <UxNote
-            title="C · Console — information-dense dashboard"
+            title="C · Console: information-dense dashboard"
             tradeoff="Slim icon rail + dashboard with stats, deadlines, drafts-in-progress. Right for power users handling many letters. Slightly heavier visual weight; not ideal for a first-time user."
           />
           <VariantC />
@@ -254,7 +254,7 @@ function VariantA() {
             <div className="flex-1">
               <p className="font-medium">No drafts yet.</p>
               <p className="text-xs text-muted-foreground">
-                Start with a flagship letter — your details auto-fill.
+                Start with a flagship letter. Your details auto-fill.
               </p>
             </div>
             <Button size="sm">

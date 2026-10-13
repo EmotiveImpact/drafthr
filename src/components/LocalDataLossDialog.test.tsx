@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { Theme } from "@radix-ui/themes";
 import { LocalDataLossDialog } from "./LocalDataLossDialog";
 import { confirmLocalDataLoss } from "@/lib/session/localDataGuard";
 
@@ -14,9 +13,7 @@ const summary = {
 
 function mount() {
   render(
-    <Theme>
-      <LocalDataLossDialog />
-    </Theme>,
+    <LocalDataLossDialog />,
   );
 }
 

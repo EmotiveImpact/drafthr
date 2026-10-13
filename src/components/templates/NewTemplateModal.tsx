@@ -2,16 +2,13 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,11 +19,12 @@ import {
 import { useDraftStore } from "@/lib/store";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
 import type { Jurisdiction, LetterTypeId, Mode } from "@/lib/letters/types";
+import { Field, KitDialogContent, KitDialogFooter, Segmented } from "@/components/wizard/kit";
 
 /**
- * "New template" — captures name + description + base letter type +
- * jurisdiction default, then spawns a template-authoring draft and
- * navigates the user straight into the editor.
+ * "Create a template": name, description, base letter type and the
+ * jurisdiction default, then a template-authoring letter opens in the editor
+ * (its top bar shows Save template).
  */
 export function NewTemplateModal({
   open,
@@ -38,9 +36,7 @@ export function NewTemplateModal({
   mode: Mode;
 }) {
   const nav = useNavigate();
-  const createTemplateSourceDraft = useDraftStore(
-    (s) => s.createTemplateSourceDraft
-  );
+  const createTemplateSourceDraft = useDraftStore((s) => s.createTemplateSourceDraft);
   const catalog = useMemo(() => letterCatalogByMode(mode), [mode]);
 
   const [name, setName] = useState("");
@@ -52,15 +48,10 @@ export function NewTemplateModal({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    const id = createTemplateSourceDraft(
-      baseLetterType as LetterTypeId,
-      { jurisdiction },
-      mode,
-      {
-        templateName: name.trim(),
-        templateDescription: description.trim() || undefined,
-      }
-    );
+    const id = createTemplateSourceDraft(baseLetterType as LetterTypeId, { jurisdiction }, mode, {
+      templateName: name.trim(),
+      templateDescription: description.trim() || undefined,
+    });
     onOpenChange(false);
     setName("");
     setDescription("");
@@ -70,48 +61,48 @@ export function NewTemplateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <KitDialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle>New template</DialogTitle>
+          <DialogTitle>Create a template</DialogTitle>
           <DialogDescription>
-            Author a reusable letter from scratch. You'll edit the
-            sections in the editor and click Save template when done.
+            Write a reusable letter from scratch. You edit the sections in the editor and press Save template when you
+            are done.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 py-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="new-tpl-name">Name *</Label>
+        <form
+          id="new-template-form"
+          className="grid gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+        >
+          <Field label="Name" htmlFor="new-tpl-name" required>
             <Input
               id="new-tpl-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={`e.g. "Standard probation outcome"`}
+              placeholder="Standard probation outcome"
               autoFocus
               maxLength={120}
             />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="new-tpl-desc">Description</Label>
+          </Field>
+          <Field label="Description" htmlFor="new-tpl-desc" aside="Optional">
             <Textarea
               id="new-tpl-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What this template is for, when to use it…"
+              placeholder="What this template is for, and when to use it"
               rows={3}
               maxLength={500}
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-tpl-base">Base letter type *</Label>
-              <Select
-                value={baseLetterType || undefined}
-                onValueChange={(v) => setBaseLetterType(v as LetterTypeId)}
-              >
-                <SelectTrigger id="new-tpl-base">
-                  <SelectValue placeholder="Pick a base" />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Field label="Base letter type" htmlFor="new-tpl-base" required>
+              <Select value={baseLetterType || undefined} onValueChange={(v) => setBaseLetterType(v as LetterTypeId)}>
+                <SelectTrigger id="new-tpl-base" className="w-full">
+                  <SelectValue placeholder="Pick a letter type" />
                 </SelectTrigger>
                 <SelectContent>
                   {catalog.map((l) => (
@@ -121,43 +112,30 @@ export function NewTemplateModal({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-tpl-jur">Jurisdiction default</Label>
-              <div
-                role="tablist"
-                aria-label="Jurisdiction default"
-                className="inline-flex h-9 gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-chip)] p-[3px]"
-              >
-                {(["UK", "US"] as const).map((j) => (
-                  <button
-                    key={j}
-                    type="button"
-                    onClick={() => setJurisdiction(j)}
-                    className={
-                      "flex-1 rounded-[7px] px-3 text-[12.5px] font-medium transition " +
-                      (jurisdiction === j
-                        ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
-                        : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]")
-                    }
-                  >
-                    {j}
-                  </button>
-                ))}
-              </div>
-            </div>
+            </Field>
+            <Field label="Jurisdiction default">
+              <Segmented
+                label="Jurisdiction default"
+                value={jurisdiction}
+                onChange={setJurisdiction}
+                options={[
+                  { value: "UK", label: "UK" },
+                  { value: "US", label: "US" },
+                ]}
+              />
+            </Field>
           </div>
-        </div>
+        </form>
 
-        <DialogFooter>
+        <KitDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit}>
-            Create &amp; edit
+          <Button type="submit" form="new-template-form" disabled={!canSubmit}>
+            Create and edit
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </KitDialogFooter>
+      </KitDialogContent>
     </Dialog>
   );
 }
