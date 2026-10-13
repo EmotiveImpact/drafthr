@@ -148,7 +148,7 @@ export function parseCsv(raw: string): CsvParseResult {
       headers,
       rows: [],
       warnings: [],
-      error: `Duplicate column '${duplicate}' — column names must be unique.`,
+      error: `Duplicate column '${duplicate}'. Column names must be unique.`,
     };
   }
 
@@ -166,7 +166,7 @@ export function parseCsv(raw: string): CsvParseResult {
       // is sent to the offending record rather than the header.
       warnings.push({
         rowIndex: fileRow,
-        message: `Row ${fileRow} missing 'employee_name' — will skip.`,
+        message: `Row ${fileRow} missing 'employee_name', so it will be skipped.`,
       });
       continue;
     }

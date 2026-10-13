@@ -71,7 +71,7 @@ export function ImportSuggestions({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[calc(100dvh-32px)] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import employees from drafts</DialogTitle>
           <DialogDescription>
@@ -102,7 +102,7 @@ export function ImportSuggestions({
                 {selected.size} of {suggestions.length} selected
               </span>
             </div>
-            <div className="max-h-[360px] overflow-y-auto rounded-[var(--ds-r-l)] border border-[var(--ds-line)] divide-y divide-[var(--ds-line)]">
+            <div className="max-h-[min(360px,45dvh)] overflow-y-auto rounded-[12px] border border-[var(--ds-line)] divide-y divide-[var(--ds-line)]">
               {suggestions.map((s) => {
                 const isSelected = selected.has(s.legalName);
                 return (
