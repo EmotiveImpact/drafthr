@@ -11,7 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { Draft, Employee, Matter } from "@/lib/letters/types";
-import type { JourneyInfo } from "@/lib/journey/stage";
+import { isOwnLetter, type JourneyInfo } from "@/lib/journey/stage";
 import { currentRound, firstName, type ReviewRequest } from "@/lib/journey/reviews";
 import { NoticeChip, NoticeStrip } from "@/components/journey/ui";
 import { cn } from "@/lib/utils";
@@ -189,7 +189,16 @@ function noticeFor({
       <NoticeStrip
         tone="green"
         icon={Stamp}
-        title={a ? `Approved by ${a.reviewerName} at ${fmtTime(a.createdAt)}.` : "Approved."}
+        title={
+          // An employee's own letter has no approver: they signed it off.
+          isOwnLetter(draft)
+            ? a
+              ? `Signed off at ${fmtTime(a.createdAt)}.`
+              : "Signed off."
+            : a
+              ? `Approved by ${a.reviewerName} at ${fmtTime(a.createdAt)}.`
+              : "Approved."
+        }
       >
         Ready to send. Choose how {recipientFirst} gets it on the right.
       </NoticeStrip>

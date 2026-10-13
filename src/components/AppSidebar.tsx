@@ -91,9 +91,11 @@ import { NotificationsBell } from "@/components/NotificationsBell";
  *   Footer  Settings, Help, then the person with the role and account menu.
  *
  * Every page the old sidebar linked to stays reachable: the bell and its
- * "View all" (Notifications), nested rows on the page's parent (Approvals,
- * Calendar and Activity under Home; Exported and Bulk letters under Letters;
- * My bookings under Experts), the person menu's "More" group, and search.
+ * "View all" (Notifications), Home's tabs (Needs approval, Calendar,
+ * Activity), the Experts page's tabs (My bookings), nested rows under Letters
+ * while on Exported or Bulk letters, the person menu's "More" group, and
+ * search. Pages under Home or Experts mark that row current without a nested
+ * list, so all seven rows stay in view on short screens.
  *
  * Collapses to a 64px icon rail on desktop (Cmd/Ctrl B, the collapse button,
  * the rail edge, or a click on any empty part of the rail expands it). On
@@ -248,6 +250,7 @@ function OrgRow({ mode }: { mode: SidebarMode | null }) {
           <div data-tour="workspace-switcher" className="flex min-w-0 flex-1 items-center">
             <WorkspaceSwitcher
               subtitle={team}
+              name={shortOrgName}
               fallback={
                 <span
                   title={fullName}
@@ -404,12 +407,24 @@ const EXPERT_PAGES = ["/consultants", "/bookings"];
 
 const under = (path: string, base: string) => path === base || path.startsWith(`${base}/`);
 
+/**
+ * The Experts page is choosing an expert for a real letter
+ * (/consultants?for=<draftId> naming a letter this person can see): part of
+ * that letter's journey, so Letters is the current row, not Experts. An
+ * unknown id falls back to browsing (ConsultantsIndex), and so does the
+ * sidebar (MARKET-053).
+ */
+function useChoosingForLetter(mode: SidebarMode | null): boolean {
+  const loc = useLocation();
+  const forId = loc.pathname === "/consultants" ? new URLSearchParams(loc.search).get("for") : null;
+  const known = useDraftStore((s) => (forId ? !!s.drafts[forId] : false));
+  return !!forId && known && mode !== "consultant";
+}
+
 function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const loc = useLocation();
   const path = loc.pathname;
-  // Choosing an expert for a letter (/consultants?for=<id>) is part of that
-  // letter's journey: Letters is the active row, not Experts (MARKET-053).
-  const choosingForLetter = path === "/consultants" && new URLSearchParams(loc.search).has("for");
+  const choosingForLetter = useChoosingForLetter(mode);
   const consultantProfile = useConsultantStore((s) => s.profile);
   const search = useSearchPaletteToggle();
 
@@ -484,34 +499,19 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   }
 
   const employer = mode === "employer";
+  // Home stays the current row on the pages that hang off it (its tabs, and
+  // Notifications from the bell). They get no nested list: no mock has one,
+  // and it pushed Experts and Reports under the footer on short screens
+  // (RULE-106). They stay reachable from Home's tabs, the bell, the person
+  // menu's More group and search.
   const homeActive = path === prefix || HOME_PAGES.some((p) => under(path, p));
-  const homeSubs: Array<{ href: string; label: string }> = [
-    ...(employer ? [{ href: "/approvals", label: "Approvals" }] : []),
-    { href: "/calendar", label: "Calendar" },
-    { href: "/activity", label: "Activity" },
-    { href: "/notifications", label: "Notifications" },
-  ];
-  // Employers have Approvals, Calendar and Activity as tabs in Home's band,
-  // so the sub-list would only repeat them (and push Experts and Reports
-  // below the fold on short screens).
-  const onHomeSub =
-    homeSubs.some((s) => under(path, s.href)) &&
-    !(employer && ["/approvals", "/calendar", "/activity"].some((p) => under(path, p)));
   const templatesHref = `${prefix}/new`;
 
   return (
     <SidebarGroup className="p-0">
       <SidebarGroupContent>
         <SidebarMenu className="gap-0.5 group-data-[collapsible=icon]:items-center">
-          <NavRow it={{ href: prefix, label: "Home", Icon: House }} isActive={homeActive}>
-            {onHomeSub && (
-              <SubList label="Home">
-                {homeSubs.map((s) => (
-                  <SubRow key={s.href} href={s.href} label={s.label} isActive={under(path, s.href)} />
-                ))}
-              </SubList>
-            )}
-          </NavRow>
+          <NavRow it={{ href: prefix, label: "Home", Icon: House }} isActive={homeActive} />
           <NavLetters mode={mode as Mode} />
           <NavMatters mode={mode as Mode} />
           {employer && (
@@ -525,17 +525,12 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
             isActive={under(path, templatesHref)}
           />
           {employer && (
+            // One row, as in the experts and bookings mocks: Marketplace and
+            // My bookings are the tabs at the top of the Experts page.
             <NavRow
               it={{ href: "/consultants", label: "Experts", Icon: Scale, tooltip: "DraftHR experts" }}
               isActive={!choosingForLetter && EXPERT_PAGES.some((p) => under(path, p))}
-            >
-              {!choosingForLetter && EXPERT_PAGES.some((p) => under(path, p)) && (
-                <SubList label="Experts">
-                  <SubRow href="/consultants" label="Marketplace" isActive={under(path, "/consultants")} />
-                  <SubRow href="/bookings" label="My bookings" isActive={under(path, "/bookings")} />
-                </SubList>
-              )}
-            </NavRow>
+            />
           )}
           {employer && (
             <NavRow
@@ -617,10 +612,8 @@ function NavLetters({ mode }: { mode: Mode }) {
     return list.map((d) => ({ d, tone: getJourney(d, latestReviewIn(requests, d.id)).listTone }));
   }, [drafts, requests, mode]);
 
-  const active =
-    LETTER_PAGES.some((p) => under(path, p)) ||
-    path.startsWith("/editor/") ||
-    (path === "/consultants" && new URLSearchParams(loc.search).has("for"));
+  const choosingForLetter = useChoosingForLetter(mode);
+  const active = LETTER_PAGES.some((p) => under(path, p)) || path.startsWith("/editor/") || choosingForLetter;
 
   return (
     <SidebarMenuItem>
@@ -914,7 +907,7 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
   const more: { href: string; label: string; Icon: typeof Bell }[] =
     mode === "employer"
       ? [
-          { href: "/approvals", label: "Approvals", Icon: ClipboardCheck },
+          { href: "/approvals", label: "Needs approval", Icon: ClipboardCheck },
           { href: "/calendar", label: "Calendar", Icon: CalendarDays },
           { href: "/notifications", label: "Notifications", Icon: Bell },
           { href: "/activity", label: "Activity", Icon: ActivityIcon },

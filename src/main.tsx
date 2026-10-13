@@ -10,8 +10,6 @@ import { initSentry } from "@/lib/observability/sentry";
 import { bootstrapTheme } from "@/lib/theme";
 import { getFlag, setFlag } from "@/lib/flags";
 import { reloadForStaleChunk } from "@/lib/chunk-reload";
-import "@fontsource/playfair-display/400.css";
-import "@fontsource/playfair-display/600.css";
 import "./styles/globals.css";
 
 bootstrapTheme();
@@ -49,7 +47,7 @@ createRoot(document.getElementById("root")!).render(
           toastOptions={{
             classNames: {
               toast:
-                "rounded-[var(--ds-r-l)]! border-0! bg-[var(--ds-ink)]! text-[var(--ds-on-accent)]! text-[14px] shadow-[var(--ds-shadow-l)]",
+                "rounded-[var(--ds-r-l)]! border-0! bg-[var(--ds-ink)]! font-sans! text-[var(--ds-on-accent)]! text-[14px] shadow-[var(--ds-shadow-l)]",
               title: "font-medium",
               description: "text-[13px] text-[color-mix(in_srgb,var(--ds-on-accent)_70%,transparent)]!",
               actionButton:

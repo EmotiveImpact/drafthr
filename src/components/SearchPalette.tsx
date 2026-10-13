@@ -14,7 +14,8 @@ import {
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
-import { briefTitleFor } from "@/lib/letters/display";
+import { briefTitleFor, sentenceCaseTitle } from "@/lib/letters/display";
+import { paletteFilter } from "@/components/searchPaletteFilter";
 import { resetTour } from "@/lib/onboarding";
 import {
   History,
@@ -75,7 +76,7 @@ function pagesFor(role: "employer" | "employee" | null | undefined, consultant: 
       { href: "/consultants", label: "Experts", Icon: Scale, keywords: ["marketplace", "review"] },
       { href: "/bookings", label: "My bookings", Icon: Inbox, keywords: ["experts", "reviews"] },
       { href: "/reports", label: "Reports", Icon: ChartColumn, keywords: ["compliance", "risk"] },
-      { href: "/approvals", label: "Approvals", Icon: ClipboardCheck, keywords: ["sign off", "review"] },
+      { href: "/approvals", label: "Needs approval", Icon: ClipboardCheck, keywords: ["approvals", "sign off", "review"] },
       { href: "/bulk", label: "Bulk letters", Icon: Layers, keywords: ["csv", "batch", "bulk operations"] },
       ...shared,
     ].filter((p, i, all) => all.findIndex((q) => q.href === p.href && q.label === p.label) === i);
@@ -208,9 +209,10 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
     if (!role) return [];
     return letterCatalogByMode(role).map((l) => ({
       id: l.id,
-      title: l.title,
+      // Sentence case, like every other list in the app (RULE-X6).
+      title: sentenceCaseTitle(l.title),
       shortTitle: l.shortTitle,
-      keywords: `${l.title} ${l.shortTitle} ${l.description} ${l.id} ${l.riskClass}`,
+      keywords: `${l.shortTitle} ${l.title} ${l.description} ${l.id} ${l.riskClass}`,
     }));
   }, [role]);
 
@@ -239,7 +241,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find a letter, letter type or page">
-      <Command>
+      <Command filter={paletteFilter}>
         <CommandInput
           placeholder="Search letters, letter types or pages"
           value={query}
@@ -361,7 +363,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
             <CommandGroup heading="Help">
               <CommandItem
                 value="help-tour"
-                keywords={["help", "tour", "guide", "onboarding"]}
+                keywords={["Replay the guided tour", "help", "tour", "guide", "onboarding"]}
                 onSelect={() => {
                   onOpenChange(false);
                   resetTour();

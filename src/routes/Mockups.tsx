@@ -238,7 +238,7 @@ function VariantA() {
         </aside>
 
         {/* Content */}
-        <main className="p-8 bg-muted/20">
+        <div data-page-main className="p-8 bg-muted/20">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2">
             Employee
           </p>
@@ -277,7 +277,7 @@ function VariantA() {
               </Card>
             ))}
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );
@@ -368,7 +368,7 @@ function VariantB() {
         </aside>
 
         {/* Content */}
-        <main className="p-8 bg-muted/20 overflow-auto">
+        <div data-page-main className="p-8 bg-muted/20 overflow-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
@@ -443,7 +443,7 @@ function VariantB() {
               </Card>
             ))}
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );
@@ -514,7 +514,7 @@ function VariantC() {
         </aside>
 
         {/* Dashboard */}
-        <main className="p-6 bg-muted/20 overflow-auto">
+        <div data-page-main className="p-6 bg-muted/20 overflow-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground mb-1">
@@ -613,7 +613,7 @@ function VariantC() {
               </button>
             ))}
           </div>
-        </main>
+        </div>
       </div>
     </div>
   );

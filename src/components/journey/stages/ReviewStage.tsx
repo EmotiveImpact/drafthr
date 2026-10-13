@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ds/Pill";
 import { PersonCard } from "@/components/journey/ui";
-import { useJourney } from "@/lib/journey/stage";
+import { isOwnLetter, markOwnLetterReady, useJourney } from "@/lib/journey/stage";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { useBookingsStore } from "@/lib/bookings";
@@ -122,7 +122,8 @@ function ReadyState({
   const allowed = canSubmitForReview(role);
   const reason = !allowed ? VIEWER_REASON : blocked;
   const usual = useDefaultApprover();
-  const team = useTeammates(draft, me.email, allowed && draft.mode !== "employee");
+  const ownLetter = isOwnLetter(draft);
+  const team = useTeammates(draft, me.email, allowed && !ownLetter);
   const firstApprover = team.people.find((p) => p.canApprove && p.userId);
   const approverName = usual ?? firstApprover?.name ?? null;
   const approverUserId =
@@ -149,10 +150,23 @@ function ReadyState({
           className="h-10 w-full text-[13.5px]"
           disabled={!allowed}
           title={!allowed ? VIEWER_REASON : undefined}
-          onClick={() => (approverName ? skipReviewTo(draft.id, { name: approverName, userId: approverUserId }) : requestApproval(draft.id))}
+          onClick={() => {
+            // An employee's own letter has no approver: skipping review
+            // makes it ready to send (LETTER-X25).
+            if (ownLetter) {
+              if (markOwnLetterReady(draft.id)) toast.success("Ready to send");
+              return;
+            }
+            if (approverName) skipReviewTo(draft.id, { name: approverName, userId: approverUserId });
+            else requestApproval(draft.id);
+          }}
           data-testid="review-skip"
         >
-          {approverName ? `Skip review, ask ${firstName(approverName)} to approve` : "Skip review, ask for approval"}
+          {ownLetter
+            ? "Skip review, get it ready to send"
+            : approverName
+              ? `Skip review, ask ${firstName(approverName)} to approve`
+              : "Skip review, ask for approval"}
         </Button>
         {reason && <p className="m-0 text-[12.5px] leading-[1.45] text-[var(--ds-muted)]">{reason}</p>}
       </div>

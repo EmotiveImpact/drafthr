@@ -206,7 +206,7 @@ export function MyBookings() {
     // At desktop width the page is exactly one screen tall, so the list and
     // the thread panel scroll on their own under the band.
     <div className="flex min-h-0 flex-1 flex-col md:h-dvh md:max-h-dvh">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-hidden">
+      <div data-page-main className="flex min-h-0 min-w-0 flex-1 flex-col md:overflow-hidden">
         <ExpertsHeader
           crumbs={[{ label: workspace, href: "/hr" }, { label: "Experts" }]}
           title="Experts"
@@ -340,7 +340,7 @@ export function MyBookings() {
             </aside>
           )}
         </div>
-      </main>
+      </div>
 
       {!desktop && (
         <SideSheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)} label={open ? `Messages with ${open.consultantName ?? "the expert"}` : "Messages"}>

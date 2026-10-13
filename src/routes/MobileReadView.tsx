@@ -95,7 +95,7 @@ export function MobileReadView() {
        * is rendered as-is; per-element styling is handled by the
        * .mobile-letter scoped block below so we don't drag the A4-export
        * sizing into the screen surface. */}
-      <main className="mx-auto max-w-[680px] px-5 pb-24 pt-4 sm:px-8 sm:pt-8">
+      <div data-page-main className="mx-auto max-w-[680px] px-5 pb-24 pt-4 sm:px-8 sm:pt-8">
         <h1 className="ds-title m-0 mb-7 text-[30px] leading-[1.12] [overflow-wrap:anywhere] sm:text-[36px]">
           {title}
         </h1>
@@ -104,7 +104,7 @@ export function MobileReadView() {
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
           aria-label="Letter content"
         />
-      </main>
+      </div>
 
       {/* Scoped typography for the read-only HTML body. Mirrors the
        * export styles in pdf.ts but tuned for screen — larger base font,

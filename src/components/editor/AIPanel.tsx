@@ -631,6 +631,32 @@ export function AIPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadKey]);
 
+  // The tab's content scrolls behind the Ask DraftHR chips and box (and
+  // under the tabs once scrolled): while there is more beyond an edge, that
+  // edge fades out instead of cutting a line or a card in half (REVIEW-X10).
+  const [moreBelow, setMoreBelow] = useState(false);
+  const [moreAbove, setMoreAbove] = useState(false);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const measure = () => {
+      setMoreBelow(el.scrollHeight - el.clientHeight - el.scrollTop > 2);
+      setMoreAbove(el.scrollTop > 2);
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(measure);
+    mo?.observe(el, { childList: true, subtree: true });
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro?.disconnect();
+      mo?.disconnect();
+    };
+  }, [threadKey, showThread]);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <div
@@ -639,7 +665,9 @@ export function AIPanel({
         aria-live={showThread ? "polite" : undefined}
         aria-relevant={showThread ? "additions text" : undefined}
         aria-busy={showThread ? isStreaming : undefined}
-        className="flex-1 overflow-auto min-h-0"
+        data-more-below={moreBelow || undefined}
+        data-more-above={moreAbove || undefined}
+        className="ai-panel-scroll flex-1 overflow-auto min-h-0"
       >
         {!showThread ? (
           replaceThread

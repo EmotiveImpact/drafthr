@@ -109,7 +109,7 @@ export function AuthCallback() {
   }, [params, navigate, refresh]);
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[var(--ds-canvas)] px-4 py-10">
+    <div data-page-main className="grid min-h-screen place-items-center bg-[var(--ds-canvas)] px-4 py-10">
       <div className="flex w-full max-w-[440px] flex-col items-center gap-6">
         <span className="inline-flex items-center gap-2.5" aria-hidden>
           <BrandMark size={40} />
@@ -141,7 +141,7 @@ export function AuthCallback() {
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }
 

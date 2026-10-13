@@ -140,6 +140,19 @@ describe("getJourney: draft", () => {
     expect(j.primaryAction?.reason).toBe("DraftHR is still drafting.");
   });
 
+  it("counts only finished sections as drafted, never one still streaming or an empty paragraph", () => {
+    const d = makeDraft({
+      sections: [
+        section("s1", "<p>Dear Jordan,</p>"),
+        section("s2", "<p>Partial te", { status: "streaming" }),
+        section("s3", "<p></p>", { status: "empty" }),
+      ],
+    });
+    const j = getJourney(d, null, { checks: PASSING });
+    expect(j.counts.sectionsDrafted).toBe(1);
+    expect(j.counts.sections).toBe(3);
+  });
+
   it("goes back to draft when the approver asks for changes", () => {
     const d = makeDraft({
       reviewStatus: "changes_requested",
@@ -318,6 +331,21 @@ describe("getJourney: send and sent", () => {
     expect(j.stepIndex).toBe(4);
   });
 
+  it("tints Send · ready amber in lists, as it needs you", () => {
+    const j = getJourney(makeDraft({ reviewStatus: "approved" }), null, { checks: PASSING });
+    expect(j.whereLabel).toBe("Send · ready");
+    expect(j.needsYou).toBe(true);
+    expect(j.listTone).toBe("needs-you");
+  });
+
+  it("says what's next for the matter only when the letter is in one", () => {
+    const exports = [{ id: "e2", format: "marked-sent", exportedAt: 5 }] as Draft["exports"];
+    expect(getJourney(makeDraft({ exports }), null, { checks: PASSING }).whatNow.detail).toBe("What's next:");
+    expect(getJourney(makeDraft({ exports, matterId: "m1" }), null, { checks: PASSING }).whatNow.detail).toBe(
+      "What's next for this matter:"
+    );
+  });
+
   it("does not count a plain export as sent", () => {
     const d = makeDraft({ reviewStatus: "approved", exports: [{ id: "e1", format: "pdf", exportedAt: 1 }] as Draft["exports"] });
     expect(getJourney(d, null, { checks: PASSING }).stage).toBe("send");
@@ -334,5 +362,31 @@ describe("journey steps", () => {
   it("runs the health checks itself when none are passed", () => {
     const j = getJourney(makeDraft());
     expect(j.counts.checksTotal).toBeGreaterThan(0);
+  });
+});
+
+describe("getJourney: an employee's own letter", () => {
+  const own = (o: Partial<Draft> = {}) => makeDraft({ mode: "employee", ...o });
+
+  it("never mentions an approver while drafting or ready", () => {
+    const drafting = getJourney(own(), null, { checks: FAILING });
+    expect(drafting.whatNow.detail).toContain("skip straight to sending it");
+    expect(drafting.whatNow.detail).not.toMatch(/approv/i);
+    const ready = getJourney(own(), null, { checks: PASSING });
+    expect(ready.stage).toBe("review");
+    expect(ready.whatNow.detail).not.toMatch(/approv/i);
+    expect(ready.secondaryAction).toMatchObject({ id: "skip-review", label: "Skip review and get it ready to send" });
+  });
+
+  it("after a finished review, offers to get it ready to send rather than send for approval", () => {
+    const j = getJourney(own(), review({ status: "finished" }), { checks: PASSING });
+    expect(j.primaryAction).toMatchObject({ id: "skip-review", label: "Get it ready to send", disabled: false });
+    expect(j.whatNow.detail).toContain("needs no approver");
+  });
+
+  it("reads Ready to send once signed off", () => {
+    const j = getJourney(own({ reviewStatus: "approved" }), null, { checks: PASSING });
+    expect(j.stage).toBe("send");
+    expect(j.statusLabel).toBe("Ready to send");
   });
 });

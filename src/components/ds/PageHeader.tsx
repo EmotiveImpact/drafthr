@@ -148,7 +148,7 @@ function useBandBleed(ref: React.RefObject<HTMLElement | null>, enabled: boolean
     if (!enabled) return;
     const el = ref.current;
     if (!el) return;
-    const main = el.closest("main") ?? document.getElementById("main");
+    const main = el.closest<HTMLElement>("[data-page-main], main") ?? document.getElementById("main");
     if (!main) return;
     // On phones the compact top bar sits above <main> inside the inset; the
     // band climbs behind it too, so the mist runs to the top of the screen.

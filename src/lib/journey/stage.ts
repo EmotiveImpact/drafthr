@@ -190,6 +190,29 @@ export function hasText(html: string | undefined): boolean {
   return (html ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
 }
 
+/**
+ * The letter is the employee's own (employee mode): it goes to their
+ * employer, so there is no approver. Review stays optional; the Approve step
+ * is their own sign-off ("Get it ready to send").
+ */
+export function isOwnLetter(draft: Pick<Draft, "mode">): boolean {
+  return draft.mode === "employee";
+}
+
+/**
+ * An employee's own letter is ready to send: there is no approver, so the
+ * writer signs it off themselves (the existing approval record, in their
+ * name), which opens the Send step. No-op for any other letter.
+ */
+export function markOwnLetterReady(draftId: string): boolean {
+  const store = useDraftStore.getState();
+  const draft = store.drafts[draftId];
+  if (!draft || !isOwnLetter(draft)) return false;
+  const name = draft.employee?.legalName?.trim() || "You";
+  store.approveDraft(draftId, name, "Ready to send. Your own letter needs no approver.");
+  return true;
+}
+
 function countsFor(draft: Draft, checks: HealthCheck[]): JourneyCounts {
   const sections = draft.sections ?? [];
   // A pending change in inline mode is already counted through its marks;
@@ -201,7 +224,9 @@ function countsFor(draft: Draft, checks: HealthCheck[]): JourneyCounts {
   ).length;
   return {
     sections: sections.length,
-    sectionsDrafted: sections.filter((s) => hasText(s.html)).length,
+    // Only sections that have finished: one DraftHR is still writing does not
+    // count yet, so "N of M drafted" never runs ahead of the stream (FEAT-060).
+    sectionsDrafted: sections.filter((s) => s.status !== "streaming" && hasText(s.html)).length,
     requiredSectionsEmpty: sections.filter((s) => s.required && !hasText(s.html)).length,
     streaming: sections.some((s) => s.status === "streaming"),
     pendingSuggestions: pendingSuggestionGroups(draft).length + pendingCards,
@@ -248,6 +273,10 @@ export function getJourney(
   const status = draft.reviewStatus ?? "draft";
   const approverName = lastSubmittedApprover(draft);
   const r = review && review.draftId === draft.id && review.status !== "recalled" ? review : null;
+  // An employee's own letter (a grievance, a resignation) goes to their
+  // employer; nobody in a workspace approves it, so after an optional review
+  // it goes straight to Send (LETTER-X25). See markOwnLetterReady.
+  const ownLetter = isOwnLetter(draft);
   const base = { counts, review: r, approverName, secondaryAction: null as JourneyAction | null };
 
   // ---- Sent -------------------------------------------------------------
@@ -261,7 +290,8 @@ export function getJourney(
       statusLabel: "Sent",
       statusTone: "green",
       whereLabel: `Sent · ${shortDate(sentAt)}`,
-      whatNow: { lead: "Sent.", detail: "What's next for this matter:" },
+      // "for this matter" only when it is in one (SEND-91).
+      whatNow: { lead: "Sent.", detail: draft.matterId ? "What's next for this matter:" : "What's next:" },
       primaryAction: { id: "download", label: "Download" },
       needsYou: false,
       listTone: "done",
@@ -277,7 +307,7 @@ export function getJourney(
       ...base,
       stage: "send",
       tone: "yours",
-      statusLabel: "Approved",
+      statusLabel: ownLetter ? "Ready to send" : "Approved",
       statusTone: "green",
       whereLabel: "Send · ready",
       whatNow: {
@@ -290,7 +320,9 @@ export function getJourney(
       },
       primaryAction: { id: "export", label: "Export", menu: true },
       needsYou: true,
-      listTone: "yours",
+      // It needs you, so the list shows it amber like every other row that
+      // does (LISTS-33).
+      listTone: "needs-you",
       stepIndex: 3,
       locked: true,
     };
@@ -452,19 +484,23 @@ export function getJourney(
       tone: "yours",
       statusLabel: "Reviewed",
       statusTone: "green",
-      whereLabel: "Approve · ready to send for approval",
-      whatNow: {
-        lead: "Review finished.",
-        detail: "Send it to be approved. The approver gets the letter and the review.",
-      },
-      primaryAction: {
-        id: "send-for-approval",
-        label: "Send for approval",
-        disabled: blocking.length > 0,
-        reason: gateReason,
-      },
+      whereLabel: ownLetter ? "Approve · ready to sign off" : "Approve · ready to send for approval",
+      whatNow: ownLetter
+        ? { lead: "Review finished.", detail: "Your own letter needs no approver. Get it ready to send." }
+        : {
+            lead: "Review finished.",
+            detail: "Send it to be approved. The approver gets the letter and the review.",
+          },
+      primaryAction: ownLetter
+        ? { id: "skip-review", label: "Get it ready to send", disabled: blocking.length > 0, reason: gateReason }
+        : {
+            id: "send-for-approval",
+            label: "Send for approval",
+            disabled: blocking.length > 0,
+            reason: gateReason,
+          },
       needsYou: true,
-      listTone: "yours",
+      listTone: "needs-you",
       stepIndex: 2,
       locked: false,
     };
@@ -489,6 +525,7 @@ export function getJourney(
   }
 
   // ---- Draft, or ready for review ----------------------------------------
+  const nextStep = ownLetter ? "send it for review or skip straight to sending it" : "send it for review or straight to approval";
   const stillDrafting = blocking.length > 0 || counts.pendingSuggestions > 0;
   if (stillDrafting) {
     const left: string[] = [];
@@ -507,8 +544,8 @@ export function getJourney(
     const detail = counts.streaming
       ? "DraftHR is drafting the letter. You can edit as soon as each section lands."
       : left.length > 0
-        ? `${joinList(left)} left, then send it for review or straight to approval.`
-        : "Draft the letter, then send it for review or straight to approval.";
+        ? `${joinList(left)} left, then ${nextStep}.`
+        : `Draft the letter, then ${nextStep}.`;
     const needsYou = counts.failingRequired > 0 || counts.pendingSuggestions > 0;
     return {
       ...base,
@@ -541,10 +578,14 @@ export function getJourney(
     whereLabel: "Review · ready to send",
     whatNow: {
       lead: "Ready for a second look.",
-      detail: `${allPass ? `All ${counts.checksTotal} checks pass.` : "No required check is failing."} Send it for review, or skip straight to approval.`,
+      detail: `${allPass ? `All ${counts.checksTotal} checks pass.` : "No required check is failing."} ${
+        ownLetter ? "Send it for review, or skip straight to sending it." : "Send it for review, or skip straight to approval."
+      }`,
     },
     primaryAction: { id: "send-for-review", label: "Send for review" },
-    secondaryAction: { id: "skip-review", label: "Skip review and send for approval" },
+    secondaryAction: ownLetter
+      ? { id: "skip-review", label: "Skip review and get it ready to send" }
+      : { id: "skip-review", label: "Skip review and send for approval" },
     needsYou: false,
     listTone: "yours",
     stepIndex: 1,

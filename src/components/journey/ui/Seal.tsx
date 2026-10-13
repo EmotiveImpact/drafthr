@@ -74,7 +74,7 @@ export function Seal({
           strokeLinejoin="round"
         />
       </svg>
-      <span className="ds-seal-label font-sans text-[10.5px] font-medium tracking-[0.08em] text-[var(--ds-green-solid)] uppercase">
+      <span className="ds-seal-label font-sans text-[10.5px] font-medium tracking-[0.08em] text-[var(--ds-green-fg)] uppercase">
         {text}
       </span>
     </div>

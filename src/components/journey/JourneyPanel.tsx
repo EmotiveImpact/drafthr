@@ -51,13 +51,21 @@ export function JourneyPanel({
   className?: string;
 }) {
   const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer });
+  // A template is never reviewed, approved or sent: no four-step tracker
+  // for it, only the drafting checklist and health (LETTER-X24).
+  const isTemplate = useDraftStore((s) => !!s.drafts[draftId]?.isTemplateSource);
   if (!journey) return null;
   const Stage = STAGES[journey.stage];
   const showHealth = health !== false && journey.stage !== "send" && journey.stage !== "sent";
 
   return (
-    <div data-slot="journey-panel" data-stage={journey.stage} className={cn("flex flex-col gap-3.5", className)}>
-      <StageTracker stage={journey.stage} tone={journey.tone} />
+    <div
+      data-slot="journey-panel"
+      data-stage={journey.stage}
+      data-template={isTemplate || undefined}
+      className={cn("flex flex-col gap-3.5", className)}
+    >
+      {!isTemplate && <StageTracker stage={journey.stage} tone={journey.tone} />}
       <WhatNow lead={journey.whatNow.lead} detail={journey.whatNow.detail} />
       <Stage draftId={draftId} />
       {showHealth && (health ?? <DefaultHealthCard draftId={draftId} stage={journey.stage} locked={journey.locked} />)}

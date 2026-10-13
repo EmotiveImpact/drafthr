@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayTitleFor } from "@/lib/letters/display";
 import { useDraftStore } from "@/lib/store";
-import { getJourney } from "@/lib/journey/stage";
+import { getJourney, isOwnLetter, markOwnLetterReady } from "@/lib/journey/stage";
 import { useProfileStore } from "@/lib/profile";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getFlag } from "@/lib/flags";
@@ -482,7 +482,19 @@ export async function finishReview(review: ReviewRequest): Promise<FinishOutcome
   useReviewStore.getState().finish(review.id);
   const fresh = useReviewStore.getState().requests[review.id];
   let outcome: FinishOutcome;
-  if (fresh?.kind === "team" && fresh.approveInSameStep && fresh.approvedAt) {
+  const own = useDraftStore.getState().drafts[review.draftId];
+  if (own && isOwnLetter(own)) {
+    // An employee's own letter has no approver: finishing the review makes
+    // it ready to send, unless a required check still fails (LETTER-X25).
+    const action = getJourney(own, fresh ?? review).primaryAction;
+    if (action && !action.disabled && markOwnLetterReady(review.draftId)) {
+      toast.success("Review finished. It's ready to send.");
+      outcome = "ready-to-send";
+    } else {
+      toast.success("Review finished");
+      outcome = "blocked";
+    }
+  } else if (fresh?.kind === "team" && fresh.approveInSameStep && fresh.approvedAt) {
     useDraftStore.getState().approveDraft(review.draftId, fresh.reviewer.name, "Approved during review");
     toast.success(`Review finished. ${firstName(fresh.reviewer.name)} approved it, so it's ready to send.`);
     outcome = "ready-to-send";

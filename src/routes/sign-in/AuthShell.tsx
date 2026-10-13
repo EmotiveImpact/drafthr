@@ -98,11 +98,11 @@ export function AuthShell({
     return <AuthSplitShell>{inner}</AuthSplitShell>;
   }
   return (
-    <main
+    <div data-page-main
       className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]"
     >
       {inner}
-    </main>
+    </div>
   );
 }
 

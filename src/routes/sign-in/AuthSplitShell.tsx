@@ -16,7 +16,7 @@ import { SignInSlideshow } from "./SignInSlideshow";
  */
 export function AuthSplitShell({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen lg:grid lg:grid-cols-2 text-[var(--ds-ink)]">
+    <div data-page-main className="min-h-screen lg:grid lg:grid-cols-2 text-[var(--ds-ink)]">
       {/* Left column: pastel letter slideshow on the warm off-white ground.
        * Hidden below lg:. Sticky to the viewport height so the form column
        * can scroll independently on tall content. */}
@@ -29,6 +29,6 @@ export function AuthSplitShell({ children }: { children: ReactNode }) {
       <div className="min-h-screen flex flex-col bg-[var(--ds-canvas)] lg:border-l lg:border-[var(--ds-line)] lg:bg-[var(--ds-surface)]">
         {children}
       </div>
-    </main>
+    </div>
   );
 }

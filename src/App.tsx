@@ -272,7 +272,7 @@ export function App() {
       const result = await syncAllPending(() => Object.values(useDraftStore.getState().drafts));
       if (cancelled) return;
       if (result.ok > 0) {
-        toast.success(`${result.ok} draft${result.ok === 1 ? "" : "s"} synced to your workspace.`);
+        toast.success(`${result.ok} letter${result.ok === 1 ? "" : "s"} synced to your workspace`);
       }
       if (result.failed > 0) {
         console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);

@@ -272,7 +272,7 @@ export function ReviewStep() {
        * the letter first, then the panel, so Submit / Approve / comments stay
        * reachable on phones. */}
       <div className="grid min-h-0 flex-1 grid-cols-1 content-start overflow-y-auto lg:content-stretch lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_380px]">
-        <main
+        <div data-page-main
           ref={canvasRef}
           className="review-canvas relative h-[75dvh] min-h-0 overflow-hidden bg-[var(--ds-canvas)] lg:h-auto"
         >
@@ -305,7 +305,7 @@ export function ReviewStep() {
             }}
             onCommentClick={(commentId) => setFocusCommentId(commentId)}
           />
-        </main>
+        </div>
 
         <aside
           aria-label="Review panel"

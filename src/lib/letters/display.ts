@@ -103,3 +103,21 @@ export function sectionTitleText(title: string | undefined): string {
   }
   return t.replace(/\s+—\s+/g, ", ").replace(/\s&\s/g, " and ");
 }
+
+/**
+ * A catalogue name in sentence case, for running text and lists
+ * ("Offer of Employment" reads "Offer of employment"). Acronyms and words
+ * with digits keep their case (PIP, ACAS, SAR, UK).
+ */
+export function sentenceCaseTitle(title: string | undefined): string {
+  const t = (title ?? "").trim();
+  let first = true;
+  return t.replace(/[\p{L}][\p{L}'’]*/gu, (w) => {
+    if (first) {
+      first = false;
+      return w;
+    }
+    if (w.length > 1 && w === w.toUpperCase()) return w;
+    return w.toLowerCase();
+  });
+}

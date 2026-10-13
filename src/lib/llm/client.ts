@@ -75,7 +75,7 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     // Body may be HTML (Vercel error page) or JSON (our error envelope).
     const text = await res.text().catch(() => "");
     const snippet = extractErrorSnippet(text);
-    const detail = snippet ? ` — ${snippet}` : "";
+    const detail = snippet ? `: ${snippet}` : "";
     throw new RetryableError(`Server error (${res.status})${detail}`);
   }
   if (res.status === 402 || res.status === 403) {

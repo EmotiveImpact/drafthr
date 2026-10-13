@@ -170,7 +170,7 @@ export function LinkPage({ icon, title, children, action }: { icon: ReactNode; t
         <BrandMark size={22} />
         <span className="text-[15px] font-medium text-[var(--ds-ink)]">DraftHR</span>
       </header>
-      <main className="mx-auto flex w-full max-w-[520px] flex-1 flex-col justify-center px-4 py-12">
+      <div data-page-main className="mx-auto flex w-full max-w-[520px] flex-1 flex-col justify-center px-4 py-12">
         <div className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-6 py-7 shadow-[var(--ds-shadow-s)]">
           <span aria-hidden className="grid size-10 place-items-center rounded-[10px] bg-[var(--ds-surface-2)] text-[var(--ds-muted)]">
             {icon}
@@ -179,7 +179,7 @@ export function LinkPage({ icon, title, children, action }: { icon: ReactNode; t
           <p className="m-0 mt-2 text-[14px] leading-[1.55] text-[var(--ds-body)]">{children}</p>
           {action && <div className="mt-5">{action}</div>}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

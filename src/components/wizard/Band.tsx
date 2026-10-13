@@ -107,7 +107,7 @@ function useBandBleed(ref: RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const main = el.closest("main") ?? document.getElementById("main");
+    const main = el.closest<HTMLElement>("[data-page-main], main") ?? document.getElementById("main");
     if (!main) return;
     const inset = el.closest<HTMLElement>('[data-slot="sidebar-inset"]') ?? main;
     const measure = () => {

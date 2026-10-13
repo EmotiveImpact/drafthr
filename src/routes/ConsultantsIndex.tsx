@@ -283,7 +283,7 @@ export function ConsultantsIndex() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      <div data-page-main className="min-w-0 flex-1 overflow-y-auto">
         <ExpertsHeader
           crumbs={crumbs}
           title={letterMode ? "Choose an expert" : "Experts"}
@@ -523,7 +523,7 @@ export function ConsultantsIndex() {
             </div>
           )}
         </div>
-      </main>
+      </div>
 
       {!letterMode && !isConsultant && (
         <BookingSheet

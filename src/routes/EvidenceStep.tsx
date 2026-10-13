@@ -219,7 +219,7 @@ export function EvidenceStep() {
       )}
 
       <div className="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_380px]">
-        <main className="relative flex min-h-0 min-w-0 flex-col bg-[var(--ds-canvas)]">
+        <div data-page-main className="relative flex min-h-0 min-w-0 flex-col bg-[var(--ds-canvas)]">
           <div className="min-h-0 flex-1 overflow-auto">
             <div className="mx-auto w-full max-w-[640px] px-3 pb-16 pt-5 sm:px-0">
               <DeadlineBanner draft={draft} />
@@ -279,7 +279,7 @@ export function EvidenceStep() {
               </article>
             </div>
           </div>
-        </main>
+        </div>
 
         {/* Side panel: permanent on lg+, a drawer on phones. */}
         <aside

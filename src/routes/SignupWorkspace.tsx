@@ -281,11 +281,11 @@ function WorkspaceShell({
   children: ReactNode;
 }) {
   return (
-    <main className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]">
+    <div data-page-main className="min-h-screen flex flex-col bg-[var(--ds-canvas)] text-[var(--ds-ink)]">
       <WorkspaceTopbar user={user} />
       <div className="flex-1">{children}</div>
       <WorkspaceFooter />
-    </main>
+    </div>
   );
 }
 

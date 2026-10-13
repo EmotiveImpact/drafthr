@@ -15,7 +15,7 @@ import { todayDateOnly } from "@/lib/date-only";
 import { useIsLargeViewport } from "@/lib/use-large-viewport";
 import { toServerUuid } from "@/lib/remote-ids";
 import { runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
-import { useJourney } from "@/lib/journey/stage";
+import { markOwnLetterReady, useJourney } from "@/lib/journey/stage";
 import { firstName, useLatestReview, useReviewStore } from "@/lib/journey/reviews";
 import { useJourneyUI } from "@/components/journey/ui-store";
 import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
@@ -904,6 +904,13 @@ export function Editor() {
         sendForReview();
         return;
       case "skip-review":
+        // An employee's own letter has no approver (LETTER-X25).
+        if (markOwnLetterReady(draft.id)) {
+          toast.success("Ready to send");
+          return;
+        }
+        setReviewDialogKind("submit");
+        return;
       case "send-for-approval":
         setReviewDialogKind("submit");
         return;
@@ -1278,7 +1285,7 @@ export function Editor() {
 
   return (
     <div className="lw-root relative flex min-h-0 flex-1 bg-[var(--ds-surface)]">
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div data-page-main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {isPhone ? (
           <>
             <PhoneTopBar bar={bar} matter={matter} />
@@ -1417,7 +1424,7 @@ export function Editor() {
             )}
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Side panel (lg+): Edits / Progress / Chat, or the pinned evidence. */}
       {isLargeViewport && pinnedDock !== null && !focusMode &&
