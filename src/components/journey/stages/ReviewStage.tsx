@@ -19,6 +19,7 @@ import {
   type ReviewVerdict,
 } from "@/lib/journey/reviews";
 import { useJourneyUI } from "@/components/journey/ui-store";
+import { useLetterWorkspace } from "@/components/editor/workspace-store";
 import {
   AskerMessages,
   BackCard,
@@ -140,7 +141,13 @@ function ReadyState({
           className="h-10 w-full text-[13.5px]"
           disabled={!!reason}
           title={reason}
-          onClick={() => openReviewPicker(draft.id, { from: "panel" })}
+          onClick={() => {
+            // The same path as the document bar's Send for review: the
+            // workspace runs the evidence check first, then the picker.
+            const send = useLetterWorkspace.getState().draftId === draft.id ? useLetterWorkspace.getState().handlers.sendForReview : undefined;
+            if (send) send("panel");
+            else openReviewPicker(draft.id, { from: "panel" });
+          }}
           data-testid="review-send-for-review"
         >
           <Eye className="size-[15px]" strokeWidth={1.7} />

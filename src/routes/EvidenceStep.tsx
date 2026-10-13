@@ -1,9 +1,12 @@
+import { toast } from "sonner";
+import { draftErrorCopy } from "@/components/editor/draft-error";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, ListOrdered, Loader2, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { useLetterAccess } from "@/components/editor/letter-access";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
 import { SectionList } from "@/components/editor/WizardSidebar";
 import { cn } from "@/lib/utils";
@@ -40,7 +43,10 @@ export function EvidenceStep() {
   const { draftId } = useParams<{ draftId: string }>();
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  // Read only while the journey has the letter locked, for a role that
+  // cannot edit, and for the teammate reviewer (who sees only the evidence
+  // they were given), as in the letter workspace (REVIEW-97, REVIEW-X20).
+  const { draft, shown, canEdit, lockedReason } = useLetterAccess(draftId);
   const setEvidence = useDraftStore((s) => s.setEvidence);
   const updateSection = useDraftStore((s) => s.updateSection);
   const appendToSection = useDraftStore((s) => s.appendToSection);
@@ -93,7 +99,7 @@ export function EvidenceStep() {
     }
   }, [autoOpenAdd]);
 
-  if (!draft || !draftId) {
+  if (!draft || !draftId || !shown) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
         <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
@@ -108,6 +114,7 @@ export function EvidenceStep() {
   }
 
   const onChangeEvidence = (items: EvidenceItem[]) => {
+    if (!canEdit) return;
     setEvidence(draft.id, items);
   };
 
@@ -115,6 +122,7 @@ export function EvidenceStep() {
     item: EvidenceItem,
     kind: "reference" | "quote",
   ) => {
+    if (!canEdit) return;
     const target = findTargetSectionForItem(draft, item, activeSectionId);
     if (!target) return;
     const html =
@@ -130,7 +138,7 @@ export function EvidenceStep() {
   };
 
   const onRegenerateSection = async (section: Section, instruction?: string) => {
-    if (streamingSectionId) return;
+    if (streamingSectionId || !canEdit) return;
     setStreamingSectionId(section.id);
     const abort = new AbortController();
     try {
@@ -149,17 +157,14 @@ export function EvidenceStep() {
       );
     } catch (err) {
       console.error(err);
-      alert(
-        "Regeneration failed: " +
-          (err instanceof Error ? err.message : "unknown error"),
-      );
+      toast.error("DraftHR could not rewrite this section", { description: draftErrorCopy(err) });
     } finally {
       setStreamingSectionId(null);
     }
   };
 
   const requiredBadge = (() => {
-    const status = buildExpectedEvidenceStatus(draft);
+    const status = buildExpectedEvidenceStatus(shown);
     if (status.length === 0) return undefined;
     const ok = status.filter((row) => row.ok).length;
     return `${ok}/${status.length}`;
@@ -197,7 +202,7 @@ export function EvidenceStep() {
               title="Evidence"
             >
               <Paperclip className="size-4" />
-              <span className="ds-mono text-[12px] text-[var(--ds-subtle)]">{draft.evidence?.length ?? 0}</span>
+              <span className="ds-mono text-[12px] text-[var(--ds-muted)]">{shown.evidence?.length ?? 0}</span>
             </button>
             <button type="button" onClick={toLetter} className={cn(BAR_BTN_DARK, "ml-1")} title="Back to the letter">
               Done
@@ -227,10 +232,16 @@ export function EvidenceStep() {
               {/* Mode note: the side panel is evidence here, not DraftHR. */}
               <div className="mb-3 flex items-start gap-2.5 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[var(--ds-muted)]">
                 <Paperclip className="mt-1 size-3.5 shrink-0" />
-                <span>
-                  <strong className="font-medium text-[var(--ds-ink)]">Linking evidence.</strong> Click a section to make
-                  it the target, then use the Evidence panel to add items, link them, or insert references and quotes.
-                </span>
+                {canEdit ? (
+                  <span>
+                    <strong className="font-medium text-[var(--ds-ink)]">Linking evidence.</strong> Click a section to make
+                    it the target, then use the Evidence panel to add items, link them, or insert references and quotes.
+                  </span>
+                ) : (
+                  <span>
+                    <strong className="font-medium text-[var(--ds-ink)]">Read only.</strong> {lockedReason}
+                  </span>
+                )}
               </div>
 
               <article className="lw-paper rounded-[3px] bg-[var(--ds-surface)] px-5 py-8 shadow-[var(--ds-shadow-paper)] sm:px-[60px] sm:py-12">
@@ -244,16 +255,25 @@ export function EvidenceStep() {
                     data-evidence-target={activeSectionId === section.id || undefined}
                   >
                     <SectionEditor
-                      draft={draft}
+                      // Remount when the lock changes: the author tools (and
+                      // their selection bubble) come and go with it.
+                      key={canEdit ? "edit" : "read"}
+                      draft={shown}
                       section={section}
                       variant="paper"
                       hideToolbar
+                      editable={canEdit}
+                      authorChrome={canEdit}
                       isStreaming={streamingSectionId === section.id}
                       active={activeSectionId === section.id}
                       onFocus={() => setActiveSectionId(section.id)}
-                      onChange={(html) => updateSection(draft.id, section.id, html)}
+                      onChange={(html) => {
+                        if (canEdit) updateSection(draft.id, section.id, html);
+                      }}
                       onRegenerate={(instr) => onRegenerateSection(section, instr)}
-                      onClear={() => updateSection(draft.id, section.id, "")}
+                      onClear={() => {
+                        if (canEdit) updateSection(draft.id, section.id, "");
+                      }}
                       onShowHistory={() => {
                         // Version history lives in the letter workspace.
                         nav(`/editor/${draft.id}?section=${section.id}`);
@@ -297,7 +317,7 @@ export function EvidenceStep() {
               value={railTab}
               onChange={setRailTab}
               tabs={[
-                { id: "evidence", label: "Evidence", count: draft.evidence?.length ?? 0 },
+                { id: "evidence", label: "Evidence", count: shown.evidence?.length ?? 0 },
                 ...(requiredBadge ? [{ id: "required" as const, label: "Required", count: requiredBadge }] : []),
                 { id: "sections", label: "Sections" },
               ]}
@@ -313,16 +333,18 @@ export function EvidenceStep() {
           </div>
           <div className={cn("flex min-h-0 flex-1 flex-col", railTab !== "evidence" && "hidden")}>
             <EvidencePanel
-              draft={draft}
+              draft={shown}
               activeSectionId={activeSectionId}
               onChangeEvidence={onChangeEvidence}
               onInsertAtSection={onInsertAtSection}
-              autoOpenAdd={autoOpenAdd}
+              autoOpenAdd={autoOpenAdd && canEdit}
+              readOnly={!canEdit}
+              readOnlyNote={lockedReason}
             />
           </div>
           {railTab === "required" && (
             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
-              <EvidenceRequirementsList draft={draft} />
+              <EvidenceRequirementsList draft={shown} />
             </div>
           )}
           {railTab === "sections" && (

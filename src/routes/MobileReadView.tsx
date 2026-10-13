@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { letterBodyHtml } from "@/lib/export/pdf";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import { briefTitleFor, recipientNameFor } from "@/lib/letters/display";
 import { useJourney } from "@/lib/journey/stage";
 import { StatusPill } from "@/components/journey/ui";
 
@@ -32,8 +32,10 @@ export function MobileReadView() {
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
 
   const bodyHtml = useMemo(() => (draft ? letterBodyHtml(draft) : ""), [draft]);
-  const meta = draft ? getLetterMeta(draft.letterType) : null;
-  const title = draft?.title || meta?.title || "Untitled letter";
+  // The same short name as the document bar and the Letters list
+  // ("Warning letter"), with the person under it.
+  const title = draft ? briefTitleFor(draft) || "Untitled letter" : "Untitled letter";
+  const recipient = draft ? recipientNameFor(draft) : "";
   const journey = useJourney(draft?.id);
 
   if (!draft) {
@@ -70,7 +72,7 @@ export function MobileReadView() {
     >
       {/* Top strip: the approval pill and Done, nothing else. */}
       <div
-        className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--ds-surface)]/95 px-4 py-3 backdrop-blur"
+        className="sticky top-0 z-10 flex items-center gap-2 border-b border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-4 py-3"
         data-testid="mobile-read-header"
       >
         {journey && <StatusPill tone={journey.statusTone}>{journey.statusLabel}</StatusPill>}
@@ -96,9 +98,11 @@ export function MobileReadView() {
        * .mobile-letter scoped block below so we don't drag the A4-export
        * sizing into the screen surface. */}
       <div data-page-main className="mx-auto max-w-[680px] px-5 pb-24 pt-4 sm:px-8 sm:pt-8">
-        <h1 className="ds-title m-0 mb-7 text-[30px] leading-[1.12] [overflow-wrap:anywhere] sm:text-[36px]">
+        <h1 className="ds-title m-0 text-[30px] leading-[1.12] [overflow-wrap:anywhere] sm:text-[36px]">
           {title}
         </h1>
+        {recipient && <p className="m-0 mt-1.5 text-[14px] text-[var(--ds-muted)]">{recipient}</p>}
+        <div className="mb-7" aria-hidden />
         <article
           className="mobile-letter text-[var(--ds-ink)]"
           dangerouslySetInnerHTML={{ __html: bodyHtml }}

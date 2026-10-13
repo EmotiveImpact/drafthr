@@ -4,7 +4,7 @@ import type { JourneyInfo } from "@/lib/journey/stage";
 import { currentRound, type ReviewRequest } from "@/lib/journey/reviews";
 import { ActivityCard, MarginCard, type ActivityEvent } from "@/components/journey/ui";
 import { cn } from "@/lib/utils";
-import { acceptWithSettle, decideEdit, prefersReducedMotion, suggestedEdits, suggestionCategory, type SuggestedEdit } from "./suggestion-groups";
+import { acceptWithSettle, decideEdit, openAnchoredComments, prefersReducedMotion, suggestedEdits, suggestionCategory, type SuggestedEdit } from "./suggestion-groups";
 import { useLetterWorkspace } from "./workspace-store";
 import type { MyPoint } from "@/components/journey/review/reviewer";
 import type { Me } from "@/components/journey/review/actions";
@@ -20,7 +20,7 @@ import { TeammatePointCard, editTeammatePoint, removeTeammatePoint, suggestionNu
 
 type Item =
   | { key: string; kind: "edit"; edit: SuggestedEdit; n: number; total: number; reviewerN?: number }
-  | { key: string; kind: "comment"; comment: Comment }
+  | { key: string; kind: "comment"; comment: Comment; fromReviewer: boolean }
   | { key: string; kind: "point"; point: MyPoint; n?: number }
   | { key: string; kind: "activity" };
 
@@ -84,12 +84,21 @@ export function MarginLayer({
   const fixCategory = useLetterWorkspace((s) => (s.draftId === draft.id ? s.fixCategory : null));
   const edits = useMemo(() => suggestedEdits(draft), [draft]);
 
-  // Open comments from the reviewer's current round (Back to you).
-  const reviewComments = useMemo(() => {
-    if (!review || review.status !== "back") return [] as Comment[];
-    const ids = new Set(currentRound(review)?.commentIds ?? []);
-    return (draft.comments ?? []).filter((c) => ids.has(c.id) && !c.resolved && !c.parentId);
-  }, [draft.comments, review]);
+  // Open comments from the reviewer's current round (Back to you), then
+  // every other open comment pinned to words in the letter (the author's
+  // own included, LETTER-X36). A reviewer's comments made while it is still
+  // out reach the author with the round, not before.
+  const { reviewComments, otherComments } = useMemo(() => {
+    const roundIds = new Set(review && review.status === "back" ? currentRound(review)?.commentIds ?? [] : []);
+    const fromRound = (draft.comments ?? []).filter((c) => roundIds.has(c.id) && !c.resolved && !c.parentId);
+    const rName = review?.reviewer.name.trim().toLowerCase() ?? "";
+    const rEmail = review?.reviewer.email?.trim().toLowerCase() ?? "";
+    const byReviewer = (c: Comment) =>
+      Boolean(review && review.status === "out") &&
+      ((!!rName && c.authorName.trim().toLowerCase() === rName) || (!!rEmail && (c.authorEmail ?? "").trim().toLowerCase() === rEmail));
+    const rest = openAnchoredComments(draft).filter((c) => !roundIds.has(c.id) && !byReviewer(c));
+    return { reviewComments: fromRound as Comment[], otherComments: rest };
+  }, [draft, review]);
 
   const items: Item[] = useMemo(() => {
     const out: Item[] = [];
@@ -110,9 +119,10 @@ export function MarginLayer({
         reviewerN: edit.ai ? undefined : ++reviewerN,
       });
     });
-    for (const c of reviewComments) out.push({ key: `c:${c.id}`, kind: "comment", comment: c });
+    for (const c of reviewComments) out.push({ key: `c:${c.id}`, kind: "comment", comment: c, fromReviewer: true });
+    for (const c of otherComments) out.push({ key: `c:${c.id}`, kind: "comment", comment: c, fromReviewer: false });
     return out;
-  }, [activity, edits, reviewComments, reviewer]);
+  }, [activity, edits, reviewComments, otherComments, reviewer]);
 
   const [leaving, setLeaving] = useState<Record<string, boolean>>({});
   const [tops, setTops] = useState<Record<string, number>>({});
@@ -250,7 +260,7 @@ export function MarginLayer({
               style={{ top }}
             >
               <MarginCard
-                kind="reviewer"
+                kind={it.fromReviewer ? "reviewer" : "comment"}
                 author={{ name: c.authorName, seed: c.authorEmail || c.authorId || c.authorName }}
                 meta="Comment"
                 actions={

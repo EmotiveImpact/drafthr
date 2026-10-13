@@ -74,8 +74,14 @@
 .lw-paper .lw-section[data-section-kind="subject"] .ProseMirror strong {
   font-weight: 600;
 }
+/* One rhythm down the page (mock f1 .paper p, 12px): a paragraph's gap is
+ * the same inside a section and across into the next one. The section's
+ * own 12px bottom padding is that gap; the generic section-node padding
+ * would add 8px more at every boundary (LETTER-X30). */
 .lw-paper .lw-section {
   scroll-margin-top: 5rem;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 /* On the phone the subject is the sheet's serif heading (phone-letter). */
 @media (max-width: 767px) {
@@ -344,4 +350,46 @@
   text-decoration-color: var(--ds-amber-ring);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
+}
+
+/* ---------- The Review page (/editor/:id/review) ----------
+ * The same colours as the letter workspace: a reviewer's changes lilac
+ * (new words lilac with a lilac underline, struck words in a lilac strike,
+ * their name tag lilac), DraftHR's green and red. The globals give every
+ * suggestion mark green by default. */
+.review-canvas ins[data-suggestion-id][data-status="pending"] {
+  text-decoration: none;
+  color: var(--ds-lilac-ink);
+  background: var(--ds-lilac-bg);
+  border-bottom: 1.5px solid var(--ds-lilac-ring);
+  padding: 0;
+}
+.review-canvas del[data-suggestion-id][data-status="pending"] {
+  color: var(--ds-lilac-fg);
+  text-decoration: line-through;
+  text-decoration-color: var(--ds-lilac-line);
+  text-decoration-thickness: 1px;
+  background: var(--ds-lilac-soft);
+  padding: 0;
+}
+.review-canvas ins[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i], [data-author=""], :not([data-author])) {
+  color: var(--ds-green-ink);
+  background: var(--ds-green-bg);
+  border-bottom-color: var(--ds-green-line);
+}
+.review-canvas del[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i], [data-author=""], :not([data-author])) {
+  color: var(--ds-red-fg);
+  text-decoration-color: var(--ds-red-line);
+  background: var(--ds-red-soft);
+}
+.review-canvas ins[data-suggestion-id][data-status="pending"][data-author]::after,
+.review-canvas del[data-suggestion-id][data-status="pending"][data-author]:not(:has(+ ins[data-suggestion-id]))::after {
+  background: var(--ds-lilac-fg);
+  color: var(--ds-on-accent);
+}
+.review-canvas ins[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i])::after {
+  background: var(--ds-green-fg);
+}
+.review-canvas del[data-suggestion-id][data-status="pending"]:is([data-author="Claude AI" i], [data-author="DraftHR" i], [data-author="AI" i]):not(:has(+ ins[data-suggestion-id]))::after {
+  background: var(--ds-red-fg);
 }

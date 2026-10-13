@@ -210,7 +210,9 @@ function noticeFor({
               : "Approved."
         }
       >
-        Ready to send. Choose how {recipientFirst} gets it on the right.
+        {/* On the phone the panel is the Progress sheet, not a column on the right. */}
+        <span className="hidden md:inline">Ready to send. Choose how {recipientFirst} gets it on the right.</span>
+        <span className="md:hidden">Ready to send. Tap Progress to choose how {recipientFirst} gets it.</span>
       </NoticeStrip>
     );
   }

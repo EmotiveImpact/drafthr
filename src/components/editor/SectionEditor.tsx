@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { useEditor, EditorContent, BubbleMenu, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -20,13 +21,15 @@ import { isAllowedEmbeddedImageFile, isSafeImageDataUrl } from "@/lib/safe-data-
 const MAX_EMBED_BYTES = 5 * 1024 * 1024;
 async function readImageAsDataUrl(file: File): Promise<string | null> {
   if (!isAllowedEmbeddedImageFile(file)) {
-    alert("Please use a PNG, JPEG, WEBP, or GIF image.");
+    toast.error("That image type cannot go in the letter", {
+      description: "Use a PNG, JPEG, WEBP or GIF image.",
+    });
     return null;
   }
   if (file.size > MAX_EMBED_BYTES) {
-    alert(
-      `${file.name} is larger than 5 MB. Add it as evidence with the paperclip button instead. That path stores the original file at full quality and references it from the section.`
-    );
+    toast.error(`${file.name} is larger than 5 MB`, {
+      description: "Add it as evidence with the paperclip button instead. That keeps the original file at full quality and references it from the section.",
+    });
     return null;
   }
   return new Promise<string | null>((resolve) => {
@@ -435,10 +438,12 @@ export function SectionEditor({
         className={cn(
           "flex items-center justify-between gap-2",
           paper
-            ? // Phones: above the section being edited. Wider screens: a
-              // column in the page's right margin, beside the section, so it
-              // never covers the text of the paragraph above.
-              "pointer-events-none absolute -top-9 right-0 z-20 font-sans md:left-full md:right-auto md:top-0 md:ml-1.5 md:flex-col md:items-start md:justify-start md:gap-1 lg:ml-3"
+            ? // Phones: a row in the flow at the top of the section being
+              // edited, so it pushes the text down rather than sitting over
+              // the last line of the paragraph above (LETTER-X13). Wider
+              // screens: a column in the page's right margin, beside the
+              // section, so it never covers the text either.
+              "pointer-events-none z-20 font-sans max-md:relative max-md:mb-1.5 max-md:justify-end md:absolute md:left-full md:right-auto md:top-0 md:ml-1.5 md:flex-col md:items-start md:justify-start md:gap-1 lg:ml-3"
             : "px-3 py-2 md:border-b md:border-letter-rule",
         )}
       >

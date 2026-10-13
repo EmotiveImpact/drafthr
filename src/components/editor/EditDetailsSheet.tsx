@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Settings2, X } from "lucide-react";
 import type { Draft, EmployeeTone, Tone, UkRegion, UsState, WorkerClass } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const TONES: { value: Tone; label: string }[] = [
   { value: "warm", label: "Warm" },
@@ -218,6 +219,7 @@ export function EditDetailsSheet({
 
             <Group label="Worker classification">
               <SelectField
+                ariaLabel="Worker classification"
                 value={workerClass}
                 onChange={(v) => setWorkerClass(v as WorkerClass)}
                 options={WORKER_CLASSES.map((w) => ({ value: w.value, label: w.label }))}
@@ -227,12 +229,14 @@ export function EditDetailsSheet({
             <Group label={isEmployer ? "Tone" : "Tone band"}>
               {isEmployer ? (
                 <SelectField
+                  ariaLabel="Tone"
                   value={tone}
                   onChange={(v) => setTone(v as Tone)}
                   options={TONES.map((t) => ({ value: t.value, label: t.label }))}
                 />
               ) : (
                 <SelectField
+                  ariaLabel="Tone band"
                   value={employeeTone}
                   onChange={(v) => setEmployeeTone(v as EmployeeTone)}
                   options={EMPLOYEE_TONES.map((t) => ({ value: t.value, label: t.label }))}
@@ -344,31 +348,42 @@ function TextField({
 
 function SelectField({
   label,
+  ariaLabel,
   value,
   onChange,
   options,
 }: {
   label?: string;
+  ariaLabel?: string;
   value: string;
   onChange: (next: string) => void;
   options: { value: string; label: string }[];
 }) {
+  const id = useId();
   return (
-    <label className="block">
+    <div className="block">
       {label && (
-        <span className="block text-[11px] text-[var(--ds-muted)] font-medium mb-1">{label}</span>
+        <label id={id} className="block text-[11px] text-[var(--ds-muted)] font-medium mb-1">
+          {label}
+        </label>
       )}
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full h-8 px-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger
+          size="sm"
+          aria-labelledby={label ? id : undefined}
+          aria-label={label ? undefined : ariaLabel}
+          className="h-8 w-full min-w-0 px-2.5 text-[13px]"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper" className="z-[60]">
+          {options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }

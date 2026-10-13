@@ -8,16 +8,26 @@ import { textOf } from "./health-fix";
  * is set) on the right, then a hairline. From the draft's employer block,
  * the same details the exports print. Not editable on the page: change
  * them in Edit details or Settings.
+ *
+ * An employee's own letter (a grievance to their employer) comes from the
+ * employee, not the company: the top shows their name and address, never
+ * the employer's name, address or logo, so it does not read as if the
+ * company issued it.
  */
 export function Letterhead({ draft, fallbackName, fallbackAddress }: { draft: Draft; fallbackName?: string; fallbackAddress?: string }) {
-  const name = draft.employer?.legalName?.trim() || fallbackName?.trim() || "";
-  const address = (draft.employer?.address?.trim() || fallbackAddress?.trim() || "").replace(/\s*\n\s*/g, ", ");
+  const fromEmployee = draft.mode === "employee";
+  const name = fromEmployee
+    ? draft.employee?.legalName?.trim() || draft.employee?.preferredName?.trim() || ""
+    : draft.employer?.legalName?.trim() || fallbackName?.trim() || "";
+  const address = (
+    fromEmployee ? draft.employee?.address?.trim() || "" : draft.employer?.address?.trim() || fallbackAddress?.trim() || ""
+  ).replace(/\s*\n\s*/g, ", ");
   const lines = address
     .split(",")
     .map((l) => l.trim())
     .filter(Boolean);
-  const logo = draft.employer?.letterheadDataUrl;
-  const phone = draft.employer?.phone?.trim() || "";
+  const logo = fromEmployee ? undefined : draft.employer?.letterheadDataUrl;
+  const phone = fromEmployee ? "" : draft.employer?.phone?.trim() || "";
   if (!name && lines.length === 0 && !logo) return null;
   return (
     <header
@@ -44,7 +54,7 @@ export function Letterhead({ draft, fallbackName, fallbackAddress }: { draft: Dr
         {logo ? (
           <img src={logo} alt={`${name} logo`} className="h-7 w-auto max-w-[96px] object-contain max-md:h-6 max-md:max-w-[64px]" />
         ) : (
-          name && (
+          name && !fromEmployee && (
             // On the phone sheet a small mark sits at the right of the
             // letterhead (mock phone-letter): the company's initial until a
             // letterhead logo is set in Settings.

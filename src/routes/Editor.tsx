@@ -72,7 +72,9 @@ import { PhoneBottomBar, PhoneDisclaimer, PhoneFlagHint, PhoneStrip, PhoneTopBar
 import { useLetterWorkspace, type WorkspaceHandlers } from "@/components/editor/workspace-store";
 import { planFix } from "@/components/editor/health-fix";
 import { HEAVY_EVIDENCE_MIN, letterEvidenceTier } from "@/components/editor/evidence-tier";
-import { recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { openAnchoredComments, recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { draftErrorCopy } from "@/components/editor/draft-error";
+import { ConfirmDialog } from "@/components/letters/dialogs";
 import {
   APPROVER_ROLE_KEY,
   APPROVER_USER_KEY,
@@ -201,6 +203,7 @@ export function Editor() {
   const [activityTab, setActivityTab] = useState<ActivityTab>("history");
   const [checksOpen, setChecksOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [confirmDiscardTemplate, setConfirmDiscardTemplate] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [tickStep, setTickStep] = useState<string | null>(null);
   const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
@@ -220,6 +223,8 @@ export function Editor() {
   const [activeEditor, setActiveEditor] = useState<TiptapEditor | null>(null);
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
   const [handoffReason, setHandoffReason] = useState<EvidenceHandoffReason | null>(null);
+  const handoffReturnFocus = useRef<HTMLElement | null>(null);
+  const handoffFrom = useRef<"bar" | "panel">("bar");
   const [floatingComment, setFloatingComment] = useState<
     | {
         anchor: FloatingAnchor;
@@ -302,10 +307,20 @@ export function Editor() {
   // Back to you (B1): open on the Edits tab, where the reviewer's points
   // are decided. Once per letter and round, so the person can move away.
   // Runs after the reset above, which clears shownBack for a new letter.
+  // A round with nothing to decide stays on Progress, where the Review
+  // step's Finish review is.
   const backKey = review?.status === "back" ? `${draftId}:${review.id}:${review.rounds?.length ?? 0}` : null;
   useEffect(() => {
     if (!backKey || shownBack.current === backKey || viewerIsReviewer) return;
     shownBack.current = backKey;
+    const live = draftId ? useDraftStore.getState().drafts[draftId] : undefined;
+    if (!live) return;
+    const round = review?.rounds?.[review.rounds.length - 1];
+    const theirComments = new Set(round?.commentIds ?? []);
+    const toDecide =
+      suggestedEdits(live).some((e) => !e.ai) ||
+      (live.comments ?? []).some((c) => !c.resolved && theirComments.has(c.id));
+    if (!toDecide) return;
     setPanelTab("edits");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backKey]);
@@ -432,11 +447,13 @@ export function Editor() {
     return () => ro.disconnect();
   }, [isPhone, focusMode, viewMode]);
   // Only the page scales with zoom; the margin cards keep their size. The
-  // margin column shows when it fits beside the page at 100% or less: zoomed
-  // in past that, the canvas scrolls sideways (inside itself, like a word
-  // processor) so the cards stay beside their paragraphs.
+  // margin column shows when it fits beside the page at this zoom. When it
+  // does not (zoomed in, or a narrow window), the page centres in the
+  // canvas, never wider than the canvas, and the cards are in the Edits tab
+  // (LETTER-33): nothing is pushed under the side panel or cut off.
   const pageW = (PAGE_W * zoom) / 100;
-  const marginFits = !isPhone && canvasW >= CANVAS_PAD_L + (PAGE_W * Math.min(zoom, 100)) / 100 + MARGIN_GAP + MARGIN_W + 16;
+  const fitsAt = (z: number) => !isPhone && canvasW >= CANVAS_PAD_L + (PAGE_W * z) / 100 + MARGIN_GAP + MARGIN_W + 16;
+  const marginFits = fitsAt(zoom);
 
   // Approval lands while the sender is looking: the approver's tick, a
   // dark toast, the tracker's Approve step draws its tick.
@@ -506,6 +523,7 @@ export function Editor() {
       jumpToSection: call("jumpToSection"),
       finalise: call("finalise"),
       openRounds: call("openRounds"),
+      sendForReview: call("sendForReview"),
     };
     useLetterWorkspace.getState().register(draftId, { handlers });
     return () => useLetterWorkspace.getState().reset(draftId);
@@ -624,7 +642,7 @@ export function Editor() {
     } catch (err) {
       console.error(err);
       toast.error("Generation failed", {
-        description: err instanceof Error ? err.message : "Unknown error. Please try again.",
+        description: draftErrorCopy(err),
         action: { label: "Retry", onClick: () => void runGenerateAll() },
       });
     } finally {
@@ -654,7 +672,7 @@ export function Editor() {
     } catch (err) {
       console.error(err);
       toast.error("DraftHR could not suggest a change", {
-        description: err instanceof Error ? err.message : "Please try again.",
+        description: draftErrorCopy(err),
       });
       return false;
     }
@@ -714,8 +732,11 @@ export function Editor() {
 
   const discardTemplateSource = () => {
     if (!draft.isTemplateSource) return;
-    const ok = window.confirm("Discard this template and any saved version? This can't be undone.");
-    if (!ok) return;
+    setConfirmDiscardTemplate(true);
+  };
+
+  const doDiscardTemplateSource = () => {
+    if (!draft.isTemplateSource) return;
     const store = useDraftStore.getState();
     if (draft.templateSourceId) store.deleteCustomTemplate(draft.templateSourceId);
     const targetUrl = (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
@@ -736,6 +757,13 @@ export function Editor() {
   const sentAt = journey.stage === "sent" ? journey.sentAt : undefined;
   const sealAnimates = Boolean(justSent && justSent.draftId === draft.id && Date.now() - justSent.at < 4000);
 
+  // Approve and Request changes belong to the named approver only, from
+  // every entry point (Approve step, document bar, More menu).
+  const openReviewAction = (kind: ReviewDialogKind) => {
+    if ((kind === "approve" || kind === "request_changes") && !viewerIsApprover) return;
+    setReviewDialogKind(kind);
+  };
+
   const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string; reviewerRole?: string }) => {
     if (!reviewDialogKind) return;
     const store = useDraftStore.getState();
@@ -752,6 +780,7 @@ export function Editor() {
       if (input.reviewerUserId) notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
       toast.success(`Sent to ${firstName(input.reviewerName) || "the approver"} to approve`);
     } else if (reviewDialogKind === "approve") {
+      if (!viewerIsApprover) return;
       approvingHere.current = true;
       store.approveDraft(draft.id, input.reviewerName, input.body);
     } else if (reviewDialogKind === "request_changes") {
@@ -788,10 +817,18 @@ export function Editor() {
   const pendingEdits = suggestedEdits(draft).length;
   // Back to you (B1): the Edits tab counts the reviewer's open points, their
   // comments as well as their suggested edits (REVIEW-70).
+  // Comments pinned to words in the letter count too, whoever wrote them
+  // (one card each in the margin, LETTER-X36); a reviewer's arrive with
+  // their round.
   const reviewerOpenComments = (() => {
-    if (review?.status !== "back") return 0;
-    const ids = new Set(review.rounds[review.rounds.length - 1]?.commentIds ?? []);
-    return (draft.comments ?? []).filter((c) => ids.has(c.id) && !c.resolved).length;
+    const ids = new Set(review?.status === "back" ? review.rounds[review.rounds.length - 1]?.commentIds ?? [] : []);
+    const open = new Set((draft.comments ?? []).filter((c) => ids.has(c.id) && !c.resolved).map((c) => c.id));
+    const rName = review?.status === "out" ? review.reviewer.name.trim().toLowerCase() : "";
+    for (const c of openAnchoredComments(draft)) {
+      if (rName && c.authorName.trim().toLowerCase() === rName) continue;
+      open.add(c.id);
+    }
+    return open.size;
   })();
 
   const rejectAllEdits = () => {
@@ -878,22 +915,25 @@ export function Editor() {
     setEvidenceDrawerOpen((v) => !v);
   };
 
-  const openReviewPicker = () => {
+  const openReviewPicker = (from: "bar" | "panel" = handoffFrom.current) => {
     // The picker lives with the journey panel: show Progress so it is mounted.
     setPanelTab("progress");
     if (isLargeViewport && pinnedDock === null) setPinnedDock("ai");
-    useJourneyUI.getState().openReviewPicker(draft.id, { from: "bar" });
+    useJourneyUI.getState().openReviewPicker(draft.id, { from });
   };
 
   /** Send for review: the evidence check first, then the reviewer picker. */
-  const sendForReview = () => {
+  const sendForReview = (from: "bar" | "panel" = "bar") => {
+    handoffFrom.current = from;
     const tier = letterTier(draft);
     const reason = evaluateEvidenceHandoff(draft, tier);
     if (reason) {
+      // Esc or Cancel on the check puts focus back on the button pressed.
+      handoffReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setHandoffReason(reason);
       return;
     }
-    openReviewPicker();
+    openReviewPicker(from);
   };
   const goReviewStep = () => nav(`/editor/${draft.id}/review`);
   const goFinalise = () => nav(`/editor/${draft.id}/finalize`);
@@ -964,7 +1004,7 @@ export function Editor() {
         if (review) requestFinishReview(draft.id);
         return;
       case "approve":
-        setReviewDialogKind("approve");
+        openReviewAction("approve");
         return;
       case "remind":
         void remindApprover();
@@ -1107,7 +1147,7 @@ export function Editor() {
     fixCheck: (c) => void fixCheck(c),
     regenerateAll: () => void runGenerateAll(),
     stop: stopStreaming,
-    openReviewDialog: (kind) => setReviewDialogKind(kind),
+    openReviewDialog: (kind) => openReviewAction(kind),
     withdraw: onWithdrawForReview,
     openCounsel: () => setCounselDialogOpen(true),
     openFeedback: () => setReviewFeedbackOpen(true),
@@ -1123,6 +1163,7 @@ export function Editor() {
     // "See all rounds": the review loop's rounds history (RoundsList). The
     // Activity dialog keeps its own Review rounds tab too.
     openRounds: () => openRoundsHistory(draft.id),
+    sendForReview: (from) => sendForReview(from),
   };
   // Live facts the stage components read (registered after render).
   liveRef.current = { draftId: draft.id, streaming, canEdit: canvasEditable, counselNeeded, counselReview };
@@ -1147,7 +1188,16 @@ export function Editor() {
     people,
     saved: journey.stage === "sent" ? { kind: "locked" } : saved,
     zoom,
-    onZoom: setZoom,
+    onZoom: (z: number) => {
+      // Zooming in past the room for the margin: its cards move to the
+      // Edits tab, so open it when there is something there to decide.
+      const leaving = fitsAt(zoom) && !fitsAt(z);
+      setZoom(z);
+      if (leaving && pendingEdits + reviewerOpenComments > 0 && !viewerIsReviewer) {
+        setEditsFilter("edits");
+        openPanelTab("edits");
+      }
+    },
     panelOpen,
     onTogglePanel: togglePanel,
     outlineOpen: showSidebar,
@@ -1192,7 +1242,7 @@ export function Editor() {
       if (activeSectionId) setRefineSectionId(activeSectionId);
     },
     onEditDetails: () => setEditDetailsOpen(true),
-    onReviewAction: (kind) => setReviewDialogKind(kind),
+    onReviewAction: (kind) => openReviewAction(kind),
     onWithdraw: onWithdrawForReview,
     onOpenFeedback: () => setReviewFeedbackOpen(true),
     onOpenCounsel: () => setCounselDialogOpen(true),
@@ -1271,6 +1321,10 @@ export function Editor() {
       {draft.sections.map((section) => (
         <div key={section.id} className="group/sec relative">
           <SectionEditor
+            // A new editor when the author tools come or go (the named
+            // reviewer signs in on this device): the selection bubble is
+            // moved out of React's tree and cannot be removed in place.
+            key={viewerIsReviewer ? "reviewer" : "author"}
             draft={draft}
             section={section}
             variant="paper"
@@ -1441,6 +1495,17 @@ export function Editor() {
                 >
                   <div className="mb-3 flex min-w-0 flex-col gap-3 empty:hidden">
                     {draft.isTemplateSource && <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />}
+                    {draft.isTemplateSource && (
+                      <ConfirmDialog
+                        open={confirmDiscardTemplate}
+                        onOpenChange={setConfirmDiscardTemplate}
+                        title="Discard this template?"
+                        body="This deletes the template and any saved version of it. You cannot undo this."
+                        confirmLabel="Discard template"
+                        destructive
+                        onConfirm={doDiscardTemplateSource}
+                      />
+                    )}
                     <LetterNotices
                       draft={draft}
                       journey={journey}
@@ -1514,6 +1579,8 @@ export function Editor() {
             <EvidenceDrawer
               draft={sharedView ?? draft}
               editor={null}
+              canAdd={canvasEditable && !viewerIsReviewer}
+              canManage={!viewerIsReviewer}
               open
               onOpenChange={() => {
                 /* pinned mode ignores Sheet open state */
@@ -1627,6 +1694,8 @@ export function Editor() {
         <EvidenceDrawer
           draft={sharedView ?? draft}
           editor={null}
+          canAdd={canvasEditable && !viewerIsReviewer}
+          canManage={!viewerIsReviewer}
           open={evidenceDrawerOpen}
           onOpenChange={setEvidenceDrawerOpen}
           pinned={false}
@@ -1645,7 +1714,14 @@ export function Editor() {
         reason={handoffReason}
         draftId={draft.id}
         onOpenChange={(next) => {
-          if (!next) setHandoffReason(null);
+          if (next) return;
+          setHandoffReason(null);
+          const back = handoffReturnFocus.current;
+          handoffReturnFocus.current = null;
+          // Opened from code, the dialog has no trigger to return focus to.
+          window.requestAnimationFrame(() => {
+            if (back?.isConnected && !document.querySelector('[role="dialog"][data-state="open"]')) back.focus();
+          });
         }}
         onOpenDrawer={() => {
           setHandoffReason(null);

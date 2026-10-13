@@ -110,7 +110,7 @@ export function SegmentedTabs<T extends string>({
         >
           <span className="truncate">{t.label}</span>
           {t.count !== undefined && t.count !== 0 && (
-            <span className="ds-mono text-[12px] font-normal text-[var(--ds-subtle)]">{t.count}</span>
+            <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">{t.count}</span>
           )}
         </button>
       ))}

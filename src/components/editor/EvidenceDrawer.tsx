@@ -94,6 +94,8 @@ export function EvidenceDrawer({
   onOpenChange,
   pinned = false,
   onPinnedChange,
+  canAdd = true,
+  canManage = true,
 }: {
   draft: Draft;
   editor: Editor | null;
@@ -104,6 +106,12 @@ export function EvidenceDrawer({
   pinned?: boolean;
   /** Toggle pinned mode. When omitted, the Pin button is hidden. */
   onPinnedChange?: (next: boolean) => void;
+  /** Upload new evidence: off while the letter is locked and for anyone
+   *  who cannot edit it (a reviewer, a viewer). */
+  canAdd?: boolean;
+  /** The Manage evidence link to the Evidence page: off for a teammate
+   *  reviewer, who sees only what was shared with them. */
+  canManage?: boolean;
 }) {
   const allItems = draft.evidence ?? [];
   const [query, setQuery] = useState("");
@@ -118,7 +126,7 @@ export function EvidenceDrawer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const handleUploadFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!canAdd || !files || files.length === 0) return;
     setUploadStatus(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`);
     try {
       const items: EvidenceItem[] = [];
@@ -399,6 +407,7 @@ export function EvidenceDrawer({
         <div className="flex-1 overflow-y-auto px-5 py-3.5">
           {filtered.length === 0 ? (
             <EmptyState
+              canAdd={canAdd}
               hasAnyEvidence={allItems.length > 0}
               onUploadClick={() => fileInputRef.current?.click()}
             />
@@ -516,14 +525,16 @@ export function EvidenceDrawer({
          * Manage evidence link returned per UX request — affordance for
          * discoverability even though the route redirects back to the drawer. */}
         <div className="px-5 py-3 border-t border-[var(--ds-line)] bg-[var(--ds-surface-2)] flex items-center gap-3">
-          <Link
-            to={`/editor/${draft.id}/evidence`}
-            onClick={() => { if (!pinned) onOpenChange(false); }}
-            className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1 shrink-0"
-          >
-            Manage evidence
-            <ExternalLink className="size-3" />
-          </Link>
+          {canManage && (
+            <Link
+              to={`/editor/${draft.id}/evidence`}
+              onClick={() => { if (!pinned) onOpenChange(false); }}
+              className="text-[12px] font-semibold text-[var(--ds-ink)] underline decoration-[var(--ds-line)] underline-offset-[3px] hover:decoration-[var(--ds-ink)] flex items-center gap-1 shrink-0"
+            >
+              Manage evidence
+              <ExternalLink className="size-3" />
+            </Link>
+          )}
           <span className="text-[11.5px] text-[var(--ds-muted)] tabular-nums">
             {allItems.length} {allItems.length === 1 ? "item" : "items"}
             {totalBytes > 0 && <> · {formatBytes(totalBytes)}</>}
@@ -533,24 +544,28 @@ export function EvidenceDrawer({
               {uploadStatus}
             </span>
           )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              void handleUploadFiles(e.target.files);
-              e.target.value = ""; // allow re-picking the same file
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="ml-auto h-[30px] px-3 bg-white border border-[var(--ds-line)] rounded-md text-[12px] font-semibold text-[var(--ds-ink)] flex items-center gap-1.5 hover:bg-[var(--ds-line-2)] transition"
-          >
-            <Upload className="size-3" />
-            Upload new
-          </button>
+          {canAdd && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  void handleUploadFiles(e.target.files);
+                  e.target.value = ""; // allow re-picking the same file
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="ml-auto h-[30px] px-3 bg-white border border-[var(--ds-line)] rounded-md text-[12px] font-semibold text-[var(--ds-ink)] flex items-center gap-1.5 hover:bg-[var(--ds-line-2)] transition"
+              >
+                <Upload className="size-3" />
+                Upload new
+              </button>
+            </>
+          )}
         </div>
     </>
   );
@@ -640,9 +655,11 @@ export function EvidenceDrawer({
 function EmptyState({
   hasAnyEvidence,
   onUploadClick,
+  canAdd = true,
 }: {
   hasAnyEvidence: boolean;
   onUploadClick: () => void;
+  canAdd?: boolean;
 }) {
   if (!hasAnyEvidence) {
     return (
@@ -657,14 +674,14 @@ function EmptyState({
           Drop in emails, screenshots, documents or notes. They'll appear here
           and you can insert <strong>[See Fig N]</strong> references into the letter.
         </p>
-        <button
+        {canAdd && <button
           type="button"
           onClick={onUploadClick}
           className="inline-flex items-center gap-1.5 h-[30px] px-3 bg-[var(--ds-ink)] text-white text-[12px] font-semibold rounded-md hover:bg-[var(--ds-ink)]/90 transition"
         >
           <Upload className="size-3" />
           Upload first item
-        </button>
+        </button>}
       </div>
     );
   }

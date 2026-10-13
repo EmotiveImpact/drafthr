@@ -26,6 +26,7 @@ import {
   type SuggestedEdit,
 } from "./suggestion-groups";
 import { useLetterWorkspace } from "./workspace-store";
+import { editExcerpt } from "./edit-excerpt";
 
 function plainText(html: string): string {
   if (typeof window === "undefined" || !html) return "";
@@ -38,26 +39,23 @@ function clip(text: string, max = 220): string {
   return text.length > max ? text.slice(0, max - 1).trimEnd() + "…" : text;
 }
 
-type Part = { kind: "del" | "ins"; text: string };
+type Part = { kind: "text" | "del" | "ins"; text: string };
 
-/** The changed runs of one suggested edit, in document order. */
+/**
+ * One suggested edit as a phrase: an in-text edit reads as the sentence it
+ * changes (the struck and inserted words with the words around them); a
+ * card proposal as its old and new text.
+ */
 function partsFor(edit: SuggestedEdit): Part[] {
   if (typeof window === "undefined") return [];
   if (edit.ids.length > 0) {
-    const root = document.createElement("div");
-    root.innerHTML = sanitizeLetterHtml(edit.section.html ?? "");
-    const want = new Set(edit.ids);
-    return [
-      ...root.querySelectorAll(
-        "ins[data-suggestion-id], del[data-suggestion-id]",
-      ),
-    ]
-      .filter((el) => want.has(el.getAttribute("data-suggestion-id") ?? ""))
-      .map((el) => ({
-        kind: el.tagName === "DEL" ? ("del" as const) : ("ins" as const),
-        text: clip((el.textContent ?? "").trim(), 140),
-      }))
-      .filter((p) => p.text);
+    const parts = editExcerpt(edit.section.html ?? "", edit.ids);
+    let room = 320;
+    return parts.map((p) => {
+      const text = room > 0 ? clip(p.text, Math.max(room, 24)) : "";
+      room -= text.length;
+      return { ...p, text };
+    }).filter((p) => p.text);
   }
   const p = edit.pending;
   if (!p) return [];
@@ -152,7 +150,9 @@ export function EditsTab({
                   <b className="font-medium text-[var(--ds-ink)]">
                     {edits.length}
                   </b>{" "}
-                  suggested edit{edits.length === 1 ? "" : "s"} to decide
+                  suggested edit{edits.length === 1 ? "" : "s"}{" "}
+                  {/* The reviewer does not decide: the author does. */}
+                  {canResolve ? "to decide" : "waiting for the author"}
                 </>
               ) : (
                 "Nothing to decide"
@@ -249,11 +249,18 @@ export function EditsTab({
                         <p className="m-0 font-serif text-[13.5px] leading-[1.5] text-[var(--ds-body)] break-words">
                           {parts.map((p, j) => (
                             <Fragment key={j}>
-                              {j > 0 && " "}
-                              {p.kind === "del" ? (
+                              {/* A card proposal's old and new text sit
+                               * side by side; an excerpt carries its own spaces. */}
+                              {j > 0 && edit.ids.length === 0 && " "}
+                              {p.kind === "text" ? (
+                                <span>{p.text}</span>
+                              ) : p.kind === "del" ? (
                                 <del
                                   className={cn(
                                     "rounded-[2px] decoration-1",
+                                    // Struck words straight before the new
+                                    // ones get a small gap so they read apart.
+                                    parts[j + 1]?.kind === "ins" && "mr-[0.3em]",
                                     edit.ai
                                       ? "bg-[var(--ds-red-soft)] text-[var(--ds-red-fg)] decoration-[var(--ds-red-line)]"
                                       : "bg-[var(--ds-lilac-soft)] text-[var(--ds-lilac-fg)] decoration-[var(--ds-lilac-line)]",

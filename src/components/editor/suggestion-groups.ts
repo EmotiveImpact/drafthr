@@ -1,4 +1,4 @@
-import type { Draft, PendingChange, Section } from "@/lib/letters/types";
+import type { Comment, Draft, PendingChange, Section } from "@/lib/letters/types";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { useDraftStore } from "@/lib/store";
 import { useReviewStore } from "@/lib/journey/reviews";
@@ -286,4 +286,21 @@ export function suggestionCategory(
   const fc = fixCategory?.[edit.section.id];
   if (fc && edit.pending && fc.at <= edit.pending.createdAt) return fc.category;
   return SOURCE_CATEGORY[edit.pending?.source ?? ""] ?? "Rewrite";
+}
+
+/**
+ * Open comments pinned to words in the letter (a highlight, or a quote of
+ * the words): each gets a margin card beside its paragraph and counts in
+ * the Edits tab, whoever wrote it, so a comment the author leaves on
+ * selected text is as easy to find as a reviewer's (LETTER-X36). Replies
+ * and comments on the letter as a whole stay in the Comments filter.
+ */
+export function openAnchoredComments(draft: Draft): Comment[] {
+  const marked = new Set<string>();
+  for (const s of draft.sections ?? []) {
+    for (const m of (s.html ?? "").matchAll(/data-comment-id\s*=\s*"([^"]+)"/gi)) marked.add(m[1]);
+  }
+  return (draft.comments ?? []).filter(
+    (c) => !c.parentId && !c.resolved && Boolean(c.sectionId) && (marked.has(c.id) || Boolean(c.quote?.trim()))
+  );
 }

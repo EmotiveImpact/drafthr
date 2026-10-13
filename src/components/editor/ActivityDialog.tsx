@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { TimelinePanel } from "./TimelinePanel";
 import { fmtWhen } from "./letter-facts";
+import { summariseRound } from "@/components/journey/review/model";
 
 export type ActivityTab = "history" | "versions" | "rounds";
 
@@ -101,7 +102,11 @@ export function ActivityDialog({
           )}
           {current === "rounds" && review && (
             <ol className="m-0 list-none p-4">
-              {[...rounds].reverse().map((r) => (
+              {[...rounds].reverse().map((r) => {
+                // Count suggestions and comments as the notice strip and the
+                // Activity card do (one per suggestion, not per mark).
+                const sum = summariseRound(draft, review, r);
+                return (
                 <li key={r.n} className="border-b border-[var(--ds-line-2)] py-3 last:border-b-0">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[13.5px] font-medium text-[var(--ds-ink)]">Round {r.n}</span>
@@ -114,12 +119,13 @@ export function ActivityDialog({
                     {review.reviewer.name}
                     {r.verdict ? `: ${REVIEW_VERDICT_LABELS[r.verdict]}` : ""}
                     {r.backAt
-                      ? ` · ${r.suggestionIds.length} change${r.suggestionIds.length === 1 ? "" : "s"}, ${r.commentIds.length} comment${r.commentIds.length === 1 ? "" : "s"}`
+                      ? ` · ${sum.changes} change${sum.changes === 1 ? "" : "s"}, ${sum.comments} comment${sum.comments === 1 ? "" : "s"}`
                       : ""}
                   </p>
                   {r.note && <p className="m-0 mt-1 whitespace-pre-wrap text-[13px] text-[var(--ds-muted)]">{r.note}</p>}
                 </li>
-              ))}
+                );
+              })}
             </ol>
           )}
         </div>

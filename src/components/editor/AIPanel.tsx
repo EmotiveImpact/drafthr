@@ -38,87 +38,98 @@ import { CRITIQUE_EVENT, type CritiqueEventDetail } from "./SecondOpinion";
  *   - "summarise for counsel"           → summariseForCounsel
  */
 /**
- * Starter prompts shown in the empty-state grid — one per typed tool, so
- * a first-time user discovers what the agent can do at a glance. Pulled
- * from QUICK_PROMPTS but with icons + a one-line hint for discoverability.
+ * Starter prompts shown in the empty state and the Prompts menu, chosen for
+ * the letter in front of the person: a clause only where the letter is a
+ * contract term (offer, contract change, promotion), an appeal line on a
+ * disciplinary letter, a calm firm rewrite on an employee's own letter. The
+ * prompt goes into the box as written, so it reads as plain English too.
  */
-const STARTER_PROMPTS: {
-  label: string;
-  hint: string;
-  Icon: typeof Wand2;
-  prompt: string;
-}[] = [
-  {
-    label: "Make it tribunal-ready",
-    hint: "Strict, factual, statutory anchors explicit.",
-    Icon: Sparkles,
-    prompt:
-      "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.",
-  },
-  {
-    label: "Tighten to ~180 words",
-    hint: "Cut adjectives without dropping facts or clauses.",
-    Icon: Minus,
-    prompt:
-      "Tighten the body section to approximately 180 words. Preserve every fact, citation, and required clause. Cut adjectives and throat-clearing.",
-  },
-  {
-    label: "Add a confidentiality clause",
-    hint: "Three-year survival post-termination by default.",
-    Icon: Plus,
-    prompt:
-      "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
-  },
-  {
-    label: "Summarise for counsel",
-    hint: "One-paragraph brief covering risks + remedies.",
-    Icon: FileText,
-    prompt:
-      "Summarise this letter for counsel: one paragraph covering the legal posture, key risks, remedies sought, and any open factual questions.",
-  },
-];
+type Starter = { label: string; hint: string; Icon: typeof Wand2; prompt: string };
 
-const QUICK_PROMPTS: { label: string; prompt: string }[] = [
-  // regenerateSection
-  {
-    label: "Tribunal-ready tone",
-    prompt:
-      "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.",
-  },
-  {
-    label: "Make formal",
-    prompt:
-      "Rewrite this letter in a more formal register. Remove contractions, use full clause names, keep every statutory citation intact.",
-  },
-  // tightenSection
-  {
-    label: "Tighten body to ~180 words",
-    prompt:
-      "Tighten the body section to approximately 180 words. Preserve every fact, citation, and required clause. Cut adjectives and throat-clearing.",
-  },
-  // addClause
-  {
-    label: "+ confidentiality clause",
-    prompt:
-      "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
-  },
-  {
-    label: "+ IP assignment clause",
-    prompt:
-      "Add an IP-assignment clause to the terms section: all work-product vests in the employer, recipient assigns and waives moral rights so far as the law permits.",
-  },
-  {
-    label: "+ reservation of rights",
-    prompt:
-      "Add an explicit reservation-of-rights paragraph to the closing: statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
-  },
-  // summariseForCounsel
-  {
-    label: "Summarise for counsel",
-    prompt:
-      "Summarise this letter for an external employment-law adviser. Cover (1) what the letter says, (2) what it relies on, (3) what it asks for, (4) key risk points.",
-  },
-];
+const CONTRACT_TYPES = new Set<string>(["offer", "contract_amendment", "promotion", "salary_increase"]);
+const DISCIPLINARY_TYPES = new Set<string>(["warning", "termination", "probation_outcome", "redundancy"]);
+
+const TRIBUNAL_READY: Starter = {
+  label: "Make it ready for a tribunal",
+  hint: "Plain facts, no admissions, the law it relies on named.",
+  Icon: Sparkles,
+  prompt:
+    "Rewrite this letter so it would stand up at a tribunal: keep to the facts, avoid admissions and loaded words, and name the law or policy it relies on. Go through each section that needs changing.",
+};
+const SHORTER: Starter = {
+  label: "Make it shorter",
+  hint: "Cut repetition without losing a fact or required wording.",
+  Icon: Minus,
+  prompt:
+    "Make the main part of this letter shorter, about 180 words. Keep every fact, date and required statement. Cut repetition and filler.",
+};
+const SUMMARISE: Starter = {
+  label: "Summarise for a solicitor",
+  hint: "One paragraph on the risks and what could go wrong.",
+  Icon: FileText,
+  prompt:
+    "Summarise this letter for an employment solicitor in one paragraph: what it says, what it relies on, the main risks and any facts still to confirm.",
+};
+const CONFIDENTIALITY: Starter = {
+  label: "Add a confidentiality clause",
+  hint: "Keeps business information private during and after employment.",
+  Icon: Plus,
+  prompt:
+    "Add a confidentiality clause to the terms: business information stays private during employment and for three years after it ends, unless the contract already says otherwise.",
+};
+const APPEAL: Starter = {
+  label: "Check the right of appeal",
+  hint: "Who to write to, how long they have and what happens next.",
+  Icon: Plus,
+  prompt:
+    "Check the right of appeal in this letter: who the employee writes to, how many days they have, and what happens at the appeal. Add or fix that paragraph if anything is missing.",
+};
+const FAIR_PROCESS: Starter = {
+  label: "Check the process was fair",
+  hint: "The meeting, earlier warnings and the chance to respond.",
+  Icon: Sparkles,
+  prompt:
+    "Check this letter shows a fair process: the meeting, the chance to respond and be accompanied, and any earlier warnings. Suggest changes where something is missing.",
+};
+const CALM_FIRM: Starter = {
+  label: "Make it calm and firm",
+  hint: "Clear about what happened and what you are asking for.",
+  Icon: Sparkles,
+  prompt:
+    "Rewrite this letter so it is calm and firm: clear about what happened, what I am asking for and by when, without sounding angry.",
+};
+
+function startersFor(draft: Pick<Draft, "mode" | "letterType">): Starter[] {
+  if (draft.mode === "employee") return [CALM_FIRM, TRIBUNAL_READY, SHORTER, SUMMARISE];
+  if (CONTRACT_TYPES.has(draft.letterType)) return [CONFIDENTIALITY, SHORTER, TRIBUNAL_READY, SUMMARISE];
+  if (DISCIPLINARY_TYPES.has(draft.letterType)) return [FAIR_PROCESS, APPEAL, SHORTER, SUMMARISE];
+  return [TRIBUNAL_READY, SHORTER, SUMMARISE];
+}
+
+/** The Prompts menu: the starters, then a formal rewrite and, on a contract
+ *  letter, the other clauses. */
+function quickPromptsFor(draft: Pick<Draft, "mode" | "letterType">): { label: string; prompt: string }[] {
+  const out = startersFor(draft).map((p) => ({ label: p.label, prompt: p.prompt }));
+  out.push({
+    label: "Make it more formal",
+    prompt: "Rewrite this letter in a more formal register. Avoid contractions and keep every legal reference as it is.",
+  });
+  if (draft.mode === "employer" && CONTRACT_TYPES.has(draft.letterType)) {
+    out.push({
+      label: "Add an intellectual property clause",
+      prompt:
+        "Add an intellectual property clause to the terms: work created in the job belongs to the employer, and the employee waives moral rights as far as the law allows.",
+    });
+  }
+  if (draft.mode === "employee") {
+    out.push({
+      label: "Add a reservation of rights",
+      prompt:
+        "Add a short paragraph to the closing that reserves my rights, including the right to bring a tribunal claim.",
+    });
+  }
+  return out;
+}
 
 const SCOPE_LABEL: Record<AIChatScope, string> = {
   letter: "whole letter",
@@ -746,7 +757,7 @@ export function AIPanel({
                   Pick a starter or describe your own. DraftHR shows each change for you to accept.
                 </p>
                 <div className="mt-4 flex flex-col gap-1">
-                  {STARTER_PROMPTS.map((p) => (
+                  {startersFor(draft).map((p) => (
                     <button
                       key={p.label}
                       type="button"
@@ -929,7 +940,7 @@ export function AIPanel({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="top" className="w-[260px] duration-[160ms] data-[state=closed]:duration-[100ms]">
                   <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Saved prompts</DropdownMenuLabel>
-                  {QUICK_PROMPTS.map((q) => (
+                  {quickPromptsFor(draft).map((q) => (
                     <DropdownMenuItem
                       key={q.label}
                       onClick={() => {
@@ -937,7 +948,7 @@ export function AIPanel({
                         requestAnimationFrame(() => textareaRef.current?.focus());
                       }}
                     >
-                      {q.label.replace(/^\+\s*/, "Add ")}
+                      {q.label}
                     </DropdownMenuItem>
                   ))}
                   {recentPrompts.length > 0 && (

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { CheckCircle2, MessageSquareWarning, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProfileStore } from "@/lib/profile";
+import { useDefaultApprover } from "@/components/journey/review/people";
 
 export type ReviewDialogKind = "submit" | "approve" | "request_changes";
 
@@ -38,14 +39,23 @@ export function ReviewDialog({
   defaultReviewerName?: string;
   onSubmit: (input: { reviewerName: string; body: string; reviewerUserId?: string; reviewerRole?: string }) => void;
 }) {
-  const [reviewerName, setReviewerName] = useState(kind === "submit" ? "" : defaultReviewerName ?? "");
-  const [body, setBody] = useState("");
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
-  const [selected, setSelected] = useState<string>(OTHER);
   // The person sending it never approves their own letter: they are left
   // out of the approver list, and nothing is prefilled with their name.
   const myEmail = useProfileStore((st) => st.profile.personal.email?.trim().toLowerCase() ?? "");
-  const prefill = kind === "submit" ? "" : defaultReviewerName ?? "";
+  const myNames = useProfileStore((st) =>
+    [st.profile.personal.legalName, st.profile.personal.preferredName].map((n) => n?.trim().toLowerCase() ?? "").filter(Boolean).join("|")
+  );
+  // On "submit", the approver the panel already offers ("Skip review, ask
+  // Ruth to approve"): the person you asked last time.
+  const usualApprover = useDefaultApprover();
+  const usual = usualApprover && !myNames.split("|").includes(usualApprover.trim().toLowerCase()) ? usualApprover : "";
+  const prefill = kind === "submit" ? usual : defaultReviewerName ?? "";
+  const [reviewerName, setReviewerName] = useState(prefill);
+  const [body, setBody] = useState("");
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [selected, setSelected] = useState<string>(OTHER);
+  const personRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -66,13 +76,20 @@ export function ReviewDialog({
         if (cancelled || !data?.members) return;
         const others = data.members.filter((m) => !myEmail || m.email.trim().toLowerCase() !== myEmail);
         setMembers(others);
-        if (others.length > 0) setSelected(others[0].userId);
+        if (others.length === 0) return;
+        // The usual approver when they are a member; else they stay typed
+        // in under "Someone else"; else the first teammate.
+        const want = usual.trim().toLowerCase();
+        const match = want ? others.find((m) => (m.legalName?.trim().toLowerCase() || m.email.toLowerCase()) === want) : undefined;
+        if (match) setSelected(match.userId);
+        else if (want) setSelected(OTHER);
+        else setSelected(others[0].userId);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [open, kind, myEmail]);
+  }, [open, kind, myEmail, usual]);
 
   const config = CONFIG[kind];
   const trimmedBody = body.trim();
@@ -99,7 +116,15 @@ export function ReviewDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
-        <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 text-[13.5px] shadow-[var(--ds-shadow-xl)]">
+        <Dialog.Content
+          onOpenAutoFocus={(e) => {
+            // Start in the first field (the approver on "submit", else the
+            // note), not on the close button.
+            e.preventDefault();
+            const target = (config.showReviewerName ? personRef.current : null) ?? bodyRef.current;
+            target?.focus();
+          }}
+          className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 text-[13.5px] shadow-[var(--ds-shadow-xl)]">
           <div className="mb-1.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <config.Icon className="size-4 text-[var(--ds-muted)]" />
@@ -124,7 +149,14 @@ export function ReviewDialog({
               </label>
               {usePicker && (
                 <Select value={selected} onValueChange={setSelected}>
-                  <SelectTrigger id="review-dialog-person" size="sm" className="w-full">
+                  <SelectTrigger
+                    id="review-dialog-person"
+                    ref={(el) => {
+                      if (selected !== OTHER) personRef.current = el;
+                    }}
+                    size="sm"
+                    className="w-full"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent position="popper">
@@ -139,6 +171,9 @@ export function ReviewDialog({
               )}
               {(!usePicker || selected === OTHER) && (
                 <input
+                  ref={(el) => {
+                    if (el) personRef.current = el;
+                  }}
                   id={usePicker ? undefined : "review-dialog-person"}
                   aria-label={usePicker ? "Approver's name" : undefined}
                   type="text"
@@ -160,8 +195,8 @@ export function ReviewDialog({
               {config.bodyRequired && <span className="text-[var(--ds-red-fg)]"> *</span>}
             </label>
             <textarea
+              ref={bodyRef}
               id="review-dialog-body"
-              autoFocus
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder={config.bodyPlaceholder}

@@ -33,6 +33,9 @@ export type WorkspaceHandlers = {
   finalise: () => void;
   /** The review rounds history (Activity). */
   openRounds: () => void;
+  /** Send for review, the same from the bar and the panel: the evidence
+   *  check first when evidence is unused or thin, then the reviewer picker. */
+  sendForReview: (from: "bar" | "panel") => void;
 };
 
 export type WorkspaceState = {

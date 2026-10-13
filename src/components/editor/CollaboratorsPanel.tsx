@@ -4,6 +4,7 @@ import type { Collaborator, CollaboratorRole, Draft } from "@/lib/letters/types"
 import { useDraftStore } from "@/lib/store";
 import { Avatar } from "@/components/ds";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ROLE_LABEL: Record<CollaboratorRole, string> = {
   owner: "Owner",
@@ -92,16 +93,16 @@ export function CollaboratorsPanel({ draft }: { draft: Draft }) {
           className={field}
         />
         <div className="flex gap-2">
-          <select
-            aria-label="Role"
-            value={role}
-            onChange={(e) => setRole(e.target.value as CollaboratorRole)}
-            className={cn(field, "min-w-0 flex-1 px-2.5")}
-          >
-            <option value="editor">{ROLE_LABEL.editor}</option>
-            <option value="reviewer">{ROLE_LABEL.reviewer}</option>
-            <option value="viewer">{ROLE_LABEL.viewer}</option>
-          </select>
+          <Select value={role} onValueChange={(v) => setRole(v as CollaboratorRole)}>
+            <SelectTrigger size="sm" aria-label="Role" className="h-9 min-w-0 flex-1 px-2.5 text-[13.5px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-[60]">
+              <SelectItem value="editor">{ROLE_LABEL.editor}</SelectItem>
+              <SelectItem value="reviewer">{ROLE_LABEL.reviewer}</SelectItem>
+              <SelectItem value="viewer">{ROLE_LABEL.viewer}</SelectItem>
+            </SelectContent>
+          </Select>
           <button
             type="submit"
             disabled={!valid}
@@ -173,16 +174,20 @@ function CollaboratorRow({
         </button>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <select
-          aria-label={`Role for ${collaborator.name ?? collaborator.email}`}
-          value={collaborator.role}
-          onChange={(e) => onRoleChange(e.target.value as CollaboratorRole)}
-          className="h-7 rounded-[7px] bg-transparent px-1.5 text-[12.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:shadow-[var(--ds-focus-ring)]"
-        >
-          <option value="editor">{ROLE_LABEL.editor}</option>
-          <option value="reviewer">{ROLE_LABEL.reviewer}</option>
-          <option value="viewer">{ROLE_LABEL.viewer}</option>
-        </select>
+        <Select value={collaborator.role} onValueChange={(v) => onRoleChange(v as CollaboratorRole)}>
+          <SelectTrigger
+            size="sm"
+            aria-label={`Role for ${collaborator.name ?? collaborator.email}`}
+            className="h-7 border-transparent bg-transparent px-1.5 text-[12.5px] hover:bg-[var(--ds-hover)]"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="start" className="z-[60]">
+            <SelectItem value="editor">{ROLE_LABEL.editor}</SelectItem>
+            <SelectItem value="reviewer">{ROLE_LABEL.reviewer}</SelectItem>
+            <SelectItem value="viewer">{ROLE_LABEL.viewer}</SelectItem>
+          </SelectContent>
+        </Select>
         <span
           className={cn(
             "rounded-[6px] px-2 py-0.5 text-[12px] font-medium",

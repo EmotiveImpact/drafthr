@@ -328,26 +328,9 @@ function TopRow(p: DocumentBarProps) {
             {journey.statusLabel}
           </StatusPill>
         )}
-        {p.counselNeeded && (
-          <button
-            type="button"
-            onClick={p.onOpenCounsel}
-            className={cn(
-              "inline-flex h-[22px] items-center gap-1 rounded-[6px] px-2 text-[12px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
-              p.counselReview
-                ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]"
-                : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
-            )}
-            title={
-              p.counselReview
-                ? `Counsel-reviewed by ${p.counselReview.reviewedBy} on ${p.counselReview.reviewedOn}. Click to update.`
-                : "Counsel review is needed before export. Click to mark it reviewed."
-            }
-          >
-            <ShieldCheck className="size-3" />
-            <span className={cn(squeeze.level >= 2 && "sr-only")}>{p.counselReview ? "Reviewed" : "Needs review"}</span>
-          </button>
-        )}
+        {/* One pill only (mocks f1 to f8): the stage. A high-risk letter's
+         * counsel sign-off is the "Counsel review" tool in the row below and
+         * the More menu, and the Send step says so before the download. */}
       </span>
       </div>
 
@@ -762,7 +745,9 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
                     <Undo className="mr-2 size-4" /> Withdraw from review
                   </DropdownMenuItem>
                 )}
-                {canApprove(role) && (
+                {/* Only the named approver approves (as in the Approve step):
+                 * the person who sent it to Ruth cannot approve it themselves. */}
+                {canApprove(role) && p.viewerIsApprover && (
                   <>
                     <DropdownMenuItem onClick={() => p.onReviewAction("approve")}>
                       <CheckCircle2 className="mr-2 size-4" /> Approve
@@ -1547,7 +1532,7 @@ function reviewTools(p: DocumentBarProps): Tool[] {
         menu: <MItem icon={<Stamp />} label={label} hint={blocked ?? undefined} disabled={disabled} onClick={() => p.onReviewAction("submit")} />,
       });
     }
-    if (reviewStatus === "in_review" && canApprove(role)) {
+    if (reviewStatus === "in_review" && canApprove(role) && p.viewerIsApprover) {
       tools.push(
         {
           key: "approve",
