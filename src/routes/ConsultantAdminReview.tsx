@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, Loader2, ShieldAlert, XCircle } from "lucide-react";
 import { getAdminQueue, adminReviewProfile, type AdminProfileDTO } from "@/lib/consultantApi";
-import { PageHeader, type PageTab } from "@/components/ds";
+import { UnderlineTabs, type PageTab, type PillTone } from "@/components/ds";
+import { ExpertsHeader } from "@/components/consultants/ExpertsHeader";
 import { Pill } from "@/components/consultants/StatusBadge";
 import {
   BTN_GHOST,
@@ -14,7 +15,7 @@ import {
   RowList,
 } from "@/components/consultants/ui";
 
-const PAGE = "mx-auto w-full max-w-[1120px] px-4 pb-24 pt-8 sm:px-8 sm:pt-11 lg:px-11";
+const PAGE = "w-full px-4 pb-24 pt-7 sm:px-8 md:px-12";
 
 type AdminTab = "pending" | "published" | "rejected" | "paused" | "suspended" | "all";
 
@@ -106,12 +107,12 @@ export function ConsultantAdminReview() {
   // non-admin during the round-trip that ends in a 403 redirect.
   if (!authChecked) {
     return (
-      <div className={PAGE} aria-busy="true">
-        <div className="h-4 w-24 animate-pulse rounded bg-[var(--ds-surface-2)]" />
-        <div className="mt-4 h-9 w-64 animate-pulse rounded bg-[var(--ds-surface-2)]" />
+      <div className="w-full px-4 pb-24 pt-8 sm:px-8 md:px-12 md:pt-[34px]" aria-busy="true">
+        <div className="h-4 w-24 animate-pulse rounded bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+        <div className="mt-4 h-9 w-64 animate-pulse rounded bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
         <div className="mt-8 space-y-3">
-          <div className="h-20 animate-pulse rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)]" />
-          <div className="h-20 animate-pulse rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)]" />
+          <div className="h-20 animate-pulse rounded-[14px] bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+          <div className="h-20 animate-pulse rounded-[14px] bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
         </div>
       </div>
     );
@@ -138,38 +139,46 @@ export function ConsultantAdminReview() {
   }));
 
   return (
-    <div className={PAGE}>
-      <PageHeader
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ExpertsHeader
         crumbs={[{ label: "Admin" }, { label: "Consultant vetting" }]}
         title={showAll ? "All consultant profiles" : "Review queue"}
         lede="Approve to publish to the public marketplace; reject to hide until the consultant revises. Actions take effect immediately and apply cross-tenant."
         actions={
-          <button type="button" onClick={() => nav(-1)} className={`${BTN_GHOST} h-9`}>
+          <button type="button" onClick={() => nav(-1)} className={`${BTN_GHOST} h-[38px] px-3 text-[14px]`}>
             <ArrowLeft className="size-3.5" aria-hidden />
             Back
           </button>
         }
-        tabs={tabs}
-        activeTab={tab}
-        onTabChange={(id) => setTab(id as AdminTab)}
+        bottom={
+          <UnderlineTabs
+            tabs={tabs}
+            activeTab={tab}
+            onTabChange={(id) => setTab(id as AdminTab)}
+            label="Profile status"
+            className="-mb-px mt-[26px]"
+          />
+        }
       />
+
+      <div className={PAGE}>
 
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-[var(--ds-r-m)] bg-[var(--ds-red-bg)] px-4 py-3 text-[13px] text-[var(--ds-red-fg)]"
+          className="mb-4 rounded-[12px] bg-[var(--ds-red-bg)] px-4 py-3 text-[13px] text-[var(--ds-red-fg)]"
         >
           {error}
         </div>
       )}
 
       {visible === null ? (
-        <div className="grid place-items-center rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] py-16 text-[var(--ds-muted)]">
+        <div className="grid place-items-center rounded-[16px] bg-[var(--ds-surface-2)] py-16 text-[var(--ds-muted)]">
           <Loader2 className="size-5 animate-spin" aria-hidden />
           <p className="m-0 mt-2 text-[13px]">Loading queue…</p>
         </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-14 text-center">
+        <div className="flex flex-col items-center rounded-[16px] bg-[var(--ds-surface-2)] px-6 py-14 text-center">
           <span className="mb-3 grid size-10 place-items-center rounded-full bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]">
             <ShieldAlert className="size-5" aria-hidden />
           </span>
@@ -197,14 +206,14 @@ export function ConsultantAdminReview() {
                   <div className="min-w-0 flex-1">
                     <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                       <div className="min-w-0 flex-1 basis-[220px]">
-                        <h2 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">{p.fullName}</h2>
+                        <h2 className="m-0 truncate text-[14px] font-medium text-[var(--ds-ink)]">{p.fullName}</h2>
                         <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">{p.role}</p>
                         <p className="m-0 mt-1 flex flex-wrap items-center gap-x-2 text-[12.5px] text-[var(--ds-muted)]">
                           {p.email && <span className="min-w-0 truncate">{p.email}</span>}
                           {p.email && <span aria-hidden className="text-[var(--ds-faint)]">·</span>}
                           <span className="ds-mono text-[var(--ds-body)]">
                             {p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}
-                            {p.price}/hr
+                            {p.price} per review
                           </span>
                           <span aria-hidden className="text-[var(--ds-faint)]">·</span>
                           <span>SLA {p.sla}</span>
@@ -261,22 +270,19 @@ export function ConsultantAdminReview() {
           </RowList>
         </>
       )}
+      </div>
     </div>
   );
 }
 
 function StatusPill({ status }: { status: AdminProfileDTO["status"] }) {
-  const map: Record<AdminProfileDTO["status"], { pill: string; dot: string; label: string }> = {
-    pending_review: {
-      pill: "bg-[var(--ds-surface)] text-[var(--ds-amber-fg)] shadow-[inset_0_0_0_1px_var(--ds-amber-dot)]",
-      dot: "bg-[var(--ds-amber-dot)]",
-      label: "Pending",
-    },
-    published: { pill: "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]", dot: "bg-[var(--ds-green-fg)]", label: "Published" },
-    rejected: { pill: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]", dot: "bg-[var(--ds-red-fg)]", label: "Rejected" },
-    paused: { pill: "bg-[var(--ds-chip)] text-[var(--ds-body)]", dot: "bg-[var(--ds-faint)]", label: "Paused" },
-    suspended: { pill: "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]", dot: "bg-[var(--ds-red-fg)]", label: "Suspended" },
+  const map: Record<AdminProfileDTO["status"], { tone: PillTone; label: string }> = {
+    pending_review: { tone: "amber", label: "Pending" },
+    published: { tone: "green", label: "Published" },
+    rejected: { tone: "red", label: "Rejected" },
+    paused: { tone: "grey", label: "Paused" },
+    suspended: { tone: "red", label: "Suspended" },
   };
   const s = map[status] ?? map.pending_review;
-  return <Pill className={s.pill} dot={s.dot} label={s.label} />;
+  return <Pill tone={s.tone} label={s.label} />;
 }

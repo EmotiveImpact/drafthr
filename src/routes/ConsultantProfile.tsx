@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, Banknote, Camera, CheckCircle2, Loader2, Plus, X } from "lucide-react";
-import { PageHeader } from "@/components/ds";
+import { ExpertsHeader } from "@/components/consultants/ExpertsHeader";
+import { AVAILABILITY_WORDS } from "@/components/consultants/market";
 import { ConsultantCard } from "@/components/consultants/ConsultantCard";
 import type { Consultant } from "@/components/consultants/types";
 import {
@@ -32,12 +33,8 @@ import {
 import { pushProfile } from "@/lib/marketplaceSync";
 import { toast } from "sonner";
 
-const AVAILABILITY_LABEL: Record<Availability, string> = {
-  this_week: "Available this week",
-  one_two_weeks: "Available in 1–2 weeks",
-  three_four_weeks: "Available in 3–4 weeks",
-  booked: "Booked, not taking new work",
-};
+/** The same words the marketplace card shows ("Available in 1 to 2 weeks"). */
+const AVAILABILITY_LABEL: Record<Availability, string> = AVAILABILITY_WORDS;
 
 /**
  * /c/profile — consultant profile setup / edit form.
@@ -196,25 +193,27 @@ export function ConsultantProfile() {
     photoUrl,
     specialty: candidate.specialty,
     specialties,
+    bio: candidate.bio,
+    availability,
     pending: profile?.status !== "published",
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-24 pt-8 sm:px-8 sm:pt-11 lg:px-11">
-      <PageHeader
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ExpertsHeader
         crumbs={[{ label: "Consultant", href: "/c" }, { label: "Profile" }]}
         title={isProfileComplete(profile) ? "Edit your marketplace card" : "Set up your marketplace card"}
         lede="This is what HR teams see when they browse the marketplace. Keep the bio concrete: what kind of letters you've reviewed, what calls you take, how fast you turn around."
         actions={
-          <button type="button" onClick={() => nav("/c")} className={`${BTN_GHOST} h-9`}>
+          <button type="button" onClick={() => nav("/c")} className={`${BTN_GHOST} h-[38px] px-3 text-[14px]`}>
             <ArrowLeft className="size-3.5" aria-hidden />
             Back to dashboard
           </button>
         }
       />
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <form onSubmit={onSubmit} className="min-w-0 space-y-4">
+      <div className="grid w-full items-start gap-8 px-4 pb-24 pt-7 sm:px-8 md:px-12 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <form onSubmit={onSubmit} className="flex min-w-0 flex-col gap-4">
           <Fieldset legend="Who you are">
             {/* Photo — first thing buyers see on the card. Optional but
              * we strongly nudge with the "Add a photo" CTA. */}
@@ -232,7 +231,7 @@ export function ConsultantProfile() {
                   type="button"
                   onClick={onPickPhoto}
                   aria-label="Upload photo"
-                  className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full bg-[var(--ds-accent)] text-[var(--ds-on-accent)] shadow ring-2 ring-[var(--ds-surface-2)] transition hover:bg-[var(--ds-accent-hover)]"
+                  className="absolute -bottom-1 -right-1 grid size-7 place-items-center rounded-full bg-[var(--ds-accent)] text-[var(--ds-on-accent)] ring-2 ring-[var(--ds-surface)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                 >
                   <Camera className="size-3.5" aria-hidden />
                 </button>
@@ -256,7 +255,7 @@ export function ConsultantProfile() {
                   <button
                     type="button"
                     onClick={() => setPhotoUrl("")}
-                    className="mt-1 text-[12px] font-medium text-[var(--ds-muted)] transition hover:text-[var(--ds-red-fg)]"
+                    className="mt-1 rounded-[4px] text-[12px] font-medium text-[var(--ds-muted)] transition-colors duration-[120ms] hover:text-[var(--ds-red-fg)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   >
                     Remove
                   </button>
@@ -293,7 +292,7 @@ export function ConsultantProfile() {
                 rows={4}
                 required
                 className={`${FIELD} py-2.5 leading-relaxed`}
-                placeholder="Former senior associate at Charlemont & Wynne. Specialise in complex settlement and TUPE measures letters. Flat-fee or hourly."
+                placeholder="Former senior associate at Charlemont & Wynne. Specialise in complex settlement and TUPE measures letters. Usually back within two working days."
               />
             </div>
           </Fieldset>
@@ -325,7 +324,7 @@ export function ConsultantProfile() {
                       key={s}
                       onClick={() => toggleSpecialty(s)}
                       aria-pressed={selected}
-                      className={`inline-flex h-7 items-center gap-1 rounded-full px-3 text-[12.5px] font-medium transition ${
+                      className={`inline-flex h-7 items-center gap-1 rounded-full px-3 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-focus)] ${
                         selected
                           ? "bg-[var(--ds-accent)] text-[var(--ds-on-accent)]"
                           : "bg-[var(--ds-surface)] text-[var(--ds-body)] shadow-[0_0_0_1px_var(--ds-line)] hover:text-[var(--ds-ink)] hover:shadow-[0_0_0_1px_var(--ds-line-strong)]"
@@ -392,7 +391,7 @@ export function ConsultantProfile() {
           <Fieldset legend="Rate and turnaround">
             <Row>
               <div>
-                <label className={LABEL}>Hourly rate</label>
+                <label className={LABEL}>Price per review</label>
                 <div className="flex gap-2">
                   <Select
                     value={currency}
@@ -413,7 +412,7 @@ export function ConsultantProfile() {
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
                     required
-                    aria-label="Hourly rate"
+                    aria-label="Price per review"
                     className={`${FIELD} ds-mono h-10 min-w-0 flex-1`}
                   />
                 </div>
@@ -447,8 +446,8 @@ export function ConsultantProfile() {
                 </SelectContent>
               </Select>
               <p className="m-0 mt-1.5 text-[12px] text-[var(--ds-muted)]">
-                Drives the badge on your marketplace card. HR teams filter on
-                this when they need urgent work.
+                Drives the badge on your marketplace card. HR teams see it when
+                they need a letter back by a date.
               </p>
             </div>
           </Fieldset>
@@ -481,10 +480,10 @@ export function ConsultantProfile() {
         </form>
 
         {/* Live preview of the 6B card HR teams will see */}
-        <aside aria-label="Card preview" className="lg:sticky lg:top-8">
+        <aside aria-label="Card preview" className="lg:sticky lg:top-6">
           <p className="m-0 mb-2.5 text-[12.5px] text-[var(--ds-muted)]">Preview of your card</p>
           <div className="mx-auto max-w-[340px] lg:max-w-none">
-            <ConsultantCard consultant={previewCard} onBook={() => {}} preview />
+            <ConsultantCard consultant={previewCard} onBook={() => {}} mode="preview" />
           </div>
         </aside>
       </div>
@@ -497,7 +496,7 @@ const LABEL = "mb-1.5 block text-[12.5px] font-medium text-[var(--ds-ink)]";
 /** A soft filled card (Harvey style) holding one group of fields. */
 function Fieldset({ legend, children }: { legend: string; children: React.ReactNode }) {
   return (
-    <fieldset className="m-0 min-w-0 rounded-[var(--ds-r-l)] border-0 bg-[var(--ds-surface-2)] p-5 sm:p-6">
+    <fieldset className="m-0 min-w-0 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6">
       <legend className="float-left mb-4 w-full p-0 text-[14.5px] font-medium text-[var(--ds-ink)]">
         {legend}
       </legend>
@@ -623,7 +622,7 @@ function PayoutConnect({ enabledFromProfile }: { enabledFromProfile: boolean }) 
   const payoutsEnabled = status?.payoutsEnabled ?? enabledFromProfile;
 
   return (
-    <section className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6">
+    <section data-testid="payouts-card" className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 sm:p-6">
       <div className="flex items-start gap-3.5">
         <span
           className="grid size-9 shrink-0 place-items-center rounded-[var(--ds-r-m)]"
