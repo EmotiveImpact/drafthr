@@ -6,6 +6,9 @@ import { ActivityCard, MarginCard, type ActivityEvent } from "@/components/journ
 import { cn } from "@/lib/utils";
 import { acceptWithSettle, decideEdit, prefersReducedMotion, suggestedEdits, suggestionCategory, type SuggestedEdit } from "./suggestion-groups";
 import { useLetterWorkspace } from "./workspace-store";
+import type { MyPoint } from "@/components/journey/review/reviewer";
+import type { Me } from "@/components/journey/review/actions";
+import { TeammatePointCard, editTeammatePoint, removeTeammatePoint, suggestionNumbers } from "@/components/journey/review/teammate";
 
 /**
  * The margin beside the page (mocks f1, f5, f6 to f8): a 256px column of
@@ -18,7 +21,12 @@ import { useLetterWorkspace } from "./workspace-store";
 type Item =
   | { key: string; kind: "edit"; edit: SuggestedEdit; n: number; total: number; reviewerN?: number }
   | { key: string; kind: "comment"; comment: Comment }
+  | { key: string; kind: "point"; point: MyPoint; n?: number }
   | { key: string; kind: "activity" };
+
+/** The named teammate reviewer's own view (V1): only their own points, each
+ *  with Edit and Remove while the review is open (mock f4 `.rnote`). */
+export type ReviewerMargin = { points: MyPoint[]; me: Me; canWork: boolean };
 
 const GAP = 12;
 
@@ -54,6 +62,7 @@ export function MarginLayer({
   onResolveComment,
   onJumpToSection,
   left,
+  reviewer,
 }: {
   draft: Draft;
   journey: JourneyInfo;
@@ -69,6 +78,8 @@ export function MarginLayer({
   onJumpToSection: (sectionId: string) => void;
   /** Left edge of the margin column in the wrapper (page width + 20). */
   left: number;
+  /** Set for the named teammate reviewer: their own cards replace the rest. */
+  reviewer?: ReviewerMargin | null;
 }) {
   const fixCategory = useLetterWorkspace((s) => (s.draftId === draft.id ? s.fixCategory : null));
   const edits = useMemo(() => suggestedEdits(draft), [draft]);
@@ -83,6 +94,11 @@ export function MarginLayer({
   const items: Item[] = useMemo(() => {
     const out: Item[] = [];
     if (activity) out.push({ key: "activity", kind: "activity" });
+    if (reviewer) {
+      const numbers = suggestionNumbers(reviewer.points);
+      for (const point of reviewer.points) out.push({ key: `p:${point.id}`, kind: "point", point, n: numbers.get(point.id) });
+      return out;
+    }
     let reviewerN = 0;
     edits.forEach((edit, i) => {
       out.push({
@@ -96,7 +112,7 @@ export function MarginLayer({
     });
     for (const c of reviewComments) out.push({ key: `c:${c.id}`, kind: "comment", comment: c });
     return out;
-  }, [activity, edits, reviewComments]);
+  }, [activity, edits, reviewComments, reviewer]);
 
   const [leaving, setLeaving] = useState<Record<string, boolean>>({});
   const [tops, setTops] = useState<Record<string, number>>({});
@@ -109,7 +125,17 @@ export function MarginLayer({
       if (!wrap) return 0;
       if (item.kind === "activity") return journey.stage === "sent" ? 120 : 42;
       let el: HTMLElement | null = null;
-      if (item.kind === "edit") {
+      if (item.kind === "point") {
+        const { point } = item;
+        const sectionEl = wrap.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(point.sectionId)}"]`);
+        if (point.kind === "suggestion") {
+          el = sectionEl?.querySelector<HTMLElement>('[data-suggestion-id][data-status="pending"]') ?? null;
+        } else {
+          el = wrap.querySelector<HTMLElement>(`mark[data-comment-id="${CSS.escape(point.id)}"]`);
+          if (!el && sectionEl && point.quote) el = blockWithText(sectionEl, point.quote);
+        }
+        el = el?.closest<HTMLElement>("p, li, h1, h2, h3, blockquote") ?? el ?? sectionEl;
+      } else if (item.kind === "edit") {
         const id = item.edit.ids[0];
         if (id) el = wrap.querySelector<HTMLElement>(`[data-suggestion-id="${CSS.escape(id)}"]`);
         el = el?.closest<HTMLElement>("p, li, h1, h2, h3, blockquote") ?? el;
@@ -188,6 +214,28 @@ export function MarginLayer({
           return (
             <div key={it.key} {...common} className="lw-margin-card pointer-events-auto absolute left-0" style={{ top }}>
               <ActivityCard events={activity ?? []} onAllVersions={onAllVersions} />
+            </div>
+          );
+        }
+        if (it.kind === "point") {
+          const { point } = it;
+          return (
+            <div
+              key={it.key}
+              {...common}
+              data-point-id={point.id}
+              data-leaving={leaving[it.key] || undefined}
+              className="lw-margin-card pointer-events-auto absolute left-0 w-64"
+              style={{ top }}
+            >
+              <TeammatePointCard
+                point={point}
+                n={it.n}
+                me={reviewer!.me}
+                canWork={reviewer!.canWork}
+                onEdit={() => editTeammatePoint(draft.id, point)}
+                onRemove={() => leave(it.key, () => removeTeammatePoint(draft.id, point))}
+              />
             </div>
           );
         }

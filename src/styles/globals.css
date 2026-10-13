@@ -782,3 +782,24 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 36px), transparent);
   mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 36px), transparent);
 }
+
+/* The paged letter on a phone (PagedlyDocEditor): the page narrows to the
+ * screen with smaller margins, so the words keep their size instead of the
+ * A4 page being shrunk to a few pixels a letter. */
+[data-phone-page] .pagedly-editor {
+  --pagedly-page-width: var(--dhr-phone-page-w) !important;
+  --pagedly-page-height: var(--dhr-phone-page-h) !important;
+  --pagedly-page-padding: 32px 22px !important;
+}
+[data-phone-page] .pagedly-ce-page {
+  width: var(--dhr-phone-page-w) !important;
+  min-height: var(--dhr-phone-page-h) !important;
+  padding: 32px 22px !important;
+}
+[data-phone-page] .pagedly-ce-footer {
+  width: var(--dhr-phone-page-w) !important;
+  max-width: 100%;
+}
+[data-phone-page] .pagedly-ce-editor {
+  padding-top: 16px !important;
+}

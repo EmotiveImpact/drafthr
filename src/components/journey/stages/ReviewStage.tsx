@@ -9,7 +9,6 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { useBookingsStore } from "@/lib/bookings";
 import { canApprove, canEditDraft, canSubmitForReview } from "@/lib/permissions";
-import { uid } from "@/lib/utils";
 import type { Draft } from "@/lib/letters/types";
 import {
   currentRound,
@@ -40,19 +39,21 @@ import {
   useMe,
   type Me,
 } from "@/components/journey/review/actions";
-import { openRoundsHistory, openSendBack, requestApproval, requestFinishReview, useReviewerMode } from "@/components/journey/review/review-ui";
+import {
+  openRoundsHistory,
+  openSendBack,
+  requestApproval,
+  requestFinishReview,
+  useReviewerMode,
+} from "@/components/journey/review/review-ui";
+import { editTeammatePoint, removeTeammatePoint, useTeammatePoints } from "@/components/journey/review/teammate";
 import { useDefaultApprover, useTeammates } from "@/components/journey/review/people";
 import { collectReviewerWork, fmtTime } from "@/components/journey/review/model";
 import {
   ReviewerModeSwitch,
-  SelectionBubble,
   YourReviewPanel,
-  changeKind,
-  suggestionTitle,
-  useLetterSelection,
   type MyPoint,
 } from "@/components/journey/review/reviewer";
-import { CommentComposer, SuggestComposer } from "@/components/journey/review/Composers";
 import { actAsTeammate } from "@/components/journey/review/trusted-api";
 
 /**
@@ -291,10 +292,6 @@ function BackState({
 /*  A teammate's own view (f4, in the app)                             */
 /* ------------------------------------------------------------------ */
 
-type Composer =
-  | { kind: "suggest"; sectionId: string; quote?: string; editId?: string }
-  | { kind: "comment"; sectionId: string; quote?: string; editId?: string; body?: string };
-
 function TeammateReview({
   draft,
   review,
@@ -311,7 +308,6 @@ function TeammateReview({
   const [mode, setMode] = useReviewerMode(draft.id);
   const open = review.status === "out";
   const canWork = open && role !== "viewer";
-  const [composer, setComposer] = useState<Composer | null>(null);
   const [busy, setBusy] = useState(false);
   const askerName = review.asker?.name || "The person who asked";
   const askerFirst = firstName(askerName) || "them";
@@ -327,87 +323,8 @@ function TeammateReview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review.id, review.status, round?.n]);
 
-  const work = useMemo(
-    () => (round ? collectReviewerWork(draft, review.reviewer, round.sentAt) : null),
-    [draft, review.reviewer, round]
-  );
-  const points: MyPoint[] = useMemo(() => {
-    if (!work) return [];
-    return work.points.map((p) => {
-      const section = draft.sections.find((s) => s.id === p.sectionId);
-      if (p.kind === "suggestion") {
-        const pc = section?.pendingChange;
-        const before = pc?.prevHtml ?? section?.html ?? "";
-        const after = pc?.proposedHtml ?? "";
-        return {
-          id: p.id,
-          kind: "suggestion",
-          sectionId: p.sectionId ?? "",
-          title: p.title,
-          where: section?.title ?? "Letter",
-          change: changeKind(before, after),
-          note: pc?.instruction,
-          proposedHtml: after,
-        };
-      }
-      const c = draft.comments?.find((x) => x.id === p.id);
-      return {
-        id: p.id,
-        kind: "comment",
-        sectionId: p.sectionId ?? "",
-        title: p.title,
-        where: section?.title ?? "Letter",
-        change: "comment",
-        note: c?.body,
-        quote: c?.quote,
-      };
-    });
-  }, [work, draft.sections, draft.comments]);
-
-  const anchor = useLetterSelection(canWork && mode !== "read");
-  const section = composer ? draft.sections.find((s) => s.id === composer.sectionId) : undefined;
-  const editing = composer?.kind === "suggest" && composer.editId ? section?.pendingChange : undefined;
-
-  const author = { authorId: me.email || me.name, authorName: me.name };
-
-  const proposeSuggestion = (sectionId: string, proposedHtml: string, note?: string, editId?: string) => {
-    const ds = useDraftStore.getState();
-    const s = ds.drafts[draft.id]?.sections.find((x) => x.id === sectionId);
-    if (!s) return;
-    if (s.pendingChange && s.pendingChange.id !== editId) {
-      toast.error("This section already has a pending suggestion. Resolve it first.");
-      return;
-    }
-    const before = s.pendingChange?.prevHtml ?? s.html ?? "";
-    if (editId) ds.rejectSectionPending(draft.id, sectionId);
-    ds.proposeSectionChange(draft.id, sectionId, {
-      id: uid("sug"),
-      createdAt: Date.now(),
-      proposedHtml,
-      instruction: note?.trim() || suggestionTitle(before, proposedHtml),
-      source: "review",
-      ...author,
-      diffViewMode: "inline",
-    });
-    toast(`Suggestion added. ${askerFirst} accepts or rejects it.`);
-  };
-
-  const addComment = (sectionId: string, body: string, quote?: string) => {
-    useDraftStore.getState().addComment(draft.id, {
-      sectionId,
-      ...author,
-      authorEmail: me.email,
-      authorUserId: me.userId,
-      body,
-      quote,
-    });
-  };
-
-  const removePoint = (p: MyPoint) => {
-    const ds = useDraftStore.getState();
-    if (p.kind === "suggestion") ds.rejectSectionPending(draft.id, p.sectionId);
-    else ds.deleteComment(draft.id, p.id);
-  };
+  // The same points as the margin cards and the page (teammate.tsx).
+  const points: MyPoint[] = useTeammatePoints(draft, review);
 
   const sendBack = async (verdict: ReviewVerdict, note: string, approve: boolean): Promise<boolean> => {
     if (!round || review.status !== "out" || busy) return false;
@@ -460,10 +377,9 @@ function TeammateReview({
 
   return (
     <div className="flex flex-col gap-3" data-testid="review-stage" data-state="reviewer">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="m-0 text-[15px] font-semibold text-[var(--ds-ink)]">Your review</h3>
-        {open && <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={!canWork} compact />}
-      </div>
+      <h3 className="m-0 text-[15px] font-semibold text-[var(--ds-ink)]">Your review</h3>
+      {/* Its own row, so Read, Suggest and Comment keep their words (REVIEW-88). */}
+      {open && <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={!canWork} className="self-start" />}
       {open && mode !== "read" && (
         <p className="m-0 text-[12.5px] leading-[1.45] text-[var(--ds-muted)]">
           {mode === "suggest"
@@ -493,50 +409,11 @@ function TeammateReview({
         busy={busy || !canWork}
         onMessage={onMessage}
         onShowPoint={showPoint}
-        onEditPoint={
-          canWork
-            ? (p) =>
-                p.kind === "suggestion"
-                  ? setComposer({ kind: "suggest", sectionId: p.sectionId, editId: p.id })
-                  : setComposer({ kind: "comment", sectionId: p.sectionId, quote: p.quote, editId: p.id, body: p.note })
-            : undefined
-        }
-        onRemovePoint={removePoint}
+        onEditPoint={canWork ? (p) => editTeammatePoint(draft.id, p) : undefined}
+        onRemovePoint={(p) => removeTeammatePoint(draft.id, p)}
         onSendBack={sendBack}
       />
 
-      {canWork && (
-        <SelectionBubble
-          anchor={anchor}
-          mode={mode}
-          onSuggest={(a) => setComposer({ kind: "suggest", sectionId: a.sectionId, quote: a.quote })}
-          onComment={(a) => setComposer({ kind: "comment", sectionId: a.sectionId, quote: a.quote })}
-        />
-      )}
-      {composer?.kind === "suggest" && section && (
-        <SuggestComposer
-          open
-          onOpenChange={(o) => !o && setComposer(null)}
-          sectionTitle={section.title}
-          html={editing?.proposedHtml ?? section.html ?? ""}
-          quote={composer.quote}
-          initialNote={editing && editing.instruction !== suggestionTitle(editing.prevHtml ?? "", editing.proposedHtml) ? editing.instruction : undefined}
-          onSubmit={(html, note) => proposeSuggestion(section.id, html, note, composer.editId)}
-        />
-      )}
-      {composer?.kind === "comment" && section && (
-        <CommentComposer
-          open
-          onOpenChange={(o) => !o && setComposer(null)}
-          sectionTitle={section.title}
-          quote={composer.quote}
-          initialBody={composer.body}
-          onSubmit={(body) => {
-            if (composer.editId) useDraftStore.getState().deleteComment(draft.id, composer.editId);
-            addComment(section.id, body, composer.quote);
-          }}
-        />
-      )}
     </div>
   );
 }

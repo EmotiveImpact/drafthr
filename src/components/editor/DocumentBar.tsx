@@ -282,6 +282,10 @@ function TopRow(p: DocumentBarProps) {
   const { draft, journey } = p;
   const evidenceCount = draft.evidence?.length ?? 0;
   const reviewStatus = draft.reviewStatus ?? "draft";
+  // The named teammate reviewer's bar (V1): Evidence and Activity keep only
+  // their icons (names stay for screen readers) so the Read, Suggest and
+  // Comment switch can show its words beside the letter's name (REVIEW-88).
+  const reviewer = journey.primaryAction?.id === "send-back";
   const squeeze = useTitleSqueeze(
     [draft.title, recipientNameFor(draft), journey.statusLabel, p.counselNeeded, p.counselReview?.reviewedBy, p.streaming, reviewStatus].join("|")
   );
@@ -391,7 +395,7 @@ function TopRow(p: DocumentBarProps) {
         )}
       >
         <Paperclip className="size-4" />
-        <span className="hidden @min-[860px]:inline">Evidence</span>
+        <span className={cn("hidden", !reviewer && "@min-[860px]:inline")}>Evidence</span>
         {evidenceCount > 0 && (
           <span className="ds-mono rounded-[5px] bg-[var(--ds-surface-3)] px-1.5 text-[12px] font-medium text-[var(--ds-muted)]">
             {evidenceCount}
@@ -407,10 +411,10 @@ function TopRow(p: DocumentBarProps) {
         title="Activity: the letter's history and saved versions"
       >
         <History className="size-4" />
-        <span className="hidden @min-[860px]:inline">Activity</span>
+        <span className={cn("hidden", !reviewer && "@min-[860px]:inline")}>Activity</span>
       </button>}
 
-      {p.journey.primaryAction?.id === "send-back" && squeeze.level < 3 && <BarReviewerMode draftId={draft.id} disabled={p.role === "viewer"} />}
+      {reviewer && <BarReviewerMode draftId={draft.id} disabled={p.role === "viewer"} compact={squeeze.level >= 3} />}
 
       <MainAction {...p} short={squeeze.level >= 5} />
 
@@ -421,9 +425,9 @@ function TopRow(p: DocumentBarProps) {
 
 /** How much the document bar's name area has to give: 0 shows "Name ·
  *  Employee" on one row with the counsel pill's words; 1 puts the employee
- *  under the name; 2 also drops the counsel pill to its icon; 3 also leaves
- *  the reviewer's Read / Suggest / Comment switch to the panel (Your review
- *  has the same switch); 4 also moves Activity into the More menu; 5 also
+ *  under the name; 2 also drops the counsel pill to its icon; 3 also drops
+ *  the reviewer's Read / Suggest / Comment switch to its icons (names stay
+ *  for screen readers); 4 also moves Activity into the More menu; 5 also
  *  shortens "Send back to <name>" to "Send back". It steps up
  *  before paint while the name or employee is cut short, and starts again
  *  from 0 when the room or the words change, so the name is never cut to
@@ -478,18 +482,12 @@ function useJustBack(draftId: string): boolean {
 }
 
 /** The named teammate reviewer's Read / Suggest / Comment switch (shared
- *  with Your review in the Progress panel). Hidden on narrow bars, where the
- *  panel's own switch is enough. */
-function BarReviewerMode({ draftId, disabled }: { draftId: string; disabled: boolean }) {
+ *  with Your review in the Progress panel). It shows its words while the
+ *  bar has room and drops to icons only when the letter's name would
+ *  otherwise be cut short (useTitleSqueeze level 3). */
+function BarReviewerMode({ draftId, disabled, compact }: { draftId: string; disabled: boolean; compact: boolean }) {
   const [mode, setMode] = useReviewerMode(draftId);
-  // Icons only until there is room for the words (names stay for screen
-  // readers), so the letter's name keeps its space.
-  return (
-    <>
-      <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={disabled} compact className="ml-1 shrink-0 max-lg:hidden 2xl:hidden" />
-      <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={disabled} className="ml-1 hidden shrink-0 2xl:inline-flex" />
-    </>
-  );
+  return <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={disabled} compact={compact} className="ml-1 shrink-0" />;
 }
 
 /** The one main action on the far right of the bar, by stage. */

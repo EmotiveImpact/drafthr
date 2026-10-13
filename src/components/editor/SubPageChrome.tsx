@@ -42,11 +42,13 @@ export function SubPageBar({
       >
         <ArrowLeft className="size-[18px]" />
       </button>
-      <div className="ml-0.5 mr-1.5 flex min-w-0 shrink items-center">
+      {/* The name keeps room for a few words on a phone; the status pill
+       * gives way there instead (FEAT-X4). */}
+      <div className="ml-0.5 mr-1.5 flex min-w-[120px] shrink items-center">
         <EditableTitleBar draft={draft} variant="bar" />
       </div>
       {journey && (
-        <StatusPill tone={journey.statusTone} className="ml-1.5 shrink-0">
+        <StatusPill tone={journey.statusTone} className="ml-1.5 shrink-0 max-sm:hidden">
           {journey.statusLabel}
         </StatusPill>
       )}

@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
 import { useDraftStore } from "@/lib/store";
-import { currentRound, firstName, useLatestReview, type ReviewRequest } from "./reviews";
+import { currentRound, firstName, useLatestReview, useNewestReview, type ReviewRequest } from "./reviews";
 
 /**
  * Where a letter is in its journey: Draft, Review (optional), Approve, Send,
@@ -136,6 +136,11 @@ export type JourneyOptions = {
   /** The person looking is the named teammate reviewer of the review that
    *  is out (their own review: suggest, pick a verdict, send it back). */
   viewerIsReviewer?: boolean;
+  /** False when the person looking did not ask for the review and is not its
+   *  named reviewer (another member of the workspace): they see where it is,
+   *  read only, and cannot recall it or finish it (REVIEW-100). Undefined is
+   *  the person who asked. */
+  viewerIsAsker?: boolean;
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -367,6 +372,51 @@ export function getJourney(
   }
 
   // ---- Out for review / back to you -------------------------------------
+  // The named reviewer after the person who asked recalled it: nothing for
+  // them to do, and no author controls on someone else's letter (REVIEW-69).
+  if (review && review.draftId === draft.id && review.status === "recalled" && opts.viewerIsReviewer) {
+    const asker = firstName(review.asker?.name ?? "") || "The person who asked";
+    return {
+      ...base,
+      review,
+      stage: "review",
+      tone: "away",
+      statusLabel: "Recalled",
+      statusTone: "grey",
+      whereLabel: "Review · recalled",
+      whatNow: {
+        lead: "Recalled.",
+        detail: `${asker} recalled this review, so there's nothing for you to do. Your suggestions from this round were withdrawn.`,
+      },
+      primaryAction: null,
+      needsYou: false,
+      listTone: "away",
+      stepIndex: 1,
+      locked: true,
+    };
+  }
+  // The named reviewer once they have sent it back: a calm read-only view
+  // until the next round arrives (REVIEW-94).
+  if (r && r.status === "back" && opts.viewerIsReviewer) {
+    const asker = firstName(r.asker?.name ?? "") || "them";
+    return {
+      ...base,
+      stage: "review",
+      tone: "away",
+      statusLabel: asker === "them" ? "Sent back" : `Sent back to ${asker}`,
+      statusTone: "lilac",
+      whereLabel: asker === "them" ? "Review · sent back" : `Review · back with ${asker}`,
+      whatNow: {
+        lead: "Sent back.",
+        detail: `${asker === "them" ? "They decide" : `${asker} decides`} what to accept. You'll be told if it comes back to you.`,
+      },
+      primaryAction: null,
+      needsYou: false,
+      listTone: "away",
+      stepIndex: 1,
+      locked: true,
+    };
+  }
   if (r && r.status === "out" && opts.viewerIsReviewer) {
     const asker = firstName(r.asker?.name ?? "") || "them";
     return {
@@ -383,6 +433,33 @@ export function getJourney(
       primaryAction: { id: "send-back", label: asker === "them" ? "Send it back" : `Send back to ${asker}` },
       needsYou: true,
       listTone: "needs-you",
+      stepIndex: 1,
+      locked: true,
+    };
+  }
+  if (r && (r.status === "out" || r.status === "back") && opts.viewerIsAsker === false) {
+    // Someone else's review: where it is, and nothing to act on.
+    const who = firstName(r.reviewer.name) || "the reviewer";
+    const asker = firstName(r.asker?.name ?? "") || "the person who asked";
+    const out = r.status === "out";
+    return {
+      ...base,
+      stage: "review",
+      tone: "away",
+      statusLabel: out ? `With ${who}` : `Back with ${asker}`,
+      statusTone: "lilac",
+      whereLabel: out ? `Review · with ${r.reviewer.name || "the reviewer"}` : `Review · back with ${asker}`,
+      whatNow: {
+        lead: "Nothing for you to do.",
+        detail: out
+          ? `${asker[0].toUpperCase()}${asker.slice(1)} sent it to ${who} for review.`
+          : `${who} sent it back to ${asker}, who decides what to accept.`,
+      },
+      primaryAction: out
+        ? { id: "recall", label: "Recall", disabled: true, reason: `Only ${asker} can recall it.` }
+        : { id: "finish-review", label: "Finish review", disabled: true, reason: `Only ${asker} can finish the review.` },
+      needsYou: false,
+      listTone: "away",
       stepIndex: 1,
       locked: true,
     };
@@ -604,12 +681,16 @@ function joinList(parts: string[]): string {
  */
 export function useJourney(draftId: string | undefined, opts?: Omit<JourneyOptions, "checks">): JourneyInfo | null {
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
-  const review = useLatestReview(draftId);
+  const latest = useLatestReview(draftId);
+  const newest = useNewestReview(draftId);
+  // The named reviewer of a review that was recalled sees that it was.
+  const review = opts?.viewerIsReviewer && newest?.status === "recalled" ? newest : latest;
   const viewerIsApprover = opts?.viewerIsApprover;
   const viewerIsReviewer = opts?.viewerIsReviewer;
+  const viewerIsAsker = opts?.viewerIsAsker;
   return useMemo(
-    () => (draft ? getJourney(draft, review, { viewerIsApprover, viewerIsReviewer }) : null),
-    [draft, review, viewerIsApprover, viewerIsReviewer]
+    () => (draft ? getJourney(draft, review, { viewerIsApprover, viewerIsReviewer, viewerIsAsker }) : null),
+    [draft, review, viewerIsApprover, viewerIsReviewer, viewerIsAsker]
   );
 }
 

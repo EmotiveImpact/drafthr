@@ -229,8 +229,15 @@ export function ReviewerWorkspace(p: ReviewerWorkspaceProps) {
     />
   );
 
-  const chip =
-    mode === "suggest"
+  // Once it is sent back (or closed), nothing here is suggesting or
+  // commenting any more: the chip says so (REVIEW-X13).
+  const chip = !canWork
+    ? status === "back"
+      ? `Round ${n} · sent back to ${askerFirst}`
+      : status === "recalled"
+        ? `Recalled by ${askerFirst} · read only`
+        : "Review finished · read only"
+    : mode === "suggest"
       ? `Suggesting · ${askerFirst} accepts or rejects`
       : mode === "comment"
         ? `Commenting · ${askerFirst} sees each comment`
@@ -289,7 +296,7 @@ export function ReviewerWorkspace(p: ReviewerWorkspaceProps) {
               <span
                 className={cn(
                   "inline-flex min-h-9 min-w-0 items-center gap-2 rounded-[8px] border px-3 py-1.5 text-[13px] leading-[1.25]",
-                  mode === "read"
+                  mode === "read" || !canWork
                     ? "border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-muted)]"
                     : "border-[var(--ds-lilac-bd)] bg-[var(--ds-lilac-soft)] text-[var(--ds-lilac-fg)]"
                 )}

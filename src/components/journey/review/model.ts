@@ -8,6 +8,7 @@
 import type { Comment, Draft, Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { sectionTitleText } from "@/lib/letters/display";
+import { planHours, specialtiesForLetter, turnaroundWords as marketTurnaroundWords } from "@/components/consultants/market";
 import {
   currentRound,
   firstName,
@@ -66,36 +67,9 @@ export function expertSuggestion(draft: Draft): ExpertSuggestion {
 
 /** Marketplace specialties that fit a letter type (empty: any expert fits). */
 export function specialtiesFor(draft: Draft): string[] {
-  switch (draft.letterType) {
-    case "warning":
-    case "termination":
-    case "probation_outcome":
-      return ["Disciplinary", "Performance"];
-    case "redundancy":
-      return ["Redundancy"];
-    case "settlement_cover":
-    case "settlement_counter_offer":
-      return ["Settlement"];
-    case "grievance":
-    case "resignation_with_grievance":
-      return ["Grievance"];
-    case "resignation_constructive":
-    case "constructive_dismissal_warning":
-      return ["Constructive dismissal", "Grievance"];
-    case "flexible_working_request":
-      return ["Flexible working"];
-    case "whistleblowing":
-      return ["Whistleblowing"];
-    case "leave_approval":
-    case "holiday_request":
-      return ["Holiday", "Statutory leave"];
-    case "accommodation_request":
-      return ["Discrimination"];
-    case "pay_dispute":
-      return ["Working Time"];
-    default:
-      return [];
-  }
+  // One list for the dialog and the marketplace page, so "See all N" is the
+  // N the page shows when it opens for this letter.
+  return specialtiesForLetter(draft);
 }
 
 /* ------------------------------------------------------------------ */
@@ -459,14 +433,14 @@ export function defaultDueAt(minHours = 48, now = Date.now()): string {
 
 /** Turnaround hours from a marketplace SLA ("24h", "24-48h"). */
 export function slaHours(sla: string | undefined): number {
-  const m = (sla ?? "").match(/(\d+)/);
-  return m ? Number(m[1]) : 48;
+  // The upper end of a range ("24-48h" is 48), as the marketplace promises it.
+  return planHours(sla);
 }
 
-/** "24 hours", "2 days". */
+/** "24 hours", "2 days": the marketplace's own words, so the dialog and the
+ *  cards say the same thing (MARKET-X3). */
 export function turnaroundWords(sla: string | undefined): string {
-  const h = slaHours(sla);
-  return h % 24 === 0 && h > 48 ? plural(h / 24, "day") : plural(h, "hour");
+  return marketTurnaroundWords(sla);
 }
 
 /** Money: "£95", "£95.50". */

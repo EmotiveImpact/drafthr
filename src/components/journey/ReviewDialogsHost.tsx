@@ -12,16 +12,18 @@ import { notifyReviewRequested } from "@/lib/collab-notify";
 import { currentRound, firstName, useReviewStore, type ReviewRequest } from "@/lib/journey/reviews";
 import { ReviewerPicker } from "./review/ReviewerPicker";
 import { RoundsList } from "./review/parts";
-import { requestApproval, useReviewUI } from "./review/review-ui";
+import { requestApproval, useReturnFocus, useReviewUI } from "./review/review-ui";
 import { bookingFor, finishReview, isAskerOf, recallReview, sendBackToReviewer, useMe } from "./review/actions";
 import { useAssignedReviews, useReviewSync } from "./review/sync";
+import { TeammateComposerHost } from "./review/teammate";
 import { openPoints, plural, reviewPoints } from "./review/model";
 
 /**
  * Hosts the review loop's dialogs: "Who should review this letter?" (opened
  * through useJourneyUI().openReviewPicker), the Recall and Finish review
  * confirmations, the "Send back to <name>" composer, the rounds history and
- * the approval picker for "Skip review" when there is no usual approver.
+ * the approval picker for "Skip review" when there is no usual approver,
+ * and a teammate reviewer's suggestion and comment boxes (V1).
  * Also: the return from the marketplace (`?review=expert&expert=<id>`), the
  * "sent it back" toast, and keeping the open review in step with the server.
  *
@@ -64,6 +66,7 @@ function HostBody() {
   const closePicker = useJourneyUI((s) => s.closeReviewPicker);
   const pickerDraft = useDraftStore((s) => (picker ? s.drafts[picker.draftId] : undefined));
   const pickerAllowed = !!pickerDraft && !pickerDraft.isTemplateSource;
+  const me = useMe();
 
   return (
     <>
@@ -82,6 +85,7 @@ function HostBody() {
       <ApprovalPicker />
       <MarketplaceReturn />
       <RouteDraftWatcher />
+      <TeammateComposerHost me={me} />
     </>
   );
 }
@@ -125,27 +129,31 @@ function RecallConfirm() {
   const bookings = useBookingsStore((s) => s.bookings);
   const booking = bookingFor(review, bookings);
   const [busy, setBusy] = useState(false);
-  const open = !!draftId && !!review && review.status === "out";
+  const me = useMe();
+  // Only the person who asked can recall it (REVIEW-100).
+  const mine = !!review && isAskerOf(review, me);
+  const open = !!draftId && !!review && review.status === "out" && mine;
   const close = () => set({ recallFor: null });
+  const returnFocus = useReturnFocus(open);
 
   useEffect(() => {
     // Nothing to recall (it came back meanwhile): close quietly.
-    if (draftId && (!review || review.status !== "out")) set({ recallFor: null });
-  }, [draftId, review, set]);
+    if (draftId && (!review || review.status !== "out" || !mine)) set({ recallFor: null });
+  }, [draftId, review, mine, set]);
 
   if (!open || !review) return null;
   const who = firstName(review.reviewer.name) || "the reviewer";
   const started = review.kind === "expert" && (booking?.paymentStatus === "paid" || !!booking?.acceptedAt);
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-recall-confirm">
+      <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-recall-confirm" onCloseAutoFocus={returnFocus}>
         <DialogTitle className="text-[20px]">Recall it from {who}?</DialogTitle>
         <DialogDescription className="mt-2 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
           {review.kind === "trusted"
             ? `${who}'s secure link stops working at once and you can edit the letter again.`
             : review.kind === "expert"
               ? `${who} can no longer open the letter and you can edit it again.`
-              : `${who} can no longer suggest changes or send it back, and you can edit the letter again.`}
+              : `${who} can no longer suggest changes or send it back, and you can edit the letter again. Any suggestions ${who} made in this round are withdrawn; comments stay.`}
           {started ? " Once a review has started, the fee isn't refunded." : ""}
         </DialogDescription>
         <div className="mt-5 flex justify-end gap-2">
@@ -184,6 +192,7 @@ function FinishConfirm() {
   const left = useMemo(() => (draft && review ? openPoints(reviewPoints(draft, review)) : []), [draft, review]);
   const close = () => set({ finishFor: null });
   const ran = useRef<string | null>(null);
+  const returnFocus = useReturnFocus(!!draftId && !!review && review.status === "back" && left.length > 0);
 
   useEffect(() => {
     if (!draftId) {
@@ -213,7 +222,7 @@ function FinishConfirm() {
     .join(", and ");
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-finish-confirm">
+      <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-finish-confirm" onCloseAutoFocus={returnFocus}>
         <DialogTitle className="text-[20px]">Finish with {plural(left.length, "point")} left?</DialogTitle>
         <DialogDescription className="mt-2 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
           You haven't decided on {left.length === 1 ? "one of" : `${left.length} of`}{" "}
@@ -247,6 +256,7 @@ function SendBackComposer() {
   const review = useOpenReview(draftId);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const returnFocus = useReturnFocus(!!draftId && !!review && review.status === "back");
   useEffect(() => {
     if (draftId) setText("");
   }, [draftId]);
@@ -266,7 +276,7 @@ function SendBackComposer() {
   };
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="w-[480px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[480px]" data-testid="review-send-back">
+      <DialogContent className="w-[480px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[480px]" data-testid="review-send-back" onCloseAutoFocus={returnFocus}>
         <DialogTitle className="text-[20px]">Send back to {who}</DialogTitle>
         <DialogDescription className="mt-1.5 mb-3 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
           This starts round {(round?.n ?? 1) + 1}. {who} sees your question at the top of their review, and the letter is locked again until it's back.
@@ -314,10 +324,11 @@ function RoundsHistory() {
   const set = useReviewUI((s) => s.set);
   const review = useLatestFor(draftId);
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const returnFocus = useReturnFocus(!!draftId && !!review && !!draft);
   if (!draftId || !review || !draft) return null;
   return (
     <Dialog open onOpenChange={(o) => !o && set({ roundsFor: null })}>
-      <DialogContent className="max-h-[calc(100dvh-32px)] w-[560px] max-w-[calc(100vw-32px)] gap-0 overflow-y-auto rounded-[16px] p-6 sm:max-w-[560px]" data-testid="review-rounds-dialog">
+      <DialogContent className="max-h-[calc(100dvh-32px)] w-[560px] max-w-[calc(100vw-32px)] gap-0 overflow-y-auto rounded-[16px] p-6 sm:max-w-[560px]" data-testid="review-rounds-dialog" onCloseAutoFocus={returnFocus}>
         <DialogTitle className="text-[22px]">How the review went</DialogTitle>
         <DialogDescription className="mt-1 mb-4 text-[13.5px] text-[var(--ds-muted)]">
           {plural(review.rounds.length, "round")} with {review.reviewer.name || "the reviewer"}

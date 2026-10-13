@@ -17,6 +17,9 @@ import type { PagedEditorActions } from "./types";
  *  zoomed down to fit (see the effect in the component). */
 const A4_PAGE_PX = 794;
 const A4_FIT_WIDTH = A4_PAGE_PX + 32;
+/** Below this container width (phones) the page narrows to the screen. */
+const PHONE_PAGE_MAX = 600;
+const A4_RATIO = 297 / 210;
 
 /**
  * Edit-on-page engine, backed by the vendored **pagedly** library. This is the
@@ -345,13 +348,19 @@ export function PagedlyDocEditor({
   // Fit the A4 page (794px) to narrow screens. Without this a phone shows
   // the page's left two thirds and cuts the rest off at the right edge.
   // Wider containers keep zoom 1, so desktop layout is untouched.
+  // On a phone that would shrink the words to about 5px, so there the page
+  // is narrowed to the screen instead (same proportions, smaller margins) and
+  // the letter reflows at its own size (FEAT-X4).
   const [pageZoom, setPageZoom] = useState(1);
+  const [phonePageW, setPhonePageW] = useState<number | null>(null);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     const fit = () => {
       const w = el.clientWidth;
-      setPageZoom(w > 0 && w < A4_FIT_WIDTH ? Math.max(0.4, (w - 16) / A4_PAGE_PX) : 1);
+      const phone = w > 0 && w < PHONE_PAGE_MAX;
+      setPhonePageW(phone ? Math.floor(w - 16) : null);
+      setPageZoom(!phone && w > 0 && w < A4_FIT_WIDTH ? Math.max(0.4, (w - 16) / A4_PAGE_PX) : 1);
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -366,12 +375,21 @@ export function PagedlyDocEditor({
   return (
     <div
       ref={wrapRef}
+      data-phone-page={phonePageW ? "" : undefined}
       className="flex min-h-full flex-col [&_.pagedly-ce-footer]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-ce-page]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-toolbar__wordcount]:text-[var(--ds-muted)] [&_.pagedly-toolbar__wordcount-sep]:opacity-100"
       // The letter on the page is set in the workspace serif (Newsreader),
       // the page chrome in the UI sans (Inter).
       style={
         {
           "--dhr-page-zoom": pageZoom,
+          // Read by the [data-phone-page] rule in globals.css, which wins
+          // over the A4 size pagedly sets on its own root.
+          ...(phonePageW
+            ? {
+                "--dhr-phone-page-w": `${phonePageW}px`,
+                "--dhr-phone-page-h": `${Math.round(phonePageW * A4_RATIO)}px`,
+              }
+            : {}),
           "--pagedly-font-family": "var(--font-serif)",
           "--pagedly-line-height": "1.5",
           "--pagedly-ui-font": "var(--font-sans)",

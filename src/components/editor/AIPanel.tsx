@@ -23,6 +23,7 @@ import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { regenerateSectionAsPending } from "@/lib/llm/draft";
 import { CLAUSE_TEMPLATES, type ClauseType } from "@/lib/llm/tools";
 import { getRecentPrompts, pushRecentPrompt } from "@/lib/recent-prompts";
+import { CRITIQUE_EVENT, type CritiqueEventDetail } from "./SecondOpinion";
 
 /**
  * Quick-prompt chips. Each maps to one of the four typed tools so the
@@ -610,6 +611,21 @@ export function AIPanel({
     window.addEventListener("drafthr:ask", on);
     return () => window.removeEventListener("drafthr:ask", on);
   }, [draft.id]);
+
+  // A second opinion from the Progress tab (SecondOpinion): it joins the
+  // thread as DraftHR's message, before the follow-up that asks for edits.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<CritiqueEventDetail>).detail;
+      if (!d?.critique || d.draftId !== draft.id) return;
+      setMessages((prev) => [
+        ...prev,
+        { id: `critique-${Date.now()}`, role: "assistant", parts: [{ type: "text", text: `**Second opinion · ${d.lensLabel}**\n\n${d.critique}` }] },
+      ]);
+    };
+    window.addEventListener(CRITIQUE_EVENT, on);
+    return () => window.removeEventListener(CRITIQUE_EVENT, on);
+  }, [draft.id, setMessages]);
 
   // "Show new edits" (the sliders menu): in the text or side by side.
   const [diffMode, setDiffModeState] = useState<DiffViewMode>(() => getDiffViewMode());

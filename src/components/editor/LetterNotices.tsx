@@ -42,11 +42,17 @@ export function LetterNotices({
   onMessage,
   onUndoSent,
   animateSent,
+  viewerIsReviewer,
+  viewerIsAsker,
   className,
 }: {
   draft: Draft;
   journey: JourneyInfo;
   review: ReviewRequest | null;
+  /** The named teammate reviewer is looking (out, sent back or recalled). */
+  viewerIsReviewer?: boolean;
+  /** False when someone else asked for the review (read only). */
+  viewerIsAsker?: boolean;
   matter?: Matter;
   employee?: Employee;
   /** "Message": open the conversation with the reviewer. */
@@ -56,7 +62,7 @@ export function LetterNotices({
   animateSent?: boolean;
   className?: string;
 }) {
-  const strip = noticeFor({ draft, journey, review, matter, onMessage, onUndoSent, animateSent });
+  const strip = noticeFor({ draft, journey, review, matter, onMessage, onUndoSent, animateSent, viewerIsReviewer, viewerIsAsker });
   // The named teammate reviewer is looking (their main action is "Send back").
   const reviewing = journey.primaryAction?.id === "send-back";
   const [reviewerMode] = useReviewerMode(draft.id);
@@ -90,7 +96,7 @@ export function LetterNotices({
   } else if (r && r.status === "back") {
     right = (
       <NoticeChip icon={Eye} tone="lilac">
-        Round {round?.n ?? 1} · from {r.reviewer.name}
+        Round {round?.n ?? 1} · {viewerIsReviewer ? "sent back" : `from ${r.reviewer.name}`}
       </NoticeChip>
     );
   } else if (r && r.status === "finished" && (journey.stage === "approve" || journey.stage === "send")) {
@@ -156,6 +162,8 @@ function noticeFor({
   onMessage,
   onUndoSent,
   animateSent,
+  viewerIsReviewer,
+  viewerIsAsker,
 }: {
   draft: Draft;
   journey: JourneyInfo;
@@ -164,6 +172,8 @@ function noticeFor({
   onMessage: () => void;
   onUndoSent?: () => void;
   animateSent?: boolean;
+  viewerIsReviewer?: boolean;
+  viewerIsAsker?: boolean;
 }): React.ReactNode {
   const r = review && review.status !== "recalled" ? review : null;
   const employeeFirst = firstName(draft.employee?.preferredName || draft.employee?.legalName) || "the employee";
@@ -227,6 +237,15 @@ function noticeFor({
         </NoticeStrip>
       );
     }
+    if (viewerIsAsker === false) {
+      // Someone else's review: where it is, nothing to act on.
+      const asker = firstName(r.asker?.name ?? "") || "Someone in your team";
+      return (
+        <NoticeStrip tone="lilac" icon={Eye} title={`With ${r.reviewer.name} for review.`}>
+          {asker} sent it for review{dueOk ? `, back by ${fmtDay(due!)} at ${fmtTime(due!.getTime())}` : ""}. Editing is paused until it's back.
+        </NoticeStrip>
+      );
+    }
     return (
       <NoticeStrip
         tone="lilac"
@@ -240,6 +259,27 @@ function noticeFor({
       >
         {dueOk ? `Back by ${fmtDay(due!)} at ${fmtTime(due!.getTime())}. ` : ""}
         Editing is paused so you're both looking at the same version.
+      </NoticeStrip>
+    );
+  }
+
+  // The named reviewer after sending it back: a calm confirmation.
+  if (r && r.status === "back" && viewerIsReviewer) {
+    const round = currentRound(r);
+    const asker = firstName(r.asker?.name ?? "") || "The person who asked";
+    return (
+      <NoticeStrip tone="lilac" icon={Reply} title={`Sent back to ${asker}${round?.backAt ? ` at ${fmtTime(round.backAt)}` : ""}.`}>
+        {asker === "The person who asked" ? "They decide" : `${asker} decides`} what to accept. You'll be told if it comes back to you.
+      </NoticeStrip>
+    );
+  }
+
+  // The named reviewer after the person who asked recalled it.
+  if (review && review.status === "recalled" && viewerIsReviewer && journey.stage === "review") {
+    const asker = firstName(review.asker?.name ?? "") || "The person who asked";
+    return (
+      <NoticeStrip tone="blue" icon={Eye} title={`${asker} recalled this review${review.recalledAt ? ` at ${fmtTime(review.recalledAt)}` : ""}.`}>
+        There's nothing for you to do. You can still read the letter.
       </NoticeStrip>
     );
   }
@@ -272,7 +312,9 @@ function noticeFor({
         title={`${who} sent it back${verdict ? `: ${verdict}` : ""}.`}
       >
         {what ? `${what}. ` : ""}
-        {next}
+        {viewerIsAsker === false
+          ? `${firstName(r.asker?.name ?? "") || "The person who asked"} decides what to accept.`
+          : next}
       </NoticeStrip>
     );
   }

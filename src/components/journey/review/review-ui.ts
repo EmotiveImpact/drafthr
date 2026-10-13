@@ -1,3 +1,4 @@
+import { useCallback, useRef } from "react";
 import { create } from "zustand";
 import { useJourneyUI } from "@/components/journey/ui-store";
 
@@ -22,10 +23,28 @@ type ReviewUIState = {
   justBack: { draftId: string; at: number } | null;
   /** The reviewer's Read / Suggest / Comment switch, per letter or link. */
   reviewerMode: Record<string, ReviewerMode>;
+  /** A teammate reviewer's suggestion or comment box (V1), opened from the
+   *  page, a margin card or Your review; ReviewDialogsHost renders it. */
+  teammateComposer: TeammateComposer | null;
   set: (patch: Partial<Omit<ReviewUIState, "set">>) => void;
 };
 
 export type ReviewerMode = "read" | "suggest" | "comment";
+
+export type TeammateComposer = {
+  draftId: string;
+  kind: "suggest" | "comment";
+  sectionId: string;
+  quote?: string;
+  /** Editing one of the reviewer's own points (its id). */
+  editId?: string;
+  /** The comment's current words, when editing a comment. */
+  body?: string;
+};
+
+export function openTeammateComposer(c: TeammateComposer): void {
+  useReviewUI.getState().set({ teammateComposer: c });
+}
 
 /** The reviewer's mode for a letter (the document bar and the panel share it). */
 export function useReviewerMode(key: string): [ReviewerMode, (m: ReviewerMode) => void] {
@@ -44,6 +63,7 @@ export const useReviewUI = create<ReviewUIState>()((set) => ({
   replyFocus: null,
   justBack: null,
   reviewerMode: {},
+  teammateComposer: null,
   set: (patch) => set(patch),
 }));
 
@@ -117,4 +137,36 @@ export function focusReviewReply(draftId: string): void {
   useJourneyUI.getState().setPanelTab("progress");
   const prev = useReviewUI.getState().replyFocus;
   useReviewUI.getState().set({ replyFocus: { draftId, n: (prev?.n ?? 0) + 1 } });
+}
+
+/**
+ * Focus back to what opened a dialog. The review dialogs open through the
+ * stores, not a Radix trigger, so Radix has nothing to return focus to and
+ * it fell to <body> (REVIEW-09). The element that had focus when the dialog
+ * first rendered is the opener (the "Send for review", Recall or Finish
+ * review button); when it has gone or is disabled (the button changed with
+ * the stage), the document bar's main action takes focus instead.
+ * Pass the result as the dialog's onCloseAutoFocus.
+ */
+export function useReturnFocus(open: boolean): (e: Event) => void {
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current && typeof document !== "undefined") {
+    const a = document.activeElement;
+    opener.current = a instanceof HTMLElement && a !== document.body && !a.closest("[role=dialog]") ? a : null;
+  }
+  wasOpen.current = open;
+  return useCallback((e: Event) => {
+    e.preventDefault();
+    const el = opener.current;
+    opener.current = null;
+    const usable = (x: HTMLElement | null): x is HTMLElement =>
+      !!x && x.isConnected && !x.matches(":disabled") && !x.closest("[role=dialog]") && x.getClientRects().length > 0;
+    const target = usable(el)
+      ? el
+      : Array.from(
+          document.querySelectorAll<HTMLElement>('[data-journey-action], [data-testid="review-send-for-review"], [data-testid="review-finish"]')
+        ).find(usable);
+    target?.focus({ preventScroll: true });
+  }, []);
 }

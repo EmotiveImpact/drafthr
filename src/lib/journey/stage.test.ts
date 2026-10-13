@@ -258,6 +258,41 @@ describe("getJourney: review", () => {
   });
 });
 
+describe("getJourney: who is looking at a review", () => {
+  const team = (o: Partial<ReviewRequest> = {}) =>
+    review({ kind: "team", reviewer: { name: "Dana Whitfield" }, asker: { name: "Alex Morgan" }, ...o });
+
+  it("gives the named reviewer a calm read-only view once they sent it back", () => {
+    const r = team({ status: "back", rounds: [{ n: 1, sentAt: 1, backAt: 2, suggestionIds: [], commentIds: [] }] });
+    const j = getJourney(makeDraft(), r, { checks: PASSING, viewerIsReviewer: true });
+    expect(j.statusLabel).toBe("Sent back to Alex");
+    expect(j.primaryAction).toBeNull();
+    expect(j.locked).toBe(true);
+    expect(j.needsYou).toBe(false);
+    expect(j.whatNow.detail).toBe("Alex decides what to accept. You'll be told if it comes back to you.");
+  });
+
+  it("tells the named reviewer it was recalled, with nothing to act on", () => {
+    const j = getJourney(makeDraft(), team({ status: "recalled" }), { checks: PASSING, viewerIsReviewer: true });
+    expect(j.statusLabel).toBe("Recalled");
+    expect(j.whatNow.lead).toBe("Recalled.");
+    expect(j.primaryAction).toBeNull();
+    expect(j.locked).toBe(true);
+  });
+
+  it("shows someone else's review read only: Recall and Finish review are not theirs", () => {
+    const out = getJourney(makeDraft(), team(), { checks: PASSING, viewerIsAsker: false });
+    expect(out.statusLabel).toBe("With Dana");
+    expect(out.primaryAction).toMatchObject({ id: "recall", disabled: true, reason: "Only Alex can recall it." });
+    expect(out.locked).toBe(true);
+    const back = getJourney(makeDraft(), team({ status: "back" }), { checks: PASSING, viewerIsAsker: false });
+    expect(back.primaryAction).toMatchObject({ id: "finish-review", disabled: true });
+    expect(back.needsYou).toBe(false);
+    // The person who asked keeps their own controls.
+    expect(getJourney(makeDraft(), team(), { checks: PASSING, viewerIsAsker: true }).primaryAction?.disabled).toBeFalsy();
+  });
+});
+
 describe("getJourney: approve", () => {
   const submitted = makeDraft({
     reviewStatus: "in_review",

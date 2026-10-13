@@ -23,6 +23,7 @@ import { EmployeeRail } from "./EmployeeRail";
 import { EvidenceRequirementsList } from "./EvidenceRequirementsList";
 import { CiteMarker } from "./Citations";
 import { LetterHealthCard } from "./LetterHealthCard";
+import { SecondOpinion } from "./SecondOpinion";
 
 const FORMAT_LABEL: Record<ExportEvent["format"], string> = {
   pdf: "PDF",
@@ -49,6 +50,7 @@ export function ProgressTab({
   journey,
   viewerIsApprover,
   viewerIsReviewer,
+  viewerIsAsker,
   tickStep,
   role,
   counselNeeded,
@@ -64,6 +66,8 @@ export function ProgressTab({
   viewerIsApprover: boolean;
   /** The named teammate reviewer is looking (their own review). */
   viewerIsReviewer?: boolean;
+  /** False when someone else asked for the review that is out or back. */
+  viewerIsAsker?: boolean;
   /** The tracker steps that just completed ("0", "0 1"): their ticks draw. */
   tickStep: string | null;
   role: WorkspaceRole | undefined;
@@ -108,6 +112,7 @@ export function ProgressTab({
         draftId={draft.id}
         viewerIsApprover={viewerIsApprover}
         viewerIsReviewer={viewerIsReviewer}
+        viewerIsAsker={viewerIsAsker}
         health={early ? <LetterHealthCard draft={draft} journey={journey} canFix={canFix} /> : false}
       />
 
@@ -205,8 +210,12 @@ export function ProgressTab({
           {!draft.isTemplateSource && (
             <Folded title="Second opinion and full review">
               <p className="m-0 text-[12.5px] leading-snug text-[var(--ds-muted)]">
-                Ask DraftHR to read it as tribunal counsel, an employee advocate or a DEI lead (1 credit), get an expert, or open the full checks.
+                Ask DraftHR to read it as tribunal counsel, an employee advocate or a DEI lead (1 credit). Its points arrive in Chat as edits you accept or reject.
               </p>
+              <div className="mt-2">
+                <SecondOpinion draft={draft} canRun={role !== "viewer" && canFix} />
+              </div>
+              <p className="m-0 mt-3 text-[12.5px] leading-snug text-[var(--ds-muted)]">Or get an expert, or open the full checks.</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <QuietButton onClick={onGoReview} ariaLabel="Next: Review">
                   Review step <ArrowRight className="size-3.5" />

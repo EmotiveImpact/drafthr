@@ -45,12 +45,14 @@ import {
 } from "./actions";
 import {
   backLine,
+  evidenceSharedWith,
   fmtDateTime,
   fmtDayTime,
   fmtTime,
   openPoints,
   plural,
   reviewPoints,
+  shareableEvidence,
   summariseRound,
   type ReviewPoint,
 } from "./model";
@@ -229,7 +231,9 @@ export function OutCard({
 }) {
   const who = firstName(review.reviewer.name) || "the reviewer";
   const round = currentRound(review);
-  const files = review.share.evidence ? (draft.evidence?.length ?? 0) : 0;
+  // Only what was shared: the files when evidence was shared, the hearing
+  // notes only when those were (REVIEW-57).
+  const files = evidenceSharedWith(draft.evidence, review.share).length;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 60000);
@@ -266,10 +270,12 @@ export function OutCard({
     }
   };
 
+  // The sub-line wraps in full (the mock wraps it to two lines), never cut
+  // mid-word beside the pill (REVIEW-X14).
   return (
     <PersonCard
       name={review.reviewer.name || "Reviewer"}
-      role={<span className="line-clamp-2 whitespace-normal">{reviewerSubline(review)}</span>}
+      role={<span className="block whitespace-normal break-words">{reviewerSubline(review)}</span>}
       seed={review.reviewer.consultantId ?? review.reviewer.email ?? review.reviewer.name}
       pill={pill}
       timeline={timeline}
@@ -869,8 +875,15 @@ export function RateExpertCard({ review }: { review: ReviewRequest }) {
 /* ------------------------------------------------------------------ */
 
 export function ReadyChecklist({ draft, checksTotal, checksPassing }: { draft: Draft; checksTotal: number; checksPassing: number }) {
-  const accepted = draft.sections.reduce((n, s) => n + (s.versions ?? []).filter((v) => v.id.endsWith("-prev")).length, 0);
-  const evidence = draft.evidence?.length ?? 0;
+  // Edits accepted while drafting: the decisions the letter's timeline
+  // records (Edits tab, margin cards), or the versions an accept leaves.
+  const versioned = draft.sections.reduce((n, s) => n + (s.versions ?? []).filter((v) => v.id.endsWith("-prev")).length, 0);
+  const decided = (draft.timeline ?? []).filter((t) => t.kind === "sections_updated" && t.meta?.decision === "accepted").length;
+  const accepted = Math.max(versioned, decided);
+  // The files a reviewer can be given, counted as the dialog counts them
+  // ("Share evidence, 3 files"); hearing notes are shared separately.
+  const { files, hearingNotes } = shareableEvidence(draft.evidence);
+  const evidence = files.length;
   return (
     <CheckList label="Ready for review">
       <CheckRow state="ok" note={accepted > 0 ? `${plural(accepted, "edit")} accepted` : undefined}>
@@ -880,7 +893,11 @@ export function ReadyChecklist({ draft, checksTotal, checksPassing }: { draft: D
         {checksPassing === checksTotal ? `All ${checksTotal} checks pass` : `${checksPassing} of ${checksTotal} checks pass`}
       </CheckRow>
       {evidence > 0 ? (
-        <CheckRow state="ok">{plural(evidence, "evidence file")} linked</CheckRow>
+        <CheckRow state="ok" note={hearingNotes.length > 0 ? "and hearing notes" : undefined}>
+          {plural(evidence, "evidence file")} linked
+        </CheckRow>
+      ) : hearingNotes.length > 0 ? (
+        <CheckRow state="ok">Hearing notes linked</CheckRow>
       ) : (
         <CheckRow state="wait">No evidence linked</CheckRow>
       )}

@@ -12,6 +12,8 @@ import { MainAction, MoreMenu, type DocumentBarProps } from "./DocumentBar";
 import { ScoreRing } from "./LetterHealthCard";
 import { placeholdersIn, sectionForCheck, textOf } from "./health-fix";
 import { fmtDay } from "./letter-facts";
+import { ReviewerModeSwitch } from "@/components/journey/review/reviewer";
+import { useReviewerMode } from "@/components/journey/review/review-ui";
 
 /**
  * The letter at phone width (mock phone-letter): a top bar with back, the
@@ -27,6 +29,10 @@ export function PhoneTopBar({ bar, matter }: { bar: DocumentBarProps; matter?: M
   const { draft } = bar;
   const employee = draft.employee?.legalName?.trim();
   const sub = [employee, matter?.name].filter(Boolean).join(" · ");
+  // The named teammate reviewer (V1): the Read, Suggest and Comment switch
+  // takes Share's place, as icons with their names for screen readers
+  // (REVIEW-138).
+  const reviewer = bar.journey.primaryAction?.id === "send-back";
   return (
     <div className="flex shrink-0 items-start gap-1 bg-[var(--ds-surface)] px-2 pb-1 pt-2">
       <Link to={bar.backTo} aria-label="Back to letters" title="Back to letters" className={iconBtn}>
@@ -36,17 +42,21 @@ export function PhoneTopBar({ bar, matter }: { bar: DocumentBarProps; matter?: M
         <EditableTitleBar draft={draft} variant="phone" />
         {sub && <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">{sub}</p>}
       </div>
-      <InvitePopover
-        draft={draft}
-        open={bar.inviteOpen}
-        onOpenChange={bar.onInviteOpenChange}
-        onOpenOnPhone={bar.onOpenOnMobile}
-        trigger={
-          <button type="button" aria-label="Share and invite" title="Share and invite" className={iconBtn}>
-            <Share2 className="size-[19px]" />
-          </button>
-        }
-      />
+      {reviewer ? (
+        <PhoneReviewerMode draftId={draft.id} disabled={bar.role === "viewer"} />
+      ) : (
+        <InvitePopover
+          draft={draft}
+          open={bar.inviteOpen}
+          onOpenChange={bar.onInviteOpenChange}
+          onOpenOnPhone={bar.onOpenOnMobile}
+          trigger={
+            <button type="button" aria-label="Share and invite" title="Share and invite" className={iconBtn}>
+              <Share2 className="size-[19px]" />
+            </button>
+          }
+        />
+      )}
       <MoreMenu
         {...bar}
         phone
@@ -58,6 +68,11 @@ export function PhoneTopBar({ bar, matter }: { bar: DocumentBarProps; matter?: M
       />
     </div>
   );
+}
+
+function PhoneReviewerMode({ draftId, disabled }: { draftId: string; disabled: boolean }) {
+  const [mode, setMode] = useReviewerMode(draftId);
+  return <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={disabled} compact className="mt-0.5 shrink-0" />;
 }
 
 export function PhoneStrip({ draft, journey, matter }: { draft: Draft; journey: JourneyInfo; matter?: Matter }) {
@@ -102,6 +117,7 @@ export function PhoneBottomBar({
   sheetTab,
   sheetOpen,
   showMain = true,
+  reviewPoints,
   onProgress,
   onChat,
 }: {
@@ -110,6 +126,8 @@ export function PhoneBottomBar({
   sheetOpen: boolean;
   /** The stage's main action (on phones; wider screens have it in the bar). */
   showMain?: boolean;
+  /** The named teammate reviewer: the button reads "Your review · N". */
+  reviewPoints?: number;
   onProgress: () => void;
   onChat: () => void;
 }) {
@@ -134,8 +152,18 @@ export function PhoneBottomBar({
             : "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)]"
         )}
       >
-        <ListChecks className="size-[18px] shrink-0" /> Progress
-        {bar.pendingEdits > 0 && <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">{bar.pendingEdits}</span>}
+        {reviewPoints == null && <ListChecks className="size-[18px] shrink-0" />}
+        {reviewPoints != null ? (
+          <>
+            Your review
+            {reviewPoints > 0 && <span className="font-normal text-[var(--ds-muted)]">· {reviewPoints}</span>}
+          </>
+        ) : (
+          <>
+            Progress
+            {bar.pendingEdits > 0 && <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">{bar.pendingEdits}</span>}
+          </>
+        )}
       </button>
       <button
         type="button"
@@ -143,14 +171,16 @@ export function PhoneBottomBar({
         aria-pressed={chatOn}
         className={cn(
           tabBtn,
-          "flex-1",
+          // Beside "Your review" and "Send back to <name>", Chat keeps its icon.
+          reviewPoints != null ? "w-[46px] flex-none px-0" : "flex-1",
           chatOn
             ? "bg-[var(--ds-surface-2)] text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)]"
             : "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)]"
         )}
         aria-label="Open AI agent"
       >
-        <MessageSquare className="size-[18px] shrink-0" /> Chat
+        <MessageSquare className="size-[18px] shrink-0" />
+        {reviewPoints == null && " Chat"}
       </button>
       {showMain && (
         <div className="flex shrink-0 [&>*]:ml-0">

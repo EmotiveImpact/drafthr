@@ -48,6 +48,12 @@ export function Approvals() {
   const home = useHomeData("employer");
   const me = (profile.personal.legalName || profile.personal.preferredName || "").trim();
   const canAct = home.canApprove;
+  // Only the approver it was sent to signs it off (an owner or admin who
+  // sent it to Ruth cannot approve their own letter, FEAT-X24). A letter
+  // sent to the workspace's reviewers, and the reviewer role, as in the
+  // letter itself (viewerIsApproverFor).
+  const canActOn = (r: ApprovalRow) =>
+    canAct && (profile.workspaceRole === "reviewer" || isForMe(r, me));
 
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
@@ -98,12 +104,14 @@ export function Approvals() {
           : (types.find(([id]) => `type:${id}` === filter)?.[1] ?? "All letter types");
 
   const approve = (r: ApprovalRow) => {
+    if (!canActOn(r)) return;
     approveDraft(r.id, me || "Workspace reviewer", notes[r.id]?.trim() || undefined);
     setNotes((n) => ({ ...n, [r.id]: "" }));
     setHintFor(null);
     toast.success("Approved", { description: r.person ? `${r.title} for ${r.person}` : r.title });
   };
   const askForChanges = (r: ApprovalRow) => {
+    if (!canActOn(r)) return;
     const body = notes[r.id]?.trim();
     if (!body) {
       // Never send an empty request: show this letter and ask what to change.
@@ -118,7 +126,10 @@ export function Approvals() {
     toast.success("Changes requested", { description: r.person ? `${r.title} for ${r.person}` : r.title });
   };
 
-  const lede = approvalsLedeParts(home.waiting, canAct);
+  // "Waiting for your sign-off" counts only the letters you can sign off;
+  // a letter you sent to someone else is just waiting for sign-off.
+  const mine = rows.filter(canActOn);
+  const lede = mine.length > 0 ? approvalsLedeParts(mine.map((r) => r.draft), true) : approvalsLedeParts(home.waiting, false);
 
   return (
     <div className="min-w-0">
@@ -251,7 +262,7 @@ export function Approvals() {
                       key={r.id}
                       row={r}
                       on={current?.id === r.id}
-                      canAct={canAct}
+                      canAct={canActOn(r)}
                       onSelect={() => setSelected(r.id)}
                       onApprove={() => approve(r)}
                       onRequestChanges={() => askForChanges(r)}
@@ -294,7 +305,7 @@ export function Approvals() {
               ref={noteRef}
               row={current}
               me={me || "You"}
-              canAct={canAct}
+              canAct={canActOn(current)}
               forMe={isForMe(current, me)}
               note={notes[current.id] ?? ""}
               onNote={(v) => {
@@ -386,6 +397,11 @@ function QueueRow({
           <ArrowUpRight className="size-4" aria-hidden />
         </Link>
       </div>
+      {!canAct && (
+        <span className="col-span-3 justify-self-end text-[12.5px] text-[var(--ds-muted)] md:col-span-1">
+          {/^workspace reviewer$/i.test(r.approver) ? "With the approver" : `With ${r.approver.split(/\s+/)[0]}`}
+        </span>
+      )}
       {canAct && (
         <div className="col-span-3 flex justify-end gap-1.5 md:col-span-1">
           <button type="button" onClick={onRequestChanges} className={cn(BTN_SM_GHOST, "flex-1 md:flex-none")}>

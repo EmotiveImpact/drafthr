@@ -8,7 +8,7 @@
  *             reach the letter through the usual letter sync)
  * Everything soft-fails: without a server the review simply waits.
  */
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useDraftStore } from "@/lib/store";
 import { useBookingsStore } from "@/lib/bookings";
 import { pullMyBookings } from "@/lib/marketplaceSync";
@@ -212,7 +212,6 @@ export function useReviewSync(review: ReviewRequest | null | undefined, enabled:
   const linkId = review?.trustedLinkId;
   const bookingId = review?.bookingId;
   const bookings = useBookingsStore((s) => s.bookings);
-  const busy = useRef(false);
 
   // Booking changes (from My bookings, the inbox or a pull) move the review on.
   useEffect(() => {
@@ -223,17 +222,23 @@ export function useReviewSync(review: ReviewRequest | null | undefined, enabled:
   useEffect(() => {
     if (!enabled || !id || (status !== "out" && status !== "back")) return;
     if (!linkId && !(kind === "expert" && bookingId)) return;
-    let cancelled = false;
+    // Each run of the effect keeps its own in-flight flag, and what the
+    // server says is applied even when the effect has re-run meanwhile
+    // (applying only ever moves the review forward). A shared flag across
+    // runs dropped the first answer and blocked the next run's first tick,
+    // so "Opened the link" and "back" waited for the next poll (REVIEW-X1).
+    let inFlight = false;
+    let stopped = false;
     const tick = async () => {
-      if (busy.current || cancelled) return;
-      busy.current = true;
+      if (inFlight || stopped) return;
+      inFlight = true;
       try {
         if (kind === "expert") await pullMyBookings().catch(() => false);
         const res = await getTrustedLinkStatus(linkId ? { linkId } : { bookingId });
-        if (!cancelled && res.ok) applyRemoteState(id, res.data);
-        if (!cancelled && kind === "expert") applyBooking(id, { delivered: true });
+        if (res.ok) applyRemoteState(id, res.data);
+        if (kind === "expert") applyBooking(id, { delivered: true });
       } finally {
-        busy.current = false;
+        inFlight = false;
       }
     };
     void tick();
@@ -241,7 +246,7 @@ export function useReviewSync(review: ReviewRequest | null | undefined, enabled:
     const onFocus = () => void tick();
     window.addEventListener("focus", onFocus);
     return () => {
-      cancelled = true;
+      stopped = true;
       window.clearInterval(t);
       window.removeEventListener("focus", onFocus);
     };

@@ -39,6 +39,7 @@ export function JourneyPanel({
   health,
   viewerIsApprover,
   viewerIsReviewer,
+  viewerIsAsker,
   className,
 }: {
   draftId: string;
@@ -48,9 +49,11 @@ export function JourneyPanel({
   viewerIsApprover?: boolean;
   /** The person looking is the named teammate reviewer (their own review). */
   viewerIsReviewer?: boolean;
+  /** False when someone else asked for the review (read only). */
+  viewerIsAsker?: boolean;
   className?: string;
 }) {
-  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer });
+  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer, viewerIsAsker });
   // A template is never reviewed, approved or sent: no four-step tracker
   // for it, only the drafting checklist and health (LETTER-X24).
   const isTemplate = useDraftStore((s) => !!s.drafts[draftId]?.isTemplateSource);

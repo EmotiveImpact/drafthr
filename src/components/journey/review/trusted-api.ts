@@ -10,6 +10,21 @@ export const REVIEW_LINKS_PATH = "/api/store/review-links";
 
 /** How long a link lasts unless the back-by needs longer (matches the server). */
 export const LINK_TTL_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_TTL_DAYS = 30;
+
+/** When a link made now would expire: 7 days, or two days after the back-by
+ *  when that is later, 30 days at most (api/review-links/_service.ts linkExpiry). */
+export function linkExpiryAt(now: number, dueAt: number | null | undefined): number {
+  const base = now + LINK_TTL_DAYS * DAY_MS;
+  const wanted = dueAt && Number.isFinite(dueAt) ? Math.max(base, dueAt + 2 * DAY_MS) : base;
+  return Math.min(wanted, now + MAX_TTL_DAYS * DAY_MS);
+}
+
+/** The same, in whole days from now, for the picker's hint. */
+export function linkExpiryDays(now: number, dueAt: number | null | undefined): number {
+  return Math.max(1, Math.round((linkExpiryAt(now, dueAt) - now) / DAY_MS));
+}
 
 export type LinkResult<T> = { ok: true; data: T } | { ok: false; message: string; status: number; code?: string };
 

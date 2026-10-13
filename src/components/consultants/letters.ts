@@ -11,6 +11,7 @@ import { displayTitleFor } from "@/lib/letters/display";
 import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
 import { getJourney } from "@/lib/journey/stage";
 import { activeReviewIn, latestReviewIn, useReviewStore, type ReviewRequest } from "@/lib/journey/reviews";
+import { shareableEvidence } from "@/components/journey/review/model";
 
 export type LetterFacts = {
   id: string;
@@ -34,7 +35,9 @@ export function letterFacts(draft: Draft, requests: Record<string, ReviewRequest
     title: displayTitleFor(draft),
     status: j.statusLabel,
     health: computeHealthScore(checks).score,
-    evidence: j.counts.evidence,
+    // The files a booking shares (hearing notes stay with you unless you
+    // share them), so the sheet and the review dialog give the same count.
+    evidence: shareableEvidence(draft.evidence).files.length,
     sent: j.stage === "sent",
     updatedAt: draft.updatedAt,
     employee: draft.employee?.legalName?.trim() ?? "",

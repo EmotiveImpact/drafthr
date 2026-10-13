@@ -136,7 +136,10 @@ export function EvidenceDrawer({
           includeVerbatim: false,
         });
       }
-      setEvidence(draft.id, [...allItems, ...items]);
+      // Append to the letter's own list: the drawer may be showing only what
+      // a reviewer was given, and the rest must not be lost.
+      const live = useDraftStore.getState().drafts[draft.id]?.evidence ?? allItems;
+      setEvidence(draft.id, [...live, ...items]);
       setUploadStatus(`Added ${items.length} item${items.length > 1 ? "s" : ""}`);
       // Clear the status banner after a moment.
       window.setTimeout(() => setUploadStatus(null), 2400);

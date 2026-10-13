@@ -30,7 +30,8 @@ import {
 import type { Teammate } from "./people";
 import { defaultApproverName, useSavedReviewers } from "./people";
 import type { Expert } from "./experts";
-import { reviewPoints, shareableEvidence, openPoints, type ReviewPoint } from "./model";
+import { acceptWithSettle, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { collectReviewerWork, reviewPoints, shareableEvidence, openPoints, type ReviewPoint } from "./model";
 import {
   askAgain,
   createReviewLink,
@@ -350,6 +351,12 @@ export function skipReviewTo(draftId: string, approver: { name: string; userId?:
 
 /** Take it back. Trusted links stop working at once. */
 export async function recallReview(review: ReviewRequest): Promise<void> {
+  // A teammate's suggestions from this round sit in the letter itself;
+  // recalling withdraws them, so the letter is as it was when it went out
+  // (ready for review again) and nobody decides on a review that was
+  // called back (REVIEW-X2). Their comments stay on the letter. Points from
+  // a secure link or an expert were never applied, so nothing to undo.
+  if (review.kind === "team" && review.status === "out") withdrawRoundSuggestions(review);
   useReviewStore.getState().recall(review.id);
   toast(`Recalled from ${firstName(review.reviewer.name) || "the reviewer"}`);
   if (review.trustedLinkId) {
@@ -358,6 +365,37 @@ export async function recallReview(review: ReviewRequest): Promise<void> {
       toast.error("Recalled here, but the secure link couldn't be switched off yet. Try again from the letter.");
     }
   }
+}
+
+function withdrawRoundSuggestions(review: ReviewRequest): void {
+  const store = useDraftStore.getState();
+  const draft = store.drafts[review.draftId];
+  const round = currentRound(review);
+  if (!draft || !round) return;
+  // Suggestions sent back in an earlier round are the asker's to decide.
+  const earlier = new Set(
+    review.rounds
+      .filter((r) => r.n < round.n)
+      .flatMap((r) => [...r.suggestionIds, ...(r.points ?? []).map((p) => p.id)])
+  );
+  const work = collectReviewerWork(draft, review.reviewer, round.sentAt);
+  for (const p of work.points) {
+    if (p.kind !== "suggestion" || !p.sectionId || earlier.has(p.id)) continue;
+    const section = draft.sections.find((s) => s.id === p.sectionId);
+    if (section?.pendingChange?.id !== p.id) continue;
+    if (pendingMarkIdsOf(section.html ?? "").some((id) => earlier.has(id))) continue;
+    store.rejectSectionPending(review.draftId, p.sectionId);
+  }
+}
+
+function pendingMarkIdsOf(html: string): string[] {
+  const ids: string[] = [];
+  for (const tag of html.match(/<(ins|del)\b[^>]*>/gi) ?? []) {
+    if (!/data-status\s*=\s*"pending"/i.test(tag)) continue;
+    const id = tag.match(/data-suggestion-id\s*=\s*"([^"]*)"/i)?.[1];
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 /** A message to the reviewer (an expert's goes on the booking's thread). */
@@ -380,10 +418,19 @@ export async function messageTheReviewer(review: ReviewRequest, text: string, me
 /*  Back to you: deciding                                              */
 /* ------------------------------------------------------------------ */
 
-export function acceptPoint(review: ReviewRequest, point: ReviewPoint): void {
+export function acceptPoint(review: ReviewRequest, point: ReviewPoint, opts: { animate?: boolean } = {}): void {
   if (point.kind !== "suggestion" || !point.sectionId) return;
-  useDraftStore.getState().acceptSectionPending(review.draftId, point.sectionId);
   useReviewStore.getState().decide(review.id, point.id, "accepted");
+  // Felt motion (letter-live): the struck words fade, the new words settle
+  // from lilac to ink, then the change is applied through the same accept
+  // path. Instant with reduced motion, and for Accept all (REVIEW-74).
+  const draft = useDraftStore.getState().drafts[review.draftId];
+  const edit =
+    opts.animate !== false && draft
+      ? suggestedEdits(draft).find((e) => e.section.id === point.sectionId && e.kind === "section" && e.ids.length > 0)
+      : undefined;
+  if (edit) acceptWithSettle(review.draftId, edit);
+  else useDraftStore.getState().acceptSectionPending(review.draftId, point.sectionId);
 }
 
 export function rejectPoint(review: ReviewRequest, point: ReviewPoint): void {
@@ -405,7 +452,7 @@ export function acceptAllPoints(review: ReviewRequest): number {
   const open = openPoints(reviewPoints(draft, review)).filter((p) => p.kind === "suggestion" && p.sectionId);
   if (open.length === 0) return 0;
   const before = draft.sections;
-  for (const p of open) acceptPoint(review, p);
+  for (const p of open) acceptPoint(review, p, { animate: false });
   toast(`Accepted ${open.length === 1 ? "1 change" : `${open.length} changes`}`, {
     duration: 8000,
     action: {

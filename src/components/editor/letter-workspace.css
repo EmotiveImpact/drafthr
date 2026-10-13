@@ -116,7 +116,7 @@
   border-bottom: 1.5px solid var(--ds-lilac-ring);
   border-radius: 2px;
   padding: 0;
-  transition: background-color 0.7s ease 0.1s, color 0.7s ease 0.1s, border-color 0.7s ease 0.1s;
+  transition: background-color 0.42s ease 0.06s, color 0.42s ease 0.06s, border-color 0.42s ease 0.06s;
 }
 .lw-paper del[data-suggestion-id][data-status="pending"] {
   color: var(--ds-lilac-fg);
@@ -334,4 +334,14 @@
 .review-canvas del[data-suggestion-id][data-status="pending"][data-author]:is([data-author="Claude AI" i], [data-author="AI" i]):not(:has(+ ins[data-suggestion-id]))::after {
   content: "DraftHR";
   font-family: var(--font-sans);
+}
+
+/* A teammate reviewer's commented words (V1, f4), painted with the CSS
+ * Custom Highlight API: amber with an amber underline, like a comment mark. */
+::highlight(lw-cmt) {
+  background-color: var(--ds-amber-bg);
+  text-decoration: underline;
+  text-decoration-color: var(--ds-amber-ring);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }

@@ -21,6 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Avatar } from "@/components/ds/Avatar";
 import { Pill } from "@/components/ds/Pill";
 import { ExpertAvatar } from "@/components/consultants/ui";
+import { VAT_RATE_CHARGED, bookingTotals } from "@/components/consultants/market";
 import { useDraftStore } from "@/lib/store";
 import { getFlag } from "@/lib/flags";
 import { firstName, type ReviewKind } from "@/lib/journey/reviews";
@@ -45,8 +46,8 @@ import {
   slaHours,
   turnaroundWords,
 } from "./model";
-import { LINK_TTL_DAYS } from "./trusted-api";
-import { clearPickerForm, readPickerForm, savePickerForm } from "./review-ui";
+import { linkExpiryDays } from "./trusted-api";
+import { clearPickerForm, readPickerForm, savePickerForm, useReturnFocus } from "./review-ui";
 
 /**
  * "Who should review this letter?" (mocks f2-choose, rv-pick, mk-pick,
@@ -66,6 +67,7 @@ export function ReviewerPicker({
   const draft = useDraftStore((s) => s.drafts[draftId]);
   const me = useMe();
   const navigate = useNavigate();
+  const returnFocus = useReturnFocus(true);
   const trustedOn = getFlag("trustedReviewLinks");
   const employeeLetter = draft?.mode === "employee";
   const suggestion = useMemo(() => (draft ? expertSuggestion(draft) : null), [draft]);
@@ -162,7 +164,7 @@ export function ReviewerPicker({
           ? `Send to ${firstTyped}`
           : "Send for review"
         : selectedExpert
-          ? `Book ${firstName(selectedExpert.name)} for ${money(selectedExpert.price, selectedExpert.symbol)}`
+          ? `Book ${firstName(selectedExpert.name)} for ${money(bookingTotals(selectedExpert.price).total, selectedExpert.symbol)}`
           : "Book an expert";
 
   const share = { evidence: shareEvidence && evidence.files.length > 0, hearingNotes: shareNotes };
@@ -234,6 +236,7 @@ export function ReviewerPicker({
       <DialogContent
         showCloseButton={false}
         data-testid="review-picker"
+        onCloseAutoFocus={returnFocus}
         className={cn(
           "flex max-h-[calc(100dvh-32px)] w-[780px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-[16px] p-0 sm:max-w-[780px]",
           "data-[state=open]:duration-[160ms] data-[state=closed]:duration-[120ms] motion-reduce:data-[state=open]:slide-in-from-bottom-0",
@@ -403,7 +406,7 @@ export function ReviewerPicker({
               )}
               <Hint icon={<Lock className="size-3.5" strokeWidth={1.6} />}>
                 {firstTyped || "They"} {firstTyped ? "sees" : "see"} only this letter and the files you share, through a link that expires in{" "}
-                {LINK_TTL_DAYS} days. They can suggest and comment, but can't approve or send.
+                {linkExpiryDays(Date.now(), Date.parse(dueAt))} days. They can suggest and comment, but can't approve or send.
               </Hint>
               {error && (
                 <p role="alert" className="m-0 mt-2.5 rounded-[10px] bg-[var(--ds-red-soft)] px-3 py-2 text-[13px] text-[var(--ds-red-fg)]">
@@ -473,8 +476,8 @@ export function ReviewerPicker({
                     </span>
                   </div>
                   <Hint icon={<ShieldCheck className="size-3.5" strokeWidth={1.6} />}>
-                    {money(selectedExpert.price, selectedExpert.symbol)} for the review. You pay only once{" "}
-                    {firstName(selectedExpert.name)} accepts, and you're refunded if it isn't back by {fmtDayDate(Date.parse(dueAt))}.
+                    {priceLine(selectedExpert)} You pay only once {firstName(selectedExpert.name)} accepts, and you're refunded if it
+                    isn't back by {fmtDayDate(Date.parse(dueAt))}.
                   </Hint>
                 </>
               ) : (
@@ -488,8 +491,10 @@ export function ReviewerPicker({
                     <span className="min-w-0 flex-1">
                       Not who you're after?
                       <em className="block text-[12.5px] text-[var(--ds-muted)] not-italic">
-                        {experts.all.length > 0
-                          ? `Browse all ${experts.all.length} experts. Filter by specialty, price and turnaround.`
+                        {/* The same N as "See all N" and the marketplace page it
+                         * opens (the experts who fit this letter, MARKET-047). */}
+                        {experts.matching.length > 0
+                          ? `Browse all ${experts.matching.length} ${experts.matching.length === 1 ? "expert" : "experts"}. Filter by specialty, price and turnaround.`
                           : "Browse the marketplace. Filter by specialty, price and turnaround."}
                       </em>
                     </span>
@@ -569,6 +574,16 @@ export function ReviewerPicker({
 }
 
 /* ------------------------------------------------------------------ */
+
+/** "£180 plus VAT, £216 in total." The same totals the booking sheet shows
+ *  and checkout charges (market.ts bookingTotals); while DraftHR adds no
+ *  VAT, the line says so instead of inventing a VAT amount. */
+function priceLine(e: Expert): string {
+  const t = bookingTotals(e.price);
+  return VAT_RATE_CHARGED > 0
+    ? `${money(t.fee, e.symbol)} plus VAT, ${money(t.total, e.symbol)} in total.`
+    : `${money(t.total, e.symbol)} in total, no VAT added.`;
+}
 
 function validEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());

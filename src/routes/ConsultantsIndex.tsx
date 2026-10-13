@@ -256,7 +256,10 @@ export function ConsultantsIndex() {
   const choose = (c: Consultant) => {
     if (actionBlocked || !forId || !c.profileId) return;
     setProfileFor(null);
-    navigate(`/editor/${encodeURIComponent(forId)}?review=expert&expert=${encodeURIComponent(c.profileId)}`);
+    // Carry the back-by date the person was choosing for (MARKET-X5), so
+    // the reviewer dialog keeps it instead of its own default.
+    const due = dueMs != null ? `&due=${encodeURIComponent(new Date(dueMs).toISOString())}` : "";
+    navigate(`/editor/${encodeURIComponent(forId)}?review=expert&expert=${encodeURIComponent(c.profileId)}${due}`);
   };
 
   /* ─── Render ─────────────────────────────────────────────────── */

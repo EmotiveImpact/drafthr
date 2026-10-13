@@ -16,10 +16,18 @@ import { useIsLargeViewport } from "@/lib/use-large-viewport";
 import { toServerUuid } from "@/lib/remote-ids";
 import { runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
 import { markOwnLetterReady, useJourney } from "@/lib/journey/stage";
-import { firstName, useLatestReview, useReviewStore } from "@/lib/journey/reviews";
+import { currentRound, firstName, useLatestReview, useNewestReview, useReviewStore } from "@/lib/journey/reviews";
 import { useJourneyUI } from "@/components/journey/ui-store";
 import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
-import { focusReviewReply, openRoundsHistory, requestFinishReview, requestRecall } from "@/components/journey/review/review-ui";
+import {
+  focusReviewReply,
+  openRoundsHistory,
+  openTeammateComposer,
+  requestFinishReview,
+  requestRecall,
+  useReviewerMode,
+} from "@/components/journey/review/review-ui";
+import { CommentQuoteMarks, TeammatePointCard, TeammateSelection, editTeammatePoint, removeTeammatePoint, suggestionNumbers, useTeammatePoints } from "@/components/journey/review/teammate";
 import { isAskerOf, isReviewerOf, useMe } from "@/components/journey/review/actions";
 import { evidenceSharedWith } from "@/components/journey/review/model";
 import { undoMarkedSent, undoToastText } from "@/components/journey/send/actions";
@@ -149,9 +157,19 @@ export function Editor() {
   // The named teammate reviewer sees their own review (mock f4 in the app):
   // the Read / Suggest / Comment switch and "Send back to <asker>".
   const reviewMe = useMe();
+  // Out, sent back (a calm read-only confirmation) or recalled (it says so):
+  // the named teammate never gets the author's controls (REVIEW-69, 94).
+  const newestReview = useNewestReview(draftId);
+  const reviewerOf = newestReview?.status === "recalled" ? newestReview : review;
   const viewerIsReviewer =
-    review?.kind === "team" && review.status === "out" && isReviewerOf(review, reviewMe) && !isAskerOf(review, reviewMe);
-  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer });
+    reviewerOf?.kind === "team" &&
+    (reviewerOf.status === "out" || reviewerOf.status === "back" || reviewerOf.status === "recalled") &&
+    isReviewerOf(reviewerOf, reviewMe) &&
+    !isAskerOf(reviewerOf, reviewMe);
+  // Someone else's review (not the asker, not the named reviewer): read only.
+  const viewerIsAsker =
+    review && (review.status === "out" || review.status === "back") && !viewerIsReviewer ? isAskerOf(review, reviewMe) : undefined;
+  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer, viewerIsAsker });
   const isLargeViewport = useIsLargeViewport();
   const isPhone = useIsPhone();
   const panelTab = useJourneyUI((s) => s.panelTab);
@@ -543,11 +561,33 @@ export function Editor() {
   // the asker shared evidence, hearing notes only when those were shared.
   const sharedView = useMemo(
     () =>
-      draft && viewerIsReviewer && review
-        ? { ...draft, evidence: evidenceSharedWith(draft.evidence, review.share) }
+      draft && viewerIsReviewer && reviewerOf
+        ? { ...draft, evidence: evidenceSharedWith(draft.evidence, reviewerOf.share) }
         : draft,
-    [draft, viewerIsReviewer, review]
+    [draft, viewerIsReviewer, reviewerOf]
   );
+
+  // The named teammate's own points (V1): margin cards with Edit and Remove
+  // while it is out, read only once sent back (REVIEW-90, 138).
+  const teammateReview =
+    viewerIsReviewer && reviewerOf && (reviewerOf.status === "out" || reviewerOf.status === "back") ? reviewerOf : null;
+  const teammatePoints = useTeammatePoints(draft, teammateReview);
+  const [reviewerMode] = useReviewerMode(draftId ?? "");
+  // The commented words get an amber highlight and bar (REVIEW-89): the
+  // teammate's own comments, or the reviewer's open ones once it is back.
+  const quotedComments = useMemo(() => {
+    if (!draft) return [];
+    const open = (draft.comments ?? []).filter((c) => !c.resolved && !c.parentId);
+    if (teammateReview) {
+      const ids = new Set(teammatePoints.filter((p) => p.kind === "comment").map((p) => p.id));
+      return open.filter((c) => ids.has(c.id));
+    }
+    if (review?.status === "back") {
+      const ids = new Set(currentRound(review)?.commentIds ?? []);
+      return open.filter((c) => ids.has(c.id));
+    }
+    return [];
+  }, [draft, teammateReview, teammatePoints, review]);
 
   if (!draft || !draftId || !meta || !journey) {
     return (
@@ -1161,8 +1201,14 @@ export function Editor() {
 
   // Reviewers on a locked letter can still suggest edits, per section.
   const reviewOutToMe = review?.status === "out" && Boolean(me) && review.reviewer.name.trim().toLowerCase() === me.toLowerCase();
+  const reviewerMargin = teammateReview
+    ? { points: teammatePoints, me: reviewMe, canWork: teammateReview.status === "out" && role !== "viewer" }
+    : null;
+  const teammateNumbers = suggestionNumbers(teammatePoints);
   const canSuggest =
     !canvasEditable &&
+    // The named teammate suggests only in Suggest mode (Read changes nothing).
+    !(viewerIsReviewer && reviewerMode !== "suggest") &&
     role !== "viewer" &&
     ((reviewStatus === "in_review" && (role === "reviewer" || viewerIsApprover)) || (review?.status === "out" && (role === "reviewer" || reviewOutToMe)));
 
@@ -1183,6 +1229,7 @@ export function Editor() {
         journey,
         viewerIsApprover,
         viewerIsReviewer,
+        viewerIsAsker,
         tickStep,
         role,
         counselNeeded,
@@ -1258,13 +1305,38 @@ export function Editor() {
           />
           {section.sectionId === "recipient_block" && <IssueDate draft={draft} className="m-0 mb-3 max-md:hidden" />}
           {phoneFlag && phoneFlag.sectionId === section.id && <PhoneFlagHint target={phoneFlag} onFix={(c) => void fixCheck(c)} />}
+          {/* The teammate's own points under their paragraph when there is
+           * no room for the margin (phones, narrow windows; REVIEW-138). */}
+          {reviewerMargin && !marginFits && teammatePoints.some((x) => x.sectionId === section.id) && (
+            <div className="mb-4 flex flex-col gap-2 font-sans" data-slot="section-points">
+              {teammatePoints
+                .filter((x) => x.sectionId === section.id)
+                .map((x) => (
+                  <div key={x.id} data-point-id={x.id}>
+                    <TeammatePointCard
+                      point={x}
+                      n={teammateNumbers.get(x.id)}
+                      me={reviewerMargin.me}
+                      canWork={reviewerMargin.canWork}
+                      onEdit={() => editTeammatePoint(draft.id, x)}
+                      onRemove={() => removeTeammatePoint(draft.id, x)}
+                      className="shadow-[var(--ds-shadow-s)]"
+                    />
+                  </div>
+                ))}
+            </div>
+          )}
           {canSuggest && !section.pendingChange && section.status !== "streaming" && (
             // Shown when the paragraph is hovered or focused (always on touch
             // screens), so a reviewer's page reads as a letter, not a form.
             <div className="pointer-events-none absolute -bottom-3 right-0 z-[2] flex justify-end opacity-0 transition-opacity duration-[120ms] group-hover/sec:pointer-events-auto group-hover/sec:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:-mt-1 [@media(hover:none)]:mb-3 [@media(hover:none)]:opacity-100">
               <button
                 type="button"
-                onClick={() => setSuggestSection(section)}
+                onClick={() =>
+                  viewerIsReviewer
+                    ? openTeammateComposer({ draftId: draft.id, kind: "suggest", sectionId: section.id })
+                    : setSuggestSection(section)
+                }
                 className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-[var(--ds-surface)] px-2.5 font-sans text-[12.5px] font-medium text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
               >
                 <Lightbulb className="size-3.5" />
@@ -1372,7 +1444,9 @@ export function Editor() {
                     <LetterNotices
                       draft={draft}
                       journey={journey}
-                      review={review}
+                      review={viewerIsReviewer ? (reviewerOf ?? review) : review}
+                      viewerIsReviewer={viewerIsReviewer}
+                      viewerIsAsker={viewerIsAsker}
                       matter={matter}
                       employee={employee}
                       onMessage={openReviewThread}
@@ -1400,6 +1474,9 @@ export function Editor() {
                     {pageInner}
                   </article>
                   <CitationLayer draft={draft} containerRef={paperRef} onViewSource={openEvidence} />
+                  {quotedComments.length > 0 && (
+                    <CommentQuoteMarks comments={quotedComments} paperRef={paperRef} wrapperRef={wrapperRef} version={draft.updatedAt} />
+                  )}
                   {marginFits && (
                     <MarginLayer
                       draft={draft}
@@ -1416,6 +1493,7 @@ export function Editor() {
                       onResolveComment={(commentId) => useDraftStore.getState().resolveComment(draft.id, commentId, true)}
                       onJumpToSection={jumpToSection}
                       left={pageW + MARGIN_GAP}
+                      reviewer={reviewerMargin}
                     />
                   )}
                 </div>
@@ -1508,9 +1586,10 @@ export function Editor() {
               sheetTab={panelTab}
               sheetOpen={aiDrawerOpen}
               showMain={isPhone}
+              reviewPoints={reviewerMargin ? teammatePoints.length : undefined}
               onProgress={() => {
                 if (aiDrawerOpen && panelTab !== "chat") setAiDrawerOpen(false);
-                else openPanelTab(pendingEdits > 0 && panelTab === "edits" ? "edits" : "progress");
+                else openPanelTab(!reviewerMargin && pendingEdits > 0 && panelTab === "edits" ? "edits" : "progress");
               }}
               onChat={() => {
                 if (aiDrawerOpen && panelTab === "chat") setAiDrawerOpen(false);
@@ -1733,6 +1812,11 @@ export function Editor() {
           defaultReviewerName={profile.personal.preferredName || profile.personal.legalName}
           onSubmit={onReviewSubmit}
         />
+      )}
+
+      {/* The named teammate: selected words offer Suggest or Comment. */}
+      {reviewerMargin && (
+        <TeammateSelection draftId={draft.id} enabled={reviewerMargin.canWork} paperRef={paperRef} />
       )}
 
       {/* A reviewer's "Suggest an edit": an attributed proposal the author

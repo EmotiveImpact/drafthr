@@ -222,6 +222,10 @@ function settleSheet(): HTMLStyleElement {
 
 const cssId = (id: string) => id.replace(/["\\]/g, "");
 
+/** How long the settle runs before the change is applied (MOTION Felt,
+ *  300 to 600 ms; the transitions in letter-workspace.css fit inside it). */
+export const SETTLE_MS = 520;
+
 /**
  * Accept with the felt motion (letter-live step 1): the struck words fade
  * out, the new words settle from green or lilac to ink, the paragraph bar
@@ -255,7 +259,7 @@ export function acceptWithSettle(draftId: string, edit: SuggestedEdit, onApplied
       const i = t.indexOf(marker);
       if (i >= 0) sheet.textContent = t.slice(0, i) + t.slice(i + marker.length + 1 + rules.length);
     }, 200);
-  }, 760);
+  }, SETTLE_MS);
 }
 
 /** The short label a DraftHR suggestion carries, by what made it. */
