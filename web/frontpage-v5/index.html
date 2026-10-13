@@ -487,6 +487,14 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 .ui-log li{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
 .ui-log li::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#2E9A62;transform:translateY(-1px)}
 .ui-log li span{color:#6A6B72;margin-left:auto;white-space:nowrap;padding-left:8px}
+.aud{display:inline-flex;gap:2px;padding:4px;border-radius:99px;background:var(--panel-2);margin-bottom:20px}
+.aud button{height:40px;padding:0 18px;border-radius:99px;font:600 14px/1 var(--font);color:var(--soft);transition:background .25s,color .25s}
+.aud button[aria-pressed=true]{background:var(--white);color:var(--bg)}
+.levels[hidden]{display:none}
+.levels.swap .lvl{animation:lvin .5s cubic-bezier(.2,.7,.2,1) both}
+.levels.swap .lvl:nth-child(2){animation-delay:.06s}.levels.swap .lvl:nth-child(3){animation-delay:.12s}
+@keyframes lvin{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.levels.swap .lvl{animation:none}}
 @media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:380px;margin-top:36px}}
 @media (max-width:600px){.lvl{padding:30px 22px 0}.lvl .shot{height:340px;margin:30px -22px 0}.ui{left:16px;right:16px;bottom:16px}}
 
@@ -601,8 +609,36 @@ html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .t
       <div><span class="tag rv">How it works</span><h2 class="rv">Every letter, checked before it goes.</h2></div>
       <div class="intro rv"><p>Some letters need a quick first draft. Some need a second pair of eyes. Some need a manager to sign them off.</p><p>Whatever the letter, DraftHR drafts it in the right structure, brings in the right people, and keeps a record of who decided what.</p></div>
     </div>
-    <div class="levels">
-      <article class="lvl rv"><div class="ln">01 Draft</div><h3>Drafted in the right structure</h3>
+    <div class="aud rv" role="group" aria-label="Show the steps for"><button type="button" data-a="emp" aria-pressed="true">For employees</button><button type="button" data-a="hr" aria-pressed="false">For HR teams</button></div>
+    <div class="levels" data-aud="emp">
+      <article class="lvl"><div class="ln">01 Draft</div><h3>Your concern, put clearly</h3>
+        <p>Pick the letter you need, such as a grievance or a flexible working request, and answer a few plain questions.</p>
+        <p>DraftHR writes it in the right structure. Every suggested change waits until you accept it.</p>
+        <div class="shot"><img src="img/story-1-night.jpg" alt="" loading="lazy" style="object-position:62% 30%">
+          <div class="ui" role="img" aria-label="In a grievance letter, DraftHR suggests a clearer sentence, with Accept and Reject">
+            <div class="ui-doc"><s>My manager has been treating me unfairly.</s> <ins>On 3 September my shifts were changed without notice, and I was not given a reason.</ins></div>
+            <div class="ui-row"><span class="ui-who"><i>&#10022;</i>DraftHR suggests</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+          </div></div></article>
+      <article class="lvl"><div class="ln">02 Review</div><h3>Read by someone on your side</h3>
+        <p>Share it with someone you trust, or book an HR expert from the marketplace.</p>
+        <p>Their notes sit beside the words they are about, so you can fix it before anyone at work sees it.</p>
+        <div class="shot"><img src="img/h-two-sides.jpg" alt="" loading="lazy" style="object-position:80% 40%">
+          <div class="ui" role="img" aria-label="A trusted reviewer's note beside the highlighted words in the letter">
+            <div class="ui-doc">&hellip;and I would like this to be dealt with <mark>under the formal grievance procedure</mark>.</div>
+            <div class="ui-row"><span class="ui-who"><i class="av">SM</i>Sam, your reviewer</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+            <div class="ui-note">Good. Ask for a meeting date in writing too, so there is a clear next step.</div>
+          </div></div></article>
+      <article class="lvl"><div class="ln">03 Send</div><h3>Sent, and kept on record</h3>
+        <p>When you are happy with every word, download it and send it yourself, or email it from DraftHR.</p>
+        <p>Your letter and its history stay together in one place, in case you need them later.</p>
+        <div class="shot"><img src="img/story-2-sign.jpg" alt="" loading="lazy" style="object-position:60% 88%">
+          <div class="ui" role="img" aria-label="A sent grievance letter stamped Sent, with its history">
+            <div class="ui-head"><div><strong>Formal grievance</strong><span>To the HR team</span></div><div class="ui-stamp">SENT &middot; 14 OCT</div></div>
+            <ul class="ui-log"><li>Read by Sam<span>13 Oct</span></li><li>You approved the final wording<span>09:02</span></li><li>Emailed to HR from DraftHR<span>09:05</span></li></ul>
+          </div></div></article>
+    </div>
+    <div class="levels" data-aud="hr" hidden>
+      <article class="lvl"><div class="ln">01 Draft</div><h3>Drafted in the right structure</h3>
         <p>Pick one of 35 letters for the UK or the US and answer a few plain questions.</p>
         <p>DraftHR writes it section by section. Every AI change waits as a proposal until you accept it.</p>
         <div class="shot"><img src="img/h-employee.jpg" alt="" loading="lazy">
@@ -610,7 +646,7 @@ html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .t
             <div class="ui-doc"><s>This warning will remain on your file indefinitely.</s> <ins>This warning will remain live for 12 months, in line with our Disciplinary Policy.</ins></div>
             <div class="ui-row"><span class="ui-who"><i>&#10022;</i>DraftHR suggests</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
           </div></div></article>
-      <article class="lvl rv"><div class="ln">02 Review</div><h3>Read by someone you trust</h3>
+      <article class="lvl"><div class="ln">02 Review</div><h3>Read by someone you trust</h3>
         <p>Send it to a teammate, someone outside your organisation, or an HR expert from the marketplace.</p>
         <p>Their suggestions come back beside the words they are about. Go back and forth until it is right.</p>
         <div class="shot"><img src="img/bd-meeting.jpg" alt="" loading="lazy">
@@ -619,7 +655,7 @@ html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .t
             <div class="ui-row"><span class="ui-who"><i class="av">CD</i>Claire Donnelly</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
             <div class="ui-note">Name the policy that was broken. It makes the warning easier to stand behind at an appeal.</div>
           </div></div></article>
-      <article class="lvl rv"><div class="ln">03 Approve and send</div><h3>Signed off, sent and on record</h3>
+      <article class="lvl"><div class="ln">03 Approve and send</div><h3>Signed off, sent and on record</h3>
         <p>The right person approves it. Then download it and send it yourself, or email it from DraftHR.</p>
         <p>Appeal windows go in your calendar, and the record stays with the matter.</p>
         <div class="shot"><img src="img/h-sign.jpg" alt="" loading="lazy" style="object-position:72% 70%">
@@ -755,6 +791,14 @@ html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .t
 <div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
 <script>
 document.documentElement.classList.add('js');
+(function(){
+  var bs=document.querySelectorAll('.aud button'),ls=document.querySelectorAll('.levels[data-aud]');
+  bs.forEach(function(b){b.addEventListener('click',function(){
+    bs.forEach(function(x){x.setAttribute('aria-pressed',x===b)});
+    ls.forEach(function(l){var on=l.dataset.aud===b.dataset.a;l.hidden=!on;l.classList.toggle('swap',on)});
+  })});
+})();
+
 
 (function(){
   var root=document.documentElement,bs=document.querySelectorAll('.theme button');
