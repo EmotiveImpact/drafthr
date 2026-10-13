@@ -10,7 +10,7 @@ import type { HealthBand } from "@/lib/finalize/healthChecks";
  * from both at once: the number climbs, the ring fills, and the band
  * label badges in last with a tiny pop.
  *
- * Respects `prefers-reduced-motion` — falls back to a static render.
+ * Respects `prefers-reduced-motion`, falls back to a static render.
  */
 type Props = {
   /** Final score in [0,100]. */
@@ -27,7 +27,7 @@ type Props = {
   label?: string;
 };
 
-// The ring carries the band colour; the number stays ink (Harvey style).
+// The ring carries the band colour; the number stays ink.
 const BAND_STYLES: Record<HealthBand, { ring: string; text: string; bg: string }> = {
   strong: {
     ring: "var(--ds-green-fg)",
@@ -77,7 +77,7 @@ export function ScoreRing({
         return;
       }
       const t = Math.min(1, (now - startAt) / duration);
-      // ease-out cubic — fast start, gentle landing.
+      // ease-out cubic, fast start, gentle landing.
       const eased = 1 - Math.pow(1 - t, 3);
       setDisplay(Math.round(from + (to - from) * eased));
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
@@ -98,8 +98,8 @@ export function ScoreRing({
 
   const dial = (
     <motion.div
-      initial={prefersReduced ? false : { scale: 0.94, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
+      initial={prefersReduced ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.4, delay, ease: [0.32, 0.72, 0, 1] }}
       style={{
         width: size,

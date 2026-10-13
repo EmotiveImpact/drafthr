@@ -32,7 +32,7 @@ export function PlanCard({
   sub?: ReactNode;
   /** Small chip on the right, e.g. "4 of 5". */
   meta?: ReactNode;
-  /** 0..1 — renders the thin progress bar when given. */
+  /** 0..1, renders the thin progress bar when given. */
   progress?: number;
   children?: ReactNode;
   className?: string;
@@ -132,7 +132,7 @@ export function PlanStep({
           type="button"
           onClick={onClick}
           title={title}
-          className={cn(cls, "-mx-2 w-[calc(100%+16px)] rounded-[var(--ds-r-s)] px-2 hover:bg-[var(--ds-surface-2)]")}
+          className={cn(cls, "-mx-2 w-[calc(100%+16px)] rounded-[var(--ds-r-s)] px-2 outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)] focus-visible:shadow-[var(--ds-focus-ring)]")}
         >
           {body}
         </button>

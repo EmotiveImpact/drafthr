@@ -4,7 +4,7 @@ import type { Fix } from "@/lib/finalize/healthChecks";
 import { cn } from "@/lib/utils";
 
 /**
- * "Fix this first" — the actionable bridge between the score and the editor.
+ * "Fix this first", the actionable bridge between the score and the editor.
  *
  * Shows the top N (default 3) ranked fixes sorted by score impact. Each row:
  *   [severity icon] [title + dimension chip · detail]  [+impact]  [Action btn]
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
  * Style note: a clean white card on the stone tokens with a single amber
  * lightning glyph in the header, near-black action buttons (design 9A).
  *
- * Each action button is a real handler — the consumer owns routing because
+ * Each action button is a real handler, the consumer owns routing because
  * only the page knows the current draftId. We just say "this check wants
  * the user to land in <route>" and let the consumer compose the URL.
  */
@@ -82,7 +82,7 @@ function FixRow({
       }}
       className="flex flex-col gap-2 px-4 sm:px-5 py-3"
     >
-      {/* Severity icon + content row — title, chip, detail. */}
+      {/* Severity icon + content row, title, chip, detail. */}
       <div className="flex items-start gap-3">
         <span
           className={cn(
@@ -94,7 +94,7 @@ function FixRow({
         </span>
 
         <div className="flex-1 min-w-0">
-          {/* Dimension chip dropped — severity icon colour (red = fail,
+          {/* Dimension chip dropped, severity icon colour (red = fail,
            * amber = warn) already conveys the gist, and at 300px sidebar
            * the chip pushed the title into ugly wrap territory. */}
           <span className="text-[13px] font-medium leading-tight text-[var(--ds-ink)]">
@@ -121,17 +121,14 @@ function FixRow({
           </span>
         )}
 
-        <motion.button
+        <button
           type="button"
           onClick={() => onAction(fix)}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.12 }}
-          className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3 text-[12px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
+          className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3 text-[12px] font-medium text-[var(--ds-on-accent)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:shadow-[var(--ds-focus-ring)]"
         >
           {fix.check.actionLabel ?? "Fix"}
           <ArrowRight className="size-3.5" />
-        </motion.button>
+        </button>
       </div>
     </motion.li>
   );
