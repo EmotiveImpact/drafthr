@@ -205,16 +205,67 @@ export function isOwnLetter(draft: Pick<Draft, "mode">): boolean {
 }
 
 /**
+ * The Send step's what-to-do line. Also shown for the moment right after
+ * sending, while the Send step is still on screen (SEND-X36).
+ */
+export function sendWhatNow(draft: Pick<Draft, "mode" | "sections">): { lead: string; detail: string } {
+  return {
+    lead: "Last step.",
+    // Only letters with a right of appeal start an appeal window (SEND-22).
+    detail:
+      draft.mode === "employer" && (draft.sections ?? []).some((s) => s.sectionId === "appeal_rights")
+        ? "Send it yourself or from DraftHR. We record the date it's given, because the appeal window starts then."
+        : "Send it yourself or from DraftHR. We record the date it's given.",
+  };
+}
+
+/**
+ * The four steps as this letter names them: an employee's own letter has no
+ * approver, so its third step is their own sign-off ("Sign off"), not
+ * "Approve" (FOUNDATION-X5).
+ */
+export function journeyStepsFor(draft: Pick<Draft, "mode"> | null | undefined): typeof JOURNEY_STEPS {
+  if (!draft || !isOwnLetter(draft)) return JOURNEY_STEPS;
+  return JOURNEY_STEPS.map((s) => (s.stage === "approve" ? { ...s, label: "Sign off" } : s));
+}
+
+/** What the approval record means for this letter, in words: "Signed off" for an employee's own letter. */
+export function approvalWord(draft: Pick<Draft, "mode">): "Signed off" | "Approved" {
+  return isOwnLetter(draft) ? "Signed off" : "Approved";
+}
+
+/**
  * An employee's own letter is ready to send: there is no approver, so the
- * writer signs it off themselves (the existing approval record, in their
- * name), which opens the Send step. No-op for any other letter.
+ * writer signs it off themselves, which opens the Send step. It uses the
+ * approval record (in their name) because that is what moves the letter on
+ * and what the audit record reads, but it is logged as a sign-off: the
+ * timeline says "Signed off by <name>", and everything that shows it on an
+ * own letter says "Signed off" (approvalWord), never "Approved"
+ * (FOUNDATION-X5). No-op for any other letter.
  */
 export function markOwnLetterReady(draftId: string): boolean {
   const store = useDraftStore.getState();
   const draft = store.drafts[draftId];
   if (!draft || !isOwnLetter(draft)) return false;
   const name = draft.employee?.legalName?.trim() || "You";
-  store.approveDraft(draftId, name, "Ready to send. Your own letter needs no approver.");
+  store.approveDraft(draftId, name, "Ready to send. Their own letter needs no approver.");
+  const after = useDraftStore.getState().drafts[draftId];
+  const approvalId = after?.approvals?.at(-1)?.id;
+  if (after && approvalId) {
+    useDraftStore.setState((s) => ({
+      drafts: {
+        ...s.drafts,
+        [draftId]: {
+          ...after,
+          timeline: (after.timeline ?? []).map((t) =>
+            t.kind === "review_approved" && t.meta?.approvalId === approvalId
+              ? { ...t, title: `Signed off by ${name}`, meta: { ...t.meta, signedOff: true } }
+              : t
+          ),
+        },
+      },
+    }));
+  }
   return true;
 }
 
@@ -315,14 +366,7 @@ export function getJourney(
       statusLabel: ownLetter ? "Ready to send" : "Approved",
       statusTone: "green",
       whereLabel: "Send · ready",
-      whatNow: {
-        lead: "Last step.",
-        // Only letters with a right of appeal start an appeal window (SEND-22).
-        detail:
-          draft.mode === "employer" && (draft.sections ?? []).some((s) => s.sectionId === "appeal_rights")
-            ? "Send it yourself or from DraftHR. We record the date it's given, because the appeal window starts then."
-            : "Send it yourself or from DraftHR. We record the date it's given.",
-      },
+      whatNow: sendWhatNow(draft),
       primaryAction: { id: "export", label: "Export", menu: true },
       needsYou: true,
       // It needs you, so the list shows it amber like every other row that
@@ -563,7 +607,7 @@ export function getJourney(
       tone: "yours",
       statusLabel: "Reviewed",
       statusTone: "green",
-      whereLabel: ownLetter ? "Approve · ready to sign off" : "Approve · ready to send for approval",
+      whereLabel: ownLetter ? "Sign off · ready" : "Approve · ready to send for approval",
       whatNow: ownLetter
         ? { lead: "Review finished.", detail: "Your own letter needs no approver. Get it ready to send." }
         : {

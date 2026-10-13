@@ -4,6 +4,7 @@ import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { runHealthChecks, computeHealthScore } from "@/lib/finalize/healthChecks";
 import { getLatestReview, REVIEW_KIND_LABELS } from "@/lib/journey/reviews";
 import { displayTitleFor } from "@/lib/letters/display";
+import { approvalWord } from "@/lib/journey/stage";
 import {
   dateGivenOf,
   fmtDayMonYear,
@@ -127,13 +128,15 @@ export function buildAuditRecord(
     lines.push("Reviewed       Not reviewed (review is optional)");
   }
 
+  // An employee's own letter has no approver: its approval is their sign-off (FOUNDATION-X5).
+  const approved = approvalWord(draft).padEnd(15);
   for (const a of draft.approvals ?? []) {
     const who = a.reviewerName || "the approver";
     if (a.decision === "submitted") lines.push(`Sent to approve  ${who}, ${when(a.createdAt)}`);
-    else if (a.decision === "approved") lines.push(`Approved       ${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
+    else if (a.decision === "approved") lines.push(`${approved}${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
     else lines.push(`Changes asked  ${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
   }
-  if (!(draft.approvals ?? []).some((a) => a.decision === "approved")) lines.push("Approved       Not yet");
+  if (!(draft.approvals ?? []).some((a) => a.decision === "approved")) lines.push(`${approved}Not yet`);
 
   if (attestation) lines.push(`Counsel        ${attestation.reviewedBy}, reviewed ${fmtDayMonYear(attestation.reviewedOn)}`);
 

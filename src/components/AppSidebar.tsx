@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -65,7 +65,7 @@ import {
 } from "lucide-react";
 import { activeMatters, MATTER_COLOR_CLASSES, draftsInMatter } from "@/lib/matters";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
-import type { Draft, Mode } from "@/lib/letters/types";
+import type { Draft, Matter, Mode } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { undeleteDraft } from "@/lib/dual-write";
 import { useProfileStore } from "@/lib/profile";
@@ -75,6 +75,9 @@ import { resetTour } from "@/lib/onboarding";
 import { getJourney, type StageTone } from "@/lib/journey/stage";
 import { latestReviewIn, useReviewStore } from "@/lib/journey/reviews";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useWorkspaceLoad } from "@/components/home/loadState";
+import { fitSubLists } from "@/components/sidebarFit";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { NotificationsBell } from "@/components/NotificationsBell";
 
@@ -92,10 +95,13 @@ import { NotificationsBell } from "@/components/NotificationsBell";
  *
  * Every page the old sidebar linked to stays reachable: the bell and its
  * "View all" (Notifications), Home's tabs (Needs approval, Calendar,
- * Activity), the Experts page's tabs (My bookings), nested rows under Letters
- * while on Exported or Bulk letters, the person menu's "More" group, and
+ * Activity), the Experts page's tabs (My bookings), a nested row under Letters
+ * while on Bulk letters, the person menu's "More" group, and
  * search. Pages under Home or Experts mark that row current without a nested
- * list, so all seven rows stay in view on short screens.
+ * list. On short screens (a 1366x768 laptop) the nested lists fold to their
+ * chevrons when they would push rows under the footer (sidebarFit.ts), so
+ * all seven rows stay in view. While the first workspace pull is in flight
+ * the nested lists show soft placeholders rather than "No letters yet".
  *
  * Collapses to a 64px icon rail on desktop (Cmd/Ctrl B, the collapse button,
  * the rail edge, or a click on any empty part of the rail expands it). On
@@ -402,6 +408,7 @@ function SubRow({ href, label, isActive, children }: { href: string; label: Reac
 
 /** Pages that live under Home, Letters and Experts (highlight their parent). */
 const HOME_PAGES = ["/approvals", "/calendar", "/activity", "/notifications"];
+// /exported redirects to the Sent tab of /letters; kept so the row stays current mid-redirect.
 const LETTER_PAGES = ["/letters", "/exported", "/bulk"];
 const EXPERT_PAGES = ["/consultants", "/bookings"];
 
@@ -427,6 +434,15 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const choosingForLetter = useChoosingForLetter(mode);
   const consultantProfile = useConsultantStore((s) => s.profile);
   const search = useSearchPaletteToggle();
+  const groupRef = useRef<HTMLDivElement>(null);
+  const available = useMiddleHeight(groupRef, mode);
+  const letterMode: Mode = mode === "employee" ? "employee" : "employer";
+  const recent = useRecentLetters(letterMode);
+  const matterList = useSidebarMatters(letterMode);
+  const pulling = useWorkspaceLoad((s) => s.pulling);
+  // null: follow the fit below; true or false once the person uses a chevron.
+  const [lettersChoice, setLettersChoice] = useState<boolean | null>(null);
+  const [mattersChoice, setMattersChoice] = useState<boolean | null>(null);
 
   // The rail hides the top row's tools, so search and the bell get their own
   // icons there.
@@ -499,6 +515,19 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   }
 
   const employer = mode === "employer";
+  const lettersLoading = pulling && recent.length === 0;
+  const mattersLoading = pulling && matterList.matters.length === 0;
+  const plan = fitSubLists({
+    available,
+    rows: employer ? 7 : 4,
+    letterRows:
+      (lettersLoading ? LOADING_ROWS : recent.length > 0 ? recent.length + 1 : 1) +
+      (under(path, "/bulk") ? 1 : 0),
+    matterRows: (mattersLoading ? LOADING_ROWS : Math.max(1, matterList.matters.length)) + matterList.nestedCount(path),
+    prefer: under(path, "/matters") ? "matters" : "letters",
+  });
+  const lettersOpen = lettersChoice ?? plan.letters;
+  const mattersOpen = mattersChoice ?? plan.matters;
   // Home stays the current row on the pages that hang off it (its tabs, and
   // Notifications from the bell). They get no nested list: no mock has one,
   // and it pushed Experts and Reports under the footer on short screens
@@ -508,12 +537,24 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const templatesHref = `${prefix}/new`;
 
   return (
-    <SidebarGroup className="p-0">
+    <SidebarGroup ref={groupRef} className="p-0">
       <SidebarGroupContent>
         <SidebarMenu className="gap-0.5 group-data-[collapsible=icon]:items-center">
           <NavRow it={{ href: prefix, label: "Home", Icon: House }} isActive={homeActive} />
-          <NavLetters mode={mode as Mode} />
-          <NavMatters mode={mode as Mode} />
+          <NavLetters
+            mode={letterMode}
+            recent={recent}
+            loading={lettersLoading}
+            expanded={lettersOpen}
+            setExpanded={setLettersChoice}
+          />
+          <NavMatters
+            matters={matterList.matters}
+            allDrafts={matterList.allDrafts}
+            loading={mattersLoading}
+            expanded={mattersOpen}
+            setExpanded={setMattersChoice}
+          />
           {employer && (
             <NavRow
               it={{ href: "/employees", label: "Employees", Icon: Users, tour: "nav-employees" }}
@@ -588,29 +629,120 @@ function DraftMarker({ d, tone }: { d: Draft; tone: StageTone }) {
   );
 }
 
-/**
- * "Letters": the row opens the Letters list; the chevron shows or hides the
- * three most recent letters (each with its journey dot and an Open / Delete
- * with undo menu), then "View all".
- */
-function NavLetters({ mode }: { mode: Mode }) {
-  const { isMobile, state, setOpen } = useSidebar();
-  const loc = useLocation();
-  const path = loc.pathname;
-  const nav = useNavigate();
-  const drafts = useDraftStore((s) => s.drafts);
-  const deleteDraft = useDraftStore((s) => s.deleteDraft);
-  const requests = useReviewStore((s) => s.requests);
-  const [expanded, setExpanded] = useState(true);
-  const isCollapsed = state === "collapsed" && !isMobile;
+type RecentLetter = { d: Draft; tone: StageTone };
 
-  const recent = useMemo(() => {
+/** Nested placeholder rows while the first workspace pull is in flight. */
+const LOADING_ROWS = 2;
+
+/** The three most recent letters for this mode, each with its journey tone. */
+function useRecentLetters(mode: Mode): RecentLetter[] {
+  const drafts = useDraftStore((s) => s.drafts);
+  const requests = useReviewStore((s) => s.requests);
+  return useMemo(() => {
     const list = Object.values(drafts)
       .filter((d) => !d.isTemplateSource && d.mode === mode)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 3);
     return list.map((d) => ({ d, tone: getJourney(d, latestReviewIn(requests, d.id)).listTone }));
   }, [drafts, requests, mode]);
+}
+
+/** Active matters for this mode, plus how many letters nest under the open one. */
+function useSidebarMatters(mode: Mode) {
+  const matterMap = useDraftStore((s) => s.matters);
+  const drafts = useDraftStore((s) => s.drafts);
+  const matters = useMemo(() => activeMatters(Object.values(matterMap), mode), [matterMap, mode]);
+  const allDrafts = useMemo(() => Object.values(drafts).filter((d) => !d.isTemplateSource), [drafts]);
+  const nestedCount = (path: string) => {
+    const id = path.startsWith("/matters/") ? path.slice("/matters/".length) : null;
+    return id && matters.some((m) => m.id === id) ? draftsInMatter(allDrafts, id).length : 0;
+  };
+  return { matters, allDrafts, nestedCount };
+}
+
+/**
+ * Everything above and below the sidebar's scrolling middle: the logo row
+ * and New letter (126px) plus Settings, Help and the person (162px). Used
+ * for the first render so the nested lists are already right on the first
+ * frame; the real figure is then read from the page and only changes the
+ * plan if the chrome is a different height.
+ */
+const SIDEBAR_CHROME_GUESS = 288;
+
+function subscribeResize(onChange: () => void) {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
+
+/**
+ * Height of the sidebar's scrolling middle (SidebarContent), which the
+ * nested lists have to share with the main rows. 0 when unknown.
+ */
+function useMiddleHeight(ref: RefObject<HTMLElement | null>, remeasureOn: unknown): number {
+  const viewport = useSyncExternalStore(
+    subscribeResize,
+    () => window.innerHeight,
+    () => 0
+  );
+  const [chrome, setChrome] = useState(SIDEBAR_CHROME_GUESS);
+  useLayoutEffect(() => {
+    const area = ref.current?.closest<HTMLElement>('[data-sidebar="content"]');
+    if (!area) return;
+    const read = () => {
+      // An area with no height (not laid out, as in tests) tells us nothing.
+      if (area.clientHeight > 0) setChrome(window.innerHeight - area.clientHeight);
+      else setChrome(Number.POSITIVE_INFINITY);
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(read);
+    ro.observe(area);
+    return () => ro.disconnect();
+    // The group mounts only for the letter-writing modes, so look again when the mode changes.
+  }, [ref, remeasureOn]);
+  return Number.isFinite(chrome) ? Math.max(0, viewport - chrome) : 0;
+}
+
+/** Soft grey nested rows (Quiet tier), announced once for screen readers. */
+function LoadingRows({ label }: { label: string }) {
+  return (
+    <li role="status" className="list-none">
+      <span className="sr-only">{label}</span>
+      <ul aria-hidden className="flex list-none flex-col">
+        {Array.from({ length: LOADING_ROWS }, (_, i) => (
+          <li key={i} className="flex h-[34px] items-center px-2.5">
+            <Skeleton className="h-2.5 rounded-full" style={{ width: `${78 - i * 18}%` }} />
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
+/**
+ * "Letters": the row opens the Letters list; the chevron shows or hides the
+ * three most recent letters (each with its journey dot and an Open / Delete
+ * with undo menu), then "View all".
+ */
+function NavLetters({
+  mode,
+  recent,
+  loading,
+  expanded,
+  setExpanded,
+}: {
+  mode: Mode;
+  recent: RecentLetter[];
+  loading: boolean;
+  expanded: boolean;
+  setExpanded: (open: boolean) => void;
+}) {
+  const { isMobile, state, setOpen } = useSidebar();
+  const loc = useLocation();
+  const path = loc.pathname;
+  const nav = useNavigate();
+  const deleteDraft = useDraftStore((s) => s.deleteDraft);
+  const isCollapsed = state === "collapsed" && !isMobile;
 
   const choosingForLetter = useChoosingForLetter(mode);
   const active = LETTER_PAGES.some((p) => under(path, p)) || path.startsWith("/editor/") || choosingForLetter;
@@ -641,15 +773,17 @@ function NavLetters({ mode }: { mode: Mode }) {
       <SidebarMenuAction
         aria-label={expanded ? "Hide recent letters" : "Show recent letters"}
         aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setExpanded(!expanded)}
         className={CHEVRON_ACTION}
       >
         <ChevronDown className={cn("transition-transform duration-150", !expanded && "-rotate-90")} />
       </SidebarMenuAction>
-      {(expanded || under(path, "/exported") || under(path, "/bulk")) && (
+      {(expanded || under(path, "/bulk")) && (
         <SubList label="Recent letters">
           {expanded &&
-            (recent.length === 0 ? (
+            (loading ? (
+              <LoadingRows label="Loading your letters" />
+            ) : recent.length === 0 ? (
               <li className="px-2.5 py-2 text-[13px] text-[var(--ds-subtle)]">No letters yet</li>
             ) : (
               recent.map(({ d, tone }) => {
@@ -712,7 +846,6 @@ function NavLetters({ mode }: { mode: Mode }) {
                 );
               })
             ))}
-          {under(path, "/exported") && <SubRow href="/exported" label="Exported" isActive />}
           {under(path, "/bulk") && <SubRow href="/bulk" label="Bulk letters" isActive />}
           {expanded && recent.length > 0 && <SubRow href="/letters" label="View all" isActive={false} />}
         </SubList>
@@ -721,15 +854,21 @@ function NavLetters({ mode }: { mode: Mode }) {
   );
 }
 
-function NavMatters({ mode }: { mode: Mode }) {
+function NavMatters({
+  matters: allMatters,
+  allDrafts,
+  loading,
+  expanded,
+  setExpanded,
+}: {
+  matters: Matter[];
+  allDrafts: Draft[];
+  loading: boolean;
+  expanded: boolean;
+  setExpanded: (open: boolean) => void;
+}) {
   const loc = useLocation();
   const path = loc.pathname;
-  const matters = useDraftStore((s) => s.matters);
-  const drafts = useDraftStore((s) => s.drafts);
-  const [expanded, setExpanded] = useState(true);
-
-  const allMatters = useMemo(() => activeMatters(Object.values(matters), mode), [matters, mode]);
-  const allDrafts = useMemo(() => Object.values(drafts).filter((d) => !d.isTemplateSource), [drafts]);
   const activeMatterId = path.startsWith("/matters/") ? path.slice("/matters/".length) : null;
 
   return (
@@ -743,14 +882,16 @@ function NavMatters({ mode }: { mode: Mode }) {
       <SidebarMenuAction
         aria-label={expanded ? "Hide matters" : "Show matters"}
         aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setExpanded(!expanded)}
         className={CHEVRON_ACTION}
       >
         <ChevronDown className={cn("transition-transform duration-150", !expanded && "-rotate-90")} />
       </SidebarMenuAction>
       {expanded && (
         <SubList label="Matters">
-          {allMatters.length === 0 ? (
+          {loading ? (
+            <LoadingRows label="Loading your matters" />
+          ) : allMatters.length === 0 ? (
             <li className="px-2.5 py-2 text-[13px] text-[var(--ds-subtle)]">No matters yet</li>
           ) : (
             allMatters.map((m) => {
@@ -911,7 +1052,7 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
           { href: "/calendar", label: "Calendar", Icon: CalendarDays },
           { href: "/notifications", label: "Notifications", Icon: Bell },
           { href: "/activity", label: "Activity", Icon: ActivityIcon },
-          { href: "/exported", label: "Exported", Icon: FileDown },
+          { href: "/letters?tab=sent", label: "Sent letters", Icon: FileDown },
           { href: "/bulk", label: "Bulk letters", Icon: Layers },
           { href: "/bookings", label: "My bookings", Icon: Inbox },
         ]
@@ -920,7 +1061,7 @@ function NavUser({ mode }: { mode: SidebarMode | null }) {
             { href: "/calendar", label: "Calendar", Icon: CalendarDays },
             { href: "/notifications", label: "Notifications", Icon: Bell },
             { href: "/activity", label: "Activity", Icon: ActivityIcon },
-            { href: "/exported", label: "Exported", Icon: FileDown },
+            { href: "/letters?tab=sent", label: "Sent letters", Icon: FileDown },
           ]
         : mode === "consultant"
           ? [{ href: "/notifications", label: "Notifications", Icon: Bell }]

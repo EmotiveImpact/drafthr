@@ -9,15 +9,18 @@ const ICONS: Record<string, LucideIcon> = { draft: PenLine, review: Eye, approve
  * to f8): Draft, Review ("optional"), Approve, Send. Done steps are green
  * ticks joined by a green line; the current step is black when it is yours,
  * amber when it needs you and lilac when someone else has it. "sent" shows
- * every step done.
+ * every step done. `steps` renames a step for this letter (an employee's own
+ * letter has "Sign off" for Approve: journeyStepsFor).
  */
 export function StageTracker({
   stage,
   tone,
+  steps = JOURNEY_STEPS,
   className,
 }: {
   stage: JourneyStage;
   tone: StageTone;
+  steps?: typeof JOURNEY_STEPS;
   className?: string;
 }) {
   const cur = stageIndex(stage);
@@ -27,7 +30,7 @@ export function StageTracker({
       data-slot="stage-tracker"
       className={cn("m-0 grid list-none grid-cols-4 p-0", className)}
     >
-      {JOURNEY_STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const state = i < cur ? "done" : i === cur ? (tone === "done" ? "done" : tone) : "todo";
         const Icon = ICONS[step.stage];
         const current = i === cur;
@@ -38,7 +41,7 @@ export function StageTracker({
             aria-current={current ? "step" : undefined}
             className="relative flex flex-col items-center gap-1.5 text-[12.5px] text-[var(--ds-subtle)]"
           >
-            {i < JOURNEY_STEPS.length - 1 && (
+            {i < steps.length - 1 && (
               <span
                 aria-hidden
                 className={cn(

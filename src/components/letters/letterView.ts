@@ -123,7 +123,8 @@ export function letterStatus(d: Draft, viewerCanApprove: boolean): LetterStatus 
     case "changes_requested":
       return { label: "Changes requested", tone: "danger" };
     case "approved":
-      if (!isSent(d)) return { label: "Approved", tone: "ok" };
+      // An employee's own letter is signed off, not approved (FOUNDATION-X5).
+      if (!isSent(d)) return { label: d.mode === "employee" ? "Ready to send" : "Approved", tone: "ok" };
       break;
   }
   if (isSent(d)) return { label: "Sent", tone: "ok" };

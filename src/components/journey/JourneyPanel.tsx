@@ -7,7 +7,8 @@ import {
   runHealthChecks,
   type HealthActionRoute,
 } from "@/lib/finalize/healthChecks";
-import { useJourney, type JourneyStage } from "@/lib/journey/stage";
+import { journeyStepsFor, sendWhatNow, useJourney, type JourneyStage } from "@/lib/journey/stage";
+import { SEND_FADE_MS, useSendMoment } from "./ui-store";
 import { HealthCard, StageTracker, WhatNow, type HealthFix } from "@/components/journey/ui";
 import { DraftStage } from "./stages/DraftStage";
 import { ReviewStage } from "./stages/ReviewStage";
@@ -57,8 +58,15 @@ export function JourneyPanel({
   // A template is never reviewed, approved or sent: no four-step tracker
   // for it, only the drafting checklist and health (LETTER-X24).
   const isTemplate = useDraftStore((s) => !!s.drafts[draftId]?.isTemplateSource);
+  const mode = useDraftStore((s) => s.drafts[draftId]?.mode);
+  const sections = useDraftStore((s) => s.drafts[draftId]?.sections);
+  // Right after sending, the Send step stays on screen for a moment (SentStage);
+  // the line above it keeps the Send step's words until both swap (SEND-X36).
+  const moment = useSendMoment(draftId);
   if (!journey) return null;
   const Stage = STAGES[journey.stage];
+  const sending = journey.stage === "sent" && moment !== "next" && mode !== undefined;
+  const whatNow = sending && mode ? sendWhatNow({ mode, sections: sections ?? [] }) : journey.whatNow;
   const showHealth = health !== false && journey.stage !== "send" && journey.stage !== "sent";
 
   return (
@@ -68,8 +76,21 @@ export function JourneyPanel({
       data-template={isTemplate || undefined}
       className={cn("flex flex-col gap-3.5", className)}
     >
-      {!isTemplate && <StageTracker stage={journey.stage} tone={journey.tone} />}
-      <WhatNow lead={journey.whatNow.lead} detail={journey.whatNow.detail} />
+      {!isTemplate && (
+        <StageTracker stage={journey.stage} tone={journey.tone} steps={journeyStepsFor(mode ? { mode } : null)} />
+      )}
+      <WhatNow
+        key={sending ? "send-moment" : "now"}
+        lead={whatNow.lead}
+        detail={whatNow.detail}
+        className={cn(
+          "transition-opacity ease-out motion-reduce:transition-none",
+          sending && moment === "fade" && "opacity-0",
+          // What's next fades in with the Sent stage under it.
+          journey.stage === "sent" && moment === "next" && "animate-in fade-in-0 duration-300 motion-reduce:animate-none"
+        )}
+        style={sending ? { transitionDuration: `${SEND_FADE_MS}ms` } : undefined}
+      />
       <Stage draftId={draftId} />
       {showHealth && (health ?? <DefaultHealthCard draftId={draftId} stage={journey.stage} locked={journey.locked} />)}
       <ReviewDialogsHost />

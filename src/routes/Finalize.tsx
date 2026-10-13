@@ -25,7 +25,7 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import { formatDateOnly, todayDateOnly, toDateOnly } from "@/lib/date-only";
 import type { Draft } from "@/lib/letters/types";
 import { recipientNameFor } from "@/lib/letters/display";
-import { useJourney } from "@/lib/journey/stage";
+import { isOwnLetter, useJourney } from "@/lib/journey/stage";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { PageHeader, type Crumb } from "@/components/ds/PageHeader";
 import {
@@ -183,7 +183,8 @@ export function Finalize() {
     </>
   ) : approver !== null ? (
     <>
-      {approver ? `Approved by ${approver}.` : "Approved."} Choose how {first || "they"} {first ? "gets" : "get"} it
+      {/* An employee's own letter has no approver: they signed it off (FOUNDATION-X5). */}
+      {isOwnLetter(draft) ? "Signed off." : approver ? `Approved by ${approver}.` : "Approved."} Choose how {first || "they"} {first ? "gets" : "get"} it
       and what to keep with it.{appealNote}
     </>
   ) : (
@@ -437,7 +438,7 @@ function PreviewPanel({
         {approver !== null && (
           <span className={chip}>
             <CircleCheck aria-hidden className="size-[13px] text-[var(--ds-green-solid)]" />
-            {approver ? `Approved by ${approver}` : "Approved"}
+            {isOwnLetter(draft) ? "Signed off" : approver ? `Approved by ${approver}` : "Approved"}
           </span>
         )}
         <span className={chip}>

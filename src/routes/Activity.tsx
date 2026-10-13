@@ -713,7 +713,11 @@ function summaryText(g: DraftGroup): string {
     seen.set(e.kind, (seen.get(e.kind) ?? 0) + 1);
   }
   for (const [kind, count] of seen) {
-    const words = REVIEW_WORDS[kind];
+    // An employee's own letter has no approver: its approval is their sign-off (FOUNDATION-X5).
+    const words =
+      kind === "review_approved" && g.mode === "employee"
+        ? (["Signed off", "Signed off {n} times"] as [string, string])
+        : REVIEW_WORDS[kind];
     if (!words) parts.push(plural(count, "review event", "review events"));
     else parts.push(count === 1 ? words[0] : words[1].replace("{n}", String(count)));
   }

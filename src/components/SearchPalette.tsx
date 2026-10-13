@@ -43,6 +43,9 @@ import {
   MessageSquare,
 } from "lucide-react";
 
+/** Letters listed at most; the heading says when more match. */
+const MAX_LETTER_ROWS = 8;
+
 type PageLink = { href: string; label: string; Icon: typeof House; keywords: string[] };
 
 /** Every page in the app frame for the current role, so each stays reachable. */
@@ -51,7 +54,8 @@ function pagesFor(role: "employer" | "employee" | null | undefined, consultant: 
     { href: "/calendar", label: "Calendar", Icon: CalendarDays, keywords: ["deadlines"] },
     { href: "/notifications", label: "Notifications", Icon: Bell, keywords: ["alerts", "deadlines"] },
     { href: "/activity", label: "Activity", Icon: ActivityIcon, keywords: ["audit", "history"] },
-    { href: "/exported", label: "Exported", Icon: FileDown, keywords: ["sent", "downloads"] },
+    // The old Exported page is the Sent tab of Letters now (/exported redirects there).
+    { href: "/letters?tab=sent", label: "Sent letters", Icon: FileDown, keywords: ["sent", "exported", "downloads"] },
     { href: "/settings", label: "Settings and profile", Icon: Settings, keywords: ["profile", "role", "account"] },
     { href: "/privacy", label: "Privacy and data", Icon: ShieldCheck, keywords: ["data"] },
     { href: "/terms", label: "Terms of service", Icon: FileText, keywords: ["legal"] },
@@ -184,6 +188,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
       commentId: string;
       draftTitle: string;
       author: string;
+      body: string;
       snippet: string;
     }> = [];
     for (const d of Object.values(drafts)) {
@@ -197,6 +202,8 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
           commentId: c.id,
           draftTitle,
           author: c.authorName,
+          // The whole comment, so a match past the snippet still lists it.
+          body: c.body,
           snippet: c.body.length > 90 ? c.body.slice(0, 90).trim() + "…" : c.body,
         });
         if (out.length >= 6) return out;
@@ -215,6 +222,19 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
       keywords: `${l.shortTitle} ${l.title} ${l.description} ${l.id} ${l.riskClass}`,
     }));
   }, [role]);
+
+  // The letters that match what was typed, with the palette's own filter, so
+  // the heading counts what is listed (FOUNDATION-X2) and a match older than
+  // the eight most recent letters is still found.
+  const matchingDrafts = useMemo(
+    () => draftRows.filter((d) => paletteFilter(d.id, query, [d.keywords]) > 0),
+    [draftRows, query]
+  );
+  const shownDrafts = matchingDrafts.slice(0, MAX_LETTER_ROWS);
+  const lettersHeading =
+    matchingDrafts.length > shownDrafts.length
+      ? `Letters (${shownDrafts.length} of ${matchingDrafts.length})`
+      : `Letters (${matchingDrafts.length})`;
 
   const prefix = role === "employer" ? "/hr" : role === "employee" ? "/me" : "";
 
@@ -257,7 +277,11 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
               {sectionMatches.map((s) => (
                 <CommandItem
                   key={`sec-${s.draftId}-${s.sectionId}`}
-                  value={`section-${s.draftId}-${s.sectionId}`}
+                  // The query is part of the value: cmdk only re-reads an item's
+                  // keywords when its value changes, and the snippet moves with
+                  // each keystroke. Without it a row matched for "se" was hidden
+                  // for "sent" while the heading still counted it.
+                  value={`section-${s.draftId}-${s.sectionId}-${q}`}
                   keywords={[s.snippet, s.draftTitle, s.sectionTitle]}
                   onSelect={() => {
                     onOpenChange(false);
@@ -288,8 +312,8 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
               {commentMatches.map((c) => (
                 <CommandItem
                   key={`cmt-${c.commentId}`}
-                  value={`comment-${c.commentId}`}
-                  keywords={[c.snippet, c.draftTitle, c.author]}
+                  value={`comment-${c.commentId}-${q}`}
+                  keywords={[c.snippet, c.draftTitle, c.author, c.body]}
                   onSelect={() => {
                     onOpenChange(false);
                     nav(`/editor/${c.draftId}`);
@@ -313,10 +337,10 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
           </>
         )}
 
-        {draftRows.length > 0 && (
+        {shownDrafts.length > 0 && (
           <>
-            <CommandGroup heading={`Letters (${draftRows.length})`}>
-              {draftRows.slice(0, 8).map((d) => (
+            <CommandGroup heading={lettersHeading}>
+              {shownDrafts.map((d) => (
                 <CommandItem
                   key={d.id}
                   value={d.id}

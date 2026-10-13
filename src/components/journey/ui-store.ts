@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import type { ReviewKind } from "@/lib/journey/reviews";
 
@@ -62,3 +63,44 @@ export const useJourneyUI = create<JourneyUIState>()((set) => ({
   markJustSent: (draftId) => set({ justSent: { draftId, at: Date.now() } }),
   clearJustSent: () => set({ justSent: null }),
 }));
+
+/** How long the Send step stays on screen after sending (letter-live: 1500 ms). */
+export const SEND_HOLD_MS = 1500;
+/** Its fade out (letter-live: 300 ms). */
+export const SEND_FADE_MS = 300;
+
+export type SendMomentPhase = "hold" | "fade" | "next";
+
+function sendMomentPhase(age: number): SendMomentPhase {
+  return age < SEND_HOLD_MS ? "hold" : age < SEND_HOLD_MS + SEND_FADE_MS ? "fade" : "next";
+}
+
+/**
+ * The send moment for a letter (letter-live): right after it is marked as
+ * sent the Send step holds for 1.5 s while the seal draws ("hold"), fades
+ * out ("fade"), then What's next shows ("next"). The Progress panel's
+ * what-to-do line and the Sent stage both read this one clock, so they swap
+ * together and the line never says "Sent. What's next" over the old Send
+ * step (SEND-X36). A letter opened later is "next" straight away.
+ */
+export function useSendMoment(draftId: string): SendMomentPhase {
+  const justSent = useJourneyUI((s) => s.justSent);
+  const at = justSent && justSent.draftId === draftId ? justSent.at : null;
+  const [phase, setPhase] = useState<SendMomentPhase>(() => (at === null ? "next" : sendMomentPhase(Date.now() - at)));
+  useEffect(() => {
+    if (at === null) {
+      setPhase("next");
+      return;
+    }
+    const age = Date.now() - at;
+    setPhase(sendMomentPhase(age));
+    if (age >= SEND_HOLD_MS + SEND_FADE_MS) return;
+    const t1 = window.setTimeout(() => setPhase("fade"), Math.max(0, SEND_HOLD_MS - age));
+    const t2 = window.setTimeout(() => setPhase("next"), Math.max(0, SEND_HOLD_MS + SEND_FADE_MS - age));
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [at]);
+  return phase;
+}

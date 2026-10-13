@@ -6,6 +6,7 @@ import { summariseRound } from "@/components/journey/review/model";
 import type { ActivityEvent } from "@/components/journey/ui";
 import { appealWorkingDays, downloadedActivity, fmtShortDay, type SentRecord } from "@/components/journey/send/record";
 import { toDateOnly } from "@/lib/date-only";
+import { approvalWord, isOwnLetter } from "@/lib/journey/stage";
 
 /**
  * Facts about a letter that the workspace shows around the page (chips,
@@ -183,7 +184,9 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
       const approver = t.actorName && !/^workspace reviewer$/i.test(t.actorName) ? firstName(t.actorName) : "the approver";
       out.push({ id: t.id, at, title: `Sent to ${approver} to approve`, meta: `You · ${fmtWhen(at)}` });
     } else if (t.kind === "review_approved") {
-      out.push({ id: t.id, at, title: "Approved", meta: `${t.actorName || "Approver"} · ${fmtWhen(at)}`, done: true });
+      // An employee's own letter has no approver: they signed it off (FOUNDATION-X5).
+      const signer = isOwnLetter(draft) ? who(t.actorName) : t.actorName || "Approver";
+      out.push({ id: t.id, at, title: approvalWord(draft), meta: `${signer} · ${fmtWhen(at)}`, done: true });
     } else if (t.kind === "review_changes_requested") {
       out.push({ id: t.id, at, title: "Changes requested", meta: `${t.actorName || "Approver"} · ${fmtWhen(at)}` });
     } else if (t.kind === "review_withdrawn") {
