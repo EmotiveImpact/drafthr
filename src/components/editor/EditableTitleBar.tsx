@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle } from "@/lib/letters/display";
@@ -25,8 +24,10 @@ export function EditableTitleBar({
 }: {
   draft: Draft;
   /** "canvas" (default): the large heading above the sections.
-   * "bar": the 11A document bar's file name, one line with a pencil. */
-  variant?: "canvas" | "bar";
+   * "bar": the document bar's letter name (15px medium), a faint dot and
+   * the employee's name in grey (mock f1). Click the name to rename.
+   * "phone": the phone top bar's name in serif 20px (mock phone-letter). */
+  variant?: "canvas" | "bar" | "phone";
 }) {
   const setTitle = useDraftStore((s) => s.setDraftTitle);
   // Auto-composed default = "Letter type · Recipient name", reused
@@ -82,7 +83,12 @@ export function EditableTitleBar({
     ? autoTitle
     : [recipientLabel, draft.context.jurisdiction].filter(Boolean).join(" · ");
 
-  if (variant === "bar") {
+  if (variant === "bar" || variant === "phone") {
+    const phone = variant === "phone";
+    // The bar shows the letter's own name (the rename or the letter type)
+    // and the employee separately, rather than the composed "Type ·
+    // Recipient" string twice.
+    const barTitle = isCustom ? displayTitle : letterTypeLabelFor(draft) || displayTitle;
     return (
       <div className="flex min-w-0 items-center gap-1.5">
         {editing ? (
@@ -102,22 +108,32 @@ export function EditableTitleBar({
             }}
             aria-label="Letter title"
             placeholder={autoTitle}
-            className="h-7 w-full min-w-0 max-w-[460px] rounded-[var(--ds-r-s)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-2 text-[14px] font-medium text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-muted)]"
+            className={
+              phone
+                ? "h-8 w-full min-w-0 rounded-[8px] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-2 font-serif text-[18px] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-muted)]"
+                : "h-8 w-full min-w-0 max-w-[460px] rounded-[7px] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-2 text-[15px] font-medium text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-muted)]"
+            }
           />
         ) : (
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="group flex h-7 min-w-0 items-center gap-1.5 rounded-[var(--ds-r-s)] px-1 text-left hover:bg-[var(--ds-surface-2)]"
+            className={
+              phone
+                ? "min-w-0 truncate rounded-[6px] text-left font-serif text-[20px] leading-[1.25] tracking-[-0.01em] text-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                : "min-w-0 truncate rounded-[6px] px-1 py-0.5 text-left text-[15px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+            }
             title={subline ? `${displayTitle}. ${subline}. Click to rename.` : "Click to rename"}
             aria-label={`Letter title: ${displayTitle}. Click to rename.`}
           >
-            <span className="truncate text-[14px] font-medium text-[var(--ds-ink)]">{displayTitle}</span>
-            <Pencil className="size-3.5 shrink-0 text-[var(--ds-muted)] opacity-70 transition group-hover:opacity-100" aria-hidden />
+            {phone ? displayTitle : barTitle}
           </button>
         )}
-        {!editing && subline && (
-          <span className="hidden min-w-0 truncate text-[12.5px] text-[var(--ds-muted)] 2xl:inline">{subline}</span>
+        {!editing && !phone && recipientLabel && (
+          <>
+            <span aria-hidden className="shrink-0 text-[15px] text-[var(--ds-faint)]">·</span>
+            <span className="min-w-0 truncate text-[15px] text-[var(--ds-muted)]">{recipientLabel}</span>
+          </>
         )}
       </div>
     );

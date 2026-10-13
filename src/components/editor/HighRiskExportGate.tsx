@@ -1,14 +1,13 @@
 import { useState } from "react";
 import {
-  Box,
-  Button,
-  Checkbox,
   Dialog,
-  Flex,
-  Grid,
-  Text,
-  TextField,
-} from "@radix-ui/themes";
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import type { Draft } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { todayDateOnly } from "@/lib/date-only";
@@ -35,115 +34,90 @@ export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
 
   const canProceed = reviewedBy.trim().length >= 2 && reviewedOn && confirmed;
 
+  const field =
+    "h-9 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-line-strong)] focus-visible:shadow-[var(--ds-focus-ring)]";
+
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Content maxWidth="540px">
-        <Dialog.Title>
-          <Flex align="center" gap="2">
-            <ShieldAlert className="size-4" style={{ color: "var(--ds-red-fg)" }} />
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-[540px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldAlert className="size-4 text-[var(--ds-red-fg)]" />
             Counsel review required
-          </Flex>
-        </Dialog.Title>
-        <Dialog.Description size="2" color="gray" mb="4">
-          <strong>{meta.title}</strong> is classified as a high-risk
-          communication. Before exporting, please confirm a qualified employment-law
-          reviewer has approved the content.
-        </Dialog.Description>
+          </DialogTitle>
+          <DialogDescription>
+            <strong className="font-medium text-[var(--ds-ink)]">{meta.title}</strong> is a high-risk letter. Before
+            exporting, confirm a qualified employment-law reviewer has approved the content.
+          </DialogDescription>
+        </DialogHeader>
 
-        <Flex direction="column" gap="3">
-          <Box
-            p="3"
-            style={{
-              background: "var(--ds-red-bg)",
-              border: "1px solid transparent",
-              borderRadius: "var(--ds-r-m)",
-            }}
-          >
-            <Text size="1" style={{ color: "var(--ds-ink)" }} className="leading-relaxed">
-              {draft.context.jurisdiction === "UK" ? (
-                <>
-                  The ACAS Code of Practice and Employment Rights Act 1996
-                  governing this letter type carry compensation uplifts of up to
-                  25% for procedural failures (s.207A TULRCA 1992). Settlement
-                  agreements specifically require independent legal advice (s.203
-                  ERA) to be valid.
-                </>
-              ) : (
-                <>
-                  US employment law (WARN Act, OWBPA, Title VII, ADA, ADEA, plus
-                  state-specific final-pay and notice rules) imposes statutory
-                  penalties for non-compliant separations. CA and NY in particular
-                  impose strict same-day or next-day final-pay rules.
-                </>
-              )}
-            </Text>
-          </Box>
+        <div className="flex flex-col gap-3">
+          <div className="rounded-[10px] bg-[var(--ds-red-bg)] p-3 text-[12.5px] leading-relaxed text-[var(--ds-ink)]">
+            {draft.context.jurisdiction === "UK" ? (
+              <>
+                The ACAS Code of Practice and Employment Rights Act 1996 governing this letter type carry compensation
+                uplifts of up to 25% for procedural failures (s.207A TULRCA 1992). Settlement agreements specifically
+                require independent legal advice (s.203 ERA) to be valid.
+              </>
+            ) : (
+              <>
+                US employment law (WARN Act, OWBPA, Title VII, ADA, ADEA, plus state-specific final-pay and notice
+                rules) imposes statutory penalties for non-compliant separations. CA and NY in particular impose strict
+                same-day or next-day final-pay rules.
+              </>
+            )}
+          </div>
 
-          <Grid columns="2" gap="3">
-            <Box>
-              <Text as="label" htmlFor="reviewedBy" size="1" color="gray" weight="medium" mb="1" className="block">
-                Reviewed by (name & role)
-              </Text>
-              <TextField.Root
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="reviewedBy" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-muted)]">
+                Reviewed by (name and role)
+              </label>
+              <input
                 id="reviewedBy"
-                placeholder="e.g. J. Smith, Employment Counsel"
+                placeholder="For example J. Smith, Employment Counsel"
                 value={reviewedBy}
                 onChange={(e) => setReviewedBy(e.target.value)}
+                className={field}
               />
-            </Box>
-            <Box>
-              <Text as="label" htmlFor="reviewedOn" size="1" color="gray" weight="medium" mb="1" className="block">
+            </div>
+            <div>
+              <label htmlFor="reviewedOn" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-muted)]">
                 Review date
-              </Text>
-              <TextField.Root
+              </label>
+              <input
                 id="reviewedOn"
                 type="date"
                 value={reviewedOn}
                 onChange={(e) => setReviewedOn(e.target.value)}
+                className={field}
               />
-            </Box>
-          </Grid>
+            </div>
+          </div>
 
-          <Flex
-            asChild
-            align="start"
-            gap="2"
-            p="3"
-            className="cursor-pointer hover:bg-[var(--ds-surface-2)]"
-            style={{
-              border: "1px solid var(--ds-line)",
-              borderRadius: "var(--ds-r-m)",
-            }}
-          >
-            <label>
-              <Checkbox
-                checked={confirmed}
-                onCheckedChange={(c) => setConfirmed(c === true)}
-                mt="1"
-              />
-              <Text size="1" className="leading-relaxed">
-                I confirm a qualified employment-law professional has reviewed
-                this letter and approved its content for issuance. I understand
-                this attestation will be embedded in the export metadata for audit.
-              </Text>
-            </label>
-          </Flex>
-        </Flex>
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-[10px] border border-[var(--ds-line)] p-3 transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)]">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--ds-accent)]"
+            />
+            <span className="text-[12.5px] leading-relaxed text-[var(--ds-body)]">
+              I confirm a qualified employment-law professional has reviewed this letter and approved its content for
+              issue. I understand this attestation will be embedded in the export metadata for audit.
+            </span>
+          </label>
+        </div>
 
-        <Flex justify="end" gap="2" mt="4">
-          <Dialog.Close>
-            <Button variant="soft" color="gray" onClick={onClose}>
-              Cancel
-            </Button>
-          </Dialog.Close>
-          <Button
-            disabled={!canProceed}
-            onClick={() => onConfirm({ reviewedBy: reviewedBy.trim(), reviewedOn })}
-          >
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!canProceed} onClick={() => onConfirm({ reviewedBy: reviewedBy.trim(), reviewedOn })}>
             Confirm and export
           </Button>
-        </Flex>
-      </Dialog.Content>
-    </Dialog.Root>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -50,11 +50,11 @@ export function RefinePopover({
         <Popover.Content
           align="end"
           sideOffset={6}
-          className="z-50 w-[320px] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_10px_24px_rgba(15,17,21,0.10),0_1px_3px_rgba(15,17,21,0.04)] p-3 text-[13px]"
+          className="z-50 w-[320px] rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-3 text-[13px] shadow-[var(--ds-shadow-l)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[side=bottom]:slide-in-from-top-1 duration-[160ms] data-[state=closed]:duration-[100ms]"
         >
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="size-3.5 text-[var(--ds-muted)]" />
-            <h4 className="text-[12px] font-semibold text-[var(--ds-ink)] m-0">Smart rewrite</h4>
+            <h4 className="m-0 text-[12.5px] font-medium text-[var(--ds-ink)]">Quick rewrites</h4>
           </div>
           <SmartRewriteMenu disabled={disabled} onRun={runSmartRewrite} />
           <div className="my-3 h-px bg-[var(--ds-line-2)]" />
@@ -62,9 +62,10 @@ export function RefinePopover({
             autoFocus
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Custom rewrite instruction"
+            placeholder="Or say what to change in this section"
+            aria-label="Refine instruction"
             rows={3}
-            className="w-full text-[12px] px-2.5 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)] resize-y"
+            className="w-full resize-y rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 py-2 text-[13px] text-[var(--ds-ink)] focus:border-[var(--ds-line-strong)] focus:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -82,7 +83,7 @@ export function RefinePopover({
                 setOpen(false);
               }}
             >
-              <RotateCcw className="size-3 mr-1" /> Plain regenerate
+              <RotateCcw className="size-3 mr-1" /> Redraft
             </Button>
             <div className="flex items-center gap-2">
               <Button
@@ -102,12 +103,12 @@ export function RefinePopover({
                 disabled={!body.trim()}
                 onClick={submit}
               >
-                Regenerate with refinement
+                Refine
               </Button>
             </div>
           </div>
-          <p className="text-[10px] text-[var(--ds-subtle)] mt-2">
-            ⌘ + Enter to submit
+          <p className="mt-2 text-[11.5px] text-[var(--ds-subtle)]">
+            Ctrl or Cmd + Enter to send. The change arrives as a suggested edit.
           </p>
         </Popover.Content>
       </Popover.Portal>

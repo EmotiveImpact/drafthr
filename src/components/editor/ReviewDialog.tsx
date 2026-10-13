@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { CheckCircle2, MessageSquareWarning, Send, X } from "lucide-react";
+import { CheckCircle2, MessageSquareWarning, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReviewDialogKind = "submit" | "approve" | "request_changes";
@@ -12,18 +12,16 @@ type WorkspaceMember = {
   role: string;
 };
 
-/** Sentinel option value for the free-text "someone else" reviewer path. */
+/** Sentinel option value for the free-text "someone else" approver path. */
 const OTHER = "__other__";
 
 /**
- * Three-in-one modal for the approval-queue actions. Same shell so the
- * UI feels consistent across the three transitions; the kind prop swaps
- * copy + which fields are required.
+ * One dialog for the approval actions: send for approval, approve, request
+ * changes. The kind swaps the copy and which fields are required.
  *
- * On "submit" the reviewer field is a WORKSPACE-MEMBER PICKER (so the chosen
- * reviewer can be emailed a review request — the notify endpoint only accepts
- * in-tenant members). Free-text stays available via "Someone else…" for solo
- * workspaces / external names; those simply don't get an email.
+ * On "submit" the approver is picked from the workspace's members (so they
+ * can be emailed: the notify endpoint only accepts members). "Someone else"
+ * stays available for one-person workspaces; they are not emailed.
  */
 export function ReviewDialog({
   open,
@@ -36,7 +34,7 @@ export function ReviewDialog({
   onOpenChange: (next: boolean) => void;
   kind: ReviewDialogKind;
   defaultReviewerName?: string;
-  onSubmit: (input: { reviewerName: string; body: string; reviewerUserId?: string }) => void;
+  onSubmit: (input: { reviewerName: string; body: string; reviewerUserId?: string; reviewerRole?: string }) => void;
 }) {
   const [reviewerName, setReviewerName] = useState(defaultReviewerName ?? "");
   const [body, setBody] = useState("");
@@ -51,8 +49,8 @@ export function ReviewDialog({
     }
   }, [open, defaultReviewerName]);
 
-  // Load teammates when the submit dialog opens. Best-effort: on failure (or a
-  // one-person workspace) the picker collapses to the free-text input.
+  // Load teammates when the submit dialog opens. Best-effort: on failure (or
+  // a one-person workspace) the picker collapses to the free-text input.
   useEffect(() => {
     if (!open || kind !== "submit") return;
     let cancelled = false;
@@ -78,51 +76,50 @@ export function ReviewDialog({
   const submit = () => {
     if (bodyMissing) return;
     onSubmit({
-      reviewerName: pickedMember
-        ? (pickedMember.legalName?.trim() || pickedMember.email)
-        : reviewerName.trim(),
+      reviewerName: pickedMember ? pickedMember.legalName?.trim() || pickedMember.email : reviewerName.trim(),
       body: trimmedBody,
       reviewerUserId: pickedMember?.userId,
+      reviewerRole: pickedMember?.role,
     });
     onOpenChange(false);
   };
 
+  const field =
+    "w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] focus:border-[var(--ds-line-strong)] focus-visible:shadow-[var(--ds-focus-ring)]";
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-        <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[calc(100vw-2rem)] rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[0_24px_48px_rgba(15,17,21,0.16)] p-4 text-[13px]">
-          <div className="flex items-center justify-between mb-2">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+        <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 text-[13.5px] shadow-[var(--ds-shadow-xl)]">
+          <div className="mb-1.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <config.Icon className="size-4 text-[var(--ds-muted)]" />
-              <Dialog.Title className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
-                {config.title}
-              </Dialog.Title>
+              <Dialog.Title className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">{config.title}</Dialog.Title>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                className="size-6 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                className="grid size-8 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                 aria-label="Close"
               >
-                <X className="size-3.5" />
+                <X className="size-4" />
               </button>
             </Dialog.Close>
           </div>
-          <Dialog.Description className="text-[12.5px] text-[var(--ds-muted)] mb-3 leading-snug">
-            {config.lede}
-          </Dialog.Description>
+          <Dialog.Description className="mb-4 text-[13px] leading-snug text-[var(--ds-muted)]">{config.lede}</Dialog.Description>
 
           {config.showReviewerName && (
             <div className="mb-3">
-              <label className="block text-[11px] font-medium text-[var(--ds-muted)] mb-1">
-                Reviewer {kind === "submit" ? "(optional)" : ""}
+              <label htmlFor="review-dialog-person" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-ink)]">
+                {kind === "submit" ? "Approver" : "Your name"}
               </label>
               {usePicker && (
                 <select
+                  id="review-dialog-person"
                   value={selected}
                   onChange={(e) => setSelected(e.target.value)}
-                  className="w-full text-[13px] px-2.5 h-9 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)]"
+                  className={`${field} h-9 px-2.5`}
                 >
                   {members.map((m) => (
                     <option key={m.userId} value={m.userId}>
@@ -134,33 +131,34 @@ export function ReviewDialog({
               )}
               {(!usePicker || selected === OTHER) && (
                 <input
+                  id={usePicker ? undefined : "review-dialog-person"}
+                  aria-label={usePicker ? "Approver's name" : undefined}
                   type="text"
                   value={reviewerName}
                   onChange={(e) => setReviewerName(e.target.value)}
                   placeholder={defaultReviewerName ?? "Workspace reviewer"}
-                  className={`w-full text-[13px] px-3 py-1.5 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)] ${usePicker ? "mt-2" : ""}`}
+                  className={`${field} h-9 ${usePicker ? "mt-2" : ""}`}
                 />
               )}
               {pickedMember && kind === "submit" && (
-                <p className="mt-1.5 text-[11px] text-[var(--ds-muted)]">
-                  They'll get an email with a link to this draft.
-                </p>
+                <p className="m-0 mt-1.5 text-[12px] text-[var(--ds-muted)]">They'll get an email with a link to this letter.</p>
               )}
             </div>
           )}
 
           <div>
-            <label className="block text-[11px] font-medium text-[var(--ds-muted)] mb-1">
+            <label htmlFor="review-dialog-body" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-ink)]">
               {config.bodyLabel}
               {config.bodyRequired && <span className="text-[var(--ds-red-fg)]"> *</span>}
             </label>
             <textarea
+              id="review-dialog-body"
               autoFocus
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder={config.bodyPlaceholder}
               rows={4}
-              className="w-full text-[13px] px-3 py-2 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-ink)] resize-y"
+              className={`${field} resize-y py-2`}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
@@ -176,12 +174,7 @@ export function ReviewDialog({
                 Cancel
               </Button>
             </Dialog.Close>
-            <Button
-              size="sm"
-              onClick={submit}
-              disabled={bodyMissing}
-              className={config.danger ? "bg-[var(--ds-red-fg)] hover:bg-[var(--ds-red-fg)]/90" : undefined}
-            >
+            <Button size="sm" onClick={submit} disabled={bodyMissing} variant={config.danger ? "destructive" : "default"}>
               {config.cta}
             </Button>
           </div>
@@ -197,7 +190,7 @@ const CONFIG: Record<
     title: string;
     lede: string;
     cta: string;
-    Icon: typeof Send;
+    Icon: typeof Stamp;
     bodyLabel: string;
     bodyPlaceholder: string;
     bodyRequired: boolean;
@@ -206,32 +199,32 @@ const CONFIG: Record<
   }
 > = {
   submit: {
-    title: "Submit for approval",
-    lede: "Send this draft to a reviewer for sign-off. You can keep editing until they pick it up.",
-    cta: "Submit for approval",
-    Icon: Send,
-    bodyLabel: "Note for the reviewer (optional)",
-    bodyPlaceholder: "Anything they should know before approving…",
+    title: "Send for approval",
+    lede: "Ask a teammate to approve this letter. Editing pauses while it is with them.",
+    cta: "Send for approval",
+    Icon: Stamp,
+    bodyLabel: "Note for the approver (optional)",
+    bodyPlaceholder: "Anything they should know before approving",
     bodyRequired: false,
     showReviewerName: true,
   },
   approve: {
-    title: "Approve draft",
-    lede: "Sign off this draft. After approval the canvas is locked and the letter is clear to send.",
+    title: "Approve letter",
+    lede: "Approve this letter. It stays locked and is ready to send.",
     cta: "Approve",
     Icon: CheckCircle2,
     bodyLabel: "Approval note (optional)",
-    bodyPlaceholder: "Anything to flag before the author ships it…",
+    bodyPlaceholder: "Anything to flag before it goes out",
     bodyRequired: false,
     showReviewerName: true,
   },
   request_changes: {
     title: "Request changes",
-    lede: "Push the draft back to the author. They'll see your feedback and can re-submit when ready.",
+    lede: "Send the letter back to its author with your feedback. They can send it again when it's ready.",
     cta: "Request changes",
     Icon: MessageSquareWarning,
     bodyLabel: "What needs to change",
-    bodyPlaceholder: "Be specific — the author will see this verbatim.",
+    bodyPlaceholder: "Be specific. The author sees this as you write it.",
     bodyRequired: true,
     showReviewerName: true,
     danger: true,

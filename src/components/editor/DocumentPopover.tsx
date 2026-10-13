@@ -17,94 +17,117 @@ const EMPLOYEE_TONES: { value: EmployeeTone; label: string; hint: string }[] = [
   { value: "tribunal_ready", label: "Tribunal-ready", hint: "Strictly procedural. ACAS EC, ET1 cover." },
 ];
 
+/** Apply a tone to a letter (employer tone or employee tone). */
+function applyTone(draft: Draft, next: Tone | EmployeeTone) {
+  const st = useDraftStore.getState();
+  const d0 = st.drafts[draft.id] ?? draft;
+  if (draft.mode === "employer") {
+    st.updateAnswers(draft.id, { ...d0.answers, tone: next });
+  } else {
+    st.updateAnswers(draft.id, { ...d0.answers, employeeTone: next });
+  }
+  useDraftStore.setState((s) => {
+    const d = s.drafts[draft.id];
+    if (!d) return s;
+    return {
+      drafts: {
+        ...s.drafts,
+        [draft.id]: {
+          ...d,
+          context:
+            draft.mode === "employer"
+              ? { ...d.context, tone: next as Tone }
+              : { ...d.context, employeeTone: next as EmployeeTone },
+          updatedAt: Date.now(),
+        },
+      },
+    };
+  });
+}
+
+/**
+ * The tones a letter can take, the current one, and a setter. Plain
+ * function (no hooks) so menus elsewhere (the phone overflow menu) can list
+ * the same choices.
+ */
+export function TONE_OPTIONS(draft: Draft): {
+  options: { value: Tone | EmployeeTone; label: string; hint: string }[];
+  current: Tone | EmployeeTone;
+  currentLabel: string;
+  setTone: (next: Tone | EmployeeTone) => void;
+} {
+  const isEmployee = draft.mode === "employee";
+  const current: Tone | EmployeeTone = isEmployee ? draft.context.employeeTone ?? "assertive" : draft.context.tone;
+  const options = isEmployee ? EMPLOYEE_TONES : EMPLOYER_TONES;
+  const currentLabel = options.find((o) => o.value === current)?.label ?? String(current ?? "");
+  return { options, current, currentLabel, setTone: (next) => applyTone(draft, next) };
+}
+
 /**
  * Unified Tone popover. Lists every tone option as a row, with the
- * Without-Prejudice toggle as a final row on employee-mode drafts —
+ * Without-Prejudice toggle as a final row on employee-mode drafts,
  * one continuous menu, no sub-sections.
  */
 export function DocumentPopover({
   draft,
   variant = "icon",
+  disabled = false,
 }: {
   draft: Draft;
   /** "icon" (default): a square icon button. "ribbon": a labelled
-   * "Tone: Formal" control for the document bar's format row. */
-  variant?: "icon" | "ribbon";
+   * "Tone: Formal" control. "tools": the letter workspace tools row,
+   * "Tone Firm" with a chevron (mock f1). */
+  variant?: "icon" | "ribbon" | "tools";
+  /** Greyed and not clickable (the letter is locked). */
+  disabled?: boolean;
 }) {
-  const updateAnswers = useDraftStore((s) => s.updateAnswers);
   const setWithoutPrejudice = useDraftStore((s) => s.setWithoutPrejudice);
 
   const isEmployee = draft.mode === "employee";
   const wpOn = Boolean(draft.context.withoutPrejudice);
-  const current = isEmployee
-    ? draft.context.employeeTone ?? "assertive"
-    : draft.context.tone;
-  const options = isEmployee ? EMPLOYEE_TONES : EMPLOYER_TONES;
-  const currentMeta = options.find((o) => o.value === current);
-
-  const setTone = (next: Tone | EmployeeTone) => {
-    if (draft.mode === "employer") {
-      updateAnswers(draft.id, { ...draft.answers, tone: next });
-      useDraftStore.setState((s) => {
-        const d = s.drafts[draft.id];
-        if (!d) return s;
-        return {
-          drafts: {
-            ...s.drafts,
-            [draft.id]: {
-              ...d,
-              context: { ...d.context, tone: next as Tone },
-              updatedAt: Date.now(),
-            },
-          },
-        };
-      });
-    } else {
-      updateAnswers(draft.id, { ...draft.answers, employeeTone: next });
-      useDraftStore.setState((s) => {
-        const d = s.drafts[draft.id];
-        if (!d) return s;
-        return {
-          drafts: {
-            ...s.drafts,
-            [draft.id]: {
-              ...d,
-              context: { ...d.context, employeeTone: next as EmployeeTone },
-              updatedAt: Date.now(),
-            },
-          },
-        };
-      });
-    }
-  };
+  const { options, current, currentLabel, setTone } = TONE_OPTIONS(draft);
+  const currentMeta = { label: currentLabel };
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        {variant === "ribbon" ? (
+      <PopoverTrigger asChild disabled={disabled}>
+        {variant === "tools" ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onMouseDown={(e) => e.preventDefault()}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2 text-[13.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] data-[state=open]:bg-[var(--ds-surface-2)] disabled:text-[var(--ds-faint)] disabled:hover:bg-transparent focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+            aria-label={`Tone: ${currentMeta.label}`}
+            title={disabled ? "The letter is locked" : "Letter tone"}
+          >
+            <span className={disabled ? "text-[var(--ds-faint)]" : "text-[var(--ds-subtle)]"}>Tone</span>
+            <span>{currentMeta.label}</span>
+            <ChevronDown className={"size-[14px] " + (disabled ? "text-[var(--ds-faint)]" : "text-[var(--ds-subtle)]")} />
+          </button>
+        ) : variant === "ribbon" ? (
           <button
             type="button"
             className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[var(--ds-r-s)] px-2 text-[13px] text-[var(--ds-body)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] data-[state=open]:bg-[var(--ds-surface-2)]"
-            aria-label={`Tone: ${currentMeta?.label ?? current}`}
+            aria-label={`Tone: ${currentMeta.label}`}
             title="Letter tone"
           >
             <Mic2 className="size-3.5 text-[var(--ds-muted)]" />
             <span className="text-[var(--ds-muted)]">Tone:</span>
-            <span className="text-[var(--ds-ink)]">{currentMeta?.label ?? current}</span>
+            <span className="text-[var(--ds-ink)]">{currentMeta.label}</span>
             <ChevronDown className="size-3 text-[var(--ds-muted)]" />
           </button>
         ) : (
           <button
             type="button"
             className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:bg-[var(--ds-line-2)] transition"
-            aria-label={`Tone: ${currentMeta?.label ?? current}`}
-            title={`Tone: ${currentMeta?.label ?? current}`}
+            aria-label={`Tone: ${currentMeta.label}`}
+            title={`Tone: ${currentMeta.label}`}
           >
             <Mic2 className="size-3.5" />
           </button>
         )}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[300px] p-1">
+      <PopoverContent align="start" className="w-[300px] p-1 duration-[160ms] data-[state=closed]:duration-[100ms]">
         <div role="radiogroup" aria-label="Letter tone">
           {options.map((o) => {
             const active = o.value === current;
