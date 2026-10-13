@@ -138,6 +138,16 @@ export type ReviewRound = {
   decisions?: Record<string, { decision: ReviewPointDecision; at: number }>;
 };
 
+/** A reviewer's suggestion waiting to go into the letter. */
+export type HeldSuggestion = {
+  sectionId: string;
+  proposedHtml: string;
+  instruction: string;
+  at: number;
+  /** busy: that part has another change waiting; missing: it is gone. */
+  reason: "busy" | "missing";
+};
+
 export type ReviewRequest = {
   id: string;
   draftId: string;
@@ -184,6 +194,12 @@ export type ReviewRequest = {
   /** trusted and expert: ids of the reviewer's points (from the server)
    *  already added to the letter here, so a sync never adds one twice. */
   remoteApplied?: string[];
+  /** trusted and expert: the reviewer's suggestions that could not go into
+   *  the letter yet, by point id: the part of the letter already had another
+   *  change waiting (a DraftHR edit), or is no longer there. They are kept
+   *  here and placed once that part is free, and until then are listed as
+   *  still to decide, never as accepted (REVIEW-X24). */
+  heldSuggestions?: Record<string, HeldSuggestion>;
   /** A copy of a request made on another device (the teammate's view). */
   importedAt?: number;
   createdAt: number;

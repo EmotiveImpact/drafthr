@@ -2,6 +2,7 @@ import type { Comment, Draft, PendingChange, Section } from "@/lib/letters/types
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { useDraftStore } from "@/lib/store";
 import { useReviewStore } from "@/lib/journey/reviews";
+import { suggestionSnapshot } from "@/components/journey/review/model";
 
 /**
  * One suggested edit as the letter workspace shows it: a margin card beside
@@ -181,7 +182,22 @@ export function recordDecision(draftId: string, edits: SuggestedEdit[], accept: 
       const ids = [edit.pending?.id, ...edit.ids].filter((id): id is string => !!id);
       // Already decided from Progress under the point's own id: one record.
       if (ids.some((id) => round.decisions?.[id])) continue;
-      if (ids.some((id) => inRound.has(id))) rs.decide(review.id, key, accept ? "accepted" : "rejected");
+      if (!ids.some((id) => inRound.has(id))) continue;
+      // Keep the point's name and place before the change leaves the text,
+      // as deciding from Progress does, so the "All decided" row still reads
+      // "Tie this to the written standard · Outcome and rationale" rather
+      // than "Suggested change · Letter" (LETTER-X38). edit.section is the
+      // section as it was, with the change still waiting in it.
+      if (!(round.points ?? []).some((p) => p.id === key)) {
+        const live = rs.requests[review.id] ?? review;
+        const rounds = live.rounds.slice();
+        const last = rounds[rounds.length - 1];
+        if (last && !(last.points ?? []).some((p) => p.id === key)) {
+          rounds[rounds.length - 1] = { ...last, points: [...(last.points ?? []), suggestionSnapshot(edit.section, key, edit.kind === "marks" ? edit.note : undefined)] };
+          rs.updateReview(review.id, { rounds });
+        }
+      }
+      rs.decide(review.id, key, accept ? "accepted" : "rejected");
     }
   }
 }

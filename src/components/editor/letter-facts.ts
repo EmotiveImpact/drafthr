@@ -250,7 +250,9 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
     }
     if (review.status === "finished" && review.finishedAt) {
       const n = review.rounds.length;
-      out.push({
+      // First in the list, so within the same millisecond it sorts below
+      // what finishing led to ("Sent to Ruth to approve" comes after it).
+      out.unshift({
         id: `${review.id}-finished`,
         at: review.finishedAt,
         title: `Review finished, ${n} round${n === 1 ? "" : "s"}`,

@@ -493,7 +493,9 @@ export function getJourney(
     const edits = pendingSuggestionGroups(draft).filter((g) => g.ids.some((id) => theirIds.has(id))).length;
     const openIds = new Set((draft.comments ?? []).filter((c) => !c.resolved).map((c) => c.id));
     const notes = (round?.commentIds ?? []).filter((id) => openIds.has(id)).length;
-    const points = edits + notes;
+    // Their suggestions not in the letter yet (held, REVIEW-X24) are still to decide.
+    const held = Object.keys(r.heldSuggestions ?? {}).filter((id) => !round?.decisions?.[id]).length;
+    const points = edits + notes + held;
     return {
       ...base,
       stage: "review",

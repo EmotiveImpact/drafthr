@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { currentRound, useReviewStore } from "@/lib/journey/reviews";
-import { acceptPoint, recallReview } from "./actions";
-import { collectReviewerWork, reviewPoints, slaHours, summariseRound, turnaroundWords } from "./model";
+import { acceptPoint, finishReview, recallReview, rejectPoint } from "./actions";
+import { applyRemotePoints, placeHeldSuggestions } from "./sync";
+import { decideEdit, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { askPlaceholder, collectReviewerWork, openPoints, reviewPoints, slaHours, summariseRound, turnaroundWords } from "./model";
 import { linkExpiryAt, linkExpiryDays } from "./trusted-api";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
@@ -16,6 +18,7 @@ function letter(): Draft {
     id: "d1",
     letterType: "final_written_warning",
     mode: "employer",
+    answers: {},
     sections: [
       { id: "s1", title: "Opening", html: "<p>You were late for persistent lateness.</p>", versions: [] },
       { id: "s2", title: "Appeal", html: "<p>You may appeal.</p>", versions: [] },
@@ -88,6 +91,40 @@ describe("the review loop, end to end in the stores", () => {
     expect(rows.map((p) => [p.title, p.state])).toEqual([["Name the Attendance Policy", "accepted"]]);
   });
 
+  it("keeps the change's name when it is accepted from its margin card (LETTER-X38)", () => {
+    const id = danaWorks();
+    const r = useReviewStore.getState().requests[id];
+    const w = collectReviewerWork(useDraftStore.getState().drafts.d1, r.reviewer, currentRound(r)!.sentAt);
+    // As the seed does: the marks and comments, no snapshot of the points.
+    useReviewStore.getState().markBack(id, { verdict: "ready-with-changes", suggestionIds: w.suggestionIds, commentIds: w.commentIds });
+    // The margin card decides through the Edits path, not the review's own.
+    const edit = suggestedEdits(useDraftStore.getState().drafts.d1).find((e) => !e.ai)!;
+    decideEdit("d1", edit, true);
+    const after = useReviewStore.getState().requests[id];
+    const rows = reviewPoints(useDraftStore.getState().drafts.d1, after).filter((p) => p.kind === "suggestion");
+    expect(rows.map((p) => [p.title, p.where, p.state])).toEqual([["Name the Attendance Policy", "Opening", "accepted"]]);
+  });
+
+  it("finishing with points left leaves the change out and resolves the comment, so nothing undecided goes on (LETTER-X37)", async () => {
+    const id = danaWorks();
+    const r = useReviewStore.getState().requests[id];
+    const w = collectReviewerWork(useDraftStore.getState().drafts.d1, r.reviewer, currentRound(r)!.sentAt);
+    useReviewStore.getState().markBack(id, { verdict: "ready-with-changes", ...w });
+    await finishReview(useReviewStore.getState().requests[id]);
+    const d = useDraftStore.getState().drafts.d1;
+    const after = useReviewStore.getState().requests[id];
+    expect(after.status).toBe("finished");
+    expect(d.sections[0].pendingChange).toBeUndefined();
+    expect(d.sections[0].html).toBe("<p>You were late for persistent lateness.</p>");
+    expect(d.comments?.[0].resolved).toBe(true);
+    const pts = reviewPoints(d, after);
+    expect(openPoints(pts)).toHaveLength(0);
+    expect(pts.map((p) => [p.title, p.state])).toEqual([
+      ["Name the Attendance Policy", "rejected"],
+      ["Name who hears it", "resolved"],
+    ]);
+  });
+
   it("withdraws the teammate's suggestion when the review is recalled, and keeps comments (REVIEW-X2)", async () => {
     const id = danaWorks();
     await recallReview(useReviewStore.getState().requests[id]);
@@ -113,5 +150,97 @@ describe("an expert's turnaround, in the same words as the marketplace (MARKET-X
     expect(slaHours("24-48h")).toBe(48);
     expect(turnaroundWords("24-48h")).toBe("48 hours");
     expect(turnaroundWords("24h")).toBe("24 hours");
+  });
+});
+
+describe("a reviewer's suggestion that can't go into the letter yet (REVIEW-X24)", () => {
+  beforeEach(() => useReviewStore.setState({ requests: {} }));
+
+  function trustedWithDraftHrEdit(): string {
+    useDraftStore.setState({ drafts: { d1: letter() } } as never);
+    // DraftHR already has an edit waiting in s1.
+    useDraftStore.getState().proposeSectionChange("d1", "s1", {
+      id: "ai_1",
+      createdAt: T0,
+      proposedHtml: "<p>You were late on eleven shifts.</p>",
+      instruction: "Be specific",
+      source: "chat",
+      diffViewMode: "inline",
+    } as never);
+    return useReviewStore.getState().createReview({
+      draftId: "d1",
+      kind: "trusted",
+      reviewer: { name: "Claire Booth", email: "claire@example.com" },
+      share: { evidence: false, hearingNotes: false },
+    } as never);
+  }
+
+  const point = {
+    id: "ex_1",
+    kind: "suggestion" as const,
+    round: 1,
+    sectionId: "s1",
+    title: "Name the Attendance Policy",
+    note: "Name the Attendance Policy",
+    proposedHtml: "<p>You were late, in breach of our Attendance Policy.</p>",
+    at: T0 + 1000,
+  };
+
+  it("is held, listed as still to decide (never Accepted), and goes in once DraftHR's edit is decided", () => {
+    const id = trustedWithDraftHrEdit();
+    applyRemotePoints(useReviewStore.getState().requests[id], [point as never]);
+    useReviewStore.getState().markBack(id, { verdict: "ready-with-changes", points: [{ id: "ex_1", kind: "suggestion", sectionId: "s1", title: point.title, where: "Opening" }] });
+    let r = useReviewStore.getState().requests[id];
+    expect(useDraftStore.getState().drafts.d1.sections[0].pendingChange?.id).toBe("ai_1");
+    let pts = reviewPoints(useDraftStore.getState().drafts.d1, r);
+    expect(pts.map((p) => [p.title, p.state, p.held])).toEqual([["Name the Attendance Policy", "open", "busy"]]);
+    // Accepting a held point does nothing (it would take DraftHR's edit).
+    acceptPoint(r, pts[0], { animate: false });
+    expect(useDraftStore.getState().drafts.d1.sections[0].pendingChange?.id).toBe("ai_1");
+    // Decide DraftHR's edit: the reviewer's goes in.
+    useDraftStore.getState().rejectSectionPending("d1", "s1");
+    expect(placeHeldSuggestions(id)).toEqual(["ex_1"]);
+    r = useReviewStore.getState().requests[id];
+    expect(useDraftStore.getState().drafts.d1.sections[0].pendingChange?.id).toBe("ex_1");
+    pts = reviewPoints(useDraftStore.getState().drafts.d1, r);
+    expect(pts.map((p) => [p.state, p.held])).toEqual([["open", undefined]]);
+    // The next sync adds it no second time.
+    expect(applyRemotePoints(r, [point as never])).toEqual([]);
+  });
+
+  it("on a part no longer in the letter, can only be left out, and never comes back", () => {
+    const id = trustedWithDraftHrEdit();
+    const gone = { ...point, sectionId: "s_gone" };
+    applyRemotePoints(useReviewStore.getState().requests[id], [gone as never]);
+    useReviewStore.getState().markBack(id, { verdict: "ready", points: [{ id: "ex_1", kind: "suggestion", sectionId: "s_gone", title: point.title }] });
+    let r = useReviewStore.getState().requests[id];
+    const [p] = reviewPoints(useDraftStore.getState().drafts.d1, r);
+    expect([p.state, p.held]).toEqual(["open", "missing"]);
+    rejectPoint(r, p);
+    r = useReviewStore.getState().requests[id];
+    // DraftHR's own edit in s1 is untouched.
+    expect(useDraftStore.getState().drafts.d1.sections[0].pendingChange?.id).toBe("ai_1");
+    expect(reviewPoints(useDraftStore.getState().drafts.d1, r).map((x) => x.state)).toEqual(["rejected"]);
+    expect(r.heldSuggestions?.ex_1).toBeUndefined();
+    expect(applyRemotePoints(r, [gone as never])).toEqual(["ex_1"]);
+    expect(useDraftStore.getState().drafts.d1.sections.some((s) => s.pendingChange?.id === "ex_1")).toBe(false);
+  });
+
+  it("an older copy without the hold still isn't shown as Accepted", () => {
+    const id = trustedWithDraftHrEdit();
+    useReviewStore.getState().updateReview(id, { remoteApplied: [] });
+    useReviewStore.getState().markBack(id, { points: [{ id: "ex_9", kind: "suggestion", sectionId: "s1", title: "Something" }] });
+    const r = useReviewStore.getState().requests[id];
+    expect(reviewPoints(useDraftStore.getState().drafts.d1, r).map((x) => [x.state, x.held])).toEqual([["open", "busy"]]);
+  });
+});
+
+describe("the example in What should they look at? (FOUNDATION-X9)", () => {
+  it("talks about a sanction only for letters that impose one", () => {
+    expect(askPlaceholder({ mode: "employer", letterType: "warning" } as Draft)).toMatch(/sanction/);
+    expect(askPlaceholder({ mode: "employee", letterType: "grievance" } as Draft)).not.toMatch(/sanction/);
+    expect(askPlaceholder({ mode: "employee", letterType: "grievance" } as Draft)).toMatch(/before I send it/);
+    expect(askPlaceholder({ mode: "employer", letterType: "offer" } as Draft)).not.toMatch(/sanction/);
+    expect(askPlaceholder({ mode: "employee", letterType: "flexible_working_request" } as Draft)).toMatch(/request/);
   });
 });

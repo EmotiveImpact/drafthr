@@ -24,7 +24,7 @@ import {
 } from "./letter-facts";
 import { disclaimerFor } from "./InlineDisclaimer";
 import { appealChipText, recipientOf, sentBannerText } from "@/components/journey/send/record";
-import { openPoints, reviewPoints } from "@/components/journey/review/model";
+import { openPoints, reviewPoints, summariseRound } from "@/components/journey/review/model";
 import { useReviewerMode } from "@/components/journey/review/review-ui";
 
 /**
@@ -326,11 +326,26 @@ function noticeFor({
     const n = r.rounds.length;
     const who = firstName(r.reviewer.name) || "The reviewer";
     const last = currentRound(r);
-    const happy = last?.verdict !== "rethink";
+    // What the reviewer said and what you did with it, so a conditional
+    // verdict ("ready once my changes are in") is never reported as happy
+    // when you left their changes out (LETTER-X37).
+    const sum = last ? summariseRound(draft, r, last) : null;
+    const outcome =
+      last?.verdict === "rethink"
+        ? `${who} asked for a rethink.`
+        : last?.verdict === "ready"
+          ? `${who} was happy for it to go as it was.`
+          : sum && sum.rejected > 0
+            ? sum.rejected === sum.changes
+              ? `You kept your own wording on ${sum.changes === 1 ? `${who}'s change` : `all ${sum.changes} of ${who}'s changes`}.`
+              : `You took ${sum.accepted} of ${who}'s changes and kept your own wording on ${sum.rejected}.`
+            : sum && sum.accepted > 0
+              ? `${who}'s ${sum.accepted === 1 ? "change is" : "changes are"} in.`
+              : `${who} was happy for it to go.`;
     const withApprover = (draft.reviewStatus ?? "draft") === "in_review" && journey.approverName && !/^workspace reviewer$/i.test(journey.approverName);
     return (
       <NoticeStrip tone="green" icon={CircleCheck} title={`Review finished after ${n} round${n === 1 ? "" : "s"}.`}>
-        {happy ? `${who} is happy for it to go.` : `${who} asked for a rethink.`}
+        {outcome}
         {withApprover ? ` It's now with ${journey.approverName} to approve.` : (draft.reviewStatus ?? "draft") === "in_review" ? " It's now with the approver." : " Send it for approval when you're ready."}
       </NoticeStrip>
     );

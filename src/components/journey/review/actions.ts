@@ -432,7 +432,9 @@ export async function messageTheReviewer(review: ReviewRequest, text: string, me
 /* ------------------------------------------------------------------ */
 
 export function acceptPoint(review: ReviewRequest, point: ReviewPoint, opts: { animate?: boolean } = {}): void {
-  if (point.kind !== "suggestion" || !point.sectionId) return;
+  // A held suggestion isn't in the letter yet: there is nothing to accept,
+  // and accepting "the change in that section" would take DraftHR's instead.
+  if (point.kind !== "suggestion" || !point.sectionId || point.held) return;
   keepSnapshot(review, point);
   useReviewStore.getState().decide(review.id, point.id, "accepted");
   // Felt motion (letter-live): the struck words fade, the new words settle
@@ -445,12 +447,28 @@ export function acceptPoint(review: ReviewRequest, point: ReviewPoint, opts: { a
 }
 
 export function rejectPoint(review: ReviewRequest, point: ReviewPoint): void {
-  if (point.kind !== "suggestion" || !point.sectionId) return;
+  if (point.kind !== "suggestion") return;
+  if (point.held || !point.sectionId) {
+    // Never in the letter: leave it out without touching the text (the
+    // section's own waiting change, if any, is someone else's).
+    keepSnapshot(review, point);
+    dropHeld(review.id, point.id);
+    useReviewStore.getState().decide(review.id, point.id, "rejected");
+    return;
+  }
   keepSnapshot(review, point);
   const edit = editFor(review.draftId, point);
   if (edit) decideEdit(review.draftId, edit, false);
   else useDraftStore.getState().rejectSectionPending(review.draftId, point.sectionId);
   useReviewStore.getState().decide(review.id, point.id, "rejected");
+}
+
+function dropHeld(reviewId: string, pointId: string): void {
+  const live = useReviewStore.getState().requests[reviewId];
+  if (!live?.heldSuggestions?.[pointId]) return;
+  const held = { ...live.heldSuggestions };
+  delete held[pointId];
+  useReviewStore.getState().updateReview(reviewId, { heldSuggestions: held });
 }
 
 /** The reviewer's edit on the page that a point stands for (its marks, else
@@ -489,7 +507,7 @@ export function resolvePoint(review: ReviewRequest, point: ReviewPoint, resolved
 export function acceptAllPoints(review: ReviewRequest): number {
   const draft = useDraftStore.getState().drafts[review.draftId];
   if (!draft) return 0;
-  const open = openPoints(reviewPoints(draft, review)).filter((p) => p.kind === "suggestion" && p.sectionId);
+  const open = openPoints(reviewPoints(draft, review)).filter((p) => p.kind === "suggestion" && p.sectionId && !p.held);
   if (open.length === 0) return 0;
   const before = draft.sections;
   for (const p of open) acceptPoint(review, p, { animate: false });
@@ -545,6 +563,30 @@ export async function sendBackToReviewer(review: ReviewRequest, question: string
   toast(`Sent back to ${firstName(review.reviewer.name) || "the reviewer"}`);
 }
 
+/** What finishing does with the points you haven't decided: the letter goes
+ *  on to approval as it is, so a suggestion still to decide is left out
+ *  (the letter keeps your wording, recorded as a decision), and a comment
+ *  still open is marked resolved. Nothing undecided is carried into a
+ *  locked letter (LETTER-X37). */
+export function closeOpenPoints(review: ReviewRequest): { leftOut: number; resolved: number } {
+  const draft = useDraftStore.getState().drafts[review.draftId];
+  if (!draft) return { leftOut: 0, resolved: 0 };
+  const open = openPoints(reviewPoints(draft, useReviewStore.getState().requests[review.id] ?? review));
+  let leftOut = 0;
+  let resolved = 0;
+  for (const p of open) {
+    const live = useReviewStore.getState().requests[review.id] ?? review;
+    if (p.kind === "suggestion") {
+      rejectPoint(live, p);
+      leftOut += 1;
+    } else {
+      resolvePoint(live, p, true);
+      resolved += 1;
+    }
+  }
+  return { leftOut, resolved };
+}
+
 /** What finishing led to: ready to send (a teammate approved in the same
  *  step), with the approver (the usual one), the approver still to pick, or
  *  held at "Send for approval" because a required check fails. */
@@ -572,6 +614,7 @@ export async function finishReview(review: ReviewRequest): Promise<FinishOutcome
       });
     }
   }
+  closeOpenPoints(review);
   useReviewStore.getState().finish(review.id);
   const fresh = useReviewStore.getState().requests[review.id];
   let outcome: FinishOutcome;

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { ReviewDialog } from "@/components/editor/ReviewDialog";
 import { useJourneyUI } from "@/components/journey/ui-store";
 import { useDraftStore } from "@/lib/store";
+import { isOwnLetter } from "@/lib/journey/stage";
 import { useBookingsStore } from "@/lib/bookings";
 import { notifyReviewRequested } from "@/lib/collab-notify";
 import { currentRound, firstName, useReviewStore, type ReviewRequest } from "@/lib/journey/reviews";
@@ -214,19 +215,27 @@ function FinishConfirm() {
   if (!draftId || !review || review.status !== "back" || left.length === 0) return null;
   const suggestions = left.filter((p) => p.kind === "suggestion").length;
   const comments = left.length - suggestions;
+  // What finishing really does (actions.ts closeOpenPoints): the letter goes
+  // to approval as it is, so nothing undecided is left in it (LETTER-X37).
   const what = [
-    suggestions > 0 ? `${plural(suggestions, "suggestion")} ${suggestions === 1 ? "stays" : "stay"} in the letter for you to accept or reject later` : "",
-    comments > 0 ? `${plural(comments, "comment")} ${comments === 1 ? "stays" : "stay"} open` : "",
+    suggestions > 0
+      ? `${suggestions === 1 ? "the suggested change is" : `the ${suggestions} suggested changes are`} left out and the letter keeps your wording`
+      : "",
+    comments > 0 ? `${comments === 1 ? "the comment is" : `the ${comments} comments are`} marked resolved` : "",
   ]
     .filter(Boolean)
     .join(", and ");
+  const next =
+    (draft && isOwnLetter(draft)) || (review.kind === "team" && review.approveInSameStep && review.approvedAt)
+      ? "The letter is then ready to send."
+      : "The letter then moves on to approval.";
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
       <DialogContent className="w-[440px] max-w-[calc(100vw-32px)] gap-0 rounded-[16px] p-6 sm:max-w-[440px]" data-testid="review-finish-confirm" onCloseAutoFocus={returnFocus}>
         <DialogTitle className="text-[20px]">Finish with {plural(left.length, "point")} left?</DialogTitle>
         <DialogDescription className="mt-2 text-[13.5px] leading-[1.5] text-[var(--ds-muted)]">
           You haven't decided on {left.length === 1 ? "one of" : `${left.length} of`}{" "}
-          {firstName(review.reviewer.name) || "the reviewer"}'s points. If you finish now, {what}. The letter moves on to approval.
+          {firstName(review.reviewer.name) || "the reviewer"}'s points. If you finish now, {what}. {next}
         </DialogDescription>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" onClick={close}>

@@ -379,6 +379,13 @@ export function YourReviewPanel(p: ReviewerPanelProps) {
             me={p.me}
             placeholder={`Message ${askerFirst}`}
             onSend={p.onMessage}
+            closed={
+              p.status === "recalled"
+                ? `Messages are closed because ${askerFirst} recalled the letter.`
+                : p.status === "finished"
+                  ? `Messages are closed because ${askerFirst} finished the review.`
+                  : undefined
+            }
           />
         )}
       </section>

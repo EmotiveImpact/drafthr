@@ -39,6 +39,7 @@ import {
 } from "./people";
 import {
   defaultDueAt,
+  askPlaceholder,
   expertSuggestion,
   fmtDayDate,
   money,
@@ -522,7 +523,7 @@ export function ReviewerPicker({
                   id={id}
                   value={ask}
                   onChange={(e) => setAsk(e.target.value)}
-                  placeholder="For example: is the sanction fair, and is anything missing before it goes out?"
+                  placeholder={askPlaceholder(draft)}
                   rows={2}
                   className="block min-h-16 w-full resize-y rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-2.5 text-[14px] leading-[1.45] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-subtle)] focus-visible:border-[var(--ds-line-strong)] focus-visible:shadow-[var(--ds-focus-ring)]"
                 />

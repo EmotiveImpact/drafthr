@@ -379,6 +379,7 @@ export function MessageThread({
   onSend,
   focusKey,
   className,
+  closed,
 }: {
   messages: ThreadMessage[];
   them: { name: string; seed?: string; avatar?: ReactNode };
@@ -388,6 +389,9 @@ export function MessageThread({
   /** Change it to focus the reply box. */
   focusKey?: number;
   className?: string;
+  /** The review has ended: the thread is read only, with this line in
+   *  place of the message box (the server takes no more messages). */
+  closed?: string;
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -431,34 +435,40 @@ export function MessageThread({
           ))}
         </ol>
       )}
-      <form
-        className={cn(
-          "flex h-[38px] items-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pr-1 pl-2.5 focus-within:border-[var(--ds-line-strong)]",
-          messages.length > 0 && "mt-2.5"
-        )}
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          data-testid="review-reply"
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-subtle)]"
-        />
-        <button
-          type="submit"
-          aria-label="Send message"
-          disabled={!text.trim()}
-          className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] disabled:text-[var(--ds-faint)]"
+      {closed ? (
+        <p className={cn("m-0 text-[12.5px] leading-[1.45] text-[var(--ds-muted)]", messages.length > 0 && "mt-2.5")} data-testid="review-thread-closed">
+          {closed}
+        </p>
+      ) : (
+        <form
+          className={cn(
+            "flex h-[38px] items-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pr-1 pl-2.5 focus-within:border-[var(--ds-line-strong)]",
+            messages.length > 0 && "mt-2.5"
+          )}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send();
+          }}
         >
-          <ArrowUp className="size-4" strokeWidth={1.8} />
-        </button>
-      </form>
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            data-testid="review-reply"
+            className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-subtle)]"
+          />
+          <button
+            type="submit"
+            aria-label="Send message"
+            disabled={!text.trim()}
+            className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] disabled:text-[var(--ds-faint)]"
+          >
+            <ArrowUp className="size-4" strokeWidth={1.8} />
+          </button>
+        </form>
+      )}
     </div>
   );
 }
@@ -524,7 +534,8 @@ export function PointsList({
 }) {
   const points = useMemo(() => reviewPoints(draft, review), [draft, review]);
   const open = openPoints(points);
-  const openSuggestions = open.filter((p) => p.kind === "suggestion").length;
+  // Accept all takes what is in the letter; a held suggestion isn't yet.
+  const openSuggestions = open.filter((p) => p.kind === "suggestion" && !p.held).length;
   const [replyTo, setReplyTo] = useState<string | null>(null);
   if (points.length === 0) {
     return (
@@ -631,6 +642,14 @@ function PointRow({
           <span className="mt-px block text-[12px] text-[var(--ds-subtle)]">
             {p.kind === "comment" ? "Comment" : (p.where ?? "Suggested change")}
           </span>
+          {/* Not in the letter yet (REVIEW-X24): say why, and what to do. */}
+          {!done && p.held && (
+            <span className="mt-1 block text-[12px] leading-[1.4] text-[var(--ds-amber-fg)]" data-testid="review-point-held">
+              {p.held === "busy"
+                ? "Not in the letter yet. Decide DraftHR's edit in this part first."
+                : "This part is no longer in the letter, so it can only be left out."}
+            </span>
+          )}
         </button>
         {done ? (
           <span
@@ -646,10 +665,10 @@ function PointRow({
           <span className="ml-auto flex shrink-0 gap-1">
             <button
               type="button"
-              disabled={!canDecide}
+              disabled={!canDecide || !!p.held}
               onClick={() => acceptPoint(review, p)}
               aria-label={`Accept: ${p.title}`}
-              title="Accept"
+              title={p.held ? "Not in the letter yet" : "Accept"}
               className={cn(btn, "border-[var(--ds-ink)] bg-[var(--ds-ink)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)]")}
             >
               <Check className="size-3.5" strokeWidth={2.2} />
@@ -658,8 +677,8 @@ function PointRow({
               type="button"
               disabled={!canDecide}
               onClick={() => rejectPoint(review, p)}
-              aria-label={`Reject: ${p.title}`}
-              title="Reject"
+              aria-label={p.held ? `Leave out: ${p.title}` : `Reject: ${p.title}`}
+              title={p.held ? "Leave out" : "Reject"}
               className={cn(btn, "border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]")}
             >
               <X className="size-3.5" strokeWidth={2} />

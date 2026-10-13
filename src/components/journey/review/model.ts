@@ -65,6 +65,68 @@ export function expertSuggestion(draft: Draft): ExpertSuggestion {
   return { suggested: false, inWords };
 }
 
+/* ------------------------------------------------------------------ */
+/*  "What should they look at?" example, per letter                    */
+/* ------------------------------------------------------------------ */
+
+const EMPLOYEE_COMPLAINT = new Set([
+  "grievance",
+  "resignation_with_grievance",
+  "resignation_constructive",
+  "constructive_dismissal_warning",
+  "pay_dispute",
+  "whistleblowing",
+  "reference_dispute",
+]);
+const EMPLOYEE_REQUEST = new Set([
+  "flexible_working_request",
+  "accommodation_request",
+  "holiday_request",
+  "subject_access_request",
+  "right_to_disconnect",
+  "sickness_notification",
+]);
+const EMPLOYEE_FORMAL = new Set(["acas_ec_notification", "tribunal_cover", "settlement_counter_offer", "redundancy_consultation_response"]);
+
+/**
+ * The example in the review dialog's "What should they look at?" box, fitted
+ * to the letter: a sanction only for letters that impose one, and an
+ * employee's own letter asks about their own case (FOUNDATION-X9).
+ */
+export function askPlaceholder(draft: Draft | undefined): string {
+  const t = String(draft?.letterType ?? "");
+  const lead = "For example: ";
+  if (draft?.mode === "employee") {
+    if (EMPLOYEE_COMPLAINT.has(t)) return `${lead}is what happened set out clearly, and is anything missing before I send it?`;
+    if (t === "appeal") return `${lead}are my grounds of appeal clear, and is anything missing before I send it?`;
+    if (EMPLOYEE_REQUEST.has(t)) return `${lead}is my request clear, and does it cover what the law asks for?`;
+    if (EMPLOYEE_FORMAL.has(t)) return `${lead}is it accurate, and does it protect my position?`;
+    if (t.startsWith("resignation")) return `${lead}is my notice right, and is anything missing before I send it?`;
+    return `${lead}is it clear and accurate, and is anything missing before I send it?`;
+  }
+  switch (t) {
+    case "warning":
+      return `${lead}is the sanction fair, and is anything missing before it goes out?`;
+    case "termination":
+      return `${lead}is the decision fair and the process followed, and is anything missing before it goes out?`;
+    case "redundancy":
+      return `${lead}is the selection and consultation explained properly, and is anything missing?`;
+    case "probation_outcome":
+      return `${lead}is the outcome fair and clearly explained, and is anything missing before it goes out?`;
+    case "offer":
+    case "contract_amendment":
+    case "promotion":
+    case "salary_increase":
+      return `${lead}are the terms clear and right, and is anything missing before it goes out?`;
+    case "settlement_cover":
+      return `${lead}are the terms and the advice wording right, and is anything missing?`;
+    case "reference":
+      return `${lead}is it accurate and fair, and could anything in it cause a problem?`;
+    default:
+      return `${lead}is it clear and fair, and is anything missing before it goes out?`;
+  }
+}
+
 /** Marketplace specialties that fit a letter type (empty: any expert fits). */
 export function specialtiesFor(draft: Draft): string[] {
   // One list for the dialog and the marketplace page, so "See all N" is the
@@ -84,6 +146,10 @@ export type ReviewPoint = ReviewPointSnapshot & {
   state: ReviewPointState;
   /** suggestion: the mark ids it left in the text. */
   markIds?: string[];
+  /** suggestion: not in the letter yet (REVIEW-X24). busy: that part has
+   *  another change waiting (decide that first); missing: that part is no
+   *  longer in the letter. Still to decide, but it can't be accepted. */
+  held?: "busy" | "missing";
 };
 
 const TAG_RE = /<(ins|del)\b[^>]*>/gi;
@@ -160,6 +226,15 @@ function suggestionTitle(section: Section): string {
   return `Change to ${section.title.toLowerCase()}`;
 }
 
+/** The snapshot a reviewer's suggestion keeps once it leaves the text (its
+ *  title and where it sits), taken from the section while the change is
+ *  still waiting in it. The same title and place the open row shows, so the
+ *  row keeps its name after you decide it anywhere (LETTER-X38). */
+export function suggestionSnapshot(section: Section, id: string, note?: string): ReviewPointSnapshot {
+  const title = note?.trim() ? clip(note) : suggestionTitle(section);
+  return { id, kind: "suggestion", sectionId: section.id, title, where: sectionTitleText(section.title) };
+}
+
 /**
  * The reviewer's points in the current round (or a given round): their
  * suggested edits (one per section, as the store keeps one pending change
@@ -189,12 +264,28 @@ export function reviewPoints(draft: Draft, review: ReviewRequest, round = curren
       markIds: pendingMarkIds(s),
     });
   }
-  // Suggestions from the snapshot no longer pending: decided (or gone).
+  // Suggestions from the snapshot no longer pending: decided, accepted
+  // (taken into the text), or never placed in the letter at all. A
+  // reviewer's suggestion from the server that never went in is held, and
+  // is still to decide, never "Accepted" (REVIEW-X24).
+  const applied = review.remoteApplied ? new Set(review.remoteApplied) : null;
   for (const p of round.points ?? []) {
     if (p.kind !== "suggestion" || seen.has(p.id)) continue;
     seen.add(p.id);
     const d = decisions[p.id]?.decision;
-    points.push({ ...p, state: d ?? "accepted" });
+    if (d) {
+      points.push({ ...p, state: d });
+      continue;
+    }
+    const held = review.heldSuggestions?.[p.id];
+    if (held) {
+      points.push({ ...p, state: "open", held: draft.sections.some((s) => s.id === held.sectionId) ? "busy" : "missing" });
+    } else if (review.kind !== "team" && applied && !applied.has(p.id)) {
+      // From the server, but never added here (an older copy with no hold).
+      points.push({ ...p, state: "open", held: draft.sections.some((s) => s.id === p.sectionId) ? "busy" : "missing" });
+    } else {
+      points.push({ ...p, state: "accepted" });
+    }
   }
   // Suggestions decided from the Edits tab or a margin card that the round
   // has no snapshot for: the decision is the record, so "You accepted 1

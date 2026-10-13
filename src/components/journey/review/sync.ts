@@ -18,6 +18,7 @@ import {
   REVIEW_VERDICT_LABELS,
   currentRound,
   useReviewStore,
+  type HeldSuggestion,
   type ReviewPointSnapshot,
   type ReviewRequest,
   type ReviewRound,
@@ -43,6 +44,9 @@ export function applyRemotePoints(review: ReviewRequest, points: RemotePoint[]):
   const applied = new Set(review.remoteApplied ?? []);
   const added: string[] = [];
   const who = review.reviewer;
+  const held: Record<string, HeldSuggestion> = { ...(review.heldSuggestions ?? {}) };
+  let heldChanged = false;
+  const lateMarks: string[] = [];
   for (const p of points) {
     const key = p.removed ? `${p.id}:removed` : p.id;
     if (applied.has(key)) continue;
@@ -55,23 +59,58 @@ export function applyRemotePoints(review: ReviewRequest, points: RemotePoint[]):
           store.deleteComment(review.draftId, p.id);
         }
       }
+      if (held[p.id]) {
+        delete held[p.id];
+        heldChanged = true;
+      }
       added.push(key);
       continue;
     }
     if (p.kind === "suggestion") {
       // Teammates' suggestions are on the letter already (no html here).
-      if (!p.proposedHtml || !section) continue;
-      if (section.pendingChange && section.pendingChange.id !== p.id) continue;
+      if (!p.proposedHtml) continue;
+      // You already decided it (left out when you finished, or dismissed
+      // while it was held): never put it back.
+      if (currentRound(review)?.decisions?.[p.id]) {
+        if (held[p.id]) {
+          delete held[p.id];
+          heldChanged = true;
+        }
+        added.push(p.id);
+        continue;
+      }
+      const proposedHtml = sanitizeLetterHtml(p.proposedHtml);
+      const instruction = p.note?.trim() || p.title?.trim() || "Suggested edit";
+      // The store keeps one waiting change per part of the letter. When that
+      // part already has another one (a DraftHR edit), or is gone, the
+      // suggestion is held, never dropped or counted as accepted, and goes
+      // in once the part is free (REVIEW-X24).
+      if (!section || (section.pendingChange && section.pendingChange.id !== p.id)) {
+        const reason = section ? "busy" : "missing";
+        const was = held[p.id];
+        if (!was || was.reason !== reason || was.proposedHtml !== proposedHtml || was.instruction !== instruction) {
+          held[p.id] = { sectionId: p.sectionId ?? "", proposedHtml, instruction, at: p.at, reason };
+          heldChanged = true;
+        }
+        continue;
+      }
       store.proposeSectionChange(review.draftId, section.id, {
         id: p.id,
         createdAt: p.at,
-        proposedHtml: sanitizeLetterHtml(p.proposedHtml),
-        instruction: p.note?.trim() || p.title?.trim() || "Suggested edit",
+        proposedHtml,
+        instruction,
         source: "review",
         authorId: who.email || who.name,
         authorName: who.name,
         diffViewMode: "inline",
       });
+      if (held[p.id]) {
+        delete held[p.id];
+        heldChanged = true;
+        // Placed after it came back: its marks belong to the round.
+        const sec = useDraftStore.getState().drafts[review.draftId]?.sections.find((x) => x.id === section.id);
+        if (review.status === "back" && sec) lateMarks.push(...markIdsIn(sec.html ?? ""));
+      }
       added.push(p.id);
     } else {
       if (!p.note?.trim()) continue;
@@ -94,10 +133,85 @@ export function applyRemotePoints(review: ReviewRequest, points: RemotePoint[]):
       added.push(p.id);
     }
   }
-  if (added.length) {
-    useReviewStore.getState().updateReview(review.id, { remoteApplied: [...(review.remoteApplied ?? []), ...added] });
+  if (added.length || heldChanged) {
+    const last = review.rounds[review.rounds.length - 1];
+    useReviewStore.getState().updateReview(review.id, {
+      ...(lateMarks.length && last
+        ? { rounds: [...review.rounds.slice(0, -1), { ...last, suggestionIds: [...new Set([...(last.suggestionIds ?? []), ...lateMarks])] }] }
+        : {}),
+      ...(added.length ? { remoteApplied: [...(review.remoteApplied ?? []), ...added] } : {}),
+      ...(heldChanged ? { heldSuggestions: held } : {}),
+    });
   }
   return added;
+}
+
+/**
+ * Put the reviewer's held suggestions into the letter once their part of it
+ * is free (you decided the DraftHR edit that was waiting there). Each one
+ * goes in once, as if it had just arrived. Returns the ids placed.
+ */
+export function placeHeldSuggestions(reviewId: string): string[] {
+  const review = useReviewStore.getState().requests[reviewId];
+  if (!review?.heldSuggestions || (review.status !== "out" && review.status !== "back")) return [];
+  const store = useDraftStore.getState();
+  const draft = store.drafts[review.draftId];
+  if (!draft) return [];
+  const held = { ...review.heldSuggestions };
+  const placed: string[] = [];
+  let changed = false;
+  for (const [id, h] of Object.entries(held)) {
+    // Already decided (left out, or dismissed): nothing to place.
+    if (currentRound(review)?.decisions?.[id]) {
+      delete held[id];
+      changed = true;
+      continue;
+    }
+    const section = draft.sections.find((s) => s.id === h.sectionId);
+    const reason: HeldSuggestion["reason"] = section ? "busy" : "missing";
+    if (!section || (section.pendingChange && section.pendingChange.id !== id)) {
+      if (h.reason !== reason) {
+        held[id] = { ...h, reason };
+        changed = true;
+      }
+      continue;
+    }
+    if (section.pendingChange?.id !== id) {
+      store.proposeSectionChange(review.draftId, section.id, {
+        id,
+        createdAt: h.at,
+        proposedHtml: h.proposedHtml,
+        instruction: h.instruction,
+        source: "review",
+        authorId: review.reviewer.email || review.reviewer.name,
+        authorName: review.reviewer.name,
+        diffViewMode: "inline",
+      });
+    }
+    delete held[id];
+    placed.push(id);
+    changed = true;
+  }
+  if (changed) {
+    // The marks it left in the text belong to the round, as if it had come
+    // back with them (the Progress line and the list count them).
+    const after = useDraftStore.getState().drafts[review.draftId];
+    const marks = placed.flatMap((pid) => {
+      const sec = after?.sections.find((s) => s.pendingChange?.id === pid);
+      return sec ? markIdsIn(sec.html ?? "") : [];
+    });
+    const last = review.rounds[review.rounds.length - 1];
+    const rounds =
+      marks.length && last
+        ? [...review.rounds.slice(0, -1), { ...last, suggestionIds: [...new Set([...(last.suggestionIds ?? []), ...marks])] }]
+        : undefined;
+    useReviewStore.getState().updateReview(review.id, {
+      ...(rounds ? { rounds } : {}),
+      heldSuggestions: held,
+      ...(placed.length ? { remoteApplied: [...(review.remoteApplied ?? []), ...placed.filter((x) => !(review.remoteApplied ?? []).includes(x))] } : {}),
+    });
+  }
+  return placed;
 }
 
 /** Bring the review in line with the server's copy. */
@@ -212,6 +326,19 @@ export function useReviewSync(review: ReviewRequest | null | undefined, enabled:
   const linkId = review?.trustedLinkId;
   const bookingId = review?.bookingId;
   const bookings = useBookingsStore((s) => s.bookings);
+  const hasHeld = !!review?.heldSuggestions && Object.keys(review.heldSuggestions).length > 0;
+  // Which parts of the letter have a change waiting, as one string, so the
+  // held suggestions are tried again the moment one is decided.
+  const waiting = useDraftStore((s) => {
+    if (!hasHeld || !review) return "";
+    const d = s.drafts[review.draftId];
+    return d ? d.sections.map((x) => `${x.id}:${x.pendingChange?.id ?? ""}`).join("|") : "";
+  });
+
+  useEffect(() => {
+    if (!enabled || !id || !hasHeld) return;
+    placeHeldSuggestions(id);
+  }, [enabled, id, hasHeld, waiting]);
 
   // Booking changes (from My bookings, the inbox or a pull) move the review on.
   useEffect(() => {
