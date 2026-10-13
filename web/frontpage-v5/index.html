@@ -448,45 +448,43 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 @media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card:last-child{grid-column:auto}}
 
 
-/* ===== Levels: three panels, one colour stepping stronger (Edem's reference, DraftHR colours) ===== */
+/* ===== Levels: three panels, stone stepping to ink (Edem's reference, DraftHR colours) ===== */
 .lv-head{display:grid;grid-template-columns:1.25fr 1fr;gap:clamp(32px,5vw,80px);align-items:start;margin-bottom:clamp(48px,6vw,80px)}
 .lv-head h2{font-size:clamp(44px,5.6vw,80px);line-height:.98;max-width:12ch;margin-top:20px}
 .lv-head .intro{color:var(--mute);font-size:clamp(17px,1.5vw,20px);line-height:1.5;padding-top:44px;max-width:40ch}
 .lv-head .intro p+p{margin-top:18px}
-.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:4px;overflow:hidden}
-.lvl{position:relative;display:flex;flex-direction:column;min-height:640px;padding:36px 32px 0;overflow:hidden;color:#16140F;
-  --ink:#16140F;--ink-2:rgba(22,20,15,.72)}
-.lvl:nth-child(1){background:#F3EDDC}
-.lvl:nth-child(2){background:#EADCB3}
-.lvl:nth-child(3){background:#DEC47A}
-.lvl .ln{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin-bottom:22px}
+.levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:6px;overflow:hidden}
+.lvl{position:relative;display:flex;flex-direction:column;min-height:620px;padding:40px 36px 0;overflow:hidden;--ink:#121210;--ink-2:rgba(18,18,16,.66);color:var(--ink)}
+.lvl:nth-child(1){background:#ECE9E2}
+.lvl:nth-child(2){background:#DCD7CC}
+.lvl:nth-child(3){background:#121210;--ink:#fff;--ink-2:rgba(255,255,255,.68)}
+.lvl .ln{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin-bottom:24px}
 .lvl h3{font-weight:600;font-size:clamp(26px,2.4vw,34px);line-height:1.05;letter-spacing:-.05em;color:var(--ink);margin-bottom:22px;max-width:14ch}
-.lvl p{font-size:16px;line-height:1.5;color:var(--ink);max-width:36ch}
+.lvl p{font-size:16px;line-height:1.55;color:var(--ink);max-width:36ch}
 .lvl p+p{margin-top:14px;color:var(--ink-2)}
-.lvl .shot{position:relative;margin-top:auto;padding-top:40px;height:340px}
-.lvl .shot img{position:absolute;left:0;top:44px;width:128%;max-width:none;border-radius:10px 10px 0 0;box-shadow:0 30px 60px -25px rgba(40,30,0,.45),0 0 0 1px rgba(0,0,0,.06)}
-.lvl:nth-child(2) .shot img{width:112%}
-.lvl .pill{position:absolute;left:-6px;top:4px;z-index:2;display:inline-flex;align-items:center;gap:10px;background:#16140F;color:#fff;border-radius:12px;padding:12px 16px;font-size:13.5px;box-shadow:0 14px 30px -12px rgba(0,0,0,.5),0 0 0 6px rgba(255,255,255,.35)}
-.lvl .pill b{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);font-weight:500}
-@media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:320px}.lvl .shot img{width:100%}}
-@media (max-width:600px){.lvl{padding:28px 22px 0}.lvl .shot{height:240px}.lvl .shot img{width:150%}}
+.lvl .shot{position:relative;margin-top:auto;height:300px;margin-right:-36px}
+.lvl .shot img{position:absolute;left:0;top:44px;width:100%;max-width:none;border-radius:12px 0 0 0;box-shadow:0 30px 60px -25px rgba(0,0,0,.35),0 0 0 1px rgba(0,0,0,.06)}
+.lvl:nth-child(3) .shot img{box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08)}
+@media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:360px}.lvl .shot img{width:min(100%,520px)}}
+@media (max-width:600px){.lvl{padding:30px 22px 0}.lvl .shot{height:280px;margin-right:-22px}}
 
 /* ===== Footer (Edem's reference): black, grouped columns, quiet bottom row ===== */
 footer{background:#000;border-top:0;padding:72px 0 0;margin-top:clamp(96px,10vw,140px);
   --white:#fff;--text:rgba(255,255,255,.92);--soft:rgba(255,255,255,.62);--mute:rgba(255,255,255,.5);--line:rgba(255,255,255,.12)}
 html[data-theme=light] footer{margin-top:clamp(96px,10vw,140px)}
 .fcols{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;align-items:start}
-.fcols .logo{opacity:.85}
+.fcols .logo{opacity:.6;font-size:17px}.fcols .logo img{width:26px;filter:grayscale(1)}
 .fgroup+.fgroup{margin-top:36px}
 .fgroup h6{font:500 14.5px/1 var(--font);color:#fff;margin-bottom:14px;letter-spacing:-.005em;text-transform:none}
 .fgroup ul{list-style:none;display:flex;flex-direction:column;gap:9px;font-size:14px;color:var(--soft)}
 .fgroup a:hover{color:#fff}
-.fbottom{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;border-top:1px solid var(--line);margin-top:96px;padding:40px 0 48px}
+.fbottom{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:40px;border-top:1px solid var(--line);margin-top:96px;padding:48px 0 64px;align-items:start}
+.fbottom .fnote{font-size:13px;max-width:22ch;color:var(--mute)}
 .fbottom h6{font:500 14px/1 var(--font);color:#fff;margin-bottom:10px;text-transform:none;letter-spacing:0}
-.fbottom p{font-size:16px;color:var(--mute)}
+.fbottom p{font-size:15px;color:var(--mute)}
 .fbottom .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#D4B144;margin-right:8px;vertical-align:1px}
 footer .mark{color:#fff;opacity:.06;margin-top:0;padding-bottom:8px}
-@media (max-width:1000px){.fcols,.fbottom{grid-template-columns:1fr 1fr}.fcols>div:first-child,.fbottom>div:first-child{grid-column:1/-1}}
+@media (max-width:1000px){.fcols,.fbottom{grid-template-columns:1fr 1fr}.fcols>div:first-child,.fbottom>div:first-child{grid-column:1/-1}.fbottom>div:first-child{order:9}}
 
 html[data-theme=light] .who-card{background:#fff;box-shadow:0 1px 0 rgba(12,12,10,.04),0 20px 40px -30px rgba(12,12,10,.25)}
 html[data-theme=light] .who-card p{color:var(--soft)}
@@ -576,15 +574,15 @@ html[data-theme=light] .who-card p{color:var(--soft)}
       <article class="lvl rv"><div class="ln">01 Draft</div><h3>Drafted in the right structure</h3>
         <p>Pick one of 35 letters for the UK or the US and answer a few plain questions.</p>
         <p>DraftHR writes it section by section. Every AI change waits as a proposal until you accept it.</p>
-        <div class="shot"><span class="pill"><b>DraftHR</b>Suggested 1 change. Accept or reject.</span><img src="img/lv-draft.jpg" alt="A letter being drafted in DraftHR, with a suggested change"></div></article>
+        <div class="shot"><img src="img/lv-draft.jpg" alt="DraftHR drafting progress: sections drafted, a suggested edit to decide and the letter health score"></div></article>
       <article class="lvl rv"><div class="ln">02 Review</div><h3>Read by someone you trust</h3>
         <p>Send it to a teammate, someone outside your organisation, or an HR expert from the marketplace.</p>
         <p>Their suggestions come back beside the words they are about. Go back and forth until it is right.</p>
-        <div class="shot"><span class="pill"><b>Review</b>Claire sent it back with 3 suggestions.</span><img src="img/lv-review.jpg" alt="Suggestions from a reviewer beside the letter"></div></article>
+        <div class="shot"><img src="img/lv-review.jpg" alt="Suggestions from a reviewer beside the letter"></div></article>
       <article class="lvl rv"><div class="ln">03 Approve and send</div><h3>Signed off, sent and on record</h3>
         <p>The right person approves it. Then download it and send it yourself, or email it from DraftHR.</p>
         <p>Appeal windows go in your calendar, and the record stays with the matter.</p>
-        <div class="shot"><span class="pill"><b>Sent</b>Approved by Priya. Appeal window set.</span><img src="img/lv-send.jpg" alt="A sent letter with its activity record and next steps"></div></article>
+        <div class="shot"><img src="img/lv-send.jpg" alt="A sent letter with its activity record and next steps"></div></article>
     </div>
   </div></section>
 
@@ -699,16 +697,15 @@ html[data-theme=light] .who-card p{color:var(--soft)}
       <div class="fgroup"><h6>Company</h6><ul><li><a href="#">About us</a></li><li><a href="#">Contact us</a></li><li><a href="#faq">Questions</a></li></ul></div>
     </div>
     <div>
-      <div class="fgroup"><h6>Legal</h6><ul><li><a href="#">Terms of service</a></li><li><a href="#">Privacy policy</a></li></ul></div>
+      <div class="fgroup"><h6>Legal</h6><ul><li><a href="#">Terms of service</a></li><li><a href="#">Privacy policy</a></li><li><a href="#">Cookie policy</a></li></ul></div>
     </div>
   </div>
   <div class="fbottom">
-    <div></div>
+    <div><p class="fnote">DraftHR drafts, you decide. Not legal advice.</p></div>
+    <div><h6>Language</h6><p>English (UK)</p></div>
     <div><h6>Jurisdictions</h6><p>United Kingdom, United States</p></div>
-    <div><h6>Before you send</h6><p><span class="dot"></span>DraftHR drafts, you decide. Not legal advice.</p></div>
     <div><h6>DraftHR</h6><p>© 2026 DraftHR</p></div>
   </div>
-  <div class="mark" aria-hidden="true">DraftHR</div>
 </div></footer>
 
 <div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
