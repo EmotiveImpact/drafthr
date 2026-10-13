@@ -36,9 +36,9 @@ export const LETTER_PRINT_CSS = `
     margin: 1in 1.1in 1.2in 1.1in;
     @bottom-center {
       content: "Page " counter(page) " of " counter(pages);
-      font-family: 'Geist', -apple-system, sans-serif;
+      font-family: var(--font-sans);
       font-size: 9pt;
-      color: #94a3b8;
+      color: var(--ds-subtle);
       padding-top: 0.4in;
     }
   }
@@ -54,9 +54,9 @@ export const LETTER_PRINT_CSS = `
     zoom: var(--paged-page-scale, 1);
   }
   .pagedjs_page {
-    background: #ffffff;
+    background: var(--ds-surface);
     box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 6px 24px rgba(0,0,0,0.06);
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ds-line);
     border-radius: 4px;
     margin: 0 !important;
   }
@@ -70,16 +70,16 @@ export const LETTER_PRINT_CSS = `
     }
   }
 
-  /* Body typography — matches the PDF render so on-screen matches print.
+  /* Body typography, Newsreader like the letter on screen. Matches the PDF render so on-screen matches print.
    * Scoped to .pagedjs_page rather than bare body so the font-family
    * doesn't leak into Radix dropdown portals (which mount under
    * document.body) and turn the rest of the UI serif while Preview is
    * mounted. */
   .pagedjs_page {
-    font-family: "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-serif);
     font-size: 11pt;
     line-height: 1.55;
-    color: #0f172a;
+    color: var(--ds-ink);
   }
   .pagedjs_page p { margin: 0 0 8pt 0; }
   .pagedjs_page h1,
@@ -88,14 +88,14 @@ export const LETTER_PRINT_CSS = `
   .pagedjs_page h2 { font-size: 14pt; font-weight: 600; }
   .pagedjs_page h3 { font-size: 12pt; font-weight: 600; }
   .pagedjs_page strong { font-weight: 600; }
-  .pagedjs_page em { color: #475569; font-style: italic; }
+  .pagedjs_page em { color: var(--ds-body); font-style: italic; }
   .pagedjs_page ul { list-style: disc; padding-left: 1.5em; margin: 6pt 0; }
   .pagedjs_page ol { list-style: decimal; padding-left: 1.5em; margin: 6pt 0; }
   .pagedjs_page li { margin: 2pt 0; overflow-wrap: anywhere; }
   .pagedjs_page table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 6pt 0; }
   .pagedjs_page th,
-  .pagedjs_page td { border: 1px solid #cbd5e1; padding: 4pt 8pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
-  .pagedjs_page hr.letter-rule { border: none; border-top: 1px solid #cbd5e1; margin: 14pt 0; }
+  .pagedjs_page td { border: 1px solid var(--ds-line-strong); padding: 4pt 8pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  .pagedjs_page hr.letter-rule { border: none; border-top: 1px solid var(--ds-line-strong); margin: 14pt 0; }
 
   /* The edit-on-page path reconstructs source HTML from paged.js clones.
    * Avoid splitting structures where paged.js rebuilds ancestor chains in a
@@ -143,15 +143,15 @@ export const LETTER_PRINT_CSS = `
   .pagedjs_page .signature-image img { max-height: 54px; }
 
   /* Figure reference token — [See Fig 1] — sits inline. */
-  .pagedjs_page .figure-ref { font-style: italic; color: #475569; }
-  .pagedjs_page .attachment-ref { font-style: italic; color: #475569; }
+  .pagedjs_page .figure-ref { font-style: italic; color: var(--ds-body); }
+  .pagedjs_page .attachment-ref { font-style: italic; color: var(--ds-body); }
 
   /* Attachments block — auto-generated at end of letter when there are
    * evidence items marked "attached". */
   .pagedjs_page .attachments-section { margin-top: 18pt; }
   .pagedjs_page .attachments-section h2 {
     font-size: 13pt;
-    border-bottom: 1px solid #cbd5e1;
+    border-bottom: 1px solid var(--ds-line-strong);
     padding-bottom: 4pt;
     margin-bottom: 6pt;
   }
@@ -162,7 +162,7 @@ export const LETTER_PRINT_CSS = `
   }
   .pagedjs_page .attachments-list li { margin: 2pt 0; }
   .pagedjs_page .attachments-list .att-num {
-    color: #94a3b8;
+    color: var(--ds-subtle);
     font-size: 9pt;
     margin-left: 6pt;
   }
@@ -171,7 +171,7 @@ export const LETTER_PRINT_CSS = `
   .pagedjs_page .figures-section { margin-top: 0; }
   .pagedjs_page .figures-section h2 {
     font-size: 14pt;
-    border-bottom: 1px solid #cbd5e1;
+    border-bottom: 1px solid var(--ds-line-strong);
     padding-bottom: 4pt;
     margin-bottom: 10pt;
   }
@@ -181,23 +181,23 @@ export const LETTER_PRINT_CSS = `
     break-inside: avoid;
   }
   .pagedjs_page .figure-item figcaption {
-    font-family: Georgia, serif;
+    font-family: var(--font-serif);
     font-size: 11pt;
     margin-bottom: 4pt;
-    color: #0f172a;
+    color: var(--ds-ink);
   }
   .pagedjs_page .figure-item img {
     max-width: 100%;
     max-height: 5in;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--ds-line);
     border-radius: 3px;
     page-break-inside: avoid;
   }
   .pagedjs_page .figure-body {
     font-size: 10.5pt;
-    color: #334155;
+    color: var(--ds-body);
     white-space: pre-wrap;
-    background: #f8fafc;
+    background: var(--ds-surface-2);
     padding: 6pt 8pt;
     border-radius: 3px;
   }
@@ -207,7 +207,7 @@ export const LETTER_PRINT_CSS = `
   .pagedjs_page .page-break-before { page-break-before: always; break-before: page; }
 
   /* Disclaimer at bottom of last letter page. */
-  .pagedjs_page .letter-disclaimer { font-size: 9.5pt; color: #64748b; }
+  .pagedjs_page .letter-disclaimer { font-size: 9.5pt; color: var(--ds-muted); }
 `;
 
 export function pagedPreviewStylesheet(): Record<string, string> {

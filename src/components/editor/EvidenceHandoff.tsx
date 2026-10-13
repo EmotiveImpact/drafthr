@@ -233,7 +233,7 @@ function UnusedBody({
         <strong>{usedCount}</strong>{" "}
         {usedCount === 1 ? "is referenced" : "are referenced"}.{" "}
         <strong>{unusedCount}</strong>{" "}
-        {unusedCount === 1 ? "is unused" : "are unused"} — these won&rsquo;t be
+        {unusedCount === 1 ? "is unused" : "are unused"}. These won&rsquo;t be
         cited anywhere in the letter:
       </p>
       <ul className="m-0 mt-2 pl-4 list-disc text-[12.5px] text-[var(--ds-muted)] space-y-0.5">
@@ -260,7 +260,7 @@ function HeavyLowCountBody({
     <p className="m-0">
       This letter type relies heavily on supporting evidence, but you only have{" "}
       <strong>{count === 0 ? "no items" : `${count} item${count === 1 ? "" : "s"}`}</strong>{" "}
-      attached. Reviewers expect at least two — usually the chronology plus
+      attached. Reviewers expect at least two, usually the chronology plus
       one or two specific incidents. Consider adding more before exporting.
     </p>
   );

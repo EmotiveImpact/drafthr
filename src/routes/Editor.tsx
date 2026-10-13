@@ -1,40 +1,38 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Editor as TiptapEditor } from "@tiptap/react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import * as Dialog from "@radix-ui/react-dialog";
+import { toast } from "sonner";
+import { ChevronLeft, Clock3, Lightbulb, Loader2, MessageSquare, MessageSquareWarning, Minimize2, Send, ShieldCheck, Sparkles, ArrowUp, X } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
+import { useProfileStore } from "@/lib/profile";
+import { meIdentity } from "@/lib/comments/identity";
+import { generateAllSections, regenerateSectionAsPending } from "@/lib/llm/draft";
+import type { Section } from "@/lib/letters/types";
+import { getLetterMeta } from "@/lib/letters/catalog";
+import { deriveEvidenceTier } from "@/lib/letters/templates";
+import { canSubmitForReview, canEditDraft } from "@/lib/permissions";
+import { todayDateOnly } from "@/lib/date-only";
+import { useIsLargeViewport } from "@/lib/use-large-viewport";
+import { toServerUuid } from "@/lib/remote-ids";
+import { runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
+import { useJourney } from "@/lib/journey/stage";
+import { firstName, useLatestReview, useReviewStore } from "@/lib/journey/reviews";
+import { useJourneyUI } from "@/components/journey/ui-store";
+import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
+import { Seal } from "@/components/journey/ui";
+import { uid, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { WizardSidebar } from "@/components/editor/WizardSidebar";
 import { EmployeeRail } from "@/components/editor/EmployeeRail";
 import { CompliancePanel } from "@/components/editor/CompliancePanel";
 import { SectionEditor } from "@/components/editor/SectionEditor";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
 import { VersionHistoryDialog } from "@/components/editor/VersionHistoryDialog";
-import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { PagedlyDocEditor } from "@/components/editor/paged-edit/PagedlyDocEditor";
 import type { PagedEditorActions } from "@/components/editor/paged-edit/types";
 import { RetryBanner, type RetryEvent } from "@/components/editor/RetryBanner";
-import { InlineSuggestionBanner } from "@/components/editor/InlineSuggestionBanner";
-import { Button } from "@/components/ui/button";
-import {
-  Loader2,
-  Sparkles,
-  ChevronLeft,
-  ShieldCheck,
-  Minimize2,
-  ArrowUp,
-  Clock3,
-  MessageSquare,
-  Send,
-  CheckCircle2,
-  MessageSquareWarning,
-  Lightbulb,
-} from "lucide-react";
-import { generateAllSections, regenerateSection } from "@/lib/llm/draft";
-import type { Section } from "@/lib/letters/types";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import { useProfileStore } from "@/lib/profile";
-import { meIdentity } from "@/lib/comments/identity";
 import { SuggestEditDialog } from "@/components/editor/SuggestEditDialog";
-import { uid } from "@/lib/utils";
 import { RefineDialog } from "@/components/editor/RefineDialog";
 import { EditDetailsSheet } from "@/components/editor/EditDetailsSheet";
 import { FloatingCommentPanel, type FloatingAnchor } from "@/components/editor/FloatingCommentPanel";
@@ -43,52 +41,76 @@ import { EvidenceDrawer } from "@/components/editor/EvidenceDrawer";
 import { SaveAsTemplateModal } from "@/components/templates/SaveAsTemplateModal";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
 import { notifyReviewRequested } from "@/lib/collab-notify";
-import { canSubmitForReview, canEditDraft } from "@/lib/permissions";
-import { MatterEmployeeChips } from "@/components/editor/MatterEmployeeChips";
 import { MobileShareDialog } from "@/components/editor/MobileShareDialog";
 import { TemplateSourceBanner } from "@/components/editor/TemplateSourceBanner";
-import {
-  EvidenceHandoff,
-  evaluateEvidenceHandoff,
-  type EvidenceHandoffReason,
-} from "@/components/editor/EvidenceHandoff";
-import { deriveEvidenceTier } from "@/lib/letters/templates";
-import * as Dialog from "@radix-ui/react-dialog";
-import { toast } from "sonner";
-import { todayDateOnly } from "@/lib/date-only";
-import { useIsLargeViewport } from "@/lib/use-large-viewport";
-import { hasPendingSuggestions, listSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
-import type { HealthActionRoute } from "@/lib/finalize/healthChecks";
-import { DocumentBar } from "@/components/editor/DocumentBar";
-import { PresenceBar } from "@/components/editor/PresenceBar";
-import { LetterSidePanel, type SidePanelTab } from "@/components/editor/LetterSidePanel";
+import { EvidenceHandoff, evaluateEvidenceHandoff, type EvidenceHandoffReason } from "@/components/editor/EvidenceHandoff";
+import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
+import { DocumentBar, type DocumentBarProps, type SavedState } from "@/components/editor/DocumentBar";
+import { LetterSidePanel } from "@/components/editor/LetterSidePanel";
 import type { EditsFilter } from "@/components/editor/EditsTab";
 import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
 import { CitationLayer } from "@/components/editor/Citations";
 import { useLetterExport } from "@/components/editor/useLetterExport";
+import { LetterNotices } from "@/components/editor/LetterNotices";
+import { ConfidentialLine, IssueDate, Letterhead } from "@/components/editor/Letterhead";
+import { MarginLayer } from "@/components/editor/MarginLayer";
+import { FindBar } from "@/components/editor/FindBar";
+import { ActivityDialog, type ActivityTab } from "@/components/editor/ActivityDialog";
+import { ChecksDialog } from "@/components/editor/LetterHealthCard";
+import { PhoneBottomBar, PhoneDisclaimer, PhoneFlagHint, PhoneStrip, PhoneTopBar, usePhoneFlag } from "@/components/editor/PhoneChrome";
+import { useLetterWorkspace, type WorkspaceHandlers } from "@/components/editor/workspace-store";
+import { planFix } from "@/components/editor/health-fix";
+import { recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
+import {
+  APPROVER_ROLE_KEY,
+  APPROVER_USER_KEY,
+  activityEvents,
+  employeeFor,
+  myName,
+  peopleOnLetter,
+  submittedEntry,
+  viewerIsApproverFor,
+} from "@/components/editor/letter-facts";
 import "@/components/editor/letter-workspace.css";
-
 
 /* ---------------------------------------------------------------------------
  * Side panel persistence: per-draft, localStorage-backed.
  *
- * `pinnedDock` drives the 14B side panel at lg+: "ai" shows the Edits /
+ * `pinnedDock` drives the side panel at lg+: "ai" shows the Edits /
  * Progress / Chat tabs, "evidence" shows the pinned evidence rail, null hides
  * the panel. It is stored under `drafthr.pinnedDock:{draftId}`, with "none"
  * recording a deliberately closed panel. With no stored value the panel opens
  * on its tabs; heavy-tier drafts open on evidence (the same auto-pin as
  * before).
- *
- * The old `scribehr-evidence-pinned:{draftId}` boolean key is no longer
- * written. Existing entries in localStorage are harmless orphans.
  * ------------------------------------------------------------------------ */
 const DOCK_KEY = (draftId: string) => `drafthr.pinnedDock:${draftId}`;
+
+/** The page is 640px wide; the margin column (256px) sits 20px to its right. */
+const PAGE_W = 640;
+const MARGIN_GAP = 20;
+const MARGIN_W = 256;
+const CANVAS_PAD_L = 48;
+
+function useIsPhone(): boolean {
+  const query = "(max-width: 767px)";
+  const [m, setM] = useState(() => (typeof window === "undefined" ? false : window.matchMedia(query).matches));
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const on = (e: MediaQueryListEvent) => setM(e.matches);
+    mql.addEventListener("change", on);
+    setM(mql.matches);
+    return () => mql.removeEventListener("change", on);
+  }, []);
+  return m;
+}
 
 export function Editor() {
   const { draftId } = useParams<{ draftId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const employees = useDraftStore((s) => s.employees);
+  const matters = useDraftStore((s) => s.matters);
   const profile = useProfileStore((s) => s.profile);
   const updateSection = useDraftStore((s) => s.updateSection);
   const updateAnswers = useDraftStore((s) => s.updateAnswers);
@@ -96,136 +118,62 @@ export function Editor() {
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
 
+  // The journey: the stage, its main action, the lock. The approver is
+  // named when the letter is sent for approval.
+  const review = useLatestReview(draftId);
+  const approverNameEarly = draft ? submittedEntry(draft)?.reviewerName : undefined;
+  const viewerIsApprover = draft ? viewerIsApproverFor(draft, profile, approverNameEarly) : false;
+  const journey = useJourney(draftId, { viewerIsApprover });
+  const isLargeViewport = useIsLargeViewport();
+  const isPhone = useIsPhone();
+  const panelTab = useJourneyUI((s) => s.panelTab);
+  const setPanelTab = useJourneyUI((s) => s.setPanelTab);
+  const justSent = useJourneyUI((s) => s.justSent);
+
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [globallyStreaming, setGloballyStreaming] = useState(false);
   const [historySection, setHistorySection] = useState<Section | null>(null);
   const [suggestSection, setSuggestSection] = useState<Section | null>(null);
   const [retryEvent, setRetryEvent] = useState<RetryEvent | null>(null);
-  // Export was moved to the Review step — no pending-export state lives in
-  // the editor anymore. Kept the type alias below for any future surface
-  // that needs to type a format string.
   const [showSidebar, setShowSidebar] = useState(false);
-  // Controls the AI drawer (Sheet overlay) — independent of pin state.
-  // When `pinnedDock === "ai"`, the AI rail mounts inline in the grid and
-  // this state is irrelevant. When `pinnedDock !== "ai"`, this controls
-  // whether the AI slides in as a Sheet overlay (scrim, full-height) on
-  // top of the content.
+  // Below lg the side panel is a bottom sheet; this opens it.
   const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
-  /**
-   * Focus mode — collapses both rails + the secondary toolbar so the writer
-   * sees only the canvas. A floating outline pill (top-left) and a floating
-   * AI composer (bottom) preserve navigation and AI access. Press Esc to
-   * exit. See public/editor-designs.html#v6 for the proposal this implements.
-   */
+  /** Focus mode: only the page. Esc leaves it. */
   const [focusMode, setFocusMode] = useState(false);
   const [refineSectionId, setRefineSectionId] = useState<string | null>(null);
   const [editDetailsOpen, setEditDetailsOpen] = useState(false);
-  // Shared open state for the InvitePopover so the mobile overflow menu
-  // can open it (its trigger is hidden below md:).
   const [invitePopoverOpen, setInvitePopoverOpen] = useState(false);
-  // Change A: Timeline is no longer a right-rail tab; it's a dialog
-  // launched from the ⋯ overflow menu.
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
-  // Change A: All-comments index dialog. Floating panel stays the
-  // primary read path; this is the "sweep them all" overview surface
-  // — symmetric with how Timeline now works.
   const [allCommentsOpen, setAllCommentsOpen] = useState(false);
   const [counselDialogOpen, setCounselDialogOpen] = useState(false);
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
-  // "Open on mobile" share dialog — shows the `/m/:draftId` link with
-  // copy / open affordances. Surfaced from the File menu.
   const [mobileShareOpen, setMobileShareOpen] = useState(false);
-  // Approval-workflow modal — null when closed, otherwise drives the
-  // submit / approve / request-changes dialog. Same shell, three kinds.
   const [reviewDialogKind, setReviewDialogKind] = useState<ReviewDialogKind | null>(null);
-  // Read-only "Review feedback" panel toggled by the changes_requested pill.
   const [reviewFeedbackOpen, setReviewFeedbackOpen] = useState(false);
-  // Unified dock state. `pinnedDock` is the single source of truth for which
-  // dock (if any) is mounted as the full-height right rail. Mutually exclusive.
-  // Lazy initialiser reads from localStorage on first mount so the correct
-  // dock is shown immediately — no flash of the unpinned state.
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityTab, setActivityTab] = useState<ActivityTab>("history");
+  const [checksOpen, setChecksOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  const [tickStep, setTickStep] = useState<number | null>(null);
   const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
     const fallback = draft?.evidenceTier === "heavy" ? "evidence" : "ai";
     if (typeof window === "undefined") return fallback;
     try {
-      const raw = window.localStorage.getItem(`drafthr.pinnedDock:${draft?.id ?? draftId}`);
+      const raw = window.localStorage.getItem(DOCK_KEY(draft?.id ?? draftId ?? ""));
       if (raw === "none") return null;
       return raw === "evidence" || raw === "ai" ? raw : fallback;
     } catch {
       return fallback;
     }
   });
-  // Side panel tab, the Edits tab filter and the mobile sheet's height.
-  const [panelTab, setPanelTab] = useState<SidePanelTab>(() =>
-    draft?.sections.some((s) => s.pendingChange || hasPendingSuggestions(s.html)) ? "edits" : "progress"
-  );
   const [editsFilter, setEditsFilter] = useState<EditsFilter>("edits");
   const [sheetSnap, setSheetSnap] = useState<"closed" | "half" | "full">("full");
-  // The Tiptap editor of the section being edited: the document bar's
-  // format row drives it.
+  // The Tiptap editor of the section being edited: the ribbon drives it.
   const [activeEditor, setActiveEditor] = useState<TiptapEditor | null>(null);
-  // The letter page, for the 8A citation markers.
-  const paperRef = useRef<HTMLElement>(null);
-  const letterExport = useLetterExport(draft);
-
-  const pinEvidence = () => setPinnedDock("evidence");
-  const unpinAll = () => setPinnedDock(null);
-
-  // Derived: evidence is pinned when pinnedDock === "evidence".
-  const evidencePinned = pinnedDock === "evidence";
-
-  /* ----------------------- Evidence drawer + pinned state -----------------
-   * Two modes:
-   *   - Floating drawer (Sheet overlay) — default for routine letters.
-   *   - Pinned rail — replaces the AI agent rail. Auto-enabled for "heavy"
-   *     evidence-tier templates (grievance, harassment, tribunal) on first
-   *     visit, persisted per draft thereafter.
-   * Pin state is localStorage-backed via DOCK_KEY(draftId).
-   * --------------------------------------------------------------------- */
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false);
-
-  // Keep localStorage in sync whenever pinnedDock changes — regardless of
-  // which helper changed it (pinEvidence, pinAI, unpinAll).
-  useEffect(() => {
-    if (!draftId) return;
-    if (typeof window === "undefined") return;
-    const key = DOCK_KEY(draftId);
-    try {
-      window.localStorage.setItem(key, pinnedDock ?? "none");
-    } catch {
-      // localStorage may be unavailable (private mode, quota) — non-fatal.
-    }
-  }, [draftId, pinnedDock]);
-
-  const handlePinnedChange = (next: boolean) => {
-    if (next) {
-      pinEvidence();
-      // Pinning also implicitly closes the floating drawer since the same
-      // surface is now permanent.
-      setEvidenceDrawerOpen(false);
-    } else {
-      // Unpinning evidence returns the side panel to its tabs.
-      setPinnedDock("ai");
-    }
-  };
-
-  // Handoff modal state — shown when the user clicks Review and a soft
-  // evidence check trips. Lives at the editor level so we can swap the
-  // CTA's onClick handler.
-  const [handoffReason, setHandoffReason] = useState<EvidenceHandoffReason | null>(
-    null
-  );
-  // Gate which AI surface mounts — exactly one at a time. Crossing
-  // the breakpoint unmounts the previous surface (its useChat persists
-  // to draft.aiChat on idle ticks) and mounts the new one (its useChat
-  // hydrates from draft.aiChat via initialMessages). Conversation
-  // survives the viewport change.
-  const isLargeViewport = useIsLargeViewport();
-
-  // Change A: comments no longer open the right rail. They pop up as a
-  // floating panel anchored to the inline highlight (existing thread)
-  // or the selection rect at click time (new thread).
+  const [handoffReason, setHandoffReason] = useState<EvidenceHandoffReason | null>(null);
   const [floatingComment, setFloatingComment] = useState<
     | {
         anchor: FloatingAnchor;
@@ -236,76 +184,50 @@ export function Editor() {
     | null
   >(null);
 
-  const commentCount = (sectionId: string) =>
-    (draft?.comments ?? []).filter((c) => c.sectionId === sectionId && !c.resolved).length;
-
-  const onFocusComment = (commentId: string) => {
-    // Find the inline mark in the canvas and open the floating thread
-    // panel anchored to it. No rail open, no scroll-jump — the user
-    // already tapped the mark so it's already in view.
-    const markEl = document.querySelector<HTMLElement>(
-      `mark[data-comment-id="${commentId}"]`
-    );
-    if (!markEl) return;
-    setFloatingComment({
-      anchor: {
-        getRect: () => markEl.getBoundingClientRect(),
-        containerEl: markEl,
-      },
-      mode: { kind: "existing", commentId },
-    });
-  };
+  // The page, the box holding the page and its margin, and the canvas.
+  const paperRef = useRef<HTMLElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const pagedEditorActionsRef = useRef<PagedEditorActions | null>(null);
+  const letterExport = useLetterExport(draft);
 
-  // Abort any in-flight AI stream when the editor unmounts (e.g. the user
-  // navigates to another draft or leaves the editor). Without this, an
-  // orphaned stream keeps calling appendToSection against the store after the
-  // component is gone, and — because the auto-generate gate uses local
-  // `globallyStreaming` which resets on remount — a remount could start a
-  // SECOND generation loop that interleaves with the orphan and corrupts
-  // section HTML. (Partial fix for E1: the remaining half is to gate
-  // auto-generate on store-derived streaming state — tracked in BUGS_AND_FIXES.)
+  const evidencePinned = pinnedDock === "evidence";
+
+  useEffect(() => {
+    if (!draftId || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(DOCK_KEY(draftId), pinnedDock ?? "none");
+    } catch {
+      // localStorage may be unavailable (private mode, quota): non-fatal.
+    }
+  }, [draftId, pinnedDock]);
+
+  // Abort any in-flight stream when the editor unmounts.
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
-  const meta = useMemo(
-    () => (draft ? getLetterMeta(draft.letterType) : null),
-    [draft]
-  );
+  const meta = useMemo(() => (draft ? getLetterMeta(draft.letterType) : null), [draft]);
 
-  // Auto-generate on first visit if all sections are empty.
+  // Auto-generate on first visit if all sections are empty. Also gated on
+  // the store's streaming state so a remount never starts a second run.
   useEffect(() => {
     if (!draft) return;
     const allEmpty = draft.sections.every((s) => s.status === "empty" && !s.html);
-    // Re-entry guard (E1b): also gate on STORE-derived streaming state, not
-    // just the local `globallyStreaming` flag. Local state resets to false on
-    // every mount, so navigating A→B→A while A's first generation is still in
-    // flight would otherwise re-enter runGenerateAll and start a second loop.
-    // The store survives remounts, so a section already "streaming" blocks the
-    // re-entry. (Strictly additive — a genuinely fresh draft has no streaming
-    // section, so first-generation is never blocked.)
     const alreadyStreaming = draft.sections.some((s) => s.status === "streaming");
     if (allEmpty && !globallyStreaming && !alreadyStreaming) {
-      void runGenerateAll();
+      void runGenerateAllRef.current?.();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
-  // On draft change, restore pinnedDock from the unified localStorage key.
-  // Falls back to tier-based default when no stored pref exists (heavy drafts
-  // auto-pin Evidence on first open). The lazy useState initialiser handles
-  // first mount; this effect handles subsequent draft changes in the same session.
-  //
-  // We compute the next value once and issue a single setPinnedDock call to
-  // avoid the double-render flicker that occurred when the previous version
-  // could queue two separate setState calls (one for the localStorage read,
-  // one for the tier fallback).
+  // A different letter: restore its dock and reset everything that carried
+  // the previous letter's ids.
   useEffect(() => {
-    if (!draftId) return;
-    if (typeof window === "undefined") return;
+    if (!draftId || typeof window === "undefined") return;
     const fallback = draft?.evidenceTier === "heavy" ? "evidence" : "ai";
     let next: "evidence" | "ai" | null = fallback;
     try {
@@ -313,19 +235,9 @@ export function Editor() {
       if (raw === "none") next = null;
       else if (raw === "evidence" || raw === "ai") next = raw;
     } catch {
-      // Fallback to the tier-based default if localStorage is unavailable.
+      // Fall back to the tier default.
     }
     setPinnedDock(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftId]);
-
-  // Reset ALL draft-scoped UI state when navigating to a different draft — the
-  // Editor instance persists across drafts (key="editor"), so anything carrying
-  // the previous draft's ids would target the wrong draft: a stale history/refine
-  // section, a floating comment that would save against draft A's section id in
-  // draft B, or a leftover "preview" viewMode driving a blank-page auto-generate
-  // on a fresh draft. (Drains the R16 stale-state class rather than per-symptom.)
-  useEffect(() => {
     setHistorySection(null);
     setActiveSectionId(null);
     setFloatingComment(null);
@@ -334,39 +246,30 @@ export function Editor() {
     setViewMode("edit");
     setActiveEditor(null);
     setEditsFilter("edits");
+    setFindOpen(false);
+    setPanelTab("progress");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
 
-  // Auto-open the floating evidence drawer when arriving with ?openEvidence=1
-  // (used by the legacy /editor/:draftId/evidence redirect so old bookmarks
-  // land on something useful). Clears the query param after consumption so a
-  // refresh doesn't re-open the drawer indefinitely.
+  // ?openEvidence=1 opens the evidence drawer (old /evidence bookmarks).
   useEffect(() => {
     if (searchParams.get("openEvidence") !== "1") return;
-    if (evidencePinned) {
-      // Pinned rail is already showing — nothing to "open". Just clear the param.
-    } else {
-      setEvidenceDrawerOpen(true);
-    }
+    if (!evidencePinned) setEvidenceDrawerOpen(true);
     const next = new URLSearchParams(searchParams);
     next.delete("openEvidence");
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, evidencePinned]);
 
-  // Jump to a specific section when arriving with ?section=<id> — the Review
-  // step's "Fix this first" CTA links here (/editor/:id?section=<id>). Focus +
-  // scroll to it in the Sections view, then clear the param so a refresh doesn't
-  // re-jump. Without this the CTA silently landed at the top of the letter.
+  // ?section=<id> scrolls to and focuses that section.
   useEffect(() => {
     const sectionId = searchParams.get("section");
     if (!sectionId) return;
-    if (!draft?.sections.some((s) => s.id === sectionId)) return; // not this draft (yet)
-    setViewMode("edit"); // scrolling targets the Sections canvas
+    if (!draft?.sections.some((s) => s.id === sectionId)) return;
+    setViewMode("edit");
     setActiveSectionId(sectionId);
     const t = setTimeout(() => {
-      document
-        .querySelector(`[data-section-id="${sectionId}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(`[data-section-id="${sectionId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
     const next = new URLSearchParams(searchParams);
     next.delete("section");
@@ -375,19 +278,31 @@ export function Editor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, draft]);
 
-  // Esc exits Focus mode. Bound at the route level so it works from any
-  // child surface (canvas, floating composer, etc.). We listen on keydown
-  // capture so Radix popovers/dialogs that swallow Escape don't beat us.
+  // ?review=expert&expert=<id>: back from the marketplace with an expert
+  // chosen. Open the reviewer picker on the expert pane with them on top.
+  useEffect(() => {
+    if (!draftId || searchParams.get("review") !== "expert") return;
+    const expertId = searchParams.get("expert") ?? undefined;
+    const dueAt = searchParams.get("due") ?? undefined;
+    setPanelTab("progress");
+    if (isLargeViewport) setPinnedDock("ai");
+    useJourneyUI.getState().openReviewPicker(draftId, { kind: "expert", expertId, dueAt, from: "marketplace" });
+    const next = new URLSearchParams(searchParams);
+    next.delete("review");
+    next.delete("expert");
+    next.delete("due");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, draftId]);
+
+  // Keyboard: Esc leaves focus mode, Ctrl or Cmd+L opens Chat, Ctrl or
+  // Cmd+F opens find in letter.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Esc exits focus mode.
       if (e.key === "Escape" && focusMode) {
         setFocusMode(false);
         return;
       }
-      // ⌘L / Ctrl+L jumps to the side panel's Chat tab and its composer
-      // (and exits focus mode). At lg+ the panel opens in the frame; below
-      // lg the bottom sheet opens.
       if ((e.metaKey || e.ctrlKey) && (e.key === "l" || e.key === "L")) {
         e.preventDefault();
         setFocusMode(false);
@@ -395,31 +310,170 @@ export function Editor() {
         if (isLargeViewport) setPinnedDock("ai");
         else setAiDrawerOpen(true);
         requestAnimationFrame(() => {
-          const el = document.querySelector<HTMLTextAreaElement>("textarea[data-ai-composer]");
-          el?.focus();
+          document.querySelector<HTMLTextAreaElement>("textarea[data-ai-composer]")?.focus();
         });
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === "f" || e.key === "F") && viewMode === "edit") {
+        e.preventDefault();
+        setFindOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusMode, isLargeViewport]);
+  }, [focusMode, isLargeViewport, viewMode, setPanelTab]);
 
-  // Imperative handle into the PagedEditor for the top File / Edit /
-  // Tools menubar. PagedEditor populates this on mount, nulls it on
-  // unmount. Read every menu click — never cache.
-  const pagedEditorActionsRef = useRef<PagedEditorActions | null>(null);
+  // "Saving", then "Saved just now", each time the letter changes.
+  const [saved, setSaved] = useState<SavedState>({ kind: "saved", at: draft?.updatedAt ?? Date.now() });
+  const lastUpdated = useRef<{ id?: string; at?: number }>({});
+  useEffect(() => {
+    if (!draft) return;
+    const prev = lastUpdated.current;
+    lastUpdated.current = { id: draft.id, at: draft.updatedAt };
+    if (prev.id !== draft.id || prev.at === undefined) {
+      setSaved({ kind: "saved", at: draft.updatedAt ?? Date.now() });
+      return;
+    }
+    if (prev.at === draft.updatedAt) return;
+    setSaved({ kind: "saving" });
+    const t = window.setTimeout(() => setSaved({ kind: "saved", at: Date.now() }), 700);
+    return () => window.clearTimeout(t);
+  }, [draft?.id, draft?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!draft || !draftId || !meta) {
+  // Does the margin column fit beside the page at this width and zoom?
+  const [canvasW, setCanvasW] = useState(0);
+  useLayoutEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const measure = () => setCanvasW(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isPhone, focusMode, viewMode]);
+  const marginFits = !isPhone && canvasW >= CANVAS_PAD_L + ((PAGE_W + MARGIN_GAP + MARGIN_W) * zoom) / 100 + 16;
+
+  // Approval lands while the sender is looking: the approver's tick, a
+  // dark toast, the tracker's Approve step draws its tick.
+  const approvingHere = useRef(false);
+  const prevStatus = useRef<{ id?: string; status?: string }>({});
+  useEffect(() => {
+    if (!draft) return;
+    const status = draft.reviewStatus ?? "draft";
+    const prev = prevStatus.current;
+    prevStatus.current = { id: draft.id, status };
+    if (prev.id !== draft.id || prev.status !== "in_review" || status !== "approved") return;
+    const approved = [...(draft.approvals ?? [])].reverse().find((a) => a.decision === "approved");
+    if (approvingHere.current) {
+      approvingHere.current = false;
+      toast.success("Approved. It can be sent now.");
+    } else {
+      toast(`${approved?.reviewerName ?? "The approver"} approved this letter`, {
+        description: "You can send it now.",
+        className: "lw-toast-dark",
+        descriptionClassName: "lw-toast-dark-desc",
+        position: "bottom-right",
+        duration: 6000,
+      });
+    }
+    setTickStep(2);
+    const t = window.setTimeout(() => setTickStep(null), 1600);
+    return () => window.clearTimeout(t);
+  }, [draft?.id, draft?.reviewStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The workspace's handlers, reachable from the stage components and the
+  // health card. Registered as stable wrappers over the latest closures.
+  const handlersRef = useRef<Partial<WorkspaceHandlers>>({});
+  useEffect(() => {
+    if (!draftId) return;
+    const call =
+      <K extends keyof WorkspaceHandlers>(k: K) =>
+      (...args: Parameters<WorkspaceHandlers[K]>) =>
+        (handlersRef.current[k] as ((...a: Parameters<WorkspaceHandlers[K]>) => void) | undefined)?.(...args);
+    const handlers: WorkspaceHandlers = {
+      openEdits: call("openEdits"),
+      openEvidence: call("openEvidence"),
+      fixCheck: call("fixCheck"),
+      regenerateAll: call("regenerateAll"),
+      stop: call("stop"),
+      openReviewDialog: call("openReviewDialog"),
+      withdraw: call("withdraw"),
+      openCounsel: call("openCounsel"),
+      openFeedback: call("openFeedback"),
+      openVersions: call("openVersions"),
+      openTimeline: call("openTimeline"),
+      openChecks: call("openChecks"),
+      ask: call("ask"),
+      jumpToSection: call("jumpToSection"),
+      finalise: call("finalise"),
+      openRounds: call("openRounds"),
+    };
+    useLetterWorkspace.getState().register(draftId, { handlers });
+    return () => useLetterWorkspace.getState().reset(draftId);
+  }, [draftId]);
+
+  const runGenerateAllRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Facts the stage components read: kept in step after every render.
+  const liveRef = useRef<{
+    draftId: string;
+    streaming: boolean;
+    canEdit: boolean;
+    counselNeeded: boolean;
+    counselReview: { reviewedBy: string; reviewedOn: string } | null;
+  } | null>(null);
+  useEffect(() => {
+    const live = liveRef.current;
+    if (!live) return;
+    const ws = useLetterWorkspace.getState();
+    if (ws.draftId !== live.draftId) return;
+    if (
+      ws.streaming !== live.streaming ||
+      ws.canEdit !== live.canEdit ||
+      ws.counselNeeded !== live.counselNeeded ||
+      ws.counselReview?.reviewedBy !== live.counselReview?.reviewedBy ||
+      ws.counselReview?.reviewedOn !== live.counselReview?.reviewedOn
+    ) {
+      ws.register(live.draftId, {
+        streaming: live.streaming,
+        canEdit: live.canEdit,
+        counselNeeded: live.counselNeeded,
+        counselReview: live.counselReview,
+      });
+    }
+  });
+
+  // The failing check the phone flags in the letter.
+  const phoneFlag = usePhoneFlag(
+    draft ?? ({ sections: [] } as unknown as NonNullable<typeof draft>),
+    paperRef,
+    Boolean(draft) && isPhone && journey?.stage === "draft" && viewMode === "edit"
+  );
+
+  const people = useMemo(() => (draft ? peopleOnLetter(draft, profile, review) : []), [draft, profile, review]);
+  const me = myName(profile);
+  const activity = useMemo(() => {
+    if (!draft || !journey) return null;
+    if (journey.stage !== "approve" && journey.stage !== "send" && journey.stage !== "sent") return null;
+    return activityEvents(draft, review, me);
+  }, [draft, journey, review, me]);
+
+  if (!draft || !draftId || !meta || !journey) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-muted-foreground">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
-          <ChevronLeft className="size-4 mr-1" /> Back home
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
+        <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
+          This letter isn't in this workspace, or it was deleted.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => nav("/")}>
+          <ChevronLeft className="size-4" /> Back home
         </Button>
       </div>
     );
   }
 
+  const storeActions = { appendToSection, setSectionStatus, pushSectionVersion, updateSection };
   const onRetry = (retryCount: number, delayMs: number, reason: string) => {
     setRetryEvent({ retryCount, delayMs, reason, startedAt: Date.now() });
     setTimeout(() => setRetryEvent(null), delayMs);
@@ -427,20 +481,12 @@ export function Editor() {
 
   const runGenerateAll = async () => {
     if (globallyStreaming) return;
-    // Store-derived re-entry guard (E1b): a section left "streaming" by an
-    // in-flight generation (e.g. from another mount of this draft) blocks a
-    // duplicate run that would interleave appendToSection writes.
     if (draft.sections.some((s) => s.status === "streaming")) return;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
     setGloballyStreaming(true);
     try {
-      await generateAllSections(
-        draft,
-        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
-        abortRef.current.signal,
-        { onRetry }
-      );
+      await generateAllSections(draft, storeActions, abortRef.current.signal, { onRetry });
     } catch (err) {
       console.error(err);
       toast.error("Generation failed", {
@@ -452,29 +498,31 @@ export function Editor() {
       setRetryEvent(null);
     }
   };
+  runGenerateAllRef.current = runGenerateAll;
 
-  const onRegenerateSection = async (section: Section, refineInstruction?: string) => {
-    if (globallyStreaming) return;
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    setGloballyStreaming(true);
+  /** Ask DraftHR to rewrite one section; the result arrives as a suggested edit. */
+  const proposeSection = async (section: Section, instruction?: string, category?: string): Promise<boolean> => {
+    const live = useDraftStore.getState().drafts[draft.id];
+    const sec = live?.sections.find((s) => s.id === section.id);
+    if (!live || !sec || sec.status === "streaming") return false;
+    if (category) useLetterWorkspace.getState().setFixCategory(sec.id, category);
+    const ctrl = new AbortController();
     try {
-      await regenerateSection(
-        draft,
-        section,
-        { appendToSection, setSectionStatus, pushSectionVersion, updateSection },
-        abortRef.current.signal,
+      await regenerateSectionAsPending(
+        live,
+        sec,
+        { ...storeActions, proposeSectionChange: useDraftStore.getState().proposeSectionChange },
+        ctrl.signal,
         { onRetry },
-        refineInstruction
+        instruction
       );
+      return true;
     } catch (err) {
       console.error(err);
-      toast.error("Regeneration failed", {
-        description: err instanceof Error ? err.message : "Unknown error. Please try again.",
+      toast.error("DraftHR could not suggest a change", {
+        description: err instanceof Error ? err.message : "Please try again.",
       });
-    } finally {
-      setGloballyStreaming(false);
-      setRetryEvent(null);
+      return false;
     }
   };
 
@@ -483,28 +531,17 @@ export function Editor() {
     setGloballyStreaming(false);
     setRetryEvent(null);
     draft.sections.forEach((s) => {
-      if (s.status === "streaming") {
-        setSectionStatus(draft.id, s.id, s.html ? "edited" : "empty");
-      }
+      if (s.status === "streaming") setSectionStatus(draft.id, s.id, s.html ? "edited" : "empty");
     });
   };
 
-  // Export logic moved to ReviewStep — that page handles format choice,
-  // counsel-review attestation, and recording the export. The editor no
-  // longer owns any export state.
-
-  // Template-source save: when isTemplateSource, the primary CTA writes
-  // the current draft's section html + answers into a CustomTemplate.
-  // First save creates the row; subsequent saves update in place via
-  // templateSourceId so we never duplicate.
+  // Template-source save: write the current sections and answers into the
+  // custom template (created on first save, updated in place after).
   const saveTemplateSource = () => {
     if (!draft.isTemplateSource) return;
     const answersRec = draft.answers as Record<string, unknown>;
     const templateName =
-      (answersRec._templateName as string | undefined)?.trim() ||
-      draft.title?.trim() ||
-      meta?.shortTitle ||
-      "Untitled template";
+      (answersRec._templateName as string | undefined)?.trim() || draft.title?.trim() || meta?.shortTitle || "Untitled template";
     const templateDescription = answersRec._templateDescription as string | undefined;
     const sectionHtml: Partial<Record<import("@/lib/letters/types").SectionId, string>> = {};
     for (const sec of draft.sections) {
@@ -512,8 +549,7 @@ export function Editor() {
       sectionHtml[sec.sectionId] = sec.html;
     }
     const store = useDraftStore.getState();
-    const myTemplatesUrl =
-      (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
+    const myTemplatesUrl = (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
     if (draft.templateSourceId && store.customTemplates[draft.templateSourceId]) {
       store.updateCustomTemplate(draft.templateSourceId, {
         name: templateName,
@@ -544,43 +580,46 @@ export function Editor() {
 
   const discardTemplateSource = () => {
     if (!draft.isTemplateSource) return;
-    const ok = window.confirm(
-      "Discard this template and any saved version? This can't be undone."
-    );
+    const ok = window.confirm("Discard this template and any saved version? This can't be undone.");
     if (!ok) return;
     const store = useDraftStore.getState();
     if (draft.templateSourceId) store.deleteCustomTemplate(draft.templateSourceId);
-    const targetUrl =
-      (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
+    const targetUrl = (draft.mode === "employer" ? "/hr/new" : "/me/new") + "?tab=mine";
     store.deleteDraft(draft.id);
     nav(targetUrl);
   };
 
   const backTo = draft.mode === "employer" ? "/hr" : draft.mode === "employee" ? "/me" : "/";
 
-  // Approval workflow — status pill + dialog gating off the workspace role.
   const reviewStatus = draft.reviewStatus ?? "draft";
   const role = profile.workspaceRole;
-  const canvasEditable = canEditDraft(role, reviewStatus);
-  const latestChangesRequest = (draft.approvals ?? [])
-    .slice()
-    .reverse()
-    .find((a) => a.decision === "changes_requested");
+  // The page can be typed into: the role allows it and the journey has not
+  // locked it (out for review, with the approver, approved, sent).
+  const canvasEditable = canEditDraft(role, reviewStatus) && !journey.locked;
+  const latestChangesRequest = (draft.approvals ?? []).slice().reverse().find((a) => a.decision === "changes_requested");
+  const matter = draft.matterId ? matters[draft.matterId] : undefined;
+  const employee = employeeFor(draft, employees);
+  const sentAt = journey.stage === "sent" ? journey.sentAt : undefined;
+  const sealAnimates = Boolean(justSent && justSent.draftId === draft.id && Date.now() - justSent.at < 4000);
 
-  const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string }) => {
+  const onReviewSubmit = (input: { reviewerName: string; body: string; reviewerUserId?: string; reviewerRole?: string }) => {
     if (!reviewDialogKind) return;
     const store = useDraftStore.getState();
     if (reviewDialogKind === "submit") {
       store.submitForReview(draft.id, input.reviewerName, input.body);
-      // Best-effort email to the picked workspace reviewer (fire-and-forget;
-      // the server validates membership + soft-fails without Resend).
-      if (input.reviewerUserId) {
-        notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
+      try {
+        if (input.reviewerUserId) window.localStorage.setItem(APPROVER_USER_KEY(draft.id), input.reviewerUserId);
+        else window.localStorage.removeItem(APPROVER_USER_KEY(draft.id));
+        if (input.reviewerRole) window.localStorage.setItem(APPROVER_ROLE_KEY(draft.id), input.reviewerRole);
+        else window.localStorage.removeItem(APPROVER_ROLE_KEY(draft.id));
+      } catch {
+        // Remind will say it cannot reach them.
       }
-      toast.success("Submitted for approval");
+      if (input.reviewerUserId) notifyReviewRequested(draft.id, input.reviewerUserId, input.body || undefined);
+      toast.success(`Sent to ${firstName(input.reviewerName) || "the approver"} to approve`);
     } else if (reviewDialogKind === "approve") {
+      approvingHere.current = true;
       store.approveDraft(draft.id, input.reviewerName, input.body);
-      toast.success("Draft approved");
     } else if (reviewDialogKind === "request_changes") {
       store.requestChanges(draft.id, input.reviewerName, input.body);
       toast("Changes requested");
@@ -592,9 +631,7 @@ export function Editor() {
     toast("Withdrawn from review");
   };
 
-  // Counsel-review status — derived from the most recent export attestation
-  // OR from a manual attestation in answers._counselReview. High-risk
-  // letters that haven't been reviewed show an amber "needs review" pill.
+  // Counsel review: the latest export attestation, or a manual one.
   const counselReview: { reviewedBy: string; reviewedOn: string } | null = (() => {
     const lastExport = (draft.exports ?? [])
       .slice()
@@ -603,86 +640,78 @@ export function Editor() {
     if (lastExport?.reviewedBy && lastExport.reviewedOn) {
       return { reviewedBy: lastExport.reviewedBy, reviewedOn: lastExport.reviewedOn };
     }
-    const manual = (draft.answers as Record<string, unknown>)._counselReview as
-      | { reviewedBy?: string; reviewedOn?: string }
-      | undefined;
-    if (manual?.reviewedBy && manual.reviewedOn) {
-      return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
-    }
+    const manual = (draft.answers as Record<string, unknown>)._counselReview as { reviewedBy?: string; reviewedOn?: string } | undefined;
+    if (manual?.reviewedBy && manual.reviewedOn) return { reviewedBy: manual.reviewedBy, reviewedOn: manual.reviewedOn };
     return null;
   })();
-
   const counselNeeded = Boolean(meta.legalReviewRequired || meta.riskClass === "high");
   const activeSection = draft.sections.find((s) => s.id === activeSectionId) ?? null;
   const unresolvedComments = (draft.comments ?? []).filter((c) => !c.resolved && !c.parentId).length;
 
-  // Everything waiting for a decision: section proposals plus single tracked
-  // changes in sections without a proposal (the same set the Edits tab lists).
-  const pendingSectionCount = draft.sections.filter((s) => s.pendingChange).length;
-  const pendingMarkCount = draft.sections
-    .filter((s) => !s.pendingChange && hasPendingSuggestions(s.html))
-    .reduce((n, s) => n + listSuggestionsHtml(s.html).filter((x) => x.status === "pending").length, 0);
-  const pendingEdits = pendingSectionCount + pendingMarkCount;
+  // Everything waiting for a decision: section proposals plus each
+  // reviewer's loose tracked changes (the set the Edits tab and the margin
+  // list, one card each).
+  const pendingEdits = suggestedEdits(draft).length;
 
   const rejectAllEdits = () => {
-    if (pendingSectionCount > 0) {
-      const snap = draft.sections
-        .filter((s) => s.pendingChange)
-        .map((s) => ({ sectionId: s.id, pending: s.pendingChange! }));
-      useDraftStore.getState().rejectAllPending(draft.id);
-      toast(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} rejected`, {
-        action: {
-          label: "Undo",
-          onClick: () => {
-            const store = useDraftStore.getState();
-            snap.forEach(({ sectionId, pending }) =>
-              store.proposeSectionChange(draft.id, sectionId, pending)
-            );
-          },
+    const sectionSnap = draft.sections.filter((s) => s.pendingChange).map((s) => ({ sectionId: s.id, pending: s.pendingChange! }));
+    const markSnap = draft.sections
+      .filter((s) => !s.pendingChange && hasPendingSuggestions(s.html))
+      .map((s) => ({ sectionId: s.id, html: s.html }));
+    const decided = suggestedEdits(draft);
+    const n = decided.length;
+    if (sectionSnap.length) useDraftStore.getState().rejectAllPending(draft.id);
+    if (markSnap.length) useDraftStore.getState().rejectAllSuggestions(draft.id);
+    if (n === 0) return;
+    recordDecision(draft.id, decided, false);
+    toast(`${n} suggested ${n === 1 ? "edit" : "edits"} rejected`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const store = useDraftStore.getState();
+          sectionSnap.forEach(({ sectionId, pending }) => store.proposeSectionChange(draft.id, sectionId, pending));
+          markSnap.forEach(({ sectionId, html }) => store.updateSection(draft.id, sectionId, html));
         },
-      });
-    }
-    if (pendingMarkCount > 0) useDraftStore.getState().rejectAllSuggestions(draft.id);
+      },
+    });
   };
 
   const acceptAllEdits = () => {
-    if (pendingSectionCount > 0) {
-      // Snapshot the CANONICAL pre-diff html so undo can restore. In inline
-      // diff mode s.html already carries the staged <ins>/<del> marks;
-      // restoring that and re-diffing it would garble the marks.
-      // pendingChange.prevHtml is the clean text captured before the diff
-      // was staged; prefer it.
-      const snap = draft.sections
-        .filter((s) => s.pendingChange)
-        .map((s) => ({
-          sectionId: s.id,
-          html: s.pendingChange!.prevHtml ?? s.html,
-          pending: s.pendingChange!,
-        }));
-      useDraftStore.getState().acceptAllPending(draft.id);
-      toast.success(`${snap.length} pending ${snap.length === 1 ? "change" : "changes"} accepted`, {
-        action: {
-          label: "Undo",
-          onClick: () => {
-            const store = useDraftStore.getState();
-            snap.forEach(({ sectionId, html, pending }) => {
-              store.updateSection(draft.id, sectionId, html);
-              store.proposeSectionChange(draft.id, sectionId, pending);
-            });
-          },
+    // Snapshot the clean pre-diff html so Undo can restore it.
+    const sectionSnap = draft.sections
+      .filter((s) => s.pendingChange)
+      .map((s) => ({ sectionId: s.id, html: s.pendingChange!.prevHtml ?? s.html, pending: s.pendingChange! }));
+    const markSnap = draft.sections
+      .filter((s) => !s.pendingChange && hasPendingSuggestions(s.html))
+      .map((s) => ({ sectionId: s.id, html: s.html }));
+    const decided = suggestedEdits(draft);
+    const n = decided.length;
+    if (sectionSnap.length) useDraftStore.getState().acceptAllPending(draft.id);
+    if (markSnap.length) useDraftStore.getState().acceptAllSuggestions(draft.id);
+    if (n === 0) return;
+    recordDecision(draft.id, decided, true);
+    toast.success(`${n} suggested ${n === 1 ? "edit" : "edits"} accepted`, {
+      action: {
+        label: "Undo",
+        onClick: () => {
+          const store = useDraftStore.getState();
+          sectionSnap.forEach(({ sectionId, html, pending }) => {
+            store.updateSection(draft.id, sectionId, html);
+            store.proposeSectionChange(draft.id, sectionId, pending);
+          });
+          markSnap.forEach(({ sectionId, html }) => store.updateSection(draft.id, sectionId, html));
         },
-      });
-    }
-    if (pendingMarkCount > 0) useDraftStore.getState().acceptAllSuggestions(draft.id);
+      },
+    });
   };
 
-  // Side panel: pinned in the frame at lg+, a bottom sheet below lg.
+  // Side panel: in the frame at lg+, a bottom sheet below lg.
   const panelOpen = isLargeViewport ? pinnedDock !== null : aiDrawerOpen;
   const togglePanel = () => {
     if (isLargeViewport) setPinnedDock((d) => (d ? null : "ai"));
     else setAiDrawerOpen((v) => !v);
   };
-  const openPanelTab = (t: SidePanelTab) => {
+  const openPanelTab = (t: "edits" | "progress" | "chat") => {
     setFocusMode(false);
     setPanelTab(t);
     if (isLargeViewport) setPinnedDock("ai");
@@ -695,45 +724,127 @@ export function Editor() {
 
   const openEvidence = () => {
     if (evidencePinned) {
-      const search = document.querySelector<HTMLInputElement>('[data-evidence-rail] input[type="search"]');
-      search?.focus();
+      document.querySelector<HTMLInputElement>('[data-evidence-rail] input[type="search"]')?.focus();
       return;
     }
     setEvidenceDrawerOpen(true);
   };
   const onEvidenceButton = () => {
     if (evidencePinned) {
-      // Focus the pinned rail: the search input, so keyboard users land
-      // somewhere useful.
-      const search = document.querySelector<HTMLInputElement>('[data-evidence-rail] input[type="search"]');
-      search?.focus();
+      document.querySelector<HTMLInputElement>('[data-evidence-rail] input[type="search"]')?.focus();
       return;
     }
     setEvidenceDrawerOpen((v) => !v);
   };
 
-  const goReview = () => {
-    // Soft check: opens the handoff card only when the soft rule trips.
-    // Light tier always proceeds; if the user hit "Don't ask for this
-    // draft", proceed silently too.
+  const openReviewPicker = () => {
+    // The picker lives with the journey panel: show Progress so it is mounted.
+    setPanelTab("progress");
+    if (isLargeViewport && pinnedDock === null) setPinnedDock("ai");
+    useJourneyUI.getState().openReviewPicker(draft.id, { from: "bar" });
+  };
+
+  /** Send for review: the evidence check first, then the reviewer picker. */
+  const sendForReview = () => {
     const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
     const reason = evaluateEvidenceHandoff(draft, tier);
     if (reason) {
       setHandoffReason(reason);
       return;
     }
-    nav(`/editor/${draft.id}/review`);
+    openReviewPicker();
   };
+  const goReviewStep = () => nav(`/editor/${draft.id}/review`);
   const goFinalise = () => nav(`/editor/${draft.id}/finalize`);
+
+  const remindApprover = async () => {
+    const approver = journey.approverName && !/^workspace reviewer$/i.test(journey.approverName) ? journey.approverName : "";
+    const first = firstName(approver) || "the approver";
+    let userId: string | null = null;
+    try {
+      userId = window.localStorage.getItem(APPROVER_USER_KEY(draft.id));
+    } catch {
+      userId = null;
+    }
+    if (!userId) {
+      toast(`Couldn't remind ${first} from here`, {
+        description: `DraftHR doesn't know which teammate ${first === "the approver" ? "it is" : `${first} is`} on this device. Message them directly.`,
+      });
+      return;
+    }
+    try {
+      const r = await fetch("/api/store/notify", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          draftId: toServerUuid(draft.id),
+          kind: "review-requested",
+          recipientUserId: userId,
+          message: `A reminder: "${draft.title?.trim() || meta.shortTitle}" is waiting for your approval.`,
+        }),
+      });
+      const body = (await r.json().catch(() => null)) as { ok?: boolean; emailed?: boolean } | null;
+      if (r.ok && body?.emailed) {
+        toast(`Reminder sent to ${first}`);
+      } else {
+        toast(`Couldn't send a reminder to ${first}`, {
+          description: r.ok ? "Email isn't set up for this workspace yet. Message them directly." : "The server didn't accept it. Try again in a moment.",
+        });
+      }
+    } catch {
+      toast(`Couldn't send a reminder to ${first}`, { description: "You seem to be offline. Try again in a moment." });
+    }
+  };
+
+  const onJourneyAction = (id: import("@/lib/journey/stage").JourneyActionId) => {
+    switch (id) {
+      case "send-for-review":
+        sendForReview();
+        return;
+      case "skip-review":
+      case "send-for-approval":
+        setReviewDialogKind("submit");
+        return;
+      case "recall":
+        if (review) {
+          useReviewStore.getState().recall(review.id);
+          toast(`Recalled from ${firstName(review.reviewer.name) || "the reviewer"}. You can edit it again.`);
+        }
+        return;
+      case "finish-review":
+        if (review) {
+          useReviewStore.getState().finish(review.id);
+          toast("Review finished. Send it for approval when you're ready.");
+        }
+        return;
+      case "approve":
+        setReviewDialogKind("approve");
+        return;
+      case "remind":
+        void remindApprover();
+        return;
+      case "export":
+      case "download":
+        return;
+    }
+  };
 
   const jumpToSection = (sectionId: string) => {
     setViewMode("edit");
     setActiveSectionId(sectionId);
     if (!isLargeViewport) setAiDrawerOpen(false);
     requestAnimationFrame(() => {
-      document
-        .querySelector(`[data-section-id="${sectionId}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.querySelector(`[data-section-id="${sectionId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const onFocusComment = (commentId: string) => {
+    const markEl = document.querySelector<HTMLElement>(`mark[data-comment-id="${commentId}"]`);
+    if (!markEl) return;
+    setFloatingComment({
+      anchor: { getRect: () => markEl.getBoundingClientRect(), containerEl: markEl },
+      mode: { kind: "existing", commentId },
     });
   };
 
@@ -762,26 +873,181 @@ export function Editor() {
     });
   };
 
-  const progressProps = {
+  /** Fix one health check: DraftHR proposes the change, or the right place opens. */
+  const fixCheck = async (check: HealthCheck) => {
+    const plan = planFix(check, draft);
+    const ws = useLetterWorkspace.getState();
+    if (plan.kind === "ai") {
+      if (!canvasEditable) return;
+      ws.setFixing(check.id, true);
+      const ok = await proposeSection(plan.section, plan.instruction, plan.category);
+      useLetterWorkspace.getState().setFixing(check.id, false);
+      if (ok && !marginFits) {
+        setEditsFilter("edits");
+        openPanelTab("edits");
+      }
+      if (ok) jumpToSection(plan.section.id);
+    } else if (plan.kind === "comments") {
+      setEditsFilter("comments");
+      openPanelTab("edits");
+    } else if (plan.kind === "evidence") {
+      openEvidence();
+    } else if (plan.kind === "settings") {
+      nav("/settings");
+    } else {
+      jumpToSection(plan.sectionId);
+    }
+  };
+
+  /** Undo "marked as sent": the letter goes back to ready to send. */
+  const undoSent = () => {
+    const st = useDraftStore.getState();
+    const d = st.drafts[draft.id];
+    if (!d) return;
+    const removed = (d.exports ?? []).filter((e) => e.format === "marked-sent");
+    if (removed.length === 0) return;
+    useDraftStore.setState({
+      drafts: {
+        ...st.drafts,
+        [d.id]: { ...d, exports: (d.exports ?? []).filter((e) => e.format !== "marked-sent"), updatedAt: Date.now() },
+      },
+    });
+    useDraftStore.getState().recordTimelineEvent(d.id, {
+      kind: "details_updated",
+      title: "Marked as not sent",
+      actorName: me || undefined,
+    });
+    useJourneyUI.getState().clearJustSent();
+    toast("Marked as not sent. The letter is ready to send again.");
+  };
+
+  /** "Message" on the out-for-review strip: the conversation with the reviewer. */
+  const openReviewThread = () => {
+    openPanelTab("progress");
+    window.setTimeout(() => {
+      const el =
+        document.querySelector<HTMLElement>('[data-slot="review-thread"] textarea, [data-review-message] textarea, [data-review-message]') ??
+        document.querySelector<HTMLElement>('[data-slot="review-thread"]');
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) el.focus();
+      }
+    }, 80);
+  };
+
+  const askDraftHR = (prompt: string) => {
+    openPanelTab("chat");
+    window.dispatchEvent(new CustomEvent("drafthr:ask", { detail: { draftId: draft.id, prompt } }));
+  };
+
+  handlersRef.current = {
+    openEdits: (filter) => {
+      setEditsFilter(filter ?? "edits");
+      openPanelTab("edits");
+    },
+    openEvidence,
+    fixCheck: (c) => void fixCheck(c),
+    regenerateAll: () => void runGenerateAll(),
+    stop: stopStreaming,
+    openReviewDialog: (kind) => setReviewDialogKind(kind),
+    withdraw: onWithdrawForReview,
+    openCounsel: () => setCounselDialogOpen(true),
+    openFeedback: () => setReviewFeedbackOpen(true),
+    openVersions: () => {
+      setActivityTab("versions");
+      setActivityOpen(true);
+    },
+    openTimeline: () => setTimelineDialogOpen(true),
+    openChecks: () => setChecksOpen(true),
+    ask: askDraftHR,
+    jumpToSection,
+    finalise: goFinalise,
+    openRounds: () => {
+      setActivityTab("rounds");
+      setActivityOpen(true);
+    },
+  };
+  // Live facts the stage components read (registered after render).
+  liveRef.current = { draftId: draft.id, streaming: globallyStreaming, canEdit: canvasEditable, counselNeeded, counselReview };
+
+  const bar: DocumentBarProps = {
+    draft,
+    journey,
+    editor: activeEditor,
+    viewMode,
+    onViewMode: setViewMode,
+    pagedActions: pagedEditorActionsRef,
+    backTo,
     streaming: globallyStreaming,
+    canEdit: canvasEditable,
     role,
+    viewerIsApprover,
     counselNeeded,
     counselReview,
+    pendingEdits,
+    commentCount: unresolvedComments,
+    activeSection,
+    people,
+    saved: journey.stage === "sent" ? { kind: "locked" } : saved,
+    zoom,
+    onZoom: setZoom,
+    panelOpen,
+    onTogglePanel: togglePanel,
+    outlineOpen: showSidebar,
+    onToggleOutline: () => setShowSidebar((s) => !s),
+    focusMode,
+    onToggleFocus: () => setFocusMode((f) => !f),
+    onOpenFind: () => {
+      setViewMode("edit");
+      setFindOpen(true);
+    },
+    evidenceActive: evidenceDrawerOpen || evidencePinned,
+    evidencePinned,
+    onEvidenceButton,
+    onOpenEvidence: openEvidence,
+    inviteOpen: invitePopoverOpen,
+    onInviteOpenChange: setInvitePopoverOpen,
+    onOpenOnMobile: () => setMobileShareOpen(true),
+    onExport: letterExport.requestExport,
+    exportBusy: letterExport.busy,
+    onFinalise: goFinalise,
+    onGoReview: goReviewStep,
+    onJourneyAction,
+    onSaveTemplate: saveTemplateSource,
+    onSaveAsTemplate: () => setSaveAsTemplateOpen(true),
+    onOpenEdits: () => {
+      setEditsFilter("edits");
+      openPanelTab("edits");
+    },
+    onAcceptAll: acceptAllEdits,
+    onRejectAll: rejectAllEdits,
+    onOpenComments: () => setAllCommentsOpen(true),
+    onComment: commentOnSelection,
+    onOpenActivity: () => {
+      setActivityTab("history");
+      setActivityOpen(true);
+    },
+    onOpenTimeline: () => setTimelineDialogOpen(true),
+    onShowSectionHistory: (s) => setHistorySection(s),
     onRegenerateAll: () => void runGenerateAll(),
     onStop: stopStreaming,
-    onOpenEvidence: openEvidence,
-    onFixRoute: (route: HealthActionRoute | undefined) => {
-      if (route === "evidence") openEvidence();
-      else if (route === "settings") nav("/settings");
-      else if (!isLargeViewport) setAiDrawerOpen(false);
+    onRefineSection: () => {
+      if (activeSectionId) setRefineSectionId(activeSectionId);
     },
-    onGoReview: goReview,
-    onFinalise: goFinalise,
-    onReviewAction: (kind: ReviewDialogKind) => setReviewDialogKind(kind),
+    onEditDetails: () => setEditDetailsOpen(true),
+    onReviewAction: (kind) => setReviewDialogKind(kind),
     onWithdraw: onWithdrawForReview,
     onOpenFeedback: () => setReviewFeedbackOpen(true),
     onOpenCounsel: () => setCounselDialogOpen(true),
+    onNavigate: (to) => nav(to),
   };
+
+  // Reviewers on a locked letter can still suggest edits, per section.
+  const reviewOutToMe = review?.status === "out" && Boolean(me) && review.reviewer.name.trim().toLowerCase() === me.toLowerCase();
+  const canSuggest =
+    !canvasEditable &&
+    role !== "viewer" &&
+    ((reviewStatus === "in_review" && (role === "reviewer" || viewerIsApprover)) || (review?.status === "out" && (role === "reviewer" || reviewOutToMe)));
 
   const sidePanel = (onClose: () => void, closeLabel: string) => (
     <LetterSidePanel
@@ -796,332 +1062,300 @@ export function Editor() {
       onAcceptAll={acceptAllEdits}
       onRejectAll={rejectAllEdits}
       onJumpToSection={jumpToSection}
-      progress={progressProps}
+      progress={{
+        journey,
+        viewerIsApprover,
+        tickStep,
+        role,
+        counselNeeded,
+        counselReview,
+        canFix: canvasEditable,
+        onOpenEvidence: openEvidence,
+        onOpenCounsel: () => setCounselDialogOpen(true),
+        onGoReview: goReviewStep,
+        onFinalise: goFinalise,
+      }}
       onOpenEvidence={openEvidence}
       onClose={onClose}
       closeLabel={closeLabel}
     />
   );
 
+  // The journey panel (Progress) hosts the review dialogs. When it is not
+  // on screen, host them here so the picker still opens.
+  const journeyPanelShown =
+    panelTab === "progress" && (isLargeViewport ? pinnedDock === "ai" && !focusMode : true);
+
+  const pageInner = (
+    <>
+      {sentAt && <Seal date={sentAt} animate={sealAnimates} className="z-10" />}
+      <Letterhead draft={draft} fallbackName={profile.employer?.legalName} fallbackAddress={profile.employer?.address} />
+      <IssueDate draft={draft} className="m-0 mb-2 font-sans text-[13px] text-[var(--ds-muted)] md:hidden" />
+      <ConfidentialLine draft={draft} />
+      {draft.sections.map((section) => (
+        <div key={section.id} className="group/sec relative">
+          <SectionEditor
+            draft={draft}
+            section={section}
+            variant="paper"
+            hideToolbar
+            onEditorFocus={setActiveEditor}
+            onEditorReady={(ed) => setActiveEditor((cur) => (cur && !cur.isDestroyed ? cur : ed))}
+            isStreaming={section.status === "streaming"}
+            active={activeSectionId === section.id}
+            onFocus={() => setActiveSectionId(section.id)}
+            onChange={(html) => updateSection(draft.id, section.id, html)}
+            onRegenerate={(instr) => void proposeSection(section, instr)}
+            onClear={() => updateSection(draft.id, section.id, "")}
+            onShowHistory={() => setHistorySection(section)}
+            onOpenCommentsThread={() => {
+              const sectionEl = document.querySelector<HTMLElement>(`[data-section-id="${section.id}"]`);
+              if (!sectionEl) return;
+              setFloatingComment({
+                anchor: { getRect: () => sectionEl.getBoundingClientRect(), containerEl: sectionEl },
+                mode: { kind: "new", sectionId: section.id },
+              });
+            }}
+            onOpenEvidenceBinder={() => {
+              setActiveSectionId(section.id);
+              nav(`/editor/${draft.id}/evidence?section=${section.id}`);
+            }}
+            onFocusComment={onFocusComment}
+            commentCount={(draft.comments ?? []).filter((c) => c.sectionId === section.id && !c.resolved).length}
+            onAcceptPending={() => useDraftStore.getState().acceptSectionPending(draft.id, section.id)}
+            onRejectPending={() => useDraftStore.getState().rejectSectionPending(draft.id, section.id)}
+            editable={canvasEditable}
+          />
+          {section.sectionId === "recipient_block" && <IssueDate draft={draft} className="m-0 mb-3 max-md:hidden" />}
+          {phoneFlag && phoneFlag.sectionId === section.id && <PhoneFlagHint target={phoneFlag} onFix={(c) => void fixCheck(c)} />}
+          {canSuggest && !section.pendingChange && section.status !== "streaming" && (
+            // Shown when the paragraph is hovered or focused (always on touch
+            // screens), so a reviewer's page reads as a letter, not a form.
+            <div className="pointer-events-none absolute -bottom-3 right-0 z-[2] flex justify-end opacity-0 transition-opacity duration-[120ms] group-hover/sec:pointer-events-auto group-hover/sec:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:-mt-1 [@media(hover:none)]:mb-3 [@media(hover:none)]:opacity-100">
+              <button
+                type="button"
+                onClick={() => setSuggestSection(section)}
+                className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-[var(--ds-surface)] px-2.5 font-sans text-[12.5px] font-medium text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                <Lightbulb className="size-3.5" />
+                Suggest an edit
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+      {globallyStreaming && (
+        <p className="mt-4 flex items-center gap-2 font-sans text-[12.5px] text-[var(--ds-muted)]">
+          <Loader2 className="size-3 animate-spin" />
+          Streaming sections from the model…
+        </p>
+      )}
+    </>
+  );
+
   return (
-    <div className="flex flex-1 min-h-0 flex-col bg-[var(--ds-canvas)] lg:p-2">
-      {/* 14B letter workspace: one framed surface holding the 11A document
-       * bar, the letter on its page and (lg+) the side panel. Below lg the
-       * side panel is a bottom sheet opened from the floating pills. */}
-      <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[var(--ds-surface)] lg:rounded-[var(--ds-r-l)] lg:border lg:border-[var(--ds-line)] lg:shadow-[var(--ds-shadow-s)]">
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          {!focusMode && (
-            <DocumentBar
-              draft={draft}
-              editor={activeEditor}
-              viewMode={viewMode}
-              onViewMode={setViewMode}
-              pagedActions={pagedEditorActionsRef}
-              backTo={backTo}
-              streaming={globallyStreaming}
-              canEdit={canvasEditable}
-              role={role}
-              counselNeeded={counselNeeded}
-              counselReview={counselReview}
-              pendingEdits={pendingEdits}
-              commentCount={unresolvedComments}
-              activeSection={activeSection}
-              panelOpen={panelOpen}
-              onTogglePanel={togglePanel}
-              outlineOpen={showSidebar}
-              onToggleOutline={() => setShowSidebar((s) => !s)}
-              focusMode={focusMode}
-              onToggleFocus={() => setFocusMode((f) => !f)}
-              evidenceActive={evidenceDrawerOpen || evidencePinned}
-              evidencePinned={evidencePinned}
-              onEvidenceButton={onEvidenceButton}
-              onOpenEvidence={openEvidence}
-              inviteOpen={invitePopoverOpen}
-              onInviteOpenChange={setInvitePopoverOpen}
-              onOpenOnMobile={() => setMobileShareOpen(true)}
-              onExport={letterExport.requestExport}
-              exportBusy={letterExport.busy}
-              onFinalise={goFinalise}
-              onGoReview={goReview}
-              onSaveTemplate={saveTemplateSource}
-              onSaveAsTemplate={() => setSaveAsTemplateOpen(true)}
-              onOpenEdits={() => {
-                setEditsFilter("edits");
-                openPanelTab("edits");
-              }}
-              onAcceptAll={acceptAllEdits}
-              onRejectAll={rejectAllEdits}
-              onOpenComments={() => setAllCommentsOpen(true)}
-              onComment={commentOnSelection}
-              onOpenTimeline={() => setTimelineDialogOpen(true)}
-              onShowSectionHistory={(s) => setHistorySection(s)}
-              onRegenerateAll={() => void runGenerateAll()}
-              onStop={stopStreaming}
-              onRefineSection={() => {
-                if (activeSectionId) setRefineSectionId(activeSectionId);
-              }}
-              onEditDetails={() => setEditDetailsOpen(true)}
-              onReviewAction={(kind) => setReviewDialogKind(kind)}
-              onWithdraw={onWithdrawForReview}
-              onOpenFeedback={() => setReviewFeedbackOpen(true)}
-              onOpenCounsel={() => setCounselDialogOpen(true)}
-              onNavigate={(to) => nav(to)}
-            />
-          )}
-
-          {/* Focus-mode overlays. The outline pill (top-left) keeps the writer
-           * oriented and exits focus mode; the AI bar (bottom) jumps back to
-           * the Chat tab and its composer. Esc also exits. */}
-          {focusMode && (
-            <>
-              <button
-                type="button"
-                onClick={() => setFocusMode(false)}
-                className="absolute left-3 top-3 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-1.5 text-[12px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition hover:bg-[var(--ds-surface-2)]"
-                title="Exit focus mode (Esc)"
-                aria-label="Exit focus mode"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <Minimize2 className="size-3" />
-                  <span className="ds-mono font-medium text-[var(--ds-body)]">
-                    {(() => {
-                      const idx = activeSectionId
-                        ? draft.sections.findIndex((s) => s.id === activeSectionId)
-                        : -1;
-                      const n = idx >= 0 ? idx + 1 : 1;
-                      return `${n} / ${draft.sections.length}`;
-                    })()}
-                  </span>
-                </span>
-                <span className="max-w-[180px] truncate">{(activeSection ?? draft.sections[0])?.title ?? "Letter"}</span>
-                <span className="ds-mono ml-1 rounded bg-[var(--ds-surface-2)] px-1.5 py-0.5 text-[10.5px] text-[var(--ds-muted)]">
-                  Esc
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  openPanelTab("chat");
-                  focusComposer();
-                }}
-                className="absolute bottom-6 left-1/2 z-30 inline-flex w-[min(560px,calc(100%-2rem))] -translate-x-1/2 items-center gap-2 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-2.5 text-[13px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-m)] transition hover:border-[var(--ds-line-strong)]"
-                title="Open AI agent (⌘L)"
-                aria-label="Open AI agent"
-              >
-                <Sparkles className="size-3.5 shrink-0" />
-                <span className="flex-1 truncate text-left">Ask DraftHR to rewrite, tighten or add a clause…</span>
-                <span className="ds-mono hidden rounded bg-[var(--ds-surface-2)] px-1.5 py-0.5 text-[10.5px] sm:inline">⌘L</span>
-                <span className="grid size-7 shrink-0 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)]">
-                  <ArrowUp className="size-3.5" />
-                </span>
-              </button>
-            </>
-          )}
-
-          <div className="relative min-h-0 flex-1 overflow-auto bg-[var(--ds-canvas)]">
-            {viewMode === "preview" ? (
-              // The Page view IS the pagedly editor (editable). Read-only when
-              // the draft can't be edited (review lock) OR while any AI
-              // generation is streaming: pagedly holds a mount-time snapshot,
-              // so editing on the page mid-stream would fight the store.
-              <PagedlyDocEditor
-                draft={draft}
-                readOnly={
-                  !canvasEditable ||
-                  globallyStreaming ||
-                  draft.sections.some((s) => s.status === "streaming")
-                }
-                actionsRef={pagedEditorActionsRef}
-              />
-            ) : (
-              <div className="mx-auto w-full max-w-[816px] pb-28 sm:px-6 sm:pt-3 lg:pb-16">
-                {/* 12B presence: who has access, floating over the page. */}
-                {!focusMode && (
-                  <div className="pointer-events-none sticky top-3 z-20 flex justify-center px-3 sm:justify-end sm:px-0">
-                    <div className="pointer-events-auto min-w-0 max-w-full">
-                      <PresenceBar draft={draft} profile={profile} onManage={() => setInvitePopoverOpen(true)} />
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-3 space-y-2 px-3 empty:hidden sm:px-0">
-                  {/* Matter breadcrumb + linked-employee chip. */}
-                  {!draft.isTemplateSource && <MatterEmployeeChips draft={draft} />}
-                  {draft.isTemplateSource && (
-                    <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />
-                  )}
-                  <InlineDisclaimer draft={draft} />
-                  {/* Read-only-during-review banner: keeps the lock state
-                   * discoverable rather than mysterious. */}
-                  {!canvasEditable && reviewStatus === "in_review" && (
-                    <div className="flex items-center gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-amber-bg)] px-3 py-2 text-[12.5px] text-[var(--ds-ink)]">
-                      <Send className="size-3.5 shrink-0 text-[var(--ds-amber-fg)]" />
-                      <span className="leading-snug">
-                        Read-only during review. Comment or decide on the Review step; the drafter edits once a decision is made.
-                      </span>
-                    </div>
-                  )}
-                  {!canvasEditable && reviewStatus === "approved" && (
-                    <div className="flex items-center gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-green-bg)] px-3 py-2 text-[12.5px] text-[var(--ds-ink)]">
-                      <CheckCircle2 className="size-3.5 shrink-0 text-[var(--ds-green-fg)]" />
-                      <span className="leading-snug">Approved. The letter is locked and clear to export.</span>
-                    </div>
-                  )}
-                  <DeadlineBanner draft={draft} />
-                  <RetryBanner event={retryEvent} />
-                  {/* Inline-diff banner: N pending tracked changes with Accept
-                   * all / Reject all and the inline / card toggle. Returns
-                   * null when no section has pending suggestions. */}
-                  <InlineSuggestionBanner draft={draft} />
-                </div>
-
-                {/* The letter, on one white page. */}
-                <article
-                  ref={paperRef}
-                  aria-label="Letter"
-                  className="lw-paper mt-3 bg-[var(--ds-surface)] px-4 py-6 sm:rounded-[var(--ds-r-s)] sm:border sm:border-[var(--ds-line)] sm:px-12 sm:py-12 sm:shadow-[var(--ds-shadow-s)] lg:px-16"
-                >
-                  {draft.sections.map((section) => (
-                    <div key={section.id}>
-                      <SectionEditor
-                        draft={draft}
-                        section={section}
-                        variant="paper"
-                        hideToolbar
-                        onEditorFocus={setActiveEditor}
-                        isStreaming={section.status === "streaming"}
-                        active={activeSectionId === section.id}
-                        onFocus={() => setActiveSectionId(section.id)}
-                        onChange={(html) => updateSection(draft.id, section.id, html)}
-                        onRegenerate={(instr) => onRegenerateSection(section, instr)}
-                        onClear={() => updateSection(draft.id, section.id, "")}
-                        onShowHistory={() => setHistorySection(section)}
-                        onOpenCommentsThread={() => {
-                          // Without an inline anchor, pop the floating panel at
-                          // the section's rect, as a new thread for this section.
-                          const sectionEl = document.querySelector<HTMLElement>(
-                            `[data-section-id="${section.id}"]`
-                          );
-                          if (!sectionEl) return;
-                          setFloatingComment({
-                            anchor: {
-                              getRect: () => sectionEl.getBoundingClientRect(),
-                              containerEl: sectionEl,
-                            },
-                            mode: { kind: "new", sectionId: section.id },
-                          });
-                        }}
-                        onOpenEvidenceBinder={() => {
-                          setActiveSectionId(section.id);
-                          nav(`/editor/${draft.id}/evidence?section=${section.id}`);
-                        }}
-                        onFocusComment={onFocusComment}
-                        commentCount={commentCount(section.id)}
-                        onAcceptPending={() =>
-                          useDraftStore.getState().acceptSectionPending(draft.id, section.id)
-                        }
-                        onRejectPending={() =>
-                          useDraftStore.getState().rejectSectionPending(draft.id, section.id)
-                        }
-                        editable={canvasEditable}
-                      />
-                      {/* Reviewer "Suggest an edit": only when the canvas is
-                       * locked for this reviewer during review and the section
-                       * isn't already carrying a pending suggestion. */}
-                      {!canvasEditable && reviewStatus === "in_review" && !section.pendingChange && section.status !== "streaming" && (
-                        <div className="-mt-1 mb-3 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => setSuggestSection(section)}
-                            className="inline-flex h-7 items-center gap-1.5 rounded-[var(--ds-r-s)] px-2.5 font-sans text-[12px] font-medium text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
-                          >
-                            <Lightbulb className="size-3" />
-                            Suggest an edit
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  {globallyStreaming && (
-                    <p className="mt-4 flex items-center gap-2 font-sans text-[12.5px] text-[var(--ds-muted)]">
-                      <Loader2 className="size-3 animate-spin" />
-                      Streaming sections from the model…
-                    </p>
-                  )}
-                </article>
-                <CitationLayer draft={draft} containerRef={paperRef} onViewSource={openEvidence} />
-              </div>
-            )}
-          </div>
-        </main>
-
-        {/* Side panel (lg+). The Edits / Progress / Chat tabs, or the
-         * pinned evidence rail when evidence is pinned. One AIPanel mounts
-         * at a time: here at lg+, in the bottom sheet below. */}
-        {isLargeViewport && pinnedDock !== null && !focusMode && (
-          evidencePinned ? (
-            <aside
-              data-evidence-rail
-              className="flex w-[400px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] xl:w-[420px]"
-            >
-              <EvidenceDrawer
-                draft={draft}
-                editor={null}
-                open
-                onOpenChange={() => { /* pinned mode ignores Sheet open state */ }}
-                pinned
-                onPinnedChange={handlePinnedChange}
-              />
-            </aside>
-          ) : (
-            <aside
-              aria-label="Letter side panel"
-              className="flex w-[400px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)] xl:w-[420px]"
-            >
-              {sidePanel(unpinAll, "Hide side panel")}
-            </aside>
-          )
+    <div className="lw-root relative flex min-h-0 flex-1 bg-[var(--ds-surface)]">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        {isPhone ? (
+          <>
+            <PhoneTopBar bar={bar} matter={matter} />
+            <PhoneStrip draft={draft} journey={journey} matter={matter} />
+          </>
+        ) : (
+          !focusMode && <DocumentBar {...bar} />
         )}
 
-        {/* Outline (sections and the compliance or rights checklist): an
-         * overlay at every width, toggled from the document bar. */}
-        {showSidebar && !focusMode && (
+        {/* Focus mode: the section pill (top left) leaves it; the bar at the
+         * bottom opens Chat. Esc also leaves. */}
+        {focusMode && (
           <>
             <button
               type="button"
-              className="absolute inset-0 z-30 bg-black/20"
-              aria-label="Close panel"
-              onClick={() => setShowSidebar(false)}
-            />
-            <aside
-              aria-label="Outline"
-              className="absolute inset-y-0 left-0 z-40 flex w-[300px] max-w-[85vw] min-h-0 flex-col overflow-hidden border-r border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)]"
+              onClick={() => setFocusMode(false)}
+              className="absolute left-3 top-3 z-30 inline-flex items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 py-1.5 text-[12.5px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              title="Exit focus mode (Esc)"
+              aria-label="Exit focus mode"
             >
-              <WizardSidebar
-                draft={draft}
-                current="edit"
-                activeSectionId={activeSectionId}
-                onSelectSection={(id) => {
-                  setShowSidebar(false);
-                  jumpToSection(id);
-                }}
-                disabled={globallyStreaming}
-                secondaryTabLabel={draft.mode === "employee" ? "Rights" : "Compliance"}
-                secondaryTab={
-                  draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />
-                }
-              />
-            </aside>
+              <Minimize2 className="size-3" />
+              <span className="ds-mono font-medium text-[var(--ds-body)]">
+                {(() => {
+                  const idx = activeSectionId ? draft.sections.findIndex((s) => s.id === activeSectionId) : -1;
+                  return `${idx >= 0 ? idx + 1 : 1} / ${draft.sections.length}`;
+                })()}
+              </span>
+              <span className="max-w-[180px] truncate">{(activeSection ?? draft.sections[0])?.title ?? "Letter"}</span>
+              <span className="ds-mono ml-1 rounded bg-[var(--ds-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--ds-muted)]">Esc</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                openPanelTab("chat");
+                focusComposer();
+              }}
+              className="absolute bottom-6 left-1/2 z-30 inline-flex w-[min(560px,calc(100%-2rem))] -translate-x-1/2 items-center gap-2 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-4 py-2.5 text-[13.5px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-ask)] transition-colors duration-[120ms] hover:border-[var(--ds-line-strong)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              title="Ask DraftHR (Ctrl or Cmd+L)"
+              aria-label="Open AI agent"
+            >
+              <Sparkles className="size-3.5 shrink-0" />
+              <span className="flex-1 truncate text-left">Ask DraftHR anything about this letter</span>
+              <span className="grid size-7 shrink-0 place-items-center rounded-[8px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)]">
+                <ArrowUp className="size-3.5" />
+              </span>
+            </button>
           </>
         )}
-      </div>
 
-      {/* Desktop, panel closed: a quiet way back to the assistant. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <FindBar open={findOpen} onClose={() => setFindOpen(false)} rootRef={paperRef} version={draft.updatedAt} />
+          <div ref={canvasRef} data-slot="letter-canvas" className="relative min-h-0 flex-1 overflow-auto bg-[var(--ds-canvas)]">
+            {viewMode === "preview" ? (
+              // Page view: the paginated editor. Read-only while locked or
+              // while DraftHR is writing (it holds a snapshot of the letter).
+              <PagedlyDocEditor
+                draft={draft}
+                readOnly={!canvasEditable || globallyStreaming || draft.sections.some((s) => s.status === "streaming")}
+                actionsRef={pagedEditorActionsRef}
+              />
+            ) : (
+              <div
+                className={cn(
+                  isPhone
+                    ? "px-3 pb-[96px] pt-3"
+                    : marginFits
+                      ? "pb-20 pr-4 pt-5"
+                      : cn("flex justify-center px-4 pt-5 md:px-6", isLargeViewport ? "pb-20" : "pb-28")
+                )}
+                style={!isPhone && marginFits ? { paddingLeft: CANVAS_PAD_L } : undefined}
+              >
+                <div
+                  ref={wrapperRef}
+                  data-slot="letter-wrapper"
+                  className="relative w-full"
+                  style={{ maxWidth: isPhone ? undefined : PAGE_W, zoom: isPhone ? undefined : zoom / 100 }}
+                >
+                  <div className="mb-3 flex min-w-0 flex-col gap-3 empty:hidden">
+                    {draft.isTemplateSource && <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />}
+                    <LetterNotices
+                      draft={draft}
+                      journey={journey}
+                      review={review}
+                      matter={matter}
+                      employee={employee}
+                      onMessage={openReviewThread}
+                      onUndoSent={canSubmitForReview(role) ? undoSent : undefined}
+                      animateSent={sealAnimates}
+                    />
+                    <DeadlineBanner draft={draft} />
+                    <RetryBanner event={retryEvent} />
+                  </div>
+
+                  {/* The letter, on one white page. */}
+                  <article
+                    ref={paperRef}
+                    aria-label="Letter"
+                    data-slot="letter-page"
+                    className={cn(
+                      "lw-paper relative bg-[var(--ds-surface)]",
+                      isPhone
+                        ? "rounded-[6px] px-5 pb-7 pt-6 shadow-[var(--ds-shadow-s)]"
+                        : "min-h-[905px] rounded-[3px] px-[60px] py-12 shadow-[var(--ds-shadow-paper)] max-lg:px-10",
+                      sealAnimates && "ds-glow-once"
+                    )}
+                  >
+                    {pageInner}
+                  </article>
+                  <CitationLayer draft={draft} containerRef={paperRef} onViewSource={openEvidence} />
+                  {marginFits && (
+                    <MarginLayer
+                      draft={draft}
+                      journey={journey}
+                      review={review}
+                      wrapperRef={wrapperRef}
+                      canResolve={canvasEditable}
+                      activity={activity}
+                      onAllVersions={() => {
+                        setActivityTab("versions");
+                        setActivityOpen(true);
+                      }}
+                      onReplyComment={onFocusComment}
+                      onResolveComment={(commentId) => useDraftStore.getState().resolveComment(draft.id, commentId, true)}
+                      onJumpToSection={jumpToSection}
+                      left={PAGE_W + MARGIN_GAP}
+                    />
+                  )}
+                </div>
+                {isPhone && <PhoneDisclaimer />}
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* Side panel (lg+): Edits / Progress / Chat, or the pinned evidence. */}
+      {isLargeViewport && pinnedDock !== null && !focusMode &&
+        (evidencePinned ? (
+          <aside
+            data-evidence-rail
+            className="flex w-[380px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)]"
+          >
+            <EvidenceDrawer
+              draft={draft}
+              editor={null}
+              open
+              onOpenChange={() => {
+                /* pinned mode ignores Sheet open state */
+              }}
+              pinned
+              onPinnedChange={(next) => {
+                if (next) {
+                  setPinnedDock("evidence");
+                  setEvidenceDrawerOpen(false);
+                } else setPinnedDock("ai");
+              }}
+            />
+          </aside>
+        ) : (
+          <aside
+            aria-label="Letter side panel"
+            className="flex w-[380px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)]"
+          >
+            {sidePanel(() => setPinnedDock(null), "Hide side panel")}
+          </aside>
+        ))}
+
+      {/* Outline: the sections and the compliance or rights checklist. */}
+      {showSidebar && !focusMode && (
+        <>
+          <button type="button" className="absolute inset-0 z-30 bg-[var(--ds-scrim)]" aria-label="Close panel" onClick={() => setShowSidebar(false)} />
+          <aside
+            aria-label="Outline"
+            className="absolute inset-y-0 left-0 z-40 flex w-[300px] max-w-[85vw] min-h-0 flex-col overflow-hidden border-r border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)]"
+          >
+            <WizardSidebar
+              draft={draft}
+              current="edit"
+              activeSectionId={activeSectionId}
+              onSelectSection={(id) => {
+                setShowSidebar(false);
+                jumpToSection(id);
+              }}
+              disabled={globallyStreaming}
+              secondaryTabLabel={draft.mode === "employee" ? "Rights" : "Compliance"}
+              secondaryTab={draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />}
+            />
+          </aside>
+        </>
+      )}
+
+      {/* Desktop, panel hidden: a quiet way back to the assistant. */}
       {isLargeViewport && pinnedDock === null && !focusMode && (
         <button
           type="button"
-          onClick={() => openPanelTab("chat")}
-          className="fixed bottom-5 right-5 z-30 inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--ds-accent)] pl-2.5 pr-3.5 text-[13px] font-medium text-[var(--ds-on-accent)] shadow-[var(--ds-shadow-m)] transition hover:bg-[var(--ds-accent-hover)]"
+          onClick={() => {
+            openPanelTab("chat");
+            focusComposer();
+          }}
+          className="fixed bottom-5 right-5 z-30 inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--ds-accent)] pl-2.5 pr-3.5 text-[13.5px] font-medium text-[var(--ds-on-accent)] shadow-[var(--ds-shadow-m)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           aria-label="Open AI agent"
         >
           <Sparkles className="size-3.5" />
@@ -1129,86 +1363,51 @@ export function Editor() {
         </button>
       )}
 
-      {/* Below lg: the side panel lives in a bottom sheet. Pills open it on
-       * the right tab; the scrim or the handle closes it. */}
+      {/* Below lg: the side panel is a bottom sheet, opened from the bottom bar. */}
       {!isLargeViewport && (
         <>
           {!focusMode && (
-            <div
-              className={
-                "fixed bottom-4 right-4 z-30 flex items-center gap-2 transition-[opacity,transform] duration-200 motion-reduce:transition-none " +
-                (aiDrawerOpen ? "pointer-events-none scale-95 opacity-0" : "opacity-100")
-              }
-              aria-hidden={aiDrawerOpen || undefined}
-            >
-              {pendingEdits > 0 && (
-                <button
-                  type="button"
-                  tabIndex={aiDrawerOpen ? -1 : undefined}
-                  onClick={() => {
-                    setEditsFilter("edits");
-                    openPanelTab("edits");
-                  }}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13px] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-m)]"
-                  aria-label={`Open ${pendingEdits} edits to review`}
-                >
-                  Edits
-                  <span className="ds-mono text-[11.5px] text-[var(--ds-muted)]">{pendingEdits}</span>
-                </button>
-              )}
-              <button
-                type="button"
-                tabIndex={aiDrawerOpen ? -1 : undefined}
-                onClick={() => openPanelTab("chat")}
-                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--ds-accent)] pl-2.5 pr-3.5 text-[13px] font-medium text-[var(--ds-on-accent)] shadow-[var(--ds-shadow-m)] active:scale-[0.98]"
-                aria-label="Open AI agent"
-              >
-                <Sparkles className="size-3.5" />
-                Ask AI
-              </button>
-            </div>
+            <PhoneBottomBar
+              bar={bar}
+              sheetTab={panelTab}
+              sheetOpen={aiDrawerOpen}
+              showMain={isPhone}
+              onProgress={() => {
+                if (aiDrawerOpen && panelTab !== "chat") setAiDrawerOpen(false);
+                else openPanelTab(pendingEdits > 0 && panelTab === "edits" ? "edits" : "progress");
+              }}
+              onChat={() => {
+                if (aiDrawerOpen && panelTab === "chat") setAiDrawerOpen(false);
+                else openPanelTab("chat");
+              }}
+            />
           )}
           <button
             type="button"
-            className={
-              "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none " +
-              (aiDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0")
-            }
+            className={cn(
+              "fixed inset-0 z-30 bg-[var(--ds-scrim)] transition-opacity duration-200 motion-reduce:transition-none",
+              aiDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
+            )}
             aria-label="Close AI drawer"
             aria-hidden={!aiDrawerOpen || undefined}
             tabIndex={aiDrawerOpen ? undefined : -1}
             onClick={() => setAiDrawerOpen(false)}
           />
-          <MobileBottomSheet
-            open={aiDrawerOpen}
-            snap={sheetSnap}
-            onSnapChange={setSheetSnap}
-            onDismiss={() => setAiDrawerOpen(false)}
-          >
+          <MobileBottomSheet open={aiDrawerOpen} snap={sheetSnap} onSnapChange={setSheetSnap} onDismiss={() => setAiDrawerOpen(false)}>
             {sidePanel(() => setAiDrawerOpen(false), "Close panel")}
           </MobileBottomSheet>
         </>
       )}
 
+      {!journeyPanelShown && <ReviewDialogsHost />}
+
       {letterExport.gate}
 
-      {/* Change A: floating comment panel — anchored to text marks
-       * (existing thread) or selection rects (new thread). */}
       {floatingComment && (
-        <FloatingCommentPanel
-          draft={draft}
-          anchor={floatingComment.anchor}
-          mode={floatingComment.mode}
-          onClose={() => setFloatingComment(null)}
-        />
+        <FloatingCommentPanel draft={draft} anchor={floatingComment.anchor} mode={floatingComment.mode} onClose={() => setFloatingComment(null)} />
       )}
 
-      {/* Floating evidence drawer — only rendered when NOT pinned. When the
-       * user pins it, the same component is mounted inside the right-rail
-       * slot above (with `pinned` set). editor=null because the section-
-       * level editors each own their own Tiptap instance; the top-level
-       * drawer surfaces evidence for browsing/management, and the section
-       * pickers handle in-cursor insertion. */}
+      {/* The floating evidence drawer, when evidence is not pinned. */}
       {!evidencePinned && (
         <EvidenceDrawer
           draft={draft}
@@ -1216,12 +1415,16 @@ export function Editor() {
           open={evidenceDrawerOpen}
           onOpenChange={setEvidenceDrawerOpen}
           pinned={false}
-          onPinnedChange={handlePinnedChange}
+          onPinnedChange={(next) => {
+            if (next) {
+              setPinnedDock("evidence");
+              setEvidenceDrawerOpen(false);
+            } else setPinnedDock("ai");
+          }}
         />
       )}
 
-      {/* Handoff card — opens when the Review CTA detects a soft evidence
-       * issue (unused items, or heavy-tier with too few items). */}
+      {/* Unused or missing evidence, before review. Continue opens the picker. */}
       <EvidenceHandoff
         open={handoffReason !== null}
         reason={handoffReason}
@@ -1232,11 +1435,10 @@ export function Editor() {
         onOpenDrawer={() => {
           setHandoffReason(null);
           if (!evidencePinned) setEvidenceDrawerOpen(true);
-          // When pinned, the rail is already visible — nothing to "open".
         }}
         onContinue={() => {
           setHandoffReason(null);
-          nav(`/editor/${draft.id}/review`);
+          openReviewPicker();
         }}
       />
 
@@ -1245,10 +1447,7 @@ export function Editor() {
         onOpenChange={setCounselDialogOpen}
         existing={counselReview}
         onAttest={(reviewedBy, reviewedOn) => {
-          updateAnswers(draft.id, {
-            ...draft.answers,
-            _counselReview: { reviewedBy, reviewedOn, attestedAt: Date.now() },
-          });
+          updateAnswers(draft.id, { ...draft.answers, _counselReview: { reviewedBy, reviewedOn, attestedAt: Date.now() } });
           setCounselDialogOpen(false);
           toast.success("Marked reviewed", { id: "counsel-reviewed", duration: 1400 });
         }}
@@ -1261,31 +1460,27 @@ export function Editor() {
         }}
       />
 
-      {/* Change A: All-comments index dialog. Click a row to close the
-       * dialog, scroll the canvas to the highlighted text, and open
-       * the FloatingCommentPanel anchored to that mark. */}
+      {/* All comments: click one to jump to its highlight and open the thread. */}
       <Dialog.Root open={allCommentsOpen} onOpenChange={setAllCommentsOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[calc(100vw-2rem)] max-h-[80vh] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)] flex flex-col">
-            <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
-              <Dialog.Title className="m-0 text-[14px] font-semibold inline-flex items-center gap-2">
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+          <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[520px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-xl)]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
+              <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[14.5px] font-medium text-[var(--ds-ink)]">
                 <MessageSquare className="size-4 text-[var(--ds-muted)]" /> Comments
               </Dialog.Title>
-              <Dialog.Description className="sr-only">
-                Every unresolved comment thread in this draft. Click one to jump to it.
-              </Dialog.Description>
+              <Dialog.Description className="sr-only">Every comment thread in this letter. Choose one to jump to it.</Dialog.Description>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                  className="grid size-8 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="Close comments"
                 >
-                  <ChevronLeft className="size-4 rotate-45" />
+                  <X className="size-4" />
                 </button>
               </Dialog.Close>
             </header>
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               {(() => {
                 const all = draft.comments ?? [];
                 const roots = all.filter((c) => !c.parentId);
@@ -1293,39 +1488,19 @@ export function Editor() {
                 const resolved = roots.filter((c) => c.resolved);
                 if (roots.length === 0) {
                   return (
-                    <div className="px-6 py-12 text-center text-[var(--ds-muted)] text-[13px]">
+                    <div className="px-6 py-12 text-center text-[13.5px] text-[var(--ds-muted)]">
                       No comments yet. Highlight any text in the document and click <em>+ Comment</em> to start a thread.
                     </div>
                   );
                 }
                 const jumpTo = (commentId: string) => {
                   setAllCommentsOpen(false);
-                  // Wait a frame so the dialog has unmounted before we
-                  // open the floating panel — otherwise the dialog's
-                  // overlay swallows the panel's outside-click guard.
                   requestAnimationFrame(() => onFocusComment(commentId));
                 };
                 return (
                   <div className="py-1">
-                    {unresolved.length > 0 && (
-                      <CommentGroup
-                        label="Unresolved"
-                        comments={unresolved}
-                        draft={draft}
-                        replyCounts={all}
-                        onJump={jumpTo}
-                      />
-                    )}
-                    {resolved.length > 0 && (
-                      <CommentGroup
-                        label="Resolved"
-                        comments={resolved}
-                        draft={draft}
-                        replyCounts={all}
-                        onJump={jumpTo}
-                        muted
-                      />
-                    )}
+                    {unresolved.length > 0 && <CommentGroup label="Unresolved" comments={unresolved} draft={draft} replyCounts={all} onJump={jumpTo} />}
+                    {resolved.length > 0 && <CommentGroup label="Resolved" comments={resolved} draft={draft} replyCounts={all} onJump={jumpTo} muted />}
                   </div>
                 );
               })()}
@@ -1334,84 +1509,86 @@ export function Editor() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Change A: Timeline dialog — moved out of the right rail into
-       * an overflow-menu launched modal. */}
+      {/* Timeline (overflow menu and Review tab). */}
       <Dialog.Root open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[calc(100vw-2rem)] max-h-[80vh] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)] flex flex-col">
-            <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--ds-line-2)] shrink-0">
-              <Dialog.Title className="m-0 text-[14px] font-semibold inline-flex items-center gap-2">
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+          <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[560px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-xl)]">
+            <header className="flex shrink-0 items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
+              <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[14.5px] font-medium text-[var(--ds-ink)]">
                 <Clock3 className="size-4 text-[var(--ds-muted)]" /> Timeline
               </Dialog.Title>
-              <Dialog.Description className="sr-only">
-                Audit timeline of regenerations, exports, comments, and attestations on this draft.
-              </Dialog.Description>
+              <Dialog.Description className="sr-only">Audit timeline of regenerations, exports, comments and attestations on this letter.</Dialog.Description>
               <Dialog.Close asChild>
                 <button
                   type="button"
-                  className="size-7 grid place-items-center rounded-md text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)]"
+                  className="grid size-8 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="Close timeline"
                 >
-                  <ChevronLeft className="size-4 rotate-45" />
+                  <X className="size-4" />
                 </button>
               </Dialog.Close>
             </header>
-            <div className="flex-1 min-h-0 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <TimelinePanel draft={draft} />
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
 
+      <ActivityDialog
+        open={activityOpen}
+        onOpenChange={setActivityOpen}
+        draft={draft}
+        review={review}
+        tab={activityTab}
+        onTabChange={setActivityTab}
+        onShowSectionHistory={(s) => {
+          setActivityOpen(false);
+          setHistorySection(s);
+        }}
+      />
+
+      <ChecksDialog
+        open={checksOpen}
+        onOpenChange={setChecksOpen}
+        draft={draft}
+        checks={checksOpen ? runHealthChecks(draft) : []}
+        canFix={canvasEditable && journey.stage === "draft"}
+        onFix={(c) => {
+          setChecksOpen(false);
+          void fixCheck(c);
+        }}
+        onJump={(sid) => {
+          setChecksOpen(false);
+          jumpToSection(sid);
+        }}
+      />
+
       <VersionHistoryDialog
         open={Boolean(historySection)}
         onClose={() => setHistorySection(null)}
         section={historySection}
         onRestore={(html) => {
-          if (historySection) {
-            // Version the CURRENT html before overwriting it — otherwise a
-            // restore silently drops the current content if it was never
-            // versioned (e.g. hand-edits, which only go through updateSection).
-            // Read the live section from the store, not the dialog snapshot.
-            const current = useDraftStore
-              .getState()
-              .drafts[draft.id]?.sections.find((s) => s.id === historySection.id);
-            if (current && current.html && current.html !== html) {
-              pushSectionVersion(draft.id, historySection.id, {
-                id: `ver_${Date.now()}`,
-                createdAt: Date.now(),
-                html: current.html,
-              });
-            }
-            updateSection(draft.id, historySection.id, html);
-            setHistorySection(null);
+          if (!historySection) return;
+          // Keep the current text as a version before replacing it.
+          const current = useDraftStore.getState().drafts[draft.id]?.sections.find((s) => s.id === historySection.id);
+          if (current && current.html && current.html !== html) {
+            pushSectionVersion(draft.id, historySection.id, { id: `ver_${Date.now()}`, createdAt: Date.now(), html: current.html });
           }
+          updateSection(draft.id, historySection.id, html);
+          setHistorySection(null);
+          toast("Version restored. The text it replaced is kept as a version.");
         }}
       />
 
-      <EditDetailsSheet
-        open={editDetailsOpen}
-        onOpenChange={setEditDetailsOpen}
-        draft={draft}
-      />
+      <EditDetailsSheet open={editDetailsOpen} onOpenChange={setEditDetailsOpen} draft={draft} />
 
-      <SaveAsTemplateModal
-        draft={draft}
-        open={saveAsTemplateOpen}
-        onOpenChange={setSaveAsTemplateOpen}
-      />
+      <SaveAsTemplateModal draft={draft} open={saveAsTemplateOpen} onOpenChange={setSaveAsTemplateOpen} />
 
-      {/* "Open on mobile" — surfaces the /m/:draftId link so the HR
-       * director can pick up reading on a phone. Pure link UX (no QR). */}
-      <MobileShareDialog
-        open={mobileShareOpen}
-        onOpenChange={setMobileShareOpen}
-        draftId={draft.id}
-      />
+      <MobileShareDialog open={mobileShareOpen} onOpenChange={setMobileShareOpen} draftId={draft.id} />
 
-      {/* Approval-workflow dialog — three kinds (submit / approve / request
-       * changes) share one modal. Closed when reviewDialogKind is null. */}
+      {/* Send for approval, approve, request changes: one dialog, three kinds. */}
       {reviewDialogKind && (
         <ReviewDialog
           open
@@ -1422,27 +1599,23 @@ export function Editor() {
         />
       )}
 
-      {/* Reviewer "Suggest an edit" composer — stages the reviewer's proposal
-       * as an attributed pendingChange (author = the current user). Reuses the
-       * AI suggestion machinery so the author Accepts/Rejects exactly as they
-       * would an AI proposal. */}
+      {/* A reviewer's "Suggest an edit": an attributed proposal the author
+       * accepts or rejects like DraftHR's. */}
       {suggestSection && (
         <SuggestEditDialog
           open
           onOpenChange={(next) => !next && setSuggestSection(null)}
           section={suggestSection}
           onSubmit={(proposedHtml) => {
-            const me = meIdentity(profile);
+            const ident = meIdentity(profile);
             useDraftStore.getState().proposeSectionChange(draft.id, suggestSection.id, {
               id: uid("sug"),
               createdAt: Date.now(),
               proposedHtml,
               instruction: "Suggested edit",
               source: "review",
-              // Stable, cross-user attribution: email seeds the reviewer's
-              // colour (matches how avatars/comments seed), name is displayed.
-              authorId: me.email || me.name,
-              authorName: me.name,
+              authorId: ident.email || ident.name,
+              authorName: ident.name,
               diffViewMode: "card",
             });
             toast.success("Suggestion sent to the author");
@@ -1450,30 +1623,25 @@ export function Editor() {
         />
       )}
 
-      {/* Review-feedback panel — opens when the user clicks the
-       * changes_requested pill. Shows the most recent reviewer pushback. */}
+      {/* Review feedback: opened from the changes-requested pill. */}
       <Dialog.Root open={reviewFeedbackOpen} onOpenChange={setReviewFeedbackOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-          <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[440px] max-w-[calc(100vw-2rem)] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)] p-4 text-[13px]">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageSquareWarning className="size-4 text-[var(--ds-red-fg)]" />
-              <Dialog.Title className="text-[14px] font-semibold text-[var(--ds-ink)] m-0">
-                Review feedback
-              </Dialog.Title>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+          <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[440px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 text-[13.5px] shadow-[var(--ds-shadow-xl)]">
+            <div className="mb-2 flex items-center gap-2">
+              <MessageSquareWarning className="size-4 text-[var(--ds-amber-fg)]" />
+              <Dialog.Title className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">Review feedback</Dialog.Title>
             </div>
             {latestChangesRequest ? (
               <>
-                <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mb-2">
+                <Dialog.Description className="mb-2 text-[12.5px] text-[var(--ds-muted)]">
                   From {latestChangesRequest.reviewerName} ·{" "}
-                  {new Date(latestChangesRequest.createdAt).toLocaleString()}
+                  {new Date(latestChangesRequest.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                 </Dialog.Description>
-                <p className="m-0 text-[13px] text-[var(--ds-ink)] whitespace-pre-wrap leading-relaxed">
-                  {latestChangesRequest.body}
-                </p>
+                <p className="m-0 whitespace-pre-wrap text-[13.5px] leading-relaxed text-[var(--ds-ink)]">{latestChangesRequest.body}</p>
               </>
             ) : (
-              <p className="m-0 text-[13px] text-[var(--ds-muted)]">No feedback recorded yet.</p>
+              <p className="m-0 text-[13.5px] text-[var(--ds-muted)]">No feedback recorded yet.</p>
             )}
             <div className="mt-4 flex items-center justify-end gap-2">
               {reviewStatus === "changes_requested" && canSubmitForReview(role) && (
@@ -1484,7 +1652,7 @@ export function Editor() {
                     setReviewDialogKind("submit");
                   }}
                 >
-                  <Send className="size-3.5 mr-1.5" />
+                  <Send className="mr-1.5 size-3.5" />
                   Re-submit for approval
                 </Button>
               )}
@@ -1498,37 +1666,29 @@ export function Editor() {
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Refine dialog — Preview's entry point into the per-section refine
-       * flow. Edit/Split surfaces use the inline RefinePopover. */}
+      {/* Refine (overflow menu, Review tab): the change arrives as a suggested edit. */}
       <RefineDialog
         open={Boolean(refineSectionId)}
         onOpenChange={(next) => !next && setRefineSectionId(null)}
-        sectionTitle={
-          refineSectionId
-            ? draft.sections.find((s) => s.id === refineSectionId)?.title
-            : undefined
-        }
+        sectionTitle={refineSectionId ? draft.sections.find((s) => s.id === refineSectionId)?.title : undefined}
         onRefineRegenerate={(instruction) => {
           const sec = draft.sections.find((s) => s.id === refineSectionId);
-          if (sec) void onRegenerateSection(sec, instruction);
+          if (sec) void proposeSection(sec, instruction);
           setRefineSectionId(null);
         }}
         onPlainRegenerate={() => {
           const sec = draft.sections.find((s) => s.id === refineSectionId);
-          if (sec) void onRegenerateSection(sec);
+          if (sec) void proposeSection(sec);
           setRefineSectionId(null);
         }}
       />
-
     </div>
   );
 }
 
 /**
- * Index row for the All Comments dialog. Shows: section title (subtle),
- * the quoted span (italic, truncated), author + relative time, body
- * preview. Clicking the row dismisses the dialog and re-opens the
- * floating panel anchored to the thread's mark.
+ * A row in the all-comments dialog: the section, the quoted text, who and
+ * when, the start of the comment. Choosing it opens the thread.
  */
 function CommentGroup({
   label,
@@ -1539,15 +1699,7 @@ function CommentGroup({
   muted,
 }: {
   label: string;
-  comments: Array<{
-    id: string;
-    sectionId: string;
-    authorName: string;
-    body: string;
-    quote?: string;
-    createdAt: number;
-    resolved?: boolean;
-  }>;
+  comments: Array<{ id: string; sectionId: string; authorName: string; body: string; quote?: string; createdAt: number; resolved?: boolean }>;
   draft: { sections: { id: string; title: string }[]; comments?: { parentId?: string }[] };
   replyCounts: Array<{ id: string; parentId?: string }>;
   onJump: (commentId: string) => void;
@@ -1555,7 +1707,7 @@ function CommentGroup({
 }) {
   return (
     <div className={muted ? "opacity-60" : undefined}>
-      <div className="px-4 pt-3 pb-1 text-[12px] text-[var(--ds-muted)]">
+      <div className="px-4 pb-1 pt-3 text-[12.5px] text-[var(--ds-muted)]">
         {label} <span className="ds-mono">{comments.length}</span>
       </div>
       {comments.map((c) => {
@@ -1566,26 +1718,18 @@ function CommentGroup({
             key={c.id}
             type="button"
             onClick={() => onJump(c.id)}
-            className="w-full text-left px-4 py-3 border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-line-2)] transition group"
+            className="group w-full border-b border-[var(--ds-line-2)] px-4 py-3 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-[11px] text-[var(--ds-muted)] truncate">
-                {section?.title ?? "Section"}
-              </span>
-              <span className="text-[10px] text-[var(--ds-subtle)] tabular-nums shrink-0">
-                {commentRelTime(c.createdAt)}
-              </span>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="truncate text-[12px] text-[var(--ds-muted)]">{section?.title ?? "Section"}</span>
+              <span className="shrink-0 text-[11.5px] tabular-nums text-[var(--ds-subtle)]">{commentRelTime(c.createdAt)}</span>
             </div>
-            {c.quote && (
-              <p className="text-[11.5px] italic text-[var(--ds-muted)] m-0 mb-1 truncate">
-                "{c.quote}"
-              </p>
-            )}
-            <p className="text-[12.5px] text-[var(--ds-ink)] m-0 line-clamp-2">
+            {c.quote && <p className="m-0 mb-1 truncate text-[12.5px] italic text-[var(--ds-muted)]">"{c.quote}"</p>}
+            <p className="m-0 line-clamp-2 text-[13px] text-[var(--ds-ink)]">
               <span className="font-medium">{c.authorName}:</span> {c.body}
             </p>
             {replyN > 0 && (
-              <p className="text-[10.5px] text-[var(--ds-muted)] mt-1 m-0">
+              <p className="m-0 mt-1 text-[11.5px] text-[var(--ds-muted)]">
                 {replyN} {replyN === 1 ? "reply" : "replies"}
               </p>
             )}
@@ -1605,15 +1749,13 @@ function commentRelTime(ts: number): string {
   if (h < 24) return `${h}h`;
   const d = Math.floor(h / 24);
   if (d < 7) return `${d}d`;
-  return new Date(ts).toLocaleDateString();
+  return new Date(ts).toLocaleDateString("en-GB");
 }
 
-/* ----------------------------------------------------------------------------
- * CounselReviewDialog — quick attestation surface for the topbar pill.
- * Lets a reviewer mark a letter as counsel-reviewed without going through
- * the Export → Review flow first. Updates draft.answers._counselReview so
- * the existing derivation in Editor picks it up immediately.
- * --------------------------------------------------------------------------*/
+/**
+ * Counsel review: record who reviewed a high-risk letter, without going
+ * through an export first. Saved in the draft's answers.
+ */
 function CounselReviewDialog({
   open,
   onOpenChange,
@@ -1628,11 +1770,8 @@ function CounselReviewDialog({
   onClear: () => void;
 }) {
   const [reviewedBy, setReviewedBy] = useState(existing?.reviewedBy ?? "");
-  const [reviewedOn, setReviewedOn] = useState(
-    existing?.reviewedOn ?? todayDateOnly()
-  );
+  const [reviewedOn, setReviewedOn] = useState(existing?.reviewedOn ?? todayDateOnly());
 
-  // Reset to existing values whenever the dialog opens.
   useEffect(() => {
     if (open) {
       setReviewedBy(existing?.reviewedBy ?? "");
@@ -1641,76 +1780,64 @@ function CounselReviewDialog({
   }, [open, existing?.reviewedBy, existing?.reviewedOn]);
 
   const canSubmit = reviewedBy.trim().length > 0 && reviewedOn.length > 0;
+  const field =
+    "h-9 w-full rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13.5px] text-[var(--ds-ink)] outline-none focus:border-[var(--ds-line-strong)] focus-visible:shadow-[var(--ds-focus-ring)]";
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[1px]" />
-        <Dialog.Content className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[460px] max-w-[calc(100vw-2rem)] rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)] p-5">
-          <Dialog.Title className="m-0 text-[15px] font-semibold inline-flex items-center gap-2">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
+        <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 shadow-[var(--ds-shadow-xl)]">
+          <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[15px] font-medium text-[var(--ds-ink)]">
             <ShieldCheck className="size-4 text-[var(--ds-muted)]" />
             {existing ? "Update counsel review" : "Mark counsel-reviewed"}
           </Dialog.Title>
-          <Dialog.Description className="text-[12px] text-[var(--ds-muted)] mt-1 mb-4">
-            High-risk letters require sign-off before export. Recording the
-            attestation here unlocks export and stamps the audit trail.
+          <Dialog.Description className="mb-4 mt-1 text-[12.5px] text-[var(--ds-muted)]">
+            High-risk letters need sign-off before export. Recording it here unlocks export and adds it to the audit trail.
           </Dialog.Description>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[12px] font-medium text-[var(--ds-ink)] mb-1">
+              <label htmlFor="counsel-by" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-ink)]">
                 Reviewer name *
               </label>
               <input
+                id="counsel-by"
                 type="text"
                 value={reviewedBy}
                 onChange={(e) => setReviewedBy(e.target.value)}
                 placeholder="Counsel name, role"
-                className="w-full h-9 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13px] outline-none focus:border-[var(--ds-line-strong)]"
+                className={field}
                 autoFocus
               />
             </div>
             <div>
-              <label className="block text-[12px] font-medium text-[var(--ds-ink)] mb-1">
+              <label htmlFor="counsel-on" className="mb-1 block text-[12.5px] font-medium text-[var(--ds-ink)]">
                 Reviewed on *
               </label>
-              <input
-                type="date"
-                value={reviewedOn}
-                onChange={(e) => setReviewedOn(e.target.value)}
-                className="w-full h-9 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13px] outline-none focus:border-[var(--ds-line-strong)]"
-              />
+              <input id="counsel-on" type="date" value={reviewedOn} onChange={(e) => setReviewedOn(e.target.value)} className={field} />
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-5">
+          <div className="mt-5 flex items-center justify-between">
             <div>
               {existing && (
                 <button
                   type="button"
                   onClick={onClear}
-                  className="text-[12px] text-[var(--ds-muted)] hover:text-destructive transition"
+                  className="rounded-[6px] text-[12.5px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:text-[var(--ds-red-fg)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                 >
                   Clear attestation
                 </button>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="h-8 px-3 rounded-md border border-[var(--ds-line)] text-[12px] hover:bg-[var(--ds-line-2)]"
-              >
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!canSubmit}
-                onClick={() => onAttest(reviewedBy.trim(), reviewedOn)}
-                className="h-8 px-3 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] text-[12px] font-medium disabled:opacity-40 hover:bg-[var(--ds-accent-hover)]"
-              >
+              </Button>
+              <Button size="sm" disabled={!canSubmit} onClick={() => onAttest(reviewedBy.trim(), reviewedOn)}>
                 {existing ? "Update" : "Mark reviewed"}
-              </button>
+              </Button>
             </div>
           </div>
         </Dialog.Content>

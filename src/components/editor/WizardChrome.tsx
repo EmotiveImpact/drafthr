@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Compact step indicator for the letter workspace: Edit, Review, Finalise.
- * Drawn as the Harvey pill track (design 2A): the current step is the
+ * Drawn as a pill track (design 2A): the current step is the
  * raised white pill, finished steps carry a green tick, later steps a
  * quiet number.
  *

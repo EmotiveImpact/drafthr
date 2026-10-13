@@ -1,28 +1,16 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import {
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  ListOrdered,
-  Loader2,
-  PanelRight,
-  Paperclip,
-  X,
-} from "lucide-react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, CheckCircle2, ListOrdered, Loader2, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
 import { SectionList } from "@/components/editor/WizardSidebar";
-import { PillTabs } from "@/components/ds/PageHeader";
-import { DocBar, DOC_BTN, DOC_BTN_PRIMARY } from "@/components/finalize/DocBar";
 import { cn } from "@/lib/utils";
 import { EvidenceRequirementsList } from "@/components/editor/EvidenceRequirementsList";
-import { EditableTitleBar } from "@/components/editor/EditableTitleBar";
-import { InlineDisclaimer } from "@/components/editor/InlineDisclaimer";
 import { DeadlineBanner } from "@/components/editor/DeadlineBanner";
 import { SectionEditor } from "@/components/editor/SectionEditor";
+import { BAR_BTN, BAR_BTN_DARK, SegmentedTabs, SubPageBar } from "@/components/editor/SubPageChrome";
 import {
   EvidencePanel,
   appendEvidenceHtml,
@@ -31,21 +19,22 @@ import {
   findTargetSectionForItem,
 } from "@/components/editor/EvidencePanel";
 import { regenerateSection } from "@/lib/llm/draft";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import "@/components/editor/letter-workspace.css";
 
 type RailTab = "evidence" | "required" | "sections";
 
 /**
- * Evidence page (`/editor/:id/evidence`), laid out like the 14B workspace:
+ * Evidence page (`/editor/:id/evidence`), in the letter workspace's
+ * language:
  *
- *   - Document bar (11A): back to the letter, file name, Edit / Review /
- *     Finalise, then Back to letter and Review.
- *   - Centre: the letter, as the same stacked SectionEditor cards Edit
- *     uses, so prose styling and editing affordances are identical.
- *   - Side panel: the evidence list (EvidencePanel: search, kind filters,
- *     evidence cards, inline edit, Add new) in place of Edits / Progress /
- *     Chat, with the required-evidence checklist and the section list as
- *     the panel's other tabs. Below lg the panel is a drawer.
+ *   - Document bar: back to the letter, the letter name and status pill,
+ *     then Done (back to the letter, where the journey carries on).
+ *   - Centre: the letter as one white page on the grey canvas; clicking a
+ *     section makes it the target for Reference and Quote.
+ *   - Side panel (380px): the evidence list (search, kind filters, cards,
+ *     inline edit, Add new) in place of Edits / Progress / Chat, with the
+ *     required-evidence checklist and the section list as its other tabs.
+ *     Below lg the panel is a drawer with a scrim.
  */
 export function EvidenceStep() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -58,7 +47,7 @@ export function EvidenceStep() {
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
 
-  // Which section card is currently "active" — drives:
+  // Which section is currently "active". Drives:
   //   - left rail's section highlight
   //   - the right rail's "Reference / Quote / Link to active" buttons
   //   - URL persistence so deep links land on the right section
@@ -95,7 +84,7 @@ export function EvidenceStep() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft?.id, params]);
 
-  // Clear autoOpenAdd once consumed — without this, every re-render would
+  // Clear autoOpenAdd once consumed. Without this, every re-render would
   // try to re-open the form even after the user closes it.
   useEffect(() => {
     if (autoOpenAdd) {
@@ -106,9 +95,12 @@ export function EvidenceStep() {
 
   if (!draft || !draftId) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-muted-foreground">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
+        <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
+          This letter isn't in this workspace, or it was deleted.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => nav("/")}>
           <ArrowLeft className="size-4" /> Back home
         </Button>
       </div>
@@ -178,29 +170,19 @@ export function EvidenceStep() {
     setShowRail(true);
   };
 
+  const toLetter = () => nav(`/editor/${draft.id}`);
+
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <DocBar
+    <div className="lw-root flex min-h-0 flex-1 flex-col">
+      <SubPageBar
         draft={draft}
-        current="evidence"
-        title={draft.title || getLetterMeta(draft.letterType).title}
-        label="Evidence"
-        leading={
-          <button
-            type="button"
-            onClick={() => nav(`/editor/${draft.id}`)}
-            aria-label="Back to letter"
-            className="-mx-1 grid size-9 shrink-0 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-body)] transition hover:bg-[var(--ds-surface-2)]"
-          >
-            <ArrowLeft className="size-4" />
-          </button>
-        }
+        onBack={toLetter}
         actions={
           <>
             {/* Phones: the side panel is a drawer; these open it. */}
             <button
               type="button"
-              className={cn(DOC_BTN, "px-2 lg:hidden")}
+              className={cn(BAR_BTN, "px-2 lg:hidden")}
               onClick={() => (showRail && railTab === "sections" ? setShowRail(false) : openPanel("sections"))}
               aria-label="Toggle sections rail"
               title="Sections"
@@ -209,123 +191,114 @@ export function EvidenceStep() {
             </button>
             <button
               type="button"
-              className={cn(DOC_BTN, "px-2 lg:hidden")}
+              className={cn(BAR_BTN, "px-2 lg:hidden")}
               onClick={() => (showRail && railTab === "evidence" ? setShowRail(false) : openPanel("evidence"))}
               aria-label="Toggle evidence rail"
               title="Evidence"
             >
-              <PanelRight className="size-4" />
+              <Paperclip className="size-4" />
+              <span className="ds-mono text-[12px] text-[var(--ds-subtle)]">{draft.evidence?.length ?? 0}</span>
             </button>
-            <Link to={`/editor/${draft.id}`} className={cn(DOC_BTN, "hidden sm:inline-flex")}>
-              Back to letter
-            </Link>
-            <button
-              type="button"
-              onClick={() => nav(`/editor/${draft.id}/review`)}
-              aria-label="Next: Review"
-              className={cn(DOC_BTN_PRIMARY, "px-2 sm:px-3")}
-            >
-              <span className="hidden sm:inline">Review</span>
-              <ArrowRight className="size-3.5" />
+            <button type="button" onClick={toLetter} className={cn(BAR_BTN_DARK, "ml-1")} title="Back to the letter">
+              Done
             </button>
           </>
         }
       />
 
-      {/* One-line notice strip — appears after a Reference / Quote insert.
-       * Click to dismiss. */}
+      {/* One-line notice after a Reference or Quote insert. Click to dismiss. */}
       {notice && (
         <button
           type="button"
           onClick={() => setNotice(null)}
-          className="flex shrink-0 items-center justify-center gap-2 border-b border-[var(--ds-line)] bg-[var(--ds-green-bg)] px-4 py-1.5 text-[12.5px] text-[var(--ds-green-fg)] transition hover:brightness-95"
+          className="flex shrink-0 items-center justify-center gap-2 border-b border-[var(--ds-line-2)] bg-[var(--ds-green-bg)] px-4 py-1.5 text-[13px] text-[var(--ds-green-fg)] transition-colors duration-[120ms] hover:bg-[var(--ds-green-soft)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
         >
           <CheckCircle2 className="size-3.5" />
           {notice}
         </button>
       )}
 
-      {/* 14B: the letter in the centre, the evidence list in the side panel
-       * (in place of Edits / Progress / Chat), with Required and Sections as
-       * the panel's other tabs. Below lg the panel becomes a drawer. */}
-      <div className="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="relative grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_380px]">
         <main className="relative flex min-h-0 min-w-0 flex-col bg-[var(--ds-canvas)]">
           <div className="min-h-0 flex-1 overflow-auto">
-            <div className="mx-auto max-w-3xl space-y-3 px-3 py-6 sm:px-6 sm:py-8">
-              <EditableTitleBar draft={draft} />
-              <InlineDisclaimer draft={draft} />
+            <div className="mx-auto w-full max-w-[640px] px-3 pb-16 pt-5 sm:px-0">
               <DeadlineBanner draft={draft} />
 
               {/* Mode note: the side panel is evidence here, not DraftHR. */}
-              <div className="flex items-start gap-2.5 rounded-[var(--ds-r-m)] bg-[var(--ds-surface-2)] px-3.5 py-2.5 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
-                <Paperclip className="mt-0.5 size-3.5 shrink-0" />
+              <div className="mb-3 flex items-start gap-2.5 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3.5 py-2.5 text-[13px] leading-relaxed text-[var(--ds-muted)]">
+                <Paperclip className="mt-1 size-3.5 shrink-0" />
                 <span>
-                  <strong className="font-medium text-[var(--ds-ink)]">Linking evidence.</strong>{" "}
-                  Click a section to make it the target, then use the Evidence panel to add items,
-                  link them, or insert references and quotes.
+                  <strong className="font-medium text-[var(--ds-ink)]">Linking evidence.</strong> Click a section to make
+                  it the target, then use the Evidence panel to add items, link them, or insert references and quotes.
                 </span>
               </div>
 
-              {draft.sections.map((section) => (
-                <SectionEditor
-                  key={section.id}
-                  draft={draft}
-                  section={section}
-                  isStreaming={streamingSectionId === section.id}
-                  active={activeSectionId === section.id}
-                  onFocus={() => setActiveSectionId(section.id)}
-                  onChange={(html) => updateSection(draft.id, section.id, html)}
-                  onRegenerate={(instr) => onRegenerateSection(section, instr)}
-                  onClear={() => updateSection(draft.id, section.id, "")}
-                  onShowHistory={() => {
-                    // History dialog lives on the Edit page; from here we
-                    // just jump back to Edit with the section selected.
-                    nav(`/editor/${draft.id}?section=${section.id}`);
-                  }}
-                  onOpenEvidenceBinder={() => {
-                    // Already on the Evidence step — just focus this section
-                    // and scroll its card into view.
-                    setActiveSectionId(section.id);
-                    const el = document.querySelector(
-                      `[data-section-id="${section.id}"]`,
-                    );
-                    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                  // Comments / pending-change flows live on the Edit page —
-                  // from Evidence we just no-op. SectionEditor renders the
-                  // section content + a minimal toolbar either way.
-                  onAcceptPending={undefined}
-                  onRejectPending={undefined}
-                />
-              ))}
-              {streamingSectionId && (
-                <p className="mt-4 flex items-center gap-2 text-[12px] text-[var(--ds-muted)]">
-                  <Loader2 className="size-3 animate-spin" />
-                  Regenerating section…
-                </p>
-              )}
+              <article className="lw-paper rounded-[3px] bg-[var(--ds-surface)] px-5 py-8 shadow-[var(--ds-shadow-paper)] sm:px-[60px] sm:py-12">
+                {draft.sections.map((section) => (
+                  <div
+                    key={section.id}
+                    className={cn(
+                      "-mx-3 rounded-[6px] px-3 transition-colors duration-[160ms]",
+                      activeSectionId === section.id && "bg-[var(--ds-surface-2)] shadow-[inset_2px_0_0_var(--ds-accent)]"
+                    )}
+                    data-evidence-target={activeSectionId === section.id || undefined}
+                  >
+                    <SectionEditor
+                      draft={draft}
+                      section={section}
+                      variant="paper"
+                      hideToolbar
+                      isStreaming={streamingSectionId === section.id}
+                      active={activeSectionId === section.id}
+                      onFocus={() => setActiveSectionId(section.id)}
+                      onChange={(html) => updateSection(draft.id, section.id, html)}
+                      onRegenerate={(instr) => onRegenerateSection(section, instr)}
+                      onClear={() => updateSection(draft.id, section.id, "")}
+                      onShowHistory={() => {
+                        // Version history lives in the letter workspace.
+                        nav(`/editor/${draft.id}?section=${section.id}`);
+                      }}
+                      onOpenEvidenceBinder={() => {
+                        // Already on the Evidence page: focus this section.
+                        setActiveSectionId(section.id);
+                        const el = document.querySelector(`[data-section-id="${section.id}"]`);
+                        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                      // Suggested edits are decided in the letter workspace.
+                      onAcceptPending={undefined}
+                      onRejectPending={undefined}
+                    />
+                  </div>
+                ))}
+                {streamingSectionId && (
+                  <p className="mt-4 flex items-center gap-2 font-sans text-[12.5px] text-[var(--ds-muted)]">
+                    <Loader2 className="size-3 animate-spin" />
+                    Redrafting the section…
+                  </p>
+                )}
+              </article>
             </div>
           </div>
         </main>
 
-        {/* Side panel: permanent on lg+, sliding drawer on phones. */}
+        {/* Side panel: permanent on lg+, a drawer on phones. */}
         <aside
           aria-label="Evidence panel"
-          className={
-            "flex min-h-0 flex-col overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)] " +
-            (showRail
-              ? "fixed inset-y-0 right-0 z-40 w-[min(420px,92vw)] shadow-[var(--ds-shadow-l)] lg:static lg:w-auto lg:shadow-none"
-              : "hidden lg:flex")
-          }
+          className={cn(
+            "flex min-h-0 flex-col overflow-hidden border-l border-[var(--ds-line-2)] bg-[var(--ds-surface)]",
+            showRail
+              ? "fixed inset-y-0 right-0 z-40 w-[min(380px,92vw)] shadow-[var(--ds-shadow-l)] lg:static lg:w-auto lg:shadow-none"
+              : "hidden lg:flex"
+          )}
         >
-          <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-[var(--ds-line-2)] px-3">
-            <PillTabs
-              className="mt-0"
-              activeTab={railTab}
-              onTabChange={(id) => setRailTab(id as RailTab)}
+          <div className="flex h-[60px] shrink-0 items-center gap-2 border-b border-[var(--ds-line-2)] pl-4 pr-3">
+            <SegmentedTabs<RailTab>
+              label="Evidence panel"
+              value={railTab}
+              onChange={setRailTab}
               tabs={[
                 { id: "evidence", label: "Evidence", count: draft.evidence?.length ?? 0 },
-                ...(requiredBadge ? [{ id: "required", label: `Required ${requiredBadge}` }] : []),
+                ...(requiredBadge ? [{ id: "required" as const, label: "Required", count: requiredBadge }] : []),
                 { id: "sections", label: "Sections" },
               ]}
             />
@@ -333,7 +306,7 @@ export function EvidenceStep() {
               type="button"
               onClick={() => setShowRail(false)}
               aria-label="Close panel"
-              className="ml-auto grid size-8 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] hover:bg-[var(--ds-surface-2)] lg:hidden"
+              className="grid size-[34px] shrink-0 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] lg:hidden"
             >
               <X className="size-4" />
             </button>
@@ -348,7 +321,7 @@ export function EvidenceStep() {
             />
           </div>
           {railTab === "required" && (
-            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-2">
               <EvidenceRequirementsList draft={draft} />
             </div>
           )}
@@ -369,13 +342,13 @@ export function EvidenceStep() {
           )}
         </aside>
 
-        {/* Mobile scrim — fades over the canvas when the drawer is open. */}
+        {/* Phone scrim over the canvas while the drawer is open. */}
         <button
           type="button"
-          className={
-            "lg:hidden fixed inset-0 z-30 bg-[var(--ds-ink)]/30 transition-opacity duration-300 motion-reduce:transition-none " +
-            (showRail ? "opacity-100" : "opacity-0 pointer-events-none")
-          }
+          className={cn(
+            "fixed inset-0 z-30 bg-[var(--ds-scrim)] transition-opacity duration-200 motion-reduce:transition-none lg:hidden",
+            showRail ? "opacity-100" : "pointer-events-none opacity-0"
+          )}
           aria-label="Close panel"
           aria-hidden={!showRail || undefined}
           tabIndex={!showRail ? -1 : undefined}

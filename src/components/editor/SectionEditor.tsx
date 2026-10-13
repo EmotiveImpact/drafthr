@@ -43,10 +43,10 @@ import { useEffect, useRef, useState } from "react";
 import type { Draft, Section } from "@/lib/letters/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { FileText, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
+import { FileText, FolderOpen, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
-import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
+import { SuggestionMarkFirst } from "./suggestion-mark-priority";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { RemoteImageEmbed } from "@/lib/tiptap/remote-image-embed";
@@ -101,6 +101,8 @@ type Props = {
   /** Reports this section's editor when it gains focus, so the document
    * bar can drive formatting for whichever section is being edited. */
   onEditorFocus?: (editor: Editor) => void;
+  /** Called once the section's editor exists, so the toolbar has a target before anything is focused. */
+  onEditorReady?: (editor: Editor) => void;
 };
 
 export function SectionEditor({
@@ -123,10 +125,13 @@ export function SectionEditor({
   variant = "card",
   hideToolbar = false,
   onEditorFocus,
+  onEditorReady,
 }: Props) {
   const paper = variant === "paper";
   const onEditorFocusRef = useRef(onEditorFocus);
   onEditorFocusRef.current = onEditorFocus;
+  const onEditorReadyRef = useRef(onEditorReady);
+  onEditorReadyRef.current = onEditorReady;
   const lastWrittenContent = useRef<string>(section.html);
   const linkedEvidence = linkedEvidenceForSection(draft, section.id);
 
@@ -151,7 +156,7 @@ export function SectionEditor({
       // Track-changes primitive — see src/lib/tiptap/suggestion-mark.ts. Marks
       // proposed reviewer / AI / consultant edits as <ins>/<del> with status
       // attributes; merge helpers fold accepted edits into canonical text.
-      SuggestionMark,
+      SuggestionMarkFirst,
       // Evidence reference tokens — render the [See Fig N] / [See Attachments]
       // spans inserted by the picker / slash command as atomic inline nodes
       // instead of letting Tiptap drop them on the floor as unknown HTML
@@ -356,6 +361,11 @@ export function SectionEditor({
   // jitter where text appears to wrap mid-line as the doc rebuilds.
   // 60ms is faster than the eye can perceive (~16 fps still feels smooth)
   // but lets the browser settle between updates.
+  // Give the toolbar a target once the editor exists (after mount).
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) onEditorReadyRef.current?.(editor as Editor);
+  }, [editor]);
+
   useEffect(() => {
     if (!editor) return;
     if (section.html === editor.getHTML()) return;
@@ -389,12 +399,15 @@ export function SectionEditor({
   return (
     <section
       data-section-id={section.id}
+      data-section-kind={section.sectionId}
       data-streaming={isStreaming || undefined}
       className={cn(
         paper
           ? // Paper: no card chrome. Sections flow down one white page; a
             // faint wash marks the section being edited.
-            "section-node lw-section group/sec relative rounded-[var(--ds-r-m)] transition-colors"
+            // The hover menu floats above the text (no reserved height), so
+            // the page reads as one letter and nothing jumps on hover.
+            "section-node lw-section group/sec relative"
           : [
               // Mobile: strip the card chrome so text gets full viewport width
               // and the section title becomes a top divider only. Card returns at md:+.
@@ -414,21 +427,28 @@ export function SectionEditor({
       <header
         className={cn(
           "flex items-center justify-between gap-2",
-          paper ? "min-h-8 pb-0.5" : "px-3 py-2 md:border-b md:border-letter-rule",
+          paper
+            ? "pointer-events-none absolute -top-9 right-0 z-20 font-sans"
+            : "px-3 py-2 md:border-b md:border-letter-rule",
         )}
       >
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={
               paper
-                ? "truncate font-sans text-[11.5px] font-medium text-[var(--ds-faint)] transition-colors group-hover/sec:text-[var(--ds-muted)]"
+                ? "sr-only"
                 : "text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate"
             }
           >
             {section.title}
           </span>
           {isStreaming && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-[var(--ds-blue-fg)]">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-[11px] text-[var(--ds-blue-fg)]",
+                paper && "rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 py-1 text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]",
+              )}
+            >
               <Loader2 className="size-3 animate-spin" />
               Drafting
             </span>
@@ -443,13 +463,13 @@ export function SectionEditor({
         <div
           className={cn(
             "flex items-center gap-0.5",
-            // Paper: section actions stay out of the way until the section is
-            // hovered, focused or being edited (always shown on touch screens).
+            // Paper: a small floating menu over the section's top right,
+            // shown when the section is hovered, focused or being edited.
             paper &&
-              "transition-opacity md:opacity-0 md:group-hover/sec:opacity-100 md:group-focus-within/sec:opacity-100",
+              "pointer-events-auto rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-0.5 shadow-[var(--ds-shadow-m)] transition-[opacity,visibility] duration-[120ms] md:invisible md:opacity-0 md:group-hover/sec:visible md:group-hover/sec:opacity-100 md:group-focus-within/sec:visible md:group-focus-within/sec:opacity-100",
             // Phones: only the section being edited shows its actions.
             paper && !active && "max-md:hidden",
-            paper && active && "md:opacity-100",
+            paper && active && "md:visible md:opacity-100",
           )}
         >
           {/* Section-header paperclip — the primary "insert evidence" affordance.
@@ -483,7 +503,7 @@ export function SectionEditor({
                     e.stopPropagation();
                     onOpenEvidenceBinder?.();
                   }}
-                  aria-label="Open Evidence & Attachments — add evidence first"
+                  aria-label="Open evidence and attachments. Add evidence first."
                   title="No evidence yet. Click to open Evidence & Attachments"
                 >
                   <Paperclip className="size-3.5" />
@@ -520,7 +540,7 @@ export function SectionEditor({
                 }}
                 aria-label={
                   linkedEvidence.length > 0
-                    ? `${linkedEvidence.length} linked — insert evidence at cursor`
+                    ? `${linkedEvidence.length} linked. Insert evidence at the cursor.`
                     : "Insert evidence at cursor"
                 }
                 title={
@@ -552,6 +572,21 @@ export function SectionEditor({
               />
             );
           })()}
+          {paper && onOpenEvidenceBinder && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenEvidenceBinder();
+              }}
+              aria-label="Evidence for this section"
+              title="Evidence for this section"
+            >
+              <FolderOpen className="size-3.5" />
+            </Button>
+          )}
           <CommentPopover
             draft={draft}
             sectionId={section.id}
@@ -611,15 +646,16 @@ export function SectionEditor({
                 disabled={isStreaming || !editable}
                 className="h-7 px-2 text-xs"
                 onClick={(e) => e.stopPropagation()}
+                aria-label={paper ? "Refine this section" : undefined}
               >
                 <Sparkles className="size-3 mr-1" />
-                Regenerate
+                {paper ? "Refine" : "Regenerate"}
               </Button>
             }
           />
         </div>
       </header>
-      {linkedEvidence.length > 0 && (
+      {linkedEvidence.length > 0 && !paper && (
         <div
           className={cn(
             "flex items-center gap-2 px-3 py-1.5 text-[11px] text-[var(--ds-muted)]",
@@ -721,7 +757,7 @@ export function SectionEditor({
           </BubbleMenu>
         )}
         {/* Edit mode uses Tailwind Typography's prose-sm — sans-serif
-         * (Geist, inherited from body), comfortable line-height, designed
+         * (Inter, inherited from body), comfortable line-height, designed
          * for writing. The serif look of the export render lives in
          * Preview (paged.js) and Edit-on-page (single-page contenteditable
          * — both use Iowan Old Style). Two intentional fonts: one for

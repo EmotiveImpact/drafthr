@@ -42,7 +42,7 @@ export function ImproveTab() {
       className="space-y-3"
     >
       <p className="text-[12px] text-[var(--ds-muted)] px-1">
-        Optional — recommended for high-stakes letters. Pick a lane.
+        Optional, recommended for high-stakes letters. Pick a lane.
       </p>
 
       <AiSpecialistLane draftId={draftId} />
@@ -327,22 +327,19 @@ function ReviewLane({
           Coming soon
         </div>
       ) : (
-        <motion.button
+        <button
           type="button"
           onClick={onClick}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ duration: 0.12 }}
           className={cn(
-            "mt-2.5 inline-flex items-center justify-center gap-1.5 w-full h-8 px-3 rounded-md text-[12px] font-semibold transition",
+            "mt-2.5 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-[8px] px-3 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
             primary
-              ? "bg-[var(--ds-ink)] text-white hover:opacity-90"
-              : "bg-[var(--ds-surface)] text-[var(--ds-ink)] border border-[var(--ds-line)] hover:bg-[var(--ds-line-2)]",
+              ? "bg-[var(--ds-accent)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)]"
+              : "border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)]",
           )}
         >
           {cta}
           <ArrowRight className="size-3.5" />
-        </motion.button>
+        </button>
       )}
     </div>
   );

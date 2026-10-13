@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, MessageSquarePlus, PenLine } from "lucide-react";
 import { toast } from "sonner";
-import { PillTabs } from "@/components/ds/PageHeader";
-import { DocBar, DOC_BTN, DOC_BTN_PRIMARY } from "@/components/finalize/DocBar";
+import { BAR_BTN, SegmentedTabs, SubPageBar } from "@/components/editor/SubPageChrome";
 import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -14,7 +13,7 @@ import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewD
 import { canEditDraft } from "@/lib/permissions";
 import { notifyReviewRequested } from "@/lib/collab-notify";
 import { Button } from "@/components/ui/button";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import "@/components/editor/letter-workspace.css";
 
 type PanelTab = "edits" | "progress";
 
@@ -27,17 +26,12 @@ type PendingComment = {
 };
 
 /**
- * Review step — the assessment page between Edit and Finalise. This is the
- * home of the COLLABORATIVE REVIEW surface (reviewers, suggestions, comments,
- * approval), sitting alongside the read-only letter preview.
- *
- *   [ 300px  Health sidebar ] [ letter preview ] [ 340px collaborative Review rail ]
- *
- *   Edit → REVIEW → Finalise (ship gate lives there)
- *
- * Health/Improve audit lives in the left sidebar's second tab; the right rail
- * is the review workspace (comment / suggest / approve). Evidence is a drawer
- * accessible from Edit; it is no longer a wizard step.
+ * The old review address (`/editor/:id/review`), kept so old links work and
+ * restyled in the letter workspace's language: the document bar (back to
+ * the letter, name, status pill), the letter on the grey canvas where you
+ * select text to comment or suggest, and a 380px side panel with Edits (the
+ * collaborative review: reviewers, suggestions, comments, approval) and
+ * Progress (health score, Fix this first, all checks, Improve).
  */
 export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -62,9 +56,9 @@ export function ReviewStep() {
     if (pendingComment || suggestFor || focusCommentId) setPanelTab("edits");
   }, [pendingComment, suggestFor, focusCommentId]);
 
-  // On-page selection popover: select any text in the letter → Comment / Suggest.
-  // This is the app's own affordance (not pagedly's toolbar) so it is discoverable
-  // and works for EVERYONE — a reviewer on a read-only page can still select text
+  // On-page selection popover: select any text in the letter, then Comment or
+  // Suggest. This is the app's own affordance (not pagedly's toolbar) so it is
+  // discoverable and works for everyone: a reviewer on a read-only page can still select text
   // and comment/suggest, and the author gets the same one-click bubble.
   const canvasRef = useRef<HTMLDivElement>(null);
   const [selBubble, setSelBubble] = useState<{
@@ -172,16 +166,18 @@ export function ReviewStep() {
 
   if (!draft || !draftId) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-muted-foreground">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
-          <ArrowLeft className="size-4 mr-1" /> Back home
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found.</h1>
+        <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
+          This letter isn't in this workspace, or it was deleted.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => nav("/")}>
+          <ArrowLeft className="size-4" /> Back home
         </Button>
       </div>
     );
   }
 
-  const meta = getLetterMeta(draft.letterType);
   const reviewStatus = draft.reviewStatus ?? "draft";
   const canResolve = canEditDraft(role, reviewStatus);
 
@@ -233,28 +229,22 @@ export function ReviewStep() {
   const openSuggestions = draft.sections.filter((s) => s.pendingChange).length;
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-[var(--ds-canvas)]">
-      <DocBar
+    <div className="lw-root flex min-h-0 flex-1 flex-col bg-[var(--ds-canvas)]">
+      <SubPageBar
         draft={draft}
-        current="review"
-        title={draft.title ?? meta.title}
-        label="Review"
+        onBack={() => nav(`/editor/${draft.id}`)}
         actions={
           <>
             <button
               type="button"
-              className={DOC_BTN}
+              className={BAR_BTN}
               onClick={() => nav(`/editor/${draft.id}`)}
               aria-label="Back to edit"
             >
-              <ArrowLeft className="size-3.5" />
-              <span className="hidden sm:inline">Edit</span>
+              <span className="hidden sm:inline">Open in the workspace</span>
+              <span className="sm:hidden">Letter</span>
             </button>
-            <button
-              type="button"
-              className={DOC_BTN_PRIMARY}
-              onClick={() => nav(`/editor/${draft.id}/finalize`)}
-            >
+            <button type="button" className={BAR_BTN} onClick={() => nav(`/editor/${draft.id}/finalize`)}>
               Finalise
               <ArrowRight className="size-3.5" />
             </button>
@@ -268,7 +258,7 @@ export function ReviewStep() {
        * so composer drafts survive a tab switch. Below lg the page scrolls:
        * the letter first, then the panel, so Submit / Approve / comments stay
        * reachable on phones. */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 content-start overflow-y-auto lg:content-stretch lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 content-start overflow-y-auto lg:content-stretch lg:overflow-hidden lg:grid-cols-[minmax(0,1fr)_380px]">
         <main
           ref={canvasRef}
           className="review-canvas relative h-[75dvh] min-h-0 overflow-hidden bg-[var(--ds-canvas)] lg:h-auto"
@@ -306,13 +296,13 @@ export function ReviewStep() {
 
         <aside
           aria-label="Review panel"
-          className="flex flex-col border-t border-[var(--ds-line)] bg-[var(--ds-surface)] lg:min-h-0 lg:border-l lg:border-t-0"
+          className="flex flex-col border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] lg:min-h-0 lg:border-l lg:border-t-0"
         >
-          <div className="flex h-[52px] shrink-0 items-center border-b border-[var(--ds-line-2)] px-3">
-            <PillTabs
-              className="mt-0"
-              activeTab={panelTab}
-              onTabChange={(id) => setPanelTab(id as PanelTab)}
+          <div className="flex h-[60px] shrink-0 items-center border-b border-[var(--ds-line-2)] pl-4 pr-3">
+            <SegmentedTabs<PanelTab>
+              label="Review panel"
+              value={panelTab}
+              onChange={setPanelTab}
               tabs={[
                 { id: "edits", label: "Edits", count: openSuggestions + unresolvedCommentCount },
                 { id: "progress", label: "Progress" },
@@ -360,12 +350,12 @@ export function ReviewStep() {
             transform: "translateX(-50%)",
             zIndex: 50,
           }}
-          className="flex items-center gap-0.5 rounded-[var(--ds-r-m)] bg-[var(--ds-surface)] p-[3px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)] ring-1 ring-[var(--ds-line)]"
+          className="flex items-center gap-0.5 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-[3px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)]"
         >
           <button
             type="button"
             onClick={commentOnSelection}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
+            className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
             <MessageSquarePlus className="size-3.5" /> Comment
           </button>
@@ -373,7 +363,7 @@ export function ReviewStep() {
           <button
             type="button"
             onClick={suggestOnSelection}
-            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)]"
+            className="inline-flex items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-[12.5px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
           >
             <PenLine className="size-3.5" /> Suggest edit
           </button>

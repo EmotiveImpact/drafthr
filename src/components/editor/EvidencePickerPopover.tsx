@@ -168,7 +168,7 @@ export function EvidencePickerPopover({
                     mode === "pack_only"
                       ? "Pack-only items aren't inserted into the letter"
                       : isInserted
-                      ? `Already inserted in §${insertedSection} — re-insert at cursor`
+                      ? `Already inserted in §${insertedSection}. Insert again at the cursor.`
                       : `Insert at cursor as ${label || mode}`
                   }
                 >
@@ -256,7 +256,7 @@ function buildInlineHtml(item: EvidenceItem): string {
     const text = item.content || item.filename || "Evidence";
     const kindLabel =
       item.kind === "email" ? "Email" : item.kind === "calendar" ? "Calendar entry" : "Note";
-    return `<blockquote>${escHtml(text)}<br/><em>— ${kindLabel}${caption}</em></blockquote>`;
+    return `<blockquote>${escHtml(text)}<br/><em>${kindLabel}${caption}</em></blockquote>`;
   }
   // Documents (no inline render possible)
   return `<p>I refer to the document <em>${escHtml(item.filename || "(unnamed)")}</em>${

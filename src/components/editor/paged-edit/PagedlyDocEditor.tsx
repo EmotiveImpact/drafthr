@@ -352,7 +352,16 @@ export function PagedlyDocEditor({
     <div
       ref={wrapRef}
       className="h-full min-h-0 [&_.pagedly-ce-footer]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-ce-page]:[zoom:var(--dhr-page-zoom,1)]"
-      style={{ "--dhr-page-zoom": pageZoom } as CSSProperties}
+      // The letter on the page is set in the workspace serif (Newsreader),
+      // the page chrome in the UI sans (Inter).
+      style={
+        {
+          "--dhr-page-zoom": pageZoom,
+          "--pagedly-font-family": "var(--font-serif)",
+          "--pagedly-line-height": "1.5",
+          "--pagedly-ui-font": "var(--font-sans)",
+        } as CSSProperties
+      }
     >
       <LetterEditor
         key={`${draftId}:${mountVersion}`}

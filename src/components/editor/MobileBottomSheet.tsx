@@ -4,6 +4,7 @@ import {
   useMotionValue,
   useTransform,
   animate,
+  useReducedMotion,
   type PanInfo,
 } from "framer-motion";
 
@@ -40,11 +41,11 @@ const SNAP_Y: Record<Snap, number> = {
  * regardless of how far the drag actually went. px/s. */
 const FLICK_THRESHOLD_PX_PER_SEC = 600;
 
-const SPRING = {
-  type: "spring" as const,
-  stiffness: 320,
-  damping: 38,
-  mass: 0.8,
+/** A calm ease, no spring: the sheet slides and stops (no overshoot). */
+const TWEEN = {
+  type: "tween" as const,
+  duration: 0.24,
+  ease: [0.2, 0, 0, 1] as [number, number, number, number],
 };
 
 export function MobileBottomSheet({
@@ -72,13 +73,18 @@ export function MobileBottomSheet({
   // Project the 0-100 motion value into a CSS percentage string so the
   // translate is height-independent.
   const yPct = useTransform(y, (n) => `${n}%`);
+  const reduce = useReducedMotion();
 
-  // Spring to the requested snap whenever it changes externally.
+  // Slide to the requested snap whenever it changes externally.
   useEffect(() => {
     const target = open ? SNAP_Y[snap] : SNAP_Y.closed;
-    const controls = animate(y, target, SPRING);
+    if (reduce) {
+      y.set(target);
+      return;
+    }
+    const controls = animate(y, target, TWEEN);
     return () => controls.stop();
-  }, [open, snap, y]);
+  }, [open, snap, y, reduce]);
 
   const handleDragEnd = (_e: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
     // info.offset.y is pixels dragged from drag-start position.
@@ -135,7 +141,7 @@ export function MobileBottomSheet({
       className={
         (className ?? "") +
         " fixed left-0 right-0 bottom-0 z-40 h-[90vh] bg-[var(--ds-surface)] " +
-        "rounded-t-2xl shadow-[0_-12px_32px_rgba(0,0,0,0.18)] " +
+        "rounded-t-2xl shadow-[var(--ds-shadow-l)] " +
         "flex flex-col touch-pan-y will-change-transform " +
         (open ? "" : "pointer-events-none ") +
         (desktopClass ?? "")

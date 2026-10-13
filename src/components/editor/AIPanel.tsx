@@ -2,14 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, t
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical, SquarePen, SlidersHorizontal, Paperclip } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical, SquarePen, SlidersHorizontal, Paperclip, Bookmark, ChevronDown, Square, TextSelect } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useNavigate } from "react-router-dom";
+import { getDiffViewMode, setDiffViewMode, type DiffViewMode } from "@/lib/diff-view-mode";
 import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
 import { uid } from "@/lib/utils";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
@@ -95,17 +98,17 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   },
   // addClause
   {
-    label: "+ Confidentiality clause",
+    label: "+ confidentiality clause",
     prompt:
       "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
   },
   {
-    label: "+ IP-assignment clause",
+    label: "+ IP assignment clause",
     prompt:
       "Add an IP-assignment clause to the terms section: all work-product vests in the employer, recipient assigns and waives moral rights so far as the law permits.",
   },
   {
-    label: "+ Reservation of rights",
+    label: "+ reservation of rights",
     prompt:
       "Add an explicit reservation-of-rights paragraph to the closing: statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
   },
@@ -158,6 +161,7 @@ export function AIPanel({
   threadKey,
   onSent,
   onOpenEvidence,
+  chips,
 }: {
   draft: Draft;
   activeSectionId: string | null;
@@ -187,6 +191,8 @@ export function AIPanel({
   onSent?: () => void;
   /** Opens the letter's evidence (the composer's Files button). */
   onOpenEvidence?: () => void;
+  /** Prompt chips above the box, fitting the letter's stage. A click sends. */
+  chips?: { label: string; prompt: string }[];
 }) {
   const profile = useProfileStore((s) => s.profile);
 
@@ -361,9 +367,9 @@ export function AIPanel({
     return { quote, sectionId: sectionEl?.getAttribute("data-section-id") ?? undefined };
   };
 
-  const submit = async (e?: React.FormEvent) => {
+  const submit = async (e?: React.FormEvent, override?: string) => {
     e?.preventDefault();
-    const text = input.trim();
+    const text = (override ?? input).trim();
     if (!text || status === "streaming" || status === "submitted") return;
     // Don't fire a new chat turn while a section regen is mutating the draft.
     if (applyAbortsRef.current.size > 0) return;
@@ -388,7 +394,7 @@ export function AIPanel({
     }
 
     const scoped = `${text}\n[scope: ${resolvedLabel}]${scopePayload}`;
-    setInput("");
+    if (override === undefined) setInput("");
     setRecentPrompts(pushRecentPrompt(text));
     onSent?.();
     await sendMessage({ text: scoped });
@@ -588,6 +594,32 @@ export function AIPanel({
         : "Whole letter";
 
   const showThread = replaceThread === undefined;
+  const nav = useNavigate();
+
+  // Prompts sent from elsewhere in the workspace (chips, a stage's "Ask
+  // DraftHR"): window event "drafthr:ask" with { draftId, prompt }.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ draftId?: string; prompt?: string }>).detail;
+      if (!d?.prompt || (d.draftId && d.draftId !== draft.id)) return;
+      void submitRef.current(undefined, d.prompt);
+    };
+    window.addEventListener("drafthr:ask", on);
+    return () => window.removeEventListener("drafthr:ask", on);
+  }, [draft.id]);
+
+  // "Show new edits" (the sliders menu): in the text or side by side.
+  const [diffMode, setDiffModeState] = useState<DiffViewMode>(() => getDiffViewMode());
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<DiffViewMode>).detail;
+      if (d === "inline" || d === "card") setDiffModeState(d);
+    };
+    window.addEventListener("drafthr:diff-view-mode", on);
+    return () => window.removeEventListener("drafthr:diff-view-mode", on);
+  }, []);
 
   // Switching side panel tabs swaps what the scroller holds: start a
   // replaced view at its top and the chat at its latest message.
@@ -748,32 +780,66 @@ export function AIPanel({
         )}
       </div>
 
-      {/* 3A composer: one soft box with the context chip, the message and a
-       * tool row (saved prompts, files, scope) ending in a dark square send. */}
-      <form onSubmit={submit} className="shrink-0 px-3 pb-3 pt-2">
+      {/* Ask DraftHR: the stage's prompt chips, then one white box with the
+       * context chip, the message and a tool row ending in a dark send. */}
+      <form onSubmit={submit} className="shrink-0 px-4 pb-4 pt-2">
+        {chips && chips.length > 0 && (
+          <div className="mb-2.5 flex flex-wrap gap-1.5" aria-label="Suggested prompts">
+            {chips.map((c) => (
+              <button
+                key={c.label}
+                type="button"
+                disabled={busy}
+                onClick={() => void submit(undefined, c.prompt)}
+                className="inline-flex h-7 items-center whitespace-nowrap rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
         <div
-          className="flex cursor-text flex-col gap-2 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] pb-2 pl-3 pr-2.5 pt-[11px] transition focus-within:border-[var(--ds-line-strong)] focus-within:shadow-[var(--ds-shadow-s)]"
+          className="flex cursor-text flex-col gap-2 rounded-[14px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pb-2.5 pl-3.5 pr-2.5 pt-3 shadow-[var(--ds-shadow-ask)] transition-colors duration-[120ms] focus-within:border-[var(--ds-line-strong)]"
           onClick={(e) => {
             if (e.target === e.currentTarget) textareaRef.current?.focus();
           }}
         >
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-[var(--ds-r-s)] bg-[var(--ds-surface-3)] py-1 pl-2 pr-2.5 text-[12px] text-[var(--ds-body)]">
-              <FileText className="size-3 shrink-0 text-[var(--ds-muted)]" />
-              <span className="truncate">
-                <span className="font-medium text-[var(--ds-ink)]">{scopeChipLabel}</span>
-              </span>
-            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-[26px] min-w-0 max-w-full items-center gap-1.5 rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] pl-2 pr-1.5 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  aria-label={`Context: ${scopeChipLabel}`}
+                  title="What DraftHR should look at"
+                >
+                  <FileText className="size-3.5 shrink-0 text-[var(--ds-muted)]" />
+                  <span className="truncate">{scopeChipLabel}</span>
+                  <ChevronDown className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="top" className="w-[240px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Ask about</DropdownMenuLabel>
+                {(["letter", "section", "selection"] as AIChatScope[]).map((sc) => (
+                  <DropdownMenuItem key={sc} onClick={() => setScope(sc)}>
+                    <span className="flex-1 truncate">
+                      {sc === "letter" ? "Whole letter" : sc === "section" ? `Section${scopeSection || activeSectionId ? `: ${(draft.sections.find((x) => x.id === activeSectionId) ?? draft.sections[0])?.title ?? ""}` : ""}` : "Selected text"}
+                    </span>
+                    {scope === sc && <Check className="size-3.5" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <textarea
             ref={textareaRef}
             data-ai-composer
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask DraftHR anything…"
+            placeholder="Ask DraftHR anything about this letter"
             aria-label="Message DraftHR"
             rows={1}
-            className="block max-h-[120px] min-h-[22px] w-full resize-none border-0 bg-transparent px-0.5 text-[13.5px] leading-[20px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none"
+            className="block max-h-[120px] min-h-[22px] w-full resize-none border-0 bg-transparent px-0.5 text-[14px] leading-[21px] text-[var(--ds-ink)] placeholder:text-[var(--ds-muted)] focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -788,14 +854,50 @@ export function AIPanel({
                   <button
                     type="button"
                     disabled={busy}
-                    className="grid size-7 shrink-0 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)] disabled:opacity-50"
-                    aria-label="Saved prompts"
-                    title="Saved prompts"
+                    className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label="Add to the message"
+                    title="Add"
                   >
                     <Plus className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top" className="w-[260px]">
+                <DropdownMenuContent align="start" side="top" className="w-[240px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                  <DropdownMenuItem onClick={() => nav(`/editor/${draft.id}/evidence?action=add`)}>
+                    <Paperclip className="mr-2 size-4" /> Add evidence
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setScope("selection")}>
+                    <TextSelect className="mr-2 size-4" /> Ask about the selected text
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {onOpenEvidence && (
+                <button
+                  type="button"
+                  onClick={onOpenEvidence}
+                  className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] px-1.5 text-[13px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  title="Evidence and files for this letter"
+                >
+                  <Paperclip className="size-3.5" />
+                  Files
+                  {(draft.evidence?.length ?? 0) > 0 && (
+                    <span className="ds-mono text-[11.5px] text-[var(--ds-subtle)]">{draft.evidence?.length}</span>
+                  )}
+                </button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] px-1.5 text-[13px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label="Saved prompts"
+                    title="Saved prompts"
+                  >
+                    <Bookmark className="size-3.5" />
+                    Prompts
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" className="w-[260px] duration-[160ms] data-[state=closed]:duration-[100ms]">
                   <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Saved prompts</DropdownMenuLabel>
                   {QUICK_PROMPTS.map((q) => (
                     <DropdownMenuItem
@@ -808,65 +910,76 @@ export function AIPanel({
                       {q.label.replace(/^\+\s*/, "Add ")}
                     </DropdownMenuItem>
                   ))}
+                  {recentPrompts.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Recent</DropdownMenuLabel>
+                      {recentPrompts.slice(0, 5).map((rp) => (
+                        <DropdownMenuItem key={rp} onClick={() => setInput(rp)}>
+                          <span className="truncate">{rp}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <span className="mx-1 h-4 w-px shrink-0 bg-[var(--ds-line-strong)]" aria-hidden />
-              {onOpenEvidence && (
-                <button
-                  type="button"
-                  onClick={onOpenEvidence}
-                  className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--ds-r-s)] px-1.5 text-[12.5px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
-                  title="Evidence and files for this letter"
-                >
-                  <Paperclip className="size-3.5" />
-                  Files
-                  {(draft.evidence?.length ?? 0) > 0 && (
-                    <span className="ds-mono text-[11px] text-[var(--ds-muted)]">{draft.evidence?.length}</span>
-                  )}
-                </button>
-              )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="grid size-7 place-items-center rounded-[var(--ds-r-s)] text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
-                    aria-label={`Scope: ${SCOPE_LABEL[scope]}`}
-                    title={`Scope: ${SCOPE_LABEL[scope]}`}
+                    className="grid size-7 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label="Options"
+                    title="Options"
                   >
-                    <SlidersHorizontal className="size-3.5" />
+                    <SlidersHorizontal className="size-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" side="top" className="w-[240px]">
-                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Apply changes to</DropdownMenuLabel>
-                  {(["letter", "section", "selection"] as AIChatScope[]).map((s) => (
-                    <DropdownMenuItem key={s} onClick={() => setScope(s)}>
-                      <span className="flex-1 truncate">
-                        {s === "letter" ? "Whole letter" : s === "section" ? `Section${scopeSection ? `: ${scopeSection.title}` : ""}` : "Selected text"}
-                      </span>
-                      {scope === s && <Check className="size-3.5" />}
-                    </DropdownMenuItem>
-                  ))}
+                <DropdownMenuContent align="end" side="top" className="w-[240px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Show DraftHR's edits</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => setDiffViewMode("inline")}>
+                    <span className="flex-1">In the text</span>
+                    {diffMode === "inline" && <Check className="size-3.5" />}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDiffViewMode("card")}>
+                    <span className="flex-1">Side by side</span>
+                    {diffMode === "card" && <Check className="size-3.5" />}
+                  </DropdownMenuItem>
+                  {messages.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          if (confirm("Clear this chat thread?")) {
+                            clearAIChat(draft.id);
+                            setMessages([]);
+                          }
+                        }}
+                      >
+                        <SquarePen className="mr-2 size-4" /> New thread
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               {busy ? (
                 <button
                   type="button"
                   onClick={() => stopAll()}
-                  className="ml-1 grid size-[30px] place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-surface-3)] text-[var(--ds-ink)] hover:bg-[var(--ds-line)]"
+                  className="ml-1 grid size-[30px] place-items-center rounded-[8px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="Stop"
                   title="Stop"
                 >
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <Square className="size-3 fill-current" />
                 </button>
               ) : (
                 <button
                   type="submit"
                   disabled={!input.trim()}
-                  className="ml-1 grid size-[30px] place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)] disabled:opacity-30"
+                  className="ml-1 grid size-[30px] place-items-center rounded-[8px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] disabled:bg-[var(--ds-accent)] disabled:text-[var(--ds-on-accent)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="Send"
-                  title="Send (⌘ + Enter)"
+                  title="Send (Ctrl or Cmd + Enter)"
                 >
                   <ArrowUp className="size-4" />
                 </button>
@@ -874,9 +987,6 @@ export function AIPanel({
             </div>
           </div>
         </div>
-        <p className="m-0 mt-1.5 text-center text-[11px] text-[var(--ds-subtle)]">
-          ⌘ Enter to send. DraftHR proposes changes for you to accept.
-        </p>
       </form>
     </div>
   );

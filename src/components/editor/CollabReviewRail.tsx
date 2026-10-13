@@ -197,6 +197,7 @@ export function CollabReviewRail({
             sub={role ? roleLabel(role) : undefined}
             status={role === "reviewer" ? "Reviewing" : "Author"}
             tone="neutral"
+            avatarName={me.name}
           />
           {reviewers
             .filter((r) => r.name !== me.name)
@@ -412,7 +413,7 @@ export function CollabReviewRail({
 
         {reviewStatus === "approved" && (
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-[var(--ds-green-fg)]">
-            <CheckCircle2 className="size-3.5" /> Approved — clear to export and send.
+            <CheckCircle2 className="size-3.5" /> Approved. Clear to export and send.
           </div>
         )}
       </div>
@@ -447,9 +448,12 @@ function ReviewerRow({
   sub,
   status,
   tone,
+  avatarName,
 }: {
   seed: string;
   name: string;
+  /** The name the initials come from, when the row reads "You". */
+  avatarName?: string;
   sub?: string;
   status: string;
   tone: "good" | "warn" | "info" | "neutral";
@@ -464,7 +468,7 @@ function ReviewerRow({
           : "bg-[var(--ds-line-2)] text-[var(--ds-muted)]";
   return (
     <div className="flex items-center gap-2 rounded-md px-1 py-1">
-      <Avatar seed={seed} name={name === "You" ? sub ?? name : name} size="md" />
+      <Avatar seed={seed} name={avatarName || name} size="md" />
       <div className="min-w-0 flex-1 leading-tight">
         <span className="block truncate text-[12px] font-semibold text-[var(--ds-ink)]">
           {name}
@@ -554,7 +558,7 @@ function SuggestionCard({
           <Sparkles className="size-3.5 shrink-0 text-[var(--ds-amber-fg)]" />
         )}
         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[var(--ds-ink)]">
-          {human ? `${pending.authorName} suggests` : "AI proposed"}
+          {human ? `${pending.authorName} suggests` : "DraftHR suggests"}
           <span className="ml-1 font-normal text-[var(--ds-subtle)]">· {section.title}</span>
         </span>
       </button>

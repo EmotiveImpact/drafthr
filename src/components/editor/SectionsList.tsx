@@ -49,7 +49,7 @@ export function SectionsList({ draft, activeSectionId, onSelect }: Props) {
             {s.pendingChange ? (
               <span
                 className="shrink-0 px-1 py-px text-[9px] font-bold rounded-full bg-[var(--ds-amber-fg)] text-white"
-                title="AI proposed a change — open this section to review"
+                title="DraftHR proposed a change. Open this section to review it."
               >
                 +1
               </span>
