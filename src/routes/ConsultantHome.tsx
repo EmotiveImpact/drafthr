@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/ds";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useShallow } from "zustand/react/shallow";
@@ -14,9 +13,10 @@ import {
   UserCog,
 } from "lucide-react";
 import { useConsultantStore, isProfileComplete } from "@/lib/consultantProfile";
-import { useBookingsStore, parseSlaHours, type Booking } from "@/lib/bookings";
+import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { ConsultantInbox } from "@/components/consultants/ConsultantInbox";
-import { BTN_OUTLINE, BTN_PRIMARY } from "@/components/consultants/ui";
+import { BTN_LG, BTN_OUTLINE, BTN_PRIMARY } from "@/components/consultants/ui";
+import { ExpertsHeader } from "@/components/consultants/ExpertsHeader";
 import { pullInbox, pullProfile } from "@/lib/marketplaceSync";
 import { cn } from "@/lib/utils";
 
@@ -24,19 +24,17 @@ import { cn } from "@/lib/utils";
 const EMPTY_BOOKINGS: Booking[] = [];
 
 /**
- * Naïve earnings calculation — rate × estimated hours per completed
- * booking, using SLA as a proxy for hours. Real implementation will read
- * actual hours logged + Stripe transfer amounts once payouts land.
+ * Indicative value: the rate is charged once per booking (the server's price
+ * snapshot), so value is the rate times completed reviews. Real figures come
+ * from Stripe transfers once payouts land.
  */
 function computeEarnings(
   bookings: Array<{ status: string }>,
-  ratePerHour: number,
-  slaString: string,
+  ratePerReview: number,
 ): { completed: number; pending: number; lifetime: number } {
-  const hoursPerBooking = parseSlaHours(slaString);
   const completed = bookings.filter((b) => b.status === "completed").length;
   const pending = bookings.filter((b) => ["accepted", "delivered"].includes(b.status)).length;
-  const lifetime = completed * ratePerHour * hoursPerBooking;
+  const lifetime = completed * ratePerReview;
   return { completed, pending, lifetime };
 }
 
@@ -102,24 +100,24 @@ export function ConsultantHome() {
   const pendingCount = allBookings.filter((b) => b.status === "requested").length;
   const activeCount = allBookings.filter((b) => b.status === "accepted").length;
   const earnings = profile
-    ? computeEarnings(allBookings, profile.price, profile.sla)
+    ? computeEarnings(allBookings, profile.price)
     : { completed: 0, pending: 0, lifetime: 0 };
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pb-24 pt-8 sm:px-8 sm:pt-11 lg:px-11">
-      <PageHeader
+    <div className="flex min-h-0 flex-1 flex-col">
+      <ExpertsHeader
         crumbs={[{ label: "Consultant" }]}
         title={profile?.fullName ? `Welcome back, ${profile.fullName.split(" ")[0]}` : "Welcome to DraftHR"}
         lede="You're signed in as a consultant. HR teams discover you through the marketplace, and DraftHR routes review requests straight to your inbox below."
         actions={
           <>
             {published && (
-              <button type="button" onClick={() => nav("/consultants")} className={`${BTN_OUTLINE} h-9 px-3.5`}>
+              <button type="button" onClick={() => nav("/consultants")} className={cn(BTN_OUTLINE, BTN_LG)}>
                 View in marketplace
                 <ExternalLink className="size-3.5" aria-hidden />
               </button>
             )}
-            <button type="button" onClick={() => nav("/c/profile")} className={`${BTN_PRIMARY} h-9 px-3.5`}>
+            <button type="button" onClick={() => nav("/c/profile")} className={cn(BTN_PRIMARY, BTN_LG)}>
               {complete ? "Edit profile" : "Set up profile"}
               <ArrowRight className="size-3.5" aria-hidden />
             </button>
@@ -127,6 +125,7 @@ export function ConsultantHome() {
         }
       />
 
+      <div className="w-full px-4 pb-24 pt-7 sm:px-8 md:px-12">
       {/* ─── Profile status ──────────────────────────────────────── */}
       {published ? (
         <p className="m-0 mb-8 inline-flex max-w-full items-start gap-2 text-[13px] leading-relaxed text-[var(--ds-body)]">
@@ -138,7 +137,7 @@ export function ConsultantHome() {
         </p>
       ) : (
         <section
-          className="mb-8 flex items-start gap-3.5 rounded-[var(--ds-r-l)] px-5 py-4 sm:px-6 sm:py-5"
+          className="mb-8 flex items-start gap-3.5 rounded-[14px] px-5 py-4 sm:px-6 sm:py-5"
           style={{
             background: complete ? "var(--ds-tint-lavender)" : "var(--ds-tint-butter)",
           }}
@@ -195,11 +194,11 @@ export function ConsultantHome() {
             value={
               profile && earnings.completed > 0
                 ? `~${profile.currency}${earnings.lifetime.toLocaleString()}`
-                : "–"
+                : `${profile?.currency ?? "£"}0`
             }
             foot={
               profile && earnings.completed > 0
-                ? `Indicative: ${profile.currency}${profile.price}/hr × est. hours`
+                ? `Indicative: ${profile.currency}${profile.price} per review × completed reviews`
                 : "Tracked once payouts go live"
             }
           />
@@ -214,7 +213,7 @@ export function ConsultantHome() {
 
       {/* ─── Inbox + At a glance ────────────────────────────────── */}
       <div className="grid gap-x-8 gap-y-8 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <section aria-labelledby="inbox-h" className="min-w-0">
+        <section aria-labelledby="inbox-h" className="min-w-0" data-testid="consultant-inbox">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 id="inbox-h" className="m-0 text-[15px] font-medium text-[var(--ds-ink)]">
               Inbox
@@ -229,7 +228,7 @@ export function ConsultantHome() {
                     onClick={seedSampleBooking}
                     disabled={!complete}
                     title={complete ? undefined : "Complete your profile first"}
-                    className="inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] border border-dashed border-[var(--ds-line-strong)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] border border-dashed border-[var(--ds-line-strong)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Sparkles className="size-3" aria-hidden />
                     Add a demo request
@@ -246,14 +245,14 @@ export function ConsultantHome() {
           <ConsultantInbox />
         </section>
 
-        <aside aria-labelledby="glance-h" className="self-start rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-5">
+        <aside aria-labelledby="glance-h" className="self-start rounded-[14px] bg-[var(--ds-surface-2)] p-5">
           <h2 id="glance-h" className="m-0 mb-4 text-[14px] font-medium text-[var(--ds-ink)]">
             At a glance
           </h2>
           <dl className="m-0 space-y-3 text-[13px]">
             <Row label="Rate">
               {profile
-                ? `${profile.currency}${profile.price}/hr`
+                ? `${profile.currency}${profile.price} per review`
                 : <span className="text-[var(--ds-muted)]">Set in profile</span>}
             </Row>
             <Row label="SLA">{profile?.sla ?? <span className="text-[var(--ds-muted)]">Not set</span>}</Row>
@@ -263,11 +262,11 @@ export function ConsultantHome() {
                 : <span className="text-[var(--ds-muted)]">None yet</span>}
             </Row>
             <Row label="Reviews">
-              {profile?.reviews ?? 0}
-              <span className="ml-1 text-[var(--ds-muted)]">(new)</span>
+              {profile?.reviews ? profile.reviews : <span className="text-[var(--ds-muted)]">None yet</span>}
             </Row>
           </dl>
         </aside>
+      </div>
       </div>
     </div>
   );
@@ -289,7 +288,7 @@ function StatTile({
   spark?: number[];
 }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-[18px] pb-[15px] pt-4">
+    <div className="flex min-w-0 flex-col rounded-[14px] bg-[var(--ds-surface-2)] px-[18px] pb-[15px] pt-4">
       <div className="flex items-center justify-between gap-2 text-[12.5px] text-[var(--ds-muted)] [&_svg]:size-[15px] [&_svg]:shrink-0">
         <span className="truncate">{label}</span>
         {icon}

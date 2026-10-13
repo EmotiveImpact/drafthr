@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
-import { useConsultantStore } from "@/lib/consultantProfile";
+import { isProfileComplete, useConsultantStore } from "@/lib/consultantProfile";
 import { Check, Clock, FileText, Inbox, MessageSquareReply, X } from "lucide-react";
 import { PillTabs, type PageTab } from "@/components/ds";
 import { BookingThread } from "@/components/consultants/BookingThread";
@@ -76,7 +76,7 @@ export function ConsultantInbox() {
 
   if (bookings.length === 0) {
     return (
-      <div className="flex flex-col items-center rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-6 py-12 text-center">
+      <div className="flex flex-col items-center rounded-[16px] bg-[var(--ds-surface-2)] px-6 py-12 text-center">
         <span className="mb-3 grid size-10 place-items-center rounded-full bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)]">
           <Inbox className="size-5" aria-hidden />
         </span>
@@ -85,9 +85,12 @@ export function ConsultantInbox() {
           it'll land here with the full letter, evidence pack, and timer.
         </p>
         <p className="m-0 mt-2 text-[12.5px] text-[var(--ds-muted)]">
-          {profile
+          {/* Never claim the card is live while it is waiting for review. */}
+          {profile && isProfileComplete(profile) && profile.status === "published"
             ? "Your card is live now. Discovery is automatic."
-            : "Complete your profile to start showing up in search."}
+            : profile && isProfileComplete(profile)
+              ? "Your card is under review. You'll show up in search once it's approved."
+              : "Complete your profile to start showing up in search."}
         </p>
       </div>
     );
@@ -144,7 +147,7 @@ function BookingRow({ booking }: { booking: Booking }) {
         <div className="min-w-0 flex-1">
           <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div className="min-w-0 flex-1 basis-[200px]">
-              <h4 className="m-0 truncate text-[14px] font-semibold text-[var(--ds-ink)]">
+              <h4 className="m-0 truncate text-[14px] font-medium text-[var(--ds-ink)]">
                 {matterTitle}
               </h4>
               <p className="m-0 mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-[var(--ds-muted)]">
@@ -183,7 +186,7 @@ function BookingRow({ booking }: { booking: Booking }) {
               )}
 
               {showDecline && (
-                <div className="flex flex-col gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-surface)] p-3 shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]">
+                <div className="flex flex-col gap-2 rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-3">
                   <textarea
                     value={declineNote}
                     onChange={(e) => setDeclineNote(e.target.value)}
@@ -201,7 +204,7 @@ function BookingRow({ booking }: { booking: Booking }) {
                         void pushBookingRespond(booking.id, "decline", { note });
                         setShowDecline(false);
                       }}
-                      className={`${BTN_PRIMARY} bg-[var(--ds-red-fg)] hover:bg-[var(--ds-red-fg)] hover:opacity-90`}
+                      className={`${BTN_PRIMARY} bg-[var(--ds-red-fg)] hover:bg-[var(--ds-red-fg)] hover:brightness-95 active:brightness-90`}
                     >
                       Confirm decline
                     </button>
@@ -225,7 +228,7 @@ function BookingRow({ booking }: { booking: Booking }) {
               )}
 
               {showDeliver && (
-                <div className="flex flex-col gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-surface)] p-3 shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]">
+                <div className="flex flex-col gap-2 rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-3">
                   <textarea
                     value={deliveryNote}
                     onChange={(e) => setDeliveryNote(e.target.value)}
@@ -306,8 +309,9 @@ function BookingRow({ booking }: { booking: Booking }) {
               <BookingThread
                 booking={booking}
                 perspective="consultant"
-                title={matterTitle}
-                subtitle={`Requested ${requestedAgo}`}
+                title="HR"
+                subtitle={matterTitle}
+                testId={`inbox-messages-${booking.id}`}
               />
             </span>
           </div>
