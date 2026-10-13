@@ -125,7 +125,7 @@ export function ResetPassword() {
           error={passwordsMismatch ? "Passwords don’t match." : null}
         />
 
-        {error && <ErrorAlert message={error} />}
+        {error && <ErrorAlert title="Couldn't reset your password" message={error} />}
 
         <PrimaryButton disabled={!canSubmit}>
           {submitting ? (

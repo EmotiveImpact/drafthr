@@ -15,7 +15,7 @@
 
 import { forwardRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { AlertCircle, Check, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, Eye, EyeOff, ShieldCheck, XCircle } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/ds";
 import { AuthSplitShell } from "./AuthSplitShell";
 import { cn } from "@/lib/utils";
@@ -339,16 +339,36 @@ export function AuthCheckbox({
   );
 }
 
-export function ErrorAlert({ message }: { message: string }) {
+/**
+ * The kit error alert (kit 09 `.alert.err`): soft red panel, circle-x icon,
+ * a medium title saying what failed and a line saying what to do.
+ */
+export function ErrorAlert({ title = "Something went wrong", message }: { title?: string; message: string }) {
   return (
     <div
       role="alert"
       aria-live="polite"
-      className="rounded-[8px] border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)]/40 px-3 py-2.5 text-[12.5px] leading-snug text-[var(--ds-red-fg)]"
+      className="flex items-start gap-3 rounded-[12px] bg-[var(--ds-red-soft)] px-4 py-3 text-[13.5px] leading-snug"
     >
-      {message}
+      <XCircle aria-hidden className="mt-[2px] size-4 shrink-0 text-[var(--ds-red-fg)]" />
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-[var(--ds-ink)]">{title}</div>
+        <div className="mt-0.5 text-[var(--ds-body)]">{message}</div>
+      </div>
     </div>
   );
+}
+
+/** A full email address: something@domain.tld. */
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** The inline error for an email field (kit 04: says what to do), or null
+ * when it looks like a real address. */
+export function emailProblem(email: string): string | null {
+  const v = email.trim();
+  if (!v) return "Enter your email address.";
+  if (!EMAIL_RE.test(v)) return "Enter a full email address, like name@company.co.uk.";
+  return null;
 }
 
 export function PrimaryButton({

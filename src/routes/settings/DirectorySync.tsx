@@ -10,7 +10,7 @@ import { Callout, FadeIn, LoadingRows, Spinner } from "@/components/wizard/kit";
 import { SettingsCard } from "./parts";
 
 /**
- * /settings/directory-sync: admin-only Directory Sync (SCIM / Google
+ * /settings/directory-sync: admin-only directory sync (SCIM / Google
  * Workspace) status panel. Shows whether the tenant is paired with a WorkOS
  * organisation, lists the connected directories and provisioned users, and
  * opens the WorkOS Admin Portal so IT can configure or extend the
@@ -51,7 +51,38 @@ type DirectoryInfo = {
   users: DirectoryUserRow[];
 };
 
-const CRUMBS = [{ label: "Settings", href: "/settings?tab=integrations" }, { label: "Directory Sync" }];
+const CRUMBS = [{ label: "Settings", href: "/settings?tab=integrations" }, { label: "Directory sync" }];
+
+const LEDE =
+  "Keep who can use DraftHR in step with your company directory: Okta, Microsoft Entra ID, Google Workspace or any SCIM directory. New starters get access automatically, and leavers lose it.";
+
+/** WorkOS directory types in plain names ("gsuite directory" is Google
+ * Workspace). Unknown types fall back to the type in sentence case. */
+const DIRECTORY_TYPES: Record<string, string> = {
+  "gsuite directory": "Google Workspace",
+  "azure scim v2.0": "Microsoft Entra ID",
+  "okta scim v2.0": "Okta",
+  "onelogin scim v2.0": "OneLogin",
+  "jump cloud scim v2.0": "JumpCloud",
+  "pingfederate scim v2.0": "PingFederate",
+  "rippling scim v2.0": "Rippling",
+  "cyberark scim v2.0": "CyberArk",
+  "generic scim v2.0": "SCIM directory",
+  "generic scim v1.1": "SCIM directory",
+  bamboohr: "BambooHR",
+  "breathe hr": "Breathe HR",
+  "cezanne hr": "Cezanne HR",
+  "fourth hr": "Fourth HR",
+  gusto: "Gusto",
+  hibob: "HiBob",
+  "people hr": "People HR",
+  personio: "Personio",
+  workday: "Workday",
+};
+
+function directoryTypeName(type: string): string {
+  return DIRECTORY_TYPES[type.trim().toLowerCase()] ?? sentence(type);
+}
 
 function shortDate(iso: string | null | undefined): string {
   if (!iso) return "Not known";
@@ -77,9 +108,13 @@ export function DirectorySync() {
   const profileRole = useProfileStore((st) => st.profile.workspaceRole);
   const role = activeTenant?.role ?? profileRole ?? "";
   const isAdmin = ADMIN_ROLES.has(role);
+  // Without a signed-in workspace (local mode) there is nothing for
+  // directory sync to connect to: the page reads as "off", as the Employees
+  // strip does, rather than as an error.
+  const signedIn = !!activeTenant;
 
   const refresh = useCallback(async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !signedIn) return;
     setLoading(true);
     setError(null);
     try {
@@ -94,17 +129,17 @@ export function DirectorySync() {
       // reads as "not available", never as a parser message.
       const data = (await res.json().catch(() => null)) as DirectoryInfo | null;
       if (!data || typeof data !== "object") {
-        setError("Directory Sync isn't available right now. Try again in a minute.");
+        setError("Directory sync isn't available right now. Try again in a minute.");
         setInfo(null);
         return;
       }
       setInfo(data);
     } catch {
-      setError("Couldn't reach DraftHR to check Directory Sync. Check your connection and try again.");
+      setError("Couldn't reach DraftHR to check directory sync. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, signedIn]);
 
   useEffect(() => {
     void refresh();
@@ -121,14 +156,16 @@ export function DirectorySync() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(data.error ?? "Couldn't open the WorkOS Admin Portal");
+        toast.error(data.error ?? "Couldn't open the setup portal. Try again in a minute.");
         return;
       }
       const { link } = (await res.json()) as { link: string };
       // Open in a new tab: the portal is a separate origin (workos.com).
       window.open(link, "_blank", "noopener,noreferrer");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Network error");
+      toast.error("Couldn't reach DraftHR to open the setup portal. Check your connection and try again.", {
+        description: err instanceof Error && err.message ? err.message : undefined,
+      });
     } finally {
       setPortalLoading(false);
     }
@@ -137,12 +174,12 @@ export function DirectorySync() {
   if (!isAdmin) {
     return (
       <div className="w-full min-w-0 px-4 pb-16 pt-6 sm:px-8 lg:px-12 lg:pt-[34px]">
-        <Band crumbs={CRUMBS} title="Directory Sync" />
+        <Band crumbs={CRUMBS} title="Directory sync" />
         <div className="max-w-[720px]">
           <SettingsCard
             icon={<ShieldCheck />}
             title="Not allowed"
-            description="Only workspace admins can view or change Directory Sync configuration. Ask an admin if you need IT to wire your IdP into DraftHR."
+            description="Only workspace owners and admins can view or change directory sync. Ask an admin if you need it set up."
           />
         </div>
       </div>
@@ -153,17 +190,18 @@ export function DirectorySync() {
     <div className="w-full min-w-0 px-4 pb-16 pt-6 sm:px-8 lg:px-12 lg:pt-[34px]">
       <Band
         crumbs={CRUMBS}
-        title="Directory Sync"
-        lede="Auto-provision DraftHR seats from Okta, Entra ID (Azure AD), Google Workspace, or any SCIM 2.0 directory. Powered by WorkOS."
+        title="Directory sync"
+        lede={LEDE}
       />
 
       <div className="flex max-w-[1000px] flex-col gap-3.5">
         {error && (
-          <Callout tone="error" title="Couldn't load Directory Sync." role="alert">
+          <Callout tone="error" title="Couldn't load directory sync" role="alert">
             {error}
           </Callout>
         )}
         <ConnectionCard
+          signedIn={signedIn}
           info={info}
           loading={loading}
           portalLoading={portalLoading}
@@ -178,12 +216,14 @@ export function DirectorySync() {
 }
 
 function ConnectionCard({
+  signedIn,
   info,
   loading,
   portalLoading,
   onOpenPortal,
   onRefresh,
 }: {
+  signedIn: boolean;
   info: DirectoryInfo | null;
   loading: boolean;
   portalLoading: boolean;
@@ -195,22 +235,38 @@ function ConnectionCard({
   return (
     <SettingsCard
       title="Connection"
-      description="DraftHR receives provisioning events from your IdP via WorkOS. New hires get a seat automatically; offboarded users are deprovisioned without losing their audit history."
+      description="When someone joins or leaves in your company directory, DraftHR gives or removes their access. Leavers keep their letter history."
       actions={
         <>
-          <Button variant="outline" onClick={onRefresh} disabled={loading}>
-            {loading ? <Spinner /> : <RefreshCw className="size-4" />}
-            {loading ? "Refreshing…" : "Refresh"}
-          </Button>
-          <Button onClick={onOpenPortal} disabled={portalLoading} data-testid="open-portal">
+          {signedIn && (
+            <Button variant="outline" onClick={onRefresh} disabled={loading}>
+              {loading ? <Spinner /> : <RefreshCw className="size-4" />}
+              {loading ? "Refreshing…" : "Refresh"}
+            </Button>
+          )}
+          <Button
+            onClick={onOpenPortal}
+            disabled={portalLoading || !signedIn}
+            title={signedIn ? "Opens the secure setup portal in a new tab" : "Sign in to your workspace to set up directory sync"}
+            data-testid="open-portal"
+          >
             {portalLoading ? <Spinner /> : <ExternalLink className="size-4" />}
-            {portalLoading ? "Opening…" : "Open Admin Portal"}
+            {portalLoading ? "Opening…" : "Open setup portal"}
           </Button>
         </>
       }
     >
       <div className="border-t border-[var(--ds-line-2)] pt-4">
-        {loading && !info ? (
+        {!signedIn ? (
+          <div className="flex flex-col items-start gap-2" data-testid="unconnected-cta">
+            <span data-testid="connection-state">
+              <Pill tone="grey">Off</Pill>
+            </span>
+            <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
+              Directory sync is off. It connects to a signed-in workspace, so sign in to your workspace to set it up.
+            </p>
+          </div>
+        ) : loading && !info ? (
           <LoadingRows rows={1} label="Loading connection" />
         ) : count > 0 ? (
           <div className="flex flex-col items-start gap-2">
@@ -218,16 +274,18 @@ function ConnectionCard({
               <Pill tone="green">Connected</Pill>
             </span>
             <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
-              {count} {count === 1 ? "directory" : "directories"} linked to your WorkOS organisation. Changes in your
-              IdP propagate in real time.
+              {count} {count === 1 ? "directory" : "directories"} connected. People added or removed there show up here
+              straight away.
             </p>
           </div>
         ) : (
           <div className="flex flex-col items-start gap-2" data-testid="unconnected-cta">
-            <Pill tone="amber">Not configured</Pill>
+            <span data-testid="connection-state">
+              <Pill tone="grey">Off</Pill>
+            </span>
             <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
-              Open the WorkOS Admin Portal to connect Okta, Entra ID, Google Workspace, or any SCIM 2.0 directory.
-              After you finish the setup there, this page will show the connection.
+              Directory sync is off. Open the setup portal to connect Okta, Microsoft Entra ID, Google Workspace or any
+              SCIM directory. Once it is set up there, the connection shows here.
             </p>
           </div>
         )}
@@ -248,7 +306,7 @@ function DirectoriesList({ directories }: { directories: DirectorySummary[] }) {
             <div className="min-w-0">
               <div className="truncate text-[14px] font-medium text-[var(--ds-ink)]">{d.name}</div>
               <div className="truncate text-[12.5px] text-[var(--ds-muted)]">
-                {sentence(d.type)} · {d.domain || "no domain"}
+                {directoryTypeName(d.type)} · {d.domain || "no domain"}
               </div>
             </div>
             <Pill tone={d.state === "linked" ? "green" : d.state === "validating" ? "amber" : "grey"}>
@@ -269,7 +327,7 @@ function SyncedUsersTable({ users }: { users: DirectoryUserRow[] }) {
     >
       {users.length === 0 ? (
         <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
-          No directory-provisioned users yet. Once your IdP starts syncing, users will appear here.
+          No one has been added from your directory yet. People appear here once it starts syncing.
         </p>
       ) : (
         <FadeIn className="-mx-5 overflow-x-auto sm:-mx-[22px]">

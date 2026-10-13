@@ -137,8 +137,10 @@ export function QuestionField({ q, value, onChange, nested = false, people }: Pr
           id={labelId}
           {...(grouped ? {} : { htmlFor: id })}
           className={cn(
-            "min-w-0 shrink-0 text-[13.5px] font-medium leading-snug text-[var(--ds-ink)]",
-            help && "sm:max-w-[55%]"
+            "min-w-0 text-[13.5px] font-medium leading-snug text-[var(--ds-ink)]",
+            // With help beside it the label keeps its width (up to 55%) and
+            // the help wraps; on its own a long label shrinks and wraps.
+            help ? "shrink-0 sm:max-w-[55%]" : "shrink [overflow-wrap:anywhere]"
           )}
         >
           {label}

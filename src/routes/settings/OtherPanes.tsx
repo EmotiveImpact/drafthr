@@ -64,7 +64,9 @@ export function TeamPane({ line }: { line: string }) {
       <div className={cn("flex flex-col gap-3.5", activeTenant && "mt-3.5")}>
         {activeTenant && isAdmin && <DirectorySyncCard />}
 
-        {!activeTenant && !import.meta.env.DEV && (
+        {/* No signed-in workspace (local mode): say so plainly, so the
+         * page is not an empty members list. */}
+        {!activeTenant && (
           <SettingsCard
             icon={<Users />}
             title="Team"
@@ -79,7 +81,11 @@ export function TeamPane({ line }: { line: string }) {
         {import.meta.env.DEV && (
           <SettingsCard
             title="Role (local simulation)"
-            description="Your seat for approval-queue simulation. The real per-workspace role is set above. Use this in local dev and demos to switch between drafter and reviewer behaviour without a second account."
+            description={
+              activeTenant
+                ? "Your real role in this workspace is the one in the members list above. In local development and demos, this switches between drafter, reviewer and approver behaviour without a second account."
+                : "Only in local development and demos. With no workspace signed in, this sets what you can do here, so you can try drafter, reviewer and approver behaviour without a second account."
+            }
           >
             <div className="max-w-[420px]">
               <Field label="Simulated role" htmlFor="set-sim-role">
@@ -117,7 +123,7 @@ function DirectorySyncCard() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Integrations and Directory Sync                                     */
+/* Integrations and directory sync                                     */
 /* ------------------------------------------------------------------ */
 
 export function IntegrationsPane({ line }: { line: string }) {
@@ -125,7 +131,7 @@ export function IntegrationsPane({ line }: { line: string }) {
   const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? "");
   return (
     <>
-      <PaneHeader title="Integrations and Directory Sync" line={line} />
+      <PaneHeader title="Integrations and directory sync" line={line} />
       <div className="flex flex-col gap-3.5">
         {activeTenant && isAdmin ? (
           <DirectorySyncCard />

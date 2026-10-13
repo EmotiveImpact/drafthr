@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Loader2, MailCheck } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { AuthShell, ErrorAlert, PrimaryButton, TextField } from "@/routes/sign-in/AuthShell";
+import { AuthShell, ErrorAlert, PrimaryButton, TextField, emailProblem } from "@/routes/sign-in/AuthShell";
 
 type Stage = "form" | "sent";
 
@@ -27,6 +27,7 @@ export function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,6 +41,13 @@ export function ForgotPassword() {
     e.preventDefault();
     if (submitting) return;
     if (!email.trim()) return;
+    // Say what to do before sending, rather than "If jo matches an account…".
+    const bad = emailProblem(email);
+    setEmailError(bad);
+    if (bad) {
+      emailRef.current?.focus();
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -102,12 +110,19 @@ export function ForgotPassword() {
           autoComplete="email"
           inputMode="email"
           value={email}
-          onChange={setEmail}
+          onChange={(v) => {
+            setEmail(v);
+            if (emailError && !emailProblem(v)) setEmailError(null);
+          }}
+          onBlur={() => {
+            if (email.trim()) setEmailError(emailProblem(email));
+          }}
           required
           disabled={submitting}
+          error={emailError}
         />
 
-        {error && <ErrorAlert message={error} />}
+        {error && <ErrorAlert title="Couldn't send the link" message={error} />}
 
         <PrimaryButton disabled={submitting || !email.trim()}>
           {submitting ? (

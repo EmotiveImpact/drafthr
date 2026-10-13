@@ -6,10 +6,12 @@ import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
 import {
   AUTH_HEADING_CLASS,
-  AUTH_INPUT_CLASS,
   AuthFooter,
   AuthSecurityNote,
+  ErrorAlert,
   PasswordField,
+  TextField,
+  emailProblem,
 } from "@/routes/sign-in/AuthShell";
 import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
 import { CheckYourEmail } from "@/routes/SignUp";
@@ -51,6 +53,10 @@ export function SignIn() {
     null | "password" | "google" | "microsoft" | "linkedin"
   >(null);
   const [error, setError] = useState<string | null>(null);
+  // Inline field errors (kit 04), shown after a submit attempt or when the
+  // email field is left with something that is not an address.
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   // Set when sign-in succeeds on credentials but the email isn't verified yet
   // (WorkOS email_verification_required). Carries the pending token so the
   // code-entry screen can finish via Flow B instead of dead-ending the user.
@@ -84,6 +90,14 @@ export function SignIn() {
     e.preventDefault();
     if (submitting) return;
     setError(null);
+    const badEmail = emailProblem(email);
+    const badPassword = password ? null : "Enter your password.";
+    setEmailError(badEmail);
+    setPasswordError(badPassword);
+    if (badEmail || badPassword) {
+      if (badEmail) emailRef.current?.focus();
+      return;
+    }
     setSubmitting("password");
     try {
       const res = await fetch("/api/auth/password", {
@@ -260,25 +274,37 @@ export function SignIn() {
             <Divider label="or continue with email" />
 
             <form noValidate onSubmit={onPassword} className="space-y-3.5">
-              <Field
+              <TextField
                 id="email"
                 label="Email"
                 type="email"
                 autoComplete="email"
                 inputMode="email"
                 value={email}
-                onChange={setEmail}
+                onChange={(v) => {
+                  setEmail(v);
+                  // Clear the error as soon as the address is fixed.
+                  if (emailError && !emailProblem(v)) setEmailError(null);
+                }}
+                onBlur={() => {
+                  if (email.trim()) setEmailError(emailProblem(email));
+                }}
                 ref={emailRef}
                 required
                 disabled={isBusy}
+                error={emailError}
               />
               <PasswordField
                 id="password"
                 label="Password"
                 autoComplete="current-password"
                 value={password}
-                onChange={setPassword}
+                onChange={(v) => {
+                  setPassword(v);
+                  if (v) setPasswordError(null);
+                }}
                 disabled={isBusy}
+                error={passwordError}
                 aside={
                   <Link
                     to="/sign-in/forgot-password"
@@ -289,15 +315,7 @@ export function SignIn() {
                 }
               />
 
-              {error && (
-                <div
-                  role="alert"
-                  aria-live="polite"
-                  className="rounded-[8px] border border-[var(--ds-red-bg)] bg-[var(--ds-red-bg)]/40 px-3 py-2.5 text-[12.5px] leading-snug text-[var(--ds-red-fg)]"
-                >
-                  {error}
-                </div>
-              )}
+              {error && <ErrorAlert title="Couldn't sign you in" message={error} />}
 
               <button
                 type="submit"
@@ -336,44 +354,6 @@ export function SignIn() {
 }
 
 /* ─── Form primitives ─────────────────────────────────────────────────── */
-
-type FieldProps = {
-  id: string;
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-  disabled?: boolean;
-  autoComplete?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-};
-
-const Field = ({
-  ref,
-  ...props
-}: FieldProps & { ref?: React.Ref<HTMLInputElement> }) => (
-  <div>
-    <label
-      htmlFor={props.id}
-      className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
-    >
-      {props.label}
-    </label>
-    <input
-      ref={ref}
-      id={props.id}
-      type={props.type ?? "text"}
-      autoComplete={props.autoComplete}
-      inputMode={props.inputMode}
-      value={props.value}
-      onChange={(e) => props.onChange(e.target.value)}
-      required={props.required}
-      disabled={props.disabled}
-      className={AUTH_INPUT_CLASS}
-    />
-  </div>
-);
 
 function Divider({ label }: { label: string }) {
   return (

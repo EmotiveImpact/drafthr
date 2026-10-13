@@ -577,10 +577,10 @@ function TemplateCard({
       </button>
 
       <div className="flex flex-1 flex-col px-2 pb-1.5 pt-3">
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <span className="inline-flex min-w-0 items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]">
-            <KindIcon aria-hidden className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />
-            <span className="truncate">{category ? plainLabel(category.label) : "Other"}</span>
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <span className="inline-flex min-w-0 items-start gap-1.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+            <KindIcon aria-hidden className="mt-px size-3.5 shrink-0 text-[var(--ds-subtle)]" />
+            <span className="min-w-0">{category ? plainLabel(category.label) : "Other"}</span>
           </span>
           <Pill tone={risk.tone} className="shrink-0">
             {risk.label}
@@ -588,7 +588,7 @@ function TemplateCard({
         </div>
 
         <h3
-          className="m-0 mt-2.5 truncate text-[14.5px] font-medium text-[var(--ds-ink)]"
+          className="m-0 mt-2.5 text-[14.5px] font-medium leading-snug text-[var(--ds-ink)] [overflow-wrap:anywhere]"
           title={`${plainLabel(letter.title)} (${facts})`}
         >
           {plainLabel(letter.title)}
@@ -597,7 +597,7 @@ function TemplateCard({
           {plainLabel(letter.description)}
         </p>
         {letter.badge && (
-          <p className="m-0 mt-1.5 truncate text-[12px] font-medium text-[var(--ds-amber-fg)]" title={plainLabel(letter.badge)}>
+          <p className="m-0 mt-1.5 text-[12px] font-medium leading-snug text-[var(--ds-amber-fg)]">
             {plainLabel(letter.badge)}
           </p>
         )}

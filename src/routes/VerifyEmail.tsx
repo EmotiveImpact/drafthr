@@ -147,7 +147,7 @@ export function VerifyEmail() {
   // failed
   return (
     <AuthShell eyebrow="Verify email" heading="This verification link has expired.">
-      {error && <ErrorAlert message={error} />}
+      {error && <ErrorAlert title="Couldn't verify your email" message={error} />}
       <p className="mt-4 text-[13.5px] leading-relaxed text-[var(--ds-body)]">
         Sign in to request a new verification email and we’ll send a fresh
         link to your inbox.

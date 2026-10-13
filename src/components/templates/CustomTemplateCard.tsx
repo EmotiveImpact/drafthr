@@ -48,7 +48,7 @@ export function CustomTemplateCard({
       <div className="-mr-1.5 -mt-[3px] flex items-start justify-between gap-2">
         <h3 className="m-0 min-w-0 pt-[3px] text-[14.5px] font-medium leading-snug text-[var(--ds-ink)]">
           {showStart ? (
-            <span className="block truncate" title={template.name}>
+            <span className="block [overflow-wrap:anywhere]">
               {template.name}
             </span>
           ) : (
@@ -56,7 +56,7 @@ export function CustomTemplateCard({
               type="button"
               onClick={onStart}
               title={`Start a letter from ${template.name}`}
-              className="block max-w-full truncate rounded-[4px] text-left hover:underline hover:underline-offset-2"
+              className="block max-w-full rounded-[4px] text-left [overflow-wrap:anywhere] hover:underline hover:underline-offset-2"
             >
               {template.name}
             </button>

@@ -38,7 +38,7 @@ const HR_PLANS: {
     monthly: "sub_starter_monthly",
     annual: "sub_starter_annual",
     plan: "starter",
-    features: ["5 letters / month", `All ${TEMPLATE_COUNT} templates`, "Full export", "Marketplace access"],
+    features: ["5 letters per month", `All ${TEMPLATE_COUNT} templates`, "Full export", "Marketplace access"],
   },
   {
     name: "Pro",
@@ -46,7 +46,7 @@ const HR_PLANS: {
     annual: "sub_pro_annual",
     plan: "pro",
     highlight: true,
-    features: ["Unlimited letters", "20 AI critique credits / mo", "Evidence-pack signing", "Marketplace access"],
+    features: ["Unlimited letters", "20 AI critique credits per month", "Evidence-pack signing", "Marketplace access"],
   },
   {
     name: "Business",
@@ -65,7 +65,7 @@ const EMPLOYEE_SKUS: { key: PriceKey; blurb: string }[] = [
   { key: "pack_grievance", blurb: "4 letters · grievance arc" },
   { key: "pack_settlement", blurb: "6 letters · settlement negotiation" },
   { key: "pack_tribunal", blurb: "8 documents · full ET1 lodgement support" },
-  { key: "sub_employee_plus", blurb: "Unlimited letters for one matter, 10 credits and £30 marketplace credit a month" },
+  { key: "sub_employee_plus", blurb: "Unlimited letters for one matter, 10 credits and £30 marketplace credit per month" },
 ];
 
 const SKU_TINTS: Tint[] = ["mint", "sky", "peach", "rose", "butter", "lavender"];
@@ -73,6 +73,14 @@ const SKU_TINTS: Tint[] = ["mint", "sky", "peach", "rose", "butter", "lavender"]
 const CREDIT_PACKS: PriceKey[] = ["credits_single", "credits_small", "credits_medium", "credits_best"];
 
 type Outcome = "success" | "cancelled" | null;
+
+/** Product names in sentence case ("Grievance pack"); the catalogue keeps
+ * Stripe's Title Case labels. "Employee Plus" is a plan name and stays. */
+function productName(entry: { label: string; kind: string }): string {
+  if (entry.kind !== "pack") return entry.label;
+  const [first = "", ...rest] = entry.label.split(" ");
+  return [first, ...rest.map((w) => w.toLowerCase())].join(" ");
+}
 
 export function Pricing() {
   const location = useLocation();
@@ -257,9 +265,9 @@ export function Pricing() {
                       </span>
                     )}
                   </div>
-                  <p className="m-0 mt-3 flex items-baseline gap-1">
+                  <p className="m-0 mt-3 flex items-baseline gap-1.5">
                     <span className="ds-title text-[40px] leading-none tracking-[-0.02em]">{gbp(entry.amountMinor)}</span>
-                    <span className="text-[13px] text-[var(--ds-muted)]">/{interval === "monthly" ? "mo" : "yr"}</span>
+                    <span className="text-[13px] text-[var(--ds-muted)]">{interval === "monthly" ? "per month" : "per year"}</span>
                   </p>
                 </div>
                 <ul className="m-0 flex flex-1 list-none flex-col gap-2 px-5 pt-4 text-[13.5px] text-[var(--ds-body)]">
@@ -315,10 +323,10 @@ export function Pricing() {
               >
                 <div className="mx-1.5 mt-1.5 flex items-baseline justify-between gap-2 rounded-[12px] bg-[var(--tint)] px-4 py-3 text-[var(--tint-ink)]">
                   <span className="ds-title text-[26px] leading-none">{gbp(entry.amountMinor)}</span>
-                  {entry.mode === "subscription" ? <span className="text-[12px] text-[var(--ds-muted)]">/mo</span> : null}
+                  {entry.mode === "subscription" ? <span className="text-[12px] text-[var(--ds-muted)]">per month</span> : null}
                 </div>
                 <div className="flex flex-1 flex-col px-4 pb-4 pt-3">
-                  <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">{entry.label}</p>
+                  <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">{productName(entry)}</p>
                   <p className="m-0 mt-0.5 flex-1 text-[12.5px] leading-snug text-[var(--ds-muted)]">{blurb}</p>
                   <Button
                     variant="outline"

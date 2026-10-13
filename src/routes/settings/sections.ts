@@ -58,7 +58,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   },
   {
     id: "integrations",
-    label: "Integrations and Directory Sync",
+    label: "Integrations and directory sync",
     group: "Workspace",
     line: "Connect your identity provider so staff accounts stay in step.",
   },

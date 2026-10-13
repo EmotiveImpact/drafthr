@@ -59,7 +59,9 @@ export function Band({
               {c.href ? (
                 <Link
                   to={c.href}
-                  className="truncate rounded-[4px] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
+                  // 36px tall tap target (phone minimum) without changing
+                  // the row height: the padding is taken back by margin.
+                  className="-my-2 block truncate rounded-[4px] py-2 transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
                 >
                   {c.label}
                 </Link>

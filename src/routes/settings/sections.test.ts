@@ -38,7 +38,7 @@ describe("Settings deep links", () => {
       "Team and roles",
       "Policies",
       "Letter defaults",
-      "Integrations and Directory Sync",
+      "Integrations and directory sync",
       "Billing",
       "Security",
       "Privacy and data",

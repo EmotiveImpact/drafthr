@@ -6,11 +6,13 @@
  * break when the Google Font CDN is blocked.
  */
 
-const BRAND_INK = "#0f172a"; // slate-900
-const BRAND_ACCENT = "#1d4ed8"; // blue-700 — CTA + links
-const BRAND_MUTED = "#64748b"; // slate-500
-const BRAND_BORDER = "#e2e8f0"; // slate-200
-const BRAND_BG = "#f8fafc"; // slate-50 — page background
+// The app's calm palette (src/styles/globals.css): near-black ink, a
+// near-black main button with white text, cool greys, no bright blue.
+const BRAND_INK = "#111110"; // --ds-ink
+const BRAND_ACCENT = "#111110"; // main button and links, as in the app
+const BRAND_MUTED = "#6b6b70"; // --ds-muted
+const BRAND_BORDER = "#e8e8ea"; // --ds-line
+const BRAND_BG = "#f5f5f6"; // --ds-surface-2, page background
 
 const PLAYFAIR_HREF =
   "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap";
@@ -102,8 +104,8 @@ export function ctaButton(label: string, href: string): string {
   // Bulletproof button pattern — table-based so Outlook doesn't collapse the padding.
   return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;">
     <tr>
-      <td align="center" bgcolor="${BRAND_ACCENT}" style="border-radius:8px;">
-        <a href="${escape(href)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;font-family:${SYSTEM_FONT_STACK};font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
+      <td align="center" bgcolor="${BRAND_ACCENT}" style="border-radius:10px;">
+        <a href="${escape(href)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;font-family:${SYSTEM_FONT_STACK};font-size:15px;font-weight:500;color:#ffffff;text-decoration:none;border-radius:10px;">
           ${escape(label)}
         </a>
       </td>
@@ -112,9 +114,14 @@ export function ctaButton(label: string, href: string): string {
 }
 
 export function formatDate(d: Date): string {
-  // "May 23, 2026" — works regardless of recipient locale (no commas/periods
-  // that mean different things in EU vs US date formats).
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  // "23 May 2026": British order with the month written out, so it cannot be
+  // misread as a US or EU numeric date. UK time, whatever the server's zone.
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/London",
+  });
 }
 
 // Free-text sanitising for anything a user typed (workspace names, display

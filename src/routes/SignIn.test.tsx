@@ -167,6 +167,29 @@ describe("SignIn", () => {
     ).toBeInTheDocument();
   });
 
+  it("says what to do inline when the email is empty or not an address, without posting", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    render(
+      <MemoryRouter initialEntries={["/sign-in"]}>
+        <SignIn />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    expect(await screen.findByText("Enter your email address.")).toBeInTheDocument();
+    expect(screen.getByText("Enter your password.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveAttribute("aria-invalid", "true");
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "jo" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "hunter2!!" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+    expect(
+      await screen.findByText("Enter a full email address, like name@company.co.uk."),
+    ).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("fetches the authorization URL and redirects for Google sign-in", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ url: "https://api.workos.com/auth?go=google" }), {

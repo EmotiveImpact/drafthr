@@ -32,6 +32,7 @@ import { Triage, type TriageResult } from "@/components/wizard/Triage";
 import { StepRail, type RailStep } from "@/components/wizard/StepRail";
 import { LawCardView } from "@/components/wizard/LawCardView";
 import { lawCardFor } from "@/components/wizard/lawCard";
+import { answersOutsideJurisdiction, questionForJurisdiction } from "@/components/wizard/jurisdictionOptions";
 import { clearSavedWizard, loadSavedWizard, saveWizard } from "@/components/wizard/savedAnswers";
 import { plainLabel, timeAgoWords } from "@/components/wizard/kit";
 import { cn } from "@/lib/utils";
@@ -235,13 +236,29 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
-  const visibleQuestions = step.questions.filter((q) => isQuestionVisible(q, answers));
+  const jurisdiction: Jurisdiction = answers.jurisdiction === "US" ? "US" : answers.jurisdiction === "UK" ? "UK" : profile.defaults.jurisdiction;
+  // Options that only exist in one country (Worker (UK), Casual / zero-hours)
+  // are left out for the other.
+  const visibleQuestions = step.questions
+    .filter((q) => isQuestionVisible(q, answers))
+    .map((q) => questionForJurisdiction(q, jurisdiction));
   const requiredAnswered =
     visibleQuestions.filter((q) => q.required).every((q) => isQuestionAnswered(q, answers[q.id])) &&
     // A list item that was started must be finished (or removed).
     visibleQuestions.every((q) => !hasHalfFilledItem(q, answers[q.id]));
 
-  const jurisdiction: Jurisdiction = answers.jurisdiction === "US" ? "US" : answers.jurisdiction === "UK" ? "UK" : profile.defaults.jurisdiction;
+  // Switching the country clears an answer that no longer applies (a UK
+  // worker status for a US letter), so it is asked again rather than kept.
+  useEffect(() => {
+    const stale = answersOutsideJurisdiction(answers, jurisdiction);
+    if (stale.length === 0) return;
+    setAnswers((a) => {
+      const next = { ...a };
+      for (const id of stale) delete next[id];
+      return next;
+    });
+  }, [answers, jurisdiction]);
+
   const law = useMemo(
     () => lawCardFor(meta.id, jurisdiction, answers, (answers.usState as UsState | undefined) || undefined),
     [meta.id, jurisdiction, answers]
@@ -364,81 +381,95 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
     );
   }
 
+  // The lede is two units: the intro with the risk pill, and the fill line.
+  // When the fill line fits beside the intro a faint "|" separates them; when
+  // it wraps to its own line the separator sits in the clipped gutter left of
+  // the line (the row is pulled 24px left and clipped), so no line ever
+  // starts with "|" or an indent.
   const lede = (
-    <span className="inline">
-      {employeeName ? (
-        <>
-          For <b>{employeeName}</b>
-          {jobTitle ? `, ${jobTitle.toLowerCase()}` : ""}
-        </>
-      ) : fillLine && lineVisible ? (
-        // Shorter intro when the fill line shares the row, so the line and
-        // its Dismiss and options stay on one line (as the mock).
-        "Answer a few questions and DraftHR drafts it."
-      ) : (
-        "Answer a few short questions and DraftHR writes the first draft for you to edit."
-      )}
-      <Pill tone={risk.tone} className="ml-2.5 align-[2px]">
-        {risk.label}
-      </Pill>
-      {fillLine && lineVisible && (
-        // One unit: if the row is too narrow the whole fill line moves to
-        // the next line together, never leaving Dismiss or the menu behind.
-        <span data-testid="prefill-line" className="inline-block whitespace-nowrap">
-          <span aria-hidden className="mx-2.5 text-[var(--ds-faint)]">
-            |
-          </span>
-          <Sparkles aria-hidden className="mr-1.5 inline size-3.5 align-[-2px] text-[var(--ds-muted)]" />
-          {fillLine}
-          <button
-            type="button"
-            onClick={() => setLineVisible(false)}
-            aria-label="Dismiss"
-            className="-my-2.5 ml-1 inline-flex h-9 items-center rounded-[6px] px-1.5 align-baseline text-[13.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
-          >
-            Dismiss
-          </button>
-          {restoredAt !== null && (
-            <button
-              type="button"
-              onClick={startAgain}
-              className="-my-2.5 ml-0.5 inline-flex h-9 items-center rounded-[6px] px-1.5 align-baseline text-[13.5px] text-[var(--ds-ink)] underline-offset-2 hover:underline"
-            >
-              Start again
-            </button>
+    <span className="block [overflow-x:clip]">
+      <span className="-ml-6 flex flex-wrap items-baseline gap-y-1">
+        <span className="min-w-0 pl-6">
+          {employeeName ? (
+            <>
+              For <b>{employeeName}</b>
+              {jobTitle ? `, ${jobTitle.toLowerCase()}` : ""}
+            </>
+          ) : fillLine && lineVisible ? (
+            // Shorter intro when the fill line shares the row, so the line and
+            // its Dismiss and options stay on one line (as the mock).
+            "Answer a few questions and DraftHR drafts it."
+          ) : (
+            "Answer a few short questions and DraftHR writes the first draft for you to edit."
           )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Auto-fill options"
-                className="-my-2.5 inline-grid h-9 w-8 place-items-center rounded-[6px] align-middle text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
-              >
-                <MoreHorizontal className="size-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-52">
-              <DropdownMenuItem onSelect={() => nav("/settings")}>
-                <Pencil />
-                Edit profile
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={fillFromProfile}>
-                <Sparkles />
-                Re-fill this form
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={dontAutoFill}>
-                <UserX />
-                Don't auto-fill
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={startAgain}>
-                <RotateCcw />
-                Start again
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* A widened space rather than a margin: when the pill wraps, the
+           * space collapses at the line break, so the pill is not indented. */}
+          <span className="[word-spacing:6px]"> </span>
+          <Pill tone={risk.tone} className="whitespace-nowrap align-[2px]">
+            {risk.label}
+          </Pill>
         </span>
-      )}
+          {fillLine && lineVisible && (
+            // One unit: if the row is too narrow the whole fill line moves to
+            // the next line together, never leaving Dismiss or the menu behind.
+            <span data-testid="prefill-line" className="relative min-w-0 pl-6">
+              <span aria-hidden className="absolute left-[9px] top-0 text-[var(--ds-faint)]">
+                |
+              </span>
+              <Sparkles aria-hidden className="mr-1.5 inline size-3.5 align-[-2px] text-[var(--ds-muted)]" />
+              {fillLine}
+              <span className="whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={() => setLineVisible(false)}
+                  aria-label="Dismiss"
+                  className="-my-2.5 ml-1 inline-flex h-9 items-center rounded-[6px] px-1.5 align-baseline text-[13.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
+                >
+                  Dismiss
+                </button>
+                {restoredAt !== null && (
+                  <button
+                    type="button"
+                    onClick={startAgain}
+                    className="-my-2.5 ml-0.5 inline-flex h-9 items-center rounded-[6px] px-1.5 align-baseline text-[13.5px] text-[var(--ds-ink)] underline-offset-2 hover:underline"
+                  >
+                    Start again
+                  </button>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Auto-fill options"
+                      className="-my-2.5 inline-grid h-9 w-8 place-items-center rounded-[6px] align-middle text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-52">
+                    <DropdownMenuItem onSelect={() => nav("/settings")}>
+                      <Pencil />
+                      Edit profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={fillFromProfile}>
+                      <Sparkles />
+                      Re-fill this form
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={dontAutoFill}>
+                      <UserX />
+                      Don't auto-fill
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={startAgain}>
+                      <RotateCcw />
+                      Start again
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </span>
+            </span>
+          )}
+      </span>
     </span>
   );
 
@@ -602,7 +633,14 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
           <div className="min-w-0 lg:col-start-2 lg:row-start-3 xl:row-start-2 xl:self-start">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-3 border-t border-[var(--ds-line)] pt-4">
               <label className="flex min-h-9 w-full cursor-pointer items-center gap-2.5 text-[13px] text-[var(--ds-body)] sm:w-auto">
-                <Switch checked={profile.autoFill} onCheckedChange={setAutoFill} aria-label="Save these answers to fill future letters" />
+                <Switch
+                  checked={profile.autoFill}
+                  onCheckedChange={setAutoFill}
+                  aria-label="Save these answers to fill future letters"
+                  // A 36px tap target (phone minimum) with the kit's 21px
+                  // track drawn inside it, so the switch looks the same.
+                  className="relative isolate data-[size=default]:h-9 data-[state=checked]:bg-transparent data-[state=unchecked]:bg-transparent before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-[21px] before:-translate-y-1/2 before:rounded-full before:transition-colors before:duration-[180ms] before:content-[''] data-[state=checked]:before:bg-[var(--ds-ink)] data-[state=unchecked]:before:bg-[var(--ds-line-strong)] focus-visible:shadow-none focus-visible:before:shadow-[var(--ds-focus-ring)]"
+                />
                 Save these answers to fill future letters
               </label>
               <span className="hidden flex-1 sm:block" />

@@ -73,10 +73,11 @@ describe("DirectorySync route", () => {
     renderRoute();
 
     await waitFor(() => expect(screen.getByTestId("unconnected-cta")).toBeInTheDocument());
-    expect(screen.getByText(/Not configured/i)).toBeInTheDocument();
-    // The "Open Admin Portal" button is rendered regardless — it's the entry
+    expect(screen.getByTestId("connection-state")).toHaveTextContent(/^Off$/);
+    // The "Open setup portal" button is rendered regardless: it's the entry
     // point to start the setup wizard.
     expect(screen.getByTestId("open-portal")).toBeInTheDocument();
+    expect(screen.getByTestId("open-portal")).toBeEnabled();
   });
 
   it("renders the connected state when WorkOS returns directories", async () => {
@@ -126,11 +127,26 @@ describe("DirectorySync route", () => {
 
     await waitFor(() => expect(screen.getByTestId("connection-state")).toHaveTextContent(/Connected/i));
     expect(screen.getByText("Acme Okta")).toBeInTheDocument();
+    // The WorkOS type is shown by its plain name.
+    expect(screen.getByText(/^Okta · acme\.com$/)).toBeInTheDocument();
     expect(screen.getByText("Jane Patel")).toBeInTheDocument();
     expect(screen.getByText(/jane@acme.com/)).toBeInTheDocument();
     // "Deprovisioned" appears both as a status badge and as a column header
     // in the table — assert at least one match.
     expect(screen.getAllByText(/Deprovisioned/i).length).toBeGreaterThan(0);
+  });
+
+  it("reads as off, not as an error, without a signed-in workspace", async () => {
+    authMock.activeTenant = null as unknown as typeof authMock.activeTenant;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderRoute();
+
+    expect(await screen.findByTestId("unconnected-cta")).toHaveTextContent(/Directory sync is off/);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("open-portal")).toBeDisabled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("calls /api/workos/portal-link and opens the returned URL in a new tab", async () => {

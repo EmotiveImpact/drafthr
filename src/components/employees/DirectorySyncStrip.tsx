@@ -67,14 +67,14 @@ export function DirectorySyncStrip() {
 
   if (state.kind === "loading") {
     return (
-      <div aria-busy="true" aria-label="Checking Directory Sync" className="mb-4 flex items-center gap-3 rounded-[12px] bg-[var(--ds-surface-2)] px-3.5 py-[11px]">
+      <div aria-busy="true" aria-label="Checking directory sync" className="mb-4 flex items-center gap-3 rounded-[12px] bg-[var(--ds-surface-2)] px-3.5 py-[11px]">
         <span className="size-7 shrink-0 animate-pulse rounded-[8px] bg-[var(--ds-surface-3)] motion-reduce:animate-none" />
         <span className="h-3 w-64 max-w-full animate-pulse rounded bg-[var(--ds-surface-3)] motion-reduce:animate-none" />
       </div>
     );
   }
   if (state.kind === "unknown") {
-    return <p className="m-0 mb-4 text-[12.5px] text-[var(--ds-subtle)]">Directory Sync status could not be checked right now.</p>;
+    return <p className="m-0 mb-4 text-[12.5px] text-[var(--ds-subtle)]">Directory sync status could not be checked right now.</p>;
   }
 
   const on = state.kind === "linked";
@@ -86,7 +86,7 @@ export function DirectorySyncStrip() {
       </span>
       <div className="min-w-0 flex-1 basis-[240px]">
         <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-medium text-[var(--ds-ink)]">
-          {on ? "Directory Sync is on" : "Directory Sync is off"}
+          {on ? "Directory sync is on" : "Directory sync is off"}
           {on && <Pill tone="green">Connected</Pill>}
         </div>
         <p className="m-0 mt-0.5 text-[12.5px] text-[var(--ds-muted)]">

@@ -32,8 +32,9 @@ describe("workspaceInviteEmail", () => {
 
   it("renders the expiry date in a long-form, locale-stable way", () => {
     const { html } = workspaceInviteEmail(baseOpts);
-    // toLocaleDateString('en-US', { month: 'long', day, year }) => "May 23, 2026"
-    expect(html).toMatch(/May 2[23], 2026/); // tolerant of TZ shifts on CI
+    // British date, month written out: "23 May 2026"
+    expect(html).toMatch(/2[23] May 2026/); // tolerant of TZ shifts on CI
+    expect(html).not.toMatch(/May 2[23], 2026/);
   });
 
   it("escapes HTML in dynamic fields to prevent injection", () => {

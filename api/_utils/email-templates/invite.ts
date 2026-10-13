@@ -65,7 +65,7 @@ export function workspaceInviteEmail(opts: {
     ${ctaButton("Accept invite", opts.inviteUrl)}
     <p style="margin:0 0 8px 0;color:${COLORS.muted};font-size:13px;">
       Or paste this link into your browser:<br />
-      <a href="${escape(opts.inviteUrl)}" style="color:${COLORS.accent};word-break:break-all;">${escape(opts.inviteUrl)}</a>
+      <a href="${escape(opts.inviteUrl)}" style="color:${COLORS.ink};text-decoration:underline;word-break:break-all;">${escape(opts.inviteUrl)}</a>
     </p>
     <p style="margin:24px 0 0 0;color:${COLORS.muted};font-size:13px;">
       This invite expires on <strong>${escape(formatDate(opts.expiresAt))}</strong>.

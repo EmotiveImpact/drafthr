@@ -223,7 +223,7 @@ export function SignUp() {
           </AuthCheckbox>
         </div>
 
-        {error && <ErrorAlert message={error} />}
+        {error && <ErrorAlert title="Couldn't create your account" message={error} />}
 
         <PrimaryButton disabled={!canSubmit}>
           {submitting ? (
@@ -441,9 +441,10 @@ export function CheckYourEmail({
           />
         </div>
 
-        {verifyError && <ErrorAlert message={verifyError} />}
+        {verifyError && <ErrorAlert title="Couldn't verify that code" message={verifyError} />}
         {!hasContext && (
           <ErrorAlert
+            title="Couldn't find your sign-up"
             message="If you already have an account, sign in instead. No new code was sent."
           />
         )}
@@ -481,7 +482,7 @@ export function CheckYourEmail({
         </button>
         {resendError && (
           <div className="mt-2">
-            <ErrorAlert message={resendError} />
+            <ErrorAlert title="Couldn't resend the code" message={resendError} />
           </div>
         )}
       </div>
