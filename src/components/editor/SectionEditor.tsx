@@ -46,7 +46,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, FolderOpen, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
-import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
+import { SuggestionMarkFirst } from "./suggestion-mark-priority";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { RemoteImageEmbed } from "@/lib/tiptap/remote-image-embed";
@@ -156,7 +156,7 @@ export function SectionEditor({
       // Track-changes primitive — see src/lib/tiptap/suggestion-mark.ts. Marks
       // proposed reviewer / AI / consultant edits as <ins>/<del> with status
       // attributes; merge helpers fold accepted edits into canonical text.
-      SuggestionMark,
+      SuggestionMarkFirst,
       // Evidence reference tokens — render the [See Fig N] / [See Attachments]
       // spans inserted by the picker / slash command as atomic inline nodes
       // instead of letting Tiptap drop them on the floor as unknown HTML
@@ -503,7 +503,7 @@ export function SectionEditor({
                     e.stopPropagation();
                     onOpenEvidenceBinder?.();
                   }}
-                  aria-label="Open Evidence & Attachments — add evidence first"
+                  aria-label="Open evidence and attachments. Add evidence first."
                   title="No evidence yet. Click to open Evidence & Attachments"
                 >
                   <Paperclip className="size-3.5" />
@@ -540,7 +540,7 @@ export function SectionEditor({
                 }}
                 aria-label={
                   linkedEvidence.length > 0
-                    ? `${linkedEvidence.length} linked — insert evidence at cursor`
+                    ? `${linkedEvidence.length} linked. Insert evidence at the cursor.`
                     : "Insert evidence at cursor"
                 }
                 title={
@@ -757,7 +757,7 @@ export function SectionEditor({
           </BubbleMenu>
         )}
         {/* Edit mode uses Tailwind Typography's prose-sm — sans-serif
-         * (Geist, inherited from body), comfortable line-height, designed
+         * (Inter, inherited from body), comfortable line-height, designed
          * for writing. The serif look of the export render lives in
          * Preview (paged.js) and Edit-on-page (single-page contenteditable
          * — both use Iowan Old Style). Two intentional fonts: one for

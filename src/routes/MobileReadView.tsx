@@ -3,14 +3,15 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDraftStore } from "@/lib/store";
 import { letterBodyHtml } from "@/lib/export/pdf";
 import { getLetterMeta } from "@/lib/letters/catalog";
-import type { Draft } from "@/lib/letters/types";
+import { useJourney } from "@/lib/journey/stage";
+import { StatusPill } from "@/components/journey/ui";
 
 /**
- * Mobile read-only view — `/m/:draftId`.
+ * Mobile read-only view, `/m/:draftId`.
  *
  * Persona D ("HR Director reads on the bus"): open a draft on a phone,
  * read it cleanly, no chrome. This route is the mobile counterpart to
- * `/editor/:draftId` — it renders the same letter body as the PDF export
+ * `/editor/:draftId`: it renders the same letter body as the PDF export
  * pipeline (`letterBodyHtml`) inside a full-bleed scroll container.
  *
  * Constraints:
@@ -21,7 +22,9 @@ import type { Draft } from "@/lib/letters/types";
  *  - No editing affordances. The HTML is sanitised by letterBodyHtml
  *    (per-section sanitizeLetterHtmlForExport + sanitizeLetterHtml on the
  *    disclaimer). contentEditable is never set.
- *  - Light theme only — Section B of SUNDAY.md locks dark mode off.
+ *  - Light theme only (Section B of SUNDAY.md locks dark mode off).
+ *  - The status pill is the journey's own label and colour, as in the
+ *    workspace's document bar.
  */
 export function MobileReadView() {
   const { draftId } = useParams<{ draftId: string }>();
@@ -31,7 +34,7 @@ export function MobileReadView() {
   const bodyHtml = useMemo(() => (draft ? letterBodyHtml(draft) : ""), [draft]);
   const meta = draft ? getLetterMeta(draft.letterType) : null;
   const title = draft?.title || meta?.title || "Untitled letter";
-  const statusLabel = draft ? statusLabelFor(draft) : "";
+  const journey = useJourney(draft?.id);
 
   if (!draft) {
     return (
@@ -70,15 +73,7 @@ export function MobileReadView() {
         className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--ds-surface)]/95 px-4 py-3 backdrop-blur"
         data-testid="mobile-read-header"
       >
-        <span
-          className={
-            "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium " +
-            statusPillClasses(statusLabel)
-          }
-        >
-          <span aria-hidden className="size-1.5 rounded-full bg-current opacity-80" />
-          {statusLabel}
-        </span>
+        {journey && <StatusPill tone={journey.statusTone}>{journey.statusLabel}</StatusPill>}
         <button
           type="button"
           onClick={() => {
@@ -89,7 +84,7 @@ export function MobileReadView() {
           }}
           aria-label="Close mobile reader"
           data-testid="mobile-read-done"
-          className="ml-auto inline-flex h-8 items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3 text-[13px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
+          className="ml-auto inline-flex h-9 items-center gap-1 rounded-[10px] bg-[var(--ds-accent)] px-3.5 text-[14px] font-medium text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
         >
           <span>Done</span>
         </button>
@@ -117,43 +112,6 @@ export function MobileReadView() {
       <style>{mobileLetterStyles}</style>
     </div>
   );
-}
-
-/** Derive the human-readable status pill text. Mirrors the editor's
- * implicit lifecycle: marked-sent export → "Sent", reviewStatus →
- * Approved / In review / Changes requested, otherwise "Draft" or
- * "Ready" when at least one section is in a non-empty state. */
-function statusLabelFor(draft: Draft): string {
-  const wasSent = (draft.exports ?? []).some((e) => e.format === "marked-sent");
-  if (wasSent) return "Sent";
-  switch (draft.reviewStatus) {
-    case "approved":
-      return "Approved";
-    case "in_review":
-      return "In review";
-    case "changes_requested":
-      return "Changes requested";
-    default:
-      break;
-  }
-  const hasContent = draft.sections.some((s) => s.status === "ready" || s.status === "edited");
-  return hasContent ? "Ready" : "Draft";
-}
-
-function statusPillClasses(label: string): string {
-  switch (label) {
-    case "Sent":
-    case "Approved":
-      return "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]";
-    case "In review":
-      return "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]";
-    case "Changes requested":
-      return "bg-[var(--ds-red-bg)] text-[var(--ds-red-fg)]";
-    case "Ready":
-      return "bg-[var(--ds-blue-bg)] text-[var(--ds-blue-fg)]";
-    default:
-      return "bg-[var(--ds-chip)] text-[var(--ds-body)]";
-  }
 }
 
 const mobileLetterStyles = `
@@ -190,6 +148,8 @@ const mobileLetterStyles = `
 }
 .mobile-letter a { color: inherit; text-decoration: underline; }
 .mobile-letter img { max-width: 100%; height: auto; display: block; }
+.mobile-letter table { display: block; max-width: 100%; overflow-x: auto; }
+.mobile-letter { overflow-wrap: anywhere; }
 .mobile-letter .attachments-block h3 { font-size: 1.05rem; }
 .mobile-letter [contenteditable] { -webkit-user-modify: read-only; user-select: text; }
 `;

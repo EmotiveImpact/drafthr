@@ -461,10 +461,13 @@ export function Editor() {
 
   if (!draft || !draftId || !meta || !journey) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-sm text-[var(--ds-muted)]">Draft not found.</p>
-        <Button variant="ghost" className="mt-4" onClick={() => nav("/")}>
-          <ChevronLeft className="mr-1 size-4" /> Back home
+      <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
+        <h1 className="m-0 font-serif text-[28px] font-normal leading-tight text-[var(--ds-ink)]">Draft not found</h1>
+        <p className="m-0 mt-2 text-[14px] leading-relaxed text-[var(--ds-muted)]">
+          This letter isn't in this workspace, or it was deleted.
+        </p>
+        <Button variant="outline" className="mt-6" onClick={() => nav("/")}>
+          <ChevronLeft className="size-4" /> Back home
         </Button>
       </div>
     );
@@ -1090,7 +1093,7 @@ export function Editor() {
       <IssueDate draft={draft} className="m-0 mb-2 font-sans text-[13px] text-[var(--ds-muted)] md:hidden" />
       <ConfidentialLine draft={draft} />
       {draft.sections.map((section) => (
-        <div key={section.id}>
+        <div key={section.id} className="group/sec relative">
           <SectionEditor
             draft={draft}
             section={section}
@@ -1126,11 +1129,13 @@ export function Editor() {
           {section.sectionId === "recipient_block" && <IssueDate draft={draft} className="m-0 mb-3 max-md:hidden" />}
           {phoneFlag && phoneFlag.sectionId === section.id && <PhoneFlagHint target={phoneFlag} onFix={(c) => void fixCheck(c)} />}
           {canSuggest && !section.pendingChange && section.status !== "streaming" && (
-            <div className="-mt-1 mb-3 flex justify-end">
+            // Shown when the paragraph is hovered or focused (always on touch
+            // screens), so a reviewer's page reads as a letter, not a form.
+            <div className="pointer-events-none absolute -bottom-3 right-0 z-[2] flex justify-end opacity-0 transition-opacity duration-[120ms] group-hover/sec:pointer-events-auto group-hover/sec:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:-mt-1 [@media(hover:none)]:mb-3 [@media(hover:none)]:opacity-100">
               <button
                 type="button"
                 onClick={() => setSuggestSection(section)}
-                className="inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2.5 font-sans text-[12.5px] font-medium text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                className="inline-flex h-7 items-center gap-1.5 rounded-[7px] bg-[var(--ds-surface)] px-2.5 font-sans text-[12.5px] font-medium text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
               >
                 <Lightbulb className="size-3.5" />
                 Suggest an edit
@@ -1321,7 +1326,7 @@ export function Editor() {
       {/* Outline: the sections and the compliance or rights checklist. */}
       {showSidebar && !focusMode && (
         <>
-          <button type="button" className="absolute inset-0 z-30 bg-black/20" aria-label="Close panel" onClick={() => setShowSidebar(false)} />
+          <button type="button" className="absolute inset-0 z-30 bg-[var(--ds-scrim)]" aria-label="Close panel" onClick={() => setShowSidebar(false)} />
           <aside
             aria-label="Outline"
             className="absolute inset-y-0 left-0 z-40 flex w-[300px] max-w-[85vw] min-h-0 flex-col overflow-hidden border-r border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-l)]"
@@ -1380,7 +1385,7 @@ export function Editor() {
           <button
             type="button"
             className={cn(
-              "fixed inset-0 z-30 bg-black/30 transition-opacity duration-200 motion-reduce:transition-none",
+              "fixed inset-0 z-30 bg-[var(--ds-scrim)] transition-opacity duration-200 motion-reduce:transition-none",
               aiDrawerOpen ? "opacity-100" : "pointer-events-none opacity-0"
             )}
             aria-label="Close AI drawer"
@@ -1458,7 +1463,7 @@ export function Editor() {
       {/* All comments: click one to jump to its highlight and open the thread. */}
       <Dialog.Root open={allCommentsOpen} onOpenChange={setAllCommentsOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
           <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[520px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-xl)]">
             <header className="flex shrink-0 items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
               <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[14.5px] font-medium text-[var(--ds-ink)]">
@@ -1507,7 +1512,7 @@ export function Editor() {
       {/* Timeline (overflow menu and Review tab). */}
       <Dialog.Root open={timelineDialogOpen} onOpenChange={setTimelineDialogOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
           <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[560px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-xl)]">
             <header className="flex shrink-0 items-center justify-between border-b border-[var(--ds-line-2)] px-4 py-3">
               <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[14.5px] font-medium text-[var(--ds-ink)]">
@@ -1621,7 +1626,7 @@ export function Editor() {
       {/* Review feedback: opened from the changes-requested pill. */}
       <Dialog.Root open={reviewFeedbackOpen} onOpenChange={setReviewFeedbackOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
           <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[440px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 text-[13.5px] shadow-[var(--ds-shadow-xl)]">
             <div className="mb-2 flex items-center gap-2">
               <MessageSquareWarning className="size-4 text-[var(--ds-amber-fg)]" />
@@ -1781,7 +1786,7 @@ function CounselReviewDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
         <Dialog.Content className="ds-rise-in fixed left-1/2 top-1/2 z-50 w-[460px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-5 shadow-[var(--ds-shadow-xl)]">
           <Dialog.Title className="m-0 inline-flex items-center gap-2 text-[15px] font-medium text-[var(--ds-ink)]">
             <ShieldCheck className="size-4 text-[var(--ds-muted)]" />

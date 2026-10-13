@@ -11,7 +11,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
-import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
+import { SuggestionMarkFirst } from "./suggestion-mark-priority";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { Lightbulb, X } from "lucide-react";
 import type { Section } from "@/lib/letters/types";
@@ -63,7 +63,7 @@ export function SuggestEditDialog({
       TableHeader,
       TableCell,
       CommentMark,
-      SuggestionMark,
+      SuggestionMarkFirst,
       FigureRef,
       AttachmentRef,
       Image.configure({ inline: false, allowBase64: true }),
@@ -180,7 +180,7 @@ export function SuggestEditDialog({
           </div>
           <Dialog.Description className="text-[12.5px] text-[var(--ds-muted)] mb-3 leading-snug">
             {quote && quoteSelected
-              ? "Your selected text is highlighted below — type to replace just that part. Only what you change becomes a redline."
+              ? "Your selected text is highlighted below. Type to replace just that part. Only what you change becomes a redline."
               : "Edit the text below. Only the words you change become a redline; the proposal doesn't touch the letter until the author accepts it."}
           </Dialog.Description>
 
@@ -190,7 +190,7 @@ export function SuggestEditDialog({
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Why? (optional) — e.g. 12 weeks from the outcome date lands on the 29th"
+            placeholder="Why? (optional), for example 12 weeks from the outcome date lands on the 29th"
             className="mt-2.5 h-8 w-full rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2.5 text-[12.5px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-ink)] focus:outline-none"
           />
 

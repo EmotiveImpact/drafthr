@@ -126,13 +126,13 @@ export function EditableTitleBar({
             title={subline ? `${displayTitle}. ${subline}. Click to rename.` : "Click to rename"}
             aria-label={`Letter title: ${displayTitle}. Click to rename.`}
           >
-            {phone ? displayTitle : barTitle}
+            {barTitle}
           </button>
         )}
         {!editing && !phone && recipientLabel && (
           <>
-            <span aria-hidden className="shrink-0 text-[15px] text-[var(--ds-faint)]">·</span>
-            <span className="min-w-0 truncate text-[15px] text-[var(--ds-muted)]">{recipientLabel}</span>
+            <span aria-hidden className="hidden shrink-0 text-[15px] text-[var(--ds-faint)] xl:inline">·</span>
+            <span className="hidden min-w-0 shrink-[3] truncate text-[15px] text-[var(--ds-muted)] xl:inline">{recipientLabel}</span>
           </>
         )}
       </div>

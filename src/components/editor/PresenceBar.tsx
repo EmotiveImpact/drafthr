@@ -52,7 +52,7 @@ export function PresenceBar({
       type="button"
       onClick={onManage}
       className="inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] py-1 pl-1 pr-3 text-[12.5px] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition hover:border-[var(--ds-line-strong)]"
-      aria-label="People on this letter — click to manage or invite"
+      aria-label="People on this letter. Click to manage or invite."
       title="Manage people"
     >
       {others.length > 0 ? (

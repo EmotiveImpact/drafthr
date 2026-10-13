@@ -315,3 +315,12 @@
     animation-delay: 0s !important;
   }
 }
+
+/* The review page tags each redline with its author. DraftHR's own
+ * proposals are stored under an older AI author name; show them as
+ * DraftHR. */
+.review-canvas ins[data-suggestion-id][data-status="pending"][data-author]:is([data-author="Claude AI" i], [data-author="AI" i])::after,
+.review-canvas del[data-suggestion-id][data-status="pending"][data-author]:is([data-author="Claude AI" i], [data-author="AI" i]):not(:has(+ ins[data-suggestion-id]))::after {
+  content: "DraftHR";
+  font-family: var(--font-sans);
+}

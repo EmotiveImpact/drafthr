@@ -98,17 +98,17 @@ const QUICK_PROMPTS: { label: string; prompt: string }[] = [
   },
   // addClause
   {
-    label: "+ Confidentiality clause",
+    label: "+ confidentiality clause",
     prompt:
       "Add a confidentiality clause to the terms section. Three-year survival post-termination unless the contract provides otherwise.",
   },
   {
-    label: "+ IP-assignment clause",
+    label: "+ IP assignment clause",
     prompt:
       "Add an IP-assignment clause to the terms section: all work-product vests in the employer, recipient assigns and waives moral rights so far as the law permits.",
   },
   {
-    label: "+ Reservation of rights",
+    label: "+ reservation of rights",
     prompt:
       "Add an explicit reservation-of-rights paragraph to the closing: statutory, contractual, common-law remedies, and the right to bring tribunal / agency proceedings.",
   },

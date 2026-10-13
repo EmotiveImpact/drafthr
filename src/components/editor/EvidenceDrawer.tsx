@@ -328,8 +328,8 @@ export function EvidenceDrawer({
       <button
         type="button"
         onClick={() => onPinnedChange(false)}
-        aria-label="Unpin evidence — return AI agent rail"
-        title="Unpin — return both Evidence and Ask AI to pills"
+        aria-label="Unpin evidence and return the side panel"
+        title="Unpin evidence and return the side panel"
         className="h-6 px-2 inline-flex items-center gap-1 rounded-md text-[11px] font-semibold text-[var(--ds-amber-fg)] hover:bg-[var(--ds-amber-bg)] transition"
       >
         <Undo2 className="size-3" />
@@ -461,7 +461,7 @@ export function EvidenceDrawer({
                           ) : mode === "attached" ? (
                             <>Will reference Attachments</>
                           ) : (
-                            <>Pack-only — not inserted in prose</>
+                            <>Pack only, not inserted in the letter</>
                           )}
                         </p>
                       </div>
@@ -703,7 +703,7 @@ function buildInlineHtml(item: EvidenceItem): string {
         : item.kind === "calendar"
         ? "Calendar entry"
         : "Note";
-    return `<blockquote>${escHtml(text)}<br/><em>— ${kindLabel}${caption}</em></blockquote>`;
+    return `<blockquote>${escHtml(text)}<br/><em>${kindLabel}${caption}</em></blockquote>`;
   }
   // Documents
   return `<p>I refer to the document <em>${escHtml(item.filename || "(unnamed)")}</em>${

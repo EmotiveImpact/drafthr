@@ -112,7 +112,7 @@ export function PhoneBottomBar({
   onChat: () => void;
 }) {
   const tabBtn =
-    "inline-flex h-[46px] min-w-0 flex-1 items-center justify-center gap-2 rounded-[12px] text-[14.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]";
+    "inline-flex h-[46px] min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[12px] px-2 text-[14.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]";
   const progressOn = sheetOpen && (sheetTab === "progress" || sheetTab === "edits");
   const chatOn = sheetOpen && sheetTab === "chat";
   return (
@@ -126,12 +126,13 @@ export function PhoneBottomBar({
         aria-pressed={progressOn}
         className={cn(
           tabBtn,
+          "flex-[1.25]",
           progressOn || !sheetOpen
             ? "bg-[var(--ds-surface-2)] text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)]"
             : "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)]"
         )}
       >
-        <ListChecks className="size-[18px]" /> Progress
+        <ListChecks className="size-[18px] shrink-0" /> Progress
         {bar.pendingEdits > 0 && <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">{bar.pendingEdits}</span>}
       </button>
       <button
@@ -140,13 +141,14 @@ export function PhoneBottomBar({
         aria-pressed={chatOn}
         className={cn(
           tabBtn,
+          "flex-1",
           chatOn
             ? "bg-[var(--ds-surface-2)] text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)]"
             : "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)]"
         )}
         aria-label="Open AI agent"
       >
-        <MessageSquare className="size-[18px]" /> Chat
+        <MessageSquare className="size-[18px] shrink-0" /> Chat
       </button>
       {showMain && (
         <div className="flex shrink-0 [&>*]:ml-0">

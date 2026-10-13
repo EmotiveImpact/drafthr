@@ -132,7 +132,7 @@ export function ProgressTab({
                 : "Needed before this letter can be exported"}
             </p>
           </div>
-          <QuietButton onClick={onOpenCounsel}>{counselReview ? "Update" : "Mark reviewed"}</QuietButton>
+          {role !== "viewer" && <QuietButton onClick={onOpenCounsel}>{counselReview ? "Update" : "Mark reviewed"}</QuietButton>}
         </div>
       )}
 

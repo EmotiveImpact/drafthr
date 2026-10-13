@@ -107,7 +107,7 @@ export function DraftStage({ draftId }: { draftId: string }) {
         )}
 
         {facts.requiredMissing > 0 ? (
-          <CheckRow state="need" action={h?.openEvidence ? { label: "Add", onClick: h.openEvidence } : undefined}>
+          <CheckRow state="need" action={h?.openEvidence ? { label: canEdit ? "Add" : "Open", onClick: h.openEvidence } : undefined}>
             {plural(facts.requiredMissing, "required evidence item")} missing
           </CheckRow>
         ) : c.evidence > 0 ? (
@@ -122,7 +122,7 @@ export function DraftStage({ draftId }: { draftId: string }) {
             {plural(c.evidence, "evidence file")} linked
           </CheckRow>
         ) : (
-          <CheckRow state="ok" action={h?.openEvidence ? { label: "Add", onClick: h.openEvidence } : undefined}>
+          <CheckRow state="ok" action={h?.openEvidence ? { label: canEdit ? "Add" : "Open", onClick: h.openEvidence } : undefined}>
             No evidence required
           </CheckRow>
         )}

@@ -132,8 +132,8 @@ export function CommentPopover({
             <div
               className="mb-2 p-2 rounded-[var(--r-sm)] text-[11px] italic leading-relaxed"
               style={{
-                background: "var(--comment-highlight, #fef3c7)",
-                borderLeft: "3px solid var(--comment-highlight-strong, #fde68a)",
+                background: "var(--comment-highlight)",
+                borderLeft: "3px solid var(--comment-highlight-strong)",
                 color: "var(--ds-ink)",
               }}
             >

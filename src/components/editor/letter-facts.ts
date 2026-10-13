@@ -235,7 +235,12 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
       });
     }
   }
-  return out.sort((a, b) => b.at - a.at).map(({ at: _at, ...e }) => e);
+  // Newest first; events recorded in the same millisecond keep their
+  // recorded order, newest first too.
+  return out
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => b.e.at - a.e.at || b.i - a.i)
+    .map(({ e: { at: _at, ...e } }) => e);
 }
 
 /** A verdict in words, lower case ("ready once my changes are in"). */

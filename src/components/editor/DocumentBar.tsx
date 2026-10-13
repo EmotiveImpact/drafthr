@@ -189,9 +189,13 @@ export function DocumentBar(p: DocumentBarProps) {
     if (!editor || editor.isDestroyed) return;
     editor.on("transaction", force);
     editor.on("selectionUpdate", force);
+    editor.on("focus", force);
+    editor.on("blur", force);
     return () => {
       editor.off("transaction", force);
       editor.off("selectionUpdate", force);
+      editor.off("focus", force);
+      editor.off("blur", force);
     };
   }, [editor]);
   const ed = editor && !editor.isDestroyed ? editor : null;
@@ -259,7 +263,7 @@ function TopRow(p: DocumentBarProps) {
   const evidenceCount = draft.evidence?.length ?? 0;
   const reviewStatus = draft.reviewStatus ?? "draft";
   return (
-    <div className="flex h-[60px] min-w-0 items-center gap-1.5 border-b border-[var(--ds-line-2)] pl-3 pr-3.5">
+    <div className="flex h-[60px] min-w-0 items-center gap-1 border-b xl:gap-1.5 border-[var(--ds-line-2)] pl-3 pr-3.5">
       <Link
         to={p.backTo}
         aria-label="Back to letters"
@@ -268,7 +272,7 @@ function TopRow(p: DocumentBarProps) {
       >
         <ArrowLeft className="size-[18px]" />
       </Link>
-      <div className="ml-0.5 mr-1.5 flex min-w-0 shrink items-center">
+      <div className="ml-0.5 mr-1.5 flex min-w-0 shrink items-center lg:min-w-[76px]">
         <EditableTitleBar draft={draft} variant="bar" />
       </div>
       <span className="flex shrink-0 items-center gap-1.5">
@@ -326,7 +330,7 @@ function TopRow(p: DocumentBarProps) {
         trigger={
           <button
             type="button"
-            className="ml-2 mr-1.5 hidden shrink-0 items-center rounded-full pl-1.5 transition-opacity duration-[120ms] hover:opacity-85 focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] lg:inline-flex"
+            className="ml-0.5 mr-1 hidden shrink-0 xl:ml-2 xl:mr-1.5 items-center rounded-full pl-1.5 transition-opacity duration-[120ms] hover:opacity-85 focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] lg:inline-flex"
             aria-label="Invite"
             title="Share and invite people"
           >
@@ -391,7 +395,7 @@ export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone" }) {
   const { draft, journey, role } = p;
   const phone = p.size === "phone";
   const base = phone
-    ? "inline-flex h-[46px] shrink-0 items-center justify-center gap-[7px] rounded-[12px] px-[18px] text-[14.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+    ? "inline-flex h-[46px] shrink-0 items-center justify-center gap-1.5 rounded-[12px] px-3.5 text-[14.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
     : "ml-1 inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] px-3 text-[14px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]";
   const dark = "bg-[var(--ds-accent)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)]";
   const ghost =
@@ -455,7 +459,7 @@ export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone" }) {
       }}
       className={cn(base, tone, disabled && off, disabled && "hover:bg-[var(--ds-accent)]")}
     >
-      {icon}
+      {icon && <span className={phone ? "contents" : "contents max-xl:hidden"}>{icon}</span>}
       {action.label}
       {disabled && reason && <span className="sr-only">. {reason}</span>}
     </button>
@@ -731,6 +735,8 @@ function HomeRow(p: FormatProps) {
   const { ed, canFormat } = p;
   const page = p.viewMode === "preview";
   const locked = !p.canEdit;
+  // Pressed states show for the section being edited, not before a click.
+  const focused = Boolean(ed?.isFocused);
   const style = !ed
     ? "Paragraph"
     : ed.isActive("heading", { level: 2 })
@@ -800,30 +806,30 @@ function HomeRow(p: FormatProps) {
           </DropdownMenu>
           <DocumentPopover draft={p.draft} variant="tools" disabled={locked} />
           <Sep />
-          <RBtn label="Bold" hint={hint} active={ed?.isActive("bold")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleBold().run()}>
+          <RBtn label="Bold" hint={hint} active={focused && ed?.isActive("bold")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleBold().run()}>
             <Bold className="size-4" />
           </RBtn>
-          <RBtn label="Italic" hint={hint} active={ed?.isActive("italic")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleItalic().run()}>
+          <RBtn label="Italic" hint={hint} active={focused && ed?.isActive("italic")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleItalic().run()}>
             <Italic className="size-4" />
           </RBtn>
           <Sep />
-          <RBtn label="Bullets" hint={hint} active={ed?.isActive("bulletList")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleBulletList().run()}>
+          <RBtn label="Bullets" hint={hint} active={focused && ed?.isActive("bulletList")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleBulletList().run()}>
             <List className="size-[17px]" />
           </RBtn>
-          <RBtn label="Numbered list" hint={hint} active={ed?.isActive("orderedList")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleOrderedList().run()}>
+          <RBtn label="Numbered list" hint={hint} active={focused && ed?.isActive("orderedList")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleOrderedList().run()}>
             <ListOrdered className="size-[17px]" />
           </RBtn>
           <Sep />
-          <RBtn label="Align left" hint={hint} active={ed?.isActive({ textAlign: "left" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("left").run()}>
+          <RBtn label="Align left" hint={hint} active={focused && ed?.isActive({ textAlign: "left" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("left").run()}>
             <AlignLeft className="size-[17px]" />
           </RBtn>
-          <RBtn label="Align centre" hint={hint} active={ed?.isActive({ textAlign: "center" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("center").run()}>
+          <RBtn label="Align centre" hint={hint} active={focused && ed?.isActive({ textAlign: "center" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("center").run()}>
             <AlignCenter className="size-[17px]" />
           </RBtn>
-          <RBtn label="Align right" hint={hint} active={ed?.isActive({ textAlign: "right" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("right").run()}>
+          <RBtn label="Align right" hint={hint} active={focused && ed?.isActive({ textAlign: "right" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("right").run()}>
             <AlignRight className="size-[17px]" />
           </RBtn>
-          <RBtn label="Justify" hint={hint} active={ed?.isActive({ textAlign: "justify" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("justify").run()}>
+          <RBtn label="Justify" hint={hint} active={focused && ed?.isActive({ textAlign: "justify" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("justify").run()}>
             <AlignJustify className="size-[17px]" />
           </RBtn>
           <Sep />
@@ -1119,7 +1125,7 @@ function LinkBtn({ ed, disabled, text }: { ed: Editor | null; disabled?: boolean
     <RBtn
       label="Link"
       text={text}
-      active={ed?.isActive("link")}
+      active={Boolean(ed?.isFocused) && ed?.isActive("link")}
       disabled={disabled}
       onClick={() => {
         if (!ed) return;
@@ -1160,14 +1166,14 @@ function RBtn({
       type="button"
       aria-label={label}
       title={disabled && hint ? `${label}. ${hint}` : label}
-      aria-pressed={active === undefined ? undefined : active}
+      aria-pressed={active === undefined ? undefined : Boolean(active) && !disabled}
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cn(
         "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[7px] text-[13.5px] transition-colors duration-[120ms] disabled:cursor-default disabled:text-[var(--ds-faint)] disabled:hover:bg-transparent focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
         text ? "px-2" : "w-8",
-        active
+        active && !disabled
           ? "bg-[var(--ds-surface-3)] text-[var(--ds-ink)]"
           : "text-[var(--ds-body)] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)]"
       )}
@@ -1179,6 +1185,6 @@ function RBtn({
 }
 
 function Sep() {
-  return <span aria-hidden className="mx-2 h-[18px] w-px shrink-0 bg-[var(--ds-line)]" />;
+  return <span aria-hidden className="mx-[5px] h-[18px] w-px shrink-0 bg-[var(--ds-line)]" />;
 }
 

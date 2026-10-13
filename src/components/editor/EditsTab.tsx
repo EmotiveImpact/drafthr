@@ -1,12 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlignLeft, CheckCheck, Columns2, MessageSquare, PenLine, Pilcrow } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import {
+  AlignLeft,
+  CheckCheck,
+  Columns2,
+  MessageSquare,
+  PenLine,
+  Pilcrow,
+} from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
-import { getDiffViewMode, setDiffViewMode, type DiffViewMode } from "@/lib/diff-view-mode";
+import {
+  getDiffViewMode,
+  setDiffViewMode,
+  type DiffViewMode,
+} from "@/lib/diff-view-mode";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { MarginCard } from "@/components/journey/ui";
 import { cn } from "@/lib/utils";
 import { CommentsPanel } from "./CommentsPanel";
-import { acceptWithSettle, decideEdit, suggestedEdits, type SuggestedEdit } from "./suggestion-groups";
+import {
+  acceptWithSettle,
+  decideEdit,
+  suggestedEdits,
+  type SuggestedEdit,
+} from "./suggestion-groups";
 
 const SOURCE_CATEGORY: Record<string, string> = {
   regenerate: "Rewrite",
@@ -36,7 +52,11 @@ function partsFor(edit: SuggestedEdit): Part[] {
     const root = document.createElement("div");
     root.innerHTML = sanitizeLetterHtml(edit.section.html ?? "");
     const want = new Set(edit.ids);
-    return [...root.querySelectorAll("ins[data-suggestion-id], del[data-suggestion-id]")]
+    return [
+      ...root.querySelectorAll(
+        "ins[data-suggestion-id], del[data-suggestion-id]",
+      ),
+    ]
       .filter((el) => want.has(el.getAttribute("data-suggestion-id") ?? ""))
       .map((el) => ({
         kind: el.tagName === "DEL" ? ("del" as const) : ("ins" as const),
@@ -95,7 +115,9 @@ export function EditsTab({
 
   const edits = useMemo(() => suggestedEdits(draft), [draft]);
   const [leaving, setLeaving] = useState<Record<string, boolean>>({});
-  const comments = (draft.comments ?? []).filter((c) => !c.parentId && !c.resolved).length;
+  const comments = (draft.comments ?? []).filter(
+    (c) => !c.parentId && !c.resolved,
+  ).length;
 
   let reviewerN = 0;
 
@@ -125,10 +147,15 @@ export function EditsTab({
       ) : (
         <>
           <div className="flex min-h-7 items-center justify-between gap-2.5">
-            <span className="min-w-0 truncate text-[13px] text-[var(--ds-muted)]" aria-live="polite">
+            <span
+              className="min-w-0 truncate text-[13px] text-[var(--ds-muted)]"
+              aria-live="polite"
+            >
               {edits.length > 0 ? (
                 <>
-                  <b className="font-medium text-[var(--ds-ink)]">{edits.length}</b>{" "}
+                  <b className="font-medium text-[var(--ds-ink)]">
+                    {edits.length}
+                  </b>{" "}
                   suggested edit{edits.length === 1 ? "" : "s"} to decide
                 </>
               ) : (
@@ -160,9 +187,12 @@ export function EditsTab({
 
           {edits.length === 0 ? (
             <div className="rounded-[12px] bg-[var(--ds-surface-2)] px-4 py-6 text-center">
-              <p className="m-0 text-[13.5px] font-medium text-[var(--ds-ink)]">No edits waiting</p>
+              <p className="m-0 text-[13.5px] font-medium text-[var(--ds-ink)]">
+                No edits waiting
+              </p>
               <p className="m-0 mx-auto mt-1 max-w-[30ch] text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
-                When DraftHR or a reviewer suggests a change, it appears here for you to accept or reject.
+                When DraftHR or a reviewer suggests a change, it appears here
+                for you to accept or reject.
               </p>
             </div>
           ) : (
@@ -175,8 +205,10 @@ export function EditsTab({
                   setLeaving((l) => ({ ...l, [key]: true }));
                   window.setTimeout(then, 220);
                 };
-                const accept = () => leave(() => acceptWithSettle(draft.id, edit));
-                const reject = () => leave(() => decideEdit(draft.id, edit, false));
+                const accept = () =>
+                  leave(() => acceptWithSettle(draft.id, edit));
+                const reject = () =>
+                  leave(() => decideEdit(draft.id, edit, false));
                 return (
                   <div
                     key={key}
@@ -190,8 +222,20 @@ export function EditsTab({
                     <MarginCard
                       kind={edit.ai ? "drafthr" : "reviewer"}
                       connector={false}
-                      author={edit.ai ? undefined : { name: edit.author || "Reviewer", seed: edit.authorId || edit.author }}
-                      meta={edit.ai ? SOURCE_CATEGORY[edit.pending?.source ?? ""] ?? "Rewrite" : `Suggestion ${reviewerN}`}
+                      author={
+                        edit.ai
+                          ? undefined
+                          : {
+                              name: edit.author || "Reviewer",
+                              seed: edit.authorId || edit.author,
+                            }
+                      }
+                      meta={
+                        edit.ai
+                          ? (SOURCE_CATEGORY[edit.pending?.source ?? ""] ??
+                            "Rewrite")
+                          : `Suggestion ${reviewerN}`
+                      }
                       onAccept={canResolve ? accept : undefined}
                       onReject={canResolve ? reject : undefined}
                       count={`${i + 1} of ${edits.length}`}
@@ -207,38 +251,47 @@ export function EditsTab({
                         <span className="truncate">{edit.section.title}</span>
                       </button>
                       {parts.length > 0 && (
-                        <p className="m-0 font-serif text-[13.5px] leading-[1.5] text-[var(--ds-body)] [overflow-wrap:anywhere]">
-                          {parts.map((p, j) =>
-                            p.kind === "del" ? (
-                              <del
-                                key={j}
-                                className={cn(
-                                  "mr-1 rounded-[2px] decoration-1",
-                                  edit.ai
-                                    ? "bg-[var(--ds-red-soft)] text-[var(--ds-red-fg)] decoration-[var(--ds-red-line)]"
-                                    : "bg-[var(--ds-lilac-soft)] text-[var(--ds-lilac-fg)] decoration-[var(--ds-lilac-line)]"
-                                )}
-                              >
-                                {p.text}
-                              </del>
-                            ) : (
-                              <ins
-                                key={j}
-                                className={cn(
-                                  "mr-1 rounded-[2px] border-b-[1.5px] no-underline",
-                                  edit.ai
-                                    ? "border-[var(--ds-green-line)] bg-[var(--ds-green-bg)] text-[var(--ds-green-ink)]"
-                                    : "border-[var(--ds-lilac-ring)] bg-[var(--ds-lilac-bg)] text-[var(--ds-lilac-ink)]"
-                                )}
-                              >
-                                {p.text}
-                              </ins>
-                            )
-                          )}
+                        <p className="m-0 font-serif text-[13.5px] leading-[1.5] text-[var(--ds-body)] break-words">
+                          {parts.map((p, j) => (
+                            <Fragment key={j}>
+                              {j > 0 && " "}
+                              {p.kind === "del" ? (
+                                <del
+                                  className={cn(
+                                    "rounded-[2px] decoration-1",
+                                    edit.ai
+                                      ? "bg-[var(--ds-red-soft)] text-[var(--ds-red-fg)] decoration-[var(--ds-red-line)]"
+                                      : "bg-[var(--ds-lilac-soft)] text-[var(--ds-lilac-fg)] decoration-[var(--ds-lilac-line)]",
+                                  )}
+                                >
+                                  {p.text}
+                                </del>
+                              ) : (
+                                <ins
+                                  className={cn(
+                                    "rounded-[2px] border-b-[1.5px] no-underline",
+                                    edit.ai
+                                      ? "border-[var(--ds-green-line)] bg-[var(--ds-green-bg)] text-[var(--ds-green-ink)]"
+                                      : "border-[var(--ds-lilac-ring)] bg-[var(--ds-lilac-bg)] text-[var(--ds-lilac-ink)]",
+                                  )}
+                                >
+                                  {p.text}
+                                </ins>
+                              )}
+                            </Fragment>
+                          ))}
                         </p>
                       )}
-                      {edit.note && <p className="m-0 mt-1.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">{edit.note}</p>}
-                      {!canResolve && <p className="m-0 mt-1.5 text-[12px] text-[var(--ds-subtle)]">Waiting for the author to decide</p>}
+                      {edit.note && (
+                        <p className="m-0 mt-1.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+                          {edit.note}
+                        </p>
+                      )}
+                      {!canResolve && (
+                        <p className="m-0 mt-1.5 text-[12px] text-[var(--ds-subtle)]">
+                          Waiting for the author to decide
+                        </p>
+                      )}
                     </MarginCard>
                   </div>
                 );
@@ -247,7 +300,9 @@ export function EditsTab({
           )}
 
           <div className="mt-1 flex items-center justify-between gap-2 border-t border-[var(--ds-line-2)] pt-3">
-            <span className="text-[12.5px] text-[var(--ds-muted)]">New edits</span>
+            <span className="text-[12.5px] text-[var(--ds-muted)]">
+              New edits
+            </span>
             <div
               className="inline-flex rounded-[8px] bg-[var(--ds-surface-2)] p-0.5"
               role="radiogroup"
@@ -255,8 +310,16 @@ export function EditsTab({
             >
               {(
                 [
-                  ["inline", "In the text", <AlignLeft key="i" className="size-3" />],
-                  ["card", "Side by side", <Columns2 key="c" className="size-3" />],
+                  [
+                    "inline",
+                    "In the text",
+                    <AlignLeft key="i" className="size-3" />,
+                  ],
+                  [
+                    "card",
+                    "Side by side",
+                    <Columns2 key="c" className="size-3" />,
+                  ],
                 ] as const
               ).map(([value, label, icon]) => (
                 <button
@@ -269,7 +332,7 @@ export function EditsTab({
                     "inline-flex h-6 items-center gap-1 rounded-[6px] px-2 text-[12px] transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
                     mode === value
                       ? "bg-[var(--ds-surface)] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
-                      : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                      : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
                   )}
                 >
                   {icon}
@@ -307,12 +370,14 @@ function FilterPill({
         "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
         active
           ? "border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
-          : "border-transparent text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+          : "border-transparent text-[var(--ds-muted)] hover:text-[var(--ds-ink)]",
       )}
     >
       {icon}
       {label}
-      <span className="ds-mono text-[11.5px] font-normal text-[var(--ds-subtle)]">{count}</span>
+      <span className="ds-mono text-[11.5px] font-normal text-[var(--ds-subtle)]">
+        {count}
+      </span>
     </button>
   );
 }

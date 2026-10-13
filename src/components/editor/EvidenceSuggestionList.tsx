@@ -119,8 +119,8 @@ export const EvidenceSuggestionList = forwardRef<
     >
       <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.07em] text-[var(--ds-muted)]">
         {items.length === 0
-          ? "Evidence — no matches"
-          : `Evidence — ${items.length} item${items.length === 1 ? "" : "s"} match`}
+          ? "Evidence: no matches"
+          : `Evidence: ${items.length} item${items.length === 1 ? "" : "s"} match`}
       </div>
 
       {items.length === 0 ? (
@@ -158,11 +158,11 @@ export const EvidenceSuggestionList = forwardRef<
               className={
                 "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition " +
                 (isFocused
-                  ? "bg-[var(--ds-blue-bg,#eff6ff)]"
-                  : "hover:bg-[var(--ds-blue-bg,#eff6ff)]")
+                  ? "bg-[var(--ds-blue-bg)]"
+                  : "hover:bg-[var(--ds-blue-bg)]")
               }
             >
-              <span className="grid size-6 shrink-0 place-items-center rounded-[5px] bg-[var(--ds-amber-bg,#fffbeb)] text-[var(--ds-amber-fg,#d97706)]">
+              <span className="grid size-6 shrink-0 place-items-center rounded-[5px] bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]">
                 <Icon className="size-3" />
               </span>
               <span className="min-w-0 flex-1">
@@ -184,7 +184,7 @@ export const EvidenceSuggestionList = forwardRef<
                 </span>
               </span>
               {isFocused && (
-                <span className="shrink-0 rounded-[3px] bg-[var(--ds-line-2,#f3f4f6)] px-1.5 py-px font-mono text-[10px] font-semibold text-[var(--ds-muted)]">
+                <span className="shrink-0 rounded-[3px] bg-[var(--ds-line-2)] px-1.5 py-px font-mono text-[10px] font-semibold text-[var(--ds-muted)]">
                   ↵
                 </span>
               )}
