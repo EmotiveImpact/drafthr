@@ -1,7 +1,7 @@
 import { Avatar, Pill } from "@/components/ds";
 import { ListHeader } from "@/components/letters/ListHeader";
 import { PaperIcon, usePageTitle } from "@/components/letters/parts";
-import { tintForLetterType, type Tint } from "@/components/letters/letterView";
+import { tintForLetterType, tintStyle, type Tint } from "@/components/letters/letterView";
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -227,6 +227,10 @@ export default function BulkOperations() {
       doneRows: 0,
       totalRows: parsed.rows.length,
     });
+    // Missing values per spreadsheet row. Substitution writes "[field not
+    // set]" for these, so they never survive as {{placeholders}} and the
+    // results list has to be told which rows are incomplete.
+    const missingByRow = new Map(missingForTemplate.map((m) => [m.rowNumber, m.fields]));
     const summaries: GeneratedDraftSummary[] = [];
     for (let i = 0; i < parsed.rows.length; i++) {
       // Stop creating drafts the moment the user clicks Cancel — Phase 1 (the
@@ -250,7 +254,9 @@ export default function BulkOperations() {
       );
 
       const personalised = personaliseTemplate(template, row);
-      const unresolvedForRow = new Set<string>();
+      const unresolvedForRow = new Set<string>(
+        missingByRow.get(parsed.rowNumbers?.[i] ?? i + 2) ?? [],
+      );
       for (const section of personalised) {
         const runtimeId = sectionByWizardId.get(section.sectionId);
         if (!runtimeId) continue;
@@ -366,6 +372,7 @@ export default function BulkOperations() {
             <StepResults
               state={generateState}
               generated={generated}
+              rowCount={parsed?.rows.length ?? 0}
               tint={tintForLetterType(letterType as LetterTypeId)}
               onCancel={() => abortRef.current?.abort()}
               onReset={reset}
@@ -392,13 +399,21 @@ export default function BulkOperations() {
           </Button>
 
           {step < 4 ? (
-            <Button
-              onClick={() => setStep((s) => ((s + 1) as Step))}
-              disabled={!canContinue}
-            >
-              Continue
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <div className="flex min-w-0 items-center gap-3">
+              {step === 3 && !canContinue && (
+                <span id="bulk-continue-why" className="text-right text-[12.5px] text-[var(--ds-muted)]">
+                  {parsed?.error ? "Fix the file to continue." : "Choose a CSV file to continue."}
+                </span>
+              )}
+              <Button
+                onClick={() => setStep((s) => ((s + 1) as Step))}
+                disabled={!canContinue}
+                aria-describedby={step === 3 && !canContinue ? "bulk-continue-why" : undefined}
+              >
+                Continue
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           ) : (
             <Button
               onClick={handleGenerate}
@@ -504,6 +519,7 @@ function StepOperation({
       </p>
 
       <RadioGroup
+        aria-label="Bulk operation"
         value={operation}
         onValueChange={(v) => setOperation(v as Operation)}
         className="mt-5 grid gap-3 sm:grid-cols-3"
@@ -578,6 +594,8 @@ function OperationOption({
         <RadioGroupItem
           value={value}
           id={`op-${value}`}
+          aria-label={badge ? `${title} (${badge.toLowerCase()})` : title}
+          aria-describedby={`op-${value}-desc`}
           disabled={disabled}
           className="absolute left-2.5 top-2.5 bg-[var(--ds-surface)]"
         />
@@ -589,7 +607,7 @@ function OperationOption({
       </div>
       <div className="px-3.5 pb-3.5 pt-3">
         <span className="block text-[13.5px] font-semibold text-[var(--ds-ink)]">{title}</span>
-        <p className="m-0 mt-1 text-[12px] font-normal leading-snug text-[var(--ds-muted)]">{description}</p>
+        <p id={`op-${value}-desc`} className="m-0 mt-1 text-[12px] font-normal leading-snug text-[var(--ds-muted)]">{description}</p>
       </div>
     </Label>
   );
@@ -618,9 +636,10 @@ function StepTemplate({
         aria-label="HR letter template"
         className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
       >
-        {hrTemplates.map((t, i) => {
+        {hrTemplates.map((t) => {
           const on = t.id === letterType;
-          const [tint, ink] = TEMPLATE_TINTS[i % TEMPLATE_TINTS.length];
+          // Same pastel as the letter type everywhere else (Letters, Home).
+          const tint = tintForLetterType(t.id as LetterTypeId);
           return (
             <button
               key={t.id}
@@ -637,10 +656,10 @@ function StepTemplate({
             >
               <span
                 className="relative mx-1.5 mt-1.5 block h-[64px] overflow-hidden rounded-[calc(var(--ds-r-l)-5px)]"
-                style={{ background: tint }}
+                style={{ ...tintStyle(tint), background: "var(--tint)" }}
               >
                 <span className="absolute -bottom-3 left-1/2 flex h-[58px] w-[54px] -translate-x-1/2 -rotate-[2.5deg] flex-col gap-1 rounded-[3px] bg-[var(--ds-surface)] px-2 pt-2 shadow-[var(--ds-shadow-m)]">
-                  <span className="mb-0.5 size-1.5 rounded-[1.5px]" style={{ background: ink }} />
+                  <span className="mb-0.5 size-1.5 rounded-[1.5px] bg-[var(--tint-ink)]" />
                   <span className="h-[3px] w-3/5 rounded bg-[var(--ds-line-strong)]" />
                   <span className="h-[3px] w-full rounded bg-[var(--ds-line)]" />
                   <span className="h-[3px] w-full rounded bg-[var(--ds-line)]" />
@@ -665,15 +684,6 @@ function StepTemplate({
     </section>
   );
 }
-
-const TEMPLATE_TINTS: [string, string][] = [
-  ["var(--ds-tint-lavender)", "var(--ds-tint-lavender-ink)"],
-  ["var(--ds-tint-mint)", "var(--ds-tint-mint-ink)"],
-  ["var(--ds-tint-peach)", "var(--ds-tint-peach-ink)"],
-  ["var(--ds-tint-sky)", "var(--ds-tint-sky-ink)"],
-  ["var(--ds-tint-butter)", "var(--ds-tint-butter-ink)"],
-  ["var(--ds-tint-rose)", "var(--ds-tint-rose-ink)"],
-];
 
 function StepUpload({
   dropRef,
@@ -724,7 +734,11 @@ function StepUpload({
           type="file"
           accept=".csv,text/csv"
           className="hidden"
-          onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            onFileChange(e.target.files?.[0] ?? null);
+            // Clear it so choosing the same file again (after fixing it) reads it again.
+            e.target.value = "";
+          }}
         />
         {csvFileName && (
           <p className="m-0 mt-4 text-[12.5px] text-[var(--ds-muted)]">
@@ -736,7 +750,7 @@ function StepUpload({
           </p>
         )}
         {parsed?.error && (
-          <p className="m-0 mt-3 max-w-sm text-[12.5px] text-[var(--ds-red-fg)]">
+          <p role="alert" className="m-0 mt-3 max-w-sm text-[12.5px] text-[var(--ds-red-fg)]">
             {parsed.error}
           </p>
         )}
@@ -792,6 +806,10 @@ function StepPreview({
     () => findMissingMergeValues(parsed.rows, parsed.headers, parsed.rowNumbers),
     [parsed],
   );
+  // A row with missing values is not ready: it counts as a warning, like a
+  // row the parser skipped.
+  const readyCount = parsed.rows.length - missing.length;
+  const warningCount = parsed.warnings.length + missing.length;
   const visibleRows = parsed.rows.slice(0, 25);
   const overflow = parsed.rows.length - visibleRows.length;
 
@@ -810,9 +828,9 @@ function StepPreview({
     <section aria-busy={generating}>
       <h2 className="m-0 text-[17px] font-semibold text-[var(--ds-ink)]">Preview</h2>
       <p className="m-0 mt-1 text-[13px] text-[var(--ds-muted)]">
-        {parsed.rows.length} row{parsed.rows.length === 1 ? "" : "s"} ready,
+        {readyCount} row{readyCount === 1 ? "" : "s"} ready,
         {" "}
-        {parsed.warnings.length} warning{parsed.warnings.length === 1 ? "" : "s"}.
+        {warningCount} warning{warningCount === 1 ? "" : "s"}.
       </p>
 
       {missing.length > 0 && (
@@ -896,6 +914,7 @@ function StepPreview({
 function StepResults({
   state,
   generated,
+  rowCount,
   tint,
   onCancel,
   onReset,
@@ -905,6 +924,7 @@ function StepResults({
 }: {
   state: GenerateState;
   generated: GeneratedDraftSummary[];
+  rowCount: number;
   tint: Tint;
   onCancel: () => void;
   onReset: () => void;
@@ -921,8 +941,8 @@ function StepResults({
           <Sparkles className="mx-auto size-9 text-[var(--ds-muted)]" />
           <h2 className="m-0 mt-4 text-[17px] font-semibold text-[var(--ds-ink)]">Drafting template letter…</h2>
           <p className="m-0 mt-2 text-[13px] text-[var(--ds-muted)]">
-            One AI call drafts the master template. We'll personalise N copies
-            from it in a moment, at no extra API cost.
+            DraftHR drafts the letter once. Then it fills in a copy for each of
+            the {rowCount} {rowCount === 1 ? "person" : "people"} in your file.
           </p>
           <p className="m-0 mt-4 text-[12.5px] text-[var(--ds-muted)]">
             Section {state.sectionIndex + 1} of {state.sectionCount}:{" "}
@@ -958,8 +978,8 @@ function StepResults({
             Personalising {state.totalRows} letter{state.totalRows === 1 ? "" : "s"}…
           </h2>
           <p className="m-0 mt-2 text-[13px] text-[var(--ds-muted)]">
-            Substituting placeholders with each row's values. This is instant
-            and runs entirely on your device.
+            Filling in each person's details from your file. This takes a
+            moment and happens on your device.
           </p>
           <p className="m-0 mt-4 text-[12.5px] text-[var(--ds-muted)]">
             {state.doneRows} of {state.totalRows} done
@@ -1003,7 +1023,7 @@ function StepResults({
         <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] p-8 text-center">
           <p className="m-0 text-[13px] text-[var(--ds-muted)]">
             Generation cancelled. Any letters created before you stopped are
-            saved in your Drafts. Check there before running the batch again so
+            saved in Letters. Check there before running the batch again so
             you don't create duplicates.
           </p>
           <div className="mt-4">
@@ -1030,8 +1050,8 @@ function StepResults({
               Created {generated.length} draft{generated.length === 1 ? "" : "s"}
             </h2>
             <p className="m-0 mt-1 text-[13px] text-[var(--ds-body)]">
-              One AI call drafted the template; the rest is instant client-side
-              substitution. Each draft is ready to review and finalise.
+              DraftHR drafted the letter once and filled in a copy for each
+              person. Each draft is ready to review and finalise.
               {incompleteCount > 0 && (
                 <>
                   {" "}

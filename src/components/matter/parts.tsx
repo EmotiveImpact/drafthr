@@ -49,7 +49,7 @@ export function LawChip({ children, className }: { children: string; className?:
 
 /** "Outcome letter" over "Fri 16 Oct · in 4 days" (amber when close, red when late or a legal limit). */
 export function DeadlineCell({ item }: { item?: DeadlineItem }) {
-  if (!item?.iso) return <span className="text-[13px] text-[var(--ds-faint)]">No deadline</span>;
+  if (!item?.iso) return <span className="text-[13px] text-[var(--ds-muted)]">No deadline</span>;
   const rel = relativeDays(item.iso);
   const law = item.kind === "tribunal";
   return (

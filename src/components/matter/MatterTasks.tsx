@@ -5,6 +5,7 @@ import { useDraftStore } from "@/lib/store";
 import { daysUntilDateOnly, todayDateOnly, toDateOnly } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/wizard/DatePicker";
 import { cn } from "@/lib/utils";
 import { TickBox } from "@/components/letters/parts";
 import { CardLink, SectionCard } from "./cards";
@@ -79,7 +80,7 @@ export function MatterTasks({ matterId, tasks, className }: { matterId: string; 
               if (e.key === "Escape") resetForm();
             }}
           />
-          <Input type="date" value={due} min={todayDateOnly()} onChange={(e) => setDue(e.target.value)} aria-label="Due date" className="h-9 text-[14px]" />
+          <DatePicker value={due} min={todayDateOnly()} onChange={(v) => setDue(v ?? "")} ariaLabel="Due date" placeholder="Due date (optional)" className="h-9" />
           <div className="flex gap-2">
             <Button size="sm" onClick={onSave} disabled={!label.trim()}>
               Save

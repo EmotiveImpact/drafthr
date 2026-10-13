@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/wizard/DatePicker";
 import {
   Select,
   SelectContent,
@@ -155,12 +156,12 @@ export function EmployeeForm({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="emp-start-date">Start date</Label>
-              <Input
+              <Label id="emp-start-date-label" htmlFor="emp-start-date">Start date</Label>
+              <DatePicker
                 id="emp-start-date"
-                type="date"
+                labelledBy="emp-start-date-label"
                 value={values.startDate ?? ""}
-                onChange={(e) => patch("startDate", e.target.value || undefined)}
+                onChange={(v) => patch("startDate", v || undefined)}
               />
             </div>
             <div className="space-y-1.5">

@@ -95,9 +95,9 @@ export function LetterRows({
             </span>
             <span className="hidden @[600px]:flex">
               {r.health != null ? (
-                <HealthRing score={r.health} label={`Health ${r.health} of 100`} className="whitespace-nowrap" />
+                <HealthRing score={r.health} label={`Health ${r.health} of 100`} className="whitespace-nowrap [&>span]:text-[var(--ds-muted)]" />
               ) : (
-                <span className="text-[13px] text-[var(--ds-faint)]">No score</span>
+                <span className="text-[13px] text-[var(--ds-muted)]">No score</span>
               )}
             </span>
             <span className="hidden whitespace-nowrap text-[13.5px] text-[var(--ds-muted)] @[900px]:block">

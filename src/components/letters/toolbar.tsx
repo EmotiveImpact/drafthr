@@ -112,7 +112,7 @@ export function FilterMenu({
           <SolidFilterButton label={label} value={chosen?.label ?? allLabel ?? "All"} set={!!chosen} icon={Icon} />
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className={cn("w-60", MENU_MOTION)}>
+      <DropdownMenuContent collisionPadding={16} align="start" className={cn("w-60", MENU_MOTION)}>
         <DropdownMenuLabel className="text-[12px] font-medium text-[var(--ds-subtle)]">{label}</DropdownMenuLabel>
         {allLabel && (
           <DropdownMenuItem onSelect={() => onChange(null)}>
@@ -213,7 +213,7 @@ export function SortMenu<K extends string>({
           </button>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn("w-52", MENU_MOTION)}>
+      <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-52", MENU_MOTION)}>
         <DropdownMenuLabel className="text-[12px] font-medium text-[var(--ds-subtle)]">Sort by</DropdownMenuLabel>
         {options.map((o) => (
           <DropdownMenuItem key={o.value} onSelect={() => onChange(o.value)}>
@@ -265,7 +265,7 @@ export function NumberPager({ page, pages, onPage }: { page: number; pages: numb
       </button>
       {nums.map((n, i) =>
         n === -1 ? (
-          <span key={`gap-${i}`} className="px-1 text-[13px] text-[var(--ds-faint)]">
+          <span key={`gap-${i}`} className="px-1 text-[13px] text-[var(--ds-muted)]">
             …
           </span>
         ) : (

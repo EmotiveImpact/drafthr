@@ -590,13 +590,13 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
 }
 
 function Cell({ value }: { value?: string }) {
-  return value ? <span className="block truncate">{value}</span> : <span className="text-[var(--ds-faint)]">-</span>;
+  return value ? <span className="block truncate">{value}</span> : <span className="text-[var(--ds-muted)]">-</span>;
 }
 
 function Count({ n, icon: Icon, label, showLabel }: { n: number; icon: typeof Folder; label: string; showLabel?: boolean }) {
   if (n === 0)
     return (
-      <span className="text-[var(--ds-faint)]">
+      <span className="text-[var(--ds-muted)]">
         0{showLabel ? ` ${label}` : <span className="sr-only"> {label}</span>}
       </span>
     );
@@ -622,7 +622,7 @@ function EmployeeRowMenu({ employee: e, menu }: { employee: Employee; menu: Menu
             <MoreHorizontal className="size-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className={cn("w-56", MENU_MOTION)}>
+        <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-56", MENU_MOTION)}>
           <DropdownMenuItem onSelect={() => menu.open(e)}>
             <ArrowUpRight />
             Open

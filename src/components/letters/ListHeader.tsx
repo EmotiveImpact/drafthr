@@ -194,7 +194,7 @@ function TabCount({ n, on, style }: { n: number; on: boolean; style: CountStyle 
   }
   if (style === "chip") {
     return (
-      <span className="ds-mono ml-1.5 rounded-[5px] bg-[var(--ds-chip)] px-1.5 py-px text-[12px] font-medium text-[var(--ds-subtle)]">
+      <span className="ds-mono ml-1.5 rounded-[5px] bg-[var(--ds-chip)] px-1.5 py-px text-[12px] font-medium text-[var(--ds-muted)]">
         {n}
       </span>
     );
@@ -203,7 +203,7 @@ function TabCount({ n, on, style }: { n: number; on: boolean; style: CountStyle 
     <span
       className={cn(
         "ds-mono ml-[7px] rounded-[6px] px-[7px] py-px text-[12px] font-medium transition-colors duration-[120ms]",
-        on ? "bg-[var(--ds-ink)] text-[var(--ds-on-accent)]" : "bg-[var(--ds-chip)] text-[var(--ds-subtle)]"
+        on ? "bg-[var(--ds-ink)] text-[var(--ds-on-accent)]" : "bg-[var(--ds-chip)] text-[var(--ds-muted)]"
       )}
     >
       {n}

@@ -37,10 +37,10 @@ export type Selection = {
 
 const WIDTH: Record<LetterColumn | "letter", string> = {
   select: "40px",
-  letter: "23%",
-  recipient: "16%",
-  matter: "16.5%",
-  where: "14%",
+  letter: "24%",
+  recipient: "15.5%",
+  matter: "13.5%",
+  where: "16.5%",
   health: "10%",
   updated: "9%",
   owner: "96px",
@@ -56,6 +56,12 @@ const HEAD: Record<LetterColumn | "letter", string> = {
   updated: "Updated",
   owner: "Owner",
 };
+
+/** Lets StageBar's where line wrap in a narrow column (its label is the last child). */
+const WHERE_WRAP = "[&>div:last-child]:whitespace-normal [&>div:last-child]:break-words";
+
+/** "/ 100" in the muted grey, which keeps 4.5:1 on the amber needs-you tint. */
+const OUT_OF_MUTED = "[&>span]:text-[var(--ds-muted)]";
 
 /** Clicks on these never open the row's letter. */
 const INTERACTIVE = "a,button,input,textarea,select,[role=menuitem],[data-tick],[data-radix-popper-content-wrapper]";
@@ -187,11 +193,11 @@ export function LettersTable({
                   {[r.recipient, r.subLine].filter(Boolean).join(" · ")}
                 </div>
                 <div className="mt-2 flex items-end justify-between gap-3">
-                  <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} className="min-w-0" />
+                  <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} className={cn("min-w-0 flex-1", WHERE_WRAP)} />
                   {r.health != null ? (
-                    <HealthRing score={r.health} size={20} stroke={2} label={`Health ${r.health} of 100`} className="shrink-0 whitespace-nowrap text-[12.5px]" />
+                    <HealthRing score={r.health} size={20} stroke={2} showOutOf={false} label={`Health ${r.health} of 100`} className="shrink-0 whitespace-nowrap text-[12.5px]" />
                   ) : (
-                    <span className="shrink-0 text-[12px] text-[var(--ds-faint)]">No score</span>
+                    <span className="shrink-0 text-[12px] text-[var(--ds-muted)]">No score</span>
                   )}
                 </div>
               </div>
@@ -234,7 +240,8 @@ function Cell({
             >
               {r.label}
             </Link>
-            <div className="mt-px truncate text-[12.5px] text-[var(--ds-muted)]" title={r.subLine}>
+            {/* Wraps to a second line rather than hiding who reviewed it. */}
+            <div className="mt-px line-clamp-2 break-words text-[12.5px] text-[var(--ds-muted)]" title={r.subLine}>
               {r.subLine}
             </div>
           </div>
@@ -245,12 +252,12 @@ function Cell({
         <div className="flex min-w-0 items-center gap-2.5">
           <Initials name={r.recipient.replace(/^to /, "")} size={28} ring={r.journey.needsYou} />
           <div className="min-w-0">
-            <div className="truncate text-[14px] leading-[1.35] text-[var(--ds-ink)]">{r.recipient}</div>
-            {r.recipientRole && <div className="truncate text-[12.5px] text-[var(--ds-muted)]">{r.recipientRole}</div>}
+            <div className="line-clamp-2 break-words text-[14px] leading-[1.35] text-[var(--ds-ink)]">{r.recipient}</div>
+            {r.recipientRole && <div className="truncate text-[12.5px] text-[var(--ds-muted)]" title={r.recipientRole}>{r.recipientRole}</div>}
           </div>
         </div>
       ) : (
-        <span className="text-[13.5px] text-[var(--ds-faint)]">No recipient</span>
+        <span className="text-[13.5px] text-[var(--ds-muted)]">No recipient</span>
       );
     case "matter":
       return r.matter ? (
@@ -259,18 +266,20 @@ function Cell({
           className="inline-flex max-w-full items-center gap-2 rounded-[4px] text-[13.5px] text-[var(--ds-body)] outline-none hover:text-[var(--ds-ink)] hover:underline hover:underline-offset-2 focus-visible:shadow-[var(--ds-focus-ring)]"
         >
           <Folder aria-hidden className="size-3.5 shrink-0 text-[var(--ds-subtle)]" />
-          <span className="truncate">{r.matter.name}</span>
+          <span className="truncate" title={r.matter.name}>{r.matter.name}</span>
         </Link>
       ) : (
-        <span className="text-[13.5px] text-[var(--ds-faint)]">No matter</span>
+        <span className="text-[13.5px] text-[var(--ds-muted)]">No matter</span>
       );
     case "where":
-      return <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} />;
+      // The where line is the row's key status: let it wrap instead of
+      // ending in an ellipsis ("Review · with Claire Booth").
+      return <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} className={WHERE_WRAP} />;
     case "health":
       return r.health != null ? (
-        <HealthRing score={r.health} label={`Health ${r.health} of 100`} className="whitespace-nowrap text-[13.5px]" />
+        <HealthRing score={r.health} label={`Health ${r.health} of 100`} className={cn("whitespace-nowrap text-[13.5px]", OUT_OF_MUTED)} />
       ) : (
-        <span className="text-[13px] text-[var(--ds-faint)]">No score</span>
+        <span className="text-[13px] text-[var(--ds-muted)]">No score</span>
       );
     case "updated":
       return <span className="whitespace-nowrap text-[13.5px] text-[var(--ds-muted)]">{date}</span>;
@@ -323,7 +332,7 @@ export function LetterRowMenu({ row, extra }: { row: LetterRowData; extra?: Reac
           <MoreHorizontal className="size-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn("w-52", MENU_MOTION)}>
+      <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-52", MENU_MOTION)}>
         <DropdownMenuItem onSelect={() => nav(href)}>
           <ArrowUpRight />
           Open

@@ -49,7 +49,9 @@ export const MATTER_TINT: Record<MatterColor, [string, string]> = {
 /** Solid tile (background, text) per matter colour: the initial tile. */
 export const MATTER_SOLID: Record<MatterColor, [string, string]> = {
   red: ["var(--ds-tint-rose-ink)", "var(--ds-tint-rose)"],
-  amber: ["var(--ds-tint-butter-ink)", "var(--ds-tint-butter)"],
+  // The amber status ink, a touch deeper than butter ink, so the butter
+  // initial keeps 4.5:1 (butter on butter ink was 4.48:1).
+  amber: ["var(--ds-amber-fg)", "var(--ds-tint-butter)"],
   blue: ["var(--ds-tint-sky-ink)", "var(--ds-tint-sky)"],
   violet: ["var(--ds-tint-lavender-ink)", "var(--ds-tint-lavender)"],
   green: ["var(--ds-tint-mint-ink)", "var(--ds-tint-mint)"],

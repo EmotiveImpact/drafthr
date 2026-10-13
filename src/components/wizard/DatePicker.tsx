@@ -45,6 +45,9 @@ export function DatePicker({
   required,
   placeholder = "Pick a date",
   labelledBy,
+  ariaLabel,
+  min,
+  className,
 }: {
   id?: string;
   value: unknown;
@@ -52,6 +55,12 @@ export function DatePicker({
   required?: boolean;
   placeholder?: string;
   labelledBy?: string;
+  /** Accessible name when there is no visible label to point at. */
+  ariaLabel?: string;
+  /** Earliest pickable day ("2026-10-13"); earlier days are disabled. */
+  min?: string;
+  /** Extra classes for the field (for example a shorter height). */
+  className?: string;
 }) {
   const selected = parseIsoDate(value);
   const [open, setOpen] = useState(false);
@@ -111,10 +120,12 @@ export function DatePicker({
           type="button"
           aria-required={required}
           aria-labelledby={labelledBy ? `${labelledBy} ${id}` : undefined}
+          aria-label={ariaLabel ? `${ariaLabel}${selected ? `, ${formatDateShort(value)}` : ""}` : undefined}
           aria-haspopup="dialog"
           className={cn(
             "flex h-10 w-full min-w-0 items-center gap-2 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-left text-[14px] outline-none transition-colors duration-[120ms] hover:border-[var(--ds-line-strong)] focus-visible:border-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] data-[state=open]:border-[var(--ds-ink)]",
-            selected ? "text-[var(--ds-ink)]" : "text-[var(--ds-subtle)]"
+            selected ? "text-[var(--ds-ink)]" : "text-[var(--ds-subtle)]",
+            className
           )}
         >
           <CalendarDays aria-hidden className="size-[15px] shrink-0 text-[var(--ds-subtle)]" />
@@ -158,6 +169,7 @@ export function DatePicker({
               const isSel = selected ? isSameDay(d, selected) : false;
               const isToday = isSameDay(d, today);
               const inMonth = isSameMonth(d, month);
+              const beforeMin = !!min && key < min;
               return (
                 <button
                   key={key}
@@ -167,8 +179,9 @@ export function DatePicker({
                   aria-pressed={isSel}
                   aria-label={format(d, "EEEE d MMMM yyyy", { locale: enGB })}
                   onClick={() => pick(d)}
+                  disabled={beforeMin}
                   className={cn(
-                    "mx-auto grid size-9 place-items-center rounded-[9px] text-[13px] tabular-nums outline-none transition-colors duration-[120ms] focus-visible:shadow-[var(--ds-focus-ring)]",
+                    "mx-auto grid size-9 place-items-center rounded-[9px] text-[13px] tabular-nums outline-none transition-colors duration-[120ms] focus-visible:shadow-[var(--ds-focus-ring)] disabled:pointer-events-none disabled:text-[var(--ds-faint)]",
                     isSel
                       ? "bg-[var(--ds-ink)] font-medium text-[var(--ds-on-accent)]"
                       : cn(

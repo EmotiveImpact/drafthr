@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, RefreshCw, ShieldCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
+import { useProfileStore } from "@/lib/profile";
 import { Pill } from "@/components/ds";
 import { Button } from "@/components/ui/button";
 import { Band } from "@/components/wizard/Band";
@@ -71,7 +72,10 @@ export function DirectorySync() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const role = activeTenant?.role ?? "";
+  // No session (auth off): fall back to the local profile's role, as the
+  // Employees strip and comments do, so a local owner is not told "Not allowed".
+  const profileRole = useProfileStore((st) => st.profile.workspaceRole);
+  const role = activeTenant?.role ?? profileRole ?? "";
   const isAdmin = ADMIN_ROLES.has(role);
 
   const refresh = useCallback(async () => {
@@ -86,10 +90,17 @@ export function DirectorySync() {
         setInfo(null);
         return;
       }
-      const data = (await res.json()) as DirectoryInfo;
+      // A non-JSON answer (no API behind this address, as in local mode)
+      // reads as "not available", never as a parser message.
+      const data = (await res.json().catch(() => null)) as DirectoryInfo | null;
+      if (!data || typeof data !== "object") {
+        setError("Directory Sync isn't available right now. Try again in a minute.");
+        setInfo(null);
+        return;
+      }
       setInfo(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load directory info");
+    } catch {
+      setError("Couldn't reach DraftHR to check Directory Sync. Check your connection and try again.");
     } finally {
       setLoading(false);
     }

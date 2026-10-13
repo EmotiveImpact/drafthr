@@ -13,6 +13,7 @@ import {
   type LetterTypeMeta,
 } from "@/lib/letters/catalog";
 import { computeHealthScore, runHealthChecks, type HealthCheck } from "@/lib/finalize/healthChecks";
+import type { JourneyPillTone } from "@/lib/journey/stage";
 
 export type Tint = "lavender" | "mint" | "peach" | "butter" | "sky" | "rose";
 
@@ -183,4 +184,46 @@ export function updatedLabel(ts: number, now = Date.now()): string {
   return new Date(now).getFullYear() === d.getFullYear()
     ? format(d, "d MMM")
     : format(d, "d MMM yyyy");
+}
+
+const EXPORT_PHRASE: Record<string, string> = {
+  "marked-sent": "marked as sent",
+  pdf: "downloaded as PDF",
+  docx: "downloaded as Word",
+  txt: "downloaded as plain text",
+  pack: "evidence pack downloaded",
+  audit: "audit record downloaded",
+};
+
+/**
+ * A timeline event as a plain sentence about the letter: "Warning letter
+ * marked as sent", "Warning letter: added comment". Export events are
+ * stored as "Exported as MARKED-SENT"; this turns the format code into words.
+ */
+export function timelineSentence(
+  ev: { kind: string; title: string; meta?: Record<string, unknown> },
+  letter: string
+): string {
+  if (ev.kind === "exported") {
+    const raw = typeof ev.meta?.format === "string" ? ev.meta.format : /exported as (.+)$/i.exec(ev.title)?.[1] ?? "";
+    const phrase = EXPORT_PHRASE[raw.trim().toLowerCase()];
+    if (phrase) return `${letter} ${phrase}`;
+  }
+  const title = ev.title.trim();
+  if (title.toLowerCase().includes(letter.toLowerCase())) return title;
+  return `${letter}: ${title.charAt(0).toLowerCase()}${title.slice(1)}`;
+}
+
+/**
+ * The status pill for a letter in a list (matter tiles, employee rows).
+ * The journey calls a draft "Draft" in grey; in a list, a draft that needs
+ * you (a check to fix, an edit to decide) shows amber "Needs you", the same
+ * word as the Letters tab and the amber tint there.
+ */
+export function listStatusPill(j: { statusLabel: string; statusTone: JourneyPillTone; needsYou: boolean }): {
+  label: string;
+  tone: JourneyPillTone;
+} {
+  if (j.needsYou && j.statusTone === "grey") return { label: "Needs you", tone: "amber" };
+  return { label: j.statusLabel, tone: j.statusTone };
 }

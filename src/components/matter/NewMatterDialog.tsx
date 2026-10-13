@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MATTER_TINT, MATTER_TYPES, MATTER_TYPE_LABEL } from "./model";
+import { DatePicker } from "@/components/wizard/DatePicker";
 
 export const SELECT_CLASS =
   "h-10 w-full min-w-0 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[14.5px] text-[var(--ds-ink)] outline-none transition-[border-color,box-shadow] duration-[120ms] hover:border-[var(--ds-line-hover)] focus-visible:border-[var(--ds-ink)]";
@@ -134,8 +135,8 @@ export function NewMatterDialog({
 
           <div className="grid gap-3.5 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="matter-deadline">Key deadline (optional)</Label>
-              <Input id="matter-deadline" type="date" value={deadlineISO} onChange={(e) => setDeadline(e.target.value)} />
+              <Label id="matter-deadline-label-text" htmlFor="matter-deadline">Key deadline (optional)</Label>
+              <DatePicker id="matter-deadline" labelledBy="matter-deadline-label-text" value={deadlineISO} onChange={(v) => setDeadline(v ?? "")} />
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="matter-deadline-label">Deadline label</Label>

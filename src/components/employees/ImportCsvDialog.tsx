@@ -151,7 +151,7 @@ export function ImportCsvDialog({
                         </div>
                       ))}
                     </div>
-                    <span className="ds-mono shrink-0 text-[11.5px] text-[var(--ds-faint)]">Row {r.line}</span>
+                    <span className="ds-mono shrink-0 text-[11.5px] text-[var(--ds-muted)]">Row {r.line}</span>
                   </li>
                 ))}
               </ul>

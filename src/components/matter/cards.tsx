@@ -49,7 +49,7 @@ import { Pill } from "@/components/ds";
 import { MENU_MOTION, PaperArt } from "@/components/letters/parts";
 import { employeeAnswers } from "@/components/employees/model";
 import type { LetterRowData } from "@/components/letters/rows";
-import { letterLabel } from "@/components/letters/letterView";
+import { letterLabel, listStatusPill, timelineSentence } from "@/components/letters/letterView";
 import { LawChip } from "./parts";
 import { shortDay, type DeadlineItem } from "./model";
 
@@ -342,7 +342,7 @@ export function AskBox({
           <Folder aria-hidden className="size-4 shrink-0 text-[var(--ds-muted)]" />
           <span className="min-w-0">
             <span className="block truncate text-[13px] font-medium text-[var(--ds-ink)]">{matter.name}</span>
-            <span className="block truncate text-[12px] text-[var(--ds-subtle)]">
+            <span className="block truncate text-[12px] text-[var(--ds-muted)]">
               {plural(counts.letters, "letter")} · {plural(counts.files, "file")} · {plural(counts.deadlines, "deadline")}
             </span>
           </span>
@@ -396,7 +396,7 @@ export function AskBox({
                   <SlidersHorizontal className="size-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="top" className={cn("w-[260px]", MENU_MOTION)}>
+              <DropdownMenuContent collisionPadding={16} align="end" side="top" className={cn("w-[260px]", MENU_MOTION)}>
                 <DropdownMenuLabel className="text-[12px] font-normal text-[var(--ds-subtle)]">New letters in this matter</DropdownMenuLabel>
                 <DropdownMenuCheckboxItem checked={withSubject} onCheckedChange={(v) => setWithSubject(!!v)} onSelect={(e) => e.preventDefault()}>
                   Fill in {subject.legalName}'s details
@@ -471,7 +471,7 @@ export function LetterTiles({ rows, onRemove }: { rows: LetterRowData[]; onRemov
             </Link>
             <div className="mt-[3px] truncate text-[13px] text-[var(--ds-muted)]">{tileLine(r)}</div>
             <div className="mt-2.5 flex items-center justify-between gap-2">
-              <StatusPill tone={r.journey.statusTone}>{r.journey.statusLabel}</StatusPill>
+              <StatusPill tone={listStatusPill(r.journey).tone}>{listStatusPill(r.journey).label}</StatusPill>
               <span className="relative z-[1]">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -483,7 +483,7 @@ export function LetterTiles({ rows, onRemove }: { rows: LetterRowData[]; onRemov
                       <MoreHorizontal className="size-4" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className={cn("w-52", MENU_MOTION)}>
+                  <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-52", MENU_MOTION)}>
                     <DropdownMenuItem onSelect={() => nav(`/editor/${r.id}`)}>
                       <ArrowUpRight />
                       Open
@@ -657,12 +657,10 @@ export function historyEntries(drafts: Draft[]): HistoryEntry[] {
   for (const d of drafts) {
     const letter = letterLabel(d);
     for (const ev of d.timeline ?? []) {
-      const title = ev.title.trim();
-      const mentions = title.toLowerCase().includes(letter.toLowerCase());
       out.push({
         id: `${d.id}-${ev.id}`,
         ts: ev.createdAt,
-        sentence: mentions ? title : `${letter}: ${title.charAt(0).toLowerCase()}${title.slice(1)}`,
+        sentence: timelineSentence(ev, letter),
         kind: KIND_LABEL[ev.kind] ?? "Update",
         detail: [ev.sectionTitle, ev.detail].filter(Boolean).join(": ") || undefined,
         letter,

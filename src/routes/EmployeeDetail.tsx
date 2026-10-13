@@ -29,7 +29,7 @@ import { ListHeader } from "@/components/letters/ListHeader";
 import { LettersTable } from "@/components/letters/LettersTable";
 import { FlatPaper, Initials, MENU_MOTION, usePageTitle } from "@/components/letters/parts";
 import { useLetterRows, type LetterRowData } from "@/components/letters/rows";
-import { letterLabel, shortTypeLabel } from "@/components/letters/letterView";
+import { letterLabel, listStatusPill, shortTypeLabel, timelineSentence } from "@/components/letters/letterView";
 import { EmployeeForm, type EmployeeFormValues } from "@/components/employees/EmployeeForm";
 import { NewLetterForPerson } from "@/components/employees/NewLetterForPerson";
 import { DeleteEmployeeDialog, EmployeeStatusPill } from "@/components/employees/parts";
@@ -243,7 +243,7 @@ function EmployeePage({ employee: e }: { employee: Employee }) {
                   <MoreHorizontal className="size-[18px]" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={8} className={cn("w-[230px] max-w-[calc(100vw-32px)]", MENU_MOTION)}>
+              <DropdownMenuContent collisionPadding={16} align="end" sideOffset={8} className={cn("w-[230px] max-w-[calc(100vw-32px)]", MENU_MOTION)}>
                 {e.status !== "left" ? (
                   <DropdownMenuItem onSelect={archive}>
                     <Archive />
@@ -481,7 +481,7 @@ function LetterLines({ rows }: { rows: LetterRowData[] }) {
             <div className="truncate text-[12.5px] text-[var(--ds-muted)]">{whoLine(r)}</div>
           </div>
           <span className="hidden sm:inline-flex">
-            <StatusPill tone={r.journey.statusTone}>{r.journey.statusLabel}</StatusPill>
+            <StatusPill tone={listStatusPill(r.journey).tone}>{listStatusPill(r.journey).label}</StatusPill>
           </span>
           <span className="w-12 shrink-0 text-right text-[13px] text-[var(--ds-subtle)]">{shortDate(r.journey.stage === "sent" && r.sentAt ? r.sentAt : r.updatedAt)}</span>
           <DropdownMenu>
@@ -494,7 +494,7 @@ function LetterLines({ rows }: { rows: LetterRowData[] }) {
                 <MoreHorizontal className="size-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={cn("w-44", MENU_MOTION)}>
+            <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-44", MENU_MOTION)}>
               <DropdownMenuItem onSelect={() => nav(`/editor/${r.id}`)}>
                 <ArrowUpRight />
                 Open
@@ -548,9 +548,9 @@ function MatterCards({ rows }: { rows: MatterRow[] }) {
               </div>
               {step && (
                 <div className="max-w-[300px] text-left sm:text-right">
-                  <div className="text-[12.5px] text-[var(--ds-subtle)]">Next step</div>
+                  <div className="text-[12.5px] text-[var(--ds-muted)]">Next step</div>
                   <div className="text-[14px] font-medium text-[var(--ds-ink)]">{step}</div>
-                  {r.next?.iso && <div className="text-[12px] text-[var(--ds-subtle)]">{shortDay(r.next.iso)}</div>}
+                  {r.next?.iso && <div className="text-[12px] text-[var(--ds-muted)]">{shortDay(r.next.iso)}</div>}
                 </div>
               )}
             </div>
@@ -585,7 +585,7 @@ function DetailsList({ employee: e }: { employee: Employee }) {
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-[var(--ds-subtle)]">{k}</dt>
-          <dd className={cn("m-0 min-w-0 truncate", v ? "text-[var(--ds-ink)]" : "text-[var(--ds-faint)]")}>{v ?? "Not set"}</dd>
+          <dd className={cn("m-0 min-w-0 truncate", v ? "text-[var(--ds-ink)]" : "text-[var(--ds-muted)]")}>{v ?? "Not set"}</dd>
         </div>
       ))}
     </dl>
@@ -601,8 +601,7 @@ function buildTimeline(letters: Draft[], matters: MatterRow[]): TimelineItem[] {
   for (const d of letters) {
     const label = letterLabel(d);
     for (const ev of d.timeline ?? []) {
-      const title = ev.title.trim();
-      const text = title.toLowerCase().includes(label.toLowerCase()) ? title : `${label}: ${title.charAt(0).toLowerCase()}${title.slice(1)}`;
+      const text = timelineSentence(ev, label);
       out.push({
         id: `${d.id}-${ev.id}`,
         ts: ev.createdAt,

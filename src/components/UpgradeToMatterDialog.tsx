@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DatePicker } from "@/components/wizard/DatePicker";
 import { useDraftStore } from "@/lib/store";
 import { suggestColorForGroup } from "@/lib/matters";
 import { MATTER_TINT } from "@/components/matter/model";
@@ -147,14 +148,14 @@ export function UpgradeToMatterDialog({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="matter-deadline" className="mb-1.5 block">
+              <Label id="matter-deadline-text" htmlFor="matter-deadline" className="mb-1.5 block">
                 Deadline (optional)
               </Label>
-              <Input
+              <DatePicker
                 id="matter-deadline"
-                type="date"
+                labelledBy="matter-deadline-text"
                 value={deadlineISO}
-                onChange={(e) => setDeadlineISO(e.target.value)}
+                onChange={(v) => setDeadlineISO(v ?? "")}
               />
             </div>
             <div>

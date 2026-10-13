@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Pill, type PillTone } from "@/components/ds";
 import { CardLink, SectionCard } from "./cards";
 import { SELECT_CLASS } from "./NewMatterDialog";
+import { DatePicker } from "@/components/wizard/DatePicker";
+
+/** Quarter-hour times in 24-hour UK style, "00:00" to "23:45". */
+const TIMES = Array.from({ length: 96 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, "0")}:${String((i % 4) * 15).padStart(2, "0")}`);
 
 const EVENT_KIND_LABEL: Record<EventKind, string> = {
   meeting: "Meeting",
@@ -43,7 +47,8 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<EventKind>("meeting");
-  const [when, setWhen] = useState("");
+  const [day, setDay] = useState("");
+  const [time, setTime] = useState("");
   const [detail, setDetail] = useState("");
 
   const now = Date.now();
@@ -60,14 +65,17 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
   const resetForm = () => {
     setLabel("");
     setKind("meeting");
-    setWhen("");
+    setDay("");
+    setTime("");
     setDetail("");
     setAdding(false);
   };
   const onSave = () => {
     const trimmed = label.trim();
-    if (!trimmed || !when) return;
-    createEvent({ matterId, kind, label: trimmed, whenISO: when, detail: detail.trim() || undefined });
+    if (!trimmed || !day) return;
+    // A date alone is a whole-day event; with a time it is "YYYY-MM-DDTHH:mm".
+    const whenISO = time ? `${day}T${time}` : day;
+    createEvent({ matterId, kind, label: trimmed, whenISO, detail: detail.trim() || undefined });
     resetForm();
   };
 
@@ -115,25 +123,35 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
 
       {adding && (
         <div className="mb-3.5 mt-1 grid gap-2 rounded-[10px] bg-[var(--ds-surface-2)] p-3">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto]">
-            <Input
-              autoFocus
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Event title (e.g. Witness interview)"
-              aria-label="Event title"
-              className="h-9 text-[14px]"
-              onKeyDown={(e) => {
-                if (e.key === "Escape") resetForm();
-              }}
-            />
+          <Input
+            autoFocus
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Event title, for example Witness interview"
+            aria-label="Event title"
+            className="h-9 text-[14px]"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") resetForm();
+            }}
+          />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,0.8fr)]">
             <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)} aria-label="Kind" className={SELECT_CLASS + " h-9 text-[14px]"}>
               <option value="meeting">Meeting</option>
               <option value="hearing">Hearing</option>
               <option value="deadline">Deadline</option>
               <option value="review">Review</option>
             </select>
-            <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} aria-label="Date and time" className="h-9 text-[14px]" />
+            <div className="min-w-0 max-sm:order-last max-sm:col-span-2">
+              <DatePicker value={day} onChange={(v) => setDay(v ?? "")} required ariaLabel="Date" placeholder="Date" className="h-9" />
+            </div>
+            <select value={time} onChange={(e) => setTime(e.target.value)} aria-label="Time" className={SELECT_CLASS + " h-9 text-[14px]"}>
+              <option value="">No time</option>
+              {TIMES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
@@ -144,7 +162,7 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
               className="h-9 flex-1 text-[14px]"
             />
             <div className="flex gap-2">
-              <Button size="sm" onClick={onSave} disabled={!label.trim() || !when}>
+              <Button size="sm" onClick={onSave} disabled={!label.trim() || !day}>
                 Save
               </Button>
               <Button variant="outline" size="sm" onClick={resetForm}>

@@ -152,7 +152,7 @@ function MatterPage({ row }: { row: MatterRow }) {
           <MoreHorizontal className="size-[18px]" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8} className={cn("w-[248px] max-w-[calc(100vw-32px)]", MENU_MOTION)}>
+      <DropdownMenuContent collisionPadding={16} align="end" sideOffset={8} className={cn("w-[248px] max-w-[calc(100vw-32px)]", MENU_MOTION)}>
         <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
           <Pencil />
           Rename matter
@@ -401,7 +401,7 @@ function MatterPage({ row }: { row: MatterRow }) {
             <DialogTitle>Edit participants</DialogTitle>
             <DialogDescription>The people this matter is about, and anyone else involved.</DialogDescription>
           </DialogHeader>
-          <MatterParticipants matterId={m.id} participants={m.participants ?? []} />
+          <MatterParticipants matterId={m.id} participants={m.participants ?? []} primary={row.people.find((p) => p.role === "primary") ?? null} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setPeopleOpen(false)}>
               Done

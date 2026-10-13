@@ -291,11 +291,29 @@ export function ChangeOwnerDialog({
   onPick: (p: KnownPerson) => void;
 }) {
   const { people, loading } = useKnownPeople(open);
+  const others = people.filter((p) => !p.you);
   const [picked, setPicked] = useState<string | null>(null);
+  // "Someone else": a name and email, added to the letter as its owner (the
+  // same collaborator invite the letter's Share uses). Without it a solo
+  // workspace, or one whose member list cannot load, could only pick itself.
+  const [other, setOther] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   useEffect(() => {
-    if (open) setPicked(null);
+    if (open) {
+      setPicked(null);
+      setOther(false);
+      setName("");
+      setEmail("");
+    }
   }, [open]);
-  const person = people.find((p) => personKey(p) === picked);
+  const nobodyElse = !loading && others.length === 0;
+  const showForm = other || nobodyElse;
+  const typedEmail = email.trim().toLowerCase();
+  const emailOk = EMAIL_RE.test(typedEmail);
+  const listed = people.find((p) => personKey(p) === picked);
+  const typed: KnownPerson | null = showForm && !listed && emailOk ? { name: name.trim() || typedEmail, email: typedEmail, seed: typedEmail } : null;
+  const person = listed ?? typed;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[480px]">
@@ -305,7 +323,49 @@ export function ChangeOwnerDialog({
             Choose who owns {count === 1 ? "this letter" : `these ${count} letters`}. The previous owner keeps edit access.
           </DialogDescription>
         </DialogHeader>
-        <PeopleList people={people} loading={loading} value={picked} onChange={setPicked} label="Owner" />
+        <PeopleList
+          people={people}
+          loading={loading}
+          value={picked}
+          onChange={(k) => {
+            setPicked(k);
+            setOther(false);
+          }}
+          label="Owner"
+        />
+        {showForm ? (
+          <div className="grid gap-2.5 rounded-[12px] bg-[var(--ds-surface-2)] p-3">
+            <p className="m-0 text-[13px] text-[var(--ds-muted)]">
+              {nobodyElse ? "Nobody else is on your letters yet. Add the new owner by email." : "Add the new owner by email."} They get edit access as the owner.
+            </p>
+            <label className="grid gap-1.5">
+              <span className="text-[13px] font-medium text-[var(--ds-ink)]">Name</span>
+              <Input value={name} onChange={(e) => { setName(e.target.value); setPicked(null); }} placeholder="For example, Ruth Adeyemi" />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="text-[13px] font-medium text-[var(--ds-ink)]">Email</span>
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setPicked(null); }}
+                placeholder="name@company.co.uk"
+                aria-invalid={email.trim() !== "" && !emailOk}
+              />
+            </label>
+            {email.trim() !== "" && !emailOk && <p className="m-0 text-[12.5px] text-[var(--ds-red-fg)]">Enter a full email address.</p>}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setOther(true);
+              setPicked(null);
+            }}
+            className="justify-self-start rounded-[6px] text-[13.5px] text-[var(--ds-ink)] underline-offset-[3px] outline-none hover:underline focus-visible:shadow-[var(--ds-focus-ring)]"
+          >
+            Someone else
+          </button>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
@@ -324,3 +384,5 @@ export function ChangeOwnerDialog({
     </Dialog>
   );
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

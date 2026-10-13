@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { UserPlus, X } from "lucide-react";
 import type { MatterParticipant, MatterParticipantRole } from "@/lib/letters/types";
+import type { MatterPerson } from "./model";
 import { useDraftStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,23 +16,35 @@ import { SELECT_CLASS } from "./NewMatterDialog";
  * avatars and the Employees counts update at once.
  */
 const ROLE_LABEL: Record<MatterParticipantRole, string> = {
-  subject: "subject",
-  manager: "manager",
-  accused: "accused",
-  complainant: "complainant",
-  witness: "witness",
-  representative: "rep",
-  other: "other",
+  subject: "Subject",
+  manager: "Manager",
+  accused: "Accused",
+  complainant: "Complainant",
+  witness: "Witness",
+  representative: "Representative",
+  other: "Other",
 };
 
 const ROLE_ORDER: MatterParticipantRole[] = ["subject", "manager", "complainant", "accused", "witness", "representative", "other"];
 
-export function MatterParticipants({ matterId, participants }: { matterId: string; participants: MatterParticipant[] }) {
+export function MatterParticipants({
+  matterId,
+  participants,
+  primary,
+}: {
+  matterId: string;
+  participants: MatterParticipant[];
+  /**
+   * The person named on the matter itself (its primary party) when they are
+   * not also a participant. The header shows them, so the list does too.
+   */
+  primary?: MatterPerson | null;
+}) {
   const employees = useDraftStore((s) => s.employees);
   const addParticipant = useDraftStore((s) => s.addMatterParticipant);
   const removeParticipant = useDraftStore((s) => s.removeMatterParticipant);
 
-  const [adding, setAdding] = useState(participants.length === 0);
+  const [adding, setAdding] = useState(participants.length === 0 && !primary);
   // "" = external party (use the name field); otherwise an employee id.
   const [employeeId, setEmployeeId] = useState("");
   const [externalName, setExternalName] = useState("");
@@ -40,10 +53,11 @@ export function MatterParticipants({ matterId, participants }: { matterId: strin
   // Active employees not already in the matter.
   const availableEmployees = useMemo(() => {
     const taken = new Set(participants.map((p) => p.employeeId).filter((id): id is string => !!id));
+    if (primary?.employeeId) taken.add(primary.employeeId);
     return Object.values(employees)
       .filter((e) => e.status !== "left" && !taken.has(e.id))
       .sort((a, b) => a.legalName.localeCompare(b.legalName));
-  }, [employees, participants]);
+  }, [employees, participants, primary]);
 
   const resetForm = () => {
     setAdding(false);
@@ -66,10 +80,24 @@ export function MatterParticipants({ matterId, participants }: { matterId: strin
 
   return (
     <div className="grid gap-3">
-      {participants.length === 0 ? (
+      {participants.length === 0 && !primary ? (
         <p className="m-0 text-[13.5px] text-[var(--ds-muted)]">Nobody is linked to this matter yet.</p>
       ) : (
         <ul className="m-0 list-none rounded-[12px] border border-[var(--ds-line)] p-0">
+          {primary && (
+            <li className="flex min-h-12 items-center gap-3 px-3 py-2">
+              <Initials name={primary.name} seed={primary.employeeId ?? primary.name} size={28} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] text-[var(--ds-ink)]">{primary.name}</span>
+                <span className="block text-[12px] text-[var(--ds-muted)]">
+                  {primary.employeeId ? "Employee" : "External party"}, named when the matter was opened
+                </span>
+              </span>
+              <Tag>{ROLE_LABEL.subject}</Tag>
+              {/* Keeps the rows lined up with the removable ones below. */}
+              <span aria-hidden className="size-7" />
+            </li>
+          )}
           {participants.map((p, i) => (
             <li key={`${p.employeeId ?? "x"}-${p.name}-${i}`} className="flex min-h-12 items-center gap-3 border-t border-[var(--ds-line-2)] px-3 py-2 first:border-t-0">
               <Initials name={p.name} seed={p.employeeId ?? p.name} size={28} />

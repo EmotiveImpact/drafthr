@@ -113,7 +113,7 @@ export function parseCsv(raw: string): CsvParseResult {
     .filter((r) => !isBlankRecord(r.cells));
 
   if (records.length === 0) {
-    return { headers: [], rows: [], warnings: [], error: "CSV is empty." };
+    return { headers: [], rows: [], warnings: [], error: "This file is empty. It needs a header row and at least one row of data." };
   }
   if (records.length < 2) {
     return {

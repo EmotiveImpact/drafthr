@@ -78,10 +78,13 @@ export function MattersIndex() {
   );
 
   const typeOptions = useMemo(() => {
-    const present = new Set(rows.map((r) => r.matter.type).filter(Boolean) as MatterType[]);
-    return (Object.keys(MATTER_TYPE_LABEL) as MatterType[])
-      .filter((t) => present.has(t))
-      .map((t) => ({ value: t, label: MATTER_TYPE_LABEL[t], count: rows.filter((r) => r.matter.type === t).length }));
+    // Every matter type the app knows, with its count (0 when none yet), so
+    // the menu is the same list New matter offers.
+    return (Object.keys(MATTER_TYPE_LABEL) as MatterType[]).map((t) => ({
+      value: t,
+      label: MATTER_TYPE_LABEL[t],
+      count: rows.filter((r) => r.matter.type === t).length,
+    }));
   }, [rows]);
   const ownerOptions = useMemo(() => {
     const m = new Map<string, number>();
@@ -312,7 +315,7 @@ function MattersTable({ rows, quiet }: { rows: MatterRow[]; quiet?: boolean }) {
                   </div>
                 </td>
                 <td className={td}>
-                  {r.typeLabel ? <span className="block truncate text-[14px] text-[var(--ds-body)]">{r.typeLabel}</span> : <span className="text-[var(--ds-faint)]">-</span>}
+                  {r.typeLabel ? <span className="block truncate text-[14px] text-[var(--ds-body)]">{r.typeLabel}</span> : <span className="text-[var(--ds-muted)]">-</span>}
                 </td>
                 <td className={td}>
                   {r.people.length > 1 ? (
@@ -335,14 +338,14 @@ function MattersTable({ rows, quiet }: { rows: MatterRow[]; quiet?: boolean }) {
                       </div>
                     </div>
                   ) : (
-                    <span className="text-[var(--ds-faint)]">-</span>
+                    <span className="text-[var(--ds-muted)]">-</span>
                   )}
                 </td>
                 <td className={td}>
                   <Pill tone={r.stage.tone}>{r.stage.label}</Pill>
                 </td>
                 <td className={td}>
-                  {r.risk ? <Pill tone={RISK_TONE[r.risk]}>{RISK_LABEL[r.risk]}</Pill> : <span className="text-[var(--ds-faint)]">-</span>}
+                  {r.risk ? <Pill tone={RISK_TONE[r.risk]}>{RISK_LABEL[r.risk]}</Pill> : <span className="text-[var(--ds-muted)]">-</span>}
                 </td>
                 <td className={td}>
                   <DeadlineCell item={r.next} />
@@ -426,7 +429,7 @@ function MatterRowMenu({ row }: { row: MatterRow }) {
             <MoreHorizontal className="size-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className={cn("w-56", MENU_MOTION)}>
+        <DropdownMenuContent collisionPadding={16} align="end" className={cn("w-56", MENU_MOTION)}>
           <DropdownMenuItem onSelect={() => nav(`/matters/${m.id}`)}>
             <ArrowUpRight />
             Open

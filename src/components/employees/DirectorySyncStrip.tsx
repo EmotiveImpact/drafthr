@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useProfileStore } from "@/lib/profile";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ds";
 
@@ -32,11 +33,18 @@ function ago(iso?: string): string | null {
  * real `/api/workos/directory-info`: on with the provider and last sync when
  * a linked directory is reported, off when none is configured, and a quiet
  * line when the status cannot be checked. Only owners and admins get the
- * Manage or Set up button.
+ * Manage or Set up button. The role comes from the signed-in workspace, or
+ * from the local profile when there is no session (auth off), the same
+ * fallback the comments use.
+ *
+ * Without a signed-in workspace there is nothing for Directory Sync to
+ * connect to, so a failed check there reads as "off", not as an error.
  */
 export function DirectorySyncStrip() {
   const { activeTenant } = useAuth();
-  const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? "");
+  const profileRole = useProfileStore((s) => s.profile.workspaceRole);
+  const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? profileRole ?? "");
+  const signedIn = !!activeTenant;
   const [state, setState] = useState<SyncState>({ kind: "loading" });
 
   useEffect(() => {
@@ -51,11 +59,11 @@ export function DirectorySyncStrip() {
         else if (data && typeof data === "object" && "configured" in data) setState({ kind: "off" });
         else setState({ kind: "unknown" });
       })
-      .catch(() => live && setState({ kind: "unknown" }));
+      .catch(() => live && setState(signedIn ? { kind: "unknown" } : { kind: "off" }));
     return () => {
       live = false;
     };
-  }, []);
+  }, [signedIn]);
 
   if (state.kind === "loading") {
     return (
