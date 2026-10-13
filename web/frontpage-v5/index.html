@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-GB" data-theme="light" data-font="geist">
+<html lang="en-GB" data-theme="light" data-font="manrope">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -726,7 +726,7 @@ html:is([data-font=inter],[data-font=cal],[data-font=manrope]) :is(.tag,.btn,.ch
   </div>
 </div></footer>
 
-<div class="fontsw" role="group" aria-label="Font"><span>Font</span><button type="button" data-f="geist" aria-pressed="true">1 Geist</button><button type="button" data-f="inter" aria-pressed="false">2 Inter</button><button type="button" data-f="cal" aria-pressed="false">3 Cal Sans</button><button type="button" data-f="manrope" aria-pressed="false">4 Manrope</button><button type="button" data-f="host" aria-pressed="false">Current</button></div>
+<div class="fontsw" role="group" aria-label="Font"><span>Font</span><button type="button" data-f="geist" aria-pressed="false">1 Geist</button><button type="button" data-f="inter" aria-pressed="false">2 Inter</button><button type="button" data-f="cal" aria-pressed="false">3 Cal Sans</button><button type="button" data-f="manrope" aria-pressed="true">4 Manrope</button><button type="button" data-f="host" aria-pressed="false">Current</button></div>
 <div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
 <script>
 document.documentElement.classList.add('js');
@@ -734,7 +734,7 @@ document.documentElement.classList.add('js');
   var root=document.documentElement,bs=document.querySelectorAll('.fontsw button');
   function set(f){root.setAttribute('data-font',f);bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.f===f)});try{localStorage.setItem('drafthr-font',f)}catch(e){}}
   var q=(location.hash.match(/font=(\w+)/)||[])[1],saved=null;try{saved=localStorage.getItem('drafthr-font')}catch(e){}
-  set(q||saved||'geist');
+  set(q||saved||'manrope');
   bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset.f)})});
 })();
 
