@@ -1,55 +1,108 @@
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@radix-ui/themes";
-import { CalendarClock, Download, ArrowUpRight } from "lucide-react";
-import { PageHeader, EmptyState } from "@/components/ds";
-import { PageShell, SectionLabel, StatusPill } from "@/components/reports/parts";
-import { cn } from "@/lib/utils";
-import { useDraftStore } from "@/lib/store";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import type { Draft } from "@/lib/letters/types";
+import { useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  addDaysToDateOnly,
-  daysUntilDateOnly,
-  formatDateOnly,
-  todayDateOnly,
-} from "@/lib/date-only";
+  CalendarClock,
+  CalendarDays,
+  CalendarPlus,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Folder,
+  ListFilter,
+} from "lucide-react";
+import { useDraftStore } from "@/lib/store";
+import { useProfileStore } from "@/lib/profile";
+import { todayDateOnly } from "@/lib/date-only";
+import { EmptyState, Pill } from "@/components/ds";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { BAND_BTN_GHOST, Band, HomeBand } from "@/components/home/HomeBand";
+import { useHomeData } from "@/components/home/homeData";
+import {
+  EVENT_TONE,
+  EVENT_TYPE_LABEL,
+  EVENT_TYPES,
+  buildIcs,
+  daysLeftLabel,
+  daysLeftTone,
+  extractCalendarEvents,
+  type CalendarEvent,
+} from "@/components/home/calendarEvents";
+import { cn } from "@/lib/utils";
 
-type Event = {
-  draftId: string;
-  iso: string;
-  daysAway: number;
-  label: string;
-  basis: string;
-  kind: "tribunal" | "acas_ec" | "advisor" | "remedy" | "appeal" | "acceptance" | "send_by";
-};
+type View = "month" | "agenda";
 
-const KIND_LABEL: Record<Event["kind"], string> = {
-  tribunal: "Tribunal",
-  acas_ec: "ACAS EC",
-  advisor: "Advisor",
-  remedy: "Remedy",
-  appeal: "Appeal",
-  acceptance: "Acceptance",
-  send_by: "Send by",
-};
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const TOOL_BTN = cn(BAND_BTN_GHOST, "h-[34px] px-3 text-[13.5px]");
+const NAV_BTN =
+  "grid size-8 shrink-0 place-items-center rounded-[8px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-focus)]";
 
+/** yyyy-mm-dd for a local date. */
+function iso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function monthTitle(y: number, m: number): string {
+  return new Date(y, m, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
+function parts(isoDate: string) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return {
+    weekday: date.toLocaleDateString("en-GB", { weekday: "short" }),
+    day: d,
+    long: date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }),
+  };
+}
+
+/**
+ * Calendar (a Home tab for HR, mock calendar): every dated thing on the
+ * person's letters (hearings, appeal windows, probation reviews, tribunal
+ * time limits, letter responses) on a month grid or as an agenda, with
+ * what is coming up and an .ics export. Employees and consultants get the
+ * same page under their own band, with only their own letters.
+ */
 export function Calendar() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
+  const matters = useDraftStore((s) => s.matters);
+  const role = useProfileStore((s) => s.profile.role);
+  const home = useHomeData("employer");
+  const employer = role === "employer";
+  const prefix = role === "employee" ? "/me" : "/hr";
 
-  const events = useMemo(
-    () =>
-      extractEvents(Object.values(drafts).filter((d) => !d.isTemplateSource)),
-    [drafts]
+  const all = useMemo(() => {
+    const mine = Object.values(drafts).filter((d) => !d.isTemplateSource && (!role || d.mode === role));
+    return extractCalendarEvents(mine, matters);
+  }, [drafts, matters, role]);
+
+  const [matterId, setMatterId] = useState("all");
+  const events = useMemo(() => (matterId === "all" ? all : all.filter((e) => e.matterId === matterId)), [all, matterId]);
+  const matterChoices = useMemo(() => {
+    const ids = new Set(all.map((e) => e.matterId).filter(Boolean) as string[]);
+    return Object.values(matters)
+      .filter((m) => ids.has(m.id) || (m.mode === (role ?? "employer") && m.status === "active"))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [all, matters, role]);
+  const matterLabel = matterId === "all" ? "All matters" : (matters[matterId]?.name ?? "All matters");
+
+  const today = new Date();
+  const [cursor, setCursor] = useState(() => ({ y: today.getFullYear(), m: today.getMonth() }));
+  const [view, setView] = useState<View>(() =>
+    typeof window !== "undefined" && window.matchMedia?.("(max-width: 767px)").matches ? "agenda" : "month"
   );
+
   const upcoming = events.filter((e) => e.daysAway >= 0);
-  const past = events.filter((e) => e.daysAway < 0);
-  const months = useMemo(() => groupByMonth(upcoming), [upcoming]);
+  const comingUp = upcoming.slice(0, 4);
 
   const onExportIcs = () => {
-    const ics = buildIcs(events);
-    const blob = new Blob([ics], { type: "text/calendar" });
+    const blob = new Blob([buildIcs(all)], { type: "text/calendar" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -60,243 +113,431 @@ export function Calendar() {
     URL.revokeObjectURL(url);
   };
 
-  return (
-    <PageShell>
-      <PageHeader
-        crumbs={[{ label: "Calendar" }]}
-        title="Deadlines"
-        lede="Tribunal limitation periods, ACAS Early Conciliation windows, advisor sign-off deadlines, and any remedy or acceptance dates from your drafts."
-        actions={
-          <Button onClick={onExportIcs} disabled={events.length === 0}>
-            <Download className="size-3.5" /> Export to calendar (.ics)
-          </Button>
-        }
-      />
+  // Band line: deadlines left this month, and how many in the next week.
+  const monthKey = iso(today).slice(0, 7);
+  const leftThisMonth = all.filter((e) => e.daysAway >= 0 && e.iso.startsWith(monthKey)).length;
+  const nextWeek = all.filter((e) => e.daysAway >= 0 && e.daysAway <= 7).length;
+  const lede =
+    leftThisMonth > 0 ? (
+      <>
+        <b>
+          {leftThisMonth} {leftThisMonth === 1 ? "deadline" : "deadlines"}
+        </b>{" "}
+        left this month
+        {nextWeek > 0 ? (
+          <>
+            , <b>{nextWeek}</b> in the next 7 days.
+          </>
+        ) : (
+          "."
+        )}
+      </>
+    ) : upcoming.length > 0 ? (
+      <>
+        No deadlines left this month. Next: <b>{parts(upcoming[0].iso).long}</b>.
+      </>
+    ) : (
+      <>No deadlines coming up.</>
+    );
 
-      {events.length === 0 && (
-        <div className="rounded-[var(--ds-r-l)] border border-[var(--ds-line)]">
-          <EmptyState
-            icon={CalendarClock}
-            title="No deadlines yet"
-            body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance, remedy or advisor date in a wizard."
-            primary={{ label: "Start a letter", to: "/" }}
-          />
-        </div>
+  const shift = (n: number) =>
+    setCursor(({ y, m }) => {
+      const d = new Date(y, m + n, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+
+  return (
+    <div className="min-w-0">
+      {employer ? (
+        <HomeBand active="calendar" approvals={home.waiting.length} lede={lede} />
+      ) : (
+        <Band crumbs={[{ label: "Home", href: role === "employee" ? "/me" : "/c" }, { label: "Calendar" }]} title="Calendar" lede={lede} />
       )}
 
-      <div className="flex flex-col gap-9">
-        {months.map(([month, list]) => (
-          <section key={month}>
-            <SectionLabel hint={list.length === 1 ? "1 deadline" : `${list.length} deadlines`}>
-              {month}
-            </SectionLabel>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {list.map((e, i) => (
-                <EventCard key={`u-${month}-${i}`} ev={e} onOpen={() => nav(`/editor/${e.draftId}`)} />
+      <div
+        className={cn(
+          "grid min-w-0 grid-cols-1 gap-8 px-4 pt-5 pb-12 md:px-12 md:pt-[26px]",
+          all.length > 0 && "xl:grid-cols-[minmax(0,1fr)_300px]"
+        )}
+      >
+        <div className="min-w-0">
+          {/* Toolbar */}
+          <div className="mb-3 flex flex-wrap items-center gap-2.5">
+            {view === "month" ? (
+              <>
+                <h2 className="ds-title m-0 mr-1.5 text-[26px] leading-none tracking-[-0.018em] whitespace-nowrap">
+                  {monthTitle(cursor.y, cursor.m)}
+                </h2>
+                <button type="button" aria-label="Previous month" className={NAV_BTN} onClick={() => shift(-1)}>
+                  <ChevronLeft className="size-4" aria-hidden />
+                </button>
+                <button type="button" aria-label="Next month" className={NAV_BTN} onClick={() => shift(1)}>
+                  <ChevronRight className="size-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={TOOL_BTN}
+                  onClick={() => setCursor({ y: today.getFullYear(), m: today.getMonth() })}
+                >
+                  Today
+                </button>
+              </>
+            ) : (
+              <h2 className="ds-title m-0 mr-1.5 text-[26px] leading-none tracking-[-0.018em]">Agenda</h2>
+            )}
+            <span className="flex-1" />
+            <div role="radiogroup" aria-label="View" className="inline-flex h-[34px] rounded-[9px] bg-[var(--ds-surface-2)] p-[3px]">
+              {(["month", "agenda"] as View[]).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={view === v}
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded-[7px] px-3 text-[13.5px] transition-colors duration-[120ms] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)]",
+                    view === v
+                      ? "bg-[var(--ds-surface)] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
+                      : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+                  )}
+                >
+                  {v === "month" ? "Month" : "Agenda"}
+                </button>
               ))}
             </div>
-          </section>
-        ))}
+            <button type="button" className={TOOL_BTN} onClick={onExportIcs} disabled={all.length === 0}>
+              <CalendarPlus className="size-4" aria-hidden />
+              Export to calendar
+            </button>
+          </div>
 
-        {past.length > 0 && (
-          <section>
-            <SectionLabel hint="Dates that have already gone by.">
-              Passed <span className="ds-mono ml-1 text-[12px] font-normal text-[var(--ds-muted)]">{past.length}</span>
-            </SectionLabel>
-            <div className="flex flex-col">
-              {past.map((e, i) => (
-                <PastRow key={`p-${i}`} ev={e} first={i === 0} onOpen={() => nav(`/editor/${e.draftId}`)} />
-              ))}
+          {all.length === 0 ? (
+            <div className="rounded-[14px] border border-[var(--ds-line)]">
+              <EmptyState
+                icon={CalendarClock}
+                title="No deadlines yet"
+                body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance, remedy or advisor date in a wizard."
+                primary={{ label: "Start a letter", to: `${prefix}/new` }}
+              />
             </div>
-          </section>
+          ) : (
+            <>
+              {/* Legend and matter filter */}
+              <div className="mb-3 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-[12.5px] text-[var(--ds-muted)]">
+                {EVENT_TYPES.map((t) => (
+                  <span key={t} className="inline-flex items-center gap-1.5">
+                    <i aria-hidden className="inline-block size-2 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
+                    {EVENT_TYPE_LABEL[t]}
+                  </span>
+                ))}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="ml-auto inline-flex items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)]"
+                    >
+                      <ListFilter className="size-3.5" aria-hidden />
+                      {matterLabel}
+                      <ChevronDown className="size-3.5" aria-hidden />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="max-w-[280px] min-w-[220px]">
+                    <DropdownMenuRadioGroup value={matterId} onValueChange={setMatterId}>
+                      <DropdownMenuRadioItem value="all">All matters</DropdownMenuRadioItem>
+                      {matterChoices.length > 0 && <DropdownMenuSeparator />}
+                      {matterChoices.map((m) => (
+                        <DropdownMenuRadioItem key={m.id} value={m.id}>
+                          <span className="truncate">{m.name}</span>
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              {view === "month" ? (
+                <MonthGrid y={cursor.y} m={cursor.m} events={events} onOpen={(id) => nav(`/editor/${id}`)} />
+              ) : (
+                <Agenda events={events} />
+              )}
+            </>
+          )}
+        </div>
+
+        {all.length > 0 && (
+          <aside className="min-w-0">
+            <section
+              aria-label="Coming up"
+              className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-5 pt-5 pb-1.5"
+            >
+              <header className="mb-1.5 flex items-center justify-between">
+                <h2 className="ds-title m-0 text-[22px] leading-tight tracking-[-0.015em]">Coming up</h2>
+                {upcoming.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setView("agenda")}
+                    className="rounded-[4px] text-[13.5px] text-[var(--ds-ink)] underline-offset-[3px] hover:underline"
+                  >
+                    View all
+                  </button>
+                )}
+              </header>
+              {comingUp.length === 0 ? (
+                <p className="m-0 pb-4 text-[13.5px] text-[var(--ds-muted)]">
+                  Nothing coming up{matterId === "all" ? "" : " for this matter"}.
+                </p>
+              ) : (
+                <ul className="m-0 list-none p-0">
+                  {comingUp.map((e) => (
+                    <EventRow key={e.id} e={e} />
+                  ))}
+                </ul>
+              )}
+            </section>
+            <p className="m-0 mt-3.5 flex items-center gap-2.5 rounded-[12px] bg-[var(--ds-surface-2)] px-3 py-2.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+              <CalendarDays className="size-4 shrink-0" aria-hidden />
+              <span>
+                <b className="font-medium text-[var(--ds-ink)]">Export to calendar</b> adds these dates to Outlook, Google
+                or Apple Calendar.
+              </span>
+            </p>
+          </aside>
         )}
       </div>
-    </PageShell>
+    </div>
   );
 }
 
-function groupByMonth(list: Event[]): [string, Event[]][] {
-  const out = new Map<string, Event[]>();
-  for (const e of list) {
-    const key = formatDateOnly(e.iso.slice(0, 7) + "-01", { month: "long", year: "numeric" }, "en-GB");
-    const arr = out.get(key) ?? [];
-    arr.push(e);
-    out.set(key, arr);
-  }
-  return [...out.entries()];
-}
+/* ─── Month grid ───────────────────────────────────────────────────── */
 
-function daysLeftLabel(days: number): string {
-  if (days === 0) return "Today";
-  if (days === 1) return "1 day left";
-  return `${days} days left`;
-}
-
-function EventCard({ ev, onOpen }: { ev: Event; onOpen: () => void }) {
-  const urgent = ev.daysAway < 14;
-  const soon = !urgent && ev.daysAway < 30;
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        "group flex min-w-0 cursor-pointer flex-col rounded-[var(--ds-r-m)] px-4 pb-4 pt-3.5 text-left transition hover:shadow-[var(--ds-shadow-m)]",
-        urgent ? "bg-[var(--ds-red-bg)]" : soon ? "bg-[var(--ds-amber-bg)]" : "bg-[var(--ds-surface-2)]"
-      )}
-    >
-      <span className="flex items-center justify-between gap-3 text-[12.5px]">
-        <span className="flex min-w-0 items-center gap-1.5 text-[var(--ds-muted)]">
-          <CalendarClock className="size-3.5 shrink-0" aria-hidden />
-          <span className="truncate">{ev.label}</span>
-        </span>
-        <span
-          className={cn(
-            "shrink-0 font-medium",
-            urgent ? "text-[var(--ds-red-fg)]" : soon ? "text-[var(--ds-amber-fg)]" : "text-[var(--ds-body)]"
-          )}
-        >
-          {daysLeftLabel(ev.daysAway)}
-        </span>
-      </span>
-      <span className="ds-title mt-2 text-[24px] leading-tight">{formatLongDate(ev.iso)}</span>
-      <span className="mt-1.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">{ev.basis}</span>
-      <span className="mt-3 flex items-center gap-2">
-        <span className="ds-mono inline-flex h-[22px] items-center gap-1 rounded-[var(--ds-r-s)] bg-[var(--ds-surface)] px-1.5 text-[11.5px] text-[var(--ds-body)] shadow-[0_0_0_1px_var(--ds-line)]">
-          <span className="grid size-3.5 place-items-center rounded-[3px] bg-[var(--ds-ink)] text-[9px] font-semibold text-[var(--ds-on-accent)]">
-            §
-          </span>
-          {KIND_LABEL[ev.kind]}
-        </span>
-        <ArrowUpRight className="ml-auto size-3.5 text-[var(--ds-muted)] group-hover:text-[var(--ds-ink)]" aria-hidden />
-      </span>
-    </button>
-  );
-}
-
-function PastRow({ ev, onOpen, first }: { ev: Event; onOpen: () => void; first: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        "relative flex w-full cursor-pointer items-center gap-3 rounded-[var(--ds-r-m)] px-3 py-3 text-left hover:bg-[var(--ds-surface-2)]",
-        !first && "before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--ds-line)]"
-      )}
-    >
-      <span className="ds-mono w-24 shrink-0 text-[12px] text-[var(--ds-muted)]">{formatDate(ev.iso)}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium text-[var(--ds-body)]">{ev.label}</span>
-        <span className="block truncate text-[12px] text-[var(--ds-muted)]">{ev.basis}</span>
-      </span>
-      <StatusPill tone="neutral" dot={false} size="sm" className="hidden sm:inline-flex">
-        {KIND_LABEL[ev.kind]}
-      </StatusPill>
-      <span className="hidden text-[12px] text-[var(--ds-faint)] sm:inline">passed</span>
-      <ArrowUpRight className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />
-    </button>
-  );
-}
-
-function extractEvents(drafts: Draft[]): Event[] {
-  const out: Event[] = [];
-  for (const d of drafts) {
-    const meta = (() => {
-      try { return getLetterMeta(d.letterType); } catch { return null; }
-    })();
-    const label = meta?.shortTitle ?? d.letterType;
-
-    const dl = d.context.protectedDeadline;
-    if (dl) {
-      out.push({
-        draftId: d.id,
-        iso: dl.iso,
-        daysAway: daysBetween(dl.iso),
-        label: `${label}: limitation expires`,
-        basis: dl.basis,
-        kind: "tribunal",
-      });
-      if (d.context.jurisdiction === "UK") {
-        const ec = subtractDays(dl.iso, 42);
-        out.push({
-          draftId: d.id,
-          iso: ec,
-          daysAway: daysBetween(ec),
-          label: `${label}: ACAS EC by`,
-          basis: "Lodge ACAS Early Conciliation at least 6 weeks before tribunal limitation",
-          kind: "acas_ec",
-        });
-      }
+function MonthGrid({
+  y,
+  m,
+  events,
+  onOpen,
+}: {
+  y: number;
+  m: number;
+  events: CalendarEvent[];
+  onOpen: (draftId: string) => void;
+}) {
+  const todayIso = iso(new Date());
+  const first = new Date(y, m, 1);
+  const lead = (first.getDay() + 6) % 7; // Monday first
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const weeks = Math.ceil((lead + daysInMonth) / 7);
+  const byDay = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const e of events) {
+      const list = map.get(e.iso) ?? [];
+      list.push(e);
+      map.set(e.iso, list);
     }
+    return map;
+  }, [events]);
 
-    const a = d.answers as Record<string, unknown>;
-    pushIfDate(out, d.id, a.advisorDeadline, `${label}: advisor sign-off`, "Advisor certification deadline (settlement)", "advisor");
-    pushIfDate(out, d.id, a.remedyDeadline, `${label}: remedy by`, "Demanded remedy deadline", "remedy");
-    pushIfDate(out, d.id, a.appealDeadline, `${label}: appeal by`, "Appeal must be lodged by", "appeal");
-    pushIfDate(out, d.id, a.acceptanceDeadline, `${label}: acceptance by`, "Acceptance deadline (offer)", "acceptance");
-    pushIfDate(out, d.id, a.demandDeadline, `${label}: payment by`, "Pay-dispute demand deadline", "remedy");
-    pushIfDate(out, d.id, a.reviewDate, `${label}: performance review`, "PIP / probation review date", "remedy");
-    pushIfDate(out, d.id, a.sendBy, `${label}: send by`, "Target date for the letter to go out", "send_by");
-  }
-  out.sort((a, b) => a.iso.localeCompare(b.iso));
-  return out;
+  const cells = Array.from({ length: weeks * 7 }, (_, i) => new Date(y, m, 1 - lead + i));
+
+  return (
+    <div
+      role="grid"
+      aria-label={`${monthTitle(y, m)} deadlines`}
+      className="overflow-hidden rounded-[14px] border border-[var(--ds-line)]"
+    >
+      <div role="row" className="grid grid-cols-7 border-b border-[var(--ds-line)]">
+        {WEEKDAYS.map((w) => (
+          <span key={w} role="columnheader" className="truncate px-1.5 py-2 text-[12px] font-medium text-[var(--ds-subtle)] md:px-2.5">
+            {w}
+          </span>
+        ))}
+      </div>
+      {Array.from({ length: weeks }, (_, w) => (
+        <div role="row" key={w} className="grid grid-cols-7 border-b border-[var(--ds-line-2)] last:border-b-0">
+          {cells.slice(w * 7, w * 7 + 7).map((d, i) => {
+            const key = iso(d);
+            const out = d.getMonth() !== m;
+            const weekend = i >= 5;
+            const isToday = key === todayIso;
+            const list = out ? [] : (byDay.get(key) ?? []);
+            const more = list.length - 1;
+            return (
+              <div
+                role="gridcell"
+                key={key}
+                aria-label={`${parts(key).long}${list.length ? `, ${list.length} ${list.length === 1 ? "deadline" : "deadlines"}` : ""}`}
+                className={cn(
+                  "flex h-[104px] min-w-0 flex-col gap-[3px] overflow-hidden border-r border-[var(--ds-line-2)] px-1 pt-1.5 last:border-r-0 md:px-1.5",
+                  weekend && "bg-[var(--ds-hover)]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-6 shrink-0 items-center px-1 text-[12.5px]",
+                    out ? "text-[var(--ds-faint)]" : "text-[var(--ds-muted)]"
+                  )}
+                >
+                  {isToday ? (
+                    <b className="-ml-1 grid h-[22px] min-w-[22px] place-items-center rounded-[7px] bg-[var(--ds-ink)] px-1 text-[12px] font-medium text-[var(--ds-on-accent)]">
+                      {d.getDate()}
+                    </b>
+                  ) : (
+                    d.getDate()
+                  )}
+                </span>
+                {list[0] && <EventChip e={list[0]} onOpen={onOpen} />}
+                {more > 0 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="self-start rounded-[5px] px-1 text-left text-[11.5px] font-medium text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                      >
+                        +{more} more
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-[240px] p-2.5">
+                      <p className="m-0 mb-2 px-0.5 text-[12.5px] font-medium text-[var(--ds-ink)]">{parts(key).long}</p>
+                      <div className="flex flex-col gap-1">
+                        {list.map((e) => (
+                          <EventChip key={e.id} e={e} onOpen={onOpen} />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
 }
 
-function pushIfDate(arr: Event[], draftId: string, v: unknown, label: string, basis: string, kind: Event["kind"]) {
-  if (typeof v !== "string" || !v) return;
-  if (!/^\d{4}-\d{2}-\d{2}/.test(v)) return;
-  arr.push({ draftId, iso: v, daysAway: daysBetween(v), label, basis, kind });
+function EventChip({ e, onOpen }: { e: CalendarEvent; onOpen: (draftId: string) => void }) {
+  const past = e.daysAway < 0;
+  const tone = EVENT_TONE[e.type];
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(e.draftId)}
+      aria-label={`${e.title}, ${e.person}, ${parts(e.iso).long}${past ? ", passed" : ""}. Open the letter`}
+      title={`${e.title} · ${e.person}${e.matterName ? ` · ${e.matterName}` : ""}`}
+      className="block w-full min-w-0 shrink-0 overflow-hidden rounded-[7px] px-[7px] py-[5px] text-left text-[11.5px] leading-[1.25] whitespace-nowrap transition-[filter] duration-[120ms] hover:brightness-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)]"
+      style={past ? { background: "var(--ds-surface-2)", color: "var(--ds-subtle)" } : { background: tone.bg, color: tone.fg }}
+    >
+      <b
+        className={cn(
+          "block truncate",
+          past ? "font-medium line-through decoration-[var(--ds-faint)]" : "font-semibold"
+        )}
+      >
+        {e.chip}
+      </b>
+      <span className="block truncate">{e.person}</span>
+    </button>
+  );
 }
 
-function daysBetween(iso: string): number {
-  return daysUntilDateOnly(iso);
+/* ─── Rows (Coming up and Agenda) ──────────────────────────────────── */
+
+function EventRow({ e, wide = false }: { e: CalendarEvent; wide?: boolean }) {
+  const p = parts(e.iso);
+  const tone = daysLeftTone(e);
+  return (
+    <li className="border-t border-[var(--ds-line-2)] first:border-t-0">
+      <Link
+        to={`/editor/${e.draftId}`}
+        className={cn(
+          "-mx-2 flex gap-3.5 rounded-[10px] px-2 py-3 transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ds-focus)]",
+          wide && "md:items-center"
+        )}
+      >
+        <span className="w-[42px] shrink-0 self-start rounded-[10px] border border-[var(--ds-line)] pt-[5px] pb-1.5 text-center">
+          <span className="block text-[10.5px] font-medium tracking-[0.06em] text-[var(--ds-subtle)] uppercase">{p.weekday}</span>
+          <b className="mt-px block text-[18px] leading-tight font-medium tracking-[-0.02em] text-[var(--ds-ink)]">{p.day}</b>
+        </span>
+        <span className={cn("min-w-0 flex-1", wide && "md:flex md:items-center md:gap-4")}>
+          <span className={cn("block min-w-0", wide && "md:flex-1")}>
+            <span className="flex min-w-0 items-center gap-[7px] text-[14px] text-[var(--ds-ink)]">
+              <i aria-hidden className="inline-block size-[7px] shrink-0 rounded-[2px]" style={{ background: EVENT_TONE[e.type].fg }} />
+              <span className="truncate">
+                {e.title}
+                {!e.matterName && e.person ? `, ${e.person}` : ""}
+              </span>
+            </span>
+            <span className="mt-[3px] flex min-w-0 items-center gap-[5px] text-[12.5px] text-[var(--ds-muted)]">
+              <Folder className="size-[13px] shrink-0 text-[var(--ds-subtle)]" aria-hidden />
+              <span className="truncate">
+                {e.matterName
+                  ? e.matterName.toLowerCase().includes(e.person.toLowerCase())
+                    ? e.matterName
+                    : `${e.matterName} · ${e.person}`
+                  : e.letter}
+              </span>
+            </span>
+          </span>
+          <span className={cn("mt-[7px] flex flex-wrap items-center gap-1.5", wide && "md:mt-0 md:shrink-0")}>
+            <Pill tone={tone}>{daysLeftLabel(e.daysAway)}</Pill>
+            {e.citation && (
+              <span
+                title={e.basis}
+                className="inline-flex h-[22px] max-w-[170px] items-center truncate rounded-[6px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-1.5 text-[11.5px] text-[var(--ds-body)]"
+              >
+                {e.citation}
+              </span>
+            )}
+          </span>
+        </span>
+      </Link>
+    </li>
+  );
 }
 
-function subtractDays(iso: string, days: number): string {
-  return addDaysToDateOnly(iso, -days);
-}
+function Agenda({ events }: { events: CalendarEvent[] }) {
+  const upcoming = events.filter((e) => e.daysAway >= 0);
+  const past = events.filter((e) => e.daysAway < 0).reverse();
+  const groups = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>();
+    for (const e of upcoming) {
+      const k = e.iso.slice(0, 7);
+      map.set(k, [...(map.get(k) ?? []), e]);
+    }
+    return [...map.entries()];
+  }, [upcoming]);
 
-function formatLongDate(iso: string): string {
-  return formatDateOnly(iso, { day: "numeric", month: "long", year: "numeric" }, "en-GB");
-}
-
-function formatDate(iso: string): string {
-  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" }, "en-GB");
-}
-
-function buildIcs(events: Event[]): string {
-  const stamp = (iso: string) => iso.replace(/-/g, "");
-  const now = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//DRAFTHR//Calendar//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-  ];
-  for (let i = 0; i < events.length; i++) {
-    const e = events[i];
-    const date = stamp(e.iso);
-    const nextDate = stamp(addDaysToDateOnly(e.iso, 1));
-    // UID must be unique per VEVENT. Several distinct answer fields share a
-    // single `kind` (e.g. remedyDeadline, demandDeadline and reviewDate all
-    // map to "remedy"), so `draftId-kind` alone collides when a draft has
-    // more than one populated: calendar apps dedupe same-UID events on
-    // import and silently drop the extras. Fold in the date and index.
-    lines.push(
-      "BEGIN:VEVENT",
-      `UID:${e.draftId}-${e.kind}-${date}-${i}@drafthr.app`,
-      `DTSTAMP:${now}`,
-      `DTSTART;VALUE=DATE:${date}`,
-      `DTEND;VALUE=DATE:${nextDate}`,
-      `SUMMARY:${escapeIcs(e.label)}`,
-      `DESCRIPTION:${escapeIcs(e.basis)}`,
-      "END:VEVENT"
+  if (events.length === 0) {
+    return (
+      <p className="m-0 rounded-[14px] border border-[var(--ds-line)] px-5 py-8 text-center text-[13.5px] text-[var(--ds-muted)]">
+        No deadlines for this matter.
+      </p>
     );
   }
-  lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  return (
+    <div className="flex flex-col gap-6">
+      {groups.map(([k, list]) => {
+        const [yy, mm] = k.split("-").map(Number);
+        return (
+          <AgendaGroup key={k} title={monthTitle(yy, mm - 1)} list={list} />
+        );
+      })}
+      {past.length > 0 && <AgendaGroup title="Passed" list={past} />}
+    </div>
+  );
 }
 
-function escapeIcs(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+function AgendaGroup({ title, list }: { title: string; list: CalendarEvent[] }) {
+  return (
+    <section aria-label={title}>
+      <h3 className="m-0 mb-1 flex items-baseline gap-2 text-[15px] font-semibold text-[var(--ds-ink)]">
+        {title}
+        <span className="text-[12.5px] font-normal text-[var(--ds-subtle)]">{list.length}</span>
+      </h3>
+      <ul className="m-0 list-none rounded-[14px] border border-[var(--ds-line)] px-4 py-0.5">
+        {list.map((e) => (
+          <EventRow key={e.id} e={e} wide />
+        ))}
+      </ul>
+    </section>
+  );
 }

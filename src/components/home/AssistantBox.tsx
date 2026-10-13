@@ -1,15 +1,31 @@
 /**
- * Home's assistant box (design 3A). It is the front door to the existing
+ * Home's ask box (mock home `.ask`). It is the front door to the existing
  * new-letter flow: type what you need and DraftHR matches it to a letter
  * type from the catalogue; sending (or picking a suggestion) opens that
- * letter's wizard, and a request with no match opens the full template
- * browser. Nothing is sent anywhere from here.
+ * letter's wizard, and a request with no match opens the template browser.
+ * Nothing is sent anywhere from here.
+ *
+ *   context chip   what DraftHR will use for the next letter (the
+ *                  workspace's law and tone, from Settings, Defaults)
+ *   +              a small menu: New letter, New matter, Browse templates
+ *   Templates      the template browser
+ *   sliders        law and tone for the next letter (saved as your defaults)
+ *   send           start the best match
  */
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowUp, Library } from "lucide-react";
+import { ArrowUp, FilePlus2, FolderPlus, LibraryBig, Paperclip, Plus, SlidersHorizontal } from "lucide-react";
 import type { Jurisdiction, Mode } from "@/lib/letters/types";
 import { letterCatalogByMode, type LetterTypeMeta } from "@/lib/letters/catalog";
+import { useProfileStore } from "@/lib/profile";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const STOP = new Set([
@@ -55,6 +71,35 @@ export function matchLetters(query: string, catalog: LetterTypeMeta[]): LetterTy
     .map((s) => s.l);
 }
 
+const HR_TONES = [
+  { id: "warm", label: "Warm" },
+  { id: "neutral", label: "Neutral" },
+  { id: "formal", label: "Formal" },
+  { id: "firm", label: "Firm" },
+] as const;
+
+const EMPLOYEE_TONES = [
+  { id: "conciliatory", label: "Conciliatory" },
+  { id: "assertive", label: "Assertive" },
+  { id: "forensic", label: "Forensic" },
+  { id: "tribunal_ready", label: "Tribunal ready" },
+] as const;
+
+const ICON_BTN =
+  "grid size-[30px] shrink-0 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] data-[state=open]:bg-[var(--ds-surface-2)] data-[state=open]:text-[var(--ds-ink)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)]";
+
+const LINK_BTN =
+  "inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[8px] px-1.5 text-[13.5px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)]";
+
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function AssistantBox({
   mode,
   jurisdiction,
@@ -66,6 +111,8 @@ export function AssistantBox({
 }) {
   const nav = useNavigate();
   const prefix = mode === "employer" ? "/hr" : "/me";
+  const defaults = useProfileStore((s) => s.profile.defaults);
+  const patchDefaults = useProfileStore((s) => s.patchDefaults);
   const [text, setText] = useState("");
   const ta = useRef<HTMLTextAreaElement>(null);
 
@@ -90,68 +137,161 @@ export function AssistantBox({
     if (!typing) return;
     start(matches[0]?.id);
   };
+  const sendLabel = matches[0] ? `Start ${matches[0].shortTitle}` : "Browse letter types";
 
-  const placeholder =
-    mode === "employer"
-      ? "Describe the letter you need, for example a final written warning for lateness"
-      : "Describe your situation, for example raising a grievance about my manager";
+  const employer = mode === "employer";
+  const tones = employer ? HR_TONES : EMPLOYEE_TONES;
+  const tone = employer ? defaults.tone : defaults.employeeTone;
+  const toneLabel = tones.find((t) => t.id === tone)?.label;
+  const law =
+    jurisdiction === "US"
+      ? `US law${defaults.usState ? `, ${defaults.usState}` : ""}`
+      : `UK law, ${defaults.ukRegion ?? "England & Wales"}`.replace("&", "and");
+  const contextLine = toneLabel ? `${law}, ${toneLabel.toLowerCase()} tone` : law;
 
   return (
     <div className={cn("w-full min-w-0", className)}>
       <div
-        className="flex cursor-text flex-col gap-3.5 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-4 pt-[18px] pb-3 transition focus-within:border-[var(--ds-line-strong)] focus-within:shadow-[var(--ds-shadow-s)] sm:pl-[18px]"
+        className="flex cursor-text flex-col rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3.5 pt-3.5 pb-3 shadow-[var(--ds-shadow-ask)] transition-colors duration-[120ms] focus-within:border-[var(--ds-line-strong)] md:px-[18px] md:pt-4 md:pb-3.5"
         onClick={(e) => {
-          if (!(e.target as HTMLElement).closest("a,button")) ta.current?.focus();
+          if (!(e.target as HTMLElement).closest("a,button,[role=menu],[role=dialog]")) ta.current?.focus();
         }}
       >
-        <label htmlFor="home-assistant" className="sr-only">
-          Ask DraftHR to start a letter
-        </label>
-        <textarea
-          id="home-assistant"
-          ref={ta}
-          rows={2}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            const el = e.currentTarget;
-            el.style.height = "auto";
-            el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder={placeholder}
-          className="block min-h-[44px] w-full resize-none border-0 bg-transparent px-0.5 text-[15px] leading-[22px] text-[var(--ds-ink)] outline-none placeholder:text-[var(--ds-muted)]"
-        />
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <div className="-ml-1.5 flex min-w-0 items-center gap-0.5 overflow-hidden">
-            <Link
-              to={`${prefix}/new`}
-              className="inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[var(--ds-r-s)] px-2 text-[13px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)]"
-            >
-              <Library className="size-[15px]" />
-              Templates
-            </Link>
-          </div>
+        <Link
+          to="/settings?tab=defaults"
+          title="Change the law and tone DraftHR uses"
+          className="inline-flex max-w-full items-center gap-2.5 self-start rounded-[10px] bg-[var(--ds-surface-2)] py-[7px] pr-3 pl-2.5 text-left transition-colors duration-[120ms] hover:bg-[var(--ds-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] md:py-2"
+        >
+          <Paperclip className="size-[15px] shrink-0 text-[var(--ds-muted)]" aria-hidden />
+          <span className="min-w-0">
+            <span className="block text-[13px] leading-tight font-medium text-[var(--ds-ink)]">
+              {employer ? "Your policies" : "Your details"}
+            </span>
+            <span className="block truncate text-[12px] leading-tight text-[var(--ds-subtle)]">{contextLine}</span>
+          </span>
+        </Link>
+
+        <div className="relative mx-0.5 mt-3.5 mb-[18px] md:mt-4 md:mb-[22px]">
+          <label htmlFor="home-assistant" className="sr-only">
+            Ask DraftHR to start a letter
+          </label>
+          {!typing && (
+            <p aria-hidden className="pointer-events-none absolute inset-0 m-0 text-[15px] leading-[1.4] text-[var(--ds-subtle)] md:text-[16px] md:leading-[24px]">
+              {employer ? (
+                <>
+                  Describe the letter you need, for example{" "}
+                  <span className="text-[var(--ds-ink)]">a final written warning for lateness</span>
+                </>
+              ) : (
+                <>
+                  Describe your situation, for example{" "}
+                  <span className="text-[var(--ds-ink)]">raising a grievance about my manager</span>
+                </>
+              )}
+            </p>
+          )}
+          <textarea
+            id="home-assistant"
+            ref={ta}
+            rows={1}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            className="relative block min-h-[42px] w-full resize-none border-0 bg-transparent p-0 text-[15px] leading-[1.4] text-[var(--ds-ink)] outline-none md:min-h-[24px] md:text-[16px] md:leading-[24px]"
+          />
+        </div>
+
+        <div className="flex min-w-0 items-center gap-2 md:gap-3">
+          <DropdownMenu>
+            <Tip label="Start something new">
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Start something new" className={cn(ICON_BTN, "-ml-1.5")}>
+                  <Plus className="size-[17px]" aria-hidden />
+                </button>
+              </DropdownMenuTrigger>
+            </Tip>
+            <DropdownMenuContent align="start" className="w-[210px]">
+              <DropdownMenuItem onSelect={() => nav(`${prefix}/new`)}>
+                <FilePlus2 aria-hidden />
+                New letter
+              </DropdownMenuItem>
+              {employer && (
+                <DropdownMenuItem onSelect={() => nav("/matters")}>
+                  <FolderPlus aria-hidden />
+                  New matter
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => nav(`${prefix}/new`)}>
+                <LibraryBig aria-hidden />
+                Browse templates
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Link to={`${prefix}/new`} className={LINK_BTN}>
+            <LibraryBig className="size-[15px]" aria-hidden />
+            Templates
+          </Link>
+          <span className="flex-1" />
+          <Popover>
+            <Tip label="Law and tone">
+              <PopoverTrigger asChild>
+                <button type="button" aria-label="Law and tone for the next letter" className={cn(ICON_BTN, "hidden sm:grid")}>
+                  <SlidersHorizontal className="size-4" aria-hidden />
+                </button>
+              </PopoverTrigger>
+            </Tip>
+            <PopoverContent align="end" className="w-[280px] p-3.5">
+              <p className="m-0 text-[13px] font-semibold text-[var(--ds-ink)]">For your next letter</p>
+              <p className="m-0 mt-0.5 text-[12.5px] text-[var(--ds-muted)]">Saved as your defaults in Settings.</p>
+              <div className="mt-3 text-[12.5px] font-medium text-[var(--ds-muted)]">Law</div>
+              <Segmented
+                label="Law"
+                value={jurisdiction}
+                options={[
+                  { id: "UK", label: "UK" },
+                  { id: "US", label: "US" },
+                ]}
+                onChange={(v) => patchDefaults({ jurisdiction: v as Jurisdiction })}
+              />
+              <div className="mt-3 text-[12.5px] font-medium text-[var(--ds-muted)]">Tone</div>
+              <Segmented
+                label="Tone"
+                value={tone ?? ""}
+                options={tones.map((t) => ({ id: t.id, label: t.label }))}
+                onChange={(v) =>
+                  employer
+                    ? patchDefaults({ tone: v as (typeof HR_TONES)[number]["id"] })
+                    : patchDefaults({ employeeTone: v as (typeof EMPLOYEE_TONES)[number]["id"] })
+                }
+                wrap
+              />
+            </PopoverContent>
+          </Popover>
           <button
             type="button"
             onClick={send}
             disabled={!typing}
-            aria-label={matches[0] ? `Start ${matches[0].shortTitle}` : "Browse letter types"}
-            title={typing ? (matches[0] ? `Start ${matches[0].shortTitle}` : "Browse letter types") : undefined}
-            className="grid size-8 shrink-0 place-items-center rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)] disabled:cursor-default disabled:opacity-[0.28] disabled:hover:bg-[var(--ds-accent)]"
+            aria-label={sendLabel}
+            title={typing ? sendLabel : undefined}
+            className="grid size-[34px] shrink-0 place-items-center rounded-[9px] bg-[var(--ds-accent)] text-[var(--ds-on-accent)] transition-colors duration-[120ms] hover:bg-[var(--ds-accent-hover)] active:bg-[var(--ds-accent-press)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-focus)] disabled:cursor-default disabled:opacity-[0.28] disabled:hover:bg-[var(--ds-accent)]"
           >
-            <ArrowUp className="size-4" />
+            <ArrowUp className="size-4" aria-hidden />
           </button>
         </div>
       </div>
 
-      {/* Suggestions: common letters before typing, best matches while typing. */}
-      <div className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5" aria-live="polite">
+      {/* Suggestions sit outside the box: common letters before typing, best matches while typing. */}
+      <div className={cn("mt-3 min-w-0 flex-wrap items-center gap-1.5", typing ? "flex" : "hidden md:flex")} aria-live="polite">
         <span className="mr-1 text-[12.5px] text-[var(--ds-muted)]">
           {typing ? (matches.length > 0 ? "Best match" : "No close match.") : "Try"}
         </span>
@@ -161,7 +301,7 @@ export function AssistantBox({
             type="button"
             onClick={() => start(l.id)}
             className={cn(
-              "inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[12.5px] font-medium transition",
+              "inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[12.5px] font-medium transition-colors duration-[120ms] active:bg-[var(--ds-surface-3)]",
               typing && i === 0
                 ? "border-[var(--ds-line-strong)] bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
                 : "border-[var(--ds-line)] bg-transparent text-[var(--ds-body)] hover:border-[var(--ds-line-strong)] hover:bg-[var(--ds-surface)] hover:text-[var(--ds-ink)]"
@@ -174,12 +314,51 @@ export function AssistantBox({
           <button
             type="button"
             onClick={() => start()}
-            className="text-[12.5px] font-medium text-[var(--ds-ink)] underline-offset-2 hover:underline"
+            className="rounded-[4px] text-[12.5px] font-medium text-[var(--ds-ink)] underline-offset-2 hover:underline"
           >
             Browse all letter types
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function Segmented({
+  label,
+  value,
+  options,
+  onChange,
+  wrap,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ id: string; label: string }>;
+  onChange: (id: string) => void;
+  wrap?: boolean;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className={cn("mt-1.5 flex gap-0.5 rounded-[10px] bg-[var(--ds-surface-2)] p-[3px]", wrap && "flex-wrap")}>
+      {options.map((o) => {
+        const on = o.id === value;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.id)}
+            className={cn(
+              "h-[28px] flex-1 whitespace-nowrap rounded-[8px] px-2.5 text-[13px] transition-colors duration-[120ms] focus-visible:outline-2 focus-visible:outline-[var(--ds-focus)]",
+              on
+                ? "bg-[var(--ds-surface)] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
+                : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

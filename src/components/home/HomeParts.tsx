@@ -1,44 +1,46 @@
-/** Small layout pieces shared by the HR and employee Home pages. */
+/** Layout pieces shared by the HR and employee Home pages (mock home). */
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const BTN_PRIMARY =
-  "inline-flex h-9 items-center gap-1.5 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-3.5 text-[13.5px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]";
+export { BAND_BTN_DARK as BTN_PRIMARY, BAND_BTN_GHOST as BTN_OUTLINE } from "./HomeBand";
 
-export const BTN_OUTLINE =
-  "inline-flex h-9 items-center gap-1.5 rounded-[var(--ds-r-s)] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3.5 text-[13.5px] font-medium text-[var(--ds-ink)] transition hover:border-[var(--ds-line-strong)] hover:bg-[var(--ds-surface-2)]";
-
-/** Page frame: the main column plus a 340px rail on wide screens. The rail
- * sits between the two main blocks on phones so what needs you comes first. */
+/**
+ * The content under the band (mock `.content`): the main column and a
+ * 340px rail, 36px apart, 30px top and 48px side padding. On phones the
+ * rail follows the ask box so what needs you comes before the long lists.
+ */
 export function HomeGrid({
   top,
   rail,
   bottom,
+  className,
 }: {
   top: ReactNode;
   rail?: ReactNode;
   bottom?: ReactNode;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
-        "grid min-w-0 grid-cols-1 gap-x-8 gap-y-10",
-        rail && "lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_1fr]"
+        "grid min-w-0 grid-cols-1 gap-x-9 px-4 pt-4 pb-10 md:px-12 md:pt-[30px]",
+        rail && "lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_1fr]",
+        className
       )}
     >
       <div className="min-w-0 lg:col-start-1 lg:row-start-1">{top}</div>
       {rail && (
-        <div className="flex min-w-0 flex-col gap-6 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <div className="mt-[26px] flex min-w-0 flex-col gap-[18px] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
           {rail}
         </div>
       )}
-      {bottom && <div className="flex min-w-0 flex-col gap-10 lg:col-start-1 lg:row-start-2">{bottom}</div>}
+      {bottom && <div className="flex min-w-0 flex-col lg:col-start-1 lg:row-start-2">{bottom}</div>}
     </div>
   );
 }
 
+/** Section heading (mock `secHead`): 17px semibold title, a sub line and a link. */
 export function SectionHead({
   title,
   sub,
@@ -49,56 +51,53 @@ export function SectionHead({
   action?: { label: string; to: string };
 }) {
   return (
-    <div className="mb-4 flex min-w-0 items-end justify-between gap-4">
+    <div className="mb-3.5 flex min-w-0 items-end justify-between gap-4">
       <div className="min-w-0">
-        <h2 className="m-0 text-[16px] font-medium tracking-[-0.005em] text-[var(--ds-ink)]">{title}</h2>
-        {sub && <p className="m-0 mt-1 text-[12.5px] text-[var(--ds-muted)]">{sub}</p>}
+        <h2 className="m-0 text-[17px] font-semibold tracking-[-0.012em] text-[var(--ds-ink)]">{title}</h2>
+        {sub && <p className="m-0 mt-[3px] text-[13.5px] text-[var(--ds-muted)]">{sub}</p>}
       </div>
       {action && (
         <Link
           to={action.to}
-          className="inline-flex shrink-0 items-center gap-0.5 text-[13.5px] text-[var(--ds-body)] transition hover:text-[var(--ds-ink)]"
+          className="shrink-0 rounded-[4px] text-[14px] text-[var(--ds-ink)] underline-offset-[3px] transition-colors duration-[120ms] hover:underline"
         >
           {action.label}
-          <ChevronRight className="size-3.5 text-[var(--ds-muted)]" />
         </Link>
       )}
     </div>
   );
 }
 
-/** White rail box with a title, an optional count and a link on the right. */
+/** White rail card with a serif title (mock `card`). */
 export function RailBox({
   title,
-  count,
+  badge,
   action,
   children,
   label,
+  className,
 }: {
   title: string;
-  count?: number;
+  badge?: ReactNode;
   action?: { label: string; to: string };
   children: ReactNode;
   label?: string;
+  className?: string;
 }) {
   return (
     <section
       aria-label={label ?? title}
-      className="min-w-0 rounded-[var(--ds-r-l)] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-[18px]"
+      className={cn("min-w-0 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-5 pt-5 pb-2", className)}
     >
-      <header className="mb-3.5 flex items-center justify-between gap-3">
-        <h2 className="m-0 inline-flex items-center gap-2 text-[15px] font-medium text-[var(--ds-ink)]">
-          {title}
-          {count != null && count > 0 && (
-            <span className="ds-mono inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--ds-chip)] px-[5px] text-[11.5px] font-medium text-[var(--ds-muted)]">
-              {count}
-            </span>
-          )}
-        </h2>
+      <header className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center">
+          <h2 className="ds-title m-0 text-[22px] leading-tight tracking-[-0.015em]">{title}</h2>
+          {badge}
+        </div>
         {action && (
           <Link
             to={action.to}
-            className="shrink-0 text-[13.5px] text-[var(--ds-body)] transition hover:text-[var(--ds-ink)]"
+            className="shrink-0 rounded-[4px] text-[13.5px] text-[var(--ds-ink)] underline-offset-[3px] hover:underline"
           >
             {action.label}
           </Link>

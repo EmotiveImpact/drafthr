@@ -1,27 +1,31 @@
 /**
- * Four soft stat tiles (design 7B): a label with an icon, a big serif number,
- * an optional sparkline and a one-line footer. Every number is passed in by
- * Home from data it already holds; this file only draws.
+ * Quiet number tiles (mock reports `stat`): an icon and label, the figure
+ * (32px, weight 500) with an optional unit, an optional sparkline, and a
+ * footer line. Every number is passed in; this file only draws.
  */
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { Pill, type PillTone } from "@/components/ds";
 import { cn } from "@/lib/utils";
 
 export type StatTileProps = {
   label: string;
   icon: LucideIcon;
   value: ReactNode;
-  /** Weekly (or similar) series for the sparkline. Hidden when flat. */
+  unit?: ReactNode;
+  /** Series for the sparkline. Hidden when flat or too short. */
   series?: number[];
   sparkLabel?: string;
+  /** Sparkline colour (a token). */
+  sparkColor?: string;
   footer?: ReactNode;
+  testId?: string;
 };
 
 export function StatTiles({ tiles, className }: { tiles: StatTileProps[]; className?: string }) {
   return (
     <div className={cn("@container w-full min-w-0", className)}>
-      <div className="grid grid-cols-2 gap-3 @[760px]:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3.5 @[360px]:grid-cols-2 @[880px]:grid-cols-4">
         {tiles.map((t) => (
           <StatTile key={t.label} {...t} />
         ))}
@@ -30,20 +34,25 @@ export function StatTiles({ tiles, className }: { tiles: StatTileProps[]; classN
   );
 }
 
-function StatTile({ label, icon: Icon, value, series, sparkLabel, footer }: StatTileProps) {
+export function StatTile({ label, icon: Icon, value, unit, series, sparkLabel, sparkColor, footer, testId }: StatTileProps) {
   const showSpark = series && series.length > 1 && series.some((v) => v !== series[0]);
   return (
-    <div className="flex min-w-0 flex-col rounded-[var(--ds-r-l)] bg-[var(--ds-surface-2)] px-4 pt-4 pb-[15px] sm:px-[18px]">
-      <div className="flex items-center justify-between gap-2 text-[12.5px] text-[var(--ds-muted)]">
+    <div data-testid={testId} className="flex min-w-0 flex-col rounded-[14px] bg-[var(--ds-surface-2)] px-4 pt-[15px] pb-3.5">
+      <div className="flex min-w-0 items-center gap-[7px] text-[13px] text-[var(--ds-muted)]">
+        <Icon className="size-3.5 shrink-0 text-[var(--ds-subtle)]" aria-hidden />
         <span className="truncate">{label}</span>
-        <Icon className="size-[15px] shrink-0" aria-hidden />
       </div>
-      <div className="mt-2.5 flex min-h-[42px] items-end justify-between gap-3">
-        <span className="ds-title text-[34px] leading-none whitespace-nowrap sm:text-[40px]">{value}</span>
-        {showSpark && <Sparkline series={series!} label={sparkLabel} />}
+      <div className="mt-3 flex min-w-0 items-end justify-between gap-3">
+        <span className="text-[32px] leading-none font-medium tracking-[-0.03em] whitespace-nowrap text-[var(--ds-ink)]">
+          {value}
+          {unit != null && unit !== "" && (
+            <span className="ml-1 text-[15px] font-normal tracking-[-0.01em] text-[var(--ds-muted)]">{unit}</span>
+          )}
+        </span>
+        {showSpark && <Sparkline series={series!} label={sparkLabel} color={sparkColor} />}
       </div>
       {footer && (
-        <div className="mt-3 flex min-h-5 min-w-0 items-center gap-1.5 overflow-hidden text-[12px] whitespace-nowrap text-[var(--ds-muted)]">
+        <div className="mt-2.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[12.5px] whitespace-nowrap text-[var(--ds-muted)]">
           {footer}
         </div>
       )}
@@ -51,82 +60,51 @@ function StatTile({ label, icon: Icon, value, series, sparkLabel, footer }: Stat
   );
 }
 
-/** Up / down chip as in the prototype: "↑ 5" in green, "↓ 2" in muted. */
-export function DeltaChip({ delta }: { delta: number }) {
-  if (delta === 0) return null;
-  const up = delta > 0;
+/** Footer pill ("+5", "1 new"), then a muted line. */
+export function TileFoot({
+  pill,
+  tone = "grey",
+  dot = false,
+  children,
+}: {
+  pill?: ReactNode;
+  tone?: PillTone;
+  dot?: boolean;
+  children?: ReactNode;
+}) {
   return (
-    <span
-      className={cn(
-        "inline-flex h-5 shrink-0 items-center gap-0.5 rounded-[var(--ds-r-s)] pr-1.5 pl-1 text-[11.5px] font-semibold",
-        up ? "bg-[var(--ds-green-bg)] text-[var(--ds-green-fg)]" : "bg-[var(--ds-chip)] text-[var(--ds-body)]"
+    <>
+      {pill != null && (
+        <Pill tone={tone} dot={dot} className="shrink-0">
+          {pill}
+        </Pill>
       )}
-    >
-      {up ? <ArrowUp className="size-3" strokeWidth={2.2} /> : <ArrowDown className="size-3" strokeWidth={2.2} />}
-      <span className="ds-mono">{Math.abs(delta)}</span>
-    </span>
+      {children && <span className="truncate">{children}</span>}
+    </>
   );
 }
 
-export function FooterDot({ tone, children }: { tone: "red" | "amber" | "green"; children: ReactNode }) {
-  return (
-    <span
-      className="inline-flex min-w-0 items-center gap-1.5 truncate font-medium"
-      style={{ color: `var(--ds-${tone}-fg)` }}
-    >
-      <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: tone === "amber" ? "var(--ds-amber-dot)" : `var(--ds-${tone}-fg)` }} />
-      <span className="truncate">{children}</span>
-    </span>
-  );
-}
-
-/* Smooth path through points (Catmull-Rom to cubic Bezier), as drawn in the
- * prototype's 7B sparkline. */
-function smooth(pts: [number, number][]): string {
-  let d = `M${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[i + 2] ?? p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    d += ` C${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
-  }
-  return d;
-}
-
-function Sparkline({ series, label }: { series: number[]; label?: string }) {
-  const W = 100;
-  const H = 34;
-  const n = series.length;
+/** Sparkline (mock reports `spark`): a 96 by 30 line with a dot at the end. */
+export function Sparkline({ series, label, color = "var(--ds-av-1-fg)" }: { series: number[]; label?: string; color?: string }) {
+  const w = 96;
+  const h = 30;
   const max = Math.max(...series);
   const min = Math.min(...series);
-  const span = max - min || 1;
-  const pts = series.map(
-    (v, i) => [(i / (n - 1)) * W, H - 2 - ((v - min) / span) * (H - 4)] as [number, number]
-  );
-  const d = smooth(pts);
+  const pts = series.map((v, i) => [(i / (series.length - 1)) * w, h - 3 - ((v - min) / (max - min || 1)) * (h - 6)] as const);
+  const d = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const [lx, ly] = pts[pts.length - 1];
   return (
     <svg
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      className="block h-[34px] w-24 max-w-[55%] shrink overflow-visible"
+      width={w}
+      height={h}
+      viewBox={`-2 0 ${w + 4} ${h}`}
+      className="-mb-0.5 shrink-0"
       role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      <path d={`${d} L${W} ${H} L0 ${H} Z`} fill="var(--ds-ink)" opacity={0.05} />
-      <path
-        d={d}
-        fill="none"
-        stroke="var(--ds-ink)"
-        strokeWidth={1.6}
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <polyline points={d} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} />
+      <circle cx={lx} cy={ly} r={2.6} fill={color} />
     </svg>
   );
 }
