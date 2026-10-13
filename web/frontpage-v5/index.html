@@ -6,7 +6,7 @@
 <title>DraftHR Front Page</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 /* Novera's form, Asset's skin: near-black canvas, graphite panels, white type in Host Grotesk,
    painted landscapes behind real product, one coloured capsule per section label. */
@@ -14,7 +14,7 @@
   --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
   --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
   --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
-  --font:"Host Grotesk",system-ui,sans-serif;
+  --font:"Host Grotesk",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --wrap:1200px; --gut:clamp(16px,4vw,40px);
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -365,6 +365,89 @@ html[data-theme=light] :focus-visible{outline-color:#0C0C0A}
 .theme button{height:36px;padding:0 16px;border-radius:99px;font-size:13.5px;color:rgba(255,255,255,.7)}
 .theme button[aria-pressed=true]{background:#fff;color:#08090A}
 
+
+/* ===== Polish round: sticky menu, editorial questions, sharper pricing, footer wordmark ===== */
+.bar{position:fixed;inset:0 0 auto;z-index:40;transform:translateY(-100%);transition:transform .35s cubic-bezier(.2,.7,.2,1),background .3s;background:rgba(8,10,9,.78);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);box-shadow:0 1px 0 var(--line)}
+.bar.on{transform:none}
+.bar .wrap{max-width:none;height:64px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:0 clamp(16px,4vw,56px)}
+.bar ul{display:flex;gap:30px;list-style:none;font-size:14px}
+.bar ul a{color:var(--soft)}.bar ul a:hover,.bar ul a.cur{color:var(--white)}
+.bar .r{display:flex;align-items:center;gap:18px;font-size:14px}
+.bar .r>a:first-child{color:var(--soft)}
+.bar .btn{height:36px;padding:0 14px;font-size:14px}
+html[data-theme=light] .bar{background:rgba(247,246,242,.82)}
+html[data-theme=light] .bar .btn-white{background:#0C0C0A;color:#fff}
+@media (max-width:1000px){.bar ul{display:none}}
+@media (max-width:600px){.bar .r>a:first-child{display:none}}
+
+/* Questions: a hairline list, larger questions */
+.faq{grid-template-columns:.8fr 1.2fr;gap:clamp(40px,6vw,96px)}
+details,details[open]{background:none;border-radius:0;margin:0;border-top:1px solid var(--line)}
+details:last-of-type{border-bottom:1px solid var(--line)}
+summary{padding:26px 0;font-size:clamp(18px,1.6vw,21px);letter-spacing:-.02em}
+summary:hover{color:var(--white);opacity:.8}
+details p{padding:0 0 28px;font-size:16px;line-height:1.65}
+summary i{flex:0 0 32px;height:32px;border-radius:50%;background:var(--panel);transition:background .2s,transform .3s}
+summary i::before,summary i::after{left:10px;top:15.4px;width:12px}
+details[open] summary i{background:var(--white)}
+details[open] summary i::before,details[open] summary i::after{background:var(--bg)}
+
+/* Pricing: calmer cards, clear hierarchy */
+.plans{gap:20px}
+.plan{padding:32px;border-radius:10px}
+.plan .top h3{font-size:18px;color:var(--soft)}
+.plan .price b{font-size:clamp(48px,4.4vw,60px);font-weight:300}
+.plan .feat{display:none}
+.plan .btn{margin-bottom:28px;height:46px}
+.plan ul{border-top:1px solid var(--line);padding-top:24px;gap:13px;font-size:15px}
+.single{border-radius:10px;padding:24px 32px;background:transparent;box-shadow:inset 0 0 0 1px var(--line-2)}
+.single p{font-size:16px}
+
+/* Footer: big quiet wordmark */
+.mark{font-weight:400;font-size:clamp(84px,25vw,368px);line-height:.78;letter-spacing:-.065em;color:var(--white);opacity:.07;margin-top:56px;user-select:none;white-space:nowrap;overflow:hidden}
+html[data-theme=light] .mark{opacity:.09}
+
+
+/* ===== Style round (Edem's reference): mono labels, pill outline buttons, bold tight headlines, black and white photos, stat cards ===== */
+.tag{font:500 12px/1.2 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--soft);gap:0}
+.tag::before{display:none}
+h1,h2{font-weight:600;letter-spacing:-.058em}
+h1{line-height:1}
+h2{line-height:1.02}
+.ch h3,.who-card h3,.cat h3{font-weight:500}
+.btn{border-radius:99px;font:500 12.5px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;height:44px;padding:0 22px}
+.nav .btn,.bar .btn{height:38px;padding:0 16px;font-size:12px}
+.btn-line,.btn-dark{background:transparent!important;box-shadow:inset 0 0 0 1px var(--white);color:var(--white)}
+.btn-line:hover,.btn-dark:hover{background:var(--white)!important;color:var(--bg)}
+html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line{background:transparent!important}
+html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{background:#fff!important;color:#08090A}
+.plan .btn-dark{box-shadow:inset 0 0 0 1px var(--line-2)}
+.num b,.plan .price b{font-weight:500;letter-spacing:-.06em}
+.ch-n{font:500 12px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase}
+.cat .ct,.who-lead,.plan .top h3,.fgrid h6,.bill .off{font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;font-size:12px}
+.plan .pop{font:500 11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:6px 10px}
+.juris span{font:500 11.5px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;padding:7px 12px}
+/* Black and white photographs below the hero (the hero story keeps its colour) */
+.who-card .ph{filter:grayscale(1) contrast(1.05)}
+.ch-pic,.statement,.close{background-color:#6f6f6f;background-blend-mode:luminosity}
+
+/* Who: stat cards, photo on top */
+.who-top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:48px;flex-wrap:wrap}
+.who-top h2{max-width:15ch;margin-top:20px}
+.who-grid{gap:20px}
+.who-card{aspect-ratio:auto!important;display:flex!important;flex-direction:column;background:var(--panel);border-radius:4px;overflow:hidden}
+.who-card::after{display:none}
+.who-card .ph{position:relative;inset:auto;aspect-ratio:16/10;background-size:cover}
+.who-card .wb{position:static;padding:32px 32px 34px;display:flex;flex-direction:column;flex:1}
+.who-card .stat{font-weight:600;font-size:clamp(52px,5vw,72px);line-height:.95;letter-spacing:-.06em;color:var(--white)}
+.who-card h3{font-size:18px;font-weight:500;letter-spacing:-.01em;margin:14px 0 22px}
+.who-card p{font-size:16px;color:var(--mute);max-width:34ch;flex:1}
+.who-card .go{align-self:flex-start;margin-top:30px;height:40px;padding:0 18px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--white);font:500 12px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;display:inline-flex;align-items:center;transition:background .2s,color .2s}
+.who-card .go svg{display:none}
+.who-card:hover .go{background:var(--white);color:var(--bg)}
+.who-card:hover .ph{transform:none}
+@media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card:last-child{grid-column:auto}}
+
 /* Reveal */
 .js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
 .js .rv.in{opacity:1;transform:none}
@@ -412,6 +495,12 @@ html[data-theme=light] :focus-visible{outline-color:#0C0C0A}
   <div class="r"><a href="#">Log in</a><a class="btn btn-white" href="#">Start a letter</a></div>
 </div></header>
 
+<header class="bar" aria-hidden="true"><div class="wrap">
+  <a class="logo" href="#top" tabindex="-1"><img src="img/logo-mark.png" alt="">DraftHR</a>
+  <ul><li><a href="#how" tabindex="-1">How it works</a></li><li><a href="#letters" tabindex="-1">Letters</a></li><li><a href="#pricing" tabindex="-1">Pricing</a></li><li><a href="#faq" tabindex="-1">Questions</a></li></ul>
+  <div class="r"><a href="#" tabindex="-1">Log in</a><a class="btn btn-white" href="#" tabindex="-1">Start a letter</a></div>
+</div></header>
+
 <main id="top">
   <!-- 1. Top of page -->
   <section class="hero" style="padding:0" data-hero="0">
@@ -426,11 +515,11 @@ html[data-theme=light] :focus-visible{outline-color:#0C0C0A}
   </section>
 
   <section class="who"><div class="wrap">
-    <p class="who-lead rv">Built for the people who put it in writing</p>
+    <div class="who-top"><div><span class="tag rv">Built for the people who put it in writing</span><h2 class="rv">One careful way to write the letters that matter.</h2></div><a class="btn btn-line rv" href="#pricing">See pricing</a></div>
     <div class="who-grid">
-      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/story-1-night.jpg);background-position:72% 40%"></div><div class="wb"><h3>Employees</h3><p>Raise a concern clearly, in the structure a fair process expects. From £9.99 a letter.</p><span class="go">Write your letter <svg viewBox="0 0 14 14"><path d="M2 7h10M8 3l4 4-4 4"/></svg></span></div></a>
-      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/hr-team.jpg);background-position:66% 40%"></div><div class="wb"><h3>HR teams</h3><p>Every manager starts from the same careful structure, reviewed and approved before it goes out.</p><span class="go">For HR teams <svg viewBox="0 0 14 14"><path d="M2 7h10M8 3l4 4-4 4"/></svg></span></div></a>
-      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/hr-consultant.jpg);background-position:46% 40%"></div><div class="wb"><h3>HR consultants</h3><p>Draft for clients in the right structure for the UK or the US, with a record they can rely on.</p><span class="go">For consultants <svg viewBox="0 0 14 14"><path d="M2 7h10M8 3l4 4-4 4"/></svg></span></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/story-1-night.jpg);background-position:72% 35%"></div><div class="wb"><div class="stat">£9.99</div><h3>a letter for employees, no subscription</h3><p>Raise a concern clearly, in the structure a fair process expects.</p><span class="go">Write your letter</span></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/hr-team.jpg);background-position:55% 30%"></div><div class="wb"><div class="stat">4 steps</div><h3>for HR teams, from draft to sent</h3><p>Every manager starts from the same careful structure, reviewed and approved before it goes out.</p><span class="go">For HR teams</span></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/hr-consultant.jpg);background-position:46% 30%"></div><div class="wb"><div class="stat">35</div><h3>letters for consultants, UK and US</h3><p>Draft for clients in the right structure, with a record they can rely on.</p><span class="go">For consultants</span></div></a>
     </div>
   </div></section>
 
@@ -573,6 +662,7 @@ html[data-theme=light] :focus-visible{outline-color:#0C0C0A}
     <div><h6>Legal</h6><ul><li><a href="#">Terms</a></li><li><a href="#">Privacy</a></li></ul></div>
   </div>
   <div class="legal"><span>DraftHR drafts, you decide. Not legal advice.</span><span>© 2026 DraftHR</span></div>
+  <div class="mark" aria-hidden="true">DraftHR</div>
 </div></footer>
 
 <div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
@@ -597,6 +687,18 @@ document.documentElement.classList.add('js');
     var y=sw.getAttribute('aria-checked')!=='true';sw.setAttribute('aria-checked',y);
     document.querySelectorAll('[data-m][data-y]').forEach(function(el){el.textContent=el.dataset[y?'y':'m']});
   });
+})();
+
+// Sticky menu: appears once the hero has scrolled away; marks the current section
+(function(){
+  var bar=document.querySelector('.bar'),hero=document.querySelector('.hero'),links=bar.querySelectorAll('ul a');
+  function on(v){bar.classList.toggle('on',v);bar.setAttribute('aria-hidden',!v);bar.querySelectorAll('a').forEach(function(a){a.tabIndex=v?0:-1})}
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){on(!es[0].isIntersecting)},{rootMargin:'-80px 0px 0px 0px'}).observe(hero);
+    var secs=['how','letters','pricing','faq'].map(function(id){return document.getElementById(id)});
+    var so=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){links.forEach(function(a){a.classList.toggle('cur',a.getAttribute('href')==='#'+e.target.id)})}})},{rootMargin:'-45% 0px -50% 0px'});
+    secs.forEach(function(s){s&&so.observe(s)});
+  }
 })();
 
 // Hero sequence: one letter's journey, night to blue hour. Advances on its own, pauses on hover.
