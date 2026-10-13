@@ -85,7 +85,7 @@ applies:
 2. `not_applicable` when `when` is false.
 3. `blocked` when any `blockedIf` holds (the first reason is shown).
 4. `waiting` when a step in `after` is not drafted or sent (steps in `after`
-   that are `not_applicable` are ignored).
+   that are `not_applicable`, or left out for this lens, are ignored).
 5. `needs_facts` when a key in `needs` is not known.
 6. Otherwise ready: the first ready step is `next`, later ready steps are
    `waiting`.
