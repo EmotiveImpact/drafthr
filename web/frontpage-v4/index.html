@@ -75,8 +75,9 @@ section{padding:clamp(96px,11vw,150px) 0}
 .hero{transition:background-image .6s ease}
 .hero-pick{position:absolute;right:clamp(16px,4vw,56px);bottom:clamp(24px,4vh,40px);z-index:3;display:flex;gap:4px;background:rgba(8,10,9,.6);backdrop-filter:blur(10px);border:1px solid var(--line-2);border-radius:99px;padding:4px}
 .hero-pick button{height:32px;min-width:32px;padding:0 12px;border-radius:99px;font-size:13px;color:var(--soft)}
+.hero-pick .lbl{font-size:12.5px;color:var(--mute);padding:0 8px 0 10px;align-self:center}
 .hero-pick button[aria-pressed=true]{background:var(--white);color:#08090A}
-@media (max-width:600px){.hero-pick{left:16px;right:16px;bottom:16px;justify-content:center}.hero .wrap{padding-bottom:96px}}
+@media (max-width:600px){.hero-pick{left:16px;right:16px;bottom:16px;justify-content:space-between}.hero-pick button{min-width:26px;padding:0 6px}.hero-pick .lbl{display:none}.hero .wrap{padding-bottom:96px}}
 
 /* 2. Who it is for (where Novera puts its logo strip) */
 .for{padding:24px 0 0}
@@ -267,7 +268,7 @@ footer{border-top:1px solid var(--line);padding:64px 0 40px;margin-top:clamp(96p
       <div class="acts rv"><a class="btn btn-white" href="#">Start a letter</a><a class="btn btn-line" href="#how">See how it works</a></div>
       <p class="note rv">From £9.99 a letter. DraftHR drafts, you decide. Not legal advice.</p>
     </div>
-    <div class="hero-pick" role="group" aria-label="Hero options"></div>
+    <div class="hero-pick" role="group" aria-label="Hero options"><span class="lbl">Hero</span></div>
   </section>
 
   <div class="for"><div class="wrap">
@@ -459,7 +460,13 @@ document.documentElement.classList.add('js');
   var H=[
     {img:'img/hero-dusk.jpg',pos:'70% 50%',tag:'AI drafting for UK and US HR letters',h:'HR letters that stand up to <em>scrutiny.</em>',p:'For HR teams, and for employees raising a concern. DraftHR writes each letter in the right structure, and you approve every word before it is sent.'},
     {img:'img/hero-letter.jpg',pos:'60% 38%',tag:'For the letters that matter',h:'Some letters are hard to write. <em>Write them well.</em>',p:'A grievance, a warning, a reply to an offer. DraftHR helps you set it out clearly and fairly, in the right structure for the UK or the US.'},
-    {img:'img/hero-glass.jpg',pos:'60% 40%',tag:'Fair to both sides',h:'Every letter will be read <em>twice.</em>',p:'Once when it arrives, and again if things go further. DraftHR drafts it with the care a manager, a tribunal or a court would expect, and nothing is sent until you approve it.'}
+    {img:'img/hero-glass.jpg',pos:'60% 40%',tag:'Fair to both sides',h:'Every letter will be read <em>twice.</em>',p:'Once when it arrives, and again if things go further. DraftHR drafts it with the care a manager, a tribunal or a court would expect, and nothing is sent until you approve it.'},
+    {img:'img/h-sign.jpg',pos:'80% 50%',tag:'You sign it, so you decide',h:'Your name goes at the bottom. <em>Make every line count.</em>',p:'DraftHR drafts each section in the right structure for the UK or the US. You read it, change it and approve every word before it is sent.'},
+    {img:'img/h-employee.jpg',pos:'80% 40%',tag:'For employees',h:'Raising a concern? <em>Put it in writing, clearly.</em>',p:'Set out what happened, how it affected you and what you are asking for, in the structure a fair process expects. A single letter from £9.99.'},
+    {img:'img/h-manager.jpg',pos:'70% 45%',tag:'For HR teams',h:'The hard conversation starts with <em>the right letter.</em>',p:'Warnings, outcomes, replies to grievances. Every manager starts from the same careful structure, reviewed and approved before it goes out.'},
+    {img:'img/h-two-sides.jpg',pos:'75% 45%',tag:'Fair to both sides',h:'Fair to both sides of <em>the table.</em>',p:'Clear facts, a calm tone and the right process, whichever side you are on. DraftHR drafts it, you decide what is sent.'},
+    {img:'img/h-envelope.jpg',pos:'100% 60%',tag:'Kept on record',h:'Once it is sent, it is <em>on the record.</em>',p:'So get it right first. Draft, review and approve in one place, and keep the letter, the replies and the deadlines together.'},
+    {img:'img/h-corridor.jpg',pos:'78% 40%',tag:'For HR consultants',h:'Walk in <em>prepared.</em>',p:'Draft for clients in the right structure, have it checked by an expert when it matters, and bring a clear record to every meeting.'}
   ];
   var hero=document.querySelector('.hero'),pick=document.querySelector('.hero-pick');
   window.DRAFTHR_HEROES=H;
@@ -470,7 +477,7 @@ document.documentElement.classList.add('js');
     hero.querySelector('[data-k=p]').textContent=d.p;
     pick.querySelectorAll('button').forEach(function(b,j){b.setAttribute('aria-pressed',j===i)});
   }
-  H.forEach(function(_,i){var b=document.createElement('button');b.textContent='Hero '+(i+1);b.addEventListener('click',function(){show(i)});pick.appendChild(b)});
+  H.forEach(function(_,i){var b=document.createElement('button');b.textContent=(i+1);b.addEventListener('click',function(){show(i)});pick.appendChild(b)});
   var q=(location.hash.match(/hero=(\d)/)||[])[1];show(q?Math.min(+q-1,H.length-1):0);
 })();
 </script>
