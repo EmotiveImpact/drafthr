@@ -114,7 +114,12 @@ export function StepRail({
       </nav>
 
       {/* Phone and tablet strip */}
-      <nav aria-label="Letter steps" className="rounded-[14px] bg-[var(--ds-surface-2)] px-4 py-3 lg:hidden">
+      {/* On the grey fill the subtle grey is below 4.5:1, so small grey text
+       * inside the strip uses the muted grey instead. */}
+      <nav
+        aria-label="Letter steps"
+        className="rounded-[14px] bg-[var(--ds-surface-2)] px-4 py-3 [--ds-subtle:var(--ds-muted)] lg:hidden"
+      >
         {header}
         <button
           type="button"

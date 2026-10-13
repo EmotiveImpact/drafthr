@@ -42,7 +42,6 @@ createRoot(document.getElementById("root")!).render(
         <Toaster
           position="bottom-right"
           theme="light"
-          closeButton
           icons={{ success: <CircleCheck className="size-[18px] text-[var(--ds-green-line)]" strokeWidth={1.8} /> }}
           toastOptions={{
             classNames: {
@@ -53,8 +52,6 @@ createRoot(document.getElementById("root")!).render(
               actionButton:
                 "bg-transparent! px-1! text-[13.5px]! font-medium! text-[var(--ds-on-accent)]! underline! underline-offset-[3px]!",
               cancelButton: "bg-transparent! text-[color-mix(in_srgb,var(--ds-on-accent)_70%,transparent)]!",
-              closeButton:
-                "border-0! bg-[color-mix(in_srgb,var(--ds-on-accent)_14%,var(--ds-ink))]! text-[var(--ds-on-accent)]!",
             },
           }}
         />

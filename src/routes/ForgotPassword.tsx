@@ -57,7 +57,7 @@ export function ForgotPassword() {
         // 200 even when WorkOS errors. The only cases that legitimately
         // 4xx are bad-shape input (invalid email) or rate-limit.
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Could not send reset link (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Couldn't send the reset link. Try again in a minute.");
       }
       setStage("sent");
     } catch (err) {

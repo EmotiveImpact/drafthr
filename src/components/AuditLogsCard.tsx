@@ -18,7 +18,7 @@ import { ExternalLink, ScrollText, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Pill } from "@/components/ds";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/wizard/kit";
+import { FadeIn, Spinner } from "@/components/wizard/kit";
 import { DefRow, SettingsCard } from "@/routes/settings/parts";
 import { useAuth } from "@/lib/auth";
 
@@ -36,6 +36,9 @@ export function AuditLogsCard() {
   const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? "");
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(false);
+  // False until the first status answer (or failure) comes back: until then
+  // the card shows grey placeholders, not "Not paired" or "Never".
+  const [loaded, setLoaded] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
 
@@ -57,6 +60,7 @@ export function AuditLogsCard() {
       setStatus(null);
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [isAdmin]);
 
@@ -100,7 +104,9 @@ export function AuditLogsCard() {
         toast.error(json.error ?? "Failed to send test event");
         return;
       }
-      toast.success(json.message ?? "Test event sent. Check your SIEM.");
+      toast.success("Test event sent", {
+        description: json.message ?? "Check your SIEM for the DraftHR test event.",
+      });
       void refresh();
     } catch (err) {
       console.warn("[audit-logs] test event failed", err);
@@ -120,8 +126,8 @@ export function AuditLogsCard() {
       title={
         <span className="flex flex-wrap items-center gap-2">
           Audit logs (WorkOS)
-          {loading ? (
-            <Pill tone="grey">Loading…</Pill>
+          {!loaded ? (
+            <Placeholder className="h-[22px] w-[132px] rounded-full" label="Loading audit log status" />
           ) : streaming ? (
             <Pill tone="green">Streaming to WorkOS</Pill>
           ) : status?.configured ? (
@@ -133,23 +139,36 @@ export function AuditLogsCard() {
       }
       description="Every audit event written to the local tamper-evident chain is also mirrored to WorkOS Audit Logs, so your SOC team can subscribe a SIEM feed. The local chain remains the source of truth."
     >
-      <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)]">
-        <DefRow label="WorkOS organisation">
-          {status?.workosOrgId ? (
-            <code className="ds-mono text-[12.5px]">{status.workosOrgId}</code>
-          ) : (
-            "Not paired, contact support"
-          )}
-        </DefRow>
-        <DefRow label="Last successful mirror">{formatLastSent(status?.lastSentAt ?? null)}</DefRow>
-      </dl>
+      {!loaded ? (
+        <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)]">
+          <DefRow label="WorkOS organisation">
+            <Placeholder className="h-3 w-[120px] rounded-full" />
+          </DefRow>
+          <DefRow label="Last successful mirror">
+            <Placeholder className="h-3 w-[96px] rounded-full" />
+          </DefRow>
+        </dl>
+      ) : (
+        <FadeIn>
+          <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)]">
+            <DefRow label="WorkOS organisation">
+              {status?.workosOrgId ? (
+                <code className="ds-mono text-[12.5px]">{status.workosOrgId}</code>
+              ) : (
+                "Not paired, contact support"
+              )}
+            </DefRow>
+            <DefRow label="Last successful mirror">{formatLastSent(status?.lastSentAt ?? null)}</DefRow>
+          </dl>
+        </FadeIn>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="outline" disabled={!status?.configured || portalLoading} onClick={onOpenPortal}>
+        <Button variant="outline" disabled={loading || !status?.configured || portalLoading} onClick={onOpenPortal}>
           {portalLoading ? <Spinner /> : <ExternalLink className="size-4" />}
           {portalLoading ? "Opening…" : "Open WorkOS Admin Portal"}
         </Button>
-        <Button variant="outline" disabled={!streaming || testLoading} onClick={onSendTest}>
+        <Button variant="outline" disabled={loading || !streaming || testLoading} onClick={onSendTest}>
           {testLoading ? <Spinner /> : <Send className="size-4" />}
           {testLoading ? "Sending…" : "Send test event"}
         </Button>
@@ -170,4 +189,16 @@ export function formatLastSent(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Soft grey placeholder block (kit 09 "Loading"). */
+function Placeholder({ className, label }: { className?: string; label?: string }) {
+  return (
+    <span
+      role={label ? "status" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      className={`inline-block animate-pulse bg-[var(--ds-surface-2)] align-middle motion-reduce:animate-none ${className ?? ""}`}
+    />
+  );
 }

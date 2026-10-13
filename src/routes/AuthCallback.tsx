@@ -44,7 +44,7 @@ export function AuthCallback() {
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}) as { error?: string });
-          throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
+          throw new Error(data.error ?? "Sign-in didn't finish. Go back and try again.");
         }
         // Force a fresh session fetch (don't coalesce onto a stale background
         // refresh — see AuthProvider).

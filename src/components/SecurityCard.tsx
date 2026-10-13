@@ -53,7 +53,7 @@ export function SecurityCard() {
       // user knows it didn't go.
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        toast.error(data.error ?? `Could not send reset link (HTTP ${res.status})`);
+        toast.error(data.error ?? "Couldn't send the reset link. Try again in a minute.");
         return;
       }
       setLastSentAt(new Date());

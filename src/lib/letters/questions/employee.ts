@@ -108,7 +108,7 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
     id: "protected",
     title: "Protected status",
     description:
-      "Discrimination law has no minimum service requirement and no compensation cap. Tell us if any of these apply — it changes how the letter is framed.",
+      "Discrimination law has no minimum service requirement and no compensation cap. Tell us if any of these apply, as it changes how the letter is framed.",
     questions: [
       {
         id: "protectedCharacteristics",
@@ -182,8 +182,8 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         {
           id: "incidents",
           type: "repeater",
-          label: "Incidents — chronological list",
-          help: "Oldest first, most recent last. Specific dates, named people, witnesses. The AI weaves these into a tribunal-grade chronology.",
+          label: "Incidents, in date order",
+          help: "Oldest first, most recent last. Specific dates, named people, witnesses. DraftHR weaves these into a tribunal-grade chronology.",
           required: true,
           repeater: {
             itemLabel: "Incident",
@@ -284,8 +284,8 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         {
           id: "incidents",
           type: "repeater",
-          label: "Incidents — chronological",
-          help: "The AI weaves each incident into a tribunal-grade narrative with causation linking the facts to the resignation decision.",
+          label: "Incidents, in date order",
+          help: "DraftHR weaves each incident into a tribunal-grade narrative with causation linking the facts to the resignation decision.",
           required: true,
           repeater: {
             itemLabel: "Incident",
@@ -331,8 +331,8 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         {
           id: "incidents",
           type: "repeater",
-          label: "Incidents — chronological list",
-          help: "List each incident the AI will weave into a tribunal-grade chronology. Include the 'last straw' as the final entry. Dates, named individuals, witnesses.",
+          label: "Incidents, in date order",
+          help: "List each incident DraftHR will weave into a tribunal-grade chronology. Include the 'last straw' as the final entry. Dates, named individuals, witnesses.",
           required: true,
           repeater: {
             itemLabel: "Incident",
@@ -344,7 +344,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
               { id: "description", type: "textarea", label: "What happened? (factual, no intensifiers)", required: true },
               { id: "individuals", type: "text", label: "Person(s) involved (full names)", placeholder: "e.g. Jane Smith, HR Director" },
               { id: "witnesses", type: "text", label: "Witnesses (names, if any)" },
-              { id: "raisedAt", type: "text", label: "If raised informally / via grievance — when, to whom?" },
+              { id: "raisedAt", type: "text", label: "If raised informally or by grievance, when and to whom?" },
               { id: "employerResponse", type: "textarea", label: "Employer's response (or lack of one)" },
             ],
           },
@@ -442,10 +442,10 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
       title: "Grounds of appeal",
       description: "We use the canonical four grounds. Provide what applies.",
       questions: [
-        { id: "groundProcedural", type: "textarea", label: "Procedural unfairness — what process was not followed?" },
-        { id: "groundFactual", type: "textarea", label: "Factual error — what facts were wrong or missing?" },
-        { id: "groundSeverity", type: "textarea", label: "Severity — why was the sanction disproportionate?" },
-        { id: "groundNewEvidence", type: "textarea", label: "New evidence — what's available now that wasn't before?" },
+        { id: "groundProcedural", type: "textarea", label: "Procedural unfairness: what process was not followed?" },
+        { id: "groundFactual", type: "textarea", label: "Factual error: what facts were wrong or missing?" },
+        { id: "groundSeverity", type: "textarea", label: "Severity: why was the sanction disproportionate?" },
+        { id: "groundNewEvidence", type: "textarea", label: "New evidence: what is available now that was not before?" },
         { id: "outcomeSought", type: "textarea", label: "Outcome sought (overturn / reduce sanction / rehearing)", required: true },
       ],
     },
@@ -476,8 +476,8 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         {
           id: "disclosedFacts",
           type: "repeater",
-          label: "Disclosed facts — chronological",
-          help: "PIDA protects INFORMATION, not allegations. Each fact: date, what specifically happened, how you know. The AI uses this as the spine of the disclosure — be precise.",
+          label: "Disclosed facts, in date order",
+          help: "PIDA protects INFORMATION, not allegations. Each fact: date, what specifically happened, how you know. DraftHR uses this as the spine of the disclosure, so be precise.",
           required: true,
           repeater: {
             itemLabel: "Fact",
@@ -511,7 +511,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
           label: "Who are you disclosing to?",
           options: [
             { value: "employer", label: "Your employer (s.43C)" },
-            { value: "prescribed", label: "A prescribed person (s.43F) — e.g. HSE, FCA, ICO" },
+            { value: "prescribed", label: "A prescribed person (s.43F), for example HSE, FCA or ICO" },
             { value: "legal", label: "A legal adviser (s.43D)" },
             { value: "minister", label: "Government minister (s.43E)" },
           ],
@@ -531,8 +531,8 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
           label: "Do you want to disclose a specific impairment / diagnosis?",
           help: "You don't have to. Many employees disclose only the barrier and the adjustment, not the underlying condition.",
           options: [
-            { value: "no", label: "No — describe the barrier only" },
-            { value: "yes", label: "Yes — disclose the impairment" },
+            { value: "no", label: "No, describe the barrier only" },
+            { value: "yes", label: "Yes, disclose the impairment" },
           ],
         },
         { id: "impairment", type: "text", label: "Impairment to disclose", required: true, showIf: (a) => a.discloseDiagnosis === "yes" },
@@ -540,7 +540,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
           id: "barriersAndAdjustments",
           type: "repeater",
           label: "Barriers and the adjustments you're requesting",
-          help: "One row per barrier. Pair each barrier with the specific adjustment that addresses it — the AI maps them directly into the letter so the employer sees a clean ask.",
+          help: "One row per barrier. Pair each barrier with the specific adjustment that addresses it. DraftHR maps them directly into the letter so the employer sees a clean ask.",
           required: true,
           repeater: {
             itemLabel: "Barrier",
@@ -555,9 +555,9 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
                 type: "select",
                 label: "Priority",
                 options: [
-                  { value: "critical", label: "Critical — can't do the job without this" },
-                  { value: "important", label: "Important — significant impact" },
-                  { value: "helpful", label: "Helpful — meaningful improvement" },
+                  { value: "critical", label: "Critical: can't do the job without this" },
+                  { value: "important", label: "Important: significant impact" },
+                  { value: "helpful", label: "Helpful: meaningful improvement" },
                 ],
               },
             ],
@@ -584,7 +584,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
           id: "payItems",
           type: "repeater",
           label: "Disputed pay items",
-          help: "One row per claim type (wages, commission, holiday pay, expenses, etc.). Real disputes are usually itemised — the AI lays each out separately so the employer can verify each line.",
+          help: "One row per claim type (wages, commission, holiday pay, expenses, etc.). Real disputes are usually itemised. DraftHR lays each out separately so the employer can verify each line.",
           required: true,
           repeater: {
             itemLabel: "Item",
@@ -612,7 +612,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
               { id: "period", type: "text", label: "Period it covers", placeholder: "e.g. 1 Jan – 31 Mar 2026", required: true },
               { id: "amountDue", type: "currency", label: "Amount due", required: true },
               { id: "amountPaid", type: "currency", label: "Amount paid (if part-paid)" },
-              { id: "calculation", type: "textarea", label: "Calculation / evidence", placeholder: "How you arrived at the figure — rates, hours, dates, refs", required: true },
+              { id: "calculation", type: "textarea", label: "Calculation / evidence", placeholder: "How you arrived at the figure: rates, hours, dates, references", required: true },
             ],
           },
         },
@@ -631,8 +631,8 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
         {
           id: "pipObjectives",
           type: "repeater",
-          label: "PIP objectives — one row per stated objective",
-          help: "Quote each objective verbatim from the PIP, then write your factual response and flag any ambiguity. The AI threads each objective into the letter with your reply so nothing gets compressed.",
+          label: "PIP objectives, one row per stated objective",
+          help: "Quote each objective verbatim from the PIP, then write your factual response and flag any ambiguity. DraftHR threads each objective into the letter with your reply so nothing gets compressed.",
           required: true,
           repeater: {
             itemLabel: "Objective",
@@ -660,7 +660,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
           id: "incidents",
           type: "repeater",
           label: "Incidents amounting to fundamental breach",
-          help: "Chronological list. Dates and named individuals. This drives the AI's recital — be specific.",
+          help: "Chronological list. Dates and named individuals. This drives the letter's account, so be specific.",
           required: true,
           repeater: {
             itemLabel: "Incident",
@@ -768,7 +768,7 @@ export const EMPLOYEE_LETTER_QUESTIONS: Partial<Record<EmployeeLetterTypeId, Que
           id: "disputedPassages",
           type: "repeater",
           label: "Disputed passages from the reference",
-          help: "One row per inaccurate passage. Quote verbatim, then state what is actually correct and the evidence for it. The AI pairs each quote with its correction.",
+          help: "One row per inaccurate passage. Quote verbatim, then state what is actually correct and the evidence for it. DraftHR pairs each quote with its correction.",
           required: true,
           repeater: {
             itemLabel: "Passage",

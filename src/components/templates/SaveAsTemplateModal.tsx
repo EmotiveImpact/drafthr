@@ -53,7 +53,9 @@ export function SaveAsTemplateModal({
       sectionHtml,
       answers: draft.answers,
     });
-    toast.success(`Saved "${trimmed}" to Your templates`);
+    toast.success(`Saved "${trimmed}" to Your templates`, {
+      description: "Find it under Templates, Your templates, to start a new letter from it.",
+    });
     setName("");
     setDescription("");
     onOpenChange(false);

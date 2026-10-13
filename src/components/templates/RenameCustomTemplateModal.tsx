@@ -37,7 +37,9 @@ export function RenameCustomTemplateModal({
       name: trimmed,
       description: description.trim() || undefined,
     });
-    toast.success("Template saved");
+    toast.success("Template saved", {
+      description: `It now shows as "${trimmed}" in Your templates.`,
+    });
     onOpenChange(false);
   };
 

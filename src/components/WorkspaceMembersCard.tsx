@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Copy, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -134,7 +134,12 @@ export function WorkspaceMembersCard({
       className="min-w-0 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-5 py-[14px] sm:px-[22px] sm:py-4"
     >
       <h4 className="m-0 mb-1 flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--ds-muted)]">
-        Members <span className="ds-mono text-[var(--ds-subtle)]">{members.length}</span>
+        Members{" "}
+        {loading && !loaded ? (
+          <span aria-hidden className="inline-block h-2.5 w-4 animate-pulse rounded-full bg-[var(--ds-surface-2)] motion-reduce:animate-none" />
+        ) : (
+          <span className="ds-mono text-[var(--ds-subtle)]">{members.length}</span>
+        )}
       </h4>
       {loading && !loaded ? (
         <LoadingRows rows={3} className="py-3" label="Loading members" />
@@ -207,7 +212,9 @@ function MemberRow({
         body: JSON.stringify({ userId: member.userId, role }),
       });
       if (res.ok) {
-        toast.success(`Role updated to ${ROLE_LABELS[role] ?? role}`);
+        toast.success(`Role updated to ${ROLE_LABELS[role] ?? role}`, {
+          description: `${name}'s access changes straight away.`,
+        });
         onChanged();
       } else {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -230,7 +237,9 @@ function MemberRow({
         body: JSON.stringify({ userId: member.userId }),
       });
       if (res.ok) {
-        toast.success("Member removed");
+        toast.success("Member removed", {
+          description: `${name} no longer has access to this workspace. Their letters stay here.`,
+        });
         setConfirming(false);
         onChanged();
       } else {
@@ -315,7 +324,9 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
     const link = `${window.location.origin}/join/${invite.inviteCode}`;
     try {
       await navigator.clipboard.writeText(link);
-      toast.success("Invite link copied");
+      toast.success("Invite link copied", {
+        description: `Send it to ${invite.email}. It works until the invite expires.`,
+      });
     } catch {
       toast.error("Couldn't copy. Copy it manually: " + link);
     }
@@ -331,7 +342,9 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
         body: JSON.stringify({ inviteId: invite.id }),
       });
       if (res.ok) {
-        toast.success("Invite revoked");
+        toast.success("Invite revoked", {
+          description: `The link for ${invite.email} no longer works.`,
+        });
         setConfirming(false);
         onChanged();
       } else {
@@ -357,7 +370,8 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
         </div>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        <Pill tone="amber">{ROLE_LABELS[invite.role] ?? invite.role}</Pill>
+        {/* Waiting on the invitee, not on you: lilac (someone else has it). */}
+        <Pill tone="lilac">{ROLE_LABELS[invite.role] ?? invite.role}</Pill>
         <Button variant="outline" size="sm" onClick={() => void onCopy()}>
           <Copy className="size-3.5" />
           Copy link
@@ -395,11 +409,13 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
 
   const onSubmit = async () => {
     setError(null);
-    if (!email.trim() || !email.includes("@")) {
+    if (!EMAIL_RE.test(email.trim())) {
       setError("Valid email required");
+      emailRef.current?.focus();
       return;
     }
     setBusy(true);
@@ -443,7 +459,9 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
     if (!inviteLink) return;
     try {
       await navigator.clipboard.writeText(inviteLink);
-      toast.success("Invite link copied");
+      toast.success("Invite link copied", {
+        description: "Paste it into a message to your teammate. It expires in 7 days.",
+      });
     } catch {
       /* the link is visible in the dialog so they can copy by hand */
     }
@@ -477,6 +495,7 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
           </>
         ) : (
           <form
+            noValidate
             className="flex flex-col gap-4"
             onSubmit={(e) => {
               e.preventDefault();
@@ -485,13 +504,18 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
           >
             <Field label="Email" htmlFor="invite-email" error={error ?? undefined}>
               <Input
+                ref={emailRef}
                 id="invite-email"
                 type="email"
                 placeholder="teammate@company.co.uk"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (error) setError(null);
+                }}
                 disabled={busy}
                 aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "invite-email-error" : undefined}
                 autoFocus
               />
             </Field>
@@ -513,3 +537,6 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
     </Dialog>
   );
 }
+
+/** One @ and a dot in the domain; the server does the real check. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

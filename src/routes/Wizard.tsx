@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { toast } from "sonner";
 import { ArrowLeft, FileCheck, MoreHorizontal, Pencil, RotateCcw, Sparkles, UserX } from "lucide-react";
 import {
@@ -80,6 +80,34 @@ function filled(v: unknown): boolean {
 
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
+}
+
+/** True when a list item has something in it. */
+function itemHasValue(item: Record<string, unknown>): boolean {
+  return Object.values(item).some(filled);
+}
+
+/** A list question (repeater) with an item that was started but has a
+ * required field still empty. */
+function hasHalfFilledItem(q: Question, value: unknown): boolean {
+  if (q.type !== "repeater" || !Array.isArray(value)) return false;
+  const required = (q.repeater?.fields ?? []).filter((f) => f.required);
+  return (value as Record<string, unknown>[]).some(
+    (item) => itemHasValue(item) && !required.every((f) => isQuestionAnswered(f, item[f.id]))
+  );
+}
+
+/** The answers without untouched blank list items (an optional "Concern 2"
+ * nobody filled in), so the draft never gets an empty numbered finding. */
+function withoutBlankItems(steps: QuestionStep[], answers: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...answers };
+  for (const q of steps.flatMap((st) => st.questions)) {
+    const v = out[q.id];
+    if (q.type === "repeater" && Array.isArray(v)) {
+      out[q.id] = (v as Record<string, unknown>[]).filter(itemHasValue);
+    }
+  }
+  return out;
 }
 
 /** Short summary of a finished step for the step list. */
@@ -180,7 +208,8 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.autoFill]);
 
-  // Bring the step title into view when the step changes.
+  // Each step opens at the top of the page, with the band and the step
+  // title in view (not at the scroll position of the step before).
   const formTop = useRef<HTMLDivElement>(null);
   const firstRender = useRef(true);
   useEffect(() => {
@@ -189,15 +218,28 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
       return;
     }
     const el = formTop.current;
-    if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+    if (!el) return;
+    let scroller: HTMLElement | null = el.parentElement;
+    while (scroller && scroller !== document.body) {
+      const oy = getComputedStyle(scroller).overflowY;
+      if ((oy === "auto" || oy === "scroll") && scroller.scrollHeight > scroller.clientHeight) break;
+      scroller = scroller.parentElement;
+    }
+    const behavior: ScrollBehavior = reduceMotion ? "auto" : "smooth";
+    if (scroller && scroller !== document.body) {
+      if (scroller.scrollTop > 0) scroller.scrollTo({ top: 0, behavior });
+    } else if (window.scrollY > 0) {
+      window.scrollTo({ top: 0, behavior });
+    }
   }, [stepIndex, triageState, reduceMotion]);
 
   const step = steps[stepIndex];
   const isLast = stepIndex === steps.length - 1;
   const visibleQuestions = step.questions.filter((q) => isQuestionVisible(q, answers));
-  const requiredAnswered = visibleQuestions
-    .filter((q) => q.required)
-    .every((q) => isQuestionAnswered(q, answers[q.id]));
+  const requiredAnswered =
+    visibleQuestions.filter((q) => q.required).every((q) => isQuestionAnswered(q, answers[q.id])) &&
+    // A list item that was started must be finished (or removed).
+    visibleQuestions.every((q) => !hasHalfFilledItem(q, answers[q.id]));
 
   const jurisdiction: Jurisdiction = answers.jurisdiction === "US" ? "US" : answers.jurisdiction === "UK" ? "UK" : profile.defaults.jurisdiction;
   const law = useMemo(
@@ -218,7 +260,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
         if (Object.keys(updates.employer).length) patchEmployer(updates.employer);
         if (Object.keys(updates.defaults).length) patchDefaults(updates.defaults);
       }
-      const id = createDraft(meta.id, answers, mode);
+      const id = createDraft(meta.id, withoutBlankItems(steps, answers), mode);
       clearSavedWizard(mode, meta.id);
       nav(`/editor/${id}`);
       return;
@@ -226,19 +268,28 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
     setStepIndex((i) => i + 1);
   };
 
-  const onBack = () => setStepIndex((i) => Math.max(0, i - 1));
-
   const leave = () => {
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
     if (idx > 0) nav(-1);
     else nav(`${prefix}/new`);
   };
 
+  // Back is always there (as in the mock): a step back, or from the first
+  // question back to the quick check when the letter has one, otherwise to
+  // the template library (the "Letter type" step).
+  const onBack = () => {
+    if (stepIndex > 0) setStepIndex((i) => Math.max(0, i - 1));
+    else if (triageApplies) setTriageState("now");
+    else leave();
+  };
+
   const onSaveDraft = () => {
     const ok = saveWizard(mode, meta.id, { answers, stepIndex, triage: triageResult });
     if (ok) {
       setRestoredAt(null);
-      toast.success("Saved. Pick up where you left off from Templates.");
+      toast.success("Answers saved", {
+        description: "Pick up where you left off from Templates on this device.",
+      });
     } else {
       toast.error("Couldn't save on this device. Your browser storage may be full.");
     }
@@ -301,7 +352,8 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
     fillLine = (
       <>
         {n} {n === 1 ? "answer" : "answers"} filled from {pick.first}'s record
-        {profile.autoFill && prefillCount > 0 ? " and your profile" : ""}
+        {/* Short, so the line with Dismiss stays on one row (as the mock). */}
+        {profile.autoFill && prefillCount > 0 ? " and yours" : ""}
       </>
     );
   } else if (profile.autoFill && prefillCount > 0) {
@@ -319,6 +371,10 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
           For <b>{employeeName}</b>
           {jobTitle ? `, ${jobTitle.toLowerCase()}` : ""}
         </>
+      ) : fillLine && lineVisible ? (
+        // Shorter intro when the fill line shares the row, so the line and
+        // its Dismiss and options stay on one line (as the mock).
+        "Answer a few questions and DraftHR drafts it."
       ) : (
         "Answer a few short questions and DraftHR writes the first draft for you to edit."
       )}
@@ -326,7 +382,9 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
         {risk.label}
       </Pill>
       {fillLine && lineVisible && (
-        <span data-testid="prefill-line" className="inline">
+        // One unit: if the row is too narrow the whole fill line moves to
+        // the next line together, never leaving Dismiss or the menu behind.
+        <span data-testid="prefill-line" className="inline-block whitespace-nowrap">
           <span aria-hidden className="mx-2.5 text-[var(--ds-faint)]">
             |
           </span>
@@ -336,7 +394,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
             type="button"
             onClick={() => setLineVisible(false)}
             aria-label="Dismiss"
-            className="ml-2 rounded-[4px] text-[13.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
+            className="-my-2.5 ml-1 inline-flex h-9 items-center rounded-[6px] px-1.5 align-baseline text-[13.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]"
           >
             Dismiss
           </button>
@@ -344,7 +402,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
             <button
               type="button"
               onClick={startAgain}
-              className="ml-2 rounded-[4px] text-[13.5px] text-[var(--ds-ink)] underline-offset-2 hover:underline"
+              className="-my-2.5 ml-0.5 inline-flex h-9 items-center rounded-[6px] px-1.5 align-baseline text-[13.5px] text-[var(--ds-ink)] underline-offset-2 hover:underline"
             >
               Start again
             </button>
@@ -354,7 +412,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
               <button
                 type="button"
                 aria-label="Auto-fill options"
-                className="ml-1.5 inline-grid size-6 place-items-center rounded-[6px] align-middle text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+                className="-my-2.5 inline-grid h-9 w-8 place-items-center rounded-[6px] align-middle text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
               >
                 <MoreHorizontal className="size-4" />
               </button>
@@ -388,6 +446,17 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
   const profileEmpty = !profile.personal.legalName?.trim() && !profile.employer.legalName?.trim();
 
   /* ── Form ───────────────────────────────────────────────────────── */
+
+  // People the "who attended" chips offer in one click: the employee the
+  // letter is for and the person writing it, each with their role.
+  const peopleSuggestions = [
+    ...(mode === "employer" && str(answers.employeeLegalName)
+      ? [{ name: str(answers.employeeLegalName), role: "Employee" }]
+      : []),
+    ...(profile.personal.legalName?.trim()
+      ? [{ name: profile.personal.legalName.trim(), role: mode === "employer" ? "Chair" : "Employee" }]
+      : []),
+  ];
 
   const showPicker = mode === "employer" && visibleQuestions.some((q) => q.id === "employeeLegalName");
   const rows = layoutRows(visibleQuestions);
@@ -451,6 +520,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
         <div ref={formTop} className="min-w-0 scroll-mt-6 lg:col-start-2 lg:row-start-1">
           {triageState === "now" ? (
             <Triage
+              onBack={leave}
               letterType={meta.id}
               jurisdiction={profile.defaults.jurisdiction === "US" ? "US" : "UK"}
               onSkip={() => {
@@ -463,6 +533,11 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
               }}
             />
           ) : (
+            // The routes sit in an <AnimatePresence initial={false}>, whose
+            // presence context would make every nested motion element skip
+            // its `initial` state. A local AnimatePresence gives each new
+            // step its own presence so the 12px slide and fade run.
+            <AnimatePresence initial={false} mode="wait">
             <motion.section key={stepIndex} aria-labelledby="wizard-step-title" {...motionProps}>
               <header>
                 <h2 id="wizard-step-title" className="ds-title m-0 text-[28px] leading-[1.1] tracking-[-0.018em]">
@@ -500,7 +575,13 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
                     )}
                   >
                     {row.map((q) => (
-                      <QuestionField key={q.id} q={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
+                      <QuestionField
+                        key={q.id}
+                        q={q}
+                        value={answers[q.id]}
+                        onChange={(v) => setAnswer(q.id, v)}
+                        people={peopleSuggestions}
+                      />
                     ))}
                   </div>
                 ))}
@@ -509,6 +590,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
                 )}
               </div>
             </motion.section>
+            </AnimatePresence>
           )}
         </div>
 
@@ -524,12 +606,10 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
                 Save these answers to fill future letters
               </label>
               <span className="hidden flex-1 sm:block" />
-              {stepIndex > 0 && (
-                <Button variant="outline" onClick={onBack} className="flex-1 sm:flex-none">
-                  <ArrowLeft className="size-4" />
-                  Back
-                </Button>
-              )}
+              <Button variant="outline" onClick={onBack} className="flex-1 sm:flex-none">
+                <ArrowLeft className="size-4" />
+                Back
+              </Button>
               <Button onClick={onNext} disabled={!requiredAnswered} className="flex-1 sm:flex-none">
                 {isLast ? (
                   <>

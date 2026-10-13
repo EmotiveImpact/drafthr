@@ -6,7 +6,7 @@ import {
   type RefObject,
 } from "react";
 import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -86,7 +86,7 @@ export function Band({
             {title}
           </h1>
           {lede && (
-            <div className="m-0 mt-2.5 max-w-[760px] text-[15px] leading-[1.5] text-[var(--ds-muted)] [&_b]:font-medium [&_b]:text-[var(--ds-ink)]">
+            <div className="m-0 mt-2.5 text-[15px] leading-[1.5] text-[var(--ds-muted)] [&_b]:font-medium [&_b]:text-[var(--ds-ink)]">
               {lede}
             </div>
           )}
@@ -152,69 +152,131 @@ export function SlidingTabs({
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [bar, setBar] = useState<{ left: number; width: number } | null>(null);
+  // When the tabs are wider than the band, the row scrolls sideways inside
+  // itself; a soft fade and an arrow button on each clipped side show that
+  // more tabs are there and scroll to them.
+  const [edges, setEdges] = useState<{ left: boolean; right: boolean }>({ left: false, right: false });
+
+  const measureEdges = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    const left = track.scrollLeft > 1;
+    const right = track.scrollLeft + track.clientWidth < track.scrollWidth - 1;
+    setEdges((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+  };
 
   useLayoutEffect(() => {
     const track = trackRef.current;
     if (!track) return;
     const measure = () => {
       const el = track.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(active)}"]`);
-      if (!el) return setBar(null);
-      setBar({ left: el.offsetLeft, width: el.offsetWidth });
+      if (!el) setBar(null);
+      else setBar({ left: el.offsetLeft, width: el.offsetWidth });
+      measureEdges();
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(measure);
     ro.observe(track);
     return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, tabs]);
+
+  // Keep the chosen tab in view.
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const el = track?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(active)}"]`);
+    if (!track || !el) return;
+    const pad = 36;
+    if (el.offsetLeft - pad < track.scrollLeft) track.scrollLeft = Math.max(0, el.offsetLeft - pad);
+    else if (el.offsetLeft + el.offsetWidth + pad > track.scrollLeft + track.clientWidth)
+      track.scrollLeft = el.offsetLeft + el.offsetWidth + pad - track.clientWidth;
+    measureEdges();
+  }, [active]);
+
+  const nudge = (dir: 1 | -1) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    track.scrollBy({ left: dir * Math.max(160, track.clientWidth * 0.6), behavior: reduce ? "auto" : "smooth" });
+  };
 
   const focusTab = (id: string) =>
     trackRef.current?.querySelector<HTMLButtonElement>(`[data-tab-id="${CSS.escape(id)}"]`)?.focus();
 
   return (
+    <div className={cn("relative -mx-1 mt-[26px]", className)}>
+      <div
+        ref={trackRef}
+        role="tablist"
+        aria-label={label}
+        onScroll={measureEdges}
+        className="no-scrollbar relative flex gap-1 overflow-x-auto px-1"
+      >
+        {tabs.map((t, i) => {
+          const on = t.id === active;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              data-tab-id={t.id}
+              aria-selected={on}
+              tabIndex={on ? 0 : -1}
+              onClick={() => onChange(t.id)}
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                e.preventDefault();
+                const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+                onChange(next.id);
+                requestAnimationFrame(() => focusTab(next.id));
+              }}
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 pb-3 pt-[7px] text-[15px] transition-colors duration-[120ms]",
+                on ? "font-medium text-[var(--ds-ink)]" : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+              )}
+            >
+              {t.label}
+              {t.count != null && (
+                <span className="ds-mono text-[14px] font-normal text-[var(--ds-subtle)]">{t.count}</span>
+              )}
+            </button>
+          );
+        })}
+        {bar && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute bottom-0 h-[2px] rounded-full bg-[var(--ds-ink)] transition-[left,width] duration-[220ms] ease-[var(--ds-ease)] motion-reduce:transition-none"
+            style={{ left: bar.left, width: bar.width }}
+          />
+        )}
+      </div>
+      {edges.left && <TabsEdge side="left" onClick={() => nudge(-1)} />}
+      {edges.right && <TabsEdge side="right" onClick={() => nudge(1)} />}
+    </div>
+  );
+}
+
+/** Fade plus a small round arrow over a clipped end of the tab row. */
+function TabsEdge({ side, onClick }: { side: "left" | "right"; onClick: () => void }) {
+  const Icon = side === "left" ? ChevronLeft : ChevronRight;
+  return (
     <div
-      ref={trackRef}
-      role="tablist"
-      aria-label={label}
-      className={cn("no-scrollbar relative -mx-1 mt-[26px] flex max-w-[calc(100%+8px)] gap-1 overflow-x-auto px-1", className)}
-    >
-      {tabs.map((t, i) => {
-        const on = t.id === active;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            data-tab-id={t.id}
-            aria-selected={on}
-            tabIndex={on ? 0 : -1}
-            onClick={() => onChange(t.id)}
-            onKeyDown={(e) => {
-              if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-              e.preventDefault();
-              const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
-              onChange(next.id);
-              requestAnimationFrame(() => focusTab(next.id));
-            }}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 pb-3 pt-[7px] text-[15px] transition-colors duration-[120ms]",
-              on ? "font-medium text-[var(--ds-ink)]" : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-            )}
-          >
-            {t.label}
-            {t.count != null && (
-              <span className="ds-mono text-[14px] font-normal text-[var(--ds-subtle)]">{t.count}</span>
-            )}
-          </button>
-        );
-      })}
-      {bar && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute bottom-0 h-[2px] rounded-full bg-[var(--ds-ink)] transition-[left,width] duration-[220ms] ease-[var(--ds-ease)] motion-reduce:transition-none"
-          style={{ left: bar.left, width: bar.width }}
-        />
+      className={cn(
+        "pointer-events-none absolute bottom-[2px] top-0 flex w-16 items-center pb-[5px]",
+        side === "left"
+          ? "left-0 justify-start bg-gradient-to-r from-[var(--ds-surface)] via-[var(--ds-surface)]/90 to-transparent"
+          : "right-0 justify-end bg-gradient-to-l from-[var(--ds-surface)] via-[var(--ds-surface)]/90 to-transparent"
       )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={side === "left" ? "Show earlier tabs" : "Show more tabs"}
+        className="pointer-events-auto grid size-8 place-items-center rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-muted)] shadow-[var(--ds-shadow-s)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none"
+      >
+        <Icon aria-hidden className="size-4" />
+      </button>
     </div>
   );
 }

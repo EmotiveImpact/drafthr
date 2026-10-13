@@ -82,7 +82,7 @@ export function DirectorySync() {
       const res = await fetch("/api/workos/directory-info", { credentials: "same-origin" });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(data.error ?? `Failed to load directory info (${res.status})`);
+        setError(data.error ?? "Couldn't load directory details. Try again in a minute.");
         setInfo(null);
         return;
       }
@@ -283,7 +283,8 @@ function SyncedUsersTable({ users }: { users: DirectoryUserRow[] }) {
                     </Pill>
                   </td>
                   <td className="px-5 py-3">
-                    {u.status === "active" ? <Pill tone="green">Active</Pill> : <Pill tone="red">Deprovisioned</Pill>}
+                    {/* Red is only for errors; a removed directory user is neutral. */}
+                    {u.status === "active" ? <Pill tone="green">Active</Pill> : <Pill tone="grey">Deprovisioned</Pill>}
                   </td>
                   <td className="whitespace-nowrap px-5 py-3 text-[var(--ds-muted)]">
                     {shortDate(u.deprovisionedAt ?? u.joinedAt)}

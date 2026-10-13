@@ -57,7 +57,9 @@ export function MyTemplatesGrid({
   const confirmDelete = () => {
     if (!deleting) return;
     deleteCustomTemplate(deleting.id);
-    toast.success(`Deleted "${deleting.name}"`);
+    toast.success(`Deleted "${deleting.name}"`, {
+      description: "Letters already made from it are not affected.",
+    });
     setDeleting(null);
   };
 

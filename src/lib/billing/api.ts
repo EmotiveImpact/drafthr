@@ -35,7 +35,7 @@ export async function openBillingPortal(
     });
     const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
     if (!res.ok || !data.url) {
-      return { ok: false, error: data.error || `Could not open billing (${res.status})` };
+      return { ok: false, error: data.error || "Billing isn't available right now. Try again in a minute." };
     }
     return { ok: true, url: data.url };
   } catch {
@@ -55,7 +55,10 @@ export async function startBillingCheckout(
     });
     const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
     if (!res.ok || !data.url) {
-      return { ok: false, error: data.error || `Checkout failed (${res.status})` };
+      return {
+        ok: false,
+        error: data.error || "Checkout isn't available right now, and no payment was taken. Try again in a minute.",
+      };
     }
     return { ok: true, url: data.url };
   } catch {

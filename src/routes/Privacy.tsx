@@ -1,4 +1,3 @@
-import { todayDateOnly } from "@/lib/date-only";
 import { PublicLegalShell } from "@/components/PublicLegalShell";
 
 /**
@@ -13,6 +12,13 @@ import { PublicLegalShell } from "@/components/PublicLegalShell";
  * Coverage: UK GDPR (default jurisdiction: England & Wales) with explicit
  * CCPA/CPRA disclosures for US users.
  */
+/**
+ * The date this wording took effect, in British format. It is fixed: change
+ * it only when the wording of this policy changes (the text was last
+ * changed in substance on 1 July 2026; later edits were punctuation only).
+ */
+const PRIVACY_EFFECTIVE_DATE = "1 July 2026";
+
 export function Privacy() {
   return (
     <PublicLegalShell
@@ -21,7 +27,7 @@ export function Privacy() {
         <>
           Effective date:{" "}
           <strong className="font-medium text-[var(--ds-ink)]">
-            {todayDateOnly()}
+            {PRIVACY_EFFECTIVE_DATE}
           </strong>
           . This policy explains how DraftHR collects, processes, and stores
           personal data in connection with drafting HR correspondence.

@@ -221,17 +221,16 @@ export function ConsultantHome() {
             <div className="flex items-center gap-3 text-[12.5px] text-[var(--ds-muted)]">
               {allBookings.length === 0 ? (
                 // Dev-only affordance to seed a sample booking while building
-                // the inbox. Never shown to real consultants in production.
-                import.meta.env.DEV ? (
+                // the inbox. Never shown to real consultants in production, and
+                // only once the profile exists (a booking needs a listing).
+                import.meta.env.DEV && complete ? (
                   <button
                     type="button"
                     onClick={seedSampleBooking}
-                    disabled={!complete}
-                    title={complete ? undefined : "Complete your profile first"}
                     className="inline-flex h-7 items-center gap-1 rounded-[var(--ds-r-s)] border border-dashed border-[var(--ds-line-strong)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Sparkles className="size-3" aria-hidden />
-                    Add a demo request
+                    Add a sample booking
                   </button>
                 ) : null
               ) : (

@@ -74,15 +74,16 @@ export function LocalDataLossDialog() {
             </li>
           ) : null}
         </ul>
-        <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
-          Download a backup first if you might need it. On a shared computer, delete it so the next person can't see it.
-        </p>
-        <KitDialogFooter className="flex-wrap">
-          <Button variant="outline" onClick={() => finish(false)}>
-            Cancel
-          </Button>
+        {/* The backup is a step before deciding, so it sits with its
+         * explanation; the footer keeps one Cancel and one red action, which
+         * stay on one row at every width. */}
+        <div className="flex flex-col items-start gap-2.5">
+          <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
+            Download a backup first if you might need it. On a shared computer, delete it so the next person can't see it.
+          </p>
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               downloadLocalBackup();
               setDownloaded(true);
@@ -90,6 +91,11 @@ export function LocalDataLossDialog() {
           >
             {downloaded ? <Check className="size-4" /> : <Download className="size-4" />}
             {downloaded ? "Backup downloaded" : "Download backup"}
+          </Button>
+        </div>
+        <KitDialogFooter>
+          <Button variant="outline" onClick={() => finish(false)}>
+            Cancel
           </Button>
           <Button
             onClick={() => finish(true)}

@@ -14,11 +14,11 @@
  *   5. On expired/invalid token we surface a "request a new link" CTA.
  */
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
-import { AuthShell, ErrorAlert, PrimaryButton } from "@/routes/sign-in/AuthShell";
+import { AuthShell, ErrorAlert, PasswordField, PrimaryButton } from "@/routes/sign-in/AuthShell";
 
 export function ResetPassword() {
   const navigate = useNavigate();
@@ -86,7 +86,7 @@ export function ResetPassword() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Reset failed (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Couldn't update your password. Request a new reset link and try again.");
       }
       // Session minted server-side; pull it into the provider before
       // navigating so RootRedirect sees the user and routes correctly.
@@ -105,7 +105,7 @@ export function ResetPassword() {
       subheading="Choose something you don’t use elsewhere. At least 8 characters."
     >
       <form noValidate onSubmit={onSubmit} className="space-y-3.5">
-        <RevealField
+        <PasswordField
           id="password"
           label="New password"
           autoComplete="new-password"
@@ -113,18 +113,16 @@ export function ResetPassword() {
           onChange={setPassword}
           disabled={submitting}
           ref={passwordRef}
-          showError={passwordTooShort}
-          errorText="At least 8 characters."
+          error={passwordTooShort ? "Use at least 8 characters." : null}
         />
-        <RevealField
+        <PasswordField
           id="confirm"
           label="Confirm new password"
           autoComplete="new-password"
           value={confirm}
           onChange={setConfirm}
           disabled={submitting}
-          showError={passwordsMismatch}
-          errorText="Passwords don’t match."
+          error={passwordsMismatch ? "Passwords don’t match." : null}
         />
 
         {error && <ErrorAlert message={error} />}
@@ -149,61 +147,3 @@ export function ResetPassword() {
     </AuthShell>
   );
 }
-
-/* ─── Reveal field (local, reuses styles from AuthShell) ───────────────── */
-
-type RevealFieldProps = {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  autoComplete?: string;
-  disabled?: boolean;
-  showError?: boolean;
-  errorText?: string;
-};
-
-const RevealField = forwardRef<HTMLInputElement, RevealFieldProps>(function RevealField(
-  props,
-  ref,
-) {
-  const [show, setShow] = useState(false);
-  return (
-    <div>
-      <label
-        htmlFor={props.id}
-        className="block text-[13px] font-medium text-[var(--ds-ink)] mb-1.5"
-      >
-        {props.label}
-      </label>
-      <div className="relative">
-        <input
-          ref={ref}
-          id={props.id}
-          type={show ? "text" : "password"}
-          autoComplete={props.autoComplete}
-          value={props.value}
-          onChange={(e) => props.onChange(e.target.value)}
-          required
-          disabled={props.disabled}
-          className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] pl-3 pr-16 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
-        />
-        <button
-          type="button"
-          tabIndex={-1}
-          onClick={() => setShow((v) => !v)}
-          aria-pressed={show}
-          aria-label={show ? "Hide password" : "Show password"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-medium text-[var(--ds-muted)] hover:text-[var(--ds-ink)] transition"
-        >
-          {show ? "Hide" : "Show"}
-        </button>
-      </div>
-      {props.showError && props.errorText && (
-        <p className="mt-1 text-[11.5px] leading-snug text-[var(--ds-red-fg)]">
-          {props.errorText}
-        </p>
-      )}
-    </div>
-  );
-});

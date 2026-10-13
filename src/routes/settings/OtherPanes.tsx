@@ -434,8 +434,8 @@ export function DataPane({ line }: { line: string }) {
           <div className="mt-4 flex items-start gap-2 rounded-[12px] bg-[var(--ds-surface-2)] px-3.5 py-3">
             <Info className="mt-0.5 size-4 shrink-0 text-[var(--ds-muted)]" aria-hidden />
             <p className="m-0 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
-              Profile data lives in your browser's local storage. When we wire authentication and server-side
-              persistence (planned), it will move to an encrypted database and become available across devices.
+              Your profile and settings are kept in this browser on this device. To move them to another
+              browser or computer, export a copy here and import it there.
             </p>
           </div>
         </SettingsCard>

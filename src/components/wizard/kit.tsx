@@ -4,7 +4,7 @@
  * design/hifi/out/kit.html: segmented switch (06), dialog (08), callouts and
  * loading rows (09), fields (04). Colours come from the --ds-* tokens only.
  */
-import { useId, type ComponentProps, type ReactNode } from "react";
+import { useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -112,7 +112,9 @@ export function Segmented<T extends string>({
             }}
             className={cn(
               "inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[8px] text-[13.5px] transition-colors duration-[120ms] disabled:opacity-40",
-              size === "sm" ? "h-[28px] px-2.5" : "h-[32px] px-3",
+              // 36px tap targets on phones (BRIEF: phone tap targets), the kit's
+              // 32px (or 28px small) from tablet width up.
+              size === "sm" ? "h-9 px-2.5 sm:h-[28px]" : "h-9 px-3 sm:h-[32px]",
               fill && "flex-1",
               on
                 ? "bg-[var(--ds-surface)] font-medium text-[var(--ds-ink)] shadow-[var(--ds-shadow-s),0_0_0_1px_var(--ds-line)]"
@@ -133,20 +135,76 @@ export function Segmented<T extends string>({
 /* ------------------------------------------------------------------ */
 
 /** The kit dialog: white, 16px corners, soft shadow, fade and a 4px rise
- * (none with reduced motion). */
+ * (none with reduced motion).
+ *
+ * Focus: our dialogs are controlled (`open` state) and opened by ordinary
+ * buttons, not a Radix DialogTrigger, so Radix has no trigger to give focus
+ * back to and it would land on <body>. We remember the element that had
+ * focus when the dialog opened and return focus to it on close (Esc, Cancel,
+ * the close button or a completed action), unless the caller's own
+ * onCloseAutoFocus already handled it. */
+/* The control that opened a dialog. Controlled dialogs can move focus into
+ * themselves before Radix reports the open (an autoFocus field), so we keep
+ * the last control outside any dialog or menu that took focus or a press. A
+ * dialog opened from a menu item returns to that menu's trigger. */
+let lastOutside: HTMLElement | null = null;
+const OVERLAY_SCOPE = '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"]';
+if (typeof document !== "undefined") {
+  const note = (target: EventTarget | null) => {
+    if (!(target instanceof Element)) return;
+    const el = target.closest<HTMLElement>('button,a[href],input,select,textarea,[tabindex]:not([tabindex="-1"]),[role="button"],[role="tab"]');
+    if (el && !el.closest(OVERLAY_SCOPE)) lastOutside = el;
+  };
+  document.addEventListener("focusin", (e) => note(e.target), true);
+  document.addEventListener("pointerdown", (e) => note(e.target), true);
+}
+
 export function KitDialogContent({
   className,
+  children,
+  onCloseAutoFocus,
   ...props
 }: ComponentProps<typeof DialogContent>) {
+  const openerRef = useRef<HTMLElement | null>(null);
   return (
     <DialogContent
       className={cn(
-        "max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[16px] p-6 shadow-[var(--ds-shadow-xl)] sm:max-w-[480px] motion-reduce:animate-none",
+        "max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-[16px] p-6 shadow-[var(--ds-shadow-xl)] sm:max-w-[480px]",
+        // The base dialog's enter/exit animation is set on data-state
+        // variants, which outrank a plain motion-reduce:animate-none.
+        "motion-reduce:animate-none motion-reduce:data-[state=open]:animate-none motion-reduce:data-[state=closed]:animate-none",
         className
       )}
+      onCloseAutoFocus={(e) => {
+        onCloseAutoFocus?.(e);
+        if (e.defaultPrevented) return;
+        const opener = openerRef.current;
+        openerRef.current = null;
+        if (opener && opener.isConnected) {
+          e.preventDefault();
+          opener.focus({ preventScroll: true });
+        }
+      }}
       {...props}
-    />
+    >
+      <CaptureOpener into={openerRef} />
+      {children}
+    </DialogContent>
   );
+}
+
+/** Records, when the dialog content first renders (before any autoFocus
+ * field inside it takes focus), the control that opened the dialog. */
+function CaptureOpener({ into }: { into: { current: HTMLElement | null } }) {
+  useState(() => {
+    const active = typeof document !== "undefined" ? document.activeElement : null;
+    into.current =
+      active instanceof HTMLElement && active !== document.body && !active.closest(OVERLAY_SCOPE)
+        ? active
+        : lastOutside;
+    return null;
+  });
+  return null;
 }
 
 export function KitDialogFooter({ className, ...props }: ComponentProps<typeof DialogFooter>) {

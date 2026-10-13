@@ -22,7 +22,9 @@ describe("upload a firm template", () => {
 
   it("explains why a file can't be used", () => {
     expect(validateUpload({ name: "scan.png", size: 10 })).toMatch(/can't be read/);
-    expect(validateUpload({ name: "big.docx", size: UPLOAD_MAX_BYTES + 1 })).toMatch(/This file is 1\.0 MB/);
+    expect(validateUpload({ name: "big.docx", size: UPLOAD_MAX_BYTES + 1 })).toMatch(
+      /This file is 1,025 KB, over the 1 MB limit\. .*then choose it again\./
+    );
     expect(validateUpload({ name: "empty.txt", size: 0 })).toMatch(/empty/);
     expect(validateUpload({ name: "fine.txt", size: 200 })).toBeNull();
   });

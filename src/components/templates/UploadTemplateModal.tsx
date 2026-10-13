@@ -141,7 +141,9 @@ export function UploadTemplateModal({
       sectionHtml: { [uploadTargetSection(meta)]: picked.html },
       answers: {},
     });
-    toast.success(`Saved "${name.trim()}" to Your templates`);
+    toast.success(`Saved "${name.trim()}" to Your templates`, {
+      description: "Find it under Templates, Your templates, to start a new letter from it.",
+    });
     onOpenChange(false);
     onSaved?.(id);
   };

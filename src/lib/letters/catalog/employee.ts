@@ -11,7 +11,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "grievance",
     mode: "employee",
-    title: "Formal Grievance",
+    title: "Formal grievance",
     shortTitle: "Formal grievance",
     description:
       "A formal grievance under the ACAS Code (UK) or an internal harassment / discrimination / hostile-work-environment complaint to HR (US, Faragher–Ellerth notice). Specifies facts, witnesses, the protected-characteristic basis where relevant, and the remedy you want.",
@@ -114,7 +114,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "flexible_working_request",
     mode: "employee",
-    title: "Flexible Working Request",
+    title: "Flexible working request",
     shortTitle: "Flexible working",
     description:
       "Statutory request under the Flexible Working (Amendment) Regulations 2023 (UK day-one right) or US state right-to-request. Pre-empts statutory grounds for refusal.",
@@ -138,7 +138,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "subject_access_request",
     mode: "employee",
-    title: "Subject Access Request (SAR) / HR file request",
+    title: "Subject access request (SAR) or HR file request",
     shortTitle: "Subject access request",
     description:
       "Request the personal data held about you. UK GDPR Art. 15 (1-month response). US: Cal. Lab. Code §1198.5, state HR-file inspection statutes.",
@@ -162,7 +162,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "appeal",
     mode: "employee",
-    title: "Appeal Against Warning / Dismissal / Redundancy Outcome",
+    title: "Appeal against a warning, dismissal or redundancy outcome",
     shortTitle: "Appeal letter",
     description:
       "Internal appeal, non-negotiable before tribunal. Uses the canonical four grounds: procedural unfairness, factual error, severity disproportionate, new evidence.",
@@ -188,7 +188,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "whistleblowing",
     mode: "employee",
-    title: "Protected Disclosure (Whistleblowing)",
+    title: "Protected disclosure (whistleblowing)",
     shortTitle: "Whistleblowing",
     description:
       "Qualifying disclosure under PIDA / s.43A–L ERA 1996 (UK): no service requirement, no compensation cap if dismissed for it. US: SOX §806 (180-day OSHA window), CA Lab. Code §1102.5, state law.",
@@ -215,7 +215,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "accommodation_request",
     mode: "employee",
-    title: "Reasonable Adjustment / ADA Accommodation Request",
+    title: "Reasonable adjustment or ADA accommodation request",
     shortTitle: "Accommodation request",
     description:
       "Request adjustments under the Equality Act 2010 (UK ss.20–22) or the ADA / PWFA / state law (US). Triggers the interactive process.",
@@ -239,7 +239,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "sickness_notification",
     mode: "employee",
-    title: "Sickness Notification / Fit-Note Response",
+    title: "Sickness notification or fit note response",
     shortTitle: "Sickness notification",
     description:
       "Notify absence dates, attach self-cert (≤ 7 days UK) or fit note (≥ 8 days UK), and engage with any 'may be fit for work' adjustments.",
@@ -261,7 +261,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "pay_dispute",
     mode: "employee",
-    title: "Pay Dispute / Wage Claim",
+    title: "Pay dispute or wage claim",
     shortTitle: "Pay dispute",
     description:
       "Recover unpaid wages, holiday pay, expenses, commissions or notice pay. UK: s.13 ERA 1996 unauthorised deduction, 6-month limit for deductions from 1 October 2026 (3 months before then and in Northern Ireland). US: FLSA + state wage-payment laws.",
@@ -286,7 +286,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "redundancy_consultation_response",
     mode: "employee",
-    title: "Redundancy Consultation Response",
+    title: "Redundancy consultation response",
     shortTitle: "Redundancy response",
     description:
       "Engage actively with an at-risk individual consultation. Preserves constructive dismissal and discrimination angles. UK: Williams v Compair Maxam framework.",
@@ -310,7 +310,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "settlement_counter_offer",
     mode: "employee",
-    title: "Settlement Agreement Counter-Offer",
+    title: "Settlement agreement counter-offer",
     shortTitle: "Settlement counter",
     description:
       "Counter an employer's settlement offer. Almost always sent through a solicitor; this tool produces a first-pass for legal review. Marked WITHOUT PREJUDICE.",
@@ -338,7 +338,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "right_to_disconnect",
     mode: "employee",
-    title: "Right to Disconnect / Overtime Objection",
+    title: "Right to disconnect or overtime objection",
     shortTitle: "Overtime objection",
     description:
       "Object to out-of-hours contact or unauthorised overtime. UK: Working Time Regulations 1998 (48h opt-out revocable). US: FLSA overtime + state predictive scheduling.",
@@ -359,7 +359,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "holiday_request",
     mode: "employee",
-    title: "Holiday Request / Refusal Challenge",
+    title: "Holiday request or refusal challenge",
     shortTitle: "Holiday request",
     description:
       "Request leave or challenge a refusal. UK: Working Time Regs reg.13 (28 days statutory min) and reg.15 (notice rules).",
@@ -380,7 +380,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "pip_response",
     mode: "employee",
-    title: "Performance Improvement Plan (PIP) Response",
+    title: "Performance improvement plan (PIP) response",
     shortTitle: "PIP response",
     description:
       "Engage with each PIP objective constructively but defensively. Reserve the right to grieve if the PIP is unfounded.",
@@ -404,7 +404,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "constructive_dismissal_warning",
     mode: "employee",
-    title: "Notice of Fundamental Breach (pre-resignation)",
+    title: "Notice of fundamental breach (before resigning)",
     shortTitle: "Breach notice",
     description:
       "Sent BEFORE resigning under constructive dismissal. Preserves position and pre-empts the affirmation argument. Demand remedy by deadline; reserve right to resign in response.",
@@ -429,7 +429,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "reference_dispute",
     mode: "employee",
-    title: "Reference Dispute",
+    title: "Reference dispute",
     shortTitle: "Reference dispute",
     description:
       "Challenge an inaccurate or misleading reference. UK: Spring v Guardian negligent misstatement. US: state qualified-privilege overcome by malice.",
@@ -452,7 +452,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "resignation_withdrawal",
     mode: "employee",
-    title: "Resignation Withdrawal",
+    title: "Resignation withdrawal",
     shortTitle: "Withdraw resignation",
     description:
       "Withdraw a resignation given in heat of moment. UK: Sothern v Franks Charlesly, words spoken in anger may not be unequivocal; promptness builds the record.",
@@ -473,7 +473,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "acas_ec_notification",
     mode: "employee",
-    title: "ACAS Early Conciliation Notification (UK) / EEOC Charge Cover (US)",
+    title: "ACAS early conciliation notification (UK) or EEOC charge cover (US)",
     shortTitle: "ACAS / EEOC cover",
     description:
       "Procedural cover. UK: notify the prospective tribunal claim to ACAS (mandatory pre-claim). US: cover letter for an EEOC charge of discrimination.",
@@ -497,7 +497,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
   {
     id: "tribunal_cover",
     mode: "employee",
-    title: "Tribunal / Court Claim Cover",
+    title: "Tribunal or court claim cover",
     shortTitle: "Tribunal cover",
     description:
       "Cover letter for an Employment Tribunal ET1 (UK) or court complaint (US). Strictly procedural; the substantive claim is in the form.",

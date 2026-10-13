@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   Banknote,
   BriefcaseBusiness,
@@ -36,12 +36,11 @@ type Props = {
   q: Question;
   value: unknown;
   onChange: (v: unknown) => void;
-  /** Nested inside a repeater item: label above, no help on the right. */
+  /** Nested inside a repeater item (smaller gap under the label row). */
   nested?: boolean;
+  /** People a "who attended" question offers in one click, with roles. */
+  people?: Person[];
 };
-
-/** Help short enough to sit on the right of the label row (mock `.flab`). */
-const SHORT_HELP = 64;
 
 /** A select with this many options or fewer shows as a segmented switch. */
 const SEGMENT_MAX = 4;
@@ -108,12 +107,11 @@ function iconFor(q: Question): LucideIcon | undefined {
  * help on the right in subtle grey, longer help under it) and the control
  * for its type. The new letter page wraps these in hairline sections.
  */
-export function QuestionField({ q, value, onChange, nested = false }: Props) {
+export function QuestionField({ q, value, onChange, nested = false, people }: Props) {
   const id = `q-${q.id}`;
   const labelId = `${id}-label`;
   const label = plainLabel(q.label);
   const help = q.help ? plainLabel(q.help) : "";
-  const helpRight = !nested && help.length > 0 && help.length <= SHORT_HELP;
   // Grouped controls (segmented, chips, switch, repeater) are labelled by the
   // label text; plain fields use <label for>.
   const grouped =
@@ -126,11 +124,22 @@ export function QuestionField({ q, value, onChange, nested = false }: Props) {
   const LabelTag = grouped ? "span" : "label";
   return (
     <div className="min-w-0">
-      <div className={cn("flex min-w-0 items-baseline justify-between gap-3", nested ? "mb-1.5" : "mb-[9px]")}>
+      {/* Label row (mock `.flab`): the label on the left and the help or
+       * context on the right in subtle grey, for every question. Long help
+       * wraps on the right; on phones it sits under the label. */}
+      <div
+        className={cn(
+          "flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6",
+          nested ? "mb-1.5" : "mb-[9px]"
+        )}
+      >
         <LabelTag
           id={labelId}
           {...(grouped ? {} : { htmlFor: id })}
-          className="min-w-0 text-[13.5px] font-medium leading-snug text-[var(--ds-ink)]"
+          className={cn(
+            "min-w-0 shrink-0 text-[13.5px] font-medium leading-snug text-[var(--ds-ink)]",
+            help && "sm:max-w-[55%]"
+          )}
         >
           {label}
           {q.required && (
@@ -140,12 +149,13 @@ export function QuestionField({ q, value, onChange, nested = false }: Props) {
           )}
           {q.required && <span className="sr-only"> (required)</span>}
         </LabelTag>
-        {helpRight && <span className="shrink-0 text-right text-[12.5px] text-[var(--ds-subtle)]">{help}</span>}
+        {help && (
+          <span className="min-w-0 text-[12.5px] leading-snug text-[var(--ds-subtle)] sm:max-w-[60%] sm:text-right">
+            {help}
+          </span>
+        )}
       </div>
-      {help && !helpRight && (
-        <p className="-mt-1 mb-2.5 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">{help}</p>
-      )}
-      {renderControl(q, id, labelId, value, onChange)}
+      {renderControl(q, id, labelId, value, onChange, people)}
     </div>
   );
 }
@@ -155,10 +165,11 @@ function renderControl(
   id: string,
   labelId: string,
   value: unknown,
-  onChange: (v: unknown) => void
+  onChange: (v: unknown) => void,
+  people?: Person[]
 ): ReactNode {
   if (isPeopleQuestion(q)) {
-    return <PeopleField id={id} labelId={labelId} value={value} onChange={onChange} />;
+    return <PeopleField id={id} labelId={labelId} value={value} onChange={onChange} suggestions={people} />;
   }
   switch (q.type) {
     case "repeater":
@@ -209,19 +220,14 @@ function renderControl(
 
     case "select": {
       const options = q.options ?? [];
-      if (options.length <= SEGMENT_MAX) {
-        return (
-          <Segmented
-            label={plainLabel(q.label)}
-            value={(value as string) || undefined}
-            onChange={(v) => onChange(v)}
-            options={options.map((o) => ({ value: o.value, label: plainLabel(o.label) }))}
-          />
-        );
-      }
-      return (
+      const select = (
         <Select value={(value as string) || undefined} onValueChange={(v) => onChange(v)}>
-          <SelectTrigger id={id} aria-required={q.required} className="w-full">
+          <SelectTrigger
+            id={id}
+            aria-required={q.required}
+            aria-labelledby={options.length <= SEGMENT_MAX ? labelId : undefined}
+            className="w-full"
+          >
             <SelectValue placeholder="Choose one" />
           </SelectTrigger>
           <SelectContent>
@@ -233,6 +239,23 @@ function renderControl(
           </SelectContent>
         </Select>
       );
+      if (options.length <= SEGMENT_MAX) {
+        return (
+          <SegmentedOrSelect
+            label={plainLabel(q.label)}
+            segmented={(groupLabel, measure) => (
+              <Segmented
+                label={groupLabel}
+                value={measure ? undefined : (value as string) || undefined}
+                onChange={(v) => onChange(v)}
+                options={options.map((o) => ({ value: o.value, label: plainLabel(o.label) }))}
+              />
+            )}
+            select={select}
+          />
+        );
+      }
+      return select;
     }
 
     case "boolean":
@@ -300,8 +323,55 @@ function IconInput({ icon: Icon, children }: { icon?: LucideIcon; children: Reac
   );
 }
 
+/**
+ * A short select shows as the kit segmented switch when all its options fit
+ * on one row; when they do not (long labels, a narrow column or a phone) it
+ * falls back to the kit select, so no option is ever clipped. An invisible
+ * copy of the switch measures its natural width.
+ */
+function SegmentedOrSelect({
+  segmented,
+  select,
+  label,
+}: {
+  segmented: (label: string, measure: boolean) => ReactNode;
+  select: ReactNode;
+  label: string;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [fits, setFits] = useState(true);
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const probe = measureRef.current;
+    if (!wrap || !probe) return;
+    const measure = () => {
+      const natural = probe.firstElementChild?.getBoundingClientRect().width ?? 0;
+      const room = wrap.getBoundingClientRect().width;
+      setFits(room === 0 || natural <= room + 0.5);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={wrapRef} className="relative min-w-0">
+      {/* Clipped to nothing so the copy can never widen the page. */}
+      <div aria-hidden inert className="pointer-events-none invisible absolute inset-x-0 top-0 h-0 overflow-hidden">
+        <div ref={measureRef} className="w-max">
+          {segmented(`${label} (measure)`, true)}
+        </div>
+      </div>
+      {fits ? segmented(label, false) : select}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* People ("Who attended")                                             */
+
 /* ------------------------------------------------------------------ */
 
 type Person = { name: string; role: string };
@@ -331,16 +401,21 @@ export function formatPeople(people: Person[]): string {
  * and a dashed Add chip. The answer is still plain text, one person a line,
  * so it can also be edited as text.
  */
+/** Quick picks for a person's role in the add form. */
+const ROLE_PICKS = ["Chair", "Employee", "Companion", "Note taker", "Witness", "HR"];
+
 function PeopleField({
   id,
   labelId,
   value,
   onChange,
+  suggestions = [],
 }: {
   id: string;
   labelId: string;
   value: unknown;
   onChange: (v: unknown) => void;
+  suggestions?: Person[];
 }) {
   const people = parsePeople(value);
   const [adding, setAdding] = useState(false);
@@ -371,9 +446,12 @@ function PeopleField({
     );
   }
 
+  const listed = new Set(people.map((p) => p.name.trim().toLowerCase()));
+  const offers = suggestions.filter((p) => p.name.trim() && !listed.has(p.name.trim().toLowerCase()));
+
   const add = () => {
     const n = name.trim();
-    if (!n) return;
+    if (!n || !role.trim()) return;
     onChange(formatPeople([...people, { name: n, role: role.trim() }]));
     setName("");
     setRole("");
@@ -401,6 +479,20 @@ function PeopleField({
             </button>
           </span>
         ))}
+        {!adding &&
+          offers.map((p) => (
+            <button
+              key={`offer-${p.name}`}
+              type="button"
+              onClick={() => onChange(formatPeople([...people, p]))}
+              aria-label={`Add ${p.name}, ${p.role}`}
+              className="inline-flex h-8 max-w-full items-center gap-[7px] rounded-[8px] border border-dashed border-[var(--ds-line-strong)] px-[11px] text-[13.5px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)]"
+            >
+              <Plus aria-hidden className="size-3.5 shrink-0" />
+              <span className="truncate">{p.name}</span>
+              <em className="shrink-0 text-[12.5px] not-italic text-[var(--ds-subtle)]">{p.role}</em>
+            </button>
+          ))}
         {!adding && (
           <button
             type="button"
@@ -428,21 +520,39 @@ function PeopleField({
           </div>
           <div className="min-w-[140px] flex-1">
             <label htmlFor={`${uid}-r`} className="mb-1 block text-[12.5px] text-[var(--ds-muted)]">
-              Role (optional)
+              Role
             </label>
             <Input
               id={`${uid}-r`}
               value={role}
-              placeholder="Chair, companion, notes"
+              placeholder="For example chair or companion"
               onChange={(e) => setRole(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())}
             />
+          </div>
+          <div className="flex w-full flex-wrap gap-1.5" role="group" aria-label="Pick a role">
+            {ROLE_PICKS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={role === r}
+                onClick={() => setRole(r)}
+                className={cn(
+                  "inline-flex h-7 items-center rounded-full border px-2.5 text-[12.5px] transition-colors duration-[120ms] focus-visible:shadow-[var(--ds-focus-ring)] focus-visible:outline-none",
+                  role === r
+                    ? "border-[var(--ds-ink)] bg-[var(--ds-ink)] text-[var(--ds-on-accent)]"
+                    : "border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] hover:border-[var(--ds-line-strong)]"
+                )}
+              >
+                {r}
+              </button>
+            ))}
           </div>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => setAdding(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={add} disabled={!name.trim()}>
+            <Button type="button" onClick={add} disabled={!name.trim() || !role.trim()}>
               Add
             </Button>
           </div>
@@ -528,6 +638,19 @@ function RepeaterField({
 
   const open = openIndex !== null && openIndex < items.length ? openIndex : null;
 
+  // How many items the question needs (at least one when required). A blank
+  // item beyond that is optional, so it is not marked "to fill in": the
+  // Continue gate does not wait for it, and blank items are dropped when
+  // the draft is made.
+  const requiredCount = q.required ? Math.max(min, 1) : min;
+  const isBlank = (it: Record<string, unknown>) => !Object.values(it).some(filled);
+  const needed = (idx: number) => {
+    if (!isBlank(items[idx] ?? {})) return true;
+    const started = items.filter((it) => !isBlank(it)).length;
+    const blanksBefore = items.slice(0, idx).filter(isBlank).length;
+    return started + blanksBefore < requiredCount;
+  };
+
   return (
     <div role="group" aria-labelledby={labelId}>
       <div className="flex flex-wrap items-center gap-2">
@@ -558,7 +681,11 @@ function RepeaterField({
               {note ? (
                 <em className="shrink-0 text-[12.5px] not-italic text-[var(--ds-subtle)]">{note}</em>
               ) : !main ? (
-                <em className="shrink-0 text-[12.5px] not-italic text-[var(--ds-amber-fg)]">to fill in</em>
+                needed(idx) ? (
+                  <em className="shrink-0 text-[12.5px] not-italic text-[var(--ds-amber-fg)]">to fill in</em>
+                ) : (
+                  <em className="shrink-0 text-[12.5px] not-italic text-[var(--ds-subtle)]">optional</em>
+                )
               ) : null}
             </button>
           );

@@ -69,7 +69,7 @@ export function SignupWorkspace() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${res.status}`);
+        throw new Error(data.error ?? "Something went wrong. Try again in a minute.");
       }
       // Re-fetch session so `activeTenant` is populated BEFORE we navigate.
       // Without this, <Protected> sees stale auth state, sees no active tenant,
@@ -104,7 +104,7 @@ export function SignupWorkspace() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `HTTP ${res.status}`);
+        throw new Error(data.error ?? "Something went wrong. Try again in a minute.");
       }
       // Clear sessionStorage stash if we came via /join/:code.
       try {

@@ -775,7 +775,7 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
               </>
             )}
             <DropdownMenuItem onClick={p.onSaveAsTemplate}>
-              <BookmarkPlus className="mr-2 size-4" /> Save as template…
+              <BookmarkPlus className="mr-2 size-4" /> Save as template
             </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>

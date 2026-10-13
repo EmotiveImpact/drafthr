@@ -74,7 +74,7 @@ export function VerifyEmail() {
         });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error ?? `Verification failed (HTTP ${res.status})`);
+          throw new Error(data.error ?? "We couldn't confirm your email with that link.");
         }
         await refresh({ force: true });
         setStage("ok");

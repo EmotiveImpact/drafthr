@@ -371,6 +371,22 @@ const EMPLOYEE_TONES: KitOption[] = [
   { value: "tribunal_ready", label: "Tribunal-ready" },
 ];
 
+/**
+ * The drafting model as people choose it: by how careful and quick the
+ * draft is, never by vendor model name or running cost. One entry per
+ * QWEN_MODEL_OPTIONS entry, in the same order (standard, fast, thorough).
+ */
+const QUALITY_TIERS: { label: string; hint: string }[] = [
+  { label: "Standard (recommended)", hint: "Careful legal wording at a good speed. Right for most letters." },
+  { label: "Fast", hint: "The quickest drafts. Good for routine, low-risk letters." },
+  { label: "Most thorough", hint: "Slower and the most careful. For tribunal-bound and high-risk letters." },
+];
+
+function qualityFor(id: string): { label: string; hint: string } {
+  const i = QWEN_MODEL_OPTIONS.findIndex((m) => m.id === id);
+  return QUALITY_TIERS[i] ?? QUALITY_TIERS[0];
+}
+
 export function DefaultsPane({ line, onSave, saved }: { line: string; onSave: () => void; saved: boolean }) {
   const profile = useProfileStore((s) => s.profile);
   const patchDefaults = useProfileStore((s) => s.patchDefaults);
@@ -424,16 +440,12 @@ export function DefaultsPane({ line, onSave, saved }: { line: string; onSave: ()
                 options={WORKER_CLASSES}
               />
             </Field>
-            <Field
-              label="Generation model"
-              htmlFor="set-model"
-              help={QWEN_MODEL_OPTIONS.find((m) => m.id === model)?.hint}
-            >
+            <Field label="Drafting quality" htmlFor="set-model" help={qualityFor(model).hint}>
               <KitSelect
                 id="set-model"
                 value={model}
                 onValueChange={(v) => patchDefaults({ qwenModel: v as QwenModelId })}
-                options={QWEN_MODEL_OPTIONS.map((m) => ({ value: m.id, label: m.label }))}
+                options={QWEN_MODEL_OPTIONS.map((m) => ({ value: m.id, label: qualityFor(m.id).label }))}
               />
             </Field>
             <Field label={employer ? "Default tone" : "Default tone band"} htmlFor="set-tone">

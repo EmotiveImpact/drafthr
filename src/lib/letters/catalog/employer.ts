@@ -4,7 +4,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "offer",
     mode: "employer",
-    title: "Offer of Employment",
+    title: "Offer of employment",
     shortTitle: "Offer letter",
     description:
       "Formalises the terms of a proposed employment offer. Generates UK or US variants with the right statutory references and at-will language.",
@@ -31,7 +31,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "reference",
     mode: "employer",
-    title: "Reference / Employment Verification",
+    title: "Reference or employment verification",
     shortTitle: "Reference letter",
     description:
       "Confirms employment for a third party. Defaults to fact-only to limit liability; switch to full character reference when authorised.",
@@ -52,7 +52,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "termination",
     mode: "employer",
-    title: "Termination / Dismissal",
+    title: "Termination or dismissal",
     shortTitle: "Termination",
     description:
       "Ends the employment relationship. UK variant references s.98 ERA fair-reason categories and ACAS Code; US variant respects at-will, WARN, COBRA, and state final-pay timing.",
@@ -78,7 +78,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "warning",
     mode: "employer",
-    title: "Performance / Disciplinary Warning",
+    title: "Performance or disciplinary warning",
     shortTitle: "Warning letter",
     description:
       "Issues a verbal, written, or final written warning. Mandatory ACAS-aligned content for UK; documentation-grade content for US to defeat discrimination claims.",
@@ -126,7 +126,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "salary_increase",
     mode: "employer",
-    title: "Salary Increase",
+    title: "Salary increase",
     shortTitle: "Pay rise",
     description:
       "Communicates a pay change without a role change. Pro-rata-aware and FLSA threshold-aware.",
@@ -148,7 +148,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "probation_outcome",
     mode: "employer",
-    title: "Probation Outcome",
+    title: "Probation outcome",
     shortTitle: "Probation outcome",
     description:
       "Pass, extension, or fail. Includes reference to the review meeting, support offered, and (on fail) right of appeal.",
@@ -171,7 +171,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "contract_amendment",
     mode: "employer",
-    title: "Contract Amendment / Variation",
+    title: "Contract amendment or variation",
     shortTitle: "Contract variation",
     description:
       "Varies an existing contractual term (hours, location, duties, pay structure). Seeks express agreement.",
@@ -194,8 +194,8 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "redundancy",
     mode: "employer",
-    title: "Redundancy / Layoff",
-    shortTitle: "Redundancy / Layoff",
+    title: "Redundancy or layoff",
+    shortTitle: "Redundancy",
     description:
       "Termination by role elimination. UK variant covers consultation, selection criteria, and statutory redundancy pay; US variant covers WARN/Cal-WARN/NY-WARN, severance, OWBPA.",
     riskClass: "high",
@@ -219,7 +219,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "leave_approval",
     mode: "employer",
-    title: "Leave Approval",
+    title: "Leave approval",
     shortTitle: "Leave approval",
     description:
       "Approves parental, sick, sabbatical, FMLA or statutory leave with pay rules and benefits-continuation logic per jurisdiction.",
@@ -241,7 +241,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "resignation_acceptance",
     mode: "employer",
-    title: "Resignation Acceptance",
+    title: "Resignation acceptance",
     shortTitle: "Resignation acceptance",
     description:
       "Acknowledges and accepts an employee's resignation, confirms last working day, garden leave, final pay, and PTO/holiday treatment.",
@@ -263,7 +263,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "return_to_work",
     mode: "employer",
-    title: "Return to Work",
+    title: "Return to work",
     shortTitle: "Return-to-work",
     description:
       "Welcomes an employee back from extended leave with role, hours, accommodations and (where relevant) phased-return plans.",
@@ -285,7 +285,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "settlement_cover",
     mode: "employer",
-    title: "Settlement / Severance Cover",
+    title: "Settlement or severance cover",
     shortTitle: "Settlement cover",
     description:
       "Cover letter accompanying a UK Settlement Agreement (s.203 ERA) or US Separation Agreement / General Release (OWBPA-compliant if 40+).",
@@ -310,7 +310,7 @@ export const EMPLOYER_CATALOG: LetterTypeMeta[] = [
   {
     id: "right_to_work",
     mode: "employer",
-    title: "Right-to-Work / Immigration Support",
+    title: "Right to work or immigration support",
     shortTitle: "Immigration support",
     description:
       "Supports a visa application, sponsorship, or right-to-work verification. UK Skilled Worker / CoS or US H-1B/L-1/O-1/I-140 variants.",

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Phone, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ExternalLink, Phone, ShieldAlert } from "lucide-react";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import type { LetterTypeId, Jurisdiction } from "@/lib/letters/types";
 import { tintStyle } from "@/components/templates/tints";
@@ -63,11 +63,14 @@ export function Triage({
   jurisdiction,
   onSkip,
   onContinue,
+  onBack,
 }: {
   letterType: LetterTypeId;
   jurisdiction: Jurisdiction;
   onSkip: () => void;
   onContinue: (result: TriageResult) => void;
+  /** Back to the template library (the "Letter type" step). */
+  onBack?: () => void;
 }) {
   const meta = getLetterMeta(letterType);
   const [evidence, setEvidence] = useState<Evidence | undefined>();
@@ -158,10 +161,17 @@ export function Triage({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-[var(--ds-line)] pt-4">
+      <div className="flex flex-wrap items-center gap-2.5 border-t border-[var(--ds-line)] pt-4">
+        {onBack && (
+          <Button variant="outline" onClick={onBack}>
+            <ArrowLeft className="size-4" />
+            Back
+          </Button>
+        )}
         <Button variant="ghost" onClick={onSkip}>
           Skip triage
         </Button>
+        <span className="hidden flex-1 sm:block" />
         <Button
           onClick={() => evidence && informal && onContinue({ score: triageScore(evidence, informal), summary: triageSummary(evidence, informal) })}
           disabled={!evidence || !informal}

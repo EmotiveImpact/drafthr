@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { AUTH_ENABLED, useAuth } from "@/lib/auth";
 import { BrandMark, Wordmark } from "@/components/ds";
 import { safeInternalRedirect } from "@/routes/AuthCallback";
-import { AuthFooter, AuthSecurityNote } from "@/routes/sign-in/AuthShell";
+import {
+  AUTH_HEADING_CLASS,
+  AUTH_INPUT_CLASS,
+  AuthFooter,
+  AuthSecurityNote,
+  PasswordField,
+} from "@/routes/sign-in/AuthShell";
 import { AuthSplitShell } from "@/routes/sign-in/AuthSplitShell";
 import { CheckYourEmail } from "@/routes/SignUp";
 
@@ -41,7 +47,6 @@ export function SignIn() {
   const [params] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState<
     null | "password" | "google" | "microsoft" | "linkedin"
   >(null);
@@ -110,7 +115,7 @@ export function SignIn() {
         pendingAuthenticationToken?: string;
       };
       if (!res.ok) {
-        throw new Error(data.error ?? `Sign-in failed (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Sign-in didn't work. Check your email and password, then try again.");
       }
       // Credentials were correct but the inbox isn't verified yet — hand off to
       // the code-entry screen (Flow B) rather than treating it as a failure.
@@ -152,7 +157,7 @@ export function SignIn() {
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Could not start sign-in (HTTP ${res.status})`);
+        throw new Error(data.error ?? "Couldn't start sign-in with that provider. Try again, or use your email.");
       }
       const { url } = (await res.json()) as { url: string };
       // Stash the post-callback redirect target so AuthCallback can pick
@@ -215,7 +220,7 @@ export function SignIn() {
             </p>
             <h1
               id="signin-heading"
-              className="ds-title mt-2 text-[clamp(28px,3.4vw,34px)] leading-[1.12]"
+              className={AUTH_HEADING_CLASS}
             >
               Sign in to draft tribunal-grade HR letters.
             </h1>
@@ -267,48 +272,22 @@ export function SignIn() {
                 required
                 disabled={isBusy}
               />
-              <div>
-                <div className="flex items-baseline justify-between mb-1.5">
-                  <label
-                    htmlFor="password"
-                    className="block text-[13px] font-medium text-[var(--ds-ink)]"
-                  >
-                    Password
-                  </label>
+              <PasswordField
+                id="password"
+                label="Password"
+                autoComplete="current-password"
+                value={password}
+                onChange={setPassword}
+                disabled={isBusy}
+                aside={
                   <Link
                     to="/sign-in/forgot-password"
                     className="text-[12.5px] text-[var(--ds-muted)] underline-offset-2 hover:text-[var(--ds-ink)] hover:underline transition"
                   >
                     Forgot password?
                   </Link>
-                </div>
-                <div className="relative">
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={isBusy}
-                    className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] pl-3 pr-10 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    tabIndex={-1}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    aria-pressed={showPassword}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-grid place-items-center w-8 h-8 rounded-[6px] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-surface-2)] transition"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="size-[15px]" aria-hidden />
-                    ) : (
-                      <Eye className="size-[15px]" aria-hidden />
-                    )}
-                  </button>
-                </div>
-              </div>
+                }
+              />
 
               {error && (
                 <div
@@ -391,7 +370,7 @@ const Field = ({
       onChange={(e) => props.onChange(e.target.value)}
       required={props.required}
       disabled={props.disabled}
-      className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
+      className={AUTH_INPUT_CLASS}
     />
   </div>
 );

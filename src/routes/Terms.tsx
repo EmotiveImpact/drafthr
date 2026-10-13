@@ -1,4 +1,3 @@
-import { todayDateOnly } from "@/lib/date-only";
 import { PublicLegalShell } from "@/components/PublicLegalShell";
 
 /**
@@ -13,6 +12,13 @@ import { PublicLegalShell } from "@/components/PublicLegalShell";
  * Governing law: England & Wales by default, with explicit US-specific
  * carve-outs (WARN Act, OWBPA, COBRA, FAA arbitration where mandatory).
  */
+/**
+ * The date this wording took effect, in British format. It is fixed: change
+ * it only when the wording of these terms changes (the text was last
+ * changed in substance on 1 July 2026; later edits were punctuation only).
+ */
+const TERMS_EFFECTIVE_DATE = "1 July 2026";
+
 export function Terms() {
   return (
     <PublicLegalShell
@@ -21,7 +27,7 @@ export function Terms() {
         <>
           Effective date:{" "}
           <strong className="font-medium text-[var(--ds-ink)]">
-            {todayDateOnly()}
+            {TERMS_EFFECTIVE_DATE}
           </strong>
           . These Terms govern your access to and use of the DraftHR
           AI-assisted HR letter drafting platform.

@@ -54,7 +54,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "defaults",
     label: "Letter defaults",
     group: "Workspace",
-    line: "The jurisdiction, tone and model every new letter starts with. You can change any of them in the wizard.",
+    line: "The jurisdiction, tone and drafting quality every new letter starts with. You can change the jurisdiction and tone for each letter in the wizard.",
   },
   {
     id: "integrations",

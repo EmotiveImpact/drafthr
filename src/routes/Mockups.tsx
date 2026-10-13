@@ -44,7 +44,7 @@ import {
 const MOCK_DRAFTS = [
   {
     id: "d1",
-    type: "Formal Grievance",
+    type: "Formal grievance",
     risk: "high" as const,
     recipient: "to Acme Holdings Limited",
     days: 2,
@@ -77,7 +77,7 @@ const MOCK_DRAFTS = [
 ];
 
 const FLAGSHIP_LETTERS = [
-  { id: "grievance", name: "Formal Grievance", risk: "high" as const, icon: FileWarning, hint: "ACAS Code Step 1 / Title VII complaint" },
+  { id: "grievance", name: "Formal grievance", risk: "high" as const, icon: FileWarning, hint: "ACAS Code Step 1 / Title VII complaint" },
   { id: "resignation_clean", name: "Resignation", risk: "low" as const, icon: Mail, hint: "Standard, gracious. Last day + thanks." },
   { id: "resignation_constructive", name: "Constructive resignation", risk: "high" as const, icon: Mail, hint: "Resigning in response to fundamental breach." },
   { id: "flexible_working_request", name: "Flexible working", risk: "low" as const, icon: CalendarClock, hint: "Day-one statutory right (UK, Apr 2024)." },
@@ -595,7 +595,7 @@ function VariantC() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <DeadlineRow letter="Formal Grievance" deadline="14 Jun 2026" days={14} basis="ACAS EC by 03 May" />
+                <DeadlineRow letter="Formal grievance" deadline="14 Jun 2026" days={14} basis="ACAS EC by 03 May" />
                 <DeadlineRow letter="Appeal letter" deadline="21 Jun 2026" days={21} basis="5 working days" />
               </CardContent>
             </Card>

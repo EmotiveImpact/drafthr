@@ -13,11 +13,12 @@
  * matches because the same Tailwind classes / DS tokens are used in both.
  */
 
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/ds";
 import { AuthSplitShell } from "./AuthSplitShell";
+import { cn } from "@/lib/utils";
 
 type AuthShellProps = {
   /** Small eyebrow above the heading ("Sign up", "Reset password"). */
@@ -73,7 +74,7 @@ export function AuthShell({
             </p>
             <h1
               id="auth-heading"
-              className="ds-title mt-2 text-[clamp(28px,3.4vw,34px)] leading-[1.12]"
+              className={AUTH_HEADING_CLASS}
             >
               {heading}
             </h1>
@@ -146,23 +147,68 @@ export function AuthFooter() {
 
 /* ─── Form primitives ─────────────────────────────────────────────────── */
 
+/** Auth page headings: Newsreader, 28px on phones and 32px from tablets up
+ * (kit page-title scale for a narrow card). */
+export const AUTH_HEADING_CLASS = "ds-title mt-2 text-[28px] leading-[1.12] sm:text-[32px]";
+
+/**
+ * The kit text field (kit 04) for the auth pages: hairline border, a darker
+ * border on hover, a black border on focus, a red border when invalid, grey
+ * fill when disabled. Same look as `@/components/ui/input`, 42px tall.
+ */
+export const AUTH_INPUT_CLASS =
+  "h-[42px] w-full rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-ink)] outline-none transition-[border-color] duration-[120ms] placeholder:text-[var(--ds-subtle)] hover:border-[var(--ds-line-hover)] focus:border-[var(--ds-ink)] aria-invalid:border-[var(--ds-red-line)] aria-invalid:focus:border-[var(--ds-red-fg)] disabled:cursor-not-allowed disabled:bg-[var(--ds-surface-2)] disabled:text-[var(--ds-muted)]";
+
+/** Help text below a field, or the error in red with an alert icon. */
+export function FieldMessage({
+  id,
+  error,
+  hint,
+}: {
+  id: string;
+  error?: string | null;
+  hint?: string;
+}) {
+  if (error) {
+    return (
+      <p id={id} className="mt-1.5 flex items-start gap-1.5 text-[12.5px] leading-snug text-[var(--ds-red-fg)]">
+        <AlertCircle className="mt-px size-3.5 shrink-0" aria-hidden />
+        {error}
+      </p>
+    );
+  }
+  if (hint) {
+    return (
+      <p id={id} className="mt-1.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+        {hint}
+      </p>
+    );
+  }
+  return null;
+}
+
 type TextFieldProps = {
   id: string;
   label: string;
   type?: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
   required?: boolean;
   disabled?: boolean;
   autoComplete?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   hint?: string;
+  /** Inline error (red border, alert icon, says what to do). */
+  error?: string | null;
 };
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
   props,
   ref,
 ) {
+  const msgId = `${props.id}-msg`;
+  const hasMsg = !!props.error || !!props.hint;
   return (
     <div>
       <label
@@ -179,16 +225,119 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         inputMode={props.inputMode}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
+        onBlur={props.onBlur}
         required={props.required}
         disabled={props.disabled}
-        className="w-full h-[42px] rounded-[var(--ds-r-m)] border border-[var(--ds-line-strong)] bg-[var(--ds-surface)] px-3 text-[14px] text-[var(--ds-ink)] placeholder:text-[var(--ds-subtle)] focus:border-[var(--ds-focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ds-focus)]/15 disabled:opacity-60"
+        aria-invalid={props.error ? true : undefined}
+        aria-describedby={hasMsg ? msgId : undefined}
+        className={AUTH_INPUT_CLASS}
       />
-      {props.hint && (
-        <p className="mt-1 text-[11.5px] text-[var(--ds-muted)] leading-snug">{props.hint}</p>
-      )}
+      <FieldMessage id={msgId} error={props.error} hint={props.hint} />
     </div>
   );
 });
+
+type PasswordFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete?: string;
+  disabled?: boolean;
+  hint?: string;
+  error?: string | null;
+  /** Something to show on the right of the label row ("Forgot password?"). */
+  aside?: ReactNode;
+};
+
+/**
+ * Password field with the eye reveal toggle, used by sign in, sign up and
+ * reset so every auth page reveals passwords the same way.
+ */
+export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
+  function PasswordField(props, ref) {
+    const [show, setShow] = useState(false);
+    const msgId = `${props.id}-msg`;
+    const hasMsg = !!props.error || !!props.hint;
+    return (
+      <div>
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+          <label htmlFor={props.id} className="block text-[13px] font-medium text-[var(--ds-ink)]">
+            {props.label}
+          </label>
+          {props.aside}
+        </div>
+        <div className="relative">
+          <input
+            ref={ref}
+            id={props.id}
+            type={show ? "text" : "password"}
+            autoComplete={props.autoComplete}
+            value={props.value}
+            onChange={(e) => props.onChange(e.target.value)}
+            required
+            disabled={props.disabled}
+            aria-invalid={props.error ? true : undefined}
+            aria-describedby={hasMsg ? msgId : undefined}
+            className={cn(AUTH_INPUT_CLASS, "pr-11")}
+          />
+          <button
+            type="button"
+            onClick={() => setShow((v) => !v)}
+            tabIndex={-1}
+            aria-label={show ? "Hide password" : "Show password"}
+            aria-pressed={show}
+            className="absolute right-1.5 top-1/2 inline-grid size-8 -translate-y-1/2 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
+          >
+            {show ? (
+              <EyeOff className="size-[15px]" aria-hidden />
+            ) : (
+              <Eye className="size-[15px]" aria-hidden />
+            )}
+          </button>
+        </div>
+        <FieldMessage id={msgId} error={props.error} hint={props.hint} />
+      </div>
+    );
+  },
+);
+
+/** The kit checkbox (kit 04): 18px, 5px corners, black with a white tick
+ * when on, the kit focus ring from the keyboard. A real checkbox input. */
+export function AuthCheckbox({
+  checked,
+  onChange,
+  disabled,
+  children,
+  id,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+  children: ReactNode;
+  id?: string;
+}) {
+  return (
+    <label className="flex items-start gap-2.5 text-[12.5px] leading-snug text-[var(--ds-body)] select-none">
+      <span className="relative mt-[-1px] inline-grid size-[18px] shrink-0 place-items-center">
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
+          className="peer size-[18px] cursor-pointer appearance-none rounded-[5px] border-[1.5px] border-[var(--ds-line-hover)] bg-[var(--ds-surface)] outline-none transition-colors duration-[120ms] hover:border-[var(--ds-faint)] checked:border-[var(--ds-ink)] checked:bg-[var(--ds-ink)] focus-visible:shadow-[var(--ds-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+        />
+        <Check
+          className="pointer-events-none absolute size-3 text-[var(--ds-on-accent)] opacity-0 peer-checked:opacity-100"
+          strokeWidth={2.6}
+          aria-hidden
+        />
+      </span>
+      <span className="min-w-0">{children}</span>
+    </label>
+  );
+}
 
 export function ErrorAlert({ message }: { message: string }) {
   return (

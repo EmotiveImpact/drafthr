@@ -81,7 +81,7 @@ export function ModePicker() {
             icon={<GraduationCap className="size-7" strokeWidth={1.5} />}
             title="I'm a consultant"
             description="Reviewing letters for HR teams: settlement, TUPE, and complex disciplinary or grievance cases. Get matched through the marketplace and receive bookings with the full evidence pack and cite-checked clauses."
-            meta="Marketplace listing, inbound bookings, flat fee or hourly"
+            meta="Marketplace listing, inbound bookings, one price per review"
             onClick={chooseConsultant}
           />
         </div>

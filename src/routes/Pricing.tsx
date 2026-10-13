@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { Check, Info } from "lucide-react";
@@ -86,17 +86,33 @@ export function Pricing() {
     return s === "success" || s === "cancelled" ? s : null;
   });
 
+  // React StrictMode runs effects twice in development; announce the
+  // checkout outcome once per visit (the toast ids also stop sonner from
+  // stacking a duplicate).
+  const announced = useRef(false);
   useEffect(() => {
     let cancelled = false;
     // Post-checkout return: Stripe redirects back with ?status=success|cancelled.
     const params = new URLSearchParams(window.location.search);
-    if (outcome === "success") {
-      toast.success("Payment complete. Thank you, your plan is being activated.");
-    } else if (outcome === "cancelled") {
-      toast("Checkout cancelled. No charge was made.");
-    }
-    if (params.get("gate") === "1") {
-      toast("Choose a plan to start creating letters.");
+    if (!announced.current) {
+      announced.current = true;
+      if (outcome === "success") {
+        toast.success("Payment complete", {
+          id: "checkout-outcome",
+          description: "Thank you. Your plan is being activated and shows here in a moment.",
+        });
+      } else if (outcome === "cancelled") {
+        toast("Checkout cancelled", {
+          id: "checkout-outcome",
+          description: "No charge was made. Pick a plan whenever you're ready.",
+        });
+      }
+      if (params.get("gate") === "1") {
+        toast("Choose a plan to continue", {
+          id: "checkout-gate",
+          description: "Creating letters needs a plan or credits on this workspace.",
+        });
+      }
     }
     if (outcome || params.get("gate")) {
       window.history.replaceState(null, "", window.location.pathname + window.location.hash);

@@ -28,7 +28,8 @@ export function uploadKind(fileName: string): UploadKind | null {
 /** Null when the file can be read, otherwise what to do about it. */
 export function validateUpload(file: { name: string; size: number }): string | null {
   if (!uploadKind(file.name)) return `${UPLOAD_RULE}. This file type can't be read.`;
-  if (file.size > UPLOAD_MAX_BYTES) return `${UPLOAD_RULE}. This file is ${formatBytes(file.size)}.`;
+  if (file.size > UPLOAD_MAX_BYTES)
+    return `This file is ${overLimitSize(file.size)}, over the 1 MB limit. Remove images or extra pages, or save the wording as a .txt file, then choose it again.`;
   if (file.size === 0) return `${UPLOAD_RULE}. This file is empty.`;
   return null;
 }
@@ -36,6 +37,13 @@ export function validateUpload(file: { name: string; size: number }): string | n
 /** The file name without its extension, as a starting template name. */
 export function nameFromFile(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+/** A size just over the limit in whole KB rounded up ("1,025 KB"), so it
+ * never reads as the limit itself; larger files in MB. */
+function overLimitSize(n: number): string {
+  if (n < 10 * 1024 * 1024) return `${Math.ceil(n / 1024).toLocaleString("en-GB")} KB`;
+  return formatBytes(n);
 }
 
 export function formatBytes(n: number): string {
