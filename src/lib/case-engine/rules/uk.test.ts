@@ -112,20 +112,50 @@ describe("uk.tribunalTimeLimit", () => {
     expect(limit("redundancy_pay", "2026-12-18", EW).date).toBe("2027-06-17");
   });
 
-  it("moves breach of contract in Scotland only from 9 November 2026", () => {
+  it("moves breach of contract in Scotland only from 9 November 2026, flagged while the order is a draft", () => {
     expect(limit("breach_of_contract", "2026-11-08", SC).detail?.months).toBe(3);
-    expect(limit("breach_of_contract", "2026-11-09", SC).date).toBe("2027-05-08");
-    expect(limit("breach_of_contract", "2026-11-02", EW).date).toBe("2027-05-01");
-    expect(limit("breach_of_contract", "2026-09-30", EW).detail?.months).toBe(3);
+    const scottish = limit("breach_of_contract", "2026-11-09", SC);
+    expect(scottish.date).toBe("2027-05-08");
+    expect(scottish.detail).toEqual({ months: 6, ifScottishOrderNotMade: "2027-02-08" });
+    expect(scottish.toVerify?.some((t) => t.includes("still a draft") && t.includes("8 February 2027"))).toBe(true);
+    expect(scottish.sources).toContain("ETEJ (Amendment) (Scotland) Order 2026 art 3 (draft)");
     expect(limit("breach_of_contract", "2026-11-02", SC).basis).toContain("9 November 2026");
   });
 
-  it("keeps the companion claim at three months, flagged, and detriment at six", () => {
+  it("keys England and Wales breach of contract to 1 October 2026 (SI 2026/759)", () => {
+    expect(limit("breach_of_contract", "2026-09-30", EW).detail?.months).toBe(3);
+    const r = limit("breach_of_contract", "2026-11-02", EW);
+    expect(r.date).toBe("2027-05-01");
+    expect(r.sources).toEqual([
+      "ETEJ (England and Wales) Order 1994 art 7",
+      "SI 2026/759 art 3",
+      "ETEJ (England and Wales) Order 1994 arts 3(c), 10",
+      "Limitation Act 1980 s5",
+    ]);
+    expect(r.basis).toContain("only once employment has ended");
+    expect(r.basis).toContain("£25,000");
+    expect(r.toVerify?.some((t) => t.includes("draft"))).toBe(false);
+  });
+
+  it("gives the companion claim six months from 1 October 2026 in Great Britain, and detriment too", () => {
     const companion = limit("companion", "2026-10-05");
-    expect(companion.date).toBe("2027-01-04");
-    expect(companion.toVerify?.some((t) => t.includes("Sch 12 para 8"))).toBe(true);
-    expect(limit("companion", "2026-09-05").toVerify?.some((t) => t.includes("Sch 12 para 8"))).toBe(false);
+    expect(companion.date).toBe("2027-04-04");
+    expect(companion.sources).toEqual(["ERA 1999 s11(2)", "ERA 2025 s152 and Sch 12", "SI 2026/954 reg 3, reg 4", "SI 2026/954 Schedule"]);
+    expect(limit("companion", "2026-09-05").date).toBe("2026-12-04");
     expect(limit("detriment", "2026-10-05").date).toBe("2027-04-04");
+    const ni = limit("companion", "2026-10-05", NI);
+    expect(ni.date).toBe("2027-01-04");
+    expect(ni.sources).toEqual(["ER(NI)O 1999 Art 13(2)"]);
+  });
+
+  it("notes the two-year limit on deduction claims in Great Britain only", () => {
+    const gb = limit("deduction", "2026-10-23");
+    expect(gb.basis).toContain("two years");
+    expect(gb.sources).toContain("ERA 1996 s23(4A)");
+    const ni = limit("deduction", "2026-10-23", NI);
+    expect(ni.sources).toEqual(["ERO 1996 Art 55(2), (3)"]);
+    expect(ni.basis).toContain("no two-year limit");
+    expect(ni.toVerify?.some((t) => t.includes("not opened"))).toBe(false);
   });
 
   it("gives six months for redundancy pay before the change and in Northern Ireland", () => {
@@ -135,9 +165,46 @@ describe("uk.tribunalTimeLimit", () => {
     expect(ni.sources).toEqual(["ERO 1996 Art 199"]);
   });
 
-  it("flags Northern Ireland claim types whose provision was not opened", () => {
-    expect(limit("deduction", "2026-10-05", NI).toVerify?.some((t) => t.includes("not opened"))).toBe(true);
-    expect(limit("discrimination", "2026-10-05", NI).toVerify?.some((t) => t.includes("Fair Employment"))).toBe(true);
+  it("cites the confirmed Northern Ireland provisions and flags the rest", () => {
+    expect(limit("unfair_dismissal", "2026-10-05", NI).sources).toEqual(["ERO 1996 Art 145(2)"]);
+    expect(limit("protective_award", "2026-12-11", NI)).toMatchObject({ date: "2027-03-10", sources: ["ERO 1996 Art 217(5)"] });
+    expect(limit("detriment", "2026-10-05", NI).toVerify?.some((t) => t.includes("not opened"))).toBe(true);
+    expect(limit("breach_of_contract", "2026-10-05", NI).toVerify?.some((t) => t.includes("not opened"))).toBe(true);
+  });
+
+  describe("Northern Ireland discrimination by ground", () => {
+    const ni = (relevantDate: string, ground?: string | string[], knowledgeDate?: string) =>
+      run("uk.tribunalTimeLimit", { claimType: "discrimination", relevantDate, ground, knowledgeDate }, NI);
+
+    it("cites every ground's law when none is given, noting the Fair Employment Tribunal", () => {
+      const r = ni("2026-10-14");
+      expect(r.date).toBe("2027-01-13");
+      expect(r.sources).toEqual(["SDO 1976 Art 76", "RRO 1997 Art 65", "DDA 1995 Sch 3 para 3", "SR 2006/261 reg 48", "SR 2003/497 reg 41", "FETO 1998 Art 46"]);
+      expect(r.basis).toContain("Fair Employment Tribunal");
+    });
+
+    it("cites the ground's own law (grievance T3)", () => {
+      expect(ni("2026-10-14", "sex").sources).toEqual(["SDO 1976 Art 76"]);
+      expect(ni("2026-10-14", ["race", "national_origin", "unknown"]).sources).toEqual(["RRO 1997 Art 65"]);
+      expect(ni("2026-10-14", "disability").basis).not.toContain("Fair Employment");
+    });
+
+    it("gives a fair employment claim the earlier of 3 months from knowledge and 6 from the act", () => {
+      const fromAct = ni("2026-10-14", "religion_belief");
+      expect(fromAct.date).toBe("2027-01-13");
+      expect(fromAct.sources).toEqual(["FETO 1998 Art 46(1)"]);
+      expect(fromAct.toVerify?.some((t) => t.includes("13 April 2027"))).toBe(true);
+      expect(ni("2026-10-14", "political_opinion", "2026-12-01")).toMatchObject({ date: "2027-02-28", detail: { months: 3 } });
+      expect(ni("2026-10-14", "religion_political", "2027-03-20")).toMatchObject({ date: "2027-04-13", detail: { months: 6 } });
+    });
+
+    it("refuses a knowledge date before the act", () => {
+      expect(ni("2026-10-14", "religion_belief", "2026-10-01").missing).toEqual(["knowledgeDate"]);
+    });
+
+    it("ignores the ground in Great Britain", () => {
+      expect(run("uk.tribunalTimeLimit", { claimType: "discrimination", relevantDate: "2026-10-14", ground: "religion_belief" }).date).toBe("2027-04-13");
+    });
   });
 });
 
@@ -180,6 +247,29 @@ describe("uk.earlyConciliation", () => {
     expect(r.basis).toContain("Labour Relations Agency");
     expect(r.sources).toContain("ERO 1996 Art 249B");
     expect(r.toVerify?.some((t) => t.includes("Article 249B"))).toBe(true);
+  });
+
+  it("cites the 12-week period in Great Britain", () => {
+    expect(ec("2027-03-31", "2027-03-01", "2027-03-20").sources).toContain("SI 2025/1153 reg 2");
+  });
+
+  it("applies Article 249B to a sex claim in Northern Ireland without the scope note", () => {
+    const r = run("uk.earlyConciliation", { limitDate: "2027-02-26", dayA: "2027-02-01", dayB: "2027-02-20", ground: "sex" }, NI);
+    expect(r.date).toBe("2027-03-20");
+    expect(r.toVerify?.some((t) => t.includes("Article 249B is applied"))).toBe(false);
+  });
+
+  it("does not extend age, sexual orientation or fair employment claims in Northern Ireland, flagged", () => {
+    const r = run("uk.earlyConciliation", { limitDate: "2027-02-26", dayA: "2027-02-01", dayB: "2027-02-20", ground: ["age", "sex"] }, NI);
+    expect(r.date).toBe("2027-02-26");
+    expect(r.detail).toEqual({ stoppedDays: 19, oneMonthAfterDayB: "2027-03-20", extendedDate: "2027-03-20" });
+    expect(r.sources).toContain("SR 2006/261 reg 48A");
+    expect(r.toVerify?.[0]).toContain("20 March 2027");
+    const fet = run("uk.earlyConciliation", { limitDate: "2027-02-26", dayA: "2027-02-01", dayB: "2027-02-20", ground: "religion_political" }, NI);
+    expect(fet.date).toBe("2027-02-26");
+    expect(fet.sources).toContain("FETO 1998 Art 46B");
+    // In Great Britain the ground changes nothing.
+    expect(run("uk.earlyConciliation", { limitDate: "2027-02-26", dayA: "2027-02-01", dayB: "2027-02-20", ground: "age" }).date).toBe("2027-03-20");
   });
 });
 
@@ -229,18 +319,40 @@ describe("uk.qualifyingService", () => {
     expect(r.detail).toMatchObject({ qualifies: false, months: 24 });
   });
 
-  it("needs six months from 1 January 2027, flagged", () => {
+  it("needs six months where the effective date of termination is on or after 1 January 2027", () => {
     const r = qs("2025-05-01", "2027-01-15");
     expect(r.date).toBe("2025-10-31");
     expect(r.detail).toMatchObject({ qualifies: true, months: 6 });
-    expect(r.toVerify?.some((t) => t.includes("transitional"))).toBe(true);
+    expect(r.sources).toEqual(["ERA 1996 s108(1)", "ERA 1996 s97(2)", "ERA 2025 s25(2)", "SI 2026/559 regs 3, 4"]);
+    expect(r.basis).toContain("even if notice was given earlier");
+    expect(r.toVerify).toBeUndefined();
   });
 
   it("flags a summary dismissal that s97(2) would carry into 2027", () => {
     const r = qs("2025-05-01", "2026-12-28");
-    expect(r.detail).toMatchObject({ qualifies: false, s97Date: "2027-01-04" });
-    expect(r.toVerify?.some((t) => t.includes("4 January 2027"))).toBe(true);
-    expect(r.toVerify?.some((t) => t.includes("in 2027"))).toBe(true);
+    expect(r.detail).toMatchObject({ qualifies: false, months: 24, s97Date: "2027-01-04" });
+    expect(r.toVerify?.some((t) => t.includes("SI 2026/559 reg 4") && t.includes("in 2027"))).toBe(true);
+  });
+
+  it("adds statutory notice when told employment ended without it", () => {
+    const short = (withoutNotice: boolean, resignation?: boolean, ctx = EW) =>
+      run("uk.qualifyingService", { startDate: "2024-10-01", terminationDate: "2026-09-29", withoutNotice, resignation }, ctx);
+    const added = short(true);
+    expect(added.detail).toMatchObject({ qualifies: true, s97Date: "2026-10-06" });
+    expect(added.basis).toContain("6 October 2026");
+    expect(added.toVerify?.some((t) => t.includes("s86(6)"))).toBe(true);
+    const full = short(false);
+    expect(full.detail).toEqual({ qualifies: false, months: 24 });
+    expect(full.toVerify).toBeUndefined();
+    const resigned = short(true, true);
+    expect(resigned.sources).toContain("ERA 1996 s97(4)");
+    expect(resigned.toVerify).toBeUndefined();
+  });
+
+  it("keeps the 2-year period when added notice only reaches 2027, flagged", () => {
+    const r = run("uk.qualifyingService", { startDate: "2025-05-01", terminationDate: "2026-12-28", withoutNotice: true });
+    expect(r.detail).toMatchObject({ qualifies: false, months: 24, s97Date: "2027-01-04" });
+    expect(r.toVerify?.some((t) => t.includes("SI 2026/559 reg 4"))).toBe(true);
   });
 
   it("counts the start day and flags the s97(2) boundary", () => {
@@ -260,7 +372,15 @@ describe("uk.qualifyingService", () => {
     const r = qs("2026-01-05", "2026-12-10", NI);
     expect(r.date).toBe("2027-01-04");
     expect(r.detail).toMatchObject({ qualifies: false, months: 12 });
-    expect(r.sources).toEqual(["ERO 1996 Art 140(1)"]);
+    expect(r.sources).toEqual(["ERO 1996 Art 140(1)", "ERO 1996 Art 129(2)"]);
+  });
+
+  it("adds statutory notice in Northern Ireland under Article 129(2)", () => {
+    const r = run("uk.qualifyingService", { startDate: "2026-01-05", terminationDate: "2026-12-28", withoutNotice: true }, NI);
+    expect(r.detail).toMatchObject({ qualifies: true, months: 12, s97Date: "2027-01-04" });
+    expect(r.basis).toContain("ERO 1996 Art 129(2)");
+    const resigned = run("uk.qualifyingService", { startDate: "2026-01-05", terminationDate: "2026-12-28", withoutNotice: true, resignation: true }, NI);
+    expect(resigned.toVerify?.some((t) => t.includes("resignation"))).toBe(true);
   });
 
   it("qualifies for an automatically unfair reason whatever the service", () => {
@@ -275,21 +395,45 @@ describe("uk.qualifyingService", () => {
 });
 
 describe("uk.writtenReasons", () => {
+  const reasons = (input: RuleInput, ctx = EW) => run("uk.writtenReasons", { requestDate: "2026-11-10", ...input }, ctx);
+
   it("is due 14 days after the request", () => {
-    const r = run("uk.writtenReasons", { requestDate: "2026-11-10" });
+    const r = reasons({});
     expect(r.date).toBe("2026-11-24");
     expect(r.detail).toEqual({ automatic: false });
-    expect(r.sources).toEqual(["ERA 1996 s92"]);
+    expect(r.sources).toEqual(["ERA 1996 s92(2), (3)"]);
+    expect(r.basis).toContain("6 months where the effective date of termination is on or after 1 January 2027");
   });
 
   it("is automatic while pregnant or on leave", () => {
-    const r = run("uk.writtenReasons", { requestDate: "2026-11-10", pregnantOrOnLeave: true });
+    const r = reasons({ pregnantOrOnLeave: true });
     expect(r.detail).toEqual({ automatic: true });
     expect(r.basis).toContain("without asking");
+    expect(r.sources).toContain("ERA 1996 s92(4), (4A)");
   });
 
-  it("uses Article 124 in Northern Ireland", () => {
-    expect(run("uk.writtenReasons", { requestDate: "2026-11-10" }, NI).sources).toEqual(["ERO 1996 Art 124"]);
+  it("says whether the service is met, with six months from 1 January 2027", () => {
+    expect(reasons({ startDate: "2025-05-01", terminationDate: "2026-11-06" }).detail).toEqual({
+      automatic: false,
+      qualifies: false,
+      monthsNeeded: 24,
+    });
+    const r = reasons({ startDate: "2026-05-01", terminationDate: "2027-01-08" });
+    expect(r.detail).toEqual({ automatic: false, qualifies: true, monthsNeeded: 6 });
+    expect(r.sources).toEqual(["ERA 1996 s92(2), (3)", "ERA 2025 Sch 3 para 1(2)", "SI 2026/559 reg 4"]);
+    expect(reasons({ startDate: "2026-09-01", terminationDate: "2026-11-06", pregnantOrOnLeave: true }).detail?.qualifies).toBe(true);
+  });
+
+  it("uses Article 124 in Northern Ireland, with one year's service", () => {
+    expect(reasons({}, NI).sources).toEqual(["ERO 1996 Art 124(2), (3)"]);
+    expect(reasons({ startDate: "2025-12-01", terminationDate: "2026-11-30" }, NI).detail).toEqual({
+      automatic: false,
+      qualifies: true,
+      monthsNeeded: 12,
+    });
+    const automatic = reasons({ pregnantOrOnLeave: true }, NI);
+    expect(automatic.sources).toEqual(["ERO 1996 Art 124(2), (3)", "ERO 1996 Art 124(4), (4A)"]);
+    expect(automatic.toVerify).toBeUndefined();
   });
 });
 
@@ -322,7 +466,8 @@ describe("uk.statutoryNotice", () => {
   });
 
   it("uses Article 118 in Northern Ireland", () => {
-    expect(notice("2020-01-06", "2026-12-01", NI).sources).toEqual(["ERO 1996 Art 118(1)"]);
+    expect(notice("2020-01-06", "2026-12-01", NI).sources).toEqual(["ERO 1996 Art 118(1), (6)"]);
+    expect(notice("2020-01-06", "2026-12-01").sources).toEqual(["ERA 1996 s86(1), (6)"]);
   });
 });
 
@@ -390,7 +535,8 @@ describe("uk.collectiveConsultation and uk.hr1Deadline", () => {
     const r = run("uk.hr1Deadline", { proposedCount: 150, firstDismissalDate: "2027-03-01" }, NI);
     expect(r.date).toBe("2026-11-30");
     expect(r.basis).toContain("Department for the Economy");
-    expect(r.sources).toEqual(["ERO 1996 Art 221"]);
+    expect(r.sources).toEqual(["ERO 1996 Art 221", "ERO 1996 Art 222"]);
+    expect(r.basis).toContain("NISRA");
     expect(run("uk.hr1Deadline", { proposedCount: 19, firstDismissalDate: "2027-03-01" }).detail?.applies).toBe(false);
   });
 });
@@ -401,6 +547,7 @@ describe("uk.protectiveAwardMax", () => {
     expect(run("uk.protectiveAwardMax", { dismissalDate: "2026-04-06" }).detail?.maxDays).toBe(180);
     expect(run("uk.protectiveAwardMax", { dismissalDate: "2026-04-05" }).detail?.maxDays).toBe(90);
     expect(run("uk.protectiveAwardMax", { dismissalDate: "2026-12-11" }, NI).detail?.maxDays).toBe(90);
+    expect(run("uk.protectiveAwardMax", { dismissalDate: "2026-12-18" }).basis).toContain("Each dismissal's own date decides");
   });
 });
 
@@ -423,6 +570,23 @@ describe("uk.statutoryRedundancyPay", () => {
   it("counts only the last 20 years, up to the gov.uk maximum", () => {
     expect(pay("1990-01-01", "2026-12-18", "1960-01-01", 1000).detail?.amount).toBe(22530);
     expect(pay("1990-01-01", "2026-12-18", "1960-01-01", 1000, NI).detail).toMatchObject({ weeklyCap: 783, amount: 23490 });
+  });
+
+  it("cites the provisions that set the cap by the relevant date", () => {
+    expect(pay("2010-03-01", "2026-12-18", "1980-06-15", 900).sources).toEqual([
+      "ERA 1996 s155",
+      "ERA 1996 s162",
+      "ERA 1996 s227(1)",
+      "SI 2026/310 art 4(2)(o)",
+      "SI 2026/310 Schedule",
+    ]);
+    expect(pay("2010-03-01", "2026-12-18", "1980-06-15", 900, NI).sources).toEqual([
+      "ERO 1996 Art 190",
+      "ERO 1996 Art 197",
+      "ERO 1996 Art 23(1)",
+      "SR 2026/57 art 4(2)(l)",
+      "SR 2026/57 Schedule",
+    ]);
   });
 
   it("uses the cap for the date of the redundancy", () => {
@@ -448,37 +612,81 @@ describe("uk.statutoryRedundancyPay", () => {
 describe("uk.familyLeaveProtectedPeriod", () => {
   const leave = (input: RuleInput, ctx = EW) => run("uk.familyLeaveProtectedPeriod", input, ctx);
 
-  it("ends with the last day of 18 months beginning with the birth (redundancy T1)", () => {
-    // The draft says 9 December 2027; reg 10(1B) and (1C) end it the day before.
+  it("ends the day before the 18-month anniversary of the birth (redundancy T1)", () => {
     const r = leave({ leaveType: "maternity", birthDate: "2026-06-09", notifiedPregnancyDate: "2025-11-03" });
     expect(r.date).toBe("2027-12-08");
-    expect(r.detail).toMatchObject({ runsFrom: "birth", from: "2025-11-03" });
-    expect(r.toVerify).toHaveLength(2);
+    expect(r.detail).toMatchObject({ runsFrom: "birth", from: "2025-11-03", extended: true });
+    expect(r.sources).toEqual(["MPL Regs 1999 reg 10(1) to (1E)", "MPL Regs 1999 reg 20(1)(b)", "SI 2024/264 reg 3"]);
+    expect(r.basis).toContain("automatically unfair");
+    // Only the notification point is left to verify.
+    expect(r.toVerify).toHaveLength(1);
+    expect(r.toVerify?.[0]).toContain("reg 10(1D)");
+    expect(leave({ leaveType: "maternity", birthDate: "2026-06-09", birthNotified: true }).toVerify).toBeUndefined();
   });
 
-  it("runs from the expected week when no birth date was given", () => {
+  it("runs from the expected week when the birth date was not given or not notified", () => {
     const r = leave({ leaveType: "maternity", expectedWeekStart: "2026-06-07" });
     expect(r.date).toBe("2027-12-06");
     expect(r.detail?.runsFrom).toBe("expected_week");
     const both = leave({ leaveType: "maternity", birthDate: "2026-06-09", expectedWeekStart: "2026-06-07" });
     expect(both.detail?.endIfBirthNotNotified).toBe("2027-12-06");
+    const notTold = leave({ leaveType: "maternity", birthDate: "2026-06-09", expectedWeekStart: "2026-06-07", birthNotified: false });
+    expect(notTold.date).toBe("2027-12-06");
+    expect(leave({ leaveType: "maternity", birthDate: "2026-06-09", birthNotified: false }).missing).toEqual(["expectedWeekStart"]);
   });
 
   it("needs a birth date or expected week for maternity", () => {
     expect(leave({ leaveType: "maternity" })).toMatchObject({ date: null, missing: ["birthDate", "expectedWeekStart"] });
   });
 
-  it("gives no date for other leave types yet", () => {
-    const r = leave({ leaveType: "adoption", leaveEndDate: "2026-12-01" });
-    expect(r.date).toBeNull();
-    expect(r.toVerify?.[0]).toContain("not opened");
+  it("ends with leave that ended before 6 April 2024", () => {
+    const r = leave({ leaveType: "maternity", birthDate: "2023-05-01", leaveEndDate: "2024-04-05" });
+    expect(r.date).toBe("2024-04-05");
+    expect(r.detail?.extended).toBe(false);
+    expect(leave({ leaveType: "maternity", birthDate: "2023-05-01", leaveEndDate: "2024-04-06" }).date).toBe("2024-10-31");
   });
 
-  it("ends with maternity leave in Northern Ireland, flagged", () => {
+  it("runs 18 months from the placement for adoption", () => {
+    const r = leave({ leaveType: "adoption", placementDate: "2026-03-02" });
+    expect(r.date).toBe("2027-09-01");
+    expect(r.sources).toEqual(["PAL Regs 2002 reg 23", "SI 2024/264"]);
+    expect(leave({ leaveType: "adoption", leaveEndDate: "2026-12-01" }).missing).toEqual(["placementDate"]);
+  });
+
+  it("extends shared parental, neonatal and bereaved partner's leave only after six consecutive weeks", () => {
+    const six = leave({ leaveType: "shared_parental", birthDate: "2026-06-09", sixConsecutiveWeeks: true });
+    expect(six.date).toBe("2027-12-08");
+    expect(six.sources).toEqual(["SPL Regs 2014 reg 39", "SI 2024/264"]);
+    const adopted = leave({ leaveType: "shared_parental", birthDate: "2026-01-01", placementDate: "2026-06-09", sixConsecutiveWeeks: true });
+    expect(adopted).toMatchObject({ date: "2027-12-08", detail: { runsFrom: "placement" } });
+    const short = leave({ leaveType: "neonatal", birthDate: "2026-06-09", sixConsecutiveWeeks: false, leaveEndDate: "2026-07-10" });
+    expect(short).toMatchObject({ date: "2026-07-10", sources: ["SI 2025/375 reg 14"], detail: { extended: false } });
+    expect(leave({ leaveType: "bereaved_partner", birthDate: "2026-06-09", sixConsecutiveWeeks: true }).sources).toEqual(["SI 2026/237 reg 14"]);
+    expect(leave({ leaveType: "neonatal", birthDate: "2026-06-09" }).missing).toEqual(["sixConsecutiveWeeks"]);
+    expect(leave({ leaveType: "neonatal", birthDate: "2026-06-09", sixConsecutiveWeeks: false }).missing).toEqual(["leaveEndDate"]);
+    expect(leave({ leaveType: "shared_parental", sixConsecutiveWeeks: true }).missing).toEqual(["birthDate", "placementDate"]);
+  });
+
+  it("gives no priority for ordinary paternity leave", () => {
+    const r = leave({ leaveType: "paternity", birthDate: "2026-06-09" });
+    expect(r).toMatchObject({ date: null, detail: { covered: false } });
+    expect(r.basis).toContain("no redundancy priority");
+  });
+
+  it("ends with the leave in Northern Ireland, for maternity, adoption and shared parental leave", () => {
     const r = leave({ leaveType: "maternity", birthDate: "2026-02-10", leaveEndDate: "2027-02-08" }, NI);
     expect(r.date).toBe("2027-02-08");
-    expect(r.toVerify?.length).toBeGreaterThan(0);
+    expect(r.sources).toEqual(["MPL Regs (NI) 1999 reg 10"]);
+    expect(r.toVerify).toBeUndefined();
+    expect(leave({ leaveType: "adoption", leaveEndDate: "2027-02-08" }, NI).sources).toEqual(["PAL Regs (NI) 2002 reg 23"]);
+    expect(leave({ leaveType: "shared_parental", leaveEndDate: "2027-02-08" }, NI).sources).toEqual(["SPL Regs (NI) 2015 reg 39"]);
     expect(leave({ leaveType: "maternity", birthDate: "2026-02-10" }, NI).missing).toEqual(["leaveEndDate"]);
+  });
+
+  it("does not cover other leave in Northern Ireland, flagged", () => {
+    const r = leave({ leaveType: "neonatal", leaveEndDate: "2027-02-08" }, NI);
+    expect(r).toMatchObject({ date: null, detail: { covered: false } });
+    expect(r.toVerify?.[0]).toContain("not checked");
   });
 });
 
@@ -500,7 +708,7 @@ describe("uk.trialPeriodEnd", () => {
   });
 
   it("uses Article 173 in Northern Ireland", () => {
-    expect(run("uk.trialPeriodEnd", { newRoleStartDate: "2027-02-01" }, NI).sources).toEqual(["ERO 1996 Art 173(3)"]);
+    expect(run("uk.trialPeriodEnd", { newRoleStartDate: "2027-02-01" }, NI).sources).toEqual(["ERO 1996 Art 173(3), (6)"]);
   });
 });
 
@@ -514,15 +722,70 @@ describe("uk.sexualHarassmentDuty", () => {
     const after = duty("2026-10-30");
     expect(after.detail).toEqual({ standard: "all_reasonable_steps", thirdParty: true });
     expect(after.sources).toContain("SI 2026/1065 reg 3");
+    expect(after.toVerify?.some((t) => t.includes("s40(1A)") && t.includes("without limit"))).toBe(true);
   });
 
   it("applies the stronger duty to the client dinner (grievance T2)", () => {
     expect(duty("2026-11-05", SC)).toMatchObject({ date: null, detail: { standard: "all_reasonable_steps", thirdParty: true } });
   });
 
-  it("does not apply in Northern Ireland", () => {
+  it("does not apply in Northern Ireland, which keeps its own liability rules", () => {
     const r = duty("2026-11-05", NI);
     expect(r.notApplicable).toBeTruthy();
+    expect(r.basis).toContain("s5(1)");
+    expect(r.basis).toContain("Art 42(3)");
+    expect(r.basis).toContain("Art 8(2B) to (2D)");
+    expect(r.toVerify).toBeUndefined();
+  });
+});
+
+describe("uk.compensationCap", () => {
+  const cap = (terminationDate: string, weeklyPay?: number, ctx = EW) =>
+    run("uk.compensationCap", { terminationDate, weeklyPay }, ctx);
+
+  it("removes the cap in Great Britain from 1 January 2027", () => {
+    const r = cap("2027-01-04", 900);
+    expect(r.date).toBeNull();
+    expect(r.detail).toEqual({ capRemoved: true, fixedCap: null, weeksPayCap: null, cap: null });
+    expect(r.sources).toEqual(["ERA 2025 s25(3)", "SI 2026/559 reg 4"]);
+  });
+
+  it("caps at the lower of the fixed cap and 52 weeks' pay before then", () => {
+    expect(cap("2026-11-06", 900).detail).toEqual({ capRemoved: false, fixedCap: 123543, weeksPayCap: 46800, cap: 46800 });
+    expect(cap("2026-12-31", 3000, SC).detail).toMatchObject({ fixedCap: 123543, weeksPayCap: 156000, cap: 123543 });
+    expect(cap("2025-10-01", 900).detail?.fixedCap).toBe(118223);
+    const unknownPay = cap("2026-11-06");
+    expect(unknownPay.detail).toMatchObject({ weeksPayCap: null, cap: 123543 });
+    expect(unknownPay.toVerify?.some((t) => t.includes("weeklyPay was not given"))).toBe(true);
+    const old = cap("2025-03-01", 900);
+    expect(old.detail).toMatchObject({ fixedCap: null, cap: 46800 });
+    expect(old.toVerify?.some((t) => t.includes("before 6 April 2025"))).toBe(true);
+  });
+
+  it("keeps a fixed cap in Northern Ireland", () => {
+    const r = cap("2027-02-01", 900, NI);
+    expect(r.detail).toEqual({ capRemoved: false, fixedCap: 123785, weeksPayCap: null, cap: 123785 });
+    expect(r.sources).toEqual(["ERO 1996 Art 158(1)", "SR 2026/57 art 4(2)(j)", "SR 2026/57 Schedule"]);
+    expect(r.basis).toContain("£123,785");
+    expect(cap("2025-10-01", undefined, NI).detail?.fixedCap).toBe(118455);
+  });
+});
+
+describe("uk.weeklyPayCap", () => {
+  const weekly = (appropriateDate: string, ctx = EW) => run("uk.weeklyPayCap", { appropriateDate }, ctx);
+
+  it("gives £751 in Great Britain and £783 in Northern Ireland from 6 April 2026", () => {
+    const gb = weekly("2026-11-05");
+    expect(gb.detail).toEqual({ weeklyCap: 751 });
+    expect(gb.sources).toEqual(["ERA 1996 s227(1)", "SI 2026/310 Schedule", "SI 2026/310 art 4(2)(r)"]);
+    expect(weekly("2026-11-05", NI)).toMatchObject({ detail: { weeklyCap: 783 }, sources: ["ERO 1996 Art 23(1)", "SR 2026/57 Schedule"] });
+    expect(weekly("2026-04-05").detail?.weeklyCap).toBe(719);
+    expect(weekly("2025-10-01", NI).detail?.weeklyCap).toBe(749);
+  });
+
+  it("holds no limit before 6 April 2025, flagged", () => {
+    const r = weekly("2025-01-10");
+    expect(r.detail).toEqual({ weeklyCap: null });
     expect(r.toVerify).toHaveLength(1);
   });
 });

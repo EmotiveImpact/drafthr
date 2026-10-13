@@ -20,10 +20,18 @@ export const RULES: Record<RuleId, RuleFn> = {
   "uk.familyLeaveProtectedPeriod": uk.familyLeaveProtectedPeriod,
   "uk.trialPeriodEnd": uk.trialPeriodEnd,
   "uk.sexualHarassmentDuty": uk.sexualHarassmentDuty,
+  "uk.compensationCap": uk.compensationCap,
+  "uk.weeklyPayCap": uk.weeklyPayCap,
   "us.eeocCharge": us.eeocCharge,
   "us.caCivilRights": us.caCivilRights,
   "us.warnNotice": us.warnNotice,
   "us.owbpa": us.owbpa,
+  "us.eeocSuitDeadline": us.eeocSuitDeadline,
+  "us.stateAgencyDeadline": us.stateAgencyDeadline,
+  "us.finalPay": us.finalPay,
+  "us.separationNotice": us.separationNotice,
+  "us.stateWarnNotice": us.stateWarnNotice,
+  "us.nlrbChargeLimit": us.nlrbChargeLimit,
 };
 
 /**

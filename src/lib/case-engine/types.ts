@@ -197,10 +197,18 @@ export type RuleId =
   | "uk.familyLeaveProtectedPeriod"
   | "uk.trialPeriodEnd"
   | "uk.sexualHarassmentDuty"
+  | "uk.compensationCap"
+  | "uk.weeklyPayCap"
   | "us.eeocCharge"
   | "us.caCivilRights"
   | "us.warnNotice"
-  | "us.owbpa";
+  | "us.owbpa"
+  | "us.eeocSuitDeadline"
+  | "us.stateAgencyDeadline"
+  | "us.finalPay"
+  | "us.separationNotice"
+  | "us.stateWarnNotice"
+  | "us.nlrbChargeLimit";
 
 /**
  * Where a rule input comes from: a fact, a fixed value, or the date an earlier
