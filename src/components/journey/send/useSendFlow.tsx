@@ -92,7 +92,7 @@ export function useSingleDownload(draft: Draft | undefined) {
       setBusy(format);
       try {
         const fresh = useDraftStore.getState().drafts[draft.id] ?? draft;
-        await runExport(fresh, format, att, format === "audit" ? { ...opts, audit: { drafterName: actor, ...opts?.audit } } : opts);
+        await runExport(fresh, format, att, opts);
         recordDownload(draft.id, format, att, actor);
       } catch (err) {
         toast.error(`${FORMAT_LABEL[format]} export failed`, {
@@ -277,7 +277,6 @@ export function useSendFlow(draftId: string, variant: "panel" | "page" = "panel"
               // (how and when it was given) though the sent record is saved
               // just after the files (SEND-29).
               audit: {
-                drafterName: actor,
                 pendingSend: { way: "self", givenBy: prefs.givenBy, dateGiven: prefs.dateGiven, actorName: actor },
               },
             });

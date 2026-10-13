@@ -160,16 +160,48 @@ describe("mark as sent, then undo", () => {
 describe("audit record", () => {
   it("records the send it goes out with, and names who drafted it", () => {
     const d = seed({
-      timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }],
+      timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1, actorName: "Alex Morgan" }],
       approvals: [{ id: "a1", decision: "approved", reviewerName: "Ruth Adeyemi", createdAt: 2 }] as Draft["approvals"],
     });
     const text = buildAuditRecord(d, undefined, now.getTime(), {
-      drafterName: "Alex Morgan",
       pendingSend: { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", actorName: "Alex Morgan" },
     });
     expect(text).toMatch(/^Drafted {8}Alex Morgan, /m);
     expect(text).toMatch(/^Sent {11}Handed over in person, given 14 Oct 2026, recorded by Alex Morgan/m);
     expect(text).not.toMatch(/Not yet|The letter's author/);
+  });
+
+  it("names the letter's author as its drafter, not whoever sends it (SEND-29)", () => {
+    const d = seed({
+      timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1, actorName: "Alex Morgan" }],
+    });
+    const text = buildAuditRecord(d, undefined, now.getTime(), {
+      pendingSend: { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", actorName: "Ruth Adeyemi" },
+    });
+    expect(text).toMatch(/^Drafted {8}Alex Morgan, /m);
+    expect(text).toMatch(/recorded by Ruth Adeyemi/);
+    expect(text).not.toMatch(/^Drafted {8}Ruth/m);
+  });
+
+  it("says the drafter is not recorded when the letter does not name one", () => {
+    const d = seed({ timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }] });
+    expect(buildAuditRecord(d, undefined, now.getTime())).toMatch(/^Drafted {8}Not recorded, /m);
+  });
+
+  it("names the owner collaborator when the created event has no name", () => {
+    const d = seed({
+      timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }],
+      collaborators: [{ id: "o", email: "alex@harbourfoods.co.uk", name: "Alex Morgan", role: "owner", status: "active", invitedAt: 1 }],
+    });
+    expect(buildAuditRecord(d, undefined, now.getTime())).toMatch(/^Drafted {8}Alex Morgan, /m);
+  });
+
+  it("lists a back-dated send when it was recorded, with the day it was given (SEND-X2)", () => {
+    seed({ timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }] });
+    markLetterSent("send-test-1", { way: "self", givenBy: "post", dateGiven: "2026-10-09", downloaded: [] }, now);
+    const text = buildAuditRecord(draft(), undefined, now.getTime());
+    expect(text).toMatch(/^14 Oct 2026, 16:05 {2}Marked as sent, given 9 Oct 2026$/m);
+    expect(text).not.toMatch(/^9 Oct 2026, 16:05/m);
   });
 
   it("reads the send from the letter once it is sent", () => {

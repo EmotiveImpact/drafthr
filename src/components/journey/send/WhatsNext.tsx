@@ -87,28 +87,46 @@ function Row({
 const ROW_BUTTON =
   "inline-flex h-[26px] max-md:h-9 items-center gap-[5px] whitespace-nowrap rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-[9px] text-[12px] text-[var(--ds-ink)] no-underline outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)] focus-visible:shadow-[var(--ds-focus-ring)] data-[state=open]:border-[var(--ds-ink)] disabled:pointer-events-none disabled:opacity-[.38]";
 
-/** The lowest price on the marketplace, in pounds, or null when it can't be read. */
-function useLowestExpertPrice(enabled: boolean): number | null {
-  const [price, setPrice] = useState<number | null>(null);
+type ExpertPrice = { amount: number; symbol: string };
+const CURRENCY_SYMBOL: Record<string, string> = { GBP: "£", USD: "$", EUR: "€" };
+
+/**
+ * The "from" price on What's next, read from the marketplace listing: the
+ * named expert's own price there (what their card and booking sheet show),
+ * or, with no expert named, the lowest price on the marketplace. Null when
+ * it can't be read, or the expert is no longer listed. Never the fee paid
+ * for an earlier review, which can include VAT or a priority turnaround
+ * (SEND-X34).
+ */
+function useExpertFromPrice(consultantId: string | undefined, name: string | undefined): ExpertPrice | null {
+  const [price, setPrice] = useState<ExpertPrice | null>(null);
   useEffect(() => {
-    if (!enabled) return;
+    setPrice(null);
+    // A named expert with no marketplace id has no listing to read.
+    if (name && !consultantId) return;
     let live = true;
-    listMarketplace({ sort: "price-asc", limit: 1 })
+    // The expert is looked up by name (the listing's search), then matched by id.
+    const req = consultantId
+      ? listMarketplace({ q: name, limit: 100 })
+      : listMarketplace({ sort: "price-asc", limit: 1 });
+    req
       .then((r) => {
         if (!live || !r.ok) return;
-        const p = r.data.consultants[0]?.price;
-        if (typeof p === "number" && p > 0) setPrice(p);
+        const list = r.data.consultants ?? [];
+        const c = consultantId ? list.find((x) => x.id === consultantId) : list[0];
+        const amount = Number(c?.price);
+        if (c && amount > 0) setPrice({ amount, symbol: CURRENCY_SYMBOL[c.currency] ?? "£" });
       })
       .catch(() => {});
     return () => {
       live = false;
     };
-  }, [enabled]);
+  }, [consultantId, name]);
   return price;
 }
 
-function pounds(n: number): string {
-  return `£${Number.isInteger(n) ? n : n.toFixed(2)}`;
+function fromPrice(p: ExpertPrice): string {
+  return `${p.symbol}${Number.isInteger(p.amount) ? p.amount : p.amount.toFixed(2)}`;
 }
 
 function AppealRows({ draft, close, canAct }: { draft: Draft; close: string; canAct: boolean }) {
@@ -124,14 +142,9 @@ function AppealRows({ draft, close, canAct }: { draft: Draft; close: string; can
   const review = useLatestReview(draft.id);
   const expert =
     review && review.kind === "expert" && review.reviewer?.name
-      ? {
-          first: firstNameOf(review.reviewer.name),
-          consultantId: review.reviewer.consultantId,
-          price: typeof review.pricePence === "number" && review.pricePence > 0 ? review.pricePence / 100 : null,
-        }
+      ? { name: review.reviewer.name, first: firstNameOf(review.reviewer.name), consultantId: review.reviewer.consultantId }
       : null;
-  const lowest = useLowestExpertPrice(!expert?.price);
-  const price = expert?.price ?? lowest;
+  const price = useExpertFromPrice(expert?.consultantId, expert?.name);
 
   const expertHref = expert?.consultantId
     ? `/consultants?draft=${encodeURIComponent(draft.id)}&expert=${encodeURIComponent(expert.consultantId)}`
@@ -211,8 +224,8 @@ function AppealRows({ draft, close, canAct }: { draft: Draft; close: string; can
         title="Expecting an appeal?"
         detail={
           expert
-            ? `${expert.first} can prepare you${price ? `, from ${pounds(price)}` : ""}`
-            : `A DraftHR expert can prepare you${price ? `, from ${pounds(price)}` : ""}`
+            ? `${expert.first} can prepare you${price ? `, from ${fromPrice(price)}` : ""}`
+            : `A DraftHR expert can prepare you${price ? `, from ${fromPrice(price)}` : ""}`
         }
         action={
           <Link to={expertHref} className={ROW_BUTTON}>

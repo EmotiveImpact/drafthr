@@ -125,11 +125,11 @@ function WayCard({
           {icon}
         </span>
         <span className="min-w-0 flex-1">
-          <b className={cn("block font-medium text-[var(--ds-ink)]", page ? "text-[14.5px]" : "text-[13.5px]")}>{title}</b>
+          <b className={cn("block font-medium text-[var(--ds-ink)]", page ? "text-[14.5px]" : "text-[13.5px] leading-[1.3]")}>{title}</b>
           <span
             className={cn(
               "mt-px block break-words text-[var(--ds-muted)]",
-              page ? "mt-0.5 text-[13px] leading-[1.45]" : "text-[12px]"
+              page ? "mt-0.5 text-[13px] leading-[1.45]" : "text-[12px] leading-[1.3]"
             )}
           >
             {detail}
@@ -552,15 +552,18 @@ export function SendButton({
 }
 
 /** "Open full page" under the Send step (mock as-panel-c `.full`). */
-export function OpenFullPageCard({ draftId }: { draftId: string }) {
+export function OpenFullPageCard({ draftId, className }: { draftId: string; className?: string }) {
   return (
     <Link
       to={`/editor/${draftId}/finalize`}
       data-slot="open-full-page"
-      className="mt-3.5 flex items-center gap-2.5 rounded-[11px] border border-dashed border-[var(--ds-line-strong)] px-3 py-2.5 text-[12.5px] text-[var(--ds-muted)] no-underline outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:shadow-[var(--ds-focus-ring)]"
+      className={cn(
+        "mt-3.5 flex items-center gap-2.5 rounded-[11px] border border-dashed border-[var(--ds-line-strong)] px-3 py-2.5 text-[12.5px] text-[var(--ds-muted)] no-underline outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:shadow-[var(--ds-focus-ring)]",
+        className
+      )}
     >
       <Maximize2 aria-hidden className="size-[15px] shrink-0 text-[var(--ds-subtle)]" />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 leading-[1.3]">
         <b className="block text-[13px] font-medium text-[var(--ds-ink)]">Open full page</b>
         Choose evidence files, add a cover note, build a bundle
       </span>

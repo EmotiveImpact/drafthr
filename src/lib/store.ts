@@ -34,6 +34,7 @@ import type {
   Task,
 } from "./letters/types";
 import { uid } from "./utils";
+import { useProfileStore } from "./profile";
 import { getLetterMeta } from "./letters/catalog";
 import {
   addDaysToDateOnly,
@@ -747,6 +748,10 @@ export const useDraftStore = create<Store>()(
           timeline: [
             timelineEvent("created", `Created ${meta.shortTitle}`, {
               createdAt: now,
+              // Who started it, so the audit record and Activity name the
+              // letter's real author rather than whoever later opens or
+              // sends it.
+              actorName: currentUserName(),
               detail: `${resolvedMode === "employer" ? "HR" : "Employee"} letter · ${draftJurisdictionLabel(
                 (a.jurisdiction as "UK" | "US") ?? "UK",
                 a.ukRegion as Draft["context"]["ukRegion"],
@@ -1993,6 +1998,12 @@ if (_isDualWriteEnabled()) {
 
 // Re-export so callers (App.tsx backfill) can avoid duplicating imports.
 export const __dualWrite = { syncDraft: _dualWriteSyncDraft };
+
+/** The signed-in person's name from their profile, if they have given one. */
+function currentUserName(): string | undefined {
+  const personal = useProfileStore.getState().profile.personal;
+  return personal.preferredName?.trim() || personal.legalName?.trim() || undefined;
+}
 
 function timelineEvent(
   kind: DraftTimelineEvent["kind"],

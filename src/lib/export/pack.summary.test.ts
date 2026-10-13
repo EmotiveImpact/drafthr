@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildExportPackHtml } from "@/lib/export/pack";
+import { buildEvidenceIndexHtml, buildExportPackHtml } from "@/lib/export/pack";
+import { displayTitleFor } from "@/lib/letters/display";
 import type { Draft } from "@/lib/letters/types";
 
 function makeDraft(): Draft {
@@ -67,6 +68,32 @@ describe("buildExportPackHtml — letter section", () => {
     expect(html).not.toContain("Reviewer Rae");
     expect(html).not.toContain("softer please");
     expect(html).not.toContain("data-comment-id");
+  });
+});
+
+describe("pack titles (SEND-X33)", () => {
+  it("keep who the letter is for when the letter has its own title", () => {
+    const draft = { ...makeDraft(), title: "Final written warning" };
+    expect(buildExportPackHtml(draft)).toContain("<h1>Export pack: Final written warning · Jamie Worker</h1>");
+    expect(buildEvidenceIndexHtml(draft)).toContain("<title>Exhibit index: Final written warning · Jamie Worker</title>");
+  });
+
+  it("name the letter as people read it, with no em dash or internal type id", () => {
+    const draft = makeDraft();
+    const name = displayTitleFor(draft);
+    expect(name).not.toBe("warning");
+    const summary = buildExportPackHtml(draft);
+    expect(summary).toContain(`<title>Export pack: ${name}</title>`);
+    expect(summary).toContain(`<h1>Export pack: ${name}</h1>`);
+    expect(summary).not.toContain("warning export pack");
+    const index = buildEvidenceIndexHtml(draft);
+    expect(index).toContain(`<title>Exhibit index: ${name}</title>`);
+    expect(index).toContain("<h1>Exhibit index</h1>");
+    for (const html of [summary, index]) {
+      const title = html.match(/<title>([^<]*)<\/title>/)![1];
+      expect(title).not.toMatch(/\u2014/);
+      expect(html).not.toMatch(/· warning ·/);
+    }
   });
 });
 

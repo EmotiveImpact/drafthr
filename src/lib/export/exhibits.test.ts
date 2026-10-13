@@ -48,6 +48,25 @@ describe("exhibits appear the same in the page preview, PDF and DOCX", () => {
     expect(letterBodyHtml(draft)).toContain(`[See ${labels[1]}]`);
   });
 
+  it("closes the letter with its notice and disclaimer before the Exhibits appendix (SEND-X32)", async () => {
+    const preview = buildPreviewSourceHtml(draft);
+    const pdf = letterBodyHtml(draft);
+    const zip = await JSZip.loadAsync(await renderLetterDocxBlob(draft));
+    const docx = await zip.file("word/document.xml")!.async("string");
+    for (const [name, out] of [
+      ["preview", preview],
+      ["pdf", pdf],
+      ["docx", docx],
+    ] as const) {
+      const notice = out.indexOf("IMPORTANT:");
+      const disclaimer = out.indexOf("does not constitute legal advice");
+      const exhibits = out.indexOf("warning-email.eml", out.indexOf("Exhibits"));
+      expect(notice, name).toBeGreaterThan(-1);
+      expect(disclaimer, name).toBeGreaterThan(notice);
+      expect(exhibits, name).toBeGreaterThan(disclaimer);
+    }
+  });
+
   it("renders nothing when there are no figure-mode items", () => {
     expect(buildExhibitsAppendixHtml({ evidence: [evidence[2]] })).toBe("");
   });

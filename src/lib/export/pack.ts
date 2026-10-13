@@ -9,6 +9,7 @@ import { renderLetterPdfBlob, filenameFor as pdfFilenameFor, letterBodyHtml } fr
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 import { loadTemplate } from "@/lib/letters/templates";
+import { displayTitleFor, letterTypeLabelFor, recipientNameFor } from "@/lib/letters/display";
 
 type ExportAttestation = {
   reviewedBy: string;
@@ -174,7 +175,7 @@ function buildReadme(
   lines.push(`DRAFTHR EXPORT PACK`);
   lines.push(`====================`);
   lines.push("");
-  lines.push(`Letter type:    ${draft.letterType}`);
+  lines.push(`Letter type:    ${letterTypeLabelFor(draft)}`);
   lines.push(`Mode:           ${draft.mode}`);
   lines.push(`Jurisdiction:   ${draft.context.jurisdiction}`);
   lines.push(`Issue date:     ${draft.context.issueDate}`);
@@ -221,7 +222,7 @@ function buildReadme(
  * Figures get their effective label (auto Fig N or user override) as the
  * heading. Each item also notes which letter sections it backs up.
  */
-function buildEvidenceIndexHtml(draft: Draft): string {
+export function buildEvidenceIndexHtml(draft: Draft): string {
   const evidence = draft.evidence ?? [];
   const figures = evidence.filter((e) => displayModeOf(e) === "figure");
   const attachments = evidence.filter((e) => displayModeOf(e) === "attached");
@@ -230,7 +231,7 @@ function buildEvidenceIndexHtml(draft: Draft): string {
 
   return `<!doctype html>
 <html><head><meta charset="utf-8">
-<title>Exhibit Index — ${escapeHtml(draft.letterType)}</title>
+<title>${escapeHtml(`Exhibit index: ${packLetterName(draft)}`)}</title>
 <style>
   body{font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;color:#0f172a;max-width:920px;margin:32px auto;padding:0 24px;line-height:1.55}
   h1{font-size:24px;margin:0 0 4px 0}
@@ -246,8 +247,8 @@ function buildEvidenceIndexHtml(draft: Draft): string {
   a{color:#0f172a}
   .empty{color:#94a3b8;font-style:italic}
 </style></head><body>
-<h1>Exhibit Index</h1>
-<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(draft.letterType)} · Generated ${escapeHtml(packDateTime(draft, Date.now()))}</p>
+<h1>Exhibit index</h1>
+<p class="meta">${evidence.length} item${evidence.length === 1 ? "" : "s"} · ${escapeHtml(packLetterName(draft))} · Generated ${escapeHtml(packDateTime(draft, Date.now()))}</p>
 
 ${
   figures.length > 0
@@ -467,9 +468,9 @@ export function buildExportPackHtml(
     </header>
 
     <section class="section">
-      <h2>Draft Summary</h2>
+      <h2>Draft summary</h2>
       <div class="grid">
-        ${summaryCard("Letter type", draft.letterType)}
+        ${summaryCard("Letter type", letterTypeLabelFor(draft))}
         ${summaryCard(draft.mode === "employer" ? "Recipient" : "Employer", draft.mode === "employer" ? draft.employee.legalName : draft.employer.legalName)}
         ${summaryCard("Issue date", draft.context.issueDate)}
         ${summaryCard("Evidence items", String(evidence.length))}
@@ -478,7 +479,7 @@ export function buildExportPackHtml(
     </section>
 
     <section class="section">
-      <h2>Review Checklist</h2>
+      <h2>Review checklist</h2>
       <ul class="clean">
         ${checklist.map(renderChecklistItem).join("")}
       </ul>
@@ -496,7 +497,7 @@ export function buildExportPackHtml(
     </section>
 
     <section class="section">
-      <h2>Evidence List</h2>
+      <h2>Evidence list</h2>
       ${
         evidence.length === 0
           ? `<p class="muted">No evidence items have been added to this draft.</p>`
@@ -505,7 +506,7 @@ export function buildExportPackHtml(
     </section>
 
     <section class="section">
-      <h2>Template Quality Inspector</h2>
+      <h2>Template quality inspector</h2>
       <p class="small muted">${quality.summary.covered} covered · ${quality.summary.missing} missing · ${quality.summary.needsReview} need review · ${quality.summary.guardrails} guardrails</p>
       <ul class="clean">
         ${quality.sections
@@ -668,8 +669,18 @@ export function packDateTime(draft: Pick<Draft, "context">, at: number | string 
 }
 
 function packTitle(draft: Draft): string {
-  const party = draft.mode === "employer" ? draft.employee.legalName : draft.employer.legalName;
-  return `${draft.letterType} export pack${party ? ` - ${party}` : ""}`;
+  return `Export pack: ${packLetterName(draft)}`;
+}
+
+/**
+ * The letter as people name it in the pack ("Final written warning · Jordan
+ * Hale"): its title, with who it is for when the title does not say, never
+ * the type's internal id (SEND-X33).
+ */
+function packLetterName(draft: Draft): string {
+  const title = displayTitleFor(draft);
+  const who = recipientNameFor(draft);
+  return who && !title.toLowerCase().includes(who.toLowerCase()) ? `${title} · ${who}` : title;
 }
 
 function filenameForPack(draft: Draft): string {

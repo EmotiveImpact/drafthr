@@ -32,4 +32,14 @@ describe("readableTimeline", () => {
     expect(out[3].detail).toBe("Reviewed on 12 October 2026");
     expect(out.some((e) => /\d{4}-\d{2}-\d{2}|[A-Z]{3,}/.test(`${e.title} ${e.detail ?? ""}`.replace("PDF", "")))).toBe(false);
   });
+
+  it("lists a back-dated send once, at the time it was recorded (SEND-X2)", () => {
+    const given = t - 4 * 86_400_000;
+    const rows = readableTimeline([
+      item({ id: "s", kind: "details_updated", createdAt: t, title: "Handed over in person", detail: "Given on 9 Oct 2026", meta: { action: "sent", sentExportAt: given } }),
+      item({ id: "e", kind: "exported", createdAt: given, title: "Exported as MARKED-SENT", meta: { exportId: "x9", format: "marked-sent" } }),
+    ]);
+    expect(rows.map((e) => e.title)).toEqual(["Handed over in person"]);
+    expect(rows[0].createdAt).toBe(t);
+  });
 });

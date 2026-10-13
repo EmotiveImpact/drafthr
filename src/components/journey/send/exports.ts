@@ -11,6 +11,8 @@ import {
   fmtTime,
   getSentRecord,
   givenByActivity,
+  letterAuthorOf,
+  sendEntryFor,
   type GivenBy,
   type LetterFormat,
   type SendWay,
@@ -82,8 +84,6 @@ export type PendingSend = {
 };
 
 export type AuditOptions = {
-  /** Who drafted the letter when its record names no one: the person in this workspace (as Activity's "You"). */
-  drafterName?: string;
   /** The send this file goes out with. */
   pendingSend?: PendingSend;
 };
@@ -109,7 +109,8 @@ export function buildAuditRecord(
   const timeline = [...(draft.timeline ?? [])].sort((a, b) => a.createdAt - b.createdAt);
   const created = timeline.find((t) => t.kind === "created");
   lines.push("WHO DID WHAT", "------------");
-  const drafter = created?.actorName?.trim() || opts.drafterName?.trim() || "Not recorded";
+  // The letter's own author, never whoever downloads or sends it (SEND-29).
+  const drafter = letterAuthorOf(draft) ?? "Not recorded";
   lines.push(`Drafted        ${drafter}, ${when(created?.createdAt ?? draft.createdAt)}`);
 
   const checks = runHealthChecks(draft);
@@ -160,16 +161,32 @@ export function buildAuditRecord(
   const exports = [...(draft.exports ?? [])].sort((a, b) => a.exportedAt - b.exportedAt);
   if (exports.length) {
     lines.push("FILES AND SENDS", "---------------");
-    for (const e of exports) {
-      const label = e.format === "marked-sent" ? "Marked as sent" : `Downloaded ${FORMAT_LABEL[e.format as ExportFormat] ?? e.format}`;
-      lines.push(`${when(e.exportedAt)}  ${label}${e.reviewedBy ? ` (counsel: ${e.reviewedBy})` : ""}`);
-    }
+    // A send is listed when it was recorded, with the day it was given: its
+    // export is timed at the date given, at that day's clock time, which is
+    // not when anything happened (SEND-X2).
+    const rows = exports.map((e) => {
+      const counsel = e.reviewedBy ? ` (counsel: ${e.reviewedBy})` : "";
+      if (e.format !== "marked-sent") {
+        return { at: e.exportedAt, text: `${when(e.exportedAt)}  Downloaded ${FORMAT_LABEL[e.format as ExportFormat] ?? e.format}${counsel}` };
+      }
+      const entry = sendEntryFor(draft, e.exportedAt);
+      const day = typeof entry?.meta?.dateGiven === "string" ? entry.meta.dateGiven : null;
+      if (entry && day) {
+        return { at: entry.createdAt, text: `${when(entry.createdAt)}  Marked as sent, given ${fmtDayMonYear(day)}${counsel}` };
+      }
+      return { at: e.exportedAt, text: `${when(e.exportedAt)}  Marked as sent${counsel}` };
+    });
+    for (const r of rows.sort((a, b) => a.at - b.at)) lines.push(r.text);
     lines.push("");
   }
 
   if (timeline.length) {
     lines.push("FULL TIMELINE", "-------------");
     for (const t of timeline) {
+      // The marked-sent export behind a recorded send is that send's entry
+      // (listed at the time it was recorded), not a second line at the date
+      // given (SEND-X2).
+      if (t.kind === "exported" && t.meta?.format === "marked-sent" && sendEntryFor(draft, t.createdAt)) continue;
       const who = t.actorName ? ` (${t.actorName})` : "";
       lines.push(`${when(t.createdAt)}  ${t.title}${who}${t.detail ? `: ${t.detail}` : ""}`);
     }
@@ -184,7 +201,7 @@ export type ExportOptions = {
   excludeEvidence?: string[];
   /** Evidence pack: a covering note for the file, put on the pack's summary page. */
   coverNote?: string;
-  /** Audit record: who drafted it and the send it goes out with. */
+  /** Audit record: the send it goes out with. */
   audit?: AuditOptions;
 };
 

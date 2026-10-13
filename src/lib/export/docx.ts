@@ -189,10 +189,12 @@ function buildDocxBodyHtml(draft: Draft): string {
     letterheadHtml(draft),
     resolved,
     attachmentsBlock,
-    // Same Exhibits appendix as the page preview and the PDF.
-    buildExhibitsAppendixHtml(draft),
+    // The notice and disclaimer close the letter, before the Exhibits
+    // appendix (as in the PDF, SEND-X32).
     "<hr />",
     sanitizeLetterHtml(disclaimerHtmlFor(draft)),
+    // Same Exhibits appendix as the page preview and the PDF.
+    buildExhibitsAppendixHtml(draft),
     // Branded export footer — same toggle as PDF. See src/lib/branding/export-footer.ts.
     brandedExportFooterHtml({ envEnabled: resolveClientEnvFlag() }),
   ]

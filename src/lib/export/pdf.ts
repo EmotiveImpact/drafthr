@@ -162,10 +162,12 @@ export function letterBodyHtml(draft: Draft): string {
     letterhead +
     resolved +
     attachments +
-    // Exhibits appendix: same builder as the page preview and the DOCX.
-    buildExhibitsAppendixHtml(draft) +
+    // The notice and disclaimer belong to the letter, so they close it,
+    // before the Exhibits appendix starts its own page (SEND-X32).
     "<hr />" +
     sanitizeLetterHtml(disclaimerHtmlFor(draft)) +
+    // Exhibits appendix: same builder as the page preview and the DOCX.
+    buildExhibitsAppendixHtml(draft) +
     // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands
     // when billing ships; for now everyone's on free, so this renders for all
     // unless VITE_DRAFTHR_EXPORT_FOOTER=false. See src/lib/branding/export-footer.ts.

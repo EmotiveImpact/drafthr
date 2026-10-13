@@ -782,6 +782,22 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 36px), transparent);
   mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 36px), transparent);
 }
+/* While the Send step's button is pinned to the foot of the panel it is the
+ * bottom edge, and fades what scrolls under it itself, so the panel's bottom
+ * fade would only fade the button (SEND-X5, SEND-X30). When the step ends
+ * the panel, the pinned bar's own padding is the panel's foot, so the step
+ * fits wherever it can. */
+.ai-panel-scroll[data-more-below]:has([data-slot="send-button-bar"][data-stuck]) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.lw-progress:has(> :last-child [data-slot="send-button-bar"]) {
+  padding-bottom: 0;
+}
+.ai-panel-scroll[data-more-above][data-more-below]:has([data-slot="send-button-bar"][data-stuck]) {
+  -webkit-mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
+  mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
+}
 
 /* The paged letter on a phone (PagedlyDocEditor): the page narrows to the
  * screen with smaller margins, so the words keep their size instead of the

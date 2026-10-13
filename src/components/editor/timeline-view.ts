@@ -6,6 +6,7 @@ const FORMAT_WORDS: Record<string, string> = {
   docx: "Downloaded as Word",
   txt: "Downloaded as plain text",
   pack: "Downloaded the evidence pack",
+  audit: "Downloaded the audit record",
   "marked-sent": "Marked as sent",
 };
 
@@ -20,14 +21,25 @@ const SAME_SEND_MS = 2 * 60 * 1000;
  * rather than as a second row each time, dates in words, and DraftHR named.
  */
 export function readableTimeline(events: DraftTimelineItem[]): DraftTimelineItem[] {
-  const sends = events.filter((e) => e.kind === "details_updated" && e.meta?.action === "sent").map((e) => e.createdAt);
+  const sendEvents = events.filter((e) => e.kind === "details_updated" && e.meta?.action === "sent");
+  const sends = sendEvents.map((e) => e.createdAt);
+  // A back-dated send's export is timed at the date given; its send entry
+  // names that time (meta.sentExportAt) and is the one row for the send, at
+  // the time it was recorded (SEND-X2).
+  const sendExportAts = new Set(
+    sendEvents.map((e) => e.meta?.sentExportAt).filter((at): at is number => typeof at === "number")
+  );
   const exportIds = new Set(events.filter((e) => e.kind === "exported").map((e) => String(e.meta?.exportId ?? "")));
   const out: DraftTimelineItem[] = [];
   const seenAttestations = new Set<string>();
   for (const e of events) {
     if (e.kind === "exported") {
       const format = String(e.meta?.format ?? "");
-      if (format === "marked-sent" && sends.some((at) => Math.abs(at - e.createdAt) <= SAME_SEND_MS)) continue;
+      if (
+        format === "marked-sent" &&
+        (sendExportAts.has(e.createdAt) || sends.some((at) => Math.abs(at - e.createdAt) <= SAME_SEND_MS))
+      )
+        continue;
       const by = typeof e.meta?.reviewedBy === "string" ? e.meta.reviewedBy : "";
       out.push({
         ...e,

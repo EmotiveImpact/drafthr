@@ -208,6 +208,33 @@ export function getSentRecord(draft: Draft): SentRecord | null {
   };
 }
 
+/**
+ * Who wrote the letter, from the letter's own record: the person on its
+ * "created" event (recorded when the draft is made), else a collaborator
+ * listed as its owner. Null when the letter does not say. Never the person
+ * looking at it or sending it (SEND-29): a letter Alex drafted and Ruth
+ * sends was still drafted by Alex.
+ */
+export function letterAuthorOf(draft: Draft): string | null {
+  const created = (draft.timeline ?? []).find((t) => t.kind === "created");
+  const fromEvent = created?.actorName?.trim();
+  if (fromEvent) return fromEvent;
+  const owner = (draft.collaborators ?? []).find((c) => c.role === "owner");
+  return owner?.name?.trim() || null;
+}
+
+/**
+ * The marked-sent export's own send record: the "sent" timeline entry made
+ * with it (its meta.sentExportAt is the export's time). The export is timed
+ * at the date given (the seal, the lists and the appeal window read it);
+ * the entry carries when the send was actually recorded.
+ */
+export function sendEntryFor(draft: Draft, exportedAt: number) {
+  return (draft.timeline ?? []).find(
+    (t) => t.kind === "details_updated" && t.meta?.action === "sent" && t.meta?.sentExportAt === exportedAt
+  );
+}
+
 export function markedSentEvents(draft: Draft): ExportEvent[] {
   return (draft.exports ?? []).filter((e) => e.format === "marked-sent");
 }
