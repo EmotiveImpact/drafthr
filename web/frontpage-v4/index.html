@@ -101,6 +101,20 @@ section{padding:clamp(96px,11vw,150px) 0}
 .for li{border-left:1px solid var(--line);height:56px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:17px;letter-spacing:-.01em;color:var(--white)}
 .for svg{width:20px;height:20px;stroke:var(--soft);fill:none;stroke-width:1.4}
 
+
+/* Who it is for: three people, one line each */
+.who{padding:clamp(72px,8vw,110px) 0 0}
+.who-lead{text-align:center;color:var(--mute);font-size:14px;margin-bottom:28px}
+.who-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.who-card{background:var(--panel);border-radius:4px;overflow:hidden;display:flex;flex-direction:column;transition:background .2s}
+.who-card:hover{background:var(--panel-2)}
+.who-card .ph{aspect-ratio:4/3;background:#111 center/cover}
+.who-card .wb{padding:22px 24px 26px}
+.who-card h3{margin-bottom:8px}
+.who-card p{color:var(--soft);font-size:15px}
+@media (max-width:1000px){.who-grid{grid-template-columns:1fr}.who-card{display:grid;grid-template-columns:1fr 1.2fr}.who-card .ph{aspect-ratio:auto;min-height:180px}}
+@media (max-width:600px){.who-card{display:flex}.who-card .ph{aspect-ratio:16/10}}
+
 /* 3. Capabilities: painted canvas with real UI, dark caption panel */
 .caps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .cap{background:var(--panel);border-radius:4px;overflow:hidden;}
@@ -285,15 +299,14 @@ footer{border-top:1px solid var(--line);padding:64px 0 40px;margin-top:clamp(96p
     <div class="bgs"></div><div class="seq" aria-label="Story"><div class="wrap"></div></div>
   </section>
 
-  <div class="for"><div class="wrap">
-    <p class="rv">Built for the people who put it in writing</p>
-    <ul class="rv">
-      <li><svg viewBox="0 0 20 20"><circle cx="7" cy="7" r="3"/><circle cx="14" cy="8" r="2.4"/><path d="M1.5 17c.6-3 2.7-4.5 5.5-4.5s4.9 1.5 5.5 4.5M12.5 12.6c2.6-.3 4.6 1 5.2 3.9"/></svg>HR teams</li>
-      <li><svg viewBox="0 0 20 20"><circle cx="10" cy="6.5" r="3.2"/><path d="M3.5 17.5c.7-3.4 3.2-5.2 6.5-5.2s5.8 1.8 6.5 5.2"/></svg>Employees</li>
-      <li><svg viewBox="0 0 20 20"><rect x="2.5" y="6" width="15" height="10.5" rx="1.5"/><path d="M7 6V4.5h6V6M2.5 11h15"/></svg>HR consultants</li>
-      <li><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.2 3 4.7 3 7.5s-.8 5.3-3 7.5c-2.2-2.2-3-4.7-3-7.5s.8-5.3 3-7.5z"/></svg>UK and US</li>
-    </ul>
-  </div></div>
+  <section class="who"><div class="wrap">
+    <p class="who-lead rv">Built for the people who put it in writing</p>
+    <div class="who-grid">
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/who-employee.jpg)"></div><div class="wb"><h3>Employees</h3><p>Raise a concern clearly, in the structure a fair process expects. From £9.99 a letter.</p></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/who-hr.jpg)"></div><div class="wb"><h3>HR teams</h3><p>Every manager starts from the same careful structure, reviewed and approved before it goes out.</p></div></a>
+      <a class="who-card rv" href="#"><div class="ph" style="background-image:url(img/who-consultant.jpg)"></div><div class="wb"><h3>HR consultants</h3><p>Draft for clients in the right structure for the UK or the US, with a record they can rely on.</p></div></a>
+    </div>
+  </div></section>
 
   <!-- 2. What DraftHR is -->
   <section id="what"><div class="wrap">
@@ -472,10 +485,10 @@ document.documentElement.classList.add('js');
 // Hero sequence: one letter's journey, night to blue hour. Advances on its own, pauses on hover.
 (function(){
   var H=[
-    {img:'img/h-employee.jpg',pos:'78% 40%',ch:'Night',t:'Deciding',h:'Some letters start late at night.'},
-    {img:'img/h-sign.jpg',pos:'80% 50%',ch:'Lamplight',t:'Drafting',h:'Every word checked before you sign.'},
+    {img:'img/story-1-night.jpg',pos:'75% 40%',ch:'Night',t:'Deciding',h:'Some letters start late at night.'},
+    {img:'img/story-2-sign.jpg',pos:'80% 40%',ch:'Lamplight',t:'Drafting',h:'Every word checked before you sign.'},
     {img:'img/h-envelope.jpg',pos:'100% 60%',ch:'Morning',t:'Ready',h:'Ready to send by morning.'},
-    {img:'img/h-corridor.jpg',pos:'78% 40%',ch:'Dusk',t:'Prepared',h:'Walk in with a clear record.'},
+    {img:'img/story-4-corridor.jpg',pos:'78% 40%',ch:'Dusk',t:'Prepared',h:'Walk in with a clear record.'},
     {img:'img/h-two-sides.jpg',pos:'75% 45%',ch:'The meeting',t:'Fair',h:'Fair to both sides of the table.'},
     {img:'img/h-manager.jpg',pos:'70% 45%',ch:'Blue hour',t:'On record',h:'Still standing when it is read again.'}
   ];
