@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-GB">
+<html lang="en-GB" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -330,6 +330,41 @@ footer{margin-top:0}
 .hero > .wrap{padding-bottom:clamp(72px,11vh,130px)!important}
 @media (max-width:600px){.hero > .wrap{padding-bottom:64px!important}}
 
+
+/* ===== Light mode: warm white page; photo sections stay dark ===== */
+html[data-theme=light]{
+  --bg:#F7F6F2; --panel:#EFEDE7; --panel-2:#E8E5DE; --raise:#E3E0D8; --line:rgba(12,12,10,.10); --line-2:rgba(12,12,10,.18);
+  --white:#0C0C0A; --text:rgba(12,12,10,.88); --soft:rgba(12,12,10,.66); --mute:rgba(12,12,10,.52);
+  --gold:#B8901F; --green:#3E9A33; --cyan:#2A9AA3; --violet:#7A5BE0;
+}
+html[data-theme=light] body{background-color:var(--bg);background-image:radial-gradient(rgba(12,12,10,.06) 1px,transparent 1.2px)}
+html[data-theme=light] .btn-white{background:#0C0C0A;color:#fff}
+html[data-theme=light] .btn-white:hover{background:#26261F}
+html[data-theme=light] .btn-line{background:rgba(12,12,10,.06)}
+html[data-theme=light] .btn-line:hover{background:rgba(12,12,10,.11)}
+html[data-theme=light] .plan .pop{background:#0C0C0A;color:#fff}
+html[data-theme=light] .ch-pic img{box-shadow:0 40px 80px -30px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.06)}
+/* Sections that sit on photographs keep the dark palette */
+html[data-theme=light] .nav,html[data-theme=light] .hero,html[data-theme=light] .statement,html[data-theme=light] .close,html[data-theme=light] .who-card,html[data-theme=light] .plan.pro{
+  --bg:#080A09; --panel:#131517; --panel-2:#1B1D20; --raise:#232326; --line:rgba(255,255,255,.08); --line-2:rgba(255,255,255,.14);
+  --white:#FFFFFF; --text:rgba(255,255,255,.92); --soft:rgba(255,255,255,.74); --mute:rgba(255,255,255,.56);
+  --gold:#D4B144; --green:#68CC58; --cyan:#9EFAFF; --violet:#B59AFF;
+}
+html[data-theme=light] :is(.nav,.hero,.statement,.close,.plan.pro) .btn-white{background:#fff;color:#08090A}
+html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line{background:rgba(255,255,255,.12)}
+html[data-theme=light] .plan.pro{background:#111214;color:var(--text)}
+html[data-theme=light] .plan.pro .pop{background:#fff;color:#08090A}
+html[data-theme=light] .statement,html[data-theme=light] .close{margin:0 clamp(8px,1.2vw,16px);border-radius:10px}
+html[data-theme=light] .statement::after{background:linear-gradient(90deg,rgba(8,10,9,.92) 0%,rgba(8,10,9,.62) 46%,rgba(8,10,9,.12) 82%),linear-gradient(0deg,rgba(8,10,9,.95) 0%,rgba(8,10,9,0) 40%)}
+html[data-theme=light] .close::after{background:radial-gradient(ellipse at center,rgba(8,10,9,.55) 0%,rgba(8,10,9,.85) 75%)}
+html[data-theme=light] footer{margin-top:clamp(64px,7vw,100px)}
+html[data-theme=light] :focus-visible{outline-color:#0C0C0A}
+
+/* Theme switch (for comparing; not part of the final site) */
+.theme{position:fixed;right:16px;bottom:16px;z-index:50;display:flex;gap:2px;padding:4px;border-radius:99px;background:rgba(20,20,22,.88);backdrop-filter:blur(10px);box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+.theme button{height:36px;padding:0 16px;border-radius:99px;font-size:13.5px;color:rgba(255,255,255,.7)}
+.theme button[aria-pressed=true]{background:#fff;color:#08090A}
+
 /* Reveal */
 .js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
 .js .rv.in{opacity:1;transform:none}
@@ -540,8 +575,16 @@ footer{margin-top:0}
   <div class="legal"><span>DraftHR drafts, you decide. Not legal advice.</span><span>© 2026 DraftHR</span></div>
 </div></footer>
 
+<div class="theme" role="group" aria-label="Colour mode"><button type="button" data-t="light" aria-pressed="true">Light</button><button type="button" data-t="dark" aria-pressed="false">Dark</button></div>
 <script>
 document.documentElement.classList.add('js');
+(function(){
+  var root=document.documentElement,bs=document.querySelectorAll('.theme button');
+  function set(t){root.setAttribute('data-theme',t);bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.t===t)});try{localStorage.setItem('drafthr-theme',t)}catch(e){}}
+  var q=(location.hash.match(/theme=(light|dark)/)||[])[1],saved=null;try{saved=localStorage.getItem('drafthr-theme')}catch(e){}
+  set(q||saved||'light');
+  bs.forEach(function(b){b.addEventListener('click',function(){set(b.dataset.t)})});
+})();
 (function(){
   var els=document.querySelectorAll('.rv');
   if(!('IntersectionObserver' in window)){els.forEach(function(e){e.classList.add('in')});return}
