@@ -407,6 +407,9 @@ const under = (path: string, base: string) => path === base || path.startsWith(`
 function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   const loc = useLocation();
   const path = loc.pathname;
+  // Choosing an expert for a letter (/consultants?for=<id>) is part of that
+  // letter's journey: Letters is the active row, not Experts (MARKET-053).
+  const choosingForLetter = path === "/consultants" && new URLSearchParams(loc.search).has("for");
   const consultantProfile = useConsultantStore((s) => s.profile);
   const search = useSearchPaletteToggle();
 
@@ -488,7 +491,12 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
     { href: "/activity", label: "Activity" },
     { href: "/notifications", label: "Notifications" },
   ];
-  const onHomeSub = homeSubs.some((s) => under(path, s.href));
+  // Employers have Approvals, Calendar and Activity as tabs in Home's band,
+  // so the sub-list would only repeat them (and push Experts and Reports
+  // below the fold on short screens).
+  const onHomeSub =
+    homeSubs.some((s) => under(path, s.href)) &&
+    !(employer && ["/approvals", "/calendar", "/activity"].some((p) => under(path, p)));
   const templatesHref = `${prefix}/new`;
 
   return (
@@ -519,9 +527,9 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
           {employer && (
             <NavRow
               it={{ href: "/consultants", label: "Experts", Icon: Scale, tooltip: "DraftHR experts" }}
-              isActive={EXPERT_PAGES.some((p) => under(path, p))}
+              isActive={!choosingForLetter && EXPERT_PAGES.some((p) => under(path, p))}
             >
-              {EXPERT_PAGES.some((p) => under(path, p)) && (
+              {!choosingForLetter && EXPERT_PAGES.some((p) => under(path, p)) && (
                 <SubList label="Experts">
                   <SubRow href="/consultants" label="Marketplace" isActive={under(path, "/consultants")} />
                   <SubRow href="/bookings" label="My bookings" isActive={under(path, "/bookings")} />
@@ -609,7 +617,10 @@ function NavLetters({ mode }: { mode: Mode }) {
     return list.map((d) => ({ d, tone: getJourney(d, latestReviewIn(requests, d.id)).listTone }));
   }, [drafts, requests, mode]);
 
-  const active = LETTER_PAGES.some((p) => under(path, p)) || path.startsWith("/editor/");
+  const active =
+    LETTER_PAGES.some((p) => under(path, p)) ||
+    path.startsWith("/editor/") ||
+    (path === "/consultants" && new URLSearchParams(loc.search).has("for"));
 
   return (
     <SidebarMenuItem>

@@ -60,7 +60,7 @@ export function DraftStage({ draftId }: { draftId: string }) {
         {streaming ? (
           <CheckRow
             state="wait"
-            action={h?.stop ? { label: "Stop", onClick: h.stop } : undefined}
+            action={h?.stop ? { label: "Stop", ariaLabel: "Stop generation", onClick: h.stop } : undefined}
           >
             <span className="inline-flex items-center gap-1.5">
               <Loader2 aria-hidden className="size-3.5 animate-spin text-[var(--ds-muted)]" />
@@ -74,7 +74,7 @@ export function DraftStage({ draftId }: { draftId: string }) {
         ) : (
           <CheckRow
             state="wait"
-            action={h?.regenerateAll && canEdit ? { label: "Draft", onClick: h.regenerateAll } : undefined}
+            action={h?.regenerateAll && canEdit ? { label: "Draft", ariaLabel: "Regenerate all sections", onClick: h.regenerateAll } : undefined}
           >
             {c.sectionsDrafted} of {c.sections} sections drafted
           </CheckRow>

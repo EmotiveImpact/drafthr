@@ -37,13 +37,18 @@ const CHROMELESS_PREFIXES = [
   "/privacy",
   "/terms",
   "/legal",
+  // Reviewer views: the trusted reviewer's secure link (no account) and the
+  // booked expert's review page show the letter without the app sidebar.
+  "/r/",
+  "/c/review/",
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   useDocumentTitle(loc.pathname);
   const { user, activeTenant, isLoaded } = useAuth();
-  const isEditor = loc.pathname.startsWith("/editor/");
+  // The full Finalise page keeps the normal sidebar (SEND-110).
+  const isEditor = loc.pathname.startsWith("/editor/") && !/^\/editor\/[^/]+\/finalize\/?$/.test(loc.pathname);
   const isChromeless =
     CHROMELESS_EXACT.includes(loc.pathname) ||
     CHROMELESS_PREFIXES.some((p) => loc.pathname.startsWith(p));
@@ -95,7 +100,10 @@ export function Layout({ children }: { children: ReactNode }) {
            * own and the composer stays on screen at any letter length. Below
            * md the sidebar is a sheet, so phones still get the full-bleed
            * editor with its own back button. */}
-          <SidebarProvider defaultOpen={false} className="h-screen h-dvh min-h-0 overflow-hidden">
+          {/* Keyed apart from the app frame's provider below: both sit at the
+           * same place in the tree, so without a key a letter opened from a
+           * list page would keep the full sidebar instead of the rail. */}
+          <SidebarProvider key="letter" defaultOpen={false} className="h-screen h-dvh min-h-0 overflow-hidden">
             <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
             <AppSidebar />
             <SidebarInset className="min-h-0 min-w-0 flex flex-col overflow-hidden">
@@ -112,7 +120,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <TooltipProvider delayDuration={150}>
       <SearchPaletteContext.Provider value={{ open, setOpen }}>
-        <SidebarProvider defaultOpen>
+        <SidebarProvider key="app" defaultOpen>
           <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:rounded focus:bg-[var(--ds-ink)] focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
           <AppSidebar />
           {/* The page sits flat beside the white sidebar (a hairline between

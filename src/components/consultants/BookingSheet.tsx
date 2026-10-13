@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { LetterPicker } from "@/components/consultants/LetterPicker";
 import { letterMeta, useLetterFacts } from "@/components/consultants/letters";
 import { NEEDS, bookExpertFromMarketplace, type BookResult } from "@/components/consultants/booking";
+import { useMe } from "@/components/journey/review/actions";
 import { VAT_RATE_CHARGED, bookingTotals, firstNameOf, money, turnaroundWords } from "@/components/consultants/market";
 import { useDraftStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,7 @@ export function BookingSheet({
   const c = consultant ?? shown;
   const letter = useLetterFacts(draftId || null);
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const me = useMe();
 
   if (!c) return null;
   const first = firstNameOf(c.name) || "The expert";
@@ -84,7 +86,7 @@ export function BookingSheet({
   const send = async () => {
     if (sending) return;
     setSending(true);
-    const res = await bookExpertFromMarketplace({ consultant: c, draft: draft ?? null, needs, note });
+    const res = await bookExpertFromMarketplace({ consultant: c, draft: draft ?? null, needs, note, asker: me });
     setSending(false);
     if (!res.ok) {
       toast.error("Couldn't send your booking request. Please try again.");

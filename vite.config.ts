@@ -64,8 +64,6 @@ export default defineConfig(({ mode }) => {
             if (pkg === "ai" || pkg === "@ai-sdk/react") return "ai-sdk";
             if (pkg === "marked") return "marked";
             if (pkg === "dompurify") return "dompurify";
-            // Radix Themes: the heaviest UI dependency.
-            if (pkg === "@radix-ui/themes") return "radix-themes";
             // Icons used everywhere: their own chunk so a refresh of any
             // non-icon code doesn't bust the icon cache.
             if (pkg === "lucide-react") return "icons";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpDown, Check, ChevronDown, Eye, FileText, Info, Plus, SearchX, Store } from "lucide-react";
 import { toast } from "sonner";
@@ -234,6 +234,25 @@ export function ConsultantsIndex() {
     }
     setBookingFor(c);
   };
+  // ?expert=<consultantId> (What's next "Ask <expert>", SEND-82): open that
+  // expert with the letter carried. Choosing for a letter opens their
+  // profile; otherwise their booking sheet. Once, then the param goes.
+  const expertParam = !isConsultant ? params.get("expert") : null;
+  const expertHandled = useRef<string | null>(null);
+  useEffect(() => {
+    if (!expertParam || loadState !== "ready" || expertHandled.current === expertParam) return;
+    expertHandled.current = expertParam;
+    const c = all.find((x) => x.profileId === expertParam);
+    if (c) {
+      if (letterMode) setProfileFor(c);
+      else requestBooking(c);
+    }
+    const next = new URLSearchParams(params);
+    next.delete("expert");
+    setParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expertParam, loadState, all, letterMode]);
+
   const choose = (c: Consultant) => {
     if (actionBlocked || !forId || !c.profileId) return;
     setProfileFor(null);

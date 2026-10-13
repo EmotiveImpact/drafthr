@@ -38,6 +38,7 @@ export function JourneyPanel({
   draftId,
   health,
   viewerIsApprover,
+  viewerIsReviewer,
   className,
 }: {
   draftId: string;
@@ -45,9 +46,11 @@ export function JourneyPanel({
   health?: ReactNode | false;
   /** The person looking is the approver (Approve shows "Approve"). */
   viewerIsApprover?: boolean;
+  /** The person looking is the named teammate reviewer (their own review). */
+  viewerIsReviewer?: boolean;
   className?: string;
 }) {
-  const journey = useJourney(draftId, { viewerIsApprover });
+  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer });
   if (!journey) return null;
   const Stage = STAGES[journey.stage];
   const showHealth = health !== false && journey.stage !== "send" && journey.stage !== "sent";
@@ -93,7 +96,9 @@ function DefaultHealthCard({ draftId, stage, locked }: { draftId: string; stage:
   if (!data) return null;
   const { score, fixes } = data;
   const line = locked
-    ? "Locked while someone else has it"
+    ? stage === "review"
+      ? "Locked while it's out for review"
+      : "Locked while someone else has it"
     : fixes.length > 0
       ? `Fix ${fixes.length} to send it on`
       : score.oneLiner;

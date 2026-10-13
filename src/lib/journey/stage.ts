@@ -63,7 +63,8 @@ export type JourneyActionId =
   | "approve"
   | "remind"
   | "export"
-  | "download";
+  | "download"
+  | "send-back";
 
 export type JourneyAction = {
   id: JourneyActionId;
@@ -132,6 +133,9 @@ export type JourneyOptions = {
   checks?: HealthCheck[];
   /** The person looking is the approver (they can approve it). */
   viewerIsApprover?: boolean;
+  /** The person looking is the named teammate reviewer of the review that
+   *  is out (their own review: suggest, pick a verdict, send it back). */
+  viewerIsReviewer?: boolean;
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -273,8 +277,11 @@ export function getJourney(
       whereLabel: "Send · ready",
       whatNow: {
         lead: "Last step.",
+        // Only letters with a right of appeal start an appeal window (SEND-22).
         detail:
-          "Send it yourself or from DraftHR. We record the date it's given, because the appeal window starts then.",
+          draft.mode === "employer" && (draft.sections ?? []).some((s) => s.sectionId === "appeal_rights")
+            ? "Send it yourself or from DraftHR. We record the date it's given, because the appeal window starts then."
+            : "Send it yourself or from DraftHR. We record the date it's given.",
       },
       primaryAction: { id: "export", label: "Export", menu: true },
       needsYou: true,
@@ -323,6 +330,26 @@ export function getJourney(
   }
 
   // ---- Out for review / back to you -------------------------------------
+  if (r && r.status === "out" && opts.viewerIsReviewer) {
+    const asker = firstName(r.asker?.name ?? "") || "them";
+    return {
+      ...base,
+      stage: "review",
+      tone: "needs-you",
+      statusLabel: asker === "them" ? "Your review" : `Reviewing for ${asker}`,
+      statusTone: "lilac",
+      whereLabel: "Review · with you",
+      whatNow: {
+        lead: "Your review.",
+        detail: `Suggest changes, pick a verdict and send it back to ${asker}.`,
+      },
+      primaryAction: { id: "send-back", label: asker === "them" ? "Send it back" : `Send back to ${asker}` },
+      needsYou: true,
+      listTone: "needs-you",
+      stepIndex: 1,
+      locked: true,
+    };
+  }
   if (r && r.status === "out") {
     const who = firstName(r.reviewer.name) || "the reviewer";
     return {
@@ -533,8 +560,9 @@ export function useJourney(draftId: string | undefined, opts?: Omit<JourneyOptio
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const review = useLatestReview(draftId);
   const viewerIsApprover = opts?.viewerIsApprover;
+  const viewerIsReviewer = opts?.viewerIsReviewer;
   return useMemo(
-    () => (draft ? getJourney(draft, review, { viewerIsApprover }) : null),
-    [draft, review, viewerIsApprover]
+    () => (draft ? getJourney(draft, review, { viewerIsApprover, viewerIsReviewer }) : null),
+    [draft, review, viewerIsApprover, viewerIsReviewer]
   );
 }

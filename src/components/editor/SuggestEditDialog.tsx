@@ -11,7 +11,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import Image from "@tiptap/extension-image";
 import TextAlign from "@tiptap/extension-text-align";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
-import { SuggestionMarkFirst } from "./suggestion-mark-priority";
+import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { Lightbulb, X } from "lucide-react";
 import type { Section } from "@/lib/letters/types";
@@ -63,7 +63,7 @@ export function SuggestEditDialog({
       TableHeader,
       TableCell,
       CommentMark,
-      SuggestionMarkFirst,
+      SuggestionMark,
       FigureRef,
       AttachmentRef,
       Image.configure({ inline: false, allowBase64: true }),

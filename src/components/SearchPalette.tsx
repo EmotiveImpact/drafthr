@@ -223,6 +223,20 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
     nav(href);
   };
 
+  // A query that starts a page name ("Calendar", "Approvals") puts Pages
+  // first, so Enter opens the page and not a letter type (HOME-15).
+  const q = query.trim().toLowerCase();
+  const pageHit = q.length > 0 && pages.some((pg) => pg.label.toLowerCase().startsWith(q));
+  const pagesGroup = (
+    <CommandGroup heading="Pages">
+      {pages.map((pg) => (
+        <CommandItem key={`${pg.href}-${pg.label}`} value={`page-${pg.label}`} onSelect={() => go(pg.href)} keywords={[pg.label, ...pg.keywords]}>
+          <pg.Icon /> {pg.label}
+        </CommandItem>
+      ))}
+    </CommandGroup>
+  );
+
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Search" description="Find a letter, letter type or page">
       <Command>
@@ -233,6 +247,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
         />
         <CommandList>
         <CommandEmpty>Nothing matches "{query}".</CommandEmpty>
+        {pageHit && pagesGroup}
 
         {sectionMatches.length > 0 && (
           <>
@@ -339,13 +354,7 @@ export function SearchPalette({ open, onOpenChange }: { open: boolean; onOpenCha
           </>
         )}
 
-        <CommandGroup heading="Pages">
-          {pages.map((pg) => (
-            <CommandItem key={`${pg.href}-${pg.label}`} value={`page-${pg.label}`} onSelect={() => go(pg.href)} keywords={[pg.label, ...pg.keywords]}>
-              <pg.Icon /> {pg.label}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {!pageHit && pagesGroup}
         {prefix && (
           <>
             <CommandSeparator />

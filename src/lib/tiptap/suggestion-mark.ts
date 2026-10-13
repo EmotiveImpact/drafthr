@@ -120,9 +120,12 @@ export const SuggestionMark = Mark.create({
   },
 
   parseHTML() {
+    // Priority above the default 50: StarterKit's Strike also parses <del>
+    // and, at equal priority, wins (it is registered first), which turned a
+    // pending deletion into a plain <s> that stayed struck after Accept.
     return [
-      { tag: "ins[data-suggestion-id]" },
-      { tag: "del[data-suggestion-id]" },
+      { tag: "ins[data-suggestion-id]", priority: 60 },
+      { tag: "del[data-suggestion-id]", priority: 60 },
     ];
   },
 

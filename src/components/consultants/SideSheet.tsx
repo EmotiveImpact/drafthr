@@ -42,9 +42,9 @@ export function SideSheet({
 }) {
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
-      {/* Portal into the app's theme root, beside the toaster, so a toast
-       * (an error while sending) shows above the sheet, not behind it. */}
-      <D.Portal container={typeof document !== "undefined" ? (document.querySelector<HTMLElement>(".radix-themes") ?? undefined) : undefined}>
+      {/* Portalled to the body; the toaster's own z-index keeps a toast (an
+       * error while sending) above the sheet. */}
+      <D.Portal>
         <D.Overlay
           className={cn(
             "fixed inset-0 z-50 bg-[var(--ds-scrim)]",

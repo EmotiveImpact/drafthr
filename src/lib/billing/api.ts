@@ -59,7 +59,7 @@ export async function startBillingCheckout(
     }
     return { ok: true, url: data.url };
   } catch {
-    return { ok: false, error: "Network error — please try again." };
+    return { ok: false, error: "Network error. Please try again." };
   }
 }
 

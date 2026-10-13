@@ -3,7 +3,7 @@ import type { Profile } from "@/lib/profile";
 import { canApprove } from "@/lib/permissions";
 import { currentRound, firstName, type ReviewRequest } from "@/lib/journey/reviews";
 import type { ActivityEvent } from "@/components/journey/ui";
-import { textOf } from "./health-fix";
+import { appealWorkingDays, downloadedActivity, type SentRecord } from "@/components/journey/send/record";
 
 /**
  * Facts about a letter that the workspace shows around the page (chips,
@@ -12,28 +12,10 @@ import { textOf } from "./health-fix";
  * hides the thing that would show it.
  */
 
-const WORD_NUMBERS: Record<string, number> = {
-  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-  eleven: 11, twelve: 12, fourteen: 14, fifteen: 15, twenty: 20, "twenty-one": 21, thirty: 30,
-};
-
-/** The appeal window the letter itself states ("within five working days"). */
-export function appealWorkingDays(draft: Draft): number | null {
-  const sections = draft.sections ?? [];
-  const ordered = [
-    ...sections.filter((s) => s.sectionId === "appeal_rights"),
-    ...sections.filter((s) => s.sectionId !== "appeal_rights"),
-  ];
-  for (const s of ordered) {
-    const text = textOf(s.html).toLowerCase();
-    if (!/appeal/.test(text)) continue;
-    const m = text.match(/within\s+([a-z-]+|\d{1,2})\s*(?:\(\d+\)\s*)?working days/);
-    if (!m) continue;
-    const n = /^\d+$/.test(m[1]) ? Number(m[1]) : WORD_NUMBERS[m[1]];
-    if (n && n > 0 && n < 60) return n;
-  }
-  return null;
-}
+/** The appeal window the letter states ("within five working days"), or
+ *  null when it gives no right of appeal. One rule for the whole letter
+ *  workspace: the send record's (src/components/journey/send/record.ts). */
+export { appealWorkingDays };
 
 /** Add working days (Monday to Friday) to a timestamp. */
 export function addWorkingDays(ms: number, days: number): Date {
@@ -166,7 +148,11 @@ const FORMAT_WORDS: Record<string, string> = {
   docx: "Downloaded the Word file",
   txt: "Downloaded the plain text",
   pack: "Downloaded the evidence pack",
+  audit: "Downloaded the audit record",
 };
+
+/** Downloads made within this long of each other read as one line. */
+const DOWNLOAD_GROUP_MS = 5000;
 
 /**
  * The Activity card (from Approval on): the letter's audit record, newest
@@ -176,7 +162,16 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
   type E = ActivityEvent & { at: number };
   const out: E[] = [];
   const who = (name: string | undefined) => (!name || sameName(name, me) ? "You" : name);
-  for (const t of draft.timeline ?? []) {
+  const timeline = draft.timeline ?? [];
+  // The Send step records the send itself ("Given in person by ..."), timed
+  // like its marked-sent export: show that line and not both.
+  const sentAts = new Set(
+    timeline.filter((t) => t.kind === "details_updated" && t.meta?.action === "sent").map((t) => t.createdAt)
+  );
+  // Downloads made together (the Send step's "Download and mark as sent")
+  // read as one line: "Downloaded PDF and evidence pack".
+  let lastDownload: { e: E; keys: SentRecord["downloaded"] } | null = null;
+  for (const t of timeline) {
     const at = t.createdAt;
     if (t.kind === "review_submitted") {
       const approver = t.actorName && !/^workspace reviewer$/i.test(t.actorName) ? firstName(t.actorName) : "the approver";
@@ -190,16 +185,33 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
     } else if (t.kind === "exported") {
       const format = String(t.meta?.format ?? "");
       if (format === "marked-sent") {
+        if (sentAts.has(at)) continue;
+        // Older sends have no send record: the export event alone. Its
+        // reviewedBy is the counsel attestation, not who sent it.
         out.push({
           id: t.id,
           at,
           title: `Marked as sent, ${deliveryPhrase(draft.context.deliveryMethod)}`,
-          meta: `${who(String(t.meta?.reviewedBy ?? "") || undefined)} · ${fmtWhen(at)}`,
+          meta: `${who(undefined)} · ${fmtWhen(at)}`,
           done: true,
         });
       } else if (FORMAT_WORDS[format]) {
-        out.push({ id: t.id, at, title: FORMAT_WORDS[format], meta: `You · ${fmtWhen(at)}` });
+        const key = format as SentRecord["downloaded"][number];
+        if (lastDownload && Math.abs(at - lastDownload.e.at) <= DOWNLOAD_GROUP_MS && !lastDownload.keys.includes(key)) {
+          lastDownload.keys.push(key);
+          lastDownload.e.title = downloadedActivity(lastDownload.keys) ?? lastDownload.e.title;
+          lastDownload.e.at = Math.max(lastDownload.e.at, at);
+          lastDownload.e.meta = `You · ${fmtWhen(lastDownload.e.at)}`;
+          continue;
+        }
+        const e: E = { id: t.id, at, title: FORMAT_WORDS[format], meta: `You · ${fmtWhen(at)}` };
+        out.push(e);
+        lastDownload = { e, keys: [key] };
       }
+    } else if (t.kind === "details_updated" && t.meta?.action === "sent") {
+      out.push({ id: t.id, at, title: t.title, meta: `${who(t.actorName)} · ${fmtWhen(at)}`, done: true });
+    } else if (t.kind === "details_updated" && t.meta?.action === "unmarked-sent") {
+      out.push({ id: t.id, at, title: t.title, meta: `${who(t.actorName)} · ${fmtWhen(at)}` });
     } else if (t.kind === "counsel_review") {
       out.push({ id: t.id, at, title: t.title, meta: fmtWhen(at) });
     } else if (t.kind === "created") {

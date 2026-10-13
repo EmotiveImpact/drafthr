@@ -48,6 +48,7 @@ export function ProgressTab({
   draft,
   journey,
   viewerIsApprover,
+  viewerIsReviewer,
   tickStep,
   role,
   counselNeeded,
@@ -61,6 +62,8 @@ export function ProgressTab({
   draft: Draft;
   journey: JourneyInfo;
   viewerIsApprover: boolean;
+  /** The named teammate reviewer is looking (their own review). */
+  viewerIsReviewer?: boolean;
   /** The tracker step that just completed (its tick draws), or null. */
   tickStep: number | null;
   role: WorkspaceRole | undefined;
@@ -87,6 +90,10 @@ export function ProgressTab({
   const deadline = draft.mode === "employee" ? draft.context.protectedDeadline : undefined;
   const days = deadline ? daysUntilDateOnly(deadline.iso) : null;
   const early = journey.stage === "draft" || journey.stage === "review" || journey.stage === "approve";
+  // Send and Sent (f7, f8) show only the step and What's next: the counsel
+  // gate is in the Send step, evidence in the document bar, all checks and
+  // outputs on the full Finalise page and in Activity.
+  const late = journey.stage === "send" || journey.stage === "sent";
 
   return (
     <div
@@ -97,6 +104,7 @@ export function ProgressTab({
       <JourneyPanel
         draftId={draft.id}
         viewerIsApprover={viewerIsApprover}
+        viewerIsReviewer={viewerIsReviewer}
         health={early ? <LetterHealthCard draft={draft} journey={journey} canFix={canFix} /> : false}
       />
 
@@ -121,7 +129,7 @@ export function ProgressTab({
       )}
 
       {/* Counsel review for high-risk letters. */}
-      {counselNeeded && (
+      {counselNeeded && !late && (
         <div className="flex items-center gap-2.5 rounded-[12px] border border-[var(--ds-line)] px-3.5 py-3">
           <ShieldCheck className={cn("size-4 shrink-0", counselReview ? "text-[var(--ds-green-fg)]" : "text-[var(--ds-amber-fg)]")} />
           <div className="min-w-0 flex-1">
@@ -136,60 +144,62 @@ export function ProgressTab({
         </div>
       )}
 
-      <div className="flex flex-col border-t border-[var(--ds-line-2)]">
-        <Folded
-          title={draft.mode === "employee" ? "Your rights checklist" : "Compliance checks"}
-          meta={compliance.total > 0 ? `${compliance.met} of ${compliance.total}` : undefined}
-        >
-          <div className="-mx-3">{draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />}</div>
-        </Folded>
-        <Folded
-          title="Evidence"
-          meta={evidenceRequired.length > 0 ? (evidenceMissing > 0 ? `${evidenceMissing} missing` : "All attached") : `${draft.evidence?.length ?? 0} attached`}
-          attention={evidenceMissing > 0}
-        >
-          <div className="-mx-2">
-            <EvidenceRequirementsList draft={draft} />
-          </div>
-          <QuietButton onClick={onOpenEvidence} className="mt-2">
-            <Paperclip className="size-3.5" /> Open evidence{draft.evidence?.length ? ` (${draft.evidence.length})` : ""}
-          </QuietButton>
-        </Folded>
-        {exports.length > 0 && (
-          <Folded title="Outputs" meta={`${exports.length}`}>
-            <div className="flex flex-wrap gap-1.5">
-              {exports.slice(0, 8).map((e) => (
-                <span
-                  key={e.id}
-                  className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-[9px] text-[12.5px] text-[var(--ds-body)]"
-                  title={e.reviewedBy ? `Counsel: ${e.reviewedBy}, ${e.reviewedOn}` : undefined}
-                >
-                  <OutputIcon format={e.format} />
-                  <span className="truncate">{FORMAT_LABEL[e.format]}</span>
-                  <span className="text-[var(--ds-muted)]">{shortDate(e.exportedAt)}</span>
-                </span>
-              ))}
-            </div>
+      {!late && (
+        <div className="flex flex-col border-t border-[var(--ds-line-2)]">
+          <Folded
+            title={draft.mode === "employee" ? "Your rights checklist" : "Compliance checks"}
+            meta={compliance.total > 0 ? `${compliance.met} of ${compliance.total}` : undefined}
+          >
+            <div className="-mx-3">{draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />}</div>
           </Folded>
-        )}
-        {!draft.isTemplateSource && (
-          <Folded title="Second opinion and full review">
-            <p className="m-0 text-[12.5px] leading-snug text-[var(--ds-muted)]">
-              Ask DraftHR to read it as tribunal counsel, an employee advocate or a DEI lead (1 credit), get an expert, or open the full checks.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <QuietButton onClick={onGoReview} ariaLabel="Next: Review">
-                Review step <ArrowRight className="size-3.5" />
-              </QuietButton>
-              {role !== "viewer" && (
-                <QuietButton onClick={onFinalise}>
-                  Finalise page <ArrowRight className="size-3.5" />
+          <Folded
+            title="Evidence"
+            meta={evidenceRequired.length > 0 ? (evidenceMissing > 0 ? `${evidenceMissing} missing` : "All attached") : `${draft.evidence?.length ?? 0} attached`}
+            attention={evidenceMissing > 0}
+          >
+            <div className="-mx-2">
+              <EvidenceRequirementsList draft={draft} />
+            </div>
+            <QuietButton onClick={onOpenEvidence} className="mt-2">
+              <Paperclip className="size-3.5" /> Open evidence{draft.evidence?.length ? ` (${draft.evidence.length})` : ""}
+            </QuietButton>
+          </Folded>
+          {exports.length > 0 && (
+            <Folded title="Outputs" meta={`${exports.length}`}>
+              <div className="flex flex-wrap gap-1.5">
+                {exports.slice(0, 8).map((e) => (
+                  <span
+                    key={e.id}
+                    className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-[9px] text-[12.5px] text-[var(--ds-body)]"
+                    title={e.reviewedBy ? `Counsel: ${e.reviewedBy}, ${e.reviewedOn}` : undefined}
+                  >
+                    <OutputIcon format={e.format} />
+                    <span className="truncate">{FORMAT_LABEL[e.format]}</span>
+                    <span className="text-[var(--ds-muted)]">{shortDate(e.exportedAt)}</span>
+                  </span>
+                ))}
+              </div>
+            </Folded>
+          )}
+          {!draft.isTemplateSource && (
+            <Folded title="Second opinion and full review">
+              <p className="m-0 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+                Ask DraftHR to read it as tribunal counsel, an employee advocate or a DEI lead (1 credit), get an expert, or open the full checks.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <QuietButton onClick={onGoReview} ariaLabel="Next: Review">
+                  Review step <ArrowRight className="size-3.5" />
                 </QuietButton>
-              )}
-            </div>
-          </Folded>
-        )}
-      </div>
+                {role !== "viewer" && (
+                  <QuietButton onClick={onFinalise}>
+                    Finalise page <ArrowRight className="size-3.5" />
+                  </QuietButton>
+                )}
+              </div>
+            </Folded>
+          )}
+        </div>
+      )}
     </div>
   );
 }

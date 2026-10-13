@@ -7,6 +7,8 @@ import { useJourney } from "@/lib/journey/stage";
 import { currentRound, firstName, type ReviewRequest } from "@/lib/journey/reviews";
 import { PersonCard, type PersonTimelineItem } from "@/components/journey/ui";
 import { Button } from "@/components/ui/button";
+import { RateExpertCard } from "@/components/journey/review/parts";
+import { openRoundsHistory } from "@/components/journey/review/review-ui";
 import type { Draft } from "@/lib/letters/types";
 import { useWorkspaceFor } from "@/components/editor/workspace-store";
 import { decisionsFor } from "@/components/editor/suggestion-groups";
@@ -91,7 +93,8 @@ export function ApproveStage({ draftId }: { draftId: string }) {
             </div>
           )}
         </PersonCard>
-        <ReviewSummary draft={draft} review={review} skipped={!review} onRounds={h?.openRounds} />
+        <ReviewSummary draft={draft} review={review} skipped={!review} onRounds={() => openRoundsHistory(draftId)} />
+        {review?.kind === "expert" && <RateExpertCard review={review} />}
         {!viewerIsApprover && canSubmitForReview(role) && h?.withdraw && (
           <div>
             <button
@@ -111,7 +114,8 @@ export function ApproveStage({ draftId }: { draftId: string }) {
   const action = journey.primaryAction;
   return (
     <div className="flex flex-col gap-3.5">
-      <ReviewSummary draft={draft} review={review} skipped={false} onRounds={h?.openRounds} />
+      <ReviewSummary draft={draft} review={review} skipped={false} onRounds={() => openRoundsHistory(draftId)} />
+      {review?.kind === "expert" && <RateExpertCard review={review} />}
       {canSubmitForReview(role) && action?.id === "send-for-approval" && (
         <div className="flex flex-col gap-1.5">
           <Button size="sm" className="self-start" disabled={Boolean(action.disabled) || !h?.openReviewDialog} onClick={() => h?.openReviewDialog?.("submit")}>
@@ -156,9 +160,13 @@ function ReviewSummary({
     );
   }
   const parts: string[] = [];
-  parts.push(`You accepted ${plural(facts.accepted, "change")}`);
-  parts.push(`kept ${facts.rejected}`);
-  parts.push(`resolved ${plural(facts.resolved, "comment")}`);
+  if (facts.accepted || facts.rejected || facts.resolved) {
+    parts.push(`You accepted ${plural(facts.accepted, "change")}`);
+    parts.push(`kept ${facts.rejected}`);
+    parts.push(`resolved ${plural(facts.resolved, "comment")}`);
+  } else {
+    parts.push("Nothing to decide");
+  }
   const roundsLink = facts.n === 2 ? "See both rounds" : facts.n > 2 ? "See all rounds" : "See the round";
   return (
     <section aria-label="Review">

@@ -16,6 +16,8 @@ import { pushBookingCreate } from "@/lib/marketplaceSync";
 import { toServerUuid } from "@/lib/remote-ids";
 import { displayTitleFor } from "@/lib/letters/display";
 import { useReviewStore } from "@/lib/journey/reviews";
+import { letterSnapshot, sharedEvidence, type Me } from "@/components/journey/review/actions";
+import { createReviewLink } from "@/components/journey/review/trusted-api";
 import { bookingTotals, planHours } from "./market";
 
 export const NEEDS = ["Legal check", "Tone and fairness", "Matches our policy"] as const;
@@ -36,11 +38,14 @@ export async function bookExpertFromMarketplace({
   draft,
   needs,
   note,
+  asker,
 }: {
   consultant: Consultant;
   draft: Draft | null;
   needs: readonly string[];
   note: string;
+  /** The person booking (the review's asker), as from useMe(). */
+  asker?: Me;
 }): Promise<BookResult> {
   const message = bookingMessage(needs, note);
   const expectedDeliveryAt = Date.now() + planHours(c.sla) * 3600_000;
@@ -100,7 +105,31 @@ export async function bookExpertFromMarketplace({
       dueAt: new Date(expectedDeliveryAt).toISOString(),
       bookingId: booking?.id,
       pricePence: bookingTotals(c.price).totalPence,
+      turnaround: "standard",
+      ...(asker ? { asker: { name: asker.name, email: asker.email, userId: asker.userId } } : {}),
     });
+    // As when booked from the letter's reviewer dialog: the expert's review
+    // state (rounds, points, messages) lives with the booking on the server,
+    // so their suggestions reach this letter (REVIEW-46, REVIEW-118).
+    const review = useReviewStore.getState().requests[reviewId];
+    if (booking && review && c.profileId) {
+      const id = reviewId;
+      void createReviewLink({
+        kind: "expert",
+        draftId: draft.id,
+        reviewId: id,
+        reviewerName: c.name,
+        bookingId: booking.id,
+        ask: message ?? "",
+        dueAt: review.dueAt,
+        share: review.share,
+        letter: letterSnapshot(draft),
+        evidence: sharedEvidence(draft, review.share),
+        askerName: asker?.name ?? "",
+      }).then((res) => {
+        if (res.ok) useReviewStore.getState().updateReview(id, { trustedLinkId: res.data.linkId });
+      });
+    }
   }
   return { ok: true, booking, reviewId };
 }

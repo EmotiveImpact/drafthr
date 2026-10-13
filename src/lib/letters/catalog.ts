@@ -17,12 +17,12 @@ export type LetterCategoryId =
 
 export const LETTER_CATEGORIES: { id: LetterCategoryId; label: string; description: string }[] = [
   { id: "onboarding", label: "Onboarding", description: "Joining, offers, references, right to work." },
-  { id: "performance_conduct", label: "Performance & conduct", description: "Probation, warnings, performance plans, terminations." },
+  { id: "performance_conduct", label: "Performance and conduct", description: "Probation, warnings, performance plans, terminations." },
   { id: "departure", label: "Departure", description: "Resignations, redundancies, references, settlements." },
-  { id: "leave", label: "Leave & sickness", description: "Holiday, sickness, family, return to work, accommodation." },
-  { id: "compensation", label: "Pay & terms", description: "Salary changes, contract amendments, promotions, pay disputes." },
-  { id: "dispute", label: "Grievance & dispute", description: "Grievances, appeals, complaints, whistleblowing, flexible working." },
-  { id: "tribunal_legal", label: "Tribunal & legal", description: "ACAS EC, tribunal covers, subject-access requests, settlement counters." },
+  { id: "leave", label: "Leave and sickness", description: "Holiday, sickness, family, return to work, accommodation." },
+  { id: "compensation", label: "Pay and terms", description: "Salary changes, contract amendments, promotions, pay disputes." },
+  { id: "dispute", label: "Grievance and dispute", description: "Grievances, appeals, complaints, whistleblowing, flexible working." },
+  { id: "tribunal_legal", label: "Tribunal and legal", description: "ACAS EC, tribunal covers, subject-access requests, settlement counters." },
 ];
 
 export type LetterTypeMeta = {

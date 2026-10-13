@@ -139,7 +139,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
         required: true,
         showIf: (a) => a.jurisdiction === "UK",
         options: [
-          { value: "England & Wales", label: "England & Wales" },
+          { value: "England & Wales", label: "England and Wales" },
           { value: "Scotland", label: "Scotland" },
           { value: "Northern Ireland", label: "Northern Ireland" },
         ],
@@ -341,7 +341,7 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
         options: [
           { value: "public", label: "Standard" },
           { value: "confidential", label: "Confidential" },
-          { value: "private_and_confidential", label: "Private & Confidential" },
+          { value: "private_and_confidential", label: "Private and confidential" },
         ],
       },
       {
@@ -440,7 +440,7 @@ export const LETTER_QUESTIONS: Partial<Record<LetterTypeId, QuestionStep[]>> = {
         },
         { id: "bonusStructure", type: "textarea", label: "Bonus / commission structure (optional)" },
         { id: "equityGrant", type: "textarea", label: "Equity grant (shares, vesting, cliff, optional)" },
-        { id: "signOnBonus", type: "textarea", label: "Sign-on bonus & clawback terms (optional)" },
+        { id: "signOnBonus", type: "textarea", label: "Sign-on bonus and clawback terms (optional)" },
       ],
     },
     {

@@ -56,6 +56,8 @@ import {
 import type { Draft, Section } from "@/lib/letters/types";
 import type { WorkspaceRole } from "@/lib/profile";
 import { canApprove, canSubmitForReview } from "@/lib/permissions";
+import { useReviewUI, useReviewerMode } from "@/components/journey/review/review-ui";
+import { ReviewerModeSwitch } from "@/components/journey/review/reviewer";
 import { getDiffViewMode, setDiffViewMode, type DiffViewMode } from "@/lib/diff-view-mode";
 import { SAFE_IMAGE_ACCEPT } from "@/lib/safe-data-url";
 import { cn } from "@/lib/utils";
@@ -98,7 +100,7 @@ export const ZOOM_LEVELS = [75, 90, 100, 110, 125, 150] as const;
 /** Menus fade and rise in about 160ms and close faster. */
 export const MENU_MOTION = "duration-[160ms] data-[state=closed]:duration-[100ms]";
 
-export type BarPerson = { name: string; seed: string; title?: string; approved?: boolean };
+export type BarPerson = { name: string; seed: string; title?: string; approved?: boolean; kind?: string };
 
 export type SavedState = { kind: "saving" } | { kind: "saved"; at: number } | { kind: "locked" };
 
@@ -259,6 +261,7 @@ export function DocumentBar(p: DocumentBarProps) {
 /* ------------------------------ Top row ---------------------------------- */
 
 function TopRow(p: DocumentBarProps) {
+  const reviewerBack = useJustBack(p.draft.id);
   const { draft, journey } = p;
   const evidenceCount = draft.evidence?.length ?? 0;
   const reviewStatus = draft.reviewStatus ?? "draft";
@@ -337,9 +340,9 @@ function TopRow(p: DocumentBarProps) {
             {p.people.map((person, i) => (
               <span key={person.seed + i} className={cn("relative", i > 0 && "-ml-1.5")}>
                 <Avatar size="lg" name={person.name} seed={person.seed} title={person.title ?? person.name} className="ring-2 ring-[var(--ds-surface)]" />
-                {person.approved && (
+                {(person.approved || (reviewerBack && person.kind === "reviewer")) && (
                   <span
-                    aria-label={`${person.name} approved`}
+                    aria-label={person.approved ? `${person.name} approved` : `${person.name} sent it back`}
                     className="lw-okb absolute -right-0.5 -bottom-0.5 grid size-3.5 place-items-center rounded-full bg-[var(--ds-green-solid)] text-white ring-2 ring-[var(--ds-surface)]"
                   >
                     <Check className="size-2" strokeWidth={3.2} />
@@ -383,10 +386,43 @@ function TopRow(p: DocumentBarProps) {
         <span className="hidden xl:inline">Activity</span>
       </button>
 
+      {p.journey.primaryAction?.id === "send-back" && <BarReviewerMode draftId={draft.id} disabled={p.role === "viewer"} />}
+
       <MainAction {...p} />
 
       <MoreMenu {...p} />
     </div>
+  );
+}
+
+/** True for a moment after the review on this letter came back while it was
+ *  open (REVIEW-85): the reviewer's avatar shows a brief green tick. */
+function useJustBack(draftId: string): boolean {
+  const at = useReviewUI((s) => (s.justBack?.draftId === draftId ? s.justBack.at : 0));
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!at) return;
+    const left = 2600 - (Date.now() - at);
+    if (left <= 0) return;
+    setOn(true);
+    const t = window.setTimeout(() => setOn(false), left);
+    return () => window.clearTimeout(t);
+  }, [at]);
+  return on;
+}
+
+/** The named teammate reviewer's Read / Suggest / Comment switch (shared
+ *  with Your review in the Progress panel). Hidden on narrow bars, where the
+ *  panel's own switch is enough. */
+function BarReviewerMode({ draftId, disabled }: { draftId: string; disabled: boolean }) {
+  const [mode, setMode] = useReviewerMode(draftId);
+  // Icons only until there is room for the words (names stay for screen
+  // readers), so the letter's name keeps its space.
+  return (
+    <>
+      <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={disabled} compact className="ml-1 shrink-0 max-lg:hidden 2xl:hidden" />
+      <ReviewerModeSwitch mode={mode} onChange={setMode} disabled={disabled} className="ml-1 hidden shrink-0 2xl:inline-flex" />
+    </>
   );
 }
 
@@ -430,6 +466,7 @@ export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone" }) {
   if ((action.id === "send-for-review" || action.id === "send-for-approval" || action.id === "recall" || action.id === "finish-review" || action.id === "remind") && !canSubmitForReview(role)) {
     blockedReason = "Viewers can read this letter but cannot move it on.";
   }
+  if (action.id === "send-back" && role === "viewer") blockedReason = "Viewers can read this letter but cannot send a review back.";
   if (action.id === "approve" && !canApprove(role)) blockedReason = "Only an owner, admin or reviewer can approve.";
   const disabled = Boolean(action.disabled) || Boolean(blockedReason) || (p.streaming && action.id.startsWith("send"));
   const reason =
@@ -446,6 +483,8 @@ export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone" }) {
       <Check className="size-[15px]" />
     ) : action.id === "remind" ? (
       <Bell className="size-[15px]" />
+    ) : action.id === "send-back" ? (
+      <Send className="size-[15px]" />
     ) : null;
   const tone = action.id === "recall" || action.id === "remind" ? ghost : dark;
   const button = (

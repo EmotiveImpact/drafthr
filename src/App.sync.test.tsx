@@ -7,7 +7,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { Theme } from "@radix-ui/themes";
 
 const order: string[] = [];
 
@@ -56,11 +55,9 @@ describe("App mount sync", () => {
     useDraftStore.setState({ drafts: { d1: { id: "d1" } as never } });
     const { App } = await import("./App");
     render(
-      <Theme>
-        <MemoryRouter initialEntries={["/no-such-page"]}>
-          <App />
-        </MemoryRouter>
-      </Theme>,
+      <MemoryRouter initialEntries={["/no-such-page"]}>
+        <App />
+      </MemoryRouter>,
     );
     await waitFor(() => expect(order).toContain("push"), { timeout: 10_000 });
     expect(order).toEqual(["deletes", "pull", "extras", "push"]);
@@ -85,11 +82,9 @@ describe("App mount sync", () => {
     try {
       const { App } = await import("./App");
       render(
-        <Theme>
-          <MemoryRouter initialEntries={["/no-such-page"]}>
-            <App />
-          </MemoryRouter>
-        </Theme>,
+        <MemoryRouter initialEntries={["/no-such-page"]}>
+          <App />
+        </MemoryRouter>,
       );
       // The user is asked about deleting it instead.
       const prompt = await screen.findAllByText("Not enough space to keep this workspace's data", {}, { timeout: 10_000 });

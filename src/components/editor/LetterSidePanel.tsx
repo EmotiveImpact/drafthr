@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { AIPanel } from "./AIPanel";
 import { EditsTab, type EditsFilter } from "./EditsTab";
 import { ProgressTab } from "./ProgressTab";
+import { appealWorkingDays } from "@/components/journey/send/record";
 
 export type SidePanelTab = "edits" | "progress" | "chat";
 
@@ -17,7 +18,7 @@ const COUNSEL =
   "Summarise this letter for an external employment-law adviser. Cover (1) what the letter says, (2) what it relies on, (3) what it asks for, (4) key risk points.";
 
 /** Prompt chips over the Ask DraftHR box, by stage (mocks f1 to f8). */
-function chipsFor(stage: JourneyStage, reviewBack: boolean): { label: string; prompt: string }[] {
+function chipsFor(stage: JourneyStage, reviewBack: boolean, draft: Draft): { label: string; prompt: string }[] {
   switch (stage) {
     case "draft":
       return [
@@ -37,8 +38,25 @@ function chipsFor(stage: JourneyStage, reviewBack: boolean): { label: string; pr
         { label: "Draft a covering email", prompt: "Draft a short, neutral covering email to send with this letter. Do not repeat the letter's content; say it is attached and how to ask questions." },
         { label: "Check before sending", prompt: "Check this letter before it is sent: dates, names, the appeal window and anything that could be challenged. List anything to fix." },
       ];
-    case "sent":
-      return [{ label: "Prepare for an appeal", prompt: "If the employee appeals this letter, what are the likely grounds and what should we prepare? Keep it short and practical." }];
+    case "sent": {
+      // Only letters with a right of appeal get the appeal chip (SEND-88).
+      const appealable = appealWorkingDays(draft) !== null;
+      return [
+        {
+          label: "Summarise for the file",
+          prompt:
+            "Summarise this letter for the employee's file in five lines: what was decided, when and how it was given, and any deadlines.",
+        },
+        ...(appealable
+          ? [
+              {
+                label: "Draft appeal outcome",
+                prompt: "Draft an appeal outcome letter for this matter, ready to complete after the appeal hearing.",
+              },
+            ]
+          : []),
+      ];
+    }
     default:
       return [];
   }
@@ -127,7 +145,7 @@ export function LetterSidePanel({
           threadKey={tab}
           onSent={() => onTabChange("chat")}
           onOpenEvidence={onOpenEvidence}
-          chips={chipsFor(stage, reviewBack)}
+          chips={chipsFor(stage, reviewBack, draft)}
         />
       </div>
     </div>

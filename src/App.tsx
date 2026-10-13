@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, type ComponentType } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
@@ -44,6 +44,9 @@ import { PaywallGate } from "@/components/billing/PaywallGate";
 // the shell (Layout, auth, router) plus the route actually being shown.
 // Previously ~30 routes were imported eagerly, which dragged the editor
 // stack, the paged view and every letter template into the entry chunk.
+/** Home and its tabs: one header band, so no page fade between them. */
+const HOME_TABS = ["/hr", "/approvals", "/calendar", "/activity"];
+
 function lazyNamed<M, K extends keyof M & string>(load: () => Promise<M>, name: K): M[K] {
   return lazy(() =>
     load().then((m) => ({ default: m[name] as unknown as ComponentType<Record<string, unknown>> })),
@@ -78,6 +81,7 @@ const ConsultantProfile = lazyNamed(() => import("@/routes/ConsultantProfile"), 
 const MyBookings = lazyNamed(() => import("@/routes/MyBookings"), "MyBookings");
 const ConsultantAdminReview = lazyNamed(() => import("@/routes/ConsultantAdminReview"), "ConsultantAdminReview");
 const SharedDraftReview = lazyNamed(() => import("@/routes/SharedDraftReview"), "SharedDraftReview");
+const TrustedReview = lazyNamed(() => import("@/routes/TrustedReview"), "TrustedReview");
 // Heavy / non-first-paint routes are lazy-loaded — they pulled ~hundreds of KB
 // into the main chunk (Reports charts, BulkOps CSV+merge, Finalize export
 // pipeline, MatterDetail/EmployeeDetail). (Senior sweep I-PERF-1.) See the
@@ -85,7 +89,6 @@ const SharedDraftReview = lazyNamed(() => import("@/routes/SharedDraftReview"), 
 // MobileReadView).
 const Mockups = lazy(() => import("@/routes/Mockups").then((m) => ({ default: m.Mockups })));
 const Calendar = lazy(() => import("@/routes/Calendar").then((m) => ({ default: m.Calendar })));
-const Exported = lazy(() => import("@/routes/Exported").then((m) => ({ default: m.Exported })));
 const Activity = lazy(() => import("@/routes/Activity").then((m) => ({ default: m.Activity })));
 const Notifications = lazy(() => import("@/routes/Notifications").then((m) => ({ default: m.Notifications })));
 const Finalize = lazy(() => import("@/routes/Finalize").then((m) => ({ default: m.Finalize })));
@@ -319,7 +322,15 @@ export function App() {
       )}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={skipTransition ? "editor" : location.pathname}
+          key={
+            skipTransition
+              ? "editor"
+              : // Home's tabs (Overview, Approvals, Calendar, Activity) share
+                // one band: keep it in place while switching tabs.
+                HOME_TABS.includes(location.pathname)
+                ? "home-tabs"
+                : location.pathname
+          }
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
@@ -386,12 +397,16 @@ export function App() {
 
         <Route path="/calendar" element={<Protected><Calendar /></Protected>} />
         <Route path="/letters" element={<Protected><Letters /></Protected>} />
-        <Route path="/exported" element={<Protected><Exported /></Protected>} />
+        {/* The old Sent letters page is the Sent tab of Letters now. */}
+        <Route path="/exported" element={<Navigate to="/letters?tab=sent" replace />} />
         <Route path="/activity" element={<Protected><Activity /></Protected>} />
         <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
         <Route path="/settings/directory-sync" element={<Protected><SettingsDirectorySync /></Protected>} />
         <Route path="/privacy" element={<Privacy />} />
+        {/* "Someone you trust" review: a secure link, no account. The token
+         * is checked server-side (api/review-links). */}
+        <Route path="/r/:token" element={<TrustedReview />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/sign-in" element={<SignIn />} />
         <Route path="/sign-in/signup" element={<SignUp />} />

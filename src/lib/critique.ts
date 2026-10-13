@@ -80,6 +80,6 @@ export async function runCritique(input: {
       },
     };
   } catch {
-    return { ok: false, error: "Network error — please try again." };
+    return { ok: false, error: "Network error. Please try again." };
   }
 }

@@ -959,8 +959,8 @@ export const useDraftStore = create<Store>()(
             inlineDiffed = sanitizeLetterHtml(
               diffHtmlAsSuggestion(canonicalHtml, change.proposedHtml, {
                 // Human reviewer suggestions carry their name (set by the
-                // review rail); AI proposals fall back to "Claude AI".
-                author: change.authorName ?? "Claude AI",
+                // review rail); DraftHR proposals fall back to "DraftHR".
+                author: change.authorName ?? "DraftHR",
                 body: change.instruction,
               }),
             );

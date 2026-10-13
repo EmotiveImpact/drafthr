@@ -16,16 +16,16 @@ import { currentRound, firstName, type ReviewRequest } from "@/lib/journey/revie
 import { NoticeChip, NoticeStrip } from "@/components/journey/ui";
 import { cn } from "@/lib/utils";
 import {
-  addWorkingDays,
   approvedEntry,
   appealWorkingDays,
-  deliveryPhrase,
   fmtDay,
   fmtTime,
   verdictWords,
 } from "./letter-facts";
 import { disclaimerFor } from "./InlineDisclaimer";
 import { suggestedEdits } from "./suggestion-groups";
+import { appealChipText, sentBannerText } from "@/components/journey/send/record";
+import { useReviewerMode } from "@/components/journey/review/review-ui";
 
 /**
  * The calm line above the letter when something has happened (mocks f3,
@@ -57,6 +57,9 @@ export function LetterNotices({
   className?: string;
 }) {
   const strip = noticeFor({ draft, journey, review, matter, onMessage, onUndoSent, animateSent });
+  // The named teammate reviewer is looking (their main action is "Send back").
+  const reviewing = journey.primaryAction?.id === "send-back";
+  const [reviewerMode] = useReviewerMode(draft.id);
   const appealDays = appealWorkingDays(draft);
   const name = draft.employee?.legalName?.trim() || employee?.legalName;
   const job = draft.employee?.jobTitle?.trim() || employee?.jobTitle;
@@ -65,10 +68,15 @@ export function LetterNotices({
   let right: React.ReactNode = null;
   const r = review && review.status !== "recalled" ? review : null;
   const round = r ? currentRound(r) : undefined;
-  if (journey.stage === "sent" && journey.sentAt && appealDays) {
+  const appealChip = journey.stage === "sent" ? appealChipText(draft) : null;
+  if (journey.stage === "sent") {
+    right = appealChip ? <NoticeChip icon={CalendarCheck}>{appealChip}</NoticeChip> : null;
+  } else if (r && r.status === "out" && reviewing) {
+    // The named teammate reviewer (f4): how they are working right now.
+    const asker = firstName(r.asker?.name ?? "") || "They";
     right = (
-      <NoticeChip icon={CalendarCheck}>
-        Appeal by {addWorkingDays(journey.sentAt, appealDays).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+      <NoticeChip icon={Eye} tone="lilac">
+        {reviewerMode === "suggest" ? `Suggesting · ${asker} accepts or rejects` : reviewerMode === "comment" ? "Commenting" : "Reading"}
       </NoticeChip>
     );
   } else if (r && r.status === "out") {
@@ -92,7 +100,7 @@ export function LetterNotices({
         Reviewed by {firstName(r.reviewer.name)} · {n} round{n === 1 ? "" : "s"}
       </NoticeChip>
     );
-  } else if (appealDays && journey.stage !== "sent") {
+  } else if (appealDays) {
     right = (
       <NoticeChip icon={CalendarClock} tone="warn">
         Appeal window: {appealDays} working day{appealDays === 1 ? "" : "s"}
@@ -160,28 +168,13 @@ function noticeFor({
   const r = review && review.status !== "recalled" ? review : null;
   const employeeFirst = firstName(draft.employee?.preferredName || draft.employee?.legalName) || "the employee";
 
-  // Sent.
+  // Sent: the words come from the send record (how and when it was given,
+  // the appeal window only for letters with a right of appeal).
   if (journey.stage === "sent" && journey.sentAt) {
-    const sentAt = journey.sentAt;
-    const appealDays = appealWorkingDays(draft);
-    const hasPdf = (draft.exports ?? []).some((e) => e.format === "pdf");
-    const parts: string[] = [];
-    if (hasPdf) parts.push("The PDF is in your downloads");
-    parts.push(matter ? `a copy is saved to ${matter.name}` : "a copy is saved with this letter");
-    let detail = `${parts.join(" and ")}.`;
-    detail = detail.charAt(0).toUpperCase() + detail.slice(1);
-    if (appealDays) {
-      detail += ` The appeal window closes on ${addWorkingDays(sentAt, appealDays).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}.`;
-    }
+    const text = sentBannerText(draft, { matterName: matter?.name });
     return (
-      <NoticeStrip
-        tone="green"
-        icon={CircleCheck}
-        title={`Marked as sent on ${new Date(sentAt).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}, ${deliveryPhrase(draft.context.deliveryMethod)}.`}
-        onUndo={onUndoSent}
-        animate={animateSent}
-      >
-        {detail}
+      <NoticeStrip tone="green" icon={CircleCheck} title={text?.title ?? "Sent."} onUndo={onUndoSent} animate={animateSent}>
+        {text?.detail}
       </NoticeStrip>
     );
   }
@@ -204,6 +197,24 @@ function noticeFor({
   if (r && r.status === "out" && journey.stage === "review") {
     const due = r.dueAt ? new Date(r.dueAt) : null;
     const dueOk = due && !Number.isNaN(due.getTime());
+    if (journey.primaryAction?.id === "send-back") {
+      const asker = firstName(r.asker?.name ?? "") || "The person who asked";
+      return (
+        <NoticeStrip
+          tone="lilac"
+          icon={Eye}
+          title={`${asker} asked you to review this letter.`}
+          actions={
+            <button type="button" onClick={onMessage}>
+              Message
+            </button>
+          }
+        >
+          {dueOk ? `Back by ${fmtDay(due!)} at ${fmtTime(due!.getTime())}. ` : ""}
+          Suggest changes or comment; {asker === "The person who asked" ? "they decide" : `${asker} decides`} what to accept.
+        </NoticeStrip>
+      );
+    }
     return (
       <NoticeStrip
         tone="lilac"

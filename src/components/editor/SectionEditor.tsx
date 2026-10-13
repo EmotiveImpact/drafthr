@@ -46,7 +46,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, FolderOpen, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
 import { EditorToolbar } from "./EditorToolbar";
 import { CommentMark } from "@/lib/tiptap/comment-mark";
-import { SuggestionMarkFirst } from "./suggestion-mark-priority";
+import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
 import { RemoteImageEmbed } from "@/lib/tiptap/remote-image-embed";
@@ -156,7 +156,7 @@ export function SectionEditor({
       // Track-changes primitive — see src/lib/tiptap/suggestion-mark.ts. Marks
       // proposed reviewer / AI / consultant edits as <ins>/<del> with status
       // attributes; merge helpers fold accepted edits into canonical text.
-      SuggestionMarkFirst,
+      SuggestionMark,
       // Evidence reference tokens — render the [See Fig N] / [See Attachments]
       // spans inserted by the picker / slash command as atomic inline nodes
       // instead of letting Tiptap drop them on the floor as unknown HTML

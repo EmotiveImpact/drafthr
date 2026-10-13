@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Theme } from "@radix-ui/themes";
 import { Toaster } from "sonner";
+import { CircleCheck } from "lucide-react";
 import { App } from "./App";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
@@ -13,11 +13,6 @@ import { reloadForStaleChunk } from "@/lib/chunk-reload";
 import "@fontsource/playfair-display/400.css";
 import "@fontsource/playfair-display/600.css";
 import "./styles/globals.css";
-// Radix Themes CSS must come AFTER ./styles/globals.css so Tailwind's preflight
-// doesn't strip Radix component backgrounds. (See RADIX-THEMES-MIGRATION.md.)
-import "@radix-ui/themes/styles.css";
-// Cool grey palette, Inter and radii for Radix Themes. Must follow its styles.
-import "./styles/radix-overrides.css";
 
 bootstrapTheme();
 initSentry();
@@ -41,32 +36,30 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <ErrorBoundary>
       <AuthProvider>
-        <Theme
-          accentColor="gray"
-          grayColor="slate"
-          radius="medium"
-          scaling="100%"
-          appearance="inherit"
-        >
-          <App />
-          {/* Global toast surface — top-right, light, swipe to dismiss.
-           * Used for accept/reject pending, regen done, comment resolved,
-           * export complete, etc. Single mount keeps the stack consistent. */}
-          <Toaster
-            position="top-right"
-            theme="light"
-            richColors
-            closeButton
-            toastOptions={{
-              classNames: {
-                toast:
-                  "rounded-[var(--ds-r-l)]! border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[14px] text-[var(--ds-ink)] shadow-[var(--ds-shadow-l)]",
-                description: "text-[13px] text-[var(--ds-muted)]",
-                actionButton: "rounded-[7px]! bg-[var(--ds-accent)]! text-[var(--ds-on-accent)]! font-medium!",
-              },
-            }}
-          />
-        </Theme>
+        <App />
+        {/* Global toast surface (kit.html "Toast"): bottom right, the dark
+         * ink toast with a green tick for success, swipe to dismiss. Used
+         * for accept/reject pending, regen done, comment resolved, export
+         * complete, etc. Single mount keeps the stack consistent. */}
+        <Toaster
+          position="bottom-right"
+          theme="light"
+          closeButton
+          icons={{ success: <CircleCheck className="size-[18px] text-[var(--ds-green-line)]" strokeWidth={1.8} /> }}
+          toastOptions={{
+            classNames: {
+              toast:
+                "rounded-[var(--ds-r-l)]! border-0! bg-[var(--ds-ink)]! text-[var(--ds-on-accent)]! text-[14px] shadow-[var(--ds-shadow-l)]",
+              title: "font-medium",
+              description: "text-[13px] text-[color-mix(in_srgb,var(--ds-on-accent)_70%,transparent)]!",
+              actionButton:
+                "bg-transparent! px-1! text-[13.5px]! font-medium! text-[var(--ds-on-accent)]! underline! underline-offset-[3px]!",
+              cancelButton: "bg-transparent! text-[color-mix(in_srgb,var(--ds-on-accent)_70%,transparent)]!",
+              closeButton:
+                "border-0! bg-[color-mix(in_srgb,var(--ds-on-accent)_14%,var(--ds-ink))]! text-[var(--ds-on-accent)]!",
+            },
+          }}
+        />
       </AuthProvider>
       </ErrorBoundary>
     </BrowserRouter>

@@ -18,7 +18,7 @@ export function CheckRow({
   state: "ok" | "wait" | "need";
   children: ReactNode;
   note?: ReactNode;
-  action?: { label: string; onClick?: () => void; href?: string; disabled?: boolean };
+  action?: { label: string; ariaLabel?: string; onClick?: () => void; href?: string; disabled?: boolean };
   className?: string;
 }) {
   return (
@@ -49,6 +49,7 @@ export function CheckRow({
         action.href ? (
           <Link
             to={action.href}
+            aria-label={action.ariaLabel}
             className="ml-auto shrink-0 whitespace-nowrap rounded-[7px] border border-[var(--ds-line)] px-[9px] py-[3px] text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)]"
           >
             {action.label}
@@ -58,6 +59,7 @@ export function CheckRow({
             type="button"
             onClick={action.onClick}
             disabled={action.disabled}
+            aria-label={action.ariaLabel}
             className="ml-auto shrink-0 whitespace-nowrap rounded-[7px] border border-[var(--ds-line)] px-[9px] py-[3px] text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-surface-2)] active:bg-[var(--ds-surface-3)] disabled:opacity-40"
           >
             {action.label}

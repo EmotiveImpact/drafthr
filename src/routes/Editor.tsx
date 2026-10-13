@@ -20,6 +20,9 @@ import { useJourney } from "@/lib/journey/stage";
 import { firstName, useLatestReview, useReviewStore } from "@/lib/journey/reviews";
 import { useJourneyUI } from "@/components/journey/ui-store";
 import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
+import { focusReviewReply, openRoundsHistory, requestFinishReview, requestRecall } from "@/components/journey/review/review-ui";
+import { isAskerOf, isReviewerOf, useMe } from "@/components/journey/review/actions";
+import { undoMarkedSent, undoToastText } from "@/components/journey/send/actions";
 import { Seal } from "@/components/journey/ui";
 import { uid, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -123,7 +126,12 @@ export function Editor() {
   const review = useLatestReview(draftId);
   const approverNameEarly = draft ? submittedEntry(draft)?.reviewerName : undefined;
   const viewerIsApprover = draft ? viewerIsApproverFor(draft, profile, approverNameEarly) : false;
-  const journey = useJourney(draftId, { viewerIsApprover });
+  // The named teammate reviewer sees their own review (mock f4 in the app):
+  // the Read / Suggest / Comment switch and "Send back to <asker>".
+  const reviewMe = useMe();
+  const viewerIsReviewer =
+    review?.kind === "team" && review.status === "out" && isReviewerOf(review, reviewMe) && !isAskerOf(review, reviewMe);
+  const journey = useJourney(draftId, { viewerIsApprover, viewerIsReviewer });
   const isLargeViewport = useIsLargeViewport();
   const isPhone = useIsPhone();
   const panelTab = useJourneyUI((s) => s.panelTab);
@@ -226,6 +234,7 @@ export function Editor() {
 
   // A different letter: restore its dock and reset everything that carried
   // the previous letter's ids.
+  const shownBack = useRef<string | null>(null);
   useEffect(() => {
     if (!draftId || typeof window === "undefined") return;
     const fallback = draft?.evidenceTier === "heavy" ? "evidence" : "ai";
@@ -248,8 +257,20 @@ export function Editor() {
     setEditsFilter("edits");
     setFindOpen(false);
     setPanelTab("progress");
+    shownBack.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId]);
+
+  // Back to you (B1): open on the Edits tab, where the reviewer's points
+  // are decided. Once per letter and round, so the person can move away.
+  // Runs after the reset above, which clears shownBack for a new letter.
+  const backKey = review?.status === "back" ? `${draftId}:${review.id}:${review.rounds?.length ?? 0}` : null;
+  useEffect(() => {
+    if (!backKey || shownBack.current === backKey || viewerIsReviewer) return;
+    shownBack.current = backKey;
+    setPanelTab("edits");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backKey]);
 
   // ?openEvidence=1 opens the evidence drawer (old /evidence bookmarks).
   useEffect(() => {
@@ -283,10 +304,18 @@ export function Editor() {
   useEffect(() => {
     if (!draftId || searchParams.get("review") !== "expert") return;
     const expertId = searchParams.get("expert") ?? undefined;
-    const dueAt = searchParams.get("due") ?? undefined;
+    const due = searchParams.get("due");
+    const dueAt =
+      due && !Number.isNaN(Date.parse(due)) && Date.parse(due) > Date.now() ? new Date(due).toISOString() : undefined;
+    // A review already out (or back) is left alone, as in ReviewDialogsHost.
+    const reviewOpen = Object.values(useReviewStore.getState().requests).some(
+      (r) => r.draftId === draftId && (r.status === "out" || r.status === "back")
+    );
     setPanelTab("progress");
     if (isLargeViewport) setPinnedDock("ai");
-    useJourneyUI.getState().openReviewPicker(draftId, { kind: "expert", expertId, dueAt, from: "marketplace" });
+    if (!reviewOpen) {
+      useJourneyUI.getState().openReviewPicker(draftId, { kind: "expert", expertId, dueAt, from: "marketplace" });
+    }
     const next = new URLSearchParams(searchParams);
     next.delete("review");
     next.delete("expert");
@@ -652,6 +681,13 @@ export function Editor() {
   // reviewer's loose tracked changes (the set the Edits tab and the margin
   // list, one card each).
   const pendingEdits = suggestedEdits(draft).length;
+  // Back to you (B1): the Edits tab counts the reviewer's open points, their
+  // comments as well as their suggested edits (REVIEW-70).
+  const reviewerOpenComments = (() => {
+    if (review?.status !== "back") return 0;
+    const ids = new Set(review.rounds[review.rounds.length - 1]?.commentIds ?? []);
+    return (draft.comments ?? []).filter((c) => ids.has(c.id) && !c.resolved).length;
+  })();
 
   const rejectAllEdits = () => {
     const sectionSnap = draft.sections.filter((s) => s.pendingChange).map((s) => ({ sectionId: s.id, pending: s.pendingChange! }));
@@ -806,23 +842,23 @@ export function Editor() {
       case "send-for-approval":
         setReviewDialogKind("submit");
         return;
+      // Recall and Finish review go through the review loop's dialogs
+      // (ReviewDialogsHost): they confirm, revoke a secure link on the
+      // server and tell the person what happened.
       case "recall":
-        if (review) {
-          useReviewStore.getState().recall(review.id);
-          toast(`Recalled from ${firstName(review.reviewer.name) || "the reviewer"}. You can edit it again.`);
-        }
+        if (review) requestRecall(draft.id);
         return;
       case "finish-review":
-        if (review) {
-          useReviewStore.getState().finish(review.id);
-          toast("Review finished. Send it for approval when you're ready.");
-        }
+        if (review) requestFinishReview(draft.id);
         return;
       case "approve":
         setReviewDialogKind("approve");
         return;
       case "remind":
         void remindApprover();
+        return;
+      case "send-back":
+        sendBackFromBar();
         return;
       case "export":
       case "download":
@@ -900,39 +936,35 @@ export function Editor() {
   };
 
   /** Undo "marked as sent": the letter goes back to ready to send. */
+  // Undo on the Sent banner clears the whole send record (the marked-sent
+  // exports, the given date, the appeal dates), records "Marked as not
+  // sent" and stops the seal (SEND-96 to 98).
   const undoSent = () => {
-    const st = useDraftStore.getState();
-    const d = st.drafts[draft.id];
-    if (!d) return;
-    const removed = (d.exports ?? []).filter((e) => e.format === "marked-sent");
-    if (removed.length === 0) return;
-    useDraftStore.setState({
-      drafts: {
-        ...st.drafts,
-        [d.id]: { ...d, exports: (d.exports ?? []).filter((e) => e.format !== "marked-sent"), updatedAt: Date.now() },
-      },
-    });
-    useDraftStore.getState().recordTimelineEvent(d.id, {
-      kind: "details_updated",
-      title: "Marked as not sent",
-      actorName: me || undefined,
-    });
-    useJourneyUI.getState().clearJustSent();
-    toast("Marked as not sent. The letter is ready to send again.");
+    const result = undoMarkedSent(draft.id, me || undefined);
+    if (result.undone) toast(undoToastText(result));
+  };
+
+  /** The reviewer's "Send back to <asker>" in the document bar: sends with
+   *  the verdict picked in Your review, or shows the verdict to pick first. */
+  const sendBackFromBar = () => {
+    openPanelTab("progress");
+    window.setTimeout(() => {
+      const button = document.querySelector<HTMLButtonElement>('[data-testid="reviewer-send-back"]');
+      if (button && !button.disabled) {
+        button.click();
+        return;
+      }
+      const verdict = document.querySelector<HTMLElement>('[data-testid="your-review"] [role="radiogroup"][aria-label="Your verdict"]');
+      verdict?.scrollIntoView({ block: "center", behavior: "smooth" });
+      verdict?.querySelector<HTMLElement>('[role="radio"]')?.focus({ preventScroll: true });
+      toast("Pick a verdict first", { description: "Then add a note and send it back." });
+    }, 120);
   };
 
   /** "Message" on the out-for-review strip: the conversation with the reviewer. */
   const openReviewThread = () => {
     openPanelTab("progress");
-    window.setTimeout(() => {
-      const el =
-        document.querySelector<HTMLElement>('[data-slot="review-thread"] textarea, [data-review-message] textarea, [data-review-message]') ??
-        document.querySelector<HTMLElement>('[data-slot="review-thread"]');
-      if (el) {
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
-        if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) el.focus();
-      }
-    }, 80);
+    focusReviewReply(draft.id);
   };
 
   const askDraftHR = (prompt: string) => {
@@ -962,10 +994,9 @@ export function Editor() {
     ask: askDraftHR,
     jumpToSection,
     finalise: goFinalise,
-    openRounds: () => {
-      setActivityTab("rounds");
-      setActivityOpen(true);
-    },
+    // "See all rounds": the review loop's rounds history (RoundsList). The
+    // Activity dialog keeps its own Review rounds tab too.
+    openRounds: () => openRoundsHistory(draft.id),
   };
   // Live facts the stage components read (registered after render).
   liveRef.current = { draftId: draft.id, streaming: globallyStreaming, canEdit: canvasEditable, counselNeeded, counselReview };
@@ -1058,13 +1089,14 @@ export function Editor() {
       editsFilter={editsFilter}
       onEditsFilterChange={setEditsFilter}
       canResolve={canvasEditable}
-      pendingEdits={pendingEdits}
+      pendingEdits={pendingEdits + reviewerOpenComments}
       onAcceptAll={acceptAllEdits}
       onRejectAll={rejectAllEdits}
       onJumpToSection={jumpToSection}
       progress={{
         journey,
         viewerIsApprover,
+        viewerIsReviewer,
         tickStep,
         role,
         counselNeeded,

@@ -50,7 +50,7 @@ export const EMPLOYEE_UNIVERSAL_STEPS: QuestionStep[] = [
         required: true,
         showIf: (a) => a.jurisdiction === "UK",
         options: [
-          { value: "England & Wales", label: "England & Wales" },
+          { value: "England & Wales", label: "England and Wales" },
           { value: "Scotland", label: "Scotland" },
           { value: "Northern Ireland", label: "Northern Ireland" },
         ],
