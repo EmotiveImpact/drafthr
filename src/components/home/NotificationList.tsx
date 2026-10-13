@@ -206,7 +206,7 @@ export function SeveritySegments({
           )}
         >
           {label}
-          <em className="ml-[3px] text-[12px] font-normal text-[var(--ds-subtle)] not-italic">{n}</em>
+          <em className="ml-[3px] text-[12px] font-normal text-[var(--ds-muted)] not-italic">{n}</em>
         </button>
       ))}
     </div>

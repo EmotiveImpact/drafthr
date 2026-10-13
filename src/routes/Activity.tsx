@@ -246,7 +246,7 @@ export function Activity() {
         lede={
           <OverviewLede
             inProgress={home.summary.inProgress}
-            needReview={home.summary.needReview}
+            needYou={home.summary.needYou}
           />
         }
       />
@@ -752,11 +752,23 @@ function iconFor(kind: Event["kind"]) {
   return <ActivityIcon className={cls} aria-hidden />;
 }
 
+/**
+ * What a filter shows, for the empty line "No <phrase> today.". Each filter
+ * has its own phrase, so labels like "AI" keep their capitals and read as
+ * a sentence ("No AI drafting today.", not "No ai today.").
+ */
+const EMPTY_PHRASE: Record<TimelineCategory | "all", string> = {
+  all: "events",
+  changes: "draft changes",
+  ai: "AI drafting",
+  comments: "comments",
+  reviews: "review activity",
+  exports: "exports",
+  people: "people changes",
+};
+
 function labelFor(c: TimelineCategory | "all"): string {
-  if (c === "all") return "events";
-  return (
-    CATEGORY_FILTERS.find((f) => f.id === c)?.label.toLowerCase() ?? "events"
-  );
+  return EMPTY_PHRASE[c] ?? "events";
 }
 
 function isoDay(ts: number): string {

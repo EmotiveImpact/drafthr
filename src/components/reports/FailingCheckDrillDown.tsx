@@ -15,6 +15,7 @@ import {
   type FailingDraft,
 } from "@/lib/reports/check-predicates";
 import { plainReason, ruleCopy } from "@/components/reports/reportsData";
+import { letterOwner, useMe } from "@/components/letters/rows";
 
 /* ============================================================================
  * /reports/checks/:checkId: per-check drill-down for HR Director.
@@ -122,6 +123,7 @@ function FailingTable({
   matters: Record<string, Matter>;
   onRowClick: (draftId: string) => void;
 }) {
+  const me = useMe();
   return (
     <table className="w-full border-collapse text-[13px] block md:table">
       <thead className="hidden md:table-header-group">
@@ -136,11 +138,9 @@ function FailingTable({
       <tbody className="block md:table-row-group">
         {rows.map(({ draft, reason }) => {
           const matter = draft.matterId ? matters[draft.matterId] : undefined;
-          const owner =
-            (draft.collaborators ?? []).find((c) => c.role === "owner")?.name ??
-            (draft.collaborators ?? []).find((c) => c.role === "owner")?.email ??
-            draft.employer?.legalName ??
-            "Unassigned";
+          // The person who owns the letter, as on the Letters page (never
+          // the company the letter is from).
+          const owner = letterOwner(draft, me).name;
           return (
             <tr
               key={draft.id}

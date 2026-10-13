@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ART_CARD, ArtCardBody, categoryName, tintFor } from "./letterArt";
 import { letterName, personFor, shortAgo, type HistoryRow, type LetterJourney, type NeedItem } from "./homeData";
 import { RailBox } from "./HomeParts";
+import { listStatusPill } from "@/components/letters/letterView";
 
 /* ─── Continue where you left off ──────────────────────────────────── */
 
@@ -53,13 +54,27 @@ export function ContinueCards({
                 tint={tintFor(d.letterType)}
                 title={letterName(d)}
                 meta={meta}
-                pill={<Pill tone={j.statusTone}>{j.statusLabel}</Pill>}
+                pill={<StatusPill journey={j} />}
               />
             </Link>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * A letter's status pill on Home, the same words and colour as on Letters,
+ * a matter and an employee: a draft that needs you (a check to fix, an edit
+ * to decide) reads amber "Needs you" rather than grey "Draft" (HOME-X1).
+ */
+export function StatusPill({ journey, className }: { journey: LetterJourney["journey"]; className?: string }) {
+  const p = listStatusPill(journey);
+  return (
+    <Pill tone={p.tone} className={className}>
+      {p.label}
+    </Pill>
   );
 }
 

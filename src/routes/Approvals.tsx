@@ -367,9 +367,14 @@ function QueueRow({
       data-selected={on || undefined}
       className={cn(
         "grid cursor-default grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-x-3.5 gap-y-3 border-b px-3.5 py-[13px] transition-colors duration-[120ms] md:grid-cols-[34px_minmax(0,1fr)_56px_204px]",
-        on
+        // Amber means "needs you": the selected row is amber only when it is
+        // waiting for you to sign it off. A letter with someone else is
+        // selected in a neutral grey (HOME-X16).
+        on && canAct
           ? "rounded-[12px] border-transparent bg-[var(--ds-amber-chip)] shadow-[inset_0_0_0_1px_var(--ds-amber-chip-bd)]"
-          : "border-[var(--ds-line-2)] hover:bg-[var(--ds-hover)]"
+          : on
+            ? "rounded-[12px] border-transparent bg-[var(--ds-surface-2)] shadow-[inset_0_0_0_1px_var(--ds-line)]"
+            : "border-[var(--ds-line-2)] hover:bg-[var(--ds-hover)]"
       )}
     >
       <button
@@ -379,7 +384,7 @@ function QueueRow({
         aria-pressed={on}
         className="rounded-[4px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-focus)]"
       >
-        <PageThumb tinted={on} />
+        <PageThumb tinted={on && canAct} />
       </button>
       <div className="min-w-0">
         <div className="truncate text-[14.5px] font-medium text-[var(--ds-ink)]">

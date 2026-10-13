@@ -82,6 +82,16 @@ export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
   deadline: "Matter deadlines",
 };
 
+/** Shorter legend labels, used when the full ones do not fit one row. */
+export const EVENT_TYPE_SHORT: Record<CalendarEventType, string> = {
+  hearing: "Hearings",
+  appeal: "Appeals",
+  probation: "Probation",
+  tribunal: "Tribunal limits",
+  response: "Responses",
+  deadline: "Matter dates",
+};
+
 export const EVENT_TYPES: CalendarEventType[] = ["hearing", "appeal", "probation", "tribunal", "response", "deadline"];
 
 /** Ink and pale fill for each type, from the status tokens. */
@@ -186,9 +196,9 @@ export function extractCalendarEvents(
           iso: ec,
           type: "tribunal",
           kind: "acas_ec",
-          chip: "ACAS EC by",
-          title: "ACAS Early Conciliation by",
-          label: `${letter}: ACAS EC by`,
+          chip: "Start ACAS EC",
+          title: "Start ACAS Early Conciliation",
+          label: `${letter}: start ACAS Early Conciliation`,
           basis: "Lodge ACAS Early Conciliation at least 6 weeks before tribunal limitation",
           citation: "ACAS EC",
         });

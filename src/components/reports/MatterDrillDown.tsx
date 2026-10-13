@@ -8,6 +8,8 @@ import { useProfileStore } from "@/lib/profile";
 import { useReviewStore } from "@/lib/journey/reviews";
 import { EmptyState, Pill, type PillTone } from "@/components/ds";
 import { journeysFor, viewerApproves } from "@/components/home/homeData";
+import { listStatusPill } from "@/components/letters/letterView";
+import { letterOwner, useMe } from "@/components/letters/rows";
 import { PaperThumb } from "@/components/reports/parts";
 import { Band } from "@/components/home/HomeBand";
 import { DRILL_ROW, DRILL_TH, DrillBody, DrillShell, lastEdited } from "@/components/reports/drillChrome";
@@ -21,8 +23,8 @@ import { runHealthChecks } from "@/lib/finalize/healthChecks";
  *
  * Layered on top of the workspace-level Risk heatmap on /reports. Clicking a
  * matter tile in the heatmap navigates here so the user can see exactly
- * which letters in the matter are driving the band, title, status, severity
- * badge, last-edited, owner, and jump straight into any draft.
+ * which letters in the matter are driving the band, title, status, what
+ * their checks found, last-edited, owner, and jump straight into any draft.
  *
  * Data: reuses `useDraftStore` (same source the Reports page already reads),
  * so tenant scoping is inherited from the persisted store, we never
@@ -59,7 +61,9 @@ export function MatterDrillDown() {
     const names = [legalName ?? "", preferredName ?? ""];
     const out: Record<string, { label: string; tone: PillTone }> = {};
     for (const { draft, journey } of journeysFor(matterDrafts, requests, (d) => viewerApproves(d, role, names))) {
-      out[draft.id] = { label: journey.statusLabel, tone: journey.statusTone };
+      // The same words and colour as the Letters page (a draft that needs
+      // you reads amber "Needs you").
+      out[draft.id] = listStatusPill(journey);
     }
     return out;
   }, [matterDrafts, requests, role, legalName, preferredName]);
@@ -100,8 +104,10 @@ export function MatterDrillDown() {
         title={matter.name}
         lede={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {/* Every letter in the matter, whatever its stage ("1 draft"
+             * for a letter ready for review would be wrong). */}
             <span>
-              {matterDrafts.length} draft{matterDrafts.length === 1 ? "" : "s"}
+              {matterDrafts.length} {matterDrafts.length === 1 ? "letter" : "letters"}
             </span>
             <span aria-hidden className="text-[var(--ds-faint)]">
               ·
@@ -143,23 +149,26 @@ const CRUMBS = [{ label: "Reports", href: "/reports" }, { label: "Matter" }];
 
 type DraftSeverity = "low" | "medium" | "high";
 
-/** Per-draft severity computed from the same health-check rules the
- * Compliance Health card aggregates. Mirrors the heatmap colour scale
- * (low/moderate/high/critical) but collapsed to three buckets for
- * compactness in the drill-down table:
+/**
+ * Each letter's own checks, in words: the matter's risk band in the header
+ * is a different measure (the matter's risk), so the letters' column says
+ * what their checks found rather than a second "risk" that could seem to
+ * contradict it ("Low risk" over a "Medium" letter).
  *
- *   high:   any compliance fail (PII, broken evidence, missing parties)
- *   medium: any warn (placeholders, word count, signature, comments)
- *   low:    clean sweep
+ *   high (red):     a required check fails     "1 failing"
+ *   medium (blue):  an advised check to look at "2 advised"
+ *   low (green):    every check passes          "All pass"
  */
-function severityFor(draft: Draft): DraftSeverity {
+function checksFor(draft: Draft): { severity: DraftSeverity; label: string } {
   try {
     const checks = runHealthChecks(draft);
-    if (checks.some((c) => c.severity === "fail")) return "high";
-    if (checks.some((c) => c.severity === "warn")) return "medium";
-    return "low";
+    const fails = checks.filter((c) => c.severity === "fail").length;
+    if (fails > 0) return { severity: "high", label: `${fails} failing` };
+    const warns = checks.filter((c) => c.severity === "warn").length;
+    if (warns > 0) return { severity: "medium", label: `${warns} advised` };
+    return { severity: "low", label: "All pass" };
   } catch {
-    return "low";
+    return { severity: "low", label: "Not checked" };
   }
 }
 
@@ -168,7 +177,9 @@ function severityTone(s: DraftSeverity): { bg: string; fg: string } {
     case "high":
       return { bg: "var(--ds-red-bg)", fg: "var(--ds-red-fg)" };
     case "medium":
-      return { bg: "var(--ds-amber-bg)", fg: "var(--ds-amber-fg)" };
+      // Advice, not a problem: the neutral info colour (amber means "needs
+      // you", and the matter's own risk band sits in the header).
+      return { bg: "var(--ds-blue-bg)", fg: "var(--ds-blue-fg)" };
     case "low":
     default:
       return { bg: "var(--ds-green-bg)", fg: "var(--ds-green-fg)" };
@@ -205,27 +216,26 @@ function DraftTable({
   statuses: Record<string, { label: string; tone: PillTone }>;
   onRowClick: (draftId: string) => void;
 }) {
+  const me = useMe();
   return (
     <table className="w-full border-collapse text-[13px] block md:table">
       <thead className="hidden md:table-header-group">
         <tr>
           <th className={DRILL_TH}>Letter</th>
           <th className={DRILL_TH}>Status</th>
-          <th className={DRILL_TH}>Severity</th>
+          <th className={DRILL_TH}>Checks</th>
           <th className={DRILL_TH}>Last edited</th>
           <th className={DRILL_TH}>Owner</th>
         </tr>
       </thead>
       <tbody className="block md:table-row-group">
         {drafts.map((d) => {
-          const sev = severityFor(d);
+          const checks = checksFor(d);
+          const sev = checks.severity;
           const tone = severityTone(sev);
           const status = statuses[d.id] ?? statusLabel(d);
-          const owner =
-            (d.collaborators ?? []).find((c) => c.role === "owner")?.name ??
-            (d.collaborators ?? []).find((c) => c.role === "owner")?.email ??
-            d.employer?.legalName ??
-            "Unassigned";
+          // The person who owns the letter, as on the Letters page.
+          const owner = letterOwner(d, me).name;
           return (
             <tr
               key={d.id}
@@ -252,12 +262,12 @@ function DraftTable({
               </td>
               <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle">
                 <span
-                  className="inline-flex items-center rounded-[6px] px-2 py-0.5 text-[12px] leading-[18px] font-medium capitalize"
+                  className="inline-flex items-center rounded-[6px] px-2 py-0.5 text-[12px] leading-[18px] font-medium whitespace-nowrap"
                   style={{ background: tone.bg, color: tone.fg }}
                   data-testid={`severity-${d.id}`}
                   data-severity={sev}
                 >
-                  {sev}
+                  {checks.label}
                 </span>
               </td>
               <td className="hidden whitespace-nowrap text-[13px] text-[var(--ds-muted)] md:table-cell md:px-4 md:py-3">

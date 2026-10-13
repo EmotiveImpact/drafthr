@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarClock,
@@ -30,12 +30,14 @@ import { useHomeData } from "@/components/home/homeData";
 import {
   EVENT_TONE,
   EVENT_TYPE_LABEL,
+  EVENT_TYPE_SHORT,
   EVENT_TYPES,
   allCalendarEvents,
   buildIcs,
   daysLeftLabel,
   daysLeftTone,
   type CalendarEvent,
+  type CalendarEventType,
 } from "@/components/home/calendarEvents";
 import { FADE_IN_GROUP, ListPlaceholder } from "@/components/home/HomeParts";
 import { useLettersLoading } from "@/components/home/loadState";
@@ -58,10 +60,18 @@ function monthTitle(y: number, m: number): string {
 function parts(isoDate: string) {
   const [y, m, d] = isoDate.split("-").map(Number);
   const date = new Date(y, m - 1, d);
+  const now = new Date();
+  const otherYear = y !== now.getFullYear();
   return {
     weekday: date.toLocaleDateString("en-GB", { weekday: "short" }),
     day: d,
-    long: date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }),
+    /** "Apr", or "Apr 27" in another year: shown under the day when the
+     *  date is not in this month, so 11 Apr never reads as 11 Oct. */
+    month:
+      otherYear || m - 1 !== now.getMonth()
+        ? `${date.toLocaleDateString("en-GB", { month: "short" })}${otherYear ? ` ${String(y).slice(2)}` : ""}`
+        : null,
+    long: date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", ...(otherYear ? { year: "numeric" } : {}) }),
   };
 }
 
@@ -107,6 +117,11 @@ export function Calendar() {
   const [view, setView] = useState<View>(() =>
     typeof window !== "undefined" && window.matchMedia?.("(max-width: 767px)").matches ? "agenda" : "month"
   );
+
+  // The legend lists the kinds of date this calendar holds (for the matter
+  // picked), in a fixed order, so it fits one row like the mock and never
+  // explains a colour that is not on the page.
+  const legendTypes = useMemo(() => EVENT_TYPES.filter((t) => events.some((e) => e.type === t)), [events]);
 
   const upcoming = events.filter((e) => e.daysAway >= 0);
   const comingUp = upcoming.slice(0, 4);
@@ -238,24 +253,15 @@ export function Calendar() {
             </div>
           ) : (
             <>
-              {/* Legend and matter filter: the filter keeps its place on the
-               * right of the first line, a long matter name is cut short. */}
-              <div className="mb-3 flex min-w-0 items-start gap-3">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-2 pt-0.5 text-[12.5px] text-[var(--ds-muted)]">
-                  {EVENT_TYPES.map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                      <i aria-hidden className="inline-block size-2 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
-                      {EVENT_TYPE_LABEL[t]}
-                    </span>
-                  ))}
-                </div>
+              {/* Legend and matter filter on one row (mock calendar `.lg`). */}
+              <LegendRow types={legendTypes}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
                       aria-label={`Matter: ${matterLabel}`}
                       title={matterLabel}
-                      className="inline-flex max-w-[200px] shrink-0 items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] data-[state=open]:bg-[var(--ds-hover)]"
+                      className="ml-auto inline-flex max-w-[200px] min-w-[112px] shrink-[100] items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] data-[state=open]:bg-[var(--ds-hover)]"
                     >
                       <ListFilter className="size-3.5 shrink-0" aria-hidden />
                       <span className="min-w-0 truncate">{matterLabel}</span>
@@ -285,7 +291,7 @@ export function Calendar() {
                     </DropdownMenuRadioGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
+              </LegendRow>
 
               <div key={`${view}:${matterId}`} className={FADE_IN_GROUP}>
                 {view === "month" ? (
@@ -338,6 +344,64 @@ export function Calendar() {
           </aside>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─── Legend row ───────────────────────────────────────────────────── */
+
+/**
+ * The legend and the matter filter on one row, as in the mock: the legend
+ * names the kinds of date this calendar holds (for the matter picked), the
+ * filter sits on the right. The mock's labels are used when they fit; when
+ * they do not (six kinds of date, or a long matter name in the filter) the
+ * short labels are used ("Appeals" for "Appeal deadlines"), and the filter
+ * is cut short before the legend gives way (its shrink weight is far higher; both weights stay at 1 or more, as weights under 1 leave part of the overflow unshrunk). Only on a narrow screen, where
+ * even the short labels do not fit, does the legend wrap.
+ */
+function LegendRow({ types, children }: { types: CalendarEventType[]; children: ReactNode }) {
+  const legend = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = legend.current;
+    if (!el) return;
+    const fit = () => {
+      el.dataset.mode = "full";
+      if (el.scrollWidth <= el.clientWidth + 1) return;
+      el.dataset.mode = "short";
+      if (el.scrollWidth <= el.clientWidth + 1) return;
+      el.dataset.mode = "wrap";
+    };
+    fit();
+    // Widths change once the web font has loaded.
+    let live = true;
+    void document.fonts?.ready.then(() => live && fit());
+    const row = el.parentElement;
+    const ro = typeof ResizeObserver !== "undefined" && row ? new ResizeObserver(fit) : null;
+    if (ro && row) ro.observe(row);
+    return () => {
+      live = false;
+      ro?.disconnect();
+    };
+  }, [types]);
+  return (
+    <div className="mb-3 flex min-w-0 items-start gap-3">
+      <div
+        ref={legend}
+        data-testid="calendar-legend"
+        data-mode="full"
+        className="group/lg flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-x-4 gap-y-2 overflow-hidden pt-0.5 text-[12.5px] text-[var(--ds-muted)] data-[mode=wrap]:flex-wrap"
+      >
+        {types.map((t) => (
+          <span key={t} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <i aria-hidden className="inline-block size-2 shrink-0 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
+            <span className="group-data-[mode=short]/lg:hidden group-data-[mode=wrap]/lg:hidden">{EVENT_TYPE_LABEL[t]}</span>
+            <span className="hidden group-data-[mode=short]/lg:inline group-data-[mode=wrap]/lg:inline">
+              {EVENT_TYPE_SHORT[t]}
+            </span>
+          </span>
+        ))}
+      </div>
+      {children}
     </div>
   );
 }
@@ -495,15 +559,38 @@ function EventRow({ e, wide = false }: { e: CalendarEvent; wide?: boolean }) {
           wide && "md:items-center"
         )}
       >
-        <span className="w-[42px] shrink-0 self-start rounded-[10px] border border-[var(--ds-line)] pt-[5px] pb-1.5 text-center">
-          <span className="block text-[10.5px] font-medium tracking-[0.06em] text-[var(--ds-subtle)] uppercase">{p.weekday}</span>
-          <b className="mt-px block text-[18px] leading-tight font-medium tracking-[-0.02em] text-[var(--ds-ink)]">{p.day}</b>
+        <span
+          title={p.long}
+          className="w-[42px] shrink-0 self-start rounded-[10px] border border-[var(--ds-line)] pt-[5px] pb-1.5 text-center"
+        >
+          <span className="sr-only">{p.long}</span>
+          <span aria-hidden className="block text-[10.5px] font-medium tracking-[0.06em] text-[var(--ds-subtle)] uppercase">
+            {p.weekday}
+          </span>
+          <b aria-hidden className="mt-px block text-[18px] leading-tight font-medium tracking-[-0.02em] text-[var(--ds-ink)]">
+            {p.day}
+          </b>
+          {p.month && (
+            <span
+              aria-hidden
+              data-testid="date-block-month"
+              className="block text-[10.5px] leading-tight font-medium tracking-[0.04em] whitespace-nowrap text-[var(--ds-subtle)] uppercase"
+            >
+              {p.month}
+            </span>
+          )}
         </span>
         <span className={cn("min-w-0 flex-1", wide && "md:flex md:items-center md:gap-4")}>
           <span className={cn("block min-w-0", wide && "md:flex-1")}>
-            <span className="flex min-w-0 items-center gap-[7px] text-[14px] text-[var(--ds-ink)]">
-              <i aria-hidden className="inline-block size-[7px] shrink-0 rounded-[2px]" style={{ background: EVENT_TONE[e.type].fg }} />
-              <span className="truncate">{e.title}</span>
+            {/* The whole title, wrapping when it is long, so a time at the
+             * end ("Return-to-work meeting, 14:00") is never cut off. */}
+            <span className="flex min-w-0 items-start gap-[7px] text-[14px] leading-[1.35] text-[var(--ds-ink)]">
+              <i
+                aria-hidden
+                className="mt-[6px] inline-block size-[7px] shrink-0 rounded-[2px]"
+                style={{ background: EVENT_TONE[e.type].fg }}
+              />
+              <span className="min-w-0 [overflow-wrap:anywhere]">{e.title}</span>
             </span>
             {where && (
               <span className="mt-[3px] flex min-w-0 items-center gap-[5px] text-[12.5px] text-[var(--ds-muted)]">

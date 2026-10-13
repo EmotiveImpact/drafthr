@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Draft } from "@/lib/letters/types";
-import { ageWords, shortDay } from "./homeData";
+import type { JourneyInfo } from "@/lib/journey/stage";
+import { ageWords, needsYouItems, shortDay, summaryFor, type LetterJourney } from "./homeData";
 import { askedAgo, approvalsLedeParts, isForMe, recentlyApprovedBy, waitingLetters } from "./approvalData";
 import { buildIcs, daysLeftLabel, daysLeftTone, shortCitation, type CalendarEvent } from "./calendarEvents";
 import { feedAgo, groupFeed, plain, snoozeUntil, workingDaysUntil } from "./notificationFeed";
@@ -150,5 +151,78 @@ describe("notifications", () => {
 
   it("flattens title parts", () => {
     expect(plain(["Hearing for ", { b: "Tom Ellis" }, " is tomorrow"])).toBe("Hearing for Tom Ellis is tomorrow");
+  });
+});
+
+describe("needs you agrees with the Letters page", () => {
+  const counts = {
+    sections: 3,
+    sectionsDrafted: 3,
+    requiredSectionsEmpty: 0,
+    streaming: false,
+    pendingSuggestions: 0,
+    failingRequired: 0,
+    warnings: 0,
+    checksTotal: 16,
+    checksPassing: 16,
+    evidence: 0,
+    unresolvedComments: 0,
+  };
+  const j = (over: Partial<JourneyInfo>): JourneyInfo =>
+    ({
+      stage: "draft",
+      tone: "yours",
+      statusLabel: "Draft",
+      statusTone: "grey",
+      whereLabel: "Draft",
+      whatNow: { lead: "", detail: "" },
+      primaryAction: null,
+      secondaryAction: null,
+      needsYou: false,
+      listTone: "yours",
+      stepIndex: 0,
+      locked: false,
+      review: null,
+      counts,
+      ...over,
+    }) as JourneyInfo;
+  const letters: LetterJourney[] = [
+    // Draft with a failing check: needs you (Letters shows it in Needs you).
+    {
+      draft: draft("fix", { employee: { legalName: "Jordan Hale" } } as Partial<Draft>),
+      journey: j({ needsYou: true, whereLabel: "Draft · 1 check to fix", counts: { ...counts, failingRequired: 1 } }),
+    },
+    // Approved, ready to send: needs you.
+    {
+      draft: draft("send", {
+        reviewStatus: "approved",
+        approvals: [{ id: "a", reviewerName: "Ruth Adeyemi", decision: "approved", createdAt: NOW }],
+      } as Partial<Draft>),
+      journey: j({ stage: "send", statusLabel: "Approved", statusTone: "green", needsYou: true }),
+    },
+    // With someone else for approval: does not need you.
+    {
+      draft: draft("away", { reviewStatus: "in_review" }),
+      journey: j({ stage: "approve", tone: "away", statusLabel: "Waiting for Ruth", statusTone: "blue" }),
+    },
+    // Ready for review, nothing to fix: does not need you.
+    { draft: draft("ready"), journey: j({ stage: "review", statusLabel: "Ready for review", statusTone: "blue" }) },
+    // Sent.
+    { draft: draft("sent"), journey: j({ stage: "sent", statusLabel: "Sent", statusTone: "green" }) },
+  ];
+
+  it("counts the letters that need you, the same rule as Letters", () => {
+    expect(summaryFor(letters)).toEqual({ inProgress: 4, needYou: 2 });
+  });
+
+  it("lists every letter that needs you, and only those", () => {
+    const items = needsYouItems({ journeys: letters, tasks: {}, matters: {}, events: [], now: NOW });
+    expect(items.map((i) => i.id).sort()).toEqual(["draft:fix", "send:send"]);
+    const fix = items.find((i) => i.id === "draft:fix")!;
+    expect(fix.title).toMatch(/ for Jordan Hale$/);
+    expect(fix.meta).toBe("1 compliance issue to fix before sending");
+    expect(fix.pill.tone).toBe("amber");
+    const send = items.find((i) => i.id === "send:send")!;
+    expect(send.meta).toBe("Approved by Ruth Adeyemi, ready to send");
   });
 });

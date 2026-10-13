@@ -4,8 +4,8 @@
  *
  *   journeys          getJourney for every real letter (a letter whose
  *                     checks throw is skipped, never breaks Home)
- *   summary           "<N letters> in progress, <M> needs your review today."
- *   needsYou          letters waiting for you, hearings this week, tasks due
+ *   summary           "<N letters> in progress, <M> need you today."
+ *   needsYou          letters that need you (as on Letters), hearings this week, tasks due
  *                     within 7 days, matters' next actions
  *   history           sentences from the letters' timelines, newest first
  */
@@ -20,6 +20,8 @@ import { getJourney, type JourneyInfo, type JourneyPillTone } from "@/lib/journe
 import { latestReviewIn, useReviewStore, firstName, currentRound, type ReviewRequest } from "@/lib/journey/reviews";
 import { allCalendarEvents, type CalendarEvent } from "./calendarEvents";
 import { metaFor } from "./letterArt";
+import { listStatusPill } from "@/components/letters/letterView";
+import { useLetterArchive } from "@/components/letters/archive";
 
 export type LetterJourney = { draft: Draft; journey: JourneyInfo };
 
@@ -85,16 +87,22 @@ export function personFor(d: Draft): string {
 
 /* ─── Summary line ─────────────────────────────────────────────────── */
 
-export type HomeSummary = { inProgress: number; needReview: number };
+export type HomeSummary = { inProgress: number; needYou: number };
 
+/**
+ * "<N letters> in progress, <M> need you today." M counts the letters whose
+ * journey needs the person (a check to fix, an edit to decide, a review back,
+ * your approval, ready to send): the same rule as the Letters page's "Needs
+ * you" tab and its "N need you" line, so the two pages never disagree.
+ */
 export function summaryFor(list: LetterJourney[]): HomeSummary {
   let inProgress = 0;
-  let needReview = 0;
+  let needYou = 0;
   for (const { journey } of list) {
     if (journey.stage !== "sent") inProgress += 1;
-    if (journey.tone === "needs-you" && (journey.stage === "approve" || journey.stage === "review")) needReview += 1;
+    if (journey.needsYou) needYou += 1;
   }
-  return { inProgress, needReview };
+  return { inProgress, needYou };
 }
 
 /** Letters sitting with the approver (in_review), oldest submission first. */
@@ -130,7 +138,7 @@ export function shortAgo(ts: number, now = Date.now()): string {
 
 export type NeedItem = {
   id: string;
-  kind: "review" | "back" | "changes" | "hearing" | "task" | "next-action";
+  kind: "review" | "back" | "changes" | "draft" | "reviewed" | "send" | "hearing" | "task" | "next-action";
   pill: { label: string; tone: JourneyPillTone };
   title: string;
   meta: string;
@@ -156,30 +164,26 @@ export function needsYouItems({
 }): NeedItem[] {
   const out: NeedItem[] = [];
 
+  // One row for every letter whose journey needs you: the same letters as
+  // the Letters page's "Needs you" tab (FOUNDATION-X6, HOME-X1).
   for (const { draft: d, journey: j } of journeys) {
+    if (!j.needsYou) continue;
     const who = personFor(d);
     const title = who ? `${letterName(d)} for ${who}` : letterName(d);
+    const fails = j.counts.failingRequired;
+    const issues = `${fails} compliance ${fails === 1 ? "issue" : "issues"} to fix before sending`;
     if (d.reviewStatus === "in_review") {
-      // Only a letter waiting on you; one sent to someone else is theirs.
-      if (j.tone !== "needs-you") continue;
-      const fails = j.counts.failingRequired;
       const asked = d.submittedForReviewAt ?? d.updatedAt;
       out.push({
         id: `review:${d.id}`,
         kind: "review",
         pill: { label: "Review", tone: "amber" },
         title,
-        meta:
-          fails > 0
-            ? `${fails} compliance ${fails === 1 ? "issue" : "issues"} to fix before sending`
-            : `Waiting for your approval, asked ${ageWords(now - asked)} ago`,
+        meta: fails > 0 ? issues : `Waiting for your approval, asked ${ageWords(now - asked)} ago`,
         href: `/editor/${d.id}`,
         rank: 0 + asked / 1e15,
       });
-      continue;
-    }
-    if (j.tone !== "needs-you") continue;
-    if (j.stage === "review" && j.review?.status === "back") {
+    } else if (j.stage === "review" && j.review?.status === "back") {
       const r = j.review;
       const round = currentRound(r);
       out.push({
@@ -201,6 +205,52 @@ export function needsYouItems({
         meta: by ? `${firstName(by.reviewerName) || by.reviewerName} asked for changes` : "Changes requested",
         href: `/editor/${d.id}`,
         rank: 2,
+      });
+    } else if (j.stage === "draft") {
+      // A draft with a required check failing or a suggested edit to decide.
+      const edits = j.counts.pendingSuggestions;
+      out.push({
+        id: `draft:${d.id}`,
+        kind: "draft",
+        pill: { label: "Review", tone: "amber" },
+        title,
+        meta: fails > 0 ? issues : `${edits} suggested ${edits === 1 ? "edit" : "edits"} to decide`,
+        href: `/editor/${d.id}`,
+        rank: 2.5,
+      });
+    } else if (j.stage === "approve") {
+      // Review finished: next it goes to the approver.
+      const by = j.review?.reviewer.name;
+      out.push({
+        id: `reviewed:${d.id}`,
+        kind: "reviewed",
+        pill: { label: "Approval", tone: "amber" },
+        title,
+        meta: by ? `Reviewed by ${by}, send it for approval` : "Review finished, send it for approval",
+        href: `/editor/${d.id}`,
+        rank: 2.6,
+      });
+    } else if (j.stage === "send") {
+      const approved = [...(d.approvals ?? [])].reverse().find((a) => a.decision === "approved");
+      const by = approved?.reviewerName && !/^workspace reviewer$/i.test(approved.reviewerName) ? approved.reviewerName : "";
+      out.push({
+        id: `send:${d.id}`,
+        kind: "send",
+        pill: { label: "Send", tone: "amber" },
+        title,
+        meta: by ? `Approved by ${by}, ready to send` : "Approved, ready to send",
+        href: `/editor/${d.id}`,
+        rank: 2.7,
+      });
+    } else {
+      out.push({
+        id: `letter:${d.id}`,
+        kind: "draft",
+        pill: { label: "Review", tone: "amber" },
+        title,
+        meta: j.whereLabel,
+        href: `/editor/${d.id}`,
+        rank: 2.8,
       });
     }
   }
@@ -335,7 +385,7 @@ export function historyRows(journeys: LetterJourney[], me: string, limit = 4): H
         title,
         ts: ev.createdAt,
         draftId: d.id,
-        pill: j.needsYou ? { label: j.statusLabel, tone: j.statusTone } : undefined,
+        pill: j.needsYou ? listStatusPill(j) : undefined,
       });
     }
   }
@@ -377,23 +427,28 @@ export function useHomeData(mode: Mode = "employer") {
   const role = useProfileStore((s) => s.profile.workspaceRole);
   const legalName = useProfileStore((s) => s.profile.personal.legalName);
   const preferredName = useProfileStore((s) => s.profile.personal.preferredName);
+  const archived = useLetterArchive((s) => s.archived);
   return useMemo(() => {
     const letters = realLetters(drafts, mode);
     const names = [legalName ?? "", preferredName ?? ""];
     const journeys = journeysFor(letters, requests, (d) => viewerApproves(d, role, names));
+    // Letters archived on the Letters page leave its counts and tabs; they
+    // leave Home's summary, "Needs you" and "Continue" the same way.
+    const live = journeys.filter((x) => !archived[x.draft.id]);
     const events = allCalendarEvents(letters, matters, matterEvents, { mode });
     // Sign-off waits on letters of either mode (the Needs approval tab's badge).
     const waiting = waitingForApproval(Object.values(drafts).filter((d) => !d.isTemplateSource));
     return {
       letters,
       journeys,
+      live,
       events,
       waiting,
-      summary: summaryFor(journeys),
-      needs: needsYouItems({ journeys, tasks, matters, events }),
+      summary: summaryFor(live),
+      needs: needsYouItems({ journeys: live, tasks, matters, events }),
       canApprove: canApprove(role),
     };
-  }, [drafts, matters, matterEvents, tasks, requests, role, legalName, preferredName, mode]);
+  }, [drafts, matters, matterEvents, tasks, requests, role, legalName, preferredName, mode, archived]);
 }
 
 /** "Fri 9 Oct" (no commas). */

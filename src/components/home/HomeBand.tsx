@@ -271,7 +271,16 @@ function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number 
   };
 
   return (
-    <div className="no-scrollbar -mx-5 mt-5 overflow-x-auto px-5 md:mx-0 md:mt-[26px] md:overflow-visible md:px-0">
+    <div
+      className={cn(
+        "no-scrollbar -mx-5 mt-5 overflow-x-auto px-5 md:mx-0 md:mt-[26px] md:overflow-visible md:px-0",
+        // Phone Home (mock phone-home) has no tab row: Needs approval,
+        // Calendar and Activity are reached from the account menu, the
+        // Needs you rows and search. The other tabs keep it, so a phone
+        // user can come back to Overview.
+        active === "overview" && "max-md:hidden"
+      )}
+    >
       <nav ref={wrap} aria-label="Home sections" className="relative flex w-max gap-1">
         {TABS.map((t, i) => {
           const on = t.id === active;
@@ -474,22 +483,28 @@ export function HomeBand({
         </>
       }
       tabs={<HomeTabs active={active} approvals={approvals} />}
+      // Without the tab row on phone Home the band ends after the summary
+      // line, with the mock's 22px below it and no rule.
+      className={active === "overview" ? "max-md:border-b-0 max-md:pb-[22px]" : undefined}
     />
   );
 }
 
-/** "<b>3 letters</b> in progress, <b>1</b> needs your review today." */
-export function OverviewLede({ inProgress, needReview }: { inProgress: number; needReview: number }) {
-  if (inProgress === 0 && needReview === 0) return <>Nothing in progress yet. Start a letter when you need one.</>;
+/**
+ * "<b>3 letters</b> in progress, <b>1</b> needs you today." The second
+ * number is the Letters page's "Needs you" count (the same rule).
+ */
+export function OverviewLede({ inProgress, needYou }: { inProgress: number; needYou: number }) {
+  if (inProgress === 0 && needYou === 0) return <>Nothing in progress yet. Start a letter when you need one.</>;
   return (
     <>
       <b>
         {inProgress} {inProgress === 1 ? "letter" : "letters"}
       </b>{" "}
       in progress
-      {needReview > 0 ? (
+      {needYou > 0 ? (
         <>
-          , <b>{needReview}</b> {needReview === 1 ? "needs" : "need"} your review today.
+          , <b>{needYou}</b> {needYou === 1 ? "needs" : "need"} you today.
         </>
       ) : (
         "."

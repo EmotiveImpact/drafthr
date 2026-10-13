@@ -194,7 +194,15 @@ export function Reports() {
         <Band
           crumbs={crumbs}
           title="Reports"
-          lede={<>How letters are going across {workspace}. Figures appear as you draft and send letters.</>}
+          // While the first pull is still bringing letters to this device,
+          // say so (as Home does) rather than the empty-workspace line.
+          lede={
+            loading ? (
+              <>Getting your letters from the workspace.</>
+            ) : (
+              <>How letters are going across {workspace}. Figures appear as you draft and send letters.</>
+            )
+          }
         />
         <div className="px-5 pt-6 pb-12 md:px-12">
           {loading ? (

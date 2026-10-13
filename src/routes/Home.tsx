@@ -20,14 +20,13 @@ import { useReviewStore } from "@/lib/journey/reviews";
 import { letterCatalogByMode } from "@/lib/letters/catalog";
 import { formatDateOnly } from "@/lib/date-only";
 import { deriveEmployeesFromDrafts } from "@/lib/employees";
-import { Pill } from "@/components/ds";
 import { AssistantBox } from "@/components/home/AssistantBox";
 import { StatTiles, TileFoot, weeklySeries, type StatTileProps } from "@/components/home/StatTiles";
 import { TemplateCards } from "@/components/home/TemplateCards";
 import { FADE_IN_GROUP, HomeGrid, ListPlaceholder, RailBox, SectionHead } from "@/components/home/HomeParts";
 import { useLettersLoading } from "@/components/home/loadState";
 import { Band, BAND_BTN_DARK, BAND_BTN_GHOST, HomeBand, OverviewLede } from "@/components/home/HomeBand";
-import { ContinueCards, HistoryCard, NeedRow, NeedsYouCard, NeedsYouList } from "@/components/home/OverviewCards";
+import { ContinueCards, HistoryCard, NeedRow, NeedsYouCard, NeedsYouList, StatusPill } from "@/components/home/OverviewCards";
 import { PageThumb, categoryName } from "@/components/home/letterArt";
 import {
   firstNameOf,
@@ -112,8 +111,8 @@ function HrHome() {
   };
 
   const recentLetters = useMemo(
-    () => [...data.journeys].sort((a, b) => b.draft.updatedAt - a.draft.updatedAt).slice(0, 3),
-    [data.journeys]
+    () => [...data.live].sort((a, b) => b.draft.updatedAt - a.draft.updatedAt).slice(0, 3),
+    [data.live]
   );
   const history = useMemo(() => historyRows(data.journeys, me, 4), [data.journeys, me]);
 
@@ -139,7 +138,7 @@ function HrHome() {
         active="overview"
         approvals={data.waiting.length}
         notice={banner || undefined}
-        lede={<OverviewLede inProgress={data.summary.inProgress} needReview={data.summary.needReview} />}
+        lede={<OverviewLede inProgress={data.summary.inProgress} needYou={data.summary.needYou} />}
       />
 
       {showAllNeeds ? (
@@ -318,9 +317,7 @@ function RecentRows({ letters }: { letters: LetterJourney[] }) {
                 {[personFor(d), categoryName(d.letterType)].filter(Boolean).join(" · ")}
               </span>
             </span>
-            <Pill tone={j.statusTone} className="shrink-0">
-              {j.statusLabel}
-            </Pill>
+            <StatusPill journey={j} className="shrink-0" />
           </Link>
         </li>
       ))}
