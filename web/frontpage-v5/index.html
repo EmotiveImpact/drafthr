@@ -325,6 +325,11 @@ footer{margin-top:0}
   .cat{grid-template-columns:1fr}.cat .ct{display:none}
 }
 
+/* Story controls hidden (Edem): photos still advance on their own */
+.seq{display:none}
+.hero > .wrap{padding-bottom:clamp(72px,11vh,130px)!important}
+@media (max-width:600px){.hero > .wrap{padding-bottom:64px!important}}
+
 /* Reveal */
 .js .rv{opacity:0;transform:translateY(16px);transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1)}
 .js .rv.in{opacity:1;transform:none}
