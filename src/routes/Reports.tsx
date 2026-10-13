@@ -24,6 +24,8 @@ import type { Draft, Matter, RiskBand } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { EmptyState, type PillTone } from "@/components/ds";
+import { ListPlaceholder } from "@/components/home/HomeParts";
+import { useLettersLoading } from "@/components/home/loadState";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +52,7 @@ import {
   daysWords,
   departmentsOf,
   failingChecks,
+  ruleCopy,
   letterFacts,
   matterInDepartment,
   niceTop,
@@ -165,6 +168,7 @@ export function Reports() {
   const failing = useMemo(() => failingChecks(inPeriod), [inPeriod]);
 
   const crumbs = [{ label: workspace, href: "/hr" }, { label: "Reports" }];
+  const loading = useLettersLoading();
 
   // Employees never see HR figures, even if they reach the page.
   if (profileRole === "employee") {
@@ -193,6 +197,11 @@ export function Reports() {
           lede={<>How letters are going across {workspace}. Figures appear as you draft and send letters.</>}
         />
         <div className="px-5 pt-6 pb-12 md:px-12">
+          {loading ? (
+            <div className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-5 py-2">
+              <ListPlaceholder rows={4} thumb={false} label="Loading reports" />
+            </div>
+          ) : (
           <div className="rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)]">
             <EmptyState
               icon={BarChart3}
@@ -201,6 +210,7 @@ export function Reports() {
               primary={{ label: "Browse templates", to: "/hr/new" }}
             />
           </div>
+          )}
         </div>
       </div>
     );
@@ -480,15 +490,17 @@ function Overview({
       value: c.percent,
       unit: "%",
       series: c.series,
-      sparkLabel: `Share of letters passing every check, ${frame.label.toLowerCase()}`,
+      // Strong: a health score of 80 or more with no required check failing.
+      // Advisory workspace rules (Failing checks) are not part of it.
+      sparkLabel: `Share of letters rated strong (health score 80 or more, no required check failing), ${frame.label.toLowerCase()}`,
       footer:
         c.deltaPts == null ? (
           <TileFoot>
-            {c.strong} of {c.scored} passing every check
+            {c.strong} of {c.scored} rated strong
           </TileFoot>
         ) : (
           <TileFoot dot pill={signed(c.deltaPts, " pts")} tone={deltaTone(c.deltaPts)}>
-            passing every check
+            letters rated strong
           </TileFoot>
         ),
     },
@@ -633,7 +645,7 @@ function LettersChartCard({ bars, frame }: { bars: ChartBar[]; frame: PeriodFram
                 key={g}
                 className={cn("relative h-0 border-t", g === 0 ? "border-[var(--ds-line)]" : "border-[var(--ds-line-2)]")}
               >
-                <span className="absolute -top-2 -left-7 w-5 text-right text-[11.5px] text-[var(--ds-faint)] tabular-nums">
+                <span className="absolute -top-2 -left-7 w-5 text-right text-[11.5px] text-[var(--ds-subtle)] tabular-nums">
                   {(top / 4) * g}
                 </span>
               </div>
@@ -849,7 +861,7 @@ function FailingCard({ failing, onViewAll }: { failing: FailingRow[]; onViewAll:
       {failing.length === 0 ? (
         <p className="m-0 flex items-center gap-2 py-3 text-[13.5px] text-[var(--ds-muted)]">
           <ShieldCheck className="size-4 text-[var(--ds-green-fg)]" aria-hidden />
-          Every letter in this period passes every check.
+          Every letter in this period passes every rule.
         </p>
       ) : (
         <ul className="m-0 list-none p-0">
@@ -863,7 +875,10 @@ function FailingCard({ failing, onViewAll }: { failing: FailingRow[]; onViewAll:
               >
                 <CircleAlert className="mt-px size-[15px] shrink-0 text-[var(--ds-amber-dot)]" aria-hidden />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13.5px] text-[var(--ds-ink)]">{f.label}</span>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-[13.5px] text-[var(--ds-ink)]">{f.label}</span>
+                    {f.advisory && <AdvisoryTag />}
+                  </span>
                   <span className="mt-0.5 block truncate text-[12px] text-[var(--ds-muted)]">{f.where}</span>
                 </span>
                 <span className="inline-flex items-center gap-1 text-[13px] font-medium whitespace-nowrap text-[var(--ds-ink)] tabular-nums">
@@ -876,6 +891,18 @@ function FailingCard({ failing, onViewAll }: { failing: FailingRow[]; onViewAll:
         </ul>
       )}
     </ReportCard>
+  );
+}
+
+/** A quiet marker for a workspace rule that is not part of the health score. */
+function AdvisoryTag() {
+  return (
+    <span
+      title="Advisory: not part of the health score, so it does not change the compliance rate"
+      className="inline-flex h-[18px] shrink-0 items-center rounded-[5px] bg-[var(--ds-surface-2)] px-1.5 text-[11px] font-medium text-[var(--ds-muted)]"
+    >
+      Advisory
+    </span>
   );
 }
 
@@ -924,7 +951,7 @@ function ComplianceHealthCard({ letters, frameLabel }: { letters: LetterFacts[];
     );
   }
 
-  // Strong = passes every check and lands in the strong band.
+  // Strong = a health score of 80 or more with no required check failing.
   const strong = scored.filter((s) => s.strong).length;
   const percent = Math.round((strong / scored.length) * 100);
   // Not strong, with a failing check or a weak band: worth counsel's eye.
@@ -952,7 +979,10 @@ function ComplianceHealthCard({ letters, frameLabel }: { letters: LetterFacts[];
             <div className="text-[12.5px] text-[var(--ds-muted)]">Strong</div>
             <div className="ds-title mt-1 text-[34px] leading-none">{percent}%</div>
             <div className="mt-1.5 text-[12px] leading-snug text-[var(--ds-muted)]">
-              {strong} of {scored.length} clearing every check
+              {strong} of {scored.length} rated strong
+            </div>
+            <div className="mt-1 max-w-[260px] text-[12px] leading-snug text-[var(--ds-muted)]">
+              Strong means a health score of 80 or more with no required check failing.
             </div>
           </div>
         </div>
@@ -1064,16 +1094,20 @@ function FailingChecksList({ drafts }: { drafts: Draft[] }) {
     return (
       <p className="m-0 mt-5 flex items-center gap-2 border-t border-[var(--ds-line-2)] pt-5 text-[13.5px] text-[var(--ds-muted)]">
         <ShieldCheck className="size-4 text-[var(--ds-green-fg)]" aria-hidden />
-        Every letter passes every check.
+        Every letter passes every rule.
       </p>
     );
   }
   return (
     <div className="mt-5 border-t border-[var(--ds-line-2)] pt-5">
-      <h3 className="m-0 mb-2.5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--ds-ink)]">
+      <h3 className="m-0 mb-1 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--ds-ink)]">
         <CircleAlert className="size-3.5 text-[var(--ds-amber-dot)]" aria-hidden />
         Failing checks
       </h3>
+      <p className="m-0 mb-2.5 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+        Rules DraftHR runs on every letter. Advisory rules are not part of the health score, so they do not change
+        the compliance rate.
+      </p>
       <ul className="m-0 list-none p-0">
         {rows.map(({ check, count }) => (
           <FailingCheckRow key={check.id} check={check} count={count} onClick={() => nav(`/reports/checks/${check.id}`)} />
@@ -1084,23 +1118,25 @@ function FailingChecksList({ drafts }: { drafts: Draft[] }) {
 }
 
 function FailingCheckRow({ check, count, onClick }: { check: ReportsHealthCheck; count: number; onClick: () => void }) {
+  const copy = ruleCopy(check.id, check);
   return (
     <li>
       <button
         type="button"
-        aria-label={`${count} letter${count === 1 ? "" : "s"} failing ${check.label}, open drill-down`}
+        aria-label={`${count} letter${count === 1 ? "" : "s"} failing ${copy.label}, open drill-down`}
         onClick={onClick}
         className="-mx-2 flex w-[calc(100%+16px)] items-start gap-3 rounded-[8px] border-b border-[var(--ds-line-2)] px-2 py-2.5 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--ds-focus)]"
       >
         <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--ds-red-fg)]" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] leading-snug font-medium text-[var(--ds-ink)]">
-            {check.label}
-            <span className="ml-2 font-normal text-[var(--ds-muted)]">
+          <div className="flex min-w-0 items-center gap-1.5 text-[13.5px] leading-snug font-medium text-[var(--ds-ink)]">
+            <span className="truncate">{copy.label}</span>
+            {copy.advisory && <AdvisoryTag />}
+            <span className="shrink-0 font-normal text-[var(--ds-muted)]">
               {count} letter{count === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="truncate text-[12px] text-[var(--ds-muted)]">{check.description}</div>
+          <div className="truncate text-[12px] text-[var(--ds-muted)]">{copy.description}</div>
         </div>
         <ChevronRight className="mt-0.5 size-3.5 shrink-0 text-[var(--ds-faint)]" aria-hidden />
       </button>

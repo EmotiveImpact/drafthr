@@ -9,15 +9,20 @@
  *                  workspace's law and tone, from Settings, Defaults)
  *   +              a small menu: New letter, New matter, Browse templates
  *   Templates      the template browser
+ *   Files          files go with a letter as its evidence: pick the letter
+ *                  and its evidence page opens, where files are added
  *   sliders        law and tone for the next letter (saved as your defaults)
  *   send           start the best match
  */
 import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowUp, FilePlus2, FolderPlus, LibraryBig, Paperclip, Plus, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, ArrowUp, FilePlus2, FolderPlus, LibraryBig, Paperclip, Plus, SlidersHorizontal } from "lucide-react";
 import type { Jurisdiction, Mode } from "@/lib/letters/types";
 import { letterCatalogByMode, type LetterTypeMeta } from "@/lib/letters/catalog";
 import { useProfileStore } from "@/lib/profile";
+import { useDraftStore } from "@/lib/store";
+import { isSent } from "@/components/journey/send/record";
+import { letterName, personFor } from "./homeData";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -141,7 +146,9 @@ export function AssistantBox({
 
   const employer = mode === "employer";
   const tones = employer ? HR_TONES : EMPLOYEE_TONES;
-  const tone = employer ? defaults.tone : defaults.employeeTone;
+  // With no saved default, the tone a new letter starts with (as the
+  // letter's own tone menu shows it): formal for HR, assertive for employees.
+  const tone = employer ? (defaults.tone ?? "formal") : (defaults.employeeTone ?? "assertive");
   const toneLabel = tones.find((t) => t.id === tone)?.label;
   const law =
     jurisdiction === "US"
@@ -167,7 +174,7 @@ export function AssistantBox({
             <span className="block text-[13px] leading-tight font-medium text-[var(--ds-ink)]">
               {employer ? "Your policies" : "Your details"}
             </span>
-            <span className="block truncate text-[12px] leading-tight text-[var(--ds-subtle)]">{contextLine}</span>
+            <span className="block truncate text-[12px] leading-tight text-[var(--ds-muted)]">{contextLine}</span>
           </span>
         </Link>
 
@@ -241,6 +248,7 @@ export function AssistantBox({
             <LibraryBig className="size-[15px]" aria-hidden />
             Templates
           </Link>
+          <FilesButton mode={mode} prefix={prefix} />
           <span className="flex-1" />
           <Popover>
             <Tip label="Law and tone">
@@ -266,7 +274,7 @@ export function AssistantBox({
               <div className="mt-3 text-[12.5px] font-medium text-[var(--ds-muted)]">Tone</div>
               <Segmented
                 label="Tone"
-                value={tone ?? ""}
+                value={tone}
                 options={tones.map((t) => ({ id: t.id, label: t.label }))}
                 onChange={(v) =>
                   employer
@@ -321,6 +329,81 @@ export function AssistantBox({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Files": the files DraftHR uses sit with a letter as its evidence, so this
+ * asks which letter, then opens that letter's evidence page to add them.
+ * With no letter yet it says so and offers to start one.
+ */
+function FilesButton({ mode, prefix }: { mode: Mode; prefix: string }) {
+  const nav = useNavigate();
+  const drafts = useDraftStore((s) => s.drafts);
+  const [open, setOpen] = useState(false);
+  const letters = useMemo(
+    () =>
+      Object.values(drafts)
+        .filter((d) => d.mode === mode && !d.isTemplateSource && !isSent(d))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 5),
+    [drafts, mode]
+  );
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={LINK_BTN}>
+          <Paperclip className="size-[15px]" aria-hidden />
+          Files
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[290px] p-2">
+        <p className="m-0 px-2 pt-1 text-[13px] font-semibold text-[var(--ds-ink)]">Add files to a letter</p>
+        <p className="m-0 px-2 pt-0.5 pb-2 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+          Files are kept with a letter as its evidence. Pick the letter.
+        </p>
+        {letters.length === 0 ? (
+          <div className="px-2 pb-1.5">
+            <p className="m-0 text-[13px] text-[var(--ds-muted)]">No letters in progress yet.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                nav(`${prefix}/new`);
+              }}
+              className="mt-1.5 inline-flex items-center gap-1 rounded-[4px] text-[13px] font-medium text-[var(--ds-ink)] underline-offset-[3px] hover:underline"
+            >
+              Start a letter
+              <ArrowRight className="size-3" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <ul className="m-0 list-none p-0" aria-label="Letters in progress">
+            {letters.map((d) => {
+              const who = personFor(d);
+              return (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      nav(`/editor/${d.id}/evidence`);
+                    }}
+                    className="flex w-full min-w-0 items-center gap-2.5 rounded-[8px] px-2 py-[7px] text-left transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ds-focus)]"
+                  >
+                    <Paperclip className="size-[14px] shrink-0 text-[var(--ds-muted)]" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] text-[var(--ds-ink)]">
+                      {letterName(d)}
+                      {who && <span className="text-[var(--ds-muted)]"> · {who}</span>}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

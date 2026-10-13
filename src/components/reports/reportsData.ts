@@ -4,8 +4,10 @@
  * the page passes the store contents and the time in, so tests can too.
  *
  *   sent        a letter's latest "marked-sent" export
- *   strong      passes every check and lands in the strong band (the same
- *               rule the compliance ring has always used)
+ *   strong      a health score of 80 or more with no required check
+ *               failing (the health score's strong band, the same rule the
+ *               compliance ring has always used). Workspace rules marked
+ *               advisory (RULE_COPY) are not part of it.
  *   department  the employee record's department, else the letter's own
  *   manager     the employee record's managerName
  */
@@ -428,7 +430,132 @@ export function byManager(letters: LetterFacts[], activeMatters: Matter[]): Mana
   });
 }
 
-export type FailingRow = { id: string; label: string; description: string; count: number; where: string };
+/* ─── Workspace rules: plain copy ──────────────────────────────────── */
+
+export type RuleCopy = {
+  label: string;
+  description: string;
+  /**
+   * Advisory rules are not part of a letter's health score, so they never
+   * change the compliance rate (strong letters can still fail them).
+   */
+  advisory: boolean;
+};
+
+/**
+ * The words people see for each workspace rule (lib/reports/check-predicates
+ * holds the rules themselves). Plain English, no shorthand.
+ */
+export const RULE_COPY: Record<string, RuleCopy> = {
+  "missing-disclaimer": {
+    label: "Missing disclaimer",
+    description: "Letters should end with a short confidentiality or without prejudice note, below a line.",
+    advisory: true,
+  },
+  "unapproved-7d": {
+    label: "Not approved for over 7 days",
+    description: "Letters left for more than a week without approval tend to go stale, or go out without sign-off.",
+    advisory: true,
+  },
+  "unresolved-placeholders": {
+    label: "Blanks left to fill",
+    description: "Square-bracket blanks such as [date] still in the letter mean it was not fully filled in.",
+    advisory: false,
+  },
+  "empty-sections": {
+    label: "Empty sections",
+    description: "Parts of the letter that were never written, usually from a wizard that was left part way.",
+    advisory: false,
+  },
+  "missing-parties": {
+    label: "Missing recipient or sender",
+    description: "A letter cannot be sent until it names who it is to and who it is from. Fix it in the letter or in Settings.",
+    advisory: false,
+  },
+  "pii-leak": {
+    label: "Personal details to remove",
+    description: "National Insurance numbers, Social Security numbers and full dates of birth should come out of a letter before it is sent.",
+    advisory: false,
+  },
+  "broken-evidence-refs": {
+    label: "Broken evidence references",
+    description: "References such as [See Fig 2] that match no attached evidence, so the reader finds a number that leads nowhere.",
+    advisory: false,
+  },
+};
+
+export function ruleCopy(id: string, fallback?: { label: string; description: string }): RuleCopy {
+  return RULE_COPY[id] ?? { label: fallback?.label ?? id, description: fallback?.description ?? "", advisory: false };
+}
+
+function andList(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+const PII_WORDS: Record<string, string> = {
+  "UK NI number": "a UK National Insurance number",
+  "US SSN": "a US Social Security number",
+  "full date of birth": "a full date of birth",
+};
+
+/**
+ * Why one letter fails a rule, in plain English, from the rule's own reason
+ * (which is written for the code, not for people).
+ */
+export function plainReason(id: string, draft: Draft, raw: string, now = Date.now()): string {
+  switch (id) {
+    case "missing-disclaimer":
+      return "No confidentiality or without prejudice note at the end of the letter";
+    case "unapproved-7d": {
+      const days = differenceInCalendarDays(new Date(now), new Date(draft.updatedAt));
+      return `Not approved. Last edited ${format(new Date(draft.updatedAt), "d MMM")}, ${days} days ago`;
+    }
+    case "unresolved-placeholders": {
+      const m = /^(\d+) unresolved placeholders? in body: (.*?)(?: \(\+(\d+) more\))?$/.exec(raw);
+      if (!m) return "Blanks still to fill in the letter";
+      const n = Number(m[1]);
+      const names = m[2].split(/,\s*/).map((x) => x.replace(/_/g, " "));
+      const more = m[3] ? ` and ${m[3]} more` : "";
+      return `${n} ${n === 1 ? "blank" : "blanks"} still to fill: ${names.join(", ")}${more}`;
+    }
+    case "empty-sections": {
+      const m = /^(\d+) of (\d+) sections? still empty$/.exec(raw);
+      return m ? `${m[1]} of ${m[2]} ${m[2] === "1" ? "section" : "sections"} not written yet` : "Some sections are not written yet";
+    }
+    case "missing-parties": {
+      const recipient = /recipient/.test(raw);
+      const sender = /sender/.test(raw);
+      if (recipient && sender) return "No recipient or sender named";
+      return recipient ? "No recipient named" : "No sender named";
+    }
+    case "pii-leak": {
+      const m = /detected: (.*)$/.exec(raw);
+      const found = (m?.[1] ?? "").split(/,\s*/).filter(Boolean).map((x) => PII_WORDS[x] ?? x);
+      return found.length ? `Contains ${andList(found)}` : "Contains personal details to remove";
+    }
+    case "broken-evidence-refs": {
+      const m = /\[See Fig ([\d, ]+)\]/.exec(raw);
+      const figs = (m?.[1] ?? "").split(/,\s*/).filter(Boolean);
+      if (figs.length === 0) return "Refers to evidence that is not attached";
+      return figs.length === 1
+        ? `Refers to Fig ${figs[0]}, but no attached evidence has that number`
+        : `Refers to Figs ${andList(figs)}, but no attached evidence has those numbers`;
+    }
+    default:
+      return raw;
+  }
+}
+
+export type FailingRow = {
+  id: string;
+  label: string;
+  description: string;
+  count: number;
+  where: string;
+  /** Not part of the health score (see RuleCopy.advisory). */
+  advisory: boolean;
+};
 
 /** "Warning letters", "Warning and Offer letters", "Hearing invitations and 2 more". */
 function typesSentence(labels: string[]): string {
@@ -444,9 +571,12 @@ export function failingChecks(letters: LetterFacts[]): FailingRow[] {
   const label = new Map(letters.map((l) => [l.draft.id, l.typeLabel]));
   return HEALTH_CHECKS.map((c) => {
     const failing = failingDraftsForCheck(drafts, c.id);
+    const copy = ruleCopy(c.id, c);
+    const first = failing[0];
     const where =
-      typesSentence(failing.map((f) => label.get(f.draft.id) ?? "")) || (failing[0]?.reason ?? c.description);
-    return { id: c.id, label: c.label, description: c.description, count: failing.length, where };
+      typesSentence(failing.map((f) => label.get(f.draft.id) ?? "")) ||
+      (first ? plainReason(c.id, first.draft, first.reason) : copy.description);
+    return { id: c.id, label: copy.label, description: copy.description, count: failing.length, where, advisory: copy.advisory };
   })
     .filter((r) => r.count > 0)
     .sort((a, b) => b.count - a.count);
@@ -518,7 +648,7 @@ export function reportCsv({
     ["Figure", "Value"],
     ["Letters sent this month", tiles.sentThisMonth],
     [`Change vs this point in ${tiles.lastMonthName}`, tiles.sentDelta],
-    ["Compliance rate (%)", tiles.compliance.percent],
+    ["Compliance rate, letters rated strong (%)", tiles.compliance.percent],
     ["Compliance change (pts)", tiles.compliance.deltaPts],
     ["High-risk matters open", tiles.highRisk.open],
     ["High-risk matters new this week", tiles.highRisk.newThisWeek],
@@ -540,8 +670,8 @@ export function reportCsv({
       m.openMatters,
     ]),
     [],
-    ["Failing check", "Letters failing", "Where"],
-    ...failing.map((f) => [f.label, f.count, f.where]),
+    ["Failing check", "Letters failing", "Where", "Advisory (not in the compliance rate)"],
+    ...failing.map((f) => [f.label, f.count, f.where, f.advisory ? "Yes" : "No"]),
   ];
   return rows.map((r) => r.map(csvCell).join(",")).join("\n") + "\n";
 }

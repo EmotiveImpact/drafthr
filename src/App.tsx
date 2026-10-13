@@ -27,6 +27,7 @@ import {
 } from "@/lib/sync-meta";
 import { useAuth } from "@/lib/auth";
 import { StorageQuotaBanner } from "@/components/StorageQuotaBanner";
+import { useWorkspaceLoad } from "@/components/home/loadState";
 import { LocalDataLossDialog } from "@/components/LocalDataLossDialog";
 import {
   clearTenantScopedLocalData,
@@ -237,6 +238,10 @@ export function App() {
   useEffect(() => {
     if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
+    // Lists show soft placeholders (not an empty state) until the first
+    // pull lands on a device with no letters yet.
+    const load = useWorkspaceLoad.getState();
+    load.setPulling(true);
     void (async () => {
       // Retry deletes that never got a confirmed 2xx (tab closed / offline)
       // BEFORE pulling, so a pending-delete row is gone rather than merged.
@@ -268,6 +273,7 @@ export function App() {
         const local = useDraftStore.getState().drafts;
         useDraftStore.setState({ drafts: mergeRemoteExtras(local, remoteExtras) });
       });
+      load.setPulling(false);
       if (cancelled || Object.keys(useDraftStore.getState().drafts).length === 0) return;
       const result = await syncAllPending(() => Object.values(useDraftStore.getState().drafts));
       if (cancelled) return;
@@ -277,9 +283,10 @@ export function App() {
       if (result.failed > 0) {
         console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
       }
-    })();
+    })().finally(() => load.setPulling(false));
     return () => {
       cancelled = true;
+      load.setPulling(false);
     };
   }, [isLoaded, activeTenant]);
 

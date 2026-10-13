@@ -1,14 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarClock,
   CalendarDays,
   CalendarPlus,
   ChevronDown,
+  FileText,
   ChevronLeft,
   ChevronRight,
   Folder,
   ListFilter,
+  User,
 } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
@@ -29,12 +31,14 @@ import {
   EVENT_TONE,
   EVENT_TYPE_LABEL,
   EVENT_TYPES,
+  allCalendarEvents,
   buildIcs,
   daysLeftLabel,
   daysLeftTone,
-  extractCalendarEvents,
   type CalendarEvent,
 } from "@/components/home/calendarEvents";
+import { FADE_IN_GROUP, ListPlaceholder } from "@/components/home/HomeParts";
+import { useLettersLoading } from "@/components/home/loadState";
 import { cn } from "@/lib/utils";
 
 type View = "month" | "agenda";
@@ -64,7 +68,8 @@ function parts(isoDate: string) {
 /**
  * Calendar (a Home tab for HR, mock calendar): every dated thing on the
  * person's letters (hearings, appeal windows, probation reviews, tribunal
- * time limits, letter responses) on a month grid or as an agenda, with
+ * time limits, letter responses) and matters (key deadlines, hearings and
+ * meetings, the tribunal limit) on a month grid or as an agenda, with
  * what is coming up and an .ics export. Employees and consultants get the
  * same page under their own band, with only their own letters.
  */
@@ -72,17 +77,22 @@ export function Calendar() {
   const nav = useNavigate();
   const drafts = useDraftStore((s) => s.drafts);
   const matters = useDraftStore((s) => s.matters);
+  const matterEvents = useDraftStore((s) => s.events);
   const role = useProfileStore((s) => s.profile.role);
   const home = useHomeData("employer");
+  const loading = useLettersLoading();
   const employer = role === "employer";
   const prefix = role === "employee" ? "/me" : "/hr";
 
   const all = useMemo(() => {
     const mine = Object.values(drafts).filter((d) => !d.isTemplateSource && (!role || d.mode === role));
-    return extractCalendarEvents(mine, matters);
-  }, [drafts, matters, role]);
+    // Consultants have no matters of their own.
+    const ownMatters = role === "employer" || role === "employee" ? matters : {};
+    return allCalendarEvents(mine, ownMatters, matterEvents, { mode: role === "employee" ? "employee" : "employer" });
+  }, [drafts, matters, matterEvents, role]);
 
   const [matterId, setMatterId] = useState("all");
+  const pickedByPointer = useRef(false);
   const events = useMemo(() => (matterId === "all" ? all : all.filter((e) => e.matterId === matterId)), [all, matterId]);
   const matterChoices = useMemo(() => {
     const ids = new Set(all.map((e) => e.matterId).filter(Boolean) as string[]);
@@ -113,13 +123,16 @@ export function Calendar() {
     URL.revokeObjectURL(url);
   };
 
-  // Band line: deadlines left this month, and how many in the next week.
+  // Band line: deadlines left this month, and how many in the next week,
+  // for the matter picked in the filter when there is one.
   const monthKey = iso(today).slice(0, 7);
-  const leftThisMonth = all.filter((e) => e.daysAway >= 0 && e.iso.startsWith(monthKey)).length;
-  const nextWeek = all.filter((e) => e.daysAway >= 0 && e.daysAway <= 7).length;
+  const leftThisMonth = events.filter((e) => e.daysAway >= 0 && e.iso.startsWith(monthKey)).length;
+  const nextWeek = events.filter((e) => e.daysAway >= 0 && e.daysAway <= 7).length;
+  const forMatter = matterId === "all" ? null : <>{matterLabel}: </>;
   const lede =
     leftThisMonth > 0 ? (
       <>
+        {forMatter}
         <b>
           {leftThisMonth} {leftThisMonth === 1 ? "deadline" : "deadlines"}
         </b>{" "}
@@ -134,10 +147,11 @@ export function Calendar() {
       </>
     ) : upcoming.length > 0 ? (
       <>
+        {forMatter}
         No deadlines left this month. Next: <b>{parts(upcoming[0].iso).long}</b>.
       </>
     ) : (
-      <>No deadlines coming up.</>
+      <>{forMatter}No deadlines coming up.</>
     );
 
   const shift = (n: number) =>
@@ -211,37 +225,55 @@ export function Calendar() {
             </button>
           </div>
 
-          {all.length === 0 ? (
+          {loading ? (
+            <ListPlaceholder rows={4} label="Loading deadlines" />
+          ) : all.length === 0 ? (
             <div className="rounded-[14px] border border-[var(--ds-line)]">
               <EmptyState
                 icon={CalendarClock}
                 title="No deadlines yet"
-                body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance, remedy or advisor date in a wizard."
+                body="Deadlines appear here when you start a tribunal-bound letter, or when you enter an acceptance, remedy or advisor date in a wizard. A deadline or hearing set on a matter shows here too."
                 primary={{ label: "Start a letter", to: `${prefix}/new` }}
               />
             </div>
           ) : (
             <>
-              {/* Legend and matter filter */}
-              <div className="mb-3 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-[12.5px] text-[var(--ds-muted)]">
-                {EVENT_TYPES.map((t) => (
-                  <span key={t} className="inline-flex items-center gap-1.5">
-                    <i aria-hidden className="inline-block size-2 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
-                    {EVENT_TYPE_LABEL[t]}
-                  </span>
-                ))}
+              {/* Legend and matter filter: the filter keeps its place on the
+               * right of the first line, a long matter name is cut short. */}
+              <div className="mb-3 flex min-w-0 items-start gap-3">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-2 pt-0.5 text-[12.5px] text-[var(--ds-muted)]">
+                  {EVENT_TYPES.map((t) => (
+                    <span key={t} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                      <i aria-hidden className="inline-block size-2 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
+                      {EVENT_TYPE_LABEL[t]}
+                    </span>
+                  ))}
+                </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className="ml-auto inline-flex items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)]"
+                      aria-label={`Matter: ${matterLabel}`}
+                      title={matterLabel}
+                      className="inline-flex max-w-[200px] shrink-0 items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] data-[state=open]:bg-[var(--ds-hover)]"
                     >
-                      <ListFilter className="size-3.5" aria-hidden />
-                      {matterLabel}
-                      <ChevronDown className="size-3.5" aria-hidden />
+                      <ListFilter className="size-3.5 shrink-0" aria-hidden />
+                      <span className="min-w-0 truncate">{matterLabel}</span>
+                      <ChevronDown className="size-3.5 shrink-0" aria-hidden />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="max-w-[280px] min-w-[220px]">
+                  <DropdownMenuContent
+                    align="end"
+                    className="max-w-[280px] min-w-[220px]"
+                    // Picked with the keyboard: focus goes back to the button.
+                    // Picked with the pointer: no focus ring is left behind.
+                    onPointerDown={() => (pickedByPointer.current = true)}
+                    onKeyDown={() => (pickedByPointer.current = false)}
+                    onCloseAutoFocus={(ev) => {
+                      if (pickedByPointer.current) ev.preventDefault();
+                      pickedByPointer.current = false;
+                    }}
+                  >
                     <DropdownMenuRadioGroup value={matterId} onValueChange={setMatterId}>
                       <DropdownMenuRadioItem value="all">All matters</DropdownMenuRadioItem>
                       {matterChoices.length > 0 && <DropdownMenuSeparator />}
@@ -255,11 +287,13 @@ export function Calendar() {
                 </DropdownMenu>
               </div>
 
-              {view === "month" ? (
-                <MonthGrid y={cursor.y} m={cursor.m} events={events} onOpen={(id) => nav(`/editor/${id}`)} />
-              ) : (
-                <Agenda events={events} />
-              )}
+              <div key={`${view}:${matterId}`} className={FADE_IN_GROUP}>
+                {view === "month" ? (
+                  <MonthGrid y={cursor.y} m={cursor.m} events={events} onOpen={(href) => nav(href)} />
+                ) : (
+                  <Agenda events={events} />
+                )}
+              </div>
             </>
           )}
         </div>
@@ -319,7 +353,7 @@ function MonthGrid({
   y: number;
   m: number;
   events: CalendarEvent[];
-  onOpen: (draftId: string) => void;
+  onOpen: (href: string) => void;
 }) {
   const todayIso = iso(new Date());
   const first = new Date(y, m, 1);
@@ -414,15 +448,15 @@ function MonthGrid({
   );
 }
 
-function EventChip({ e, onOpen }: { e: CalendarEvent; onOpen: (draftId: string) => void }) {
+function EventChip({ e, onOpen }: { e: CalendarEvent; onOpen: (href: string) => void }) {
   const past = e.daysAway < 0;
   const tone = EVENT_TONE[e.type];
   return (
     <button
       type="button"
-      onClick={() => onOpen(e.draftId)}
-      aria-label={`${e.title}, ${e.person}, ${parts(e.iso).long}${past ? ", passed" : ""}. Open the letter`}
-      title={`${e.title} · ${e.person}${e.matterName ? ` · ${e.matterName}` : ""}`}
+      onClick={() => onOpen(e.href)}
+      aria-label={`${[e.title, e.person || e.matterName].filter(Boolean).join(", ")}, ${parts(e.iso).long}${past ? ", passed" : ""}. ${e.draftId ? "Open the letter" : "Open the matter"}`}
+      title={[e.title, e.person, e.matterName].filter(Boolean).join(" · ")}
       className="block w-full min-w-0 shrink-0 overflow-hidden rounded-[7px] px-[7px] py-[5px] text-left text-[11.5px] leading-[1.25] whitespace-nowrap transition-[filter] duration-[120ms] hover:brightness-[0.97] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)]"
       style={past ? { background: "var(--ds-surface-2)", color: "var(--ds-subtle)" } : { background: tone.bg, color: tone.fg }}
     >
@@ -434,7 +468,7 @@ function EventChip({ e, onOpen }: { e: CalendarEvent; onOpen: (draftId: string) 
       >
         {e.chip}
       </b>
-      <span className="block truncate">{e.person}</span>
+      <span className="block truncate">{e.person || e.matterName}</span>
     </button>
   );
 }
@@ -444,10 +478,18 @@ function EventChip({ e, onOpen }: { e: CalendarEvent; onOpen: (draftId: string) 
 function EventRow({ e, wide = false }: { e: CalendarEvent; wide?: boolean }) {
   const p = parts(e.iso);
   const tone = daysLeftTone(e);
+  // Under the title: the matter (with the person when the matter's name
+  // does not say who), else the employee the letter is for.
+  const person = e.person && e.person !== "No name yet" ? e.person : "";
+  const where = e.matterName
+    ? person && !e.matterName.toLowerCase().includes(person.toLowerCase())
+      ? `${e.matterName} · ${person}`
+      : e.matterName
+    : person || e.letter;
   return (
     <li className="border-t border-[var(--ds-line-2)] first:border-t-0">
       <Link
-        to={`/editor/${e.draftId}`}
+        to={e.href}
         className={cn(
           "-mx-2 flex gap-3.5 rounded-[10px] px-2 py-3 transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ds-focus)]",
           wide && "md:items-center"
@@ -461,21 +503,20 @@ function EventRow({ e, wide = false }: { e: CalendarEvent; wide?: boolean }) {
           <span className={cn("block min-w-0", wide && "md:flex-1")}>
             <span className="flex min-w-0 items-center gap-[7px] text-[14px] text-[var(--ds-ink)]">
               <i aria-hidden className="inline-block size-[7px] shrink-0 rounded-[2px]" style={{ background: EVENT_TONE[e.type].fg }} />
-              <span className="truncate">
-                {e.title}
-                {!e.matterName && e.person ? `, ${e.person}` : ""}
-              </span>
+              <span className="truncate">{e.title}</span>
             </span>
-            <span className="mt-[3px] flex min-w-0 items-center gap-[5px] text-[12.5px] text-[var(--ds-muted)]">
-              <Folder className="size-[13px] shrink-0 text-[var(--ds-subtle)]" aria-hidden />
-              <span className="truncate">
-                {e.matterName
-                  ? e.matterName.toLowerCase().includes(e.person.toLowerCase())
-                    ? e.matterName
-                    : `${e.matterName} · ${e.person}`
-                  : e.letter}
+            {where && (
+              <span className="mt-[3px] flex min-w-0 items-center gap-[5px] text-[12.5px] text-[var(--ds-muted)]">
+                {e.matterName ? (
+                  <Folder className="size-[13px] shrink-0 text-[var(--ds-subtle)]" aria-label="Matter" />
+                ) : person ? (
+                  <User className="size-[13px] shrink-0 text-[var(--ds-subtle)]" aria-label="Employee" />
+                ) : (
+                  <FileText className="size-[13px] shrink-0 text-[var(--ds-subtle)]" aria-label="Letter" />
+                )}
+                <span className="truncate">{where}</span>
               </span>
-            </span>
+            )}
           </span>
           <span className={cn("mt-[7px] flex flex-wrap items-center gap-1.5", wide && "md:mt-0 md:shrink-0")}>
             <Pill tone={tone}>{daysLeftLabel(e.daysAway)}</Pill>

@@ -18,7 +18,7 @@ import { canApprove } from "@/lib/permissions";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
 import { getJourney, type JourneyInfo, type JourneyPillTone } from "@/lib/journey/stage";
 import { latestReviewIn, useReviewStore, firstName, currentRound, type ReviewRequest } from "@/lib/journey/reviews";
-import { extractCalendarEvents, type CalendarEvent } from "./calendarEvents";
+import { allCalendarEvents, type CalendarEvent } from "./calendarEvents";
 import { metaFor } from "./letterArt";
 
 export type LetterJourney = { draft: Draft; journey: JourneyInfo };
@@ -28,16 +28,39 @@ export function realLetters(drafts: Record<string, Draft>, mode: Mode): Draft[] 
   return Object.values(drafts).filter((d) => d.mode === mode && !d.isTemplateSource);
 }
 
+/** Who a letter waiting for sign-off was sent to (its latest submission). */
+export function approverOf(d: Draft): string {
+  const list = d.approvals ?? [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i].decision === "submitted") return list[i].reviewerName?.trim() || "Workspace reviewer";
+  }
+  return "Workspace reviewer";
+}
+
+/**
+ * The signed-in person is the one this letter waits on for sign-off: they
+ * can approve, and it was sent to them by name, to the workspace's
+ * reviewers, or they hold the reviewer role (as on the letter itself).
+ */
+export function viewerApproves(d: Draft, role: WorkspaceRole | undefined, names: string[]): boolean {
+  if (!canApprove(role)) return false;
+  if (role === "reviewer") return true;
+  const who = approverOf(d).toLowerCase();
+  if (who === "workspace reviewer") return true;
+  return names.some((n) => !!n.trim() && n.trim().toLowerCase() === who);
+}
+
 /** getJourney for each letter; a letter that cannot be read is skipped. */
 export function journeysFor(
   letters: Draft[],
   requests: Record<string, ReviewRequest>,
-  viewerIsApprover: boolean
+  viewerIsApprover: boolean | ((d: Draft) => boolean)
 ): LetterJourney[] {
   const out: LetterJourney[] = [];
   for (const draft of letters) {
     try {
-      out.push({ draft, journey: getJourney(draft, latestReviewIn(requests, draft.id), { viewerIsApprover }) });
+      const approves = typeof viewerIsApprover === "function" ? viewerIsApprover(draft) : viewerIsApprover;
+      out.push({ draft, journey: getJourney(draft, latestReviewIn(requests, draft.id), { viewerIsApprover: approves }) });
     } catch {
       // A letter whose checks cannot run is left out of every roll-up.
     }
@@ -123,24 +146,22 @@ export function needsYouItems({
   tasks,
   matters,
   events,
-  role,
   now = Date.now(),
 }: {
   journeys: LetterJourney[];
   tasks: Record<string, Task>;
   matters: Record<string, Matter>;
   events: CalendarEvent[];
-  role: WorkspaceRole | undefined;
   now?: number;
 }): NeedItem[] {
   const out: NeedItem[] = [];
-  const approver = canApprove(role);
 
   for (const { draft: d, journey: j } of journeys) {
     const who = personFor(d);
     const title = who ? `${letterName(d)} for ${who}` : letterName(d);
     if (d.reviewStatus === "in_review") {
-      if (!approver) continue;
+      // Only a letter waiting on you; one sent to someone else is theirs.
+      if (j.tone !== "needs-you") continue;
       const fails = j.counts.failingRequired;
       const asked = d.submittedForReviewAt ?? d.updatedAt;
       out.push({
@@ -194,7 +215,7 @@ export function needsYouItems({
       pill: { label: "Hearing", tone: "blue" },
       title: `${e.title.split(",")[0]}, ${date}${e.time ? ` at ${e.time}` : ""}`,
       meta: [e.person, e.matterName ?? e.letter].filter(Boolean).join(" · "),
-      href: `/editor/${e.draftId}`,
+      href: e.href,
       rank: 3 + e.daysAway / 100,
     });
   }
@@ -352,11 +373,15 @@ export function useHomeData(mode: Mode = "employer") {
   const matters = useDraftStore((s) => s.matters);
   const tasks = useDraftStore((s) => s.tasks);
   const requests = useReviewStore((s) => s.requests);
+  const matterEvents = useDraftStore((s) => s.events);
   const role = useProfileStore((s) => s.profile.workspaceRole);
+  const legalName = useProfileStore((s) => s.profile.personal.legalName);
+  const preferredName = useProfileStore((s) => s.profile.personal.preferredName);
   return useMemo(() => {
     const letters = realLetters(drafts, mode);
-    const journeys = journeysFor(letters, requests, canApprove(role));
-    const events = extractCalendarEvents(letters, matters);
+    const names = [legalName ?? "", preferredName ?? ""];
+    const journeys = journeysFor(letters, requests, (d) => viewerApproves(d, role, names));
+    const events = allCalendarEvents(letters, matters, matterEvents, { mode });
     // Sign-off waits on letters of either mode (the Needs approval tab's badge).
     const waiting = waitingForApproval(Object.values(drafts).filter((d) => !d.isTemplateSource));
     return {
@@ -365,10 +390,10 @@ export function useHomeData(mode: Mode = "employer") {
       events,
       waiting,
       summary: summaryFor(journeys),
-      needs: needsYouItems({ journeys, tasks, matters, events, role }),
+      needs: needsYouItems({ journeys, tasks, matters, events }),
       canApprove: canApprove(role),
     };
-  }, [drafts, matters, tasks, requests, role, mode]);
+  }, [drafts, matters, matterEvents, tasks, requests, role, legalName, preferredName, mode]);
 }
 
 /** "Fri 9 Oct" (no commas). */

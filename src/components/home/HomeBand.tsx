@@ -17,6 +17,7 @@ import { useProfileStore } from "@/lib/profile";
 import { avatarColor, avatarInitials, avatarInk } from "@/components/ds";
 import { cn } from "@/lib/utils";
 import { firstNameOf, greetingFor } from "./homeData";
+import { useLettersLoading } from "./loadState";
 
 export type HomeTabId = "overview" | "approvals" | "calendar" | "activity";
 
@@ -56,8 +57,11 @@ export function Band({
   lede,
   actions,
   tabs,
+  notice,
   className,
 }: {
+  /** A banner at the very top of the band, above the title. */
+  notice?: ReactNode;
   crumbs?: Array<{ label: string; href?: string }>;
   title: ReactNode;
   lede?: ReactNode;
@@ -70,10 +74,15 @@ export function Band({
       data-slot="home-band"
       className={cn(
         "relative -mt-[52px] border-b border-[var(--ds-line-2)] px-5 pt-[70px] [background:var(--ds-mist-phone)] md:mt-0 md:px-12 md:pt-[34px] md:[background:var(--ds-mist)]",
+        // On phones the band climbs behind the transparent top bar. When the
+        // storage warning sits between them, stay below it instead of
+        // drawing over it.
+        "max-md:[main:has(>[data-testid=storage-quota-banner])_&]:mt-3 max-md:[main:has(>[data-testid=storage-quota-banner])_&]:pt-6",
         !tabs && "pb-[22px] md:pb-7",
         className
       )}
     >
+      {notice && <div className="mb-5 md:mb-6">{notice}</div>}
       {crumbs && crumbs.length > 0 && (
         <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-2 text-[13px] leading-4 text-[var(--ds-muted)] md:flex">
           {crumbs.map((c, i) => (
@@ -112,21 +121,31 @@ export function Band({
 
 type Member = { userId: string; email: string | null; legalName: string | null };
 
-/** Real workspace members (up to three, then +N). Hidden for a team of one. */
+/**
+ * Real workspace members (up to three, then +N). Hidden for a team of one,
+ * and when the list cannot be loaded (no server, signed out, an error):
+ * never made-up initials. The request is made whenever the page mounts, so
+ * it works in any set-up that serves /api/workspace/members.
+ */
 function MemberStack() {
   const { activeTenant } = useAuth();
   const [members, setMembers] = useState<Member[] | null>(null);
   useEffect(() => {
-    if (!activeTenant) return;
     let live = true;
     fetch("/api/workspace/members", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : { members: [] }))
-      .then((j) => live && setMembers(((j?.members ?? []) as Member[]).filter(Boolean)))
+      .then(async (r) => {
+        const type = r.headers.get("content-type") ?? "";
+        // A dev server or static host answers with the app's HTML: no list.
+        if (!r.ok || !type.includes("application/json")) return { members: [] };
+        return r.json();
+      })
+      .then((j) => live && setMembers(((j?.members ?? []) as Member[]).filter((m) => m && (m.userId || m.email))))
       .catch(() => live && setMembers([]));
     return () => {
       live = false;
     };
-  }, [activeTenant]);
+    // Reload when the person switches workspace.
+  }, [activeTenant?.id]);
   if (!members || members.length < 2) return null;
   const shown = members.slice(0, 3);
   const more = members.length - shown.length;
@@ -141,7 +160,7 @@ function MemberStack() {
         const seed = m.email ?? m.userId;
         return (
           <span
-            key={m.userId}
+            key={m.userId || seed}
             className={cn(
               "grid size-[30px] place-items-center rounded-full border-2 border-[var(--ds-surface)] text-[10px] font-semibold",
               i > 0 && "-ml-1.5"
@@ -163,34 +182,84 @@ function MemberStack() {
 
 /* ─── Tabs ─────────────────────────────────────────────────────────── */
 
-/** Where the underline sat on the last Home tab, so the next tab can slide from it. */
+/**
+ * Each Home tab is its own route, so switching tabs mounts a new band. Two
+ * things carry over from the band being left: where the underline sat (so
+ * the new one can slide from there) and, when the switch was made with the
+ * keyboard, which tab should hold focus (so a keyboard user keeps their
+ * place instead of dropping to the page body).
+ */
 let lastBar: { left: number; width: number } | null = null;
+let focusTabOnMount: HomeTabId | null = null;
 
 function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number }) {
   const nav = useNavigate();
   const wrap = useRef<HTMLDivElement>(null);
   const refs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  // Start where the previous band's underline was, without a transition.
+  // Kept in a ref (not read again from the module) so a second run of the
+  // effect (React's development double run) still slides from there.
+  const from = useRef(lastBar);
   const [bar, setBar] = useState<{ left: number; width: number; animate: boolean } | null>(
     lastBar ? { ...lastBar, animate: false } : null
   );
 
+  // Keyboard switch: put focus on the new tab once it is on screen.
   useLayoutEffect(() => {
-    const measure = (animate: boolean) => {
+    if (focusTabOnMount !== active) return;
+    focusTabOnMount = null;
+    refs.current[active]?.focus({ preventScroll: true });
+  }, [active]);
+
+  useLayoutEffect(() => {
+    const read = () => {
       const el = refs.current[active];
-      if (!el) return;
-      const next = { left: el.offsetLeft, width: el.offsetWidth };
-      lastBar = next;
-      setBar({ ...next, animate });
+      return el ? { left: el.offsetLeft, width: el.offsetWidth } : null;
     };
-    // Slide from the previous tab's place on the next frame.
-    const raf = requestAnimationFrame(() => measure(true));
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => measure(false)) : null;
+    let raf1 = 0;
+    let raf2 = 0;
+    const first = read();
+    if (first) {
+      const start = from.current;
+      if (!start || (start.left === first.left && start.width === first.width)) {
+        setBar({ ...first, animate: false });
+      } else {
+        // The old position has been painted (state above); turn the
+        // transition on, then move on the frame after so it slides.
+        raf1 = requestAnimationFrame(() => {
+          setBar((b) => (b ? { ...b, animate: true } : b));
+          raf2 = requestAnimationFrame(() => {
+            from.current = null;
+            setBar({ ...first, animate: true });
+          });
+        });
+      }
+      lastBar = first;
+    }
+    // Later size changes (fonts, the count badge, the window) move it
+    // without a slide; the observer's first call reports nothing new.
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => {
+            const next = read();
+            if (!next || (lastBar && next.left === lastBar.left && next.width === lastBar.width)) return;
+            lastBar = next;
+            setBar({ ...next, animate: false });
+          })
+        : null;
     if (ro && wrap.current) ro.observe(wrap.current);
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
       ro?.disconnect();
     };
   }, [active, approvals]);
+
+  const go = (id: HomeTabId, href: string, fromKeyboard: boolean) => {
+    if (id === active) return;
+    if (fromKeyboard) focusTabOnMount = id;
+    nav(href);
+  };
 
   const onKey = (e: KeyboardEvent<HTMLAnchorElement>, i: number) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft" && e.key !== "Home" && e.key !== "End") return;
@@ -198,7 +267,7 @@ function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number 
     const n =
       e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + TABS.length) % TABS.length;
     refs.current[TABS[n].id]?.focus();
-    nav(TABS[n].href);
+    go(TABS[n].id, TABS[n].href, true);
   };
 
   return (
@@ -216,6 +285,13 @@ function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number 
               to={t.href}
               aria-current={on ? "page" : undefined}
               onKeyDown={(e) => onKey(e, i)}
+              onClick={(e) => {
+                // Enter on a focused tab arrives as a click with no pointer
+                // (detail 0): keep focus on the tab after the switch.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                go(t.id, t.href, e.detail === 0);
+              }}
               className={cn(
                 "inline-flex items-center whitespace-nowrap rounded-t-[6px] px-3 pt-[7px] pb-3 text-[14px] leading-[17px] transition-colors duration-[120ms] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ds-focus)]",
                 on ? "font-medium text-[var(--ds-ink)]" : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
@@ -239,6 +315,7 @@ function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number 
         {bar && (
           <span
             aria-hidden
+            data-tab-underline
             className={cn(
               "pointer-events-none absolute bottom-[-1px] left-0 h-[2px] bg-[var(--ds-ink)] motion-reduce:transition-none",
               bar.animate && "transition-[transform,width] duration-[160ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
@@ -362,20 +439,27 @@ export function HomeBand({
   active,
   lede,
   approvals,
+  notice,
 }: {
   active: HomeTabId;
   lede: ReactNode;
+  /** A banner above the title (the employee directory import). */
+  notice?: ReactNode;
   /** Letters waiting for sign-off (the Needs approval badge). */
   approvals: number;
 }) {
   const workspace = useWorkspaceName();
   const greeting = useGreeting();
+  // While the first pull is still bringing letters to an empty device the
+  // counts would read as "nothing yet", so the lede says what is happening.
+  const loading = useLettersLoading();
   usePrefetchTabs();
   return (
     <Band
+      notice={notice}
       crumbs={[{ label: workspace }, { label: "HR team" }]}
       title={greeting}
-      lede={lede}
+      lede={loading ? "Getting your letters from the workspace." : lede}
       actions={
         <>
           <MemberStack />

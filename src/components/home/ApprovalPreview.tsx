@@ -54,14 +54,16 @@ export const ApprovalPreview = forwardRef<HTMLTextAreaElement, Props>(function A
 ) {
   const approverFirst = firstName(row.approver) || row.approver;
   const requesterFirst = firstName(row.requester) || row.requester;
-  const pill = canAct ? (
-    <Pill tone="amber">{forMe ? "Waiting for you" : `Waiting for ${approverFirst}`}</Pill>
-  ) : (
-    <Pill tone="lilac">{`With ${row.approver === "Workspace reviewer" ? "an approver" : approverFirst}`}</Pill>
-  );
-  const sub = [row.person, row.matterName ? `${row.matterName.replace(/\s+matter$/i, "")} matter` : undefined]
-    .filter(Boolean)
-    .join(" · ");
+  // Amber only when it is waiting for you; otherwise lilac, naming who has it.
+  const pill =
+    canAct && forMe ? (
+      <Pill tone="amber">Waiting for you</Pill>
+    ) : (
+      <Pill tone="lilac">{`With ${row.approver === "Workspace reviewer" ? "an approver" : approverFirst}`}</Pill>
+    );
+  // "<employee> · <matter name>": the matter as it is named (letters carry
+  // no version number, so that part is left out).
+  const sub = [row.person, row.matterName].filter(Boolean).join(" · ");
   const shownFixes = row.fixes.slice(0, 3);
   const meIsApprover = forMe && row.approver !== "Workspace reviewer";
 

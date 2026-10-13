@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export { BAND_BTN_DARK as BTN_PRIMARY, BAND_BTN_GHOST as BTN_OUTLINE } from "./HomeBand";
 
@@ -107,3 +108,37 @@ export function RailBox({
     </section>
   );
 }
+
+/**
+ * Soft grey rows while a list is still loading (motion map, Quiet tier):
+ * a thumbnail and two lines per row. The real rows replace them and fade
+ * in together.
+ */
+export function ListPlaceholder({
+  rows = 3,
+  label = "Loading letters",
+  thumb = true,
+  className,
+}: {
+  rows?: number;
+  label?: string;
+  thumb?: boolean;
+  className?: string;
+}) {
+  return (
+    <div role="status" aria-label={label} data-placeholder className={cn("flex flex-col", className)}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 border-b border-[var(--ds-line-2)] py-3 last:border-b-0">
+          {thumb && <Skeleton className="size-[34px] shrink-0 rounded-[8px]" />}
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-3 rounded-full" style={{ width: `${62 - i * 9}%` }} />
+            <Skeleton className="mt-2 h-2.5 rounded-full" style={{ width: `${40 - i * 5}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A group of rows that fades in together once (never one by one). */
+export const FADE_IN_GROUP = "animate-in fade-in-0 duration-200 motion-reduce:animate-none";

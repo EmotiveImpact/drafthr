@@ -1,3 +1,4 @@
+import { HEALTH_CHECKS } from "@/lib/reports/check-predicates";
 import { describe, it, expect } from "vitest";
 import type { Draft, Employee, Matter } from "@/lib/letters/types";
 import {
@@ -12,7 +13,9 @@ import {
   niceTop,
   oneDp,
   periodFrame,
+  plainReason,
   reportCsv,
+  ruleCopy,
   reportTiles,
   sentAtOf,
   timeToResolve,
@@ -260,13 +263,52 @@ describe("CSV export", () => {
       bars: chartBars(letters, frame),
       types: byLetterType(letters),
       managers: byManager(letters, []),
-      failing: [{ id: "x", label: "Missing disclaimer", description: "", count: 1, where: "Warning, Offer and 2 more" }],
+      failing: [{ id: "x", label: "Missing disclaimer", description: "", count: 1, where: "Warning, Offer and 2 more", advisory: true }],
     });
     expect(csv).toContain("Period,Last 12 months");
     expect(csv).toContain("Letters sent this month,1");
     expect(csv).toContain("October 2026,1,");
     expect(csv).toContain("Manager,Department,Letters");
     expect(csv).toContain(`${NO_MANAGER},`);
-    expect(csv).toContain('Missing disclaimer,1,"Warning, Offer and 2 more"');
+    expect(csv).toContain('Missing disclaimer,1,"Warning, Offer and 2 more",Yes');
+  });
+});
+
+describe("workspace rules in plain English", () => {
+  it("names every rule without shorthand and marks the advisory ones", () => {
+    for (const c of HEALTH_CHECKS) {
+      const copy = ruleCopy(c.id, c);
+      expect(copy.label).not.toMatch(/[<>]|\d+d\b|PII/);
+      expect(copy.description).not.toMatch(/`|<hr>|—/);
+    }
+    expect(ruleCopy("unapproved-7d").label).toBe("Not approved for over 7 days");
+    expect(ruleCopy("missing-disclaimer").advisory).toBe(true);
+    expect(ruleCopy("unresolved-placeholders").advisory).toBe(false);
+  });
+
+  it("turns each rule's reason into plain words", () => {
+    const d = draft("a", { updatedAt: NOW - 12 * DAY } as Partial<Draft>);
+    expect(plainReason("missing-disclaimer", d, "No <hr> + disclaimer block detected at the foot of the letter")).toBe(
+      "No confidentiality or without prejudice note at the end of the letter"
+    );
+    expect(plainReason("unapproved-7d", d, "Last edited 2026-10-01, no approval recorded (12 days ago)", NOW)).toMatch(
+      /^Not approved\. Last edited \d+ \w{3}, 12 days ago$/
+    );
+    expect(plainReason("unresolved-placeholders", d, "2 unresolved placeholders in body: employee_name, date")).toBe(
+      "2 blanks still to fill: employee name, date"
+    );
+    expect(plainReason("empty-sections", d, "3 of 7 sections still empty")).toBe("3 of 7 sections not written yet");
+    expect(plainReason("missing-parties", d, "Missing recipient + sender — letter cannot be sent")).toBe("No recipient or sender named");
+    expect(plainReason("pii-leak", d, "PII patterns detected: UK NI number, full date of birth")).toBe(
+      "Contains a UK National Insurance number and a full date of birth"
+    );
+    expect(plainReason("broken-evidence-refs", d, "[See Fig 3] — no matching attachment in evidence")).toBe(
+      "Refers to Fig 3, but no attached evidence has that number"
+    );
+    for (const c of HEALTH_CHECKS) {
+      // Every real reason the rules give comes out without code characters.
+      const raw = c.predicate({ ...d, sections: [{ id: "s", title: "Body", status: "draft", html: "<p>[date] AB123456C [See Fig 9]</p>", versions: [] }], employer: { legalName: "" }, employee: { legalName: "" }, answers: {}, evidence: [] } as unknown as Draft);
+      if (raw) expect(plainReason(c.id, d, raw, NOW)).not.toMatch(/<|>|—|\+|PII|body:/);
+    }
   });
 });

@@ -149,6 +149,8 @@ export function approvalsLedeParts(waiting: Draft[], approver: boolean, now = Da
     count: waiting.length,
     whose: approver ? "your sign-off" : "sign-off",
     age: ageForLede(now - oldest),
+    /** "sent a minute ago", "sent 2 days ago". */
+    sent: `sent ${ageForLede(now - oldest)} ago`,
   };
 }
 

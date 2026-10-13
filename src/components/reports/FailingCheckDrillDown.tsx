@@ -14,6 +14,7 @@ import {
   getHealthCheck,
   type FailingDraft,
 } from "@/lib/reports/check-predicates";
+import { plainReason, ruleCopy } from "@/components/reports/reportsData";
 
 /* ============================================================================
  * /reports/checks/:checkId: per-check drill-down for HR Director.
@@ -46,9 +47,13 @@ export function FailingCheckDrillDown() {
     [drafts]
   );
 
+  // Each letter's reason in plain words (the rule's own reason is for code).
   const failing = useMemo<FailingDraft[]>(() => {
     if (!check) return [];
-    return failingDraftsForCheck(realDrafts, check.id);
+    return failingDraftsForCheck(realDrafts, check.id).map((f) => ({
+      ...f,
+      reason: plainReason(check.id, f.draft, f.reason),
+    }));
   }, [check, realDrafts]);
 
   const crumbs = [{ label: "Reports", href: "/reports" }, { label: "Failing check" }];
@@ -71,14 +76,18 @@ export function FailingCheckDrillDown() {
     );
   }
 
+  const copy = ruleCopy(check.id, check);
   return (
     <DrillShell>
       <Band
         crumbs={crumbs}
-        title={check.label}
+        title={copy.label}
         lede={
           <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-            <span>{check.description}</span>
+            <span>
+              {copy.description}
+              {copy.advisory && " Advisory: this rule is not part of the health score, so it does not change the compliance rate."}
+            </span>
             <span data-testid="failing-count">
               <Pill tone={failing.length === 0 ? "green" : "red"}>{failing.length} failing</Pill>
             </span>

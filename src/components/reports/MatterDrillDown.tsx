@@ -4,7 +4,10 @@ import { FileText, TrendingUp } from "lucide-react";
 
 import type { Draft, Matter, RiskBand } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { EmptyState } from "@/components/ds";
+import { useProfileStore } from "@/lib/profile";
+import { useReviewStore } from "@/lib/journey/reviews";
+import { EmptyState, Pill, type PillTone } from "@/components/ds";
+import { journeysFor, viewerApproves } from "@/components/home/homeData";
 import { PaperThumb } from "@/components/reports/parts";
 import { Band } from "@/components/home/HomeBand";
 import { DRILL_ROW, DRILL_TH, DrillBody, DrillShell, lastEdited } from "@/components/reports/drillChrome";
@@ -46,6 +49,20 @@ export function MatterDrillDown() {
     );
     return [...list].sort((a, b) => b.updatedAt - a.updatedAt);
   }, [drafts, matterId]);
+
+  // Each letter's stage as everywhere else (Letters, Home, the letter itself).
+  const requests = useReviewStore((s) => s.requests);
+  const role = useProfileStore((s) => s.profile.workspaceRole);
+  const legalName = useProfileStore((s) => s.profile.personal.legalName);
+  const preferredName = useProfileStore((s) => s.profile.personal.preferredName);
+  const statuses = useMemo(() => {
+    const names = [legalName ?? "", preferredName ?? ""];
+    const out: Record<string, { label: string; tone: PillTone }> = {};
+    for (const { draft, journey } of journeysFor(matterDrafts, requests, (d) => viewerApproves(d, role, names))) {
+      out[draft.id] = { label: journey.statusLabel, tone: journey.statusTone };
+    }
+    return out;
+  }, [matterDrafts, requests, role, legalName, preferredName]);
 
   const employeeCount = useMemo(
     () => new Set(matterDrafts.map((d) => d.employee?.legalName).filter(Boolean)).size,
@@ -112,7 +129,7 @@ export function MatterDrillDown() {
               body="When you draft a letter into this matter, it will appear here."
             />
           ) : (
-            <DraftTable drafts={matterDrafts} onRowClick={(id) => nav(`/editor/${id}`)} />
+            <DraftTable drafts={matterDrafts} statuses={statuses} onRowClick={(id) => nav(`/editor/${id}`)} />
           )}
         </section>
       </DrillBody>
@@ -172,17 +189,20 @@ function riskTone(band: RiskBand): { bg: string; fg: string } {
   }
 }
 
-function statusLabel(draft: Draft): "Sent" | "Ready" | "Draft" {
-  if ((draft.exports ?? []).some((e) => e.format === "marked-sent")) return "Sent";
-  if (draft.reviewStatus === "approved") return "Ready";
-  return "Draft";
+/** Fallback for a letter whose stage cannot be worked out. */
+function statusLabel(draft: Draft): { label: string; tone: PillTone } {
+  if ((draft.exports ?? []).some((e) => e.format === "marked-sent")) return { label: "Sent", tone: "green" };
+  if (draft.reviewStatus === "approved") return { label: "Approved", tone: "green" };
+  return { label: "Draft", tone: "grey" };
 }
 
 function DraftTable({
   drafts,
+  statuses,
   onRowClick,
 }: {
   drafts: Draft[];
+  statuses: Record<string, { label: string; tone: PillTone }>;
   onRowClick: (draftId: string) => void;
 }) {
   return (
@@ -200,7 +220,7 @@ function DraftTable({
         {drafts.map((d) => {
           const sev = severityFor(d);
           const tone = severityTone(sev);
-          const status = statusLabel(d);
+          const status = statuses[d.id] ?? statusLabel(d);
           const owner =
             (d.collaborators ?? []).find((c) => c.role === "owner")?.name ??
             (d.collaborators ?? []).find((c) => c.role === "owner")?.email ??
@@ -227,7 +247,9 @@ function DraftTable({
                   <span className="min-w-0">{briefTitleFor(d)}</span>
                 </span>
               </td>
-              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-muted)] md:text-[13px] md:text-[var(--ds-body)]">{status}</td>
+              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-muted)] md:text-[13px] md:text-[var(--ds-body)]">
+                <Pill tone={status.tone}>{status.label}</Pill>
+              </td>
               <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle">
                 <span
                   className="inline-flex items-center rounded-[6px] px-2 py-0.5 text-[12px] leading-[18px] font-medium capitalize"

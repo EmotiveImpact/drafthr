@@ -341,14 +341,15 @@ describe("FailingCheckDrillDown", () => {
 
     renderAt("/reports/checks/unapproved-7d");
 
-    expect(screen.getByText("Unapproved >7d")).toBeInTheDocument();
+    expect(screen.getByText("Not approved for over 7 days")).toBeInTheDocument();
     expect(screen.getByTestId("failing-count")).toHaveTextContent("1 failing");
     expect(screen.getByText("Stale letter")).toBeInTheDocument();
     expect(screen.queryByText("Clean letter")).not.toBeInTheDocument();
     // Matter name is shown in the row.
     expect(screen.getByText("Acme grievance")).toBeInTheDocument();
-    // The "Reason this letter is failing" column contains a non-empty reason.
-    expect(screen.getByText(/no approval recorded/i)).toBeInTheDocument();
+    // The "Reason this letter is failing" column gives the reason in plain words.
+    expect(screen.getByText(/^Not approved\. Last edited .+, \d+ days ago$/)).toBeInTheDocument();
+    expect(screen.queryByText(/no approval recorded/i)).not.toBeInTheDocument();
   });
 
   it("shows the 'no failures' empty state when nothing is failing", () => {

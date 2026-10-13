@@ -13,13 +13,22 @@
  *   answers.reviewDate                 probation or performance review
  *   answers.acceptanceDeadline, remedyDeadline, demandDeadline,
  *   advisorDeadline, sendBy            letter responses
+ *   the sent record (journey/send)      appeal window closes, for a sent
+ *                                      letter with a right of appeal
+ *
+ * And from matters (extractMatterCalendarEvents): the matter's key
+ * deadline, its hearings, meetings and deadlines, and the tribunal time
+ * limit counted from when its outcome letter was given (as the matter
+ * page shows it).
  */
-import type { Draft, Matter } from "@/lib/letters/types";
+import type { Draft, Matter, MatterEvent } from "@/lib/letters/types";
+import { appealCloseDate, dateGivenOf, getSentRecord, isSent } from "@/components/journey/send/record";
+import { tribunalItem } from "@/components/matter/model";
 import { addDaysToDateOnly, daysUntilDateOnly } from "@/lib/date-only";
 import type { LetterTypeId } from "@/lib/letters/types";
 import { categoryOf, getLetterMeta } from "@/lib/letters/catalog";
 
-export type CalendarEventType = "hearing" | "appeal" | "probation" | "tribunal" | "response";
+export type CalendarEventType = "hearing" | "appeal" | "probation" | "tribunal" | "response" | "deadline";
 
 /** The older, finer kinds (kept for the .ics summary and the agenda). */
 export type CalendarEventKind =
@@ -31,11 +40,15 @@ export type CalendarEventKind =
   | "acceptance"
   | "send_by"
   | "hearing"
-  | "review";
+  | "review"
+  | "matter_deadline";
 
 export type CalendarEvent = {
   id: string;
-  draftId: string;
+  /** The letter it comes from; none for a matter's own dates. */
+  draftId?: string;
+  /** Where the event opens: the letter, or the matter's Deadlines tab. */
+  href: string;
   /** yyyy-mm-dd */
   iso: string;
   /** "10:00" when the date carried a time. */
@@ -66,9 +79,10 @@ export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
   probation: "Probation reviews",
   tribunal: "Tribunal time limits",
   response: "Letter responses",
+  deadline: "Matter deadlines",
 };
 
-export const EVENT_TYPES: CalendarEventType[] = ["hearing", "appeal", "probation", "tribunal", "response"];
+export const EVENT_TYPES: CalendarEventType[] = ["hearing", "appeal", "probation", "tribunal", "response", "deadline"];
 
 /** Ink and pale fill for each type, from the status tokens. */
 export const EVENT_TONE: Record<CalendarEventType, { fg: string; bg: string }> = {
@@ -77,6 +91,7 @@ export const EVENT_TONE: Record<CalendarEventType, { fg: string; bg: string }> =
   probation: { fg: "var(--ds-green-fg)", bg: "var(--ds-green-soft)" },
   tribunal: { fg: "var(--ds-red-fg)", bg: "var(--ds-red-soft)" },
   response: { fg: "var(--ds-lilac-fg)", bg: "var(--ds-lilac-soft)" },
+  deadline: { fg: "var(--ds-body)", bg: "var(--ds-surface-3)" },
 };
 
 function meta(id: string) {
@@ -143,11 +158,11 @@ export function extractCalendarEvents(
     const person =
       (d.mode === "employer" ? d.employee?.legalName : d.employer?.legalName)?.trim() || "No name yet";
     const matter = d.matterId ? matters[d.matterId] : undefined;
-    const base = { draftId: d.id, person, letter, matterId: matter?.id, matterName: matter?.name };
+    const base = { draftId: d.id, href: `/editor/${d.id}`, person, letter, matterId: matter?.id, matterName: matter?.name };
     const a = (d.answers ?? {}) as Record<string, unknown>;
     let n = 0;
     const push = (
-      e: Omit<CalendarEvent, "id" | "daysAway" | "draftId" | "person" | "letter" | "matterId" | "matterName">
+      e: Omit<CalendarEvent, "id" | "daysAway" | "draftId" | "href" | "person" | "letter" | "matterId" | "matterName">
     ) => {
       out.push({ ...base, ...e, id: `${d.id}:${e.kind}:${e.iso}:${n++}`, daysAway: daysUntilDateOnly(e.iso, now) });
     };
@@ -205,7 +220,9 @@ export function extractCalendarEvents(
       });
     }
 
-    const appeal = splitDate(a.appealDeadline);
+    // The appeal window: the date the person entered, else (for a sent
+    // letter with a right of appeal) the close date from its send record.
+    const appeal = splitDate(a.appealDeadline) ?? (isSent(d) ? sentAppealClose(d) : null);
     if (appeal) {
       push({
         iso: appeal.iso,
@@ -250,6 +267,120 @@ export function extractCalendarEvents(
   return out;
 }
 
+function sentAppealClose(d: Draft): { iso: string } | null {
+  try {
+    const close = getSentRecord(d)?.appealDeadline ?? appealCloseDate(d, dateGivenOf(d));
+    return splitDate(close);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A matter's own dates, as calendar events: its key deadline, the hearings,
+ * meetings and deadlines added on the matter, and the tribunal time limit
+ * counted from when its outcome letter was given (a limit already recorded
+ * on a letter comes from that letter instead, so it is not listed twice).
+ * Closed and archived matters are left out.
+ */
+export function extractMatterCalendarEvents(
+  matters: Record<string, Matter>,
+  drafts: Draft[],
+  matterEvents: Record<string, MatterEvent> | MatterEvent[] = {},
+  now: Date = new Date()
+): CalendarEvent[] {
+  const out: CalendarEvent[] = [];
+  const evs = Array.isArray(matterEvents) ? matterEvents : Object.values(matterEvents);
+  for (const m of Object.values(matters)) {
+    if (m.status === "closed" || m.status === "archived") continue;
+    const primary = m.parties?.primaryName?.trim() ?? "";
+    const person = primary && primary.toLowerCase() !== m.name.trim().toLowerCase() ? primary : "";
+    const href = `/matters/${m.id}?tab=deadlines`;
+    const base = { href, person, letter: "", matterId: m.id, matterName: m.name };
+    let n = 0;
+    const push = (e: Omit<CalendarEvent, "id" | "daysAway" | "href" | "person" | "letter" | "matterId" | "matterName">) => {
+      out.push({ ...base, ...e, id: `matter:${m.id}:${e.kind}:${e.iso}:${n++}`, daysAway: daysUntilDateOnly(e.iso, now) });
+    };
+
+    const key = splitDate(m.deadlineISO);
+    if (key) {
+      const label = m.deadlineLabel?.trim() || "Key deadline";
+      push({
+        iso: key.iso,
+        type: "deadline",
+        kind: "matter_deadline",
+        chip: label,
+        title: label,
+        label: `${m.name}: ${label.toLowerCase()}`,
+        basis: "Key deadline on the matter",
+      });
+    }
+
+    for (const e of evs) {
+      if (e.matterId !== m.id) continue;
+      const v = splitDate(e.whenISO);
+      if (!v) continue;
+      const noun = e.label?.trim() || (e.kind === "hearing" ? "Hearing" : e.kind === "meeting" ? "Meeting" : e.kind === "review" ? "Review" : "Deadline");
+      const dated = e.kind === "deadline";
+      const short = e.kind === "hearing" ? "Hearing" : e.kind === "meeting" ? "Meeting" : e.kind === "review" ? "Review" : noun;
+      push({
+        iso: v.iso,
+        time: v.time,
+        type: dated ? "deadline" : "hearing",
+        kind: dated ? "matter_deadline" : "hearing",
+        chip: v.time && !dated ? `${short} ${v.time}` : short,
+        title: v.time ? `${noun}, ${v.time}` : noun,
+        label: `${m.name}: ${noun.toLowerCase()}`,
+        basis: e.detail?.trim() || noun,
+      });
+    }
+
+    const letters = drafts.filter((d) => d.matterId === m.id && !d.isTemplateSource);
+    let trib;
+    try {
+      trib = tribunalItem(m, letters);
+    } catch {
+      trib = undefined;
+    }
+    const from = trib?.draftId ? letters.find((d) => d.id === trib.draftId) : undefined;
+    // Only the limit counted from a sent letter: a recorded protected
+    // deadline is already on that letter's own events.
+    if (trib?.iso && from && !from.context?.protectedDeadline?.iso) {
+      push({
+        iso: trib.iso.slice(0, 10),
+        type: "tribunal",
+        kind: "tribunal",
+        chip: "ET time limit",
+        title: "Tribunal claim time limit",
+        label: `${m.name}: limitation expires`,
+        basis: trib.note || "Tribunal claim time limit",
+        citation: trib.law,
+      });
+      // That event belongs to the letter it is counted from.
+      const last = out[out.length - 1];
+      last.draftId = from.id;
+    }
+  }
+  out.sort((x, y) => x.iso.localeCompare(y.iso) || (x.time ?? "").localeCompare(y.time ?? ""));
+  return out;
+}
+
+/** Letter events and matter events together, soonest first. */
+export function allCalendarEvents(
+  drafts: Draft[],
+  matters: Record<string, Matter>,
+  matterEvents: Record<string, MatterEvent> | MatterEvent[] = {},
+  opts: { mode?: Draft["mode"]; now?: Date } = {}
+): CalendarEvent[] {
+  const now = opts.now ?? new Date();
+  const scoped = opts.mode
+    ? Object.fromEntries(Object.entries(matters).filter(([, m]) => m.mode === opts.mode))
+    : matters;
+  return [...extractCalendarEvents(drafts, matters, now), ...extractMatterCalendarEvents(scoped, drafts, matterEvents, now)].sort(
+    (x, y) => x.iso.localeCompare(y.iso) || (x.time ?? "").localeCompare(y.time ?? "")
+  );
+}
+
 /** "Today", "Tomorrow", "In 3 days", "2 days ago". */
 export function daysLeftLabel(days: number): string {
   if (days === 0) return "Today";
@@ -278,7 +409,7 @@ export function buildIcs(events: CalendarEvent[], now: Date = new Date()): strin
     // so fold in the date and the index (calendar apps dedupe same-UID events).
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${e.draftId}-${e.kind}-${date}-${i}@drafthr.app`,
+      `UID:${e.draftId ?? e.matterId ?? "event"}-${e.kind}-${date}-${i}@drafthr.app`,
       `DTSTAMP:${dtstamp}`,
       `DTSTART;VALUE=DATE:${date}`,
       `DTEND;VALUE=DATE:${next}`,

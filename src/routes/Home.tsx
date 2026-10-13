@@ -24,7 +24,8 @@ import { Pill } from "@/components/ds";
 import { AssistantBox } from "@/components/home/AssistantBox";
 import { StatTiles, TileFoot, weeklySeries, type StatTileProps } from "@/components/home/StatTiles";
 import { TemplateCards } from "@/components/home/TemplateCards";
-import { HomeGrid, RailBox, SectionHead } from "@/components/home/HomeParts";
+import { FADE_IN_GROUP, HomeGrid, ListPlaceholder, RailBox, SectionHead } from "@/components/home/HomeParts";
+import { useLettersLoading } from "@/components/home/loadState";
 import { Band, BAND_BTN_DARK, BAND_BTN_GHOST, HomeBand, OverviewLede } from "@/components/home/HomeBand";
 import { ContinueCards, HistoryCard, NeedRow, NeedsYouCard, NeedsYouList } from "@/components/home/OverviewCards";
 import { PageThumb, categoryName } from "@/components/home/letterArt";
@@ -86,6 +87,7 @@ function HrHome() {
   const createEmployee = useDraftStore((s) => s.createEmployee);
   const profile = useProfileStore((s) => s.profile);
   const data = useHomeData("employer");
+  const loading = useLettersLoading();
   const me = profile.personal.preferredName || profile.personal.legalName || "";
 
   // Employee backfill: HR has drafts but no employee records yet.
@@ -136,6 +138,7 @@ function HrHome() {
       <HomeBand
         active="overview"
         approvals={data.waiting.length}
+        notice={banner || undefined}
         lede={<OverviewLede inProgress={data.summary.inProgress} needReview={data.summary.needReview} />}
       />
 
@@ -155,60 +158,75 @@ function HrHome() {
           <NeedsYouList items={data.needs} />
         </div>
       ) : (
-        <>
-          {/* Phone (mock phone-home): ask box, Needs you, Recent letters. */}
-          <div className="px-4 pt-4 pb-10 md:hidden">
-            {banner && <div className="mb-4">{banner}</div>}
-            <AssistantBox mode="employer" jurisdiction={profile.defaults.jurisdiction} />
-            <PhoneSection title="Needs you" to={data.needs.length > 0 ? "/hr?view=needs-you" : undefined}>
-              {data.needs.length === 0 ? (
-                <p className="m-0 py-3 text-[13.5px] text-[var(--ds-muted)]">Nothing needs you right now.</p>
+        // One ask box for every width (one textarea, one label). On phones
+        // (mock phone-home) the rail becomes "Needs you" and "Recent
+        // letters" rows; from md up it is the cards beside the main column.
+        <HomeGrid
+          top={<AssistantBox mode="employer" jurisdiction={profile.defaults.jurisdiction} />}
+          rail={
+            <>
+              <div key={loading ? "phone-loading" : "phone-ready"} className={`md:hidden [&>section:first-child]:mt-0 ${FADE_IN_GROUP}`}>
+                <PhoneSection title="Needs you" to={data.needs.length > 0 ? "/hr?view=needs-you" : undefined}>
+                  {loading ? (
+                    <ListPlaceholder rows={3} />
+                  ) : data.needs.length === 0 ? (
+                    <p className="m-0 py-3 text-[13.5px] text-[var(--ds-muted)]">Nothing needs you right now.</p>
+                  ) : (
+                    <ul className="m-0 list-none p-0">
+                      {data.needs.slice(0, 4).map((it) => (
+                        <NeedRow key={it.id} item={it} phone />
+                      ))}
+                    </ul>
+                  )}
+                </PhoneSection>
+                <PhoneSection title="Recent letters" to="/letters">
+                  {loading ? <ListPlaceholder rows={3} /> : <RecentRows letters={recentLetters} />}
+                </PhoneSection>
+              </div>
+              {loading ? (
+                <div className="hidden min-w-0 flex-col gap-[18px] md:flex">
+                  <RailBox title="Needs you">
+                    <ListPlaceholder rows={2} className="pb-2" />
+                  </RailBox>
+                  <RailBox title="History">
+                    <ListPlaceholder rows={3} thumb={false} label="Loading history" className="pb-2" />
+                  </RailBox>
+                </div>
               ) : (
-                <ul className="m-0 list-none p-0">
-                  {data.needs.slice(0, 4).map((it) => (
-                    <NeedRow key={it.id} item={it} phone />
-                  ))}
-                </ul>
-              )}
-            </PhoneSection>
-            <PhoneSection title="Recent letters" to="/letters">
-              <RecentRows letters={recentLetters} />
-            </PhoneSection>
-          </div>
-
-          <div className="hidden md:block">
-            {banner && <div className="px-12 pt-6">{banner}</div>}
-            <HomeGrid
-              top={<AssistantBox mode="employer" jurisdiction={profile.defaults.jurisdiction} />}
-              rail={
-                <>
+                <div key="desk-ready" className={`hidden min-w-0 flex-col gap-[18px] md:flex ${FADE_IN_GROUP}`}>
                   <NeedsYouCard items={data.needs} startHref="/hr/new" />
                   <HistoryCard rows={history} />
-                </>
-              }
-              bottom={
-                <>
-                  <section aria-label="Continue where you left off" className="mt-[34px]">
-                    <SectionHead
-                      title="Continue where you left off"
-                      sub="Letters your team is drafting"
-                      action={recentLetters.length > 0 ? { label: "View all", to: "/letters" } : undefined}
-                    />
+                </div>
+              )}
+            </>
+          }
+          bottom={
+            <div className="hidden md:block">
+              <section aria-label="Continue where you left off" className="mt-[34px]">
+                <SectionHead
+                  title="Continue where you left off"
+                  sub="Letters your team is drafting"
+                  action={recentLetters.length > 0 ? { label: "View all", to: "/letters" } : undefined}
+                />
+                {loading ? (
+                  <ListPlaceholder rows={3} />
+                ) : (
+                  <div className={FADE_IN_GROUP}>
                     <ContinueCards letters={recentLetters} matters={matters} startHref="/hr/new" />
-                  </section>
-                  <section aria-label="Start from a template" className="mt-[34px]">
-                    <SectionHead
-                      title="Start from a template"
-                      sub={`Letters your policies and ${lawWord} already shape`}
-                      action={{ label: "Browse templates", to: "/hr/new" }}
-                    />
-                    <TemplateCards letters={starters} prefix="/hr" />
-                  </section>
-                </>
-              }
-            />
-          </div>
-        </>
+                  </div>
+                )}
+              </section>
+              <section aria-label="Start from a template" className="mt-[34px]">
+                <SectionHead
+                  title="Start from a template"
+                  sub={`Letters your policies and ${lawWord} already shape`}
+                  action={{ label: "Browse templates", to: "/hr/new" }}
+                />
+                <TemplateCards letters={starters} prefix="/hr" />
+              </section>
+            </div>
+          }
+        />
       )}
     </div>
   );
@@ -506,7 +524,7 @@ function DeadlinesBox({ deadlines, prefix }: { deadlines: Deadline[]; prefix: st
             return (
               <li key={d.id} className="border-t border-[var(--ds-line-2)] first:border-t-0">
                 <Link
-                  to={`/editor/${d.draftId}`}
+                  to={d.href}
                   className="-mx-2 block rounded-[10px] px-2 py-3 transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)]"
                 >
                   <span className="flex items-center justify-between gap-3 text-[12.5px]">
@@ -569,7 +587,7 @@ function deriveDeadlines(drafts: Draft[]) {
     .filter((e) => e.type === "tribunal" || e.type === "appeal" || e.type === "response" || e.type === "hearing")
     .map((e) => ({
       id: e.id,
-      draftId: e.draftId,
+      href: e.href,
       label: `${e.letter}, ${e.title.toLowerCase()}`,
       iso: e.iso,
       basis: e.citation && e.citation !== e.basis ? e.basis : e.basis,

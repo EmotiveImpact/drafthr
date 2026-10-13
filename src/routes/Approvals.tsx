@@ -27,6 +27,9 @@ import {
   type ApprovalRow,
 } from "@/components/home/approvalData";
 import { ApprovalPreview, BTN_SM_DARK, BTN_SM_GHOST, PersonDot } from "@/components/home/ApprovalPreview";
+import { firstName } from "@/lib/journey/reviews";
+import { FADE_IN_GROUP, ListPlaceholder } from "@/components/home/HomeParts";
+import { useLettersLoading } from "@/components/home/loadState";
 import { cn } from "@/lib/utils";
 
 type SortKey = "oldest" | "recent";
@@ -46,6 +49,7 @@ export function Approvals() {
   const requestChanges = useDraftStore((s) => s.requestChanges);
   const profile = useProfileStore((s) => s.profile);
   const home = useHomeData("employer");
+  const loading = useLettersLoading();
   const me = (profile.personal.legalName || profile.personal.preferredName || "").trim();
   const canAct = home.canApprove;
   // Only the approver it was sent to signs it off (an owner or admin who
@@ -130,6 +134,14 @@ export function Approvals() {
   // a letter you sent to someone else is just waiting for sign-off.
   const mine = rows.filter(canActOn);
   const lede = mine.length > 0 ? approvalsLedeParts(mine.map((r) => r.draft), true) : approvalsLedeParts(home.waiting, false);
+  // Not yours: name the approver when every waiting letter went to one person.
+  const approvers = [...new Set(rows.map((r) => r.approver))];
+  const whose =
+    mine.length > 0
+      ? "your sign-off"
+      : approvers.length === 1 && !/^workspace reviewer$/i.test(approvers[0])
+        ? `${firstName(approvers[0]) || approvers[0]}'s sign-off`
+        : "sign-off";
 
   return (
     <div className="min-w-0">
@@ -142,8 +154,8 @@ export function Approvals() {
               <b>
                 {lede.count} {lede.count === 1 ? "letter" : "letters"}
               </b>{" "}
-              {lede.count === 1 ? "is" : "are"} waiting for {lede.whose}
-              {lede.count === 1 ? `, for ${lede.age}.` : `, the oldest for ${lede.age}.`}
+              {lede.count === 1 ? "is" : "are"} waiting for {whose}
+              {lede.count === 1 ? `, ${lede.sent}.` : `. The oldest was ${lede.sent}.`}
             </>
           ) : (
             <>Nothing is waiting for {canAct ? "your sign-off" : "sign-off"}.</>
@@ -158,7 +170,9 @@ export function Approvals() {
         )}
       >
         <div className="min-w-0">
-          {rows.length === 0 ? (
+          {loading ? (
+            <ListPlaceholder rows={3} label="Loading letters waiting for sign-off" />
+          ) : rows.length === 0 ? (
             <div className="rounded-[16px] border border-[var(--ds-line)]">
               <EmptyState
                 icon={ClipboardCheck}
@@ -256,7 +270,11 @@ export function Approvals() {
                   />
                 </div>
               ) : (
-                <ul className="m-0 list-none p-0" aria-label="Letters waiting for sign-off">
+                <ul
+                  key={`${filter}:${sortKey}`}
+                  className={cn("m-0 list-none p-0", FADE_IN_GROUP)}
+                  aria-label="Letters waiting for sign-off"
+                >
                   {filtered.map((r) => (
                     <QueueRow
                       key={r.id}

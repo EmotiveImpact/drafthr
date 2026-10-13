@@ -269,7 +269,7 @@ export function buildFeed({
       meta: `${noun}, ${date}${e.time ? ` at ${e.time}` : ""}`,
       dot: "var(--ds-red-solid)",
       lead: { type: "icon", icon: "calendar", tone: "red" },
-      href: `/editor/${e.draftId}`,
+      href: e.href,
       actionLabel: "Open letter",
       primary: "Open letter",
       draftId: e.draftId,

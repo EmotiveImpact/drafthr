@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  ClipboardCheck,
   FileDown,
   FileEdit,
   FilePlus2,
@@ -37,6 +38,8 @@ import { cn } from "@/lib/utils";
 import { Band, HomeBand, OverviewLede } from "@/components/home/HomeBand";
 import { letterName, personFor, useHomeData } from "@/components/home/homeData";
 import { PageThumb } from "@/components/home/letterArt";
+import { ListPlaceholder } from "@/components/home/HomeParts";
+import { useLettersLoading } from "@/components/home/loadState";
 
 type Event = DraftTimelineItem & {
   draftId: string;
@@ -84,7 +87,11 @@ const DAY_BTN =
 export function Activity() {
   const drafts = useDraftStore((s) => s.drafts);
   const role = useProfileStore((s) => s.profile.role);
+  const me = useProfileStore(
+    (s) => s.profile.personal.preferredName?.trim() || s.profile.personal.legalName?.trim() || "",
+  );
   const home = useHomeData("employer");
+  const loading = useLettersLoading();
   const prefix = role === "employee" ? "/me" : "/hr";
 
   /* Flatten every draft's timeline into a single chronological list. */
@@ -96,20 +103,23 @@ export function Activity() {
     for (const d of list) {
       const label = letterName(d);
       const person = personFor(d);
+      // Who sends a letter for approval: its owner, else you.
+      const sender =
+        d.collaborators?.find((c) => c.role === "owner")?.name?.trim() || me || undefined;
       for (const event of buildDraftTimeline(d)) {
         out.push({
-          ...event,
+          ...asLogged(event, sender),
           draftId: d.id,
           draftLabel: label,
           person,
           mode: d.mode,
-          category: timelineCategoryFor(event.kind),
+          category: activityCategory(event.kind),
         });
       }
     }
     out.sort((a, b) => b.createdAt - a.createdAt);
     return out;
-  }, [drafts, role]);
+  }, [drafts, role, me]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map<string, Event[]>();
@@ -255,7 +265,9 @@ export function Activity() {
     <div className="min-w-0">
       {band}
       <div className="max-w-[1000px] px-4 pt-5 pb-12 md:px-12 md:pt-[26px]">
-        {events.length === 0 ? (
+        {loading ? (
+          <ListPlaceholder rows={4} label="Loading activity" />
+        ) : events.length === 0 ? (
           <div className="rounded-[16px] border border-[var(--ds-line)]">
             <EmptyState
               icon={ActivityIcon}
@@ -380,14 +392,7 @@ export function Activity() {
                           )}
                         >
                           <span>{relDayLabel(day, today)}</span>
-                          <span
-                            className={cn(
-                              "ds-mono text-[11px] opacity-70",
-                              active && "opacity-80",
-                            )}
-                          >
-                            {count}
-                          </span>
+                          <span className="ds-mono text-[11px]">{count}</span>
                         </button>
                       );
                     })}
@@ -409,10 +414,10 @@ export function Activity() {
                 />
                 <p className="m-0 text-[13.5px] text-[var(--ds-muted)]">
                   {searchTerm.trim()
-                    ? `Nothing matching "${searchTerm.trim()}" on ${prettyDay(selectedDay)}.`
+                    ? `Nothing matching "${searchTerm.trim()}" ${onDay(selectedDay)}.`
                     : filter === "all"
-                      ? `Nothing logged on ${prettyDay(selectedDay)}.`
-                      : `No ${labelFor(filter)} on ${prettyDay(selectedDay)}.`}
+                      ? `Nothing logged ${onDay(selectedDay)}.`
+                      : `No ${labelFor(filter)} ${onDay(selectedDay)}.`}
                 </p>
               </div>
             ) : (
@@ -659,7 +664,38 @@ function MonthGrid({
  * Helpers
  * ==========================================================================*/
 
-/** "Created · 7 AI sections · 2 comments · Exported" */
+/**
+ * Activity's own grouping: approval steps (sent for approval, approved,
+ * changes asked for, withdrawn) are reviews, not draft changes.
+ */
+function activityCategory(kind: Event["kind"]): TimelineCategory {
+  if (kind.startsWith("review_")) return "reviews";
+  return timelineCategoryFor(kind);
+}
+
+/**
+ * The store records a submission with the approver as its actor
+ * ("Submitted for review to Ruth"); the log shows who sent it, and to whom.
+ */
+function asLogged(event: DraftTimelineItem, sender: string | undefined): DraftTimelineItem {
+  if (event.kind !== "review_submitted") return event;
+  const to = event.actorName?.trim();
+  return {
+    ...event,
+    title: to && !/^workspace reviewer$/i.test(to) ? `Sent for approval to ${to}` : "Sent for approval",
+    actorName: sender,
+  };
+}
+
+const REVIEW_WORDS: Partial<Record<Event["kind"], [string, string]>> = {
+  review_submitted: ["Sent for approval", "Sent for approval {n} times"],
+  review_approved: ["Approved", "Approved {n} times"],
+  review_changes_requested: ["Changes asked for", "Changes asked for {n} times"],
+  review_withdrawn: ["Withdrawn from approval", "Withdrawn from approval {n} times"],
+  counsel_review: ["Counsel review", "{n} counsel reviews"],
+};
+
+/** "Created · 7 AI sections · 2 comments · Sent for approval · Exported" */
 function summaryText(g: DraftGroup): string {
   const parts: string[] = [];
   const n = (k: TimelineCategory) => g.counts[k] ?? 0;
@@ -670,8 +706,17 @@ function summaryText(g: DraftGroup): string {
   if (changes > 0) parts.push(plural(changes, "change", "changes"));
   if (n("ai")) parts.push(plural(n("ai"), "AI section", "AI sections"));
   if (n("comments")) parts.push(plural(n("comments"), "comment", "comments"));
-  if (n("reviews"))
-    parts.push(plural(n("reviews"), "review event", "review events"));
+  // Name each approval step, in the order they happened.
+  const seen = new Map<Event["kind"], number>();
+  for (const e of [...g.events].sort((a, b) => a.createdAt - b.createdAt)) {
+    if (e.category !== "reviews") continue;
+    seen.set(e.kind, (seen.get(e.kind) ?? 0) + 1);
+  }
+  for (const [kind, count] of seen) {
+    const words = REVIEW_WORDS[kind];
+    if (!words) parts.push(plural(count, "review event", "review events"));
+    else parts.push(count === 1 ? words[0] : words[1].replace("{n}", String(count)));
+  }
   if (n("exports"))
     parts.push(
       n("exports") === 1 ? "Exported" : `Exported ${n("exports")} times`,
@@ -698,6 +743,8 @@ function iconFor(kind: Event["kind"]) {
     return <UserPlus className={cls} aria-hidden />;
   if (kind.endsWith("_updated"))
     return <FileEdit className={cls} aria-hidden />;
+  if (kind.startsWith("review_"))
+    return <ClipboardCheck className={cls} aria-hidden />;
   return <ActivityIcon className={cls} aria-hidden />;
 }
 
@@ -732,6 +779,13 @@ function prettyDay(iso: string): string {
   const wd = d.toLocaleDateString("en-GB", { weekday: "short" });
   const mon = d.toLocaleDateString("en-GB", { month: "short" });
   return `${wd} ${d.getDate()} ${mon}${d.getFullYear() === today.getFullYear() ? "" : ` ${d.getFullYear()}`}`;
+}
+
+/** "today", "yesterday", "on Monday", "on Mon 12 Oct": for a sentence. */
+function onDay(iso: string): string {
+  const p = prettyDay(iso);
+  if (p === "Today" || p === "Yesterday") return p.toLowerCase();
+  return `on ${p}`;
 }
 
 function relDayLabel(iso: string, todayIso: string): string {

@@ -109,7 +109,7 @@ export function NotificationRow({
             )}
             {item.unread && <span className="sr-only">, unread</span>}
           </button>
-          <div className="mt-[3px] flex min-w-0 items-center gap-1.5 text-[12.5px] text-[var(--ds-subtle)]">
+          <div className="mt-[3px] flex min-w-0 items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]">
             {item.dot && <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: item.dot }} />}
             <span className={cn(wide ? "line-clamp-2" : "truncate")}>{meta}</span>
           </div>
