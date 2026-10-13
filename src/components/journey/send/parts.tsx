@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Calendar,
   Check,
+  CircleCheck,
   Download,
   LoaderCircle,
   Mail,
@@ -201,6 +202,22 @@ function AddEmail({ flow, variant }: { flow: SendFlow; variant: "panel" | "page"
   );
 }
 
+function EmailAddress({ email }: { email: string }) {
+  const at = email.lastIndexOf("@");
+  const parts = at > 0 ? [email.slice(0, at + 1), email.slice(at + 1)] : [email];
+  const piece = "inline-block max-w-full truncate whitespace-nowrap align-bottom";
+  return (
+    <span title={email} className="break-normal">
+      {parts.map((p, i) => (
+        <span key={i}>
+          {i > 0 && <wbr />}
+          <span className={piece}>{p}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** The two ways (a radio group). Panel: stacked; page: side by side. */
 export function WayCards({ flow, variant = "panel" }: { flow: SendFlow; variant?: "panel" | "page" }) {
   const name = useId();
@@ -210,10 +227,15 @@ export function WayCards({ flow, variant = "panel" }: { flow: SendFlow; variant?
   const lockedOut = working || !canSend;
   const iconSize = page ? "size-[18px]" : "size-4";
 
-  const emailDetail = recipient.email
-    ? page
-      ? `Sent to ${recipient.email}.`
-      : `To ${recipient.email}`
+  // The address breaks only after the "@", never mid-domain, and gets no
+  // full stop after it; a part too long for the card is shortened, with the
+  // whole address on hover (SEND-X7).
+  const emailDetail = recipient.email ? (
+    <>
+      {page ? "Sent to " : "To "}
+      <EmailAddress email={recipient.email} />
+    </>
+  )
     : recipient.name
       ? `No email for ${who} yet`
       : "No email address yet";
@@ -320,8 +342,9 @@ export function DateGivenField({
       <DateField
         id={id}
         value={flow.prefs.dateGiven}
-        onChange={(v) => flow.update({ dateGiven: v > today ? today : v })}
+        onChange={(v) => flow.update({ dateGiven: v > today ? today : v < flow.minDate ? flow.minDate : v })}
         max={today}
+        min={flow.minDate}
         disabled={flow.working || !flow.canSend}
         label={`Date given, ${display}`}
         display={display}
@@ -329,6 +352,11 @@ export function DateGivenField({
       />
       {flow.futureDate && (
         <p className="m-0 mt-1 text-[12px] text-[var(--ds-red-fg)]">The date given can't be later than today.</p>
+      )}
+      {flow.earlyDate && (
+        <p className="m-0 mt-1 text-[12px] text-[var(--ds-red-fg)]">
+          The date given can't be before {fmtShortDay(flow.minDate)}.
+        </p>
       )}
     </div>
   );
@@ -495,7 +523,8 @@ export function SendButton({
   blocked?: boolean;
 }) {
   const disabled = !!flow.block || flow.working || !!blocked;
-  const Icon = flow.prefs.way === "email" ? Send : Download;
+  // Nothing ticked: the button only records the send, so no download icon (SEND-X12).
+  const Icon = flow.prefs.way === "email" ? Send : flow.markOnly ? CircleCheck : Download;
   return (
     <button
       type="button"

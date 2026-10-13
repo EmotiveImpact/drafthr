@@ -50,7 +50,6 @@ export function SendStepBody({ flow, frozen = false }: { flow: SendFlow; frozen?
         <>
           <CounselNote flow={flow} />
           <EmailErrorBox flow={flow} />
-          <BlockLine block={flow.block} />
         </>
       )}
       {frozen ? (
@@ -59,9 +58,17 @@ export function SendStepBody({ flow, frozen = false }: { flow: SendFlow; frozen?
           Sent
         </div>
       ) : (
-        // Phones: the button stays at the foot of the sheet while it scrolls.
-        <div className="max-md:sticky max-md:bottom-0 max-md:z-10 max-md:-mx-1 max-md:bg-[var(--ds-surface)] max-md:px-1 max-md:pb-2">
-          <SendButton flow={flow} />
+        // The button stays in view at the foot of the panel (and the phone
+        // sheet) while the step scrolls, above the Ask DraftHR chips; while
+        // more of the panel sits below, it clears the panel's fade edge so it
+        // is never faded or hidden (SEND-X5).
+        <div
+          data-slot="send-button-bar"
+          className="sticky bottom-0 z-10 -mx-1 flex flex-col bg-[var(--ds-surface)] px-1 pb-2 [.ai-panel-scroll[data-more-below]_&]:bottom-9 [.ai-panel-scroll[data-more-below]_&]:shadow-[0_36px_0_0_var(--ds-surface)]"
+        >
+          {/* Why it is disabled stays with the button. */}
+          <BlockLine block={flow.block} />
+          <SendButton flow={flow} className={flow.block ? "mt-2" : undefined} />
         </div>
       )}
       <OpenFullPageCard draftId={draft.id} />

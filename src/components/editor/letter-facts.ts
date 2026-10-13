@@ -4,7 +4,8 @@ import { canApprove } from "@/lib/permissions";
 import { currentRound, firstName, type ReviewRequest } from "@/lib/journey/reviews";
 import { summariseRound } from "@/components/journey/review/model";
 import type { ActivityEvent } from "@/components/journey/ui";
-import { appealWorkingDays, downloadedActivity, type SentRecord } from "@/components/journey/send/record";
+import { appealWorkingDays, downloadedActivity, fmtShortDay, type SentRecord } from "@/components/journey/send/record";
+import { toDateOnly } from "@/lib/date-only";
 
 /**
  * Facts about a letter that the workspace shows around the page (chips,
@@ -166,8 +167,12 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
   const timeline = draft.timeline ?? [];
   // The Send step records the send itself ("Given in person by ..."), timed
   // like its marked-sent export: show that line and not both.
+  // The send line is listed when it was recorded; its marked-sent export
+  // carries the date given (meta.sentExportAt names it).
   const sentAts = new Set(
-    timeline.filter((t) => t.kind === "details_updated" && t.meta?.action === "sent").map((t) => t.createdAt)
+    timeline
+      .filter((t) => t.kind === "details_updated" && t.meta?.action === "sent")
+      .map((t) => (typeof t.meta?.sentExportAt === "number" ? t.meta.sentExportAt : t.createdAt))
   );
   // Downloads made together (the Send step's "Download and mark as sent")
   // read as one line: "Downloaded PDF and evidence pack".
@@ -210,7 +215,10 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
         lastDownload = { e, keys: [key] };
       }
     } else if (t.kind === "details_updated" && t.meta?.action === "sent") {
-      out.push({ id: t.id, at, title: t.title, meta: `${who(t.actorName)} · ${fmtWhen(at)}`, done: true });
+      // A back-dated send says the day it was given ("Handed over in person on 6 Oct").
+      const given = typeof t.meta?.dateGiven === "string" ? t.meta.dateGiven : null;
+      const title = given && toDateOnly(new Date(at)) !== given ? `${t.title} on ${fmtShortDay(given)}` : t.title;
+      out.push({ id: t.id, at, title, meta: `${who(t.actorName)} · ${fmtWhen(at)}`, done: true });
     } else if (t.kind === "details_updated" && t.meta?.action === "unmarked-sent") {
       out.push({ id: t.id, at, title: t.title, meta: `${who(t.actorName)} · ${fmtWhen(at)}` });
     } else if (t.kind === "counsel_review") {

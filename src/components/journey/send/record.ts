@@ -137,6 +137,21 @@ const WAYS: SendWay[] = ["self", "email"];
 const GIVEN: GivenBy[] = ["hand-delivery", "post", "recorded-delivery", "email"];
 const FORMATS: LetterFormat[] = ["pdf", "docx", "txt"];
 
+/**
+ * The earliest date the letter can have been given: the day it was approved
+ * (the latest approval), or, for a letter sent without one, the day it was
+ * started. Nobody hands over a letter before it exists (SEND-X2). "" when
+ * neither is known.
+ */
+export function earliestDateGiven(draft: Draft, today = todayDateOnly()): string {
+  const approved = (draft.approvals ?? []).filter((a) => a.decision === "approved").map((a) => a.createdAt);
+  const at = approved.length ? Math.max(...approved) : draft.createdAt;
+  // No known start: no lower limit ("" sorts before every date).
+  if (!Number.isFinite(at) || at <= 0) return "";
+  const d = toDateOnly(new Date(at));
+  return d > today ? today : d;
+}
+
 /** The saved Send step choices, with the defaults filled in. */
 export function getSendPrefs(draft: Draft, today = todayDateOnly()): SendPrefs {
   const raw = obj((draft.answers as Record<string, unknown>)?._send) ?? {};
@@ -147,8 +162,9 @@ export function getSendPrefs(draft: Draft, today = todayDateOnly()): SendPrefs {
   return {
     way: WAYS.includes(raw.way as SendWay) ? (raw.way as SendWay) : "self",
     givenBy: GIVEN.includes(raw.givenBy as GivenBy) ? (raw.givenBy as GivenBy) : "hand-delivery",
-    // A saved date later than today (a clock change) falls back to today.
-    dateGiven: date > today ? today : date,
+    // A saved date later than today (a clock change) falls back to today;
+    // one before the letter was approved moves up to that day.
+    dateGiven: date > today ? today : date < earliestDateGiven(draft, today) ? earliestDateGiven(draft, today) : date,
     downloads: d
       ? {
           pdf: d.pdf === true,

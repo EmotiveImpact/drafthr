@@ -10,7 +10,9 @@ import { todayDateOnly } from "@/lib/date-only";
 import type { Draft } from "@/lib/letters/types";
 import { HighRiskExportGate } from "@/components/editor/HighRiskExportGate";
 import {
+  earliestDateGiven,
   employeeRecordFor,
+  fmtDayMonYear,
   getSendPrefs,
   isValidEmail,
   recipientOf,
@@ -90,7 +92,7 @@ export function useSingleDownload(draft: Draft | undefined) {
       setBusy(format);
       try {
         const fresh = useDraftStore.getState().drafts[draft.id] ?? draft;
-        await runExport(fresh, format, att, opts);
+        await runExport(fresh, format, att, format === "audit" ? { ...opts, audit: { drafterName: actor, ...opts?.audit } } : opts);
         recordDownload(draft.id, format, att, actor);
       } catch (err) {
         toast.error(`${FORMAT_LABEL[format]} export failed`, {
@@ -126,6 +128,12 @@ export type SendFlow = {
   /** Why the button is disabled, or null. */
   block: SendBlock | null;
   futureDate: boolean;
+  /** The earliest date given allowed (the day it was approved), YYYY-MM-DD. */
+  minDate: string;
+  /** The date given is before the letter was approved. */
+  earlyDate: boolean;
+  /** Nothing to download: the button only records the send. */
+  markOnly: boolean;
   counselRequired: boolean;
   attestation: Attestation | undefined;
   working: boolean;
@@ -174,6 +182,8 @@ export function useSendFlow(draftId: string, variant: "panel" | "page" = "panel"
   const canSend = canSubmitForReview(role);
   const today = todayDateOnly();
   const futureDate = prefs.dateGiven > today;
+  const minDate = earliestDateGiven(draft);
+  const earlyDate = prefs.dateGiven < minDate;
 
   const formats: ExportFormat[] =
     way === "email"
@@ -199,6 +209,12 @@ export function useSendFlow(draftId: string, variant: "panel" | "page" = "panel"
       fix: { label: "Fix", href: failing[0].actionRoute === "evidence" ? `/editor/${draft.id}/evidence` : `/editor/${draft.id}` },
     };
   else if (way === "self" && futureDate) block = { reason: "The date given can't be later than today." };
+  else if (way === "self" && earlyDate)
+    block = {
+      reason: `The date given can't be before ${fmtDayMonYear(minDate)}, when the letter was ${
+        (draft.approvals ?? []).some((a) => a.decision === "approved") ? "approved" : "started"
+      }.`,
+    };
   else if (way === "email" && !recipient.email)
     block = { reason: `Add ${recipient.short || "the recipient"}'s email address first.` };
 
@@ -257,6 +273,13 @@ export function useSendFlow(draftId: string, variant: "panel" | "page" = "panel"
             await runExport(fresh, f, att, {
               excludeEvidence: variant === "page" ? prefs.excludedEvidence : undefined,
               coverNote: variant === "page" ? prefs.coverNote : undefined,
+              // The audit record goes out with this send, so it records it
+              // (how and when it was given) though the sent record is saved
+              // just after the files (SEND-29).
+              audit: {
+                drafterName: actor,
+                pendingSend: { way: "self", givenBy: prefs.givenBy, dateGiven: prefs.dateGiven, actorName: actor },
+              },
             });
           } catch (err) {
             toast.error(`${FORMAT_LABEL[f]} export failed`, {
@@ -292,6 +315,9 @@ export function useSendFlow(draftId: string, variant: "panel" | "page" = "panel"
     formats,
     block,
     futureDate,
+    minDate,
+    earlyDate,
+    markOnly: way === "self" && formats.length === 0,
     counselRequired: gate.required,
     attestation: gate.attestation,
     working: working !== null,

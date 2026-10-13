@@ -6,6 +6,7 @@ import {
   appealCloseDate,
   appealWorkingDays,
   downloadedActivity,
+  earliestDateGiven,
   fmtDayMonYear,
   fmtShortDay,
   getSendPrefs,
@@ -217,6 +218,22 @@ describe("dates, prefs and recipient", () => {
   it("brings a saved future date back to today", () => {
     const d = makeDraft({ answers: { _send: { dateGiven: "2026-12-01" } } });
     expect(getSendPrefs(d, "2026-10-14").dateGiven).toBe("2026-10-14");
+  });
+
+  it("never takes a date given before the letter was approved", () => {
+    const approvedAt = new Date(2026, 9, 13, 11, 2).getTime();
+    const d = makeDraft({
+      createdAt: new Date(2026, 9, 5).getTime(),
+      approvals: [{ id: "a1", decision: "approved", reviewerName: "Ruth", createdAt: approvedAt }] as Draft["approvals"],
+      answers: { _send: { dateGiven: "2026-10-06" } },
+    });
+    expect(earliestDateGiven(d, "2026-10-14")).toBe("2026-10-13");
+    expect(getSendPrefs(d, "2026-10-14").dateGiven).toBe("2026-10-13");
+    // Without an approval, the day the letter was started.
+    const started = makeDraft({ createdAt: new Date(2026, 9, 5, 9).getTime() });
+    expect(earliestDateGiven(started, "2026-10-14")).toBe("2026-10-05");
+    // No known start: no limit.
+    expect(earliestDateGiven(makeDraft({ createdAt: 0 }), "2026-10-14")).toBe("");
   });
 
   it("emails only a single valid address stored on the letter", () => {

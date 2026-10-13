@@ -24,12 +24,14 @@ export function buildExhibitsAppendixHtml(draft: Pick<Draft, "evidence">): strin
         const isImage = item.mimeType?.startsWith("image/");
         const imageUrl = isImage && isSafeImageDataUrl(item.fileDataUrl) ? item.fileDataUrl : undefined;
         return `<figure class="figure-item" style="margin:0 0 14pt 0;break-inside:avoid;page-break-inside:avoid;">
-          <figcaption><strong>${escHtml(label)}</strong>${
-            item.filename ? ` &mdash; ${escHtml(item.filename)}` : ""
+          <figcaption style="display:block;margin:0 0 6pt 0;"><strong>${escHtml(label)}</strong>${
+            item.filename ? `: ${escHtml(item.filename)}` : ""
           }</figcaption>
           ${
+            // A block image under its caption: an inline one sat on the
+            // caption's baseline and covered it in the PDF (FEAT-X11).
             imageUrl
-              ? `<img src="${escHtml(imageUrl)}" alt="${escHtml(item.filename || "")}" style="max-width:100%;max-height:5in;" />`
+              ? `<img src="${escHtml(imageUrl)}" alt="${escHtml(item.filename || "")}" style="display:block;max-width:100%;max-height:5in;height:auto;" />`
               : ""
           }
           ${item.content ? `<p class="figure-body" style="white-space:pre-wrap;">${escHtml(item.content)}</p>` : ""}

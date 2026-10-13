@@ -5,6 +5,8 @@ import { getJourney } from "@/lib/journey/stage";
 import { useJourneyUI } from "@/components/journey/ui-store";
 import { markLetterSent, saveAppealHearing, undoMarkedSent, undoToastText } from "./actions";
 import { getSentRecord, sentBannerText } from "./record";
+import { buildAuditRecord } from "./exports";
+import { activityEvents } from "@/components/editor/letter-facts";
 
 const PASSING = [{ id: "a", label: "a", severity: "pass" as const, dimension: "compliance" as const }];
 
@@ -83,6 +85,21 @@ describe("mark as sent, then undo", () => {
     expect(draft().answers.appealDeadline).toBe("2026-10-19");
   });
 
+  it("lists a back-dated send in Activity when it was recorded, saying the day it was given", () => {
+    seed({
+      timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: new Date(2026, 9, 13, 9).getTime() }],
+    });
+    markLetterSent("send-test-1", { way: "self", givenBy: "post", dateGiven: "2026-10-12", downloaded: [] }, now);
+    const ev = draft().timeline!.find((e) => e.meta?.action === "sent")!;
+    expect(ev.createdAt).toBe(now.getTime());
+    expect(ev.detail).toBe("Given on 12 Oct 2026");
+    const sent = draft().exports!.find((e) => e.format === "marked-sent")!;
+    expect(ev.meta?.sentExportAt).toBe(sent.exportedAt);
+    const rows = activityEvents(draft(), null, "Alex Morgan");
+    // Newest first, one line for the send, above "Started".
+    expect(rows.map((r) => r.title)).toEqual(["Sent by post on Mon 12 Oct", "Started Warning letter"]);
+  });
+
   it("Undo restores the Send step, the earlier appeal date and clears the hearing", () => {
     seed();
     markLetterSent("send-test-1", { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", downloaded: ["pdf"] }, now);
@@ -137,5 +154,27 @@ describe("mark as sent, then undo", () => {
   it("does nothing when the letter is not sent", () => {
     seed();
     expect(undoMarkedSent("send-test-1")).toEqual({ undone: false, emailed: false });
+  });
+});
+
+describe("audit record", () => {
+  it("records the send it goes out with, and names who drafted it", () => {
+    const d = seed({
+      timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }],
+      approvals: [{ id: "a1", decision: "approved", reviewerName: "Ruth Adeyemi", createdAt: 2 }] as Draft["approvals"],
+    });
+    const text = buildAuditRecord(d, undefined, now.getTime(), {
+      drafterName: "Alex Morgan",
+      pendingSend: { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", actorName: "Alex Morgan" },
+    });
+    expect(text).toMatch(/^Drafted {8}Alex Morgan, /m);
+    expect(text).toMatch(/^Sent {11}Handed over in person, given 14 Oct 2026, recorded by Alex Morgan/m);
+    expect(text).not.toMatch(/Not yet|The letter's author/);
+  });
+
+  it("reads the send from the letter once it is sent", () => {
+    seed();
+    markLetterSent("send-test-1", { way: "self", givenBy: "post", dateGiven: "2026-10-14", downloaded: ["pdf"] }, now);
+    expect(buildAuditRecord(draft(), undefined, now.getTime())).toMatch(/^Sent {11}Sent by post, given 14 Oct 2026/m);
   });
 });

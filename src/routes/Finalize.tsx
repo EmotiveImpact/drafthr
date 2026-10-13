@@ -52,6 +52,7 @@ import {
 } from "@/components/journey/send/parts";
 import {
   appealCloseDate,
+  appealWorkingDays,
   dateGivenOf,
   fmtShortDayYear,
   getSentRecord,
@@ -174,6 +175,8 @@ export function Finalize() {
     { label: letterTitle, href: backHref },
   ];
 
+  // Only letters with a right of appeal have an appeal window (SEND-X1).
+  const appealNote = appealWorkingDays(draft) !== null ? " DraftHR records the date for the appeal window." : "";
   const lede: ReactNode = isSent ? (
     <>
       <b>Sent.</b> {first ? `${first} has` : "They have"} this letter. The exports stay here if you need them again.
@@ -181,12 +184,12 @@ export function Finalize() {
   ) : approver !== null ? (
     <>
       {approver ? `Approved by ${approver}.` : "Approved."} Choose how {first || "they"} {first ? "gets" : "get"} it
-      and what to keep with it. DraftHR records the date for the appeal window.
+      and what to keep with it.{appealNote}
     </>
   ) : (
     <>
       Not approved yet ({journey.statusLabel.toLowerCase()}). Choose how {first || "they"} {first ? "gets" : "get"} it
-      and what to keep with it. DraftHR records the date for the appeal window.
+      and what to keep with it.{appealNote}
     </>
   );
 
@@ -212,7 +215,16 @@ export function Finalize() {
             <DropdownMenuItem
               key={a.id}
               disabled={counselMissing || exportsHook.busy !== null}
-              onSelect={() => exportsHook.download(a.id)}
+              // The pack holds what this page chose: the evidence ticked
+              // below and the covering note (SEND-X4).
+              onSelect={() =>
+                exportsHook.download(
+                  a.id,
+                  a.id === "pack"
+                    ? { excludeEvidence: flow.prefs.excludedEvidence, coverNote: flow.prefs.coverNote }
+                    : undefined
+                )
+              }
               className="gap-2.5 py-2"
             >
               <a.icon className={cn("size-4", a.iconCls)} />
@@ -405,6 +417,13 @@ function PreviewPanel({
       : healthScore >= 70
         ? "text-[var(--ds-health-mid)]"
         : "text-[var(--ds-health-low)]";
+  // The number is small text: the darker status ink keeps it above 4.5:1 (RULE-057).
+  const healthInk =
+    healthScore >= 85
+      ? "text-[var(--ds-green-fg)]"
+      : healthScore >= 70
+        ? "text-[var(--ds-amber-fg)]"
+        : "text-[var(--ds-red-fg)]";
   const chip = "inline-flex items-center gap-1.5 rounded-[7px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-[9px] py-[3px] text-[12.5px] text-[var(--ds-body)]";
 
   return (
@@ -431,7 +450,7 @@ function PreviewPanel({
         </span>
         <span className={chip}>
           <CircleCheck aria-hidden className={cn("size-[13px]", healthTone)} />
-          Health <b className={cn("font-medium tabular-nums", healthTone)}>{healthScore}</b>
+          Health <b className={cn("font-medium tabular-nums", healthInk)}>{healthScore}</b>
         </span>
       </div>
       <SendingFacts draft={draft} />
@@ -451,7 +470,7 @@ function SendingFacts({ draft }: { draft: Draft }) {
       aria-label="What you're sending"
       className="w-full border-t border-[var(--ds-line)] px-[18px] py-3.5 text-[12.5px] text-[var(--ds-muted)]"
     >
-      <div className="text-[11.5px] uppercase tracking-[.06em] text-[var(--ds-subtle)]">What you're sending</div>
+      <div className="text-[11.5px] uppercase tracking-[.06em] text-[var(--ds-muted)]">What you're sending</div>
       <div className="mt-1 truncate text-[14px] font-medium text-[var(--ds-ink)]">{draft.title ?? meta.title}</div>
       <div className="mt-0.5">
         {draft.context?.jurisdiction ?? "UK"}, drafted by {draftedBy}, for {recipient}
@@ -573,9 +592,11 @@ function Row({
         disabled && "opacity-[.55]"
       )}
     >
+      {/* The label keeps a usable width; a hint that does not fit beside
+          it drops to its own line under the name (SEND-131, RULE-X1). */}
       <label
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 rounded-[6px] has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]",
+          "flex min-w-0 flex-[1_1_200px] items-center gap-3 rounded-[6px] has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]",
           disabled ? "cursor-default" : "cursor-pointer"
         )}
       >
@@ -591,7 +612,16 @@ function Row({
         {tile}
         <span className="min-w-0 break-words">{name}</span>
       </label>
-      {meta && <span className="ml-auto text-[12.5px] text-[var(--ds-subtle)]">{meta}</span>}
+      {meta && (
+        <span
+          className={cn(
+            "ml-auto min-w-0 text-[12.5px] text-[var(--ds-subtle)] max-sm:ml-0 max-sm:basis-full",
+            sub ? "max-sm:pl-[66px]" : "max-sm:pl-[72px]"
+          )}
+        >
+          {meta}
+        </span>
+      )}
     </div>
   );
 }

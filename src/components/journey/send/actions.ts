@@ -1,8 +1,10 @@
 import { useDraftStore } from "@/lib/store";
 import type { Draft } from "@/lib/letters/types";
 import { useJourneyUI } from "@/components/journey/ui-store";
+import { toDateOnly } from "@/lib/date-only";
 import {
   appealCloseDate,
+  fmtDayMonYear,
   getSendPrefs,
   getSentRecord,
   givenByActivity,
@@ -145,12 +147,25 @@ export function markLetterSent(draftId: string, input: MarkSentInput, now = new 
       },
     };
   });
+  // Activity lists the send when it was recorded (newest first), and says
+  // the date given when that was an earlier day (SEND-X2). The marked-sent
+  // export keeps the date given, which the seal and the appeal window use;
+  // sentExportAt ties the two so Activity shows one line.
+  const backDated = toDateOnly(now) !== input.dateGiven;
   useDraftStore.getState().recordTimelineEvent(draftId, {
     kind: "details_updated",
     title: givenByActivity(record.givenBy, record.way, record.emailedName),
+    detail: backDated ? `Given on ${fmtDayMonYear(input.dateGiven)}` : undefined,
     actorName: input.actorName,
-    createdAt: at,
-    meta: { action: "sent", way: record.way, givenBy: record.givenBy, dateGiven: record.dateGiven, emailedTo: record.emailedTo },
+    createdAt: now.getTime(),
+    meta: {
+      action: "sent",
+      way: record.way,
+      givenBy: record.givenBy,
+      dateGiven: record.dateGiven,
+      emailedTo: record.emailedTo,
+      sentExportAt: at,
+    },
   });
   useJourneyUI.getState().markJustSent(draftId);
 }

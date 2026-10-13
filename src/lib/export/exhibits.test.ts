@@ -43,7 +43,7 @@ describe("exhibits appear the same in the page preview, PDF and DOCX", () => {
 
   it("uses the same figure labels the letter body cites", () => {
     const html = buildExhibitsAppendixHtml(draft);
-    const labels = [...html.matchAll(/<figcaption><strong>([^<]+)<\/strong>/g)].map((m) => m[1]);
+    const labels = [...html.matchAll(/<figcaption[^>]*><strong>([^<]+)<\/strong>/g)].map((m) => m[1]);
     expect(labels).toHaveLength(2);
     expect(letterBodyHtml(draft)).toContain(`[See ${labels[1]}]`);
   });

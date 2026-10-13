@@ -1,5 +1,4 @@
 import type { Draft } from "@/lib/letters/types";
-import { getLetterMeta } from "@/lib/letters/catalog";
 import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { runHealthChecks, computeHealthScore } from "@/lib/finalize/healthChecks";
@@ -11,7 +10,9 @@ import {
   fmtTime,
   getSentRecord,
   givenByActivity,
+  type GivenBy,
   type LetterFormat,
+  type SendWay,
 } from "./record";
 
 /**
@@ -47,23 +48,6 @@ function downloadBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function slugFor(draft: Draft): string {
-  let title = draft.title ?? "";
-  if (!title) {
-    try {
-      title = getLetterMeta(draft.letterType).title;
-    } catch {
-      title = "letter";
-    }
-  }
-  return (
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "letter"
-  );
-}
-
 /** The letter as plain text (accepted suggestions merged, entities decoded). */
 export function letterPlainText(draft: Draft): string {
   const htmlToPlain = (html: string): string => {
@@ -80,8 +64,36 @@ export function letterPlainText(draft: Draft): string {
     .join("\n\n");
 }
 
+/**
+ * The send being recorded right now, for an audit record downloaded with
+ * "Download and mark as sent": the file is made before the sent record is
+ * saved, so it is told how and when the letter was given.
+ */
+export type PendingSend = {
+  way: SendWay;
+  givenBy: GivenBy;
+  /** YYYY-MM-DD */
+  dateGiven: string;
+  emailedTo?: string;
+  emailedName?: string;
+  /** The person recording the send. */
+  actorName?: string;
+};
+
+export type AuditOptions = {
+  /** Who drafted the letter when its record names no one: the person in this workspace (as Activity's "You"). */
+  drafterName?: string;
+  /** The send this file goes out with. */
+  pendingSend?: PendingSend;
+};
+
 /** The audit record: who drafted, checked, reviewed, approved and sent the letter, and when. */
-export function buildAuditRecord(draft: Draft, attestation?: Attestation, now = Date.now()): string {
+export function buildAuditRecord(
+  draft: Draft,
+  attestation?: Attestation,
+  now = Date.now(),
+  opts: AuditOptions = {}
+): string {
   const when = (ms: number) => `${fmtDayMonYear(ms)}, ${fmtTime(ms)}`;
   const lines: string[] = [];
   const title = displayTitleFor(draft);
@@ -96,7 +108,8 @@ export function buildAuditRecord(draft: Draft, attestation?: Attestation, now = 
   const timeline = [...(draft.timeline ?? [])].sort((a, b) => a.createdAt - b.createdAt);
   const created = timeline.find((t) => t.kind === "created");
   lines.push("WHO DID WHAT", "------------");
-  lines.push(`Drafted        ${created?.actorName || "The letter's author"}, ${when(created?.createdAt ?? draft.createdAt)}`);
+  const drafter = created?.actorName?.trim() || opts.drafterName?.trim() || "Not recorded";
+  lines.push(`Drafted        ${drafter}, ${when(created?.createdAt ?? draft.createdAt)}`);
 
   const checks = runHealthChecks(draft);
   const score = computeHealthScore(checks);
@@ -124,9 +137,16 @@ export function buildAuditRecord(draft: Draft, attestation?: Attestation, now = 
 
   if (attestation) lines.push(`Counsel        ${attestation.reviewedBy}, reviewed ${fmtDayMonYear(attestation.reviewedOn)}`);
 
+  const pending = opts.pendingSend;
   const rec = getSentRecord(draft);
-  const given = dateGivenOf(draft);
-  if (given) {
+  const given = pending?.dateGiven ?? dateGivenOf(draft);
+  if (pending) {
+    const how = givenByActivity(pending.givenBy, pending.way, pending.emailedName);
+    const by = pending.actorName ? `, recorded by ${pending.actorName}` : "";
+    lines.push(
+      `Sent           ${how}, given ${fmtDayMonYear(pending.dateGiven)}${pending.emailedTo ? ` to ${pending.emailedTo}` : ""}${by} (at ${when(now)})`
+    );
+  } else if (given) {
     const how = rec ? givenByActivity(rec.givenBy, rec.way, rec.emailedName) : "Marked as sent";
     lines.push(`Sent           ${how}, given ${fmtDayMonYear(given)}${rec?.emailedTo ? ` to ${rec.emailedTo}` : ""}`);
   } else {
@@ -161,6 +181,8 @@ export type ExportOptions = {
   excludeEvidence?: string[];
   /** Evidence pack: a covering note for the file, put on the pack's summary page. */
   coverNote?: string;
+  /** Audit record: who drafted it and the send it goes out with. */
+  audit?: AuditOptions;
 };
 
 /** Download one file. Throws when it cannot be made. */
@@ -183,14 +205,18 @@ export async function runExport(
     return;
   }
   if (format === "txt") {
+    // Named like the PDF and Word files (type-employee-date.txt).
+    const { filenameFor } = await import("@/lib/export/pdf");
     const blob = new Blob([letterPlainText(draft)], { type: "text/plain;charset=utf-8" });
-    downloadBlob(blob, `${slugFor(draft)}.txt`);
+    downloadBlob(blob, filenameFor(draft).replace(/\.pdf$/i, "") + ".txt");
     return;
   }
   if (format === "audit") {
     const { filenameFor } = await import("@/lib/export/pdf");
     const base = filenameFor(draft).replace(/\.pdf$/i, "");
-    const blob = new Blob([buildAuditRecord(draft, attestation)], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([buildAuditRecord(draft, attestation, Date.now(), opts.audit)], {
+      type: "text/plain;charset=utf-8",
+    });
     downloadBlob(blob, `${base}-audit-record.txt`);
     return;
   }

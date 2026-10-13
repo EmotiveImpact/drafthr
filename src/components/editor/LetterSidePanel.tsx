@@ -51,7 +51,9 @@ function chipsFor(stage: JourneyStage, reviewBack: boolean, draft: Draft): { lab
           ? [
               {
                 label: "Draft appeal outcome",
-                prompt: "Draft an appeal outcome letter for this matter, ready to complete after the appeal hearing.",
+                prompt: `Draft an appeal outcome letter ${
+                  draft.matterId ? "for this matter" : "following this letter"
+                }, ready to complete after the appeal hearing.`,
               },
             ]
           : []),

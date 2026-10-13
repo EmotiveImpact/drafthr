@@ -183,7 +183,9 @@ function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
       className="flex min-w-0 items-center gap-2 text-[13px] text-[var(--ds-muted)]"
     >
       {crumbs.map((c, i) => (
-        <span key={i} className="flex min-w-0 items-center gap-2">
+        // The first crumb is the short section name ("Letters"): it keeps
+        // its width and the longer names after it shorten instead (SEND-X13).
+        <span key={i} className={cn("flex min-w-0 items-center gap-2", i === 0 && crumbs.length > 1 && "shrink-0")}>
           {c.href ? (
             <Link to={c.href} className="truncate rounded-[4px] transition-colors duration-[120ms] hover:text-[var(--ds-ink)]">
               {c.label}
