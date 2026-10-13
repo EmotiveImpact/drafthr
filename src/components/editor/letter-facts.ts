@@ -2,6 +2,7 @@ import type { Draft, Employee } from "@/lib/letters/types";
 import type { Profile } from "@/lib/profile";
 import { canApprove } from "@/lib/permissions";
 import { currentRound, firstName, type ReviewRequest } from "@/lib/journey/reviews";
+import { summariseRound } from "@/components/journey/review/model";
 import type { ActivityEvent } from "@/components/journey/ui";
 import { appealWorkingDays, downloadedActivity, type SentRecord } from "@/components/journey/send/record";
 
@@ -222,8 +223,11 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
     const rname = firstName(review.reviewer.name) || "Reviewer";
     for (const r of review.rounds) {
       if (r.backAt) {
-        const changes = r.suggestionIds.length;
-        const comments = r.commentIds.length;
+        // Count suggestions and comments as the rounds history does, not
+        // the marks a suggestion leaves in the text.
+        const sum = summariseRound(draft, review, r);
+        const changes = sum.changes;
+        const comments = sum.comments;
         const parts: string[] = [];
         if (changes) parts.push(`${changes} change${changes === 1 ? "" : "s"}`);
         if (comments) parts.push(`${comments} comment${comments === 1 ? "" : "s"}`);
@@ -278,3 +282,44 @@ export const APPROVER_USER_KEY = (draftId: string) => `drafthr.approverUserId:${
 
 /** The approver's workspace role, remembered with their user id (Approve shows "Admin · approver"). */
 export const APPROVER_ROLE_KEY = (draftId: string) => `drafthr.approverRole:${draftId}`;
+
+/**
+ * The approver's job title, for "Operations Director · approver" on the
+ * Approve card: their employee record when they have one, else the title
+ * the workspace's own letters give them beside their name ("Ruth Adeyemi,
+ * Operations Director" or a sign-off "Ruth Adeyemi<br>Operations
+ * Director"). Null when nothing names it.
+ */
+export function approverTitleFor(
+  name: string | undefined,
+  drafts: Record<string, Draft>,
+  employees: Record<string, Employee>
+): string | null {
+  const who = (name ?? "").trim();
+  if (!who || /^workspace reviewer$/i.test(who)) return null;
+  const lower = who.toLowerCase();
+  const emp = Object.values(employees).find((e) => e.legalName?.trim().toLowerCase() === lower && e.jobTitle?.trim());
+  if (emp?.jobTitle) return emp.jobTitle.trim();
+  const esc = who.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // A capitalised title of one to five words straight after the name.
+  const word = "[A-Z][A-Za-z'&-]*";
+  const re = new RegExp(`${esc}(?:,[ \\t]*|[ \\t]*\\n[ \\t]*)(${word}(?:[ \\t]+(?:of|and|&|${word})){0,4})(?=[,.;:)\\n]|$)`);
+  const counts = new Map<string, number>();
+  for (const d of Object.values(drafts)) {
+    for (const s of d.sections ?? []) {
+      if (!s.html || !s.html.includes(who)) continue;
+      const text = s.html
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>\s*<p[^>]*>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&amp;/g, "&")
+        .replace(/&nbsp;/g, " ");
+      const m = text.match(re);
+      if (m?.[1]) counts.set(m[1], (counts.get(m[1]) ?? 0) + 1);
+    }
+  }
+  let best: string | null = null;
+  let n = 0;
+  for (const [t, c] of counts) if (c > n) [best, n] = [t, c];
+  return best;
+}

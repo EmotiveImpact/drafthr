@@ -23,8 +23,8 @@ import {
   verdictWords,
 } from "./letter-facts";
 import { disclaimerFor } from "./InlineDisclaimer";
-import { suggestedEdits } from "./suggestion-groups";
-import { appealChipText, sentBannerText } from "@/components/journey/send/record";
+import { appealChipText, recipientOf, sentBannerText } from "@/components/journey/send/record";
+import { openPoints, reviewPoints } from "@/components/journey/review/model";
 import { useReviewerMode } from "@/components/journey/review/review-ui";
 
 /**
@@ -167,6 +167,9 @@ function noticeFor({
 }): React.ReactNode {
   const r = review && review.status !== "recalled" ? review : null;
   const employeeFirst = firstName(draft.employee?.preferredName || draft.employee?.legalName) || "the employee";
+  // Who the letter goes to: the employee, or on an employee's own letter the
+  // employer contact (or the company).
+  const recipientFirst = recipientOf(draft).short || (draft.mode === "employee" ? "they" : employeeFirst);
 
   // Sent: the words come from the send record (how and when it was given,
   // the appeal window only for letters with a right of appeal).
@@ -188,7 +191,7 @@ function noticeFor({
         icon={Stamp}
         title={a ? `Approved by ${a.reviewerName} at ${fmtTime(a.createdAt)}.` : "Approved."}
       >
-        Ready to send. Choose how {employeeFirst} gets it on the right.
+        Ready to send. Choose how {recipientFirst} gets it on the right.
       </NoticeStrip>
     );
   }
@@ -237,19 +240,30 @@ function noticeFor({
     const round = currentRound(r);
     const who = firstName(r.reviewer.name) || "The reviewer";
     const verdict = round?.verdict ? verdictWords(round.verdict) : "";
-    const theirIds = new Set(round?.suggestionIds ?? []);
-    const changes = suggestedEdits(draft).filter(
-      (e) => !e.ai && (e.author === r.reviewer.name || e.ids.some((id) => theirIds.has(id)))
-    ).length;
-    const openIds = new Set((draft.comments ?? []).filter((c) => !c.resolved).map((c) => c.id));
-    const comments = (round?.commentIds ?? []).filter((id) => openIds.has(id)).length;
+    // What is still to decide, counted as the Progress panel counts it.
+    const open = openPoints(reviewPoints(draft, r, round));
+    const changes = open.filter((p) => p.kind === "suggestion").length;
+    const comments = open.length - changes;
+    const what = [
+      changes > 0 ? `${changes} suggested change${changes === 1 ? "" : "s"}` : "",
+      comments > 0 ? `${comments} comment${comments === 1 ? "" : "s"}` : "",
+    ]
+      .filter(Boolean)
+      .join(" and ");
+    const next =
+      changes > 0
+        ? "Accept or reject each, or send it back with a question."
+        : comments > 0
+          ? `Read and resolve ${comments === 1 ? "it" : "them"}, or send it back with a question.`
+          : "Nothing to accept or reject. Finish the review, or send it back with a question.";
     return (
       <NoticeStrip
         tone="lilac"
         icon={Reply}
         title={`${who} sent it back${verdict ? `: ${verdict}` : ""}.`}
       >
-        {changes} suggested change{changes === 1 ? "" : "s"} and {comments} comment{comments === 1 ? "" : "s"}. Accept or reject each, or send it back with a question.
+        {what ? `${what}. ` : ""}
+        {next}
       </NoticeStrip>
     );
   }

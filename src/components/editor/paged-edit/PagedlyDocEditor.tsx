@@ -65,7 +65,9 @@ const FEATURES: EditorFeatures = {
   // — Quality-of-life behaviours (little/no toolbar footprint) —
   find: true,
   paste: true,
-  wordCount: true,
+  // Off: counted by the app under the page (pagedly's count only updates
+  // once the cursor is in the page, so it read "0 words" on arrival).
+  wordCount: false,
   markdownShortcuts: true,
   smartTypography: true,
   autoLink: true,
@@ -269,6 +271,19 @@ export function PagedlyDocEditor({
     return () => timers.forEach(clearTimeout);
   }, [mountVersion]);
 
+  // The word count under the page. pagedly's own toolbar count only updates
+  // once the cursor is in the page, so a letter opened without a click read
+  // "0 words"; this one reads the stored letter, as the health checks do.
+  const live = useDraftStore((s) => s.drafts[draftId]) ?? draft;
+  const words = useMemo(() => {
+    const text = live.sections
+      .map((x) => (x.html ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " "))
+      .join("\n")
+      .trim();
+    return text ? text.split(/\s+/).length : 0;
+  }, [live.sections]);
+  const minutes = Math.max(1, Math.round(words / 200));
+
   // Bridge pagedly's imperative handle to the app's PagedEditorActions contract
   // so the top menubar's Edit menu (Undo / Redo / Select all / Find) keeps
   // driving whatever engine is mounted.
@@ -351,7 +366,7 @@ export function PagedlyDocEditor({
   return (
     <div
       ref={wrapRef}
-      className="h-full min-h-0 [&_.pagedly-ce-footer]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-ce-page]:[zoom:var(--dhr-page-zoom,1)]"
+      className="flex min-h-full flex-col [&_.pagedly-ce-footer]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-ce-page]:[zoom:var(--dhr-page-zoom,1)] [&_.pagedly-toolbar__wordcount]:text-[var(--ds-muted)] [&_.pagedly-toolbar__wordcount-sep]:opacity-100"
       // The letter on the page is set in the workspace serif (Newsreader),
       // the page chrome in the UI sans (Inter).
       style={
@@ -360,6 +375,11 @@ export function PagedlyDocEditor({
           "--pagedly-font-family": "var(--font-serif)",
           "--pagedly-line-height": "1.5",
           "--pagedly-ui-font": "var(--font-sans)",
+          // Toolbar meta text (word count, its separators) in the workspace
+          // grey that reads at AA, not pagedly's light default.
+          "--pagedly-text-faint": "var(--ds-muted)",
+          "--pagedly-muted": "var(--ds-muted)",
+          "--pagedly-text-soft": "var(--ds-muted)",
         } as CSSProperties
       }
     >
@@ -371,7 +391,9 @@ export function PagedlyDocEditor({
         onCommentAdd={enableComments ? onCommentAdd : undefined}
         onCommentClick={reviewMode ? onCommentClick : undefined}
         toolbar
-        toolbarPosition="sticky"
+        // Stationary: the toolbar sits above the page instead of floating
+        // over the letter text as it scrolls.
+        toolbarPosition="stationary"
         toolbarLayout="compact"
         features={features}
         showPageNumbers
@@ -379,9 +401,19 @@ export function PagedlyDocEditor({
         // No write-back when read-only (review-locked): guarantees the surface
         // can never mutate the store even if pagedly emits an initial change.
         onChange={readOnly ? undefined : persist}
-        className="h-full"
+        className="flex-1"
         canvasClassName="bg-[var(--ds-canvas)]"
       />
+      <div
+        className="sticky bottom-0 z-10 flex h-8 shrink-0 items-center justify-end gap-1.5 border-t border-[var(--ds-line-2)] bg-[var(--ds-surface)] px-4 text-[12px] text-[var(--ds-muted)]"
+        role="status"
+        aria-live="off"
+        data-testid="page-word-count"
+      >
+        <span>{words.toLocaleString("en-GB")} {words === 1 ? "word" : "words"}</span>
+        <span aria-hidden>·</span>
+        <span>{minutes} min read</span>
+      </div>
     </div>
   );
 }

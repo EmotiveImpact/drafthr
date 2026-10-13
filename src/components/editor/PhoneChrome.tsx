@@ -88,7 +88,9 @@ export function PhoneStrip({ draft, journey, matter }: { draft: Draft; journey: 
 
 export function PhoneDisclaimer() {
   return (
-    <p className="m-0 flex items-center justify-center gap-1.5 px-4 pb-4 pt-3 text-center text-[12px] text-[var(--ds-subtle)]">
+    // Muted, not subtle: it sits on the canvas fill, where subtle grey
+    // falls under 4.5:1.
+    <p className="m-0 flex items-center justify-center gap-1.5 px-4 pb-4 pt-3 text-center text-[12px] text-[var(--ds-muted)]">
       <Info aria-hidden className="size-3.5 shrink-0" />
       DraftHR drafts letters, it does not give legal advice.
     </p>

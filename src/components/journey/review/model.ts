@@ -7,6 +7,7 @@
  */
 import type { Comment, Draft, Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
+import { sectionTitleText } from "@/lib/letters/display";
 import {
   currentRound,
   firstName,
@@ -153,7 +154,8 @@ function clip(s: string, n = 64): string {
 /** Where a section sits, in words ("Right of appeal"). */
 export function sectionWhere(draft: Draft, sectionId: string | undefined): string | undefined {
   if (!sectionId) return undefined;
-  return draft.sections.find((s) => s.id === sectionId)?.title;
+  const t = draft.sections.find((s) => s.id === sectionId)?.title;
+  return t ? sectionTitleText(t) : undefined;
 }
 
 /** Does this pending change come from the reviewer? */
@@ -208,7 +210,7 @@ export function reviewPoints(draft: Draft, review: ReviewRequest, round = curren
       kind: "suggestion",
       sectionId: s.id,
       title: snap?.title ?? suggestionTitle(s),
-      where: snap?.where ?? s.title,
+      where: snap?.where ?? sectionTitleText(s.title),
       state: "open",
       markIds: pendingMarkIds(s),
     });
@@ -219,6 +221,15 @@ export function reviewPoints(draft: Draft, review: ReviewRequest, round = curren
     seen.add(p.id);
     const d = decisions[p.id]?.decision;
     points.push({ ...p, state: d ?? "accepted" });
+  }
+  // Suggestions decided from the Edits tab or a margin card that the round
+  // has no snapshot for: the decision is the record, so "You accepted 1
+  // change" counts them.
+  const commentIdsInRound = new Set([...round.commentIds, ...(round.points ?? []).filter((p) => p.kind === "comment").map((p) => p.id)]);
+  for (const [id, d] of Object.entries(decisions)) {
+    if (seen.has(id) || commentIdsInRound.has(id) || (d.decision !== "accepted" && d.decision !== "rejected")) continue;
+    seen.add(id);
+    points.push({ id, kind: "suggestion", title: "Suggested change", where: "Letter", state: d.decision });
   }
 
   // Comments.
@@ -272,7 +283,7 @@ export function collectReviewerWork(
     const pc = s.pendingChange;
     if (!pc || pc.source !== "review" || !mine(pc.authorName, pc.authorId)) continue;
     suggestionIds.push(...pendingMarkIds(s));
-    points.push({ id: pc.id, kind: "suggestion", sectionId: s.id, title: suggestionTitle(s), where: s.title });
+    points.push({ id: pc.id, kind: "suggestion", sectionId: s.id, title: suggestionTitle(s), where: sectionTitleText(s.title) });
   }
   const commentIds: string[] = [];
   for (const c of draft.comments ?? []) {
@@ -507,6 +518,15 @@ export function shareableEvidence<T extends { kind: string; filename?: string; c
   const hearingNotes: T[] = [];
   for (const e of evidence ?? []) (isHearingNote(e) ? hearingNotes : files).push(e);
   return { files, hearingNotes };
+}
+
+/** The evidence a reviewer was given: files when the asker shared evidence,
+ * hearing notes only when they shared those too. The letter is always shared. */
+export function evidenceSharedWith<T extends { kind: string; filename?: string; content?: string }>(
+  evidence: T[] | undefined,
+  share: { evidence: boolean; hearingNotes: boolean } | undefined
+): T[] {
+  return (evidence ?? []).filter((e) => Boolean(isHearingNote(e) ? share?.hearingNotes : share?.evidence));
 }
 
 /** Verdict from a delivery note written by the reviewer's send-back. */

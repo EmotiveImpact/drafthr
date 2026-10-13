@@ -9,8 +9,7 @@ import { useProfileStore } from "@/lib/profile";
 import { meIdentity } from "@/lib/comments/identity";
 import { generateAllSections, regenerateSectionAsPending } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
-import { getLetterMeta } from "@/lib/letters/catalog";
-import { deriveEvidenceTier } from "@/lib/letters/templates";
+import { categoryOf, getLetterMeta } from "@/lib/letters/catalog";
 import { canSubmitForReview, canEditDraft } from "@/lib/permissions";
 import { todayDateOnly } from "@/lib/date-only";
 import { useIsLargeViewport } from "@/lib/use-large-viewport";
@@ -22,6 +21,7 @@ import { useJourneyUI } from "@/components/journey/ui-store";
 import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
 import { focusReviewReply, openRoundsHistory, requestFinishReview, requestRecall } from "@/components/journey/review/review-ui";
 import { isAskerOf, isReviewerOf, useMe } from "@/components/journey/review/actions";
+import { evidenceSharedWith } from "@/components/journey/review/model";
 import { undoMarkedSent, undoToastText } from "@/components/journey/send/actions";
 import { Seal } from "@/components/journey/ui";
 import { uid, cn } from "@/lib/utils";
@@ -63,6 +63,7 @@ import { ChecksDialog } from "@/components/editor/LetterHealthCard";
 import { PhoneBottomBar, PhoneDisclaimer, PhoneFlagHint, PhoneStrip, PhoneTopBar, usePhoneFlag } from "@/components/editor/PhoneChrome";
 import { useLetterWorkspace, type WorkspaceHandlers } from "@/components/editor/workspace-store";
 import { planFix } from "@/components/editor/health-fix";
+import { HEAVY_EVIDENCE_MIN, letterEvidenceTier } from "@/components/editor/evidence-tier";
 import { recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
 import {
   APPROVER_ROLE_KEY,
@@ -93,6 +94,25 @@ const PAGE_W = 640;
 const MARGIN_GAP = 20;
 const MARGIN_W = 256;
 const CANVAS_PAD_L = 48;
+
+/**
+ * Where the side panel opens on a first visit. A heavy-evidence letter that
+ * is built from evidence (a grievance, an appeal, a constructive dismissal
+ * or tribunal letter) still being drafted with too little evidence (fewer
+ * than the 2 items the review handoff asks for) opens with the evidence
+ * pinned, so it gets gathered while drafting. Everything else, including
+ * warnings and dismissals (mock f1), opens on the Edits / Progress / Chat
+ * tabs. Pin or unpin is then remembered per letter.
+ */
+const letterTier = letterEvidenceTier;
+
+function defaultDock(draft: import("@/lib/letters/types").Draft | undefined): "evidence" | "ai" {
+  if (!draft) return "ai";
+  const tier = letterTier(draft);
+  const drafting = (draft.reviewStatus ?? "draft") === "draft" && !(draft.exports ?? []).some((e) => e.format === "marked-sent");
+  const evidenceLed = ["dispute", "tribunal_legal", "departure"].includes(categoryOf(draft.letterType) ?? "");
+  return tier === "heavy" && evidenceLed && drafting && (draft.evidence?.length ?? 0) < HEAVY_EVIDENCE_MIN ? "evidence" : "ai";
+}
 
 function useIsPhone(): boolean {
   const query = "(max-width: 767px)";
@@ -164,9 +184,9 @@ export function Editor() {
   const [checksOpen, setChecksOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [zoom, setZoom] = useState(100);
-  const [tickStep, setTickStep] = useState<number | null>(null);
+  const [tickStep, setTickStep] = useState<string | null>(null);
   const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
-    const fallback = draft?.evidenceTier === "heavy" ? "evidence" : "ai";
+    const fallback = defaultDock(draft);
     if (typeof window === "undefined") return fallback;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draft?.id ?? draftId ?? ""));
@@ -237,7 +257,7 @@ export function Editor() {
   const shownBack = useRef<string | null>(null);
   useEffect(() => {
     if (!draftId || typeof window === "undefined") return;
-    const fallback = draft?.evidenceTier === "heavy" ? "evidence" : "ai";
+    const fallback = defaultDock(draft);
     let next: "evidence" | "ai" | null = fallback;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draftId));
@@ -353,21 +373,33 @@ export function Editor() {
   }, [focusMode, isLargeViewport, viewMode, setPanelTab]);
 
   // "Saving", then "Saved just now", each time the letter changes.
+  // Only a change to the letter itself (its text, title, details) counts:
+  // opening a letter, syncing its review or recording a view never shows
+  // "Saving", so a locked letter nobody edited reads "Saved".
   const [saved, setSaved] = useState<SavedState>({ kind: "saved", at: draft?.updatedAt ?? Date.now() });
-  const lastUpdated = useRef<{ id?: string; at?: number }>({});
+  const contentSig = draft
+    ? `${draft.title ?? ""}\u0001${JSON.stringify(draft.context)}\u0001${draft.sections.map((x) => x.html).join("\u0001")}`
+    : "";
+  const lastContent = useRef<{ id?: string; sig?: string; openedAt: number }>({ openedAt: 0 });
   useEffect(() => {
     if (!draft) return;
-    const prev = lastUpdated.current;
-    lastUpdated.current = { id: draft.id, at: draft.updatedAt };
-    if (prev.id !== draft.id || prev.at === undefined) {
+    const prev = lastContent.current;
+    const opened = prev.id !== draft.id || prev.sig === undefined;
+    lastContent.current = { id: draft.id, sig: contentSig, openedAt: opened ? Date.now() : prev.openedAt };
+    if (opened) {
       setSaved({ kind: "saved", at: draft.updatedAt ?? Date.now() });
       return;
     }
-    if (prev.at === draft.updatedAt) return;
+    if (prev.sig === contentSig) return;
+    // The section editors settle the stored html as they mount (no one has
+    // typed yet): not a save the person made.
+    if (Date.now() - prev.openedAt < 1500) return;
+    // DraftHR writing the first draft is not a person's edit either.
+    if (draft.sections.some((x) => x.status === "streaming")) return;
     setSaved({ kind: "saving" });
     const t = window.setTimeout(() => setSaved({ kind: "saved", at: Date.now() }), 700);
     return () => window.clearTimeout(t);
-  }, [draft?.id, draft?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draft?.id, contentSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Does the margin column fit beside the page at this width and zoom?
   const [canvasW, setCanvasW] = useState(0);
@@ -381,7 +413,12 @@ export function Editor() {
     ro.observe(el);
     return () => ro.disconnect();
   }, [isPhone, focusMode, viewMode]);
-  const marginFits = !isPhone && canvasW >= CANVAS_PAD_L + ((PAGE_W + MARGIN_GAP + MARGIN_W) * zoom) / 100 + 16;
+  // Only the page scales with zoom; the margin cards keep their size. The
+  // margin column shows when it fits beside the page at 100% or less: zoomed
+  // in past that, the canvas scrolls sideways (inside itself, like a word
+  // processor) so the cards stay beside their paragraphs.
+  const pageW = (PAGE_W * zoom) / 100;
+  const marginFits = !isPhone && canvasW >= CANVAS_PAD_L + (PAGE_W * Math.min(zoom, 100)) / 100 + MARGIN_GAP + MARGIN_W + 16;
 
   // Approval lands while the sender is looking: the approver's tick, a
   // dark toast, the tracker's Approve step draws its tick.
@@ -406,10 +443,24 @@ export function Editor() {
         duration: 6000,
       });
     }
-    setTickStep(2);
+  }, [draft?.id, draft?.reviewStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A tracker step completes while the letter is open (Draft on sending for
+  // review or approval, Review when it finishes, Approve when approved,
+  // Send when sent): its circle fills and its tick draws (letter-live).
+  const prevStep = useRef<{ id?: string; idx?: number }>({});
+  useEffect(() => {
+    if (!draft || !journey) return;
+    const prev = prevStep.current;
+    prevStep.current = { id: draft.id, idx: journey.stepIndex };
+    if (prev.id !== draft.id || prev.idx === undefined || journey.stepIndex <= prev.idx) return;
+    const done: number[] = [];
+    for (let i = prev.idx; i < Math.min(journey.stepIndex, 4); i++) done.push(i);
+    if (!done.length) return;
+    setTickStep(done.join(" "));
     const t = window.setTimeout(() => setTickStep(null), 1600);
     return () => window.clearTimeout(t);
-  }, [draft?.id, draft?.reviewStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draft?.id, journey?.stepIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The workspace's handlers, reachable from the stage components and the
   // health card. Registered as stable wrappers over the latest closures.
@@ -488,6 +539,16 @@ export function Editor() {
     return activityEvents(draft, review, me);
   }, [draft, journey, review, me]);
 
+  // A teammate reviewer sees only the evidence they were given: files when
+  // the asker shared evidence, hearing notes only when those were shared.
+  const sharedView = useMemo(
+    () =>
+      draft && viewerIsReviewer && review
+        ? { ...draft, evidence: evidenceSharedWith(draft.evidence, review.share) }
+        : draft,
+    [draft, viewerIsReviewer, review]
+  );
+
   if (!draft || !draftId || !meta || !journey) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center px-6 py-20 text-center">
@@ -502,6 +563,10 @@ export function Editor() {
     );
   }
 
+  // DraftHR is writing: this editor's own run, or a run the store shows (a
+  // section streaming, started from the wizard, a stage control or another
+  // mount). The bar's "Drafting…", Stop and the page's streaming line follow it.
+  const streaming = globallyStreaming || draft.sections.some((s) => s.status === "streaming");
   const storeActions = { appendToSection, setSectionStatus, pushSectionVersion, updateSection };
   const onRetry = (retryCount: number, delayMs: number, reason: string) => {
     setRetryEvent({ retryCount, delayMs, reason, startedAt: Date.now() });
@@ -603,7 +668,7 @@ export function Editor() {
       useDraftStore.setState({ drafts: { ...store.drafts, [draft.id]: next } });
     }
     toast.success("Template saved", {
-      action: { label: "Open My Templates", onClick: () => nav(myTemplatesUrl) },
+      action: { label: "Open your templates", onClick: () => nav(myTemplatesUrl) },
     });
   };
 
@@ -782,7 +847,7 @@ export function Editor() {
 
   /** Send for review: the evidence check first, then the reviewer picker. */
   const sendForReview = () => {
-    const tier = draft.evidenceTier ?? deriveEvidenceTier(draft.letterType);
+    const tier = letterTier(draft);
     const reason = evaluateEvidenceHandoff(draft, tier);
     if (reason) {
       setHandoffReason(reason);
@@ -915,6 +980,20 @@ export function Editor() {
     const ws = useLetterWorkspace.getState();
     if (plan.kind === "ai") {
       if (!canvasEditable) return;
+      // A suggestion already waiting in that section is never replaced
+      // silently (as in the Review step): decide it first.
+      const live = useDraftStore.getState().drafts[draft.id]?.sections.find((x) => x.id === plan.section.id);
+      if (live?.pendingChange || hasPendingSuggestions(live?.html ?? "")) {
+        toast("This section already has a suggested edit", {
+          description: "Accept or reject it first, then Fix again.",
+        });
+        jumpToSection(plan.section.id);
+        if (!marginFits) {
+          setEditsFilter("edits");
+          openPanelTab("edits");
+        }
+        return;
+      }
       ws.setFixing(check.id, true);
       const ok = await proposeSection(plan.section, plan.instruction, plan.category);
       useLetterWorkspace.getState().setFixing(check.id, false);
@@ -999,17 +1078,17 @@ export function Editor() {
     openRounds: () => openRoundsHistory(draft.id),
   };
   // Live facts the stage components read (registered after render).
-  liveRef.current = { draftId: draft.id, streaming: globallyStreaming, canEdit: canvasEditable, counselNeeded, counselReview };
+  liveRef.current = { draftId: draft.id, streaming, canEdit: canvasEditable, counselNeeded, counselReview };
 
   const bar: DocumentBarProps = {
-    draft,
+    draft: sharedView ?? draft,
     journey,
     editor: activeEditor,
     viewMode,
     onViewMode: setViewMode,
     pagedActions: pagedEditorActionsRef,
     backTo,
-    streaming: globallyStreaming,
+    streaming,
     canEdit: canvasEditable,
     role,
     viewerIsApprover,
@@ -1082,7 +1161,7 @@ export function Editor() {
 
   const sidePanel = (onClose: () => void, closeLabel: string) => (
     <LetterSidePanel
-      draft={draft}
+      draft={sharedView ?? draft}
       tab={panelTab}
       onTabChange={setPanelTab}
       activeSectionId={activeSectionId}
@@ -1120,8 +1199,19 @@ export function Editor() {
 
   const pageInner = (
     <>
-      {sentAt && <Seal date={sentAt} animate={sealAnimates} className="z-10" />}
       <Letterhead draft={draft} fallbackName={profile.employer?.legalName} fallbackAddress={profile.employer?.address} />
+      {/* The seal sits in the flow at the top right, under the letterhead,
+       * and the lines beside it wrap around it: it never covers the
+       * letter's words, with or without an address block, on any width. */}
+      {sentAt && (
+        <Seal
+          date={sentAt}
+          animate={sealAnimates}
+          placed={false}
+          size={isPhone ? 60 : 84}
+          className={cn("relative z-10 float-right -rotate-[8deg]", isPhone ? "-mt-1 mb-1 ml-3" : "-mt-2 mb-2 ml-6 mr-1")}
+        />
+      )}
       <IssueDate draft={draft} className="m-0 mb-2 font-sans text-[13px] text-[var(--ds-muted)] md:hidden" />
       <ConfidentialLine draft={draft} />
       {draft.sections.map((section) => (
@@ -1157,6 +1247,7 @@ export function Editor() {
             onAcceptPending={() => useDraftStore.getState().acceptSectionPending(draft.id, section.id)}
             onRejectPending={() => useDraftStore.getState().rejectSectionPending(draft.id, section.id)}
             editable={canvasEditable}
+            authorChrome={!viewerIsReviewer}
           />
           {section.sectionId === "recipient_block" && <IssueDate draft={draft} className="m-0 mb-3 max-md:hidden" />}
           {phoneFlag && phoneFlag.sectionId === section.id && <PhoneFlagHint target={phoneFlag} onFix={(c) => void fixCheck(c)} />}
@@ -1176,8 +1267,8 @@ export function Editor() {
           )}
         </div>
       ))}
-      {globallyStreaming && (
-        <p className="mt-4 flex items-center gap-2 font-sans text-[12.5px] text-[var(--ds-muted)]">
+      {streaming && (
+        <p role="status" className="mt-4 flex items-center gap-2 font-sans text-[12.5px] text-[var(--ds-muted)]">
           <Loader2 className="size-3 animate-spin" />
           Streaming sections from the model…
         </p>
@@ -1243,11 +1334,15 @@ export function Editor() {
             {viewMode === "preview" ? (
               // Page view: the paginated editor. Read-only while locked or
               // while DraftHR is writing (it holds a snapshot of the letter).
-              <PagedlyDocEditor
-                draft={draft}
-                readOnly={!canvasEditable || globallyStreaming || draft.sections.some((s) => s.status === "streaming")}
-                actionsRef={pagedEditorActionsRef}
-              />
+              <div className="lw-pageview contents">
+                <PagedlyDocEditor
+                  draft={draft}
+                  readOnly={!canvasEditable || streaming}
+                  actionsRef={pagedEditorActionsRef}
+                />
+                {/* The same numbered citation boxes as the Sections view. */}
+                <CitationLayer draft={draft} containerRef={canvasRef} onViewSource={openEvidence} />
+              </div>
             ) : (
               <div
                 className={cn(
@@ -1263,7 +1358,7 @@ export function Editor() {
                   ref={wrapperRef}
                   data-slot="letter-wrapper"
                   className="relative w-full"
-                  style={{ maxWidth: isPhone ? undefined : PAGE_W, zoom: isPhone ? undefined : zoom / 100 }}
+                  style={{ maxWidth: isPhone ? undefined : pageW, minWidth: !isPhone && marginFits ? pageW : undefined }}
                 >
                   <div className="mb-3 flex min-w-0 flex-col gap-3 empty:hidden">
                     {draft.isTemplateSource && <TemplateSourceBanner draft={draft} onDiscard={discardTemplateSource} />}
@@ -1293,6 +1388,7 @@ export function Editor() {
                         : "min-h-[905px] rounded-[3px] px-[60px] py-12 shadow-[var(--ds-shadow-paper)] max-lg:px-10",
                       sealAnimates && "ds-glow-once"
                     )}
+                    style={!isPhone && zoom !== 100 ? { zoom: zoom / 100 } : undefined}
                   >
                     {pageInner}
                   </article>
@@ -1312,7 +1408,7 @@ export function Editor() {
                       onReplyComment={onFocusComment}
                       onResolveComment={(commentId) => useDraftStore.getState().resolveComment(draft.id, commentId, true)}
                       onJumpToSection={jumpToSection}
-                      left={PAGE_W + MARGIN_GAP}
+                      left={pageW + MARGIN_GAP}
                     />
                   )}
                 </div>
@@ -1331,7 +1427,7 @@ export function Editor() {
             className="flex w-[380px] min-h-0 shrink-0 flex-col overflow-hidden border-l border-[var(--ds-line)] bg-[var(--ds-surface)]"
           >
             <EvidenceDrawer
-              draft={draft}
+              draft={sharedView ?? draft}
               editor={null}
               open
               onOpenChange={() => {
@@ -1366,12 +1462,13 @@ export function Editor() {
             <WizardSidebar
               draft={draft}
               current="edit"
+              chrome={false}
               activeSectionId={activeSectionId}
               onSelectSection={(id) => {
                 setShowSidebar(false);
                 jumpToSection(id);
               }}
-              disabled={globallyStreaming}
+              disabled={streaming}
               secondaryTabLabel={draft.mode === "employee" ? "Rights" : "Compliance"}
               secondaryTab={draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />}
             />
@@ -1442,7 +1539,7 @@ export function Editor() {
       {/* The floating evidence drawer, when evidence is not pinned. */}
       {!evidencePinned && (
         <EvidenceDrawer
-          draft={draft}
+          draft={sharedView ?? draft}
           editor={null}
           open={evidenceDrawerOpen}
           onOpenChange={setEvidenceDrawerOpen}

@@ -8,6 +8,7 @@ import {
   Pilcrow,
 } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
+import { sectionTitleText } from "@/lib/letters/display";
 import {
   getDiffViewMode,
   setDiffViewMode,
@@ -21,16 +22,10 @@ import {
   acceptWithSettle,
   decideEdit,
   suggestedEdits,
+  suggestionCategory,
   type SuggestedEdit,
 } from "./suggestion-groups";
-
-const SOURCE_CATEGORY: Record<string, string> = {
-  regenerate: "Rewrite",
-  addClause: "Add a clause",
-  tighten: "Tighten",
-  manual: "Edit",
-  review: "Suggested edit",
-};
+import { useLetterWorkspace } from "./workspace-store";
 
 function plainText(html: string): string {
   if (typeof window === "undefined" || !html) return "";
@@ -114,6 +109,7 @@ export function EditsTab({
   }, []);
 
   const edits = useMemo(() => suggestedEdits(draft), [draft]);
+  const fixCategory = useLetterWorkspace((s) => (s.draftId === draft.id ? s.fixCategory : null));
   const [leaving, setLeaving] = useState<Record<string, boolean>>({});
   const comments = (draft.comments ?? []).filter(
     (c) => !c.parentId && !c.resolved,
@@ -232,8 +228,7 @@ export function EditsTab({
                       }
                       meta={
                         edit.ai
-                          ? (SOURCE_CATEGORY[edit.pending?.source ?? ""] ??
-                            "Rewrite")
+                          ? suggestionCategory(edit, fixCategory)
                           : `Suggestion ${reviewerN}`
                       }
                       onAccept={canResolve ? accept : undefined}
@@ -248,7 +243,7 @@ export function EditsTab({
                         title="Show in the letter"
                       >
                         <Pilcrow className="size-3 shrink-0" />
-                        <span className="truncate">{edit.section.title}</span>
+                        <span className="truncate">{sectionTitleText(edit.section.title)}</span>
                       </button>
                       {parts.length > 0 && (
                         <p className="m-0 font-serif text-[13.5px] leading-[1.5] text-[var(--ds-body)] break-words">

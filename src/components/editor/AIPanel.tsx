@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, isToolUIPart, type UIMessage } from "ai";
 import { Markdown } from "./Markdown";
-import { ArrowUp, Sparkles, Wand2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, FlaskConical, SquarePen, SlidersHorizontal, Paperclip, Bookmark, ChevronDown, Square, TextSelect } from "lucide-react";
+import { ArrowUp, Sparkles, Wand2, Loader2, Check, AlertCircle, RotateCw, Plus, Minus, FileText, Copy, PanelRight, Pin, PinOff, SquarePen, SlidersHorizontal, Paperclip, Bookmark, ChevronDown, Square, TextSelect } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,11 +13,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { getDiffViewMode, setDiffViewMode, type DiffViewMode } from "@/lib/diff-view-mode";
-import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
-import { uid } from "@/lib/utils";
 import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { useProfileStore } from "@/lib/profile";
+import { MODEL_OPTIONS, useProfileStore, type ModelId } from "@/lib/profile";
+import { ConfirmDialog } from "@/components/letters/dialogs";
 import { agentErrorMessage, buildAgentSystemPrompt, buildLetterContextMessage } from "@/lib/llm/agent";
 import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
@@ -156,7 +155,6 @@ export function AIPanel({
   onPin,
   onUnpin,
   isPinned,
-  variant = "panel",
   replaceThread,
   threadKey,
   onSent,
@@ -177,7 +175,8 @@ export function AIPanel({
    * true, clicking the pin button will call this instead of onPin. */
   onUnpin?: () => void;
   isPinned?: boolean;
-  /** "panel" (default): the 14B side panel. "rail": legacy rail chrome. */
+  /** "panel" (default): the 14B side panel. "rail": legacy rail chrome.
+   *  Both now render the same thread. */
   variant?: "rail" | "panel";
   /** When set, replaces the chat thread above the composer (the side
    * panel's Edits and Progress tabs) so the composer stays pinned on every
@@ -203,16 +202,6 @@ export function AIPanel({
   const pushSectionVersion = useDraftStore((s) => s.pushSectionVersion);
   const clearAIChat = useDraftStore((s) => s.clearAIChat);
   const recordTimelineEvent = useDraftStore((s) => s.recordTimelineEvent);
-  const acceptAllSuggestions = useDraftStore((s) => s.acceptAllSuggestions);
-  const rejectAllSuggestions = useDraftStore((s) => s.rejectAllSuggestions);
-
-  // Track-changes affordance — derive once per draft change whether any
-  // section still has pending suggestion marks. Cheap because the helper
-  // string-probes before any DOM parse. Drives the Accept/Reject strip.
-  const anyPending = useMemo(
-    () => draft.sections.some((sec) => hasPendingSuggestions(sec.html)),
-    [draft.sections]
-  );
 
   const [scope, setScope] = useState<AIChatScope>("letter");
   const [input, setInput] = useState("");
@@ -230,6 +219,12 @@ export function AIPanel({
     () => captureRuntimeContext(draft.context.jurisdiction),
     [draft.context.jurisdiction]
   );
+  const todayWords = useMemo(() => {
+    const d = new Date(`${runtimeCtx.isoDate}T12:00:00`);
+    return Number.isNaN(d.getTime())
+      ? runtimeCtx.localDate
+      : d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  }, [runtimeCtx.isoDate, runtimeCtx.localDate]);
 
   const initialMessages = useMemo<UIMessage[]>(
     () =>
@@ -250,8 +245,14 @@ export function AIPanel({
   // after the user edits the draft or changes the model in Settings.
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  const modelRef = useRef(profile.defaults.qwenModel);
-  modelRef.current = profile.defaults.qwenModel;
+  // The default model lives in Settings; the composer can pick another one
+  // for this letter's chat (a one-off, not saved as the default).
+  const defaultModel: ModelId = profile.defaults.qwenModel ?? DEFAULT_MODEL;
+  const [modelChoice, setModelChoice] = useState<ModelId | null>(null);
+  const model: ModelId = modelChoice ?? defaultModel;
+  const modelRef = useRef(model);
+  modelRef.current = model;
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const transport = useMemo(
     () =>
@@ -648,21 +649,16 @@ export function AIPanel({
              * fresh thread. Pin and hide only render where a caller wires them. */}
             <div className="flex items-center gap-2">
               <span
-                className="ds-mono min-w-0 truncate text-[11px] text-[var(--ds-muted)]"
-                title={`Model: ${profile.defaults.qwenModel ?? DEFAULT_MODEL}. The agent has today's date (${runtimeCtx.localDate}, ${runtimeCtx.timeZone}) so it never invents dates.`}
+                className="min-w-0 truncate text-[12px] text-[var(--ds-muted)]"
+                title={`DraftHR has today's date (${todayWords}, ${runtimeCtx.timeZone}) so it never invents dates.`}
               >
-                {profile.defaults.qwenModel ?? DEFAULT_MODEL} · {runtimeCtx.localDate}
+                Today · {todayWords}
               </span>
               <div className="ml-auto flex items-center gap-0.5">
                 {messages.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm("Clear this chat thread?")) {
-                        clearAIChat(draft.id);
-                        setMessages([]);
-                      }
-                    }}
+                    onClick={() => setConfirmClear(true)}
                     className="inline-flex h-7 items-center gap-1.5 rounded-[var(--ds-r-s)] px-2 text-[12px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
                     aria-label="Clear chat thread"
                     title="Start a new thread"
@@ -696,16 +692,6 @@ export function AIPanel({
               </div>
             </div>
 
-            {(import.meta.env.DEV || variant === "rail") && (
-              <SuggestionTestStrip
-                draft={draft}
-                activeSectionId={activeSectionId}
-                anyPending={anyPending}
-                onAcceptAll={() => acceptAllSuggestions(draft.id)}
-                onRejectAll={() => rejectAllSuggestions(draft.id)}
-                insertTest={() => insertTestSuggestion(draft, activeSectionId, updateSection)}
-              />
-            )}
 
             {messages.length === 0 && (
               // Empty state: what DraftHR can do, one starter per tool, then
@@ -929,6 +915,37 @@ export function AIPanel({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
+                    disabled={busy}
+                    className="inline-flex h-7 max-w-[120px] items-center gap-1 rounded-[7px] px-1.5 text-[12.5px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                    aria-label={`Model: ${modelLabel(model)}`}
+                    title={modelChoice ? "Model for this chat (your default is in Settings)" : "Model (your default, set in Settings)"}
+                    data-testid="composer-model"
+                  >
+                    <span className="truncate">{modelLabel(model, true)}</span>
+                    <ChevronDown className="size-3 shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="top" className="w-[260px] duration-[160ms] data-[state=closed]:duration-[100ms]">
+                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Model for this chat</DropdownMenuLabel>
+                  {MODEL_OPTIONS.map((m) => (
+                    <DropdownMenuItem key={m.id} onClick={() => setModelChoice(m.id === defaultModel ? null : m.id)}>
+                      <span className="flex-1 truncate">
+                        {m.label}
+                        {m.id === defaultModel && <span className="text-[var(--ds-muted)]"> · default</span>}
+                      </span>
+                      {model === m.id && <Check className="size-3.5" />}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => nav("/settings")}>
+                    <span className="text-[var(--ds-muted)]">Change the default in Settings</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
                     className="grid size-7 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                     aria-label="Options"
                     title="Options"
@@ -950,12 +967,7 @@ export function AIPanel({
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => {
-                          if (confirm("Clear this chat thread?")) {
-                            clearAIChat(draft.id);
-                            setMessages([]);
-                          }
-                        }}
+                        onClick={() => setConfirmClear(true)}
                       >
                         <SquarePen className="mr-2 size-4" /> New thread
                       </DropdownMenuItem>
@@ -988,95 +1000,27 @@ export function AIPanel({
           </div>
         </div>
       </form>
+      <ConfirmDialog
+        open={confirmClear}
+        onOpenChange={setConfirmClear}
+        title="Start a new thread?"
+        body="This clears the chat for this letter. The letter and its suggested edits stay as they are."
+        confirmLabel="New thread"
+        onConfirm={() => {
+          clearAIChat(draft.id);
+          setMessages([]);
+        }}
+      />
     </div>
   );
 }
 
-/**
- * Track-changes affordance + DEV debug button. Rendered at the top of the
- * AI scroller so the four downstream surfaces (consultant review, AI critique
- * diff, threaded comments, co-edit cursors) have a working primitive to
- * exercise. The "Test suggestion" button is gated to DEV — it injects a
- * green-underlined <ins> at the start of the active section so we can prove
- * the merge / accept / reject paths end-to-end. The Accept/Reject row only
- * shows when there's at least one pending suggestion in the draft.
- */
-function SuggestionTestStrip(props: {
-  draft: Draft;
-  activeSectionId: string | null;
-  anyPending: boolean;
-  onAcceptAll: () => void;
-  onRejectAll: () => void;
-  insertTest: () => void;
-}): ReactElement | null {
-  const isDev = import.meta.env.DEV;
-  if (!isDev && !props.anyPending) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-[var(--ds-r-m)] border border-dashed border-[var(--ds-line)] px-3 py-2 text-[12px]">
-      <span className="text-[var(--ds-muted)] inline-flex items-center gap-1">
-        <FlaskConical className="size-3.5" />
-        Track-changes
-      </span>
-      {props.anyPending ? (
-        <>
-          <span className="text-[var(--ds-ink)]">Pending suggestions</span>
-          <span className="ml-auto inline-flex items-center gap-1">
-            <button
-              type="button"
-              onClick={props.onAcceptAll}
-              className="h-6 rounded-[var(--ds-r-s)] bg-[var(--ds-accent)] px-2 text-[11.5px] font-medium text-[var(--ds-on-accent)] transition hover:bg-[var(--ds-accent-hover)]"
-              title="Accept every pending suggestion in this draft"
-            >
-              Accept all
-            </button>
-            <button
-              type="button"
-              onClick={props.onRejectAll}
-              className="h-6 rounded-[var(--ds-r-s)] px-2 text-[11.5px] font-medium text-[var(--ds-muted)] transition hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-ink)]"
-              title="Reject every pending suggestion. The text stays and the marks fade."
-            >
-              Reject all
-            </button>
-          </span>
-        </>
-      ) : (
-        <span className="text-[var(--ds-subtle)]">No pending suggestions</span>
-      )}
-      {isDev && (
-        <button
-          type="button"
-          onClick={props.insertTest}
-          className="h-6 px-2 rounded-md border border-dashed border-[var(--ds-line)] text-[var(--ds-muted)] hover:text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] transition text-[11px]"
-          title="DEV: inject a fake suggestion into the active section"
-        >
-          Test suggestion
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** DEV helper: append a pending <ins> to the active section's HTML so the
- * accept / reject paths have something to chew on. Reads-then-writes via
- * updateSection so it goes through the canonical sanitiser. */
-function insertTestSuggestion(
-  draft: Draft,
-  activeSectionId: string | null,
-  updateSection: (draftId: string, sectionId: string, html: string) => void,
-): void {
-  const section =
-    draft.sections.find((s) => s.id === activeSectionId) ?? draft.sections[0];
-  if (!section) return;
-  const id = uid("sug");
-  const created = Date.now();
-  // <p> wrapper keeps the editor's block schema happy — bare inline marks at
-  // the doc level get re-wrapped on next parse anyway.
-  const inserted =
-    `<p><ins data-suggestion-id="${id}" data-suggestion-kind="insertion" ` +
-    `data-author="Test reviewer" data-created-at="${created}" ` +
-    `data-status="pending" data-body="DEV: synthetic suggestion" ` +
-    `class="ds-suggestion ds-suggestion-ins ds-suggestion-pending">[TEST INSERT]</ins></p>`;
-  updateSection(draft.id, section.id, `${section.html ?? ""}${inserted}`);
+/** A model's name for people: its Settings label, or just the family name
+ *  when short (the composer row has little room). */
+function modelLabel(id: ModelId, short = false): string {
+  const label = MODEL_OPTIONS.find((m) => m.id === id)?.label ?? "Default model";
+  if (!short) return label;
+  return label.replace(/^Claude\s+/, "").replace(/\s+[\d.]+$/, "");
 }
 
 /** Concatenate text-type parts from a v6 UIMessage. */

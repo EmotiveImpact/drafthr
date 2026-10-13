@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CircleCheck, Check, Stamp, Undo2 } from "lucide-react";
+import { CircleCheck, Check, Stamp, Undo2, CircleDot } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { canApprove, canSubmitForReview } from "@/lib/permissions";
@@ -11,9 +11,10 @@ import { RateExpertCard } from "@/components/journey/review/parts";
 import { openRoundsHistory } from "@/components/journey/review/review-ui";
 import type { Draft } from "@/lib/letters/types";
 import { useWorkspaceFor } from "@/components/editor/workspace-store";
-import { decisionsFor } from "@/components/editor/suggestion-groups";
+import { openPoints, reviewPoints, reviewSummary } from "@/components/journey/review/model";
 import {
   APPROVER_ROLE_KEY,
+  approverTitleFor,
   fmtWhen,
   submittedEntry,
   verdictWords,
@@ -49,6 +50,8 @@ function storedApproverRole(draftId: string): string | null {
  */
 export function ApproveStage({ draftId }: { draftId: string }) {
   const draft = useDraftStore((s) => s.drafts[draftId]);
+  const drafts = useDraftStore((s) => s.drafts);
+  const employees = useDraftStore((s) => s.employees);
   const profile = useProfileStore((s) => s.profile);
   const approverName = draft ? submittedEntry(draft)?.reviewerName : undefined;
   const viewerIsApprover = draft ? viewerIsApproverFor(draft, profile, approverName) : false;
@@ -67,7 +70,9 @@ export function ApproveStage({ draftId }: { draftId: string }) {
     const named = submitted?.reviewerName && !/^workspace reviewer$/i.test(submitted.reviewerName) ? submitted.reviewerName : "";
     const name = named || "Your approver";
     const first = firstName(named) || "the approver";
-    const roleWord = storedApproverRole(draftId);
+    // Their job title (employee record, or how the workspace's letters name
+    // them), else the workspace role picked when it was sent.
+    const roleWord = approverTitleFor(named, drafts, employees) ?? storedApproverRole(draftId);
     const timeline: PersonTimelineItem[] = [
       { id: "sent", label: "Sent for approval", time: submitted ? fmtWhen(submitted.createdAt) : undefined, state: "done" },
       { id: "with", label: viewerIsApprover ? "With you to approve" : `With ${first}`, time: "now", state: "now" },
@@ -140,14 +145,22 @@ function ReviewSummary({
   skipped: boolean;
   onRounds?: () => void;
 }) {
+  // The same counts as the rounds history (reviewSummary), and what is
+  // still open in the last round.
   const facts = useMemo(() => {
     if (!review) return null;
-    const ids = new Set(review.rounds.flatMap((r) => r.suggestionIds));
-    const commentIds = new Set(review.rounds.flatMap((r) => r.commentIds));
-    const { accepted, rejected } = decisionsFor(draft, review.reviewer.name, ids);
-    const resolved = (draft.comments ?? []).filter((c) => commentIds.has(c.id) && c.resolved).length;
+    const sum = reviewSummary(draft, review);
+    const open = openPoints(reviewPoints(draft, review)).length;
     const last = currentRound(review);
-    return { accepted, rejected, resolved, verdict: last?.verdict ? verdictWords(last.verdict) : "", n: review.rounds.length };
+    const verdict = sum.verdict ?? last?.verdict;
+    return {
+      accepted: sum.accepted,
+      kept: sum.kept,
+      resolved: sum.resolved,
+      open,
+      verdict: verdict ? verdictWords(verdict) : "",
+      n: Math.max(1, review.rounds.length),
+    };
   }, [draft, review]);
 
   if (!review || !facts) {
@@ -159,14 +172,15 @@ function ReviewSummary({
       </section>
     );
   }
+  const decided = facts.accepted + facts.kept + facts.resolved;
   const parts: string[] = [];
-  if (facts.accepted || facts.rejected || facts.resolved) {
+  if (decided > 0) {
     parts.push(`You accepted ${plural(facts.accepted, "change")}`);
-    parts.push(`kept ${facts.rejected}`);
+    parts.push(`kept ${facts.kept}`);
     parts.push(`resolved ${plural(facts.resolved, "comment")}`);
-  } else {
-    parts.push("Nothing to decide");
   }
+  if (facts.open > 0) parts.push(`${plural(facts.open, "point")} still open`);
+  if (parts.length === 0) parts.push("Nothing to decide");
   const roundsLink = facts.n === 2 ? "See both rounds" : facts.n > 2 ? "See all rounds" : "See the round";
   return (
     <section aria-label="Review">
@@ -179,7 +193,11 @@ function ReviewSummary({
         </span>
       </p>
       <p className="m-0 mt-1 flex items-start gap-2 text-[13px] text-[var(--ds-body)]">
-        <Check aria-hidden className="mt-[2px] size-3.5 shrink-0 text-[var(--ds-muted)]" />
+        {facts.open > 0 ? (
+          <CircleDot aria-hidden className="mt-[2px] size-3.5 shrink-0 text-[var(--ds-amber-fg)]" />
+        ) : (
+          <Check aria-hidden className="mt-[2px] size-3.5 shrink-0 text-[var(--ds-muted)]" />
+        )}
         <span>{parts.join(", ")}</span>
       </p>
       {onRounds && (

@@ -57,8 +57,12 @@ export function CollabReviewRail({
   onFocusCommentConsumed,
   openSuggest,
   onOpenSuggestConsumed,
+  submitBlockedReason,
 }: {
   draft: Draft;
+  /** Set when the journey holds the submit (a required check fails). The
+   *  Submit and Re-submit buttons are disabled and this reason is shown. */
+  submitBlockedReason?: string | null;
   role: WorkspaceRole | undefined;
   /** Whether the viewer may Accept/Reject suggestions (the canvas edit gate). */
   canResolve: boolean;
@@ -334,11 +338,17 @@ export function CollabReviewRail({
             <Button
               size="sm"
               className="w-full"
-              disabled={!canSubmitForReview(role)}
+              disabled={!canSubmitForReview(role) || Boolean(submitBlockedReason)}
+              title={submitBlockedReason ?? undefined}
               onClick={() => onOpenReviewDialog("submit")}
             >
               <Send className="mr-1.5 size-3.5" /> Submit for approval
             </Button>
+            {submitBlockedReason && (
+              <p data-testid="submit-blocked-reason" className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">
+                {submitBlockedReason}
+              </p>
+            )}
           </>
         )}
 
@@ -403,11 +413,17 @@ export function CollabReviewRail({
             <Button
               size="sm"
               className="w-full"
-              disabled={!canSubmitForReview(role)}
+              disabled={!canSubmitForReview(role) || Boolean(submitBlockedReason)}
+              title={submitBlockedReason ?? undefined}
               onClick={() => onOpenReviewDialog("submit")}
             >
               <Send className="mr-1.5 size-3.5" /> Re-submit for approval
             </Button>
+            {submitBlockedReason && (
+              <p data-testid="submit-blocked-reason" className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">
+                {submitBlockedReason}
+              </p>
+            )}
           </>
         )}
 

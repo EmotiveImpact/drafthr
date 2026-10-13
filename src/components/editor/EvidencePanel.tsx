@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronDown,
@@ -22,6 +22,7 @@ import { displayModeOf, figureLabelFor, sectionLabels } from "@/lib/evidence";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
 import { uid } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 /* ---------------------------------------------------------------------------
@@ -343,7 +344,7 @@ function AddEvidenceForm({
     if (!file) return;
     if (file.size > MAX_EVIDENCE_FILE_BYTES) {
       setError(
-        `${file.name} is larger than 10 MB. Use a smaller file or summarize as a note.`,
+        `${file.name} is larger than 10 MB. Use a smaller file or summarise it as a note.`,
       );
       return;
     }
@@ -387,23 +388,29 @@ function AddEvidenceForm({
     onSubmit(item);
   };
 
+  const typeLabelId = useId();
   return (
     <div className="shrink-0 border-b border-[var(--ds-line)] bg-[var(--ds-surface-2)] px-3 py-3 space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10.5px] font-medium text-[var(--ds-muted)]">
-          Type
-          <select
-            value={kind}
-            onChange={(event) => setKind(event.target.value as Kind)}
-            className="mt-1 h-7 w-full rounded-md border border-[var(--ds-line)] bg-white px-1.5 text-[12px] text-[var(--ds-ink)]"
-          >
-            {KIND_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="block text-[10.5px] font-medium text-[var(--ds-muted)]">
+          <span id={typeLabelId}>Type</span>
+          <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
+            <SelectTrigger
+              size="sm"
+              aria-labelledby={typeLabelId}
+              className="mt-1 h-7 w-full rounded-md px-1.5 text-[12px] font-normal data-[size=sm]:h-7 data-[size=sm]:text-[12px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-[60]">
+              {KIND_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <label className="block text-[10.5px] font-medium text-[var(--ds-muted)]">
           Label
           <input
@@ -680,6 +687,7 @@ function CardEditPanel({
   onUpdate: (patch: Partial<EvidenceItem>) => void;
   onClose: () => void;
 }) {
+  const typeLabelId = useId();
   const mode = displayModeOf(item);
   const evidence = draft.evidence ?? [];
   const autoLabel = figureLabelFor(item, evidence);
@@ -687,22 +695,25 @@ function CardEditPanel({
   return (
     <div className="border-t border-[var(--ds-line-2)] bg-[var(--ds-surface-2)] px-2.5 py-2.5 space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <label className="block text-[10px] font-medium text-[var(--ds-muted)]">
-          Type
-          <select
-            value={item.kind}
-            onChange={(event) =>
-              onUpdate({ kind: event.target.value as Kind })
-            }
-            className="mt-1 h-7 w-full rounded-md border border-[var(--ds-line)] bg-white px-1.5 text-[12px] text-[var(--ds-ink)]"
-          >
-            {KIND_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="block text-[10px] font-medium text-[var(--ds-muted)]">
+          <span id={typeLabelId}>Type</span>
+          <Select value={item.kind} onValueChange={(v) => onUpdate({ kind: v as Kind })}>
+            <SelectTrigger
+              size="sm"
+              aria-labelledby={typeLabelId}
+              className="mt-1 h-7 w-full rounded-md px-1.5 text-[12px] font-normal data-[size=sm]:h-7 data-[size=sm]:text-[12px]"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" className="z-[60]">
+              {KIND_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <label className="block text-[10px] font-medium text-[var(--ds-muted)]">
           Label
           <input

@@ -17,6 +17,7 @@ export function Letterhead({ draft, fallbackName, fallbackAddress }: { draft: Dr
     .map((l) => l.trim())
     .filter(Boolean);
   const logo = draft.employer?.letterheadDataUrl;
+  const phone = draft.employer?.phone?.trim() || "";
   if (!name && lines.length === 0 && !logo) return null;
   return (
     <header
@@ -25,19 +26,36 @@ export function Letterhead({ draft, fallbackName, fallbackAddress }: { draft: Dr
     >
       <div className="min-w-0">
         <div className="text-[19px] leading-tight text-[var(--ds-ink)] max-md:font-sans max-md:text-[14px] max-md:font-semibold">{name}</div>
-        {lines.length > 0 && (
-          <div className="mt-0.5 font-sans text-[12px] leading-[1.5] text-[var(--ds-muted)] md:hidden">{lines.join(", ")}</div>
+        {(lines.length > 0 || phone) && (
+          <div className="mt-0.5 font-sans text-[12px] leading-[1.5] text-[var(--ds-muted)] md:hidden">
+            {[lines.join(", "), phone].filter(Boolean).join(" · ")}
+          </div>
         )}
       </div>
       <div className="flex shrink-0 items-start gap-3">
-        {lines.length > 0 && (
+        {(lines.length > 0 || phone) && (
           <address className="text-right text-[12px] not-italic leading-[1.5] text-[var(--ds-muted)] max-md:hidden">
             {groupAddress(lines).map((l) => (
               <div key={l}>{l}</div>
             ))}
+            {phone && <div>{phone}</div>}
           </address>
         )}
-        {logo && <img src={logo} alt={`${name} logo`} className="h-7 w-auto max-w-[96px] object-contain" />}
+        {logo ? (
+          <img src={logo} alt={`${name} logo`} className="h-7 w-auto max-w-[96px] object-contain max-md:h-6 max-md:max-w-[64px]" />
+        ) : (
+          name && (
+            // On the phone sheet a small mark sits at the right of the
+            // letterhead (mock phone-letter): the company's initial until a
+            // letterhead logo is set in Settings.
+            <span
+              aria-hidden
+              className="grid size-6 place-items-center rounded-[6px] bg-[var(--ds-ink)] font-sans text-[12px] font-semibold text-[var(--ds-on-accent)] md:hidden"
+            >
+              {name.charAt(0).toUpperCase()}
+            </span>
+          )
+        )}
       </div>
     </header>
   );

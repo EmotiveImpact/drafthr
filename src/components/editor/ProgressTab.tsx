@@ -64,8 +64,8 @@ export function ProgressTab({
   viewerIsApprover: boolean;
   /** The named teammate reviewer is looking (their own review). */
   viewerIsReviewer?: boolean;
-  /** The tracker step that just completed (its tick draws), or null. */
-  tickStep: number | null;
+  /** The tracker steps that just completed ("0", "0 1"): their ticks draw. */
+  tickStep: string | null;
   role: WorkspaceRole | undefined;
   counselNeeded: boolean;
   counselReview: { reviewedBy: string; reviewedOn: string } | null;
@@ -81,7 +81,10 @@ export function ProgressTab({
     const text = draft.sections.map((s) => s.html).join("\n");
     const rules = rulesFor(draft.letterType, draft.context.jurisdiction, draft.context.usState);
     const met = rules.filter((r) => ruleSatisfied(r, text)).length;
-    return { met, total: rules.length };
+    const required = rules.filter((r) => r.severity === "required");
+    const requiredMissing = required.filter((r) => !ruleSatisfied(r, text)).length;
+    const optionalOpen = rules.filter((r) => r.severity !== "required" && !ruleSatisfied(r, text)).length;
+    return { met, total: rules.length, requiredMissing, optionalOpen };
   }, [draft.sections, draft.letterType, draft.context.jurisdiction, draft.context.usState]);
 
   const evidenceRequired = evidenceStatus.filter((e) => e.expectation.required);
@@ -99,7 +102,7 @@ export function ProgressTab({
     <div
       className="lw-progress flex min-w-0 flex-col gap-3.5 px-4 pb-5 pt-4"
       aria-label="Letter progress"
-      data-tick-step={tickStep ?? undefined}
+      data-tick-steps={tickStep ?? undefined}
     >
       <JourneyPanel
         draftId={draft.id}
@@ -148,8 +151,26 @@ export function ProgressTab({
         <div className="flex flex-col border-t border-[var(--ds-line-2)]">
           <Folded
             title={draft.mode === "employee" ? "Your rights checklist" : "Compliance checks"}
-            meta={compliance.total > 0 ? `${compliance.met} of ${compliance.total}` : undefined}
+            // Its own count, apart from the letter health checks above: the
+            // legal points DraftHR looks for in this kind of letter. Required
+            // points first; optional ones never read as a failure (LETTER-X26).
+            meta={
+              compliance.total === 0
+                ? undefined
+                : compliance.requiredMissing > 0
+                  ? `${compliance.requiredMissing} required missing`
+                  : compliance.optionalOpen > 0
+                    ? `Required met · ${compliance.optionalOpen} optional`
+                    : "All met"
+            }
+            attention={compliance.requiredMissing > 0}
           >
+            {compliance.total > 0 && (
+              <p className="m-0 mb-2 text-[12.5px] leading-snug text-[var(--ds-muted)]">
+                Legal points DraftHR looks for in this kind of letter, separate from the letter health checks. {compliance.met} of{" "}
+                {compliance.total} are covered{compliance.optionalOpen > 0 && compliance.requiredMissing === 0 ? "; the rest are optional" : ""}.
+              </p>
+            )}
             <div className="-mx-3">{draft.mode === "employee" ? <EmployeeRail draft={draft} /> : <CompliancePanel draft={draft} />}</div>
           </Folded>
           <Folded

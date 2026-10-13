@@ -49,6 +49,11 @@
 .lw-paper .ProseMirror ul,
 .lw-paper .ProseMirror ol { margin: 0 0 12px; padding-left: 1.4em; }
 .lw-paper .ProseMirror li { margin: 2px 0; }
+/* The base reset clears list markers; a letter's lists show theirs. */
+.lw-paper .ProseMirror ul { list-style: disc outside; }
+.lw-paper .ProseMirror ul ul { list-style-type: circle; }
+.lw-paper .ProseMirror ol { list-style: decimal outside; }
+.lw-paper .ProseMirror li::marker { color: var(--ds-body); }
 .lw-paper .ProseMirror p.is-editor-empty:first-child::before {
   font-family: var(--font-sans);
   font-size: 13px;
@@ -191,7 +196,7 @@
 /* ---------- Numbered boxed citation markers ----------
  * A "[See Fig N]" evidence reference keeps its text for copy, export and
  * screen readers; on the page it shows as a small numbered box. */
-.lw-paper .figure-ref[data-cite-n] {
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n] {
   font-size: 0 !important;
   background: transparent !important;
   padding: 0 !important;
@@ -199,7 +204,7 @@
   color: transparent !important;
   cursor: pointer;
 }
-.lw-paper .figure-ref[data-cite-n]::after,
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n]::after,
 .lw-cite {
   content: attr(data-cite-n);
   display: inline-grid;
@@ -221,8 +226,8 @@
   cursor: pointer;
   transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.lw-paper .figure-ref[data-cite-n]:hover::after,
-.lw-paper .figure-ref[data-cite-n].is-open::after,
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n]:hover::after,
+:is(.lw-paper, .lw-pageview) .figure-ref[data-cite-n].is-open::after,
 .lw-cite:hover,
 .lw-cite[data-state="open"] {
   color: var(--ds-ink);
@@ -279,13 +284,19 @@
 .lw-progress [data-slot="stage-tracker"] li > span.size-7 {
   transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease, box-shadow 0.35s ease;
 }
-.lw-progress[data-tick-step="0"] [data-slot="stage-tracker"] > li:nth-child(1)[data-state="done"] svg path,
-.lw-progress[data-tick-step="1"] [data-slot="stage-tracker"] > li:nth-child(2)[data-state="done"] svg path,
-.lw-progress[data-tick-step="2"] [data-slot="stage-tracker"] > li:nth-child(3)[data-state="done"] svg path,
-.lw-progress[data-tick-step="3"] [data-slot="stage-tracker"] > li:nth-child(4)[data-state="done"] svg path {
+.lw-progress[data-tick-steps~="0"] [data-slot="stage-tracker"] > li:nth-child(1)[data-state="done"] svg path,
+.lw-progress[data-tick-steps~="1"] [data-slot="stage-tracker"] > li:nth-child(2)[data-state="done"] svg path,
+.lw-progress[data-tick-steps~="2"] [data-slot="stage-tracker"] > li:nth-child(3)[data-state="done"] svg path,
+.lw-progress[data-tick-steps~="3"] [data-slot="stage-tracker"] > li:nth-child(4)[data-state="done"] svg path {
   stroke-dasharray: 24;
   stroke-dashoffset: 24;
   animation: ds-draw 0.35s ease-out 0.1s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-progress[data-tick-steps] [data-slot="stage-tracker"] > li svg path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 
 /* Status pill cross-fade when the stage changes. */

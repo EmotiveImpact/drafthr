@@ -7,6 +7,7 @@ import {
   backTiming,
   collectReviewerWork,
   defaultDueAt,
+  evidenceSharedWith,
   isHearingNote,
   openPoints,
   parseDelivery,
@@ -105,6 +106,16 @@ describe("the reviewer's points", () => {
     expect(openPoints(after).map((p) => p.id)).toEqual(["c1"]);
     expect(summariseRound(accepted, r, r.rounds[0])).toBeTruthy();
   });
+
+  it("counts a suggestion decided from the Edits tab when the round has no snapshot of it", () => {
+    const accepted = draft();
+    accepted.sections[0] = { ...accepted.sections[0], html: "<p>You were late eleven times.</p>", pendingChange: undefined };
+    const r = review({ rounds: [{ ...review().rounds[0], decisions: { pc1: { decision: "accepted", at: T0 + 9000 } } }] });
+    const pts = reviewPoints(accepted, r);
+    expect(pts.filter((p) => p.kind === "suggestion").map((p) => [p.id, p.state])).toEqual([["pc1", "accepted"]]);
+    // While it is still in the text, the mark ids never add extra rows.
+    expect(reviewPoints(draft(), review()).filter((p) => p.kind === "suggestion")).toHaveLength(1);
+  });
 });
 
 describe("what goes to the reviewer", () => {
@@ -128,6 +139,12 @@ describe("what goes to the reviewer", () => {
     expect(sharedEvidence(d, { evidence: true, hearingNotes: false }).map((e) => [e.id, e.group])).toEqual([["e1", "file"]]);
     expect(sharedEvidence(d, { evidence: false, hearingNotes: true }).map((e) => e.id)).toEqual(["e2", "e3"]);
     expect(sharedEvidence(d, { evidence: false, hearingNotes: false })).toEqual([]);
+  });
+
+  it("shows a teammate only the evidence they were given, in the letter's order", () => {
+    expect(evidenceSharedWith(evidence, { evidence: true, hearingNotes: false }).map((e) => e.id)).toEqual(["e1"]);
+    expect(evidenceSharedWith(evidence, { evidence: true, hearingNotes: true }).map((e) => e.id)).toEqual(["e1", "e2", "e3"]);
+    expect(evidenceSharedWith(evidence, undefined)).toEqual([]);
   });
 
   it("splits a numbered ask into questions", () => {

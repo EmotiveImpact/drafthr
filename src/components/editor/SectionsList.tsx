@@ -1,4 +1,5 @@
 import type { Draft } from "@/lib/letters/types";
+import { sectionTitleText } from "@/lib/letters/display";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -131,12 +132,12 @@ const TITLE_OVERRIDES: [RegExp, string][] = [
 ];
 
 export function sidebarLabelFor(section: SidebarSection): string {
-  const title = section.title.trim();
+  const title = sectionTitleText(section.title);
   for (const [pattern, label] of TITLE_OVERRIDES) {
     if (pattern.test(title)) return label;
   }
 
-  const beforeDash = title.split(/\s+[—-]\s+/)[0]?.trim();
+  const beforeDash = title.split(/\s+[—-]\s+|:\s+/)[0]?.trim();
   if (beforeDash && beforeDash.length <= 22) return beforeDash;
 
   return LABEL_BY_SECTION_ID[section.sectionId] ?? compactTitle(title);
@@ -147,5 +148,6 @@ function compactTitle(title: string): string {
     .replace(/\s*\([^)]*\)/g, "")
     .replace(/\s+\/\s+.*/g, "")
     .replace(/\s+[—-]\s+.*/g, "")
+    .replace(/:\s+.*/g, "")
     .trim();
 }

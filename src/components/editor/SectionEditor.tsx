@@ -41,6 +41,7 @@ async function readImageAsDataUrl(file: File): Promise<string | null> {
 }
 import { useEffect, useRef, useState } from "react";
 import type { Draft, Section } from "@/lib/letters/types";
+import { sectionTitleText } from "@/lib/letters/display";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { FileText, FolderOpen, Loader2, History, Trash2, MessageSquarePlus, Sparkles, Check, X } from "lucide-react";
@@ -98,6 +99,11 @@ type Props = {
   /** Hide the per-section format toolbar (the document bar's format row
    * drives the focused section instead). */
   hideToolbar?: boolean;
+  /** The author's section chrome: the hover actions (attach, evidence,
+   * comment, history, clear, Refine) and the selection "Comment" bubble.
+   * Off for a teammate reviewer, who has their own Suggest and Comment
+   * controls. Defaults to true. */
+  authorChrome?: boolean;
   /** Reports this section's editor when it gains focus, so the document
    * bar can drive formatting for whichever section is being edited. */
   onEditorFocus?: (editor: Editor) => void;
@@ -124,6 +130,7 @@ export function SectionEditor({
   editable = true,
   variant = "card",
   hideToolbar = false,
+  authorChrome = true,
   onEditorFocus,
   onEditorReady,
 }: Props) {
@@ -147,7 +154,7 @@ export function SectionEditor({
       StarterKit.configure({ codeBlock: false, code: false }),
       Underline,
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: "noopener noreferrer" } }),
-      Placeholder.configure({ placeholder: `Write the ${section.title.toLowerCase()}…` }),
+      Placeholder.configure({ placeholder: `Write the ${sectionTitleText(section.title).toLowerCase()}…` }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -428,7 +435,10 @@ export function SectionEditor({
         className={cn(
           "flex items-center justify-between gap-2",
           paper
-            ? "pointer-events-none absolute -top-9 right-0 z-20 font-sans"
+            ? // Phones: above the section being edited. Wider screens: a
+              // column in the page's right margin, beside the section, so it
+              // never covers the text of the paragraph above.
+              "pointer-events-none absolute -top-9 right-0 z-20 font-sans md:left-full md:right-auto md:top-0 md:ml-1.5 md:flex-col md:items-start md:justify-start md:gap-1 lg:ml-3"
             : "px-3 py-2 md:border-b md:border-letter-rule",
         )}
       >
@@ -440,7 +450,7 @@ export function SectionEditor({
                 : "text-[10px] uppercase tracking-[0.18em] text-muted-foreground truncate"
             }
           >
-            {section.title}
+            {sectionTitleText(section.title)}
           </span>
           {isStreaming && (
             <span
@@ -460,13 +470,18 @@ export function SectionEditor({
             <span className="inline-flex items-center text-[11px] text-[var(--ds-green-fg)]">Ready</span>
           )}
         </div>
-        <div
+        {authorChrome && (<div
           className={cn(
             "flex items-center gap-0.5",
             // Paper: a small floating menu over the section's top right,
             // shown when the section is hovered, focused or being edited.
             paper &&
               "pointer-events-auto rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] p-0.5 shadow-[var(--ds-shadow-m)] transition-[opacity,visibility] duration-[120ms] md:invisible md:opacity-0 md:group-hover/sec:visible md:group-hover/sec:opacity-100 md:group-focus-within/sec:visible md:group-focus-within/sec:opacity-100",
+            // The column: one button per row, and an invisible strip across
+            // the gap to the text so the pointer can reach it without the
+            // menu closing.
+            paper &&
+              "md:relative md:flex-col md:before:absolute md:before:inset-y-0 md:before:right-full md:before:w-3 md:before:content-['']",
             // Phones: only the section being edited shows its actions.
             paper && !active && "max-md:hidden",
             paper && active && "md:visible md:opacity-100",
@@ -644,16 +659,17 @@ export function SectionEditor({
                 size="sm"
                 variant="ghost"
                 disabled={isStreaming || !editable}
-                className="h-7 px-2 text-xs"
+                className={cn("h-7 px-2 text-xs", paper && "md:w-7 md:px-0")}
                 onClick={(e) => e.stopPropagation()}
                 aria-label={paper ? "Refine this section" : undefined}
+                title={paper ? "Refine this section" : undefined}
               >
-                <Sparkles className="size-3 mr-1" />
-                {paper ? "Refine" : "Regenerate"}
+                <Sparkles className={cn("size-3 mr-1", paper && "md:mr-0")} />
+                {paper ? <span className="md:sr-only">Refine</span> : "Regenerate"}
               </Button>
             }
           />
-        </div>
+        </div>)}
       </header>
       {linkedEvidence.length > 0 && !paper && (
         <div
@@ -716,7 +732,7 @@ export function SectionEditor({
       )}
 
       <div className={paper ? "pb-3" : "px-3 py-3 md:px-7 md:py-5"}>
-        {editor && (
+        {editor && authorChrome && (
           <BubbleMenu
             editor={editor}
             tippyOptions={{

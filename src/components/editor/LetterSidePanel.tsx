@@ -205,7 +205,8 @@ function Segmented({
         >
           {it.label}
           {it.count !== undefined && it.count > 0 && (
-            <span className="ds-mono text-[12px] font-normal text-[var(--ds-subtle)]">{it.count}</span>
+            // Muted: the count sits on the tab track's fill (AA there).
+            <span className="ds-mono text-[12px] font-normal text-[var(--ds-muted)]">{it.count}</span>
           )}
         </button>
       ))}

@@ -65,9 +65,21 @@ export async function generateAllSections(
   for (const section of draft.sections) {
     if (signal.aborted) return;
 
-    // reset any prior content
+    // Reset any prior content, keeping it to put back if this section's
+    // run fails or is stopped before any text arrives (nothing is lost when
+    // Regenerate all fails).
+    const priorHtml = section.html ?? "";
+    const priorStatus = section.status;
     store.updateSection(draft.id, section.id, "");
     store.setSectionStatus(draft.id, section.id, "streaming");
+    const restorePrior = () => {
+      if (!priorHtml.trim()) {
+        store.setSectionStatus(draft.id, section.id, "empty");
+        return;
+      }
+      store.updateSection(draft.id, section.id, priorHtml);
+      store.setSectionStatus(draft.id, section.id, priorStatus === "streaming" || priorStatus === "empty" ? "edited" : priorStatus);
+    };
 
     const userPrompt = buildSectionPrompt(draft, section, priorTitles);
     let acc = "";
@@ -104,8 +116,11 @@ export async function generateAllSections(
         html: sanitiseHtml(acc),
       });
     } catch (err) {
-      if (signal.aborted) return;
-      store.setSectionStatus(draft.id, section.id, "empty");
+      if (signal.aborted) {
+        if (!acc.trim()) restorePrior();
+        return;
+      }
+      restorePrior();
       throw err;
     }
 

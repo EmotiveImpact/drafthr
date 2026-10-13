@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, MessageSquarePlus, Reply, Trash2, X } from "lucide-react";
 import type { Comment, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
+import { notifyComment } from "@/lib/collab-notify";
 import {
   type CommentViewer,
   canDeleteComment,
@@ -197,6 +198,9 @@ export function FloatingCommentPanel({
               resolved: false,
             });
             mode.applyMark?.(id);
+            // Email the author that a comment landed, as the Comments panel
+            // does (best effort; the server skips self-comments).
+            notifyComment(draft.id, body);
             onClose();
           }}
         />
@@ -219,6 +223,7 @@ export function FloatingCommentPanel({
               body,
               resolved: false,
             });
+            notifyComment(draft.id, body);
           }}
           onDelete={(id) => deleteComment(draft.id, id)}
           onToggleResolve={() =>

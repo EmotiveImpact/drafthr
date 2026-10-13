@@ -168,7 +168,7 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "Grounds enumerated",
     description:
-      "Tribunals expect the canonical four grounds — procedural unfairness, factual error, severity disproportionate, new evidence — to be addressed in turn.",
+      "Tribunals expect the canonical four grounds (procedural unfairness, factual error, severity disproportionate, new evidence) to be addressed in turn.",
     match: { kind: "regex", value: "procedural|factual error|severity|new evidence|disproportionate", flags: "i" },
     recommendation: "Structure the body around the four canonical grounds.",
   },
@@ -179,7 +179,7 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "Right to be accompanied requested",
     description:
-      "s.10 Employment Relations Act 1999 — request the right to be accompanied at the appeal hearing.",
+      "s.10 Employment Relations Act 1999: request the right to be accompanied at the appeal hearing.",
     match: { kind: "regex", value: "right to be accompanied|colleague or trade union", flags: "i" },
     recommendation:
       "Add: 'I request the right to be accompanied at the appeal hearing in accordance with s.10 ERelA 1999.'",

@@ -336,7 +336,7 @@ export function EvidenceDrawer({
         Unpin
       </button>
       <span className="text-[11px] text-[var(--ds-muted)]">
-        Evidence pinned · Ask AI is a pill at bottom-right
+        Evidence pinned · Ask DraftHR is at the bottom right
       </span>
     </div>
   ) : null;
@@ -360,7 +360,7 @@ export function EvidenceDrawer({
 
         {/* Tabs — min-w-0 on the flex container is required for overflow-x-auto
          * to actually kick in when the inner buttons exceed the slot width. */}
-        <div className="flex border-b border-[var(--ds-line)] px-3 gap-0.5 overflow-x-auto min-w-0">
+        <div className="flex min-w-0 justify-between border-b border-[var(--ds-line)] px-2">
           {FILTER_TABS.map((tab) => {
             const isActive = activeTab === tab.id;
             const count = counts[tab.id];
@@ -370,7 +370,7 @@ export function EvidenceDrawer({
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "py-2.5 px-2 text-[12px] font-semibold border-b-2 -mb-px transition whitespace-nowrap shrink-0",
+                  "py-2.5 px-1 text-[12px] font-semibold border-b-2 -mb-px transition whitespace-nowrap shrink-0",
                   isActive
                     ? "text-[var(--ds-ink)] border-[var(--ds-ink)]"
                     : "text-[var(--ds-muted)] border-transparent hover:text-[var(--ds-ink)]"
@@ -379,7 +379,7 @@ export function EvidenceDrawer({
                 {tab.label}
                 <span
                   className={cn(
-                    "ml-1.5 inline-block min-w-[18px] text-center text-[10.5px] font-semibold px-1.5 py-px rounded-full",
+                    "ml-1 inline-block min-w-[16px] text-center text-[10.5px] font-semibold px-1 py-px rounded-full",
                     isActive
                       ? "bg-[var(--ds-ink)] text-white"
                       : "bg-[var(--ds-surface-2)] text-[var(--ds-muted)]"
@@ -616,8 +616,10 @@ export function EvidenceDrawer({
                 initial={{ x: "100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
-                transition={{ type: "spring", stiffness: 340, damping: 42, mass: 0.9 }}
-                className="fixed inset-y-0 right-0 z-40 w-full max-w-[420px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-2xl flex flex-col min-h-0 overflow-hidden focus:outline-none"
+                transition={{ duration: 0.22, ease: [0.2, 0.7, 0.2, 1] }}
+                // The side panel's own width: it opens over the Edits /
+                // Progress / Chat tabs, never over the document bar.
+                className="fixed inset-y-0 right-0 z-40 w-full max-w-[380px] bg-[var(--ds-surface)] border-l border-[var(--ds-line)] shadow-[var(--ds-shadow-l)] flex flex-col min-h-0 overflow-hidden focus:outline-none"
               >
                 {innerBody}
               </motion.aside>

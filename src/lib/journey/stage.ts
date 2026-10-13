@@ -185,6 +185,11 @@ function attr(tag: string, name: string): string | undefined {
   return m ? m[1] : undefined;
 }
 
+/** A section has words in it (an empty "<p></p>" left by the editor does not count). */
+export function hasText(html: string | undefined): boolean {
+  return (html ?? "").replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim().length > 0;
+}
+
 function countsFor(draft: Draft, checks: HealthCheck[]): JourneyCounts {
   const sections = draft.sections ?? [];
   // A pending change in inline mode is already counted through its marks;
@@ -196,8 +201,8 @@ function countsFor(draft: Draft, checks: HealthCheck[]): JourneyCounts {
   ).length;
   return {
     sections: sections.length,
-    sectionsDrafted: sections.filter((s) => (s.html ?? "").trim().length > 0).length,
-    requiredSectionsEmpty: sections.filter((s) => s.required && !(s.html ?? "").trim()).length,
+    sectionsDrafted: sections.filter((s) => hasText(s.html)).length,
+    requiredSectionsEmpty: sections.filter((s) => s.required && !hasText(s.html)).length,
     streaming: sections.some((s) => s.status === "streaming"),
     pendingSuggestions: pendingSuggestionGroups(draft).length + pendingCards,
     failingRequired: checks.filter((c) => c.severity === "fail").length,
@@ -565,4 +570,28 @@ export function useJourney(draftId: string | undefined, opts?: Omit<JourneyOptio
     () => (draft ? getJourney(draft, review, { viewerIsApprover, viewerIsReviewer }) : null),
     [draft, review, viewerIsApprover, viewerIsReviewer]
   );
+}
+
+/**
+ * Why the letter can't be sent for review or approval yet (a required check
+ * fails), or null. Every "Submit for approval" (the document bar, its menu,
+ * the Review page) reads this, so none of them gets round the health gate
+ * that holds Send for review.
+ */
+export function submitBlocked(journey: JourneyInfo): string | null {
+  const a = journey.primaryAction;
+  if (!a || !a.disabled) return null;
+  if (a.id !== "send-for-review" && a.id !== "send-for-approval") return null;
+  return a.reason ?? "Fix the required checks first.";
+}
+
+/**
+ * Why Finalise and send isn't open yet, or null. It opens once the letter
+ * is approved (or sent); before that, a letter locked with someone else or
+ * failing a required check says so.
+ */
+export function finaliseBlocked(journey: JourneyInfo): string | null {
+  if (journey.stage === "send" || journey.stage === "sent") return null;
+  if (journey.locked) return "It's with someone else at the moment.";
+  return submitBlocked(journey);
 }

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { CheckCircle2, MessageSquareWarning, Stamp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useProfileStore } from "@/lib/profile";
 
 export type ReviewDialogKind = "submit" | "approve" | "request_changes";
 
@@ -36,18 +38,22 @@ export function ReviewDialog({
   defaultReviewerName?: string;
   onSubmit: (input: { reviewerName: string; body: string; reviewerUserId?: string; reviewerRole?: string }) => void;
 }) {
-  const [reviewerName, setReviewerName] = useState(defaultReviewerName ?? "");
+  const [reviewerName, setReviewerName] = useState(kind === "submit" ? "" : defaultReviewerName ?? "");
   const [body, setBody] = useState("");
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [selected, setSelected] = useState<string>(OTHER);
+  // The person sending it never approves their own letter: they are left
+  // out of the approver list, and nothing is prefilled with their name.
+  const myEmail = useProfileStore((st) => st.profile.personal.email?.trim().toLowerCase() ?? "");
+  const prefill = kind === "submit" ? "" : defaultReviewerName ?? "";
 
   useEffect(() => {
     if (!open) {
       setBody("");
-      setReviewerName(defaultReviewerName ?? "");
+      setReviewerName(prefill);
       setSelected(OTHER);
     }
-  }, [open, defaultReviewerName]);
+  }, [open, prefill]);
 
   // Load teammates when the submit dialog opens. Best-effort: on failure (or
   // a one-person workspace) the picker collapses to the free-text input.
@@ -58,14 +64,15 @@ export function ReviewDialog({
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { members?: WorkspaceMember[] } | null) => {
         if (cancelled || !data?.members) return;
-        setMembers(data.members);
-        if (data.members.length > 0) setSelected(data.members[0].userId);
+        const others = data.members.filter((m) => !myEmail || m.email.trim().toLowerCase() !== myEmail);
+        setMembers(others);
+        if (others.length > 0) setSelected(others[0].userId);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [open, kind]);
+  }, [open, kind, myEmail]);
 
   const config = CONFIG[kind];
   const trimmedBody = body.trim();
@@ -73,8 +80,9 @@ export function ReviewDialog({
   const usePicker = kind === "submit" && members.length > 0;
   const pickedMember = usePicker && selected !== OTHER ? members.find((m) => m.userId === selected) : undefined;
 
+  const nameMissing = kind === "submit" && !pickedMember && !reviewerName.trim();
   const submit = () => {
-    if (bodyMissing) return;
+    if (bodyMissing || nameMissing) return;
     onSubmit({
       reviewerName: pickedMember ? pickedMember.legalName?.trim() || pickedMember.email : reviewerName.trim(),
       body: trimmedBody,
@@ -115,19 +123,19 @@ export function ReviewDialog({
                 {kind === "submit" ? "Approver" : "Your name"}
               </label>
               {usePicker && (
-                <select
-                  id="review-dialog-person"
-                  value={selected}
-                  onChange={(e) => setSelected(e.target.value)}
-                  className={`${field} h-9 px-2.5`}
-                >
-                  {members.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {(m.legalName?.trim() || m.email) + " · " + m.role}
-                    </option>
-                  ))}
-                  <option value={OTHER}>Someone else…</option>
-                </select>
+                <Select value={selected} onValueChange={setSelected}>
+                  <SelectTrigger id="review-dialog-person" size="sm" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    {members.map((m) => (
+                      <SelectItem key={m.userId} value={m.userId}>
+                        {(m.legalName?.trim() || m.email) + " · " + m.role}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={OTHER}>Someone else…</SelectItem>
+                  </SelectContent>
+                </Select>
               )}
               {(!usePicker || selected === OTHER) && (
                 <input
@@ -136,7 +144,7 @@ export function ReviewDialog({
                   type="text"
                   value={reviewerName}
                   onChange={(e) => setReviewerName(e.target.value)}
-                  placeholder={defaultReviewerName ?? "Workspace reviewer"}
+                  placeholder={kind === "submit" ? "Approver's name" : defaultReviewerName ?? "Your name"}
                   className={`${field} h-9 ${usePicker ? "mt-2" : ""}`}
                 />
               )}
@@ -174,7 +182,7 @@ export function ReviewDialog({
                 Cancel
               </Button>
             </Dialog.Close>
-            <Button size="sm" onClick={submit} disabled={bodyMissing} variant={config.danger ? "destructive" : "default"}>
+            <Button size="sm" onClick={submit} disabled={bodyMissing || nameMissing} variant={config.danger ? "destructive" : "default"}>
               {config.cta}
             </Button>
           </div>

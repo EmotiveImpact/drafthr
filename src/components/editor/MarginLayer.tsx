@@ -4,7 +4,7 @@ import type { JourneyInfo } from "@/lib/journey/stage";
 import { currentRound, type ReviewRequest } from "@/lib/journey/reviews";
 import { ActivityCard, MarginCard, type ActivityEvent } from "@/components/journey/ui";
 import { cn } from "@/lib/utils";
-import { acceptWithSettle, decideEdit, prefersReducedMotion, suggestedEdits, type SuggestedEdit } from "./suggestion-groups";
+import { acceptWithSettle, decideEdit, prefersReducedMotion, suggestedEdits, suggestionCategory, type SuggestedEdit } from "./suggestion-groups";
 import { useLetterWorkspace } from "./workspace-store";
 
 /**
@@ -15,13 +15,6 @@ import { useLetterWorkspace } from "./workspace-store";
  * Activity card at the top.
  */
 
-const SOURCE_CATEGORY: Record<string, string> = {
-  tighten: "Clarity",
-  addClause: "Compliance",
-  regenerate: "Rewrite",
-  chat: "Rewrite",
-};
-
 type Item =
   | { key: string; kind: "edit"; edit: SuggestedEdit; n: number; total: number; reviewerN?: number }
   | { key: string; kind: "comment"; comment: Comment }
@@ -29,18 +22,24 @@ type Item =
 
 const GAP = 12;
 
-/** Offset of an element from an ancestor, in the ancestor's own CSS pixels. */
+/** Offset of an element from an ancestor, in the ancestor's pixels. Read
+ *  from the rendered boxes, so it stays right when the page is zoomed (only
+ *  the page scales; this layer does not). */
 function offsetWithin(el: HTMLElement, ancestor: HTMLElement): number | null {
-  let top = 0;
-  let cur: HTMLElement | null = el;
-  while (cur && cur !== ancestor) {
-    top += cur.offsetTop;
-    const parent = cur.offsetParent as HTMLElement | null;
-    if (!parent) return null;
-    if (parent !== ancestor && !ancestor.contains(parent)) return null;
-    cur = parent;
+  if (!ancestor.contains(el)) return null;
+  return el.getBoundingClientRect().top - ancestor.getBoundingClientRect().top;
+}
+
+/** The block (paragraph, list item, heading) holding the first occurrence
+ *  of `quote` inside `root`, for a comment saved without a highlight. */
+function blockWithText(root: HTMLElement, quote: string): HTMLElement | null {
+  const needle = quote.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!needle) return null;
+  const blocks = root.querySelectorAll<HTMLElement>("p, li, h1, h2, h3, blockquote");
+  for (const b of blocks) {
+    if ((b.textContent ?? "").replace(/\s+/g, " ").includes(needle)) return b;
   }
-  return cur === ancestor ? top : null;
+  return null;
 }
 
 export function MarginLayer({
@@ -116,9 +115,12 @@ export function MarginLayer({
         el = el?.closest<HTMLElement>("p, li, h1, h2, h3, blockquote") ?? el;
         if (!el) el = wrap.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(item.edit.section.id)}"]`);
       } else {
+        // The comment's own passage: its highlight, else the quoted words.
         el = wrap.querySelector<HTMLElement>(`mark[data-comment-id="${CSS.escape(item.comment.id)}"]`);
         el = el?.closest<HTMLElement>("p, li, h1, h2, h3, blockquote") ?? el;
-        if (!el) el = wrap.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(item.comment.sectionId)}"]`);
+        const sectionEl = wrap.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(item.comment.sectionId)}"]`);
+        if (!el && sectionEl && item.comment.quote) el = blockWithText(sectionEl, item.comment.quote);
+        if (!el) el = sectionEl;
       }
       if (!el) return 0;
       const t = offsetWithin(el, wrap);
@@ -165,11 +167,7 @@ export function MarginLayer({
     window.setTimeout(then, 220);
   };
 
-  const categoryFor = (edit: SuggestedEdit): string => {
-    const fc = fixCategory?.[edit.section.id];
-    if (fc && edit.pending && fc.at <= edit.pending.createdAt) return fc.category;
-    return SOURCE_CATEGORY[edit.pending?.source ?? ""] ?? "Rewrite";
-  };
+  const categoryFor = (edit: SuggestedEdit): string => suggestionCategory(edit, fixCategory);
 
   return (
     <div

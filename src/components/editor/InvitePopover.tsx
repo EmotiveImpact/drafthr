@@ -5,6 +5,7 @@ import type { CollaboratorRole, Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { Avatar } from "@/components/ds";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ROLE_HINT: Record<CollaboratorRole, string> = {
   owner: "Full access. Only the draft creator.",
@@ -145,15 +146,20 @@ Sent from DRAFTHR`
               className="w-full px-2.5 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[13px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-line-strong)]"
             />
             <div className="flex gap-2">
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as CollaboratorRole)}
-                className="flex-1 px-2 h-8 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[12px] text-[var(--ds-ink)] focus:outline-none focus:border-[var(--ds-line-strong)]"
-              >
-                <option value="editor">Editor</option>
-                <option value="reviewer">Reviewer</option>
-                <option value="viewer">Viewer</option>
-              </select>
+              <Select value={role} onValueChange={(v) => setRole(v as CollaboratorRole)}>
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Role"
+                  className="h-8 min-w-0 flex-1 rounded-md px-2 text-[12px]"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" className="z-[60]">
+                  <SelectItem value="editor">Editor</SelectItem>
+                  <SelectItem value="reviewer">Reviewer</SelectItem>
+                  <SelectItem value="viewer">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
               <Button type="submit" size="sm" disabled={!valid} className="h-8">
                 <UserPlus className="size-3.5" /> Add
               </Button>
@@ -268,15 +274,20 @@ function RosterRow({
           Owner
         </span>
       ) : (
-        <select
-          value={role}
-          onChange={(e) => onChangeRole?.(e.target.value)}
-          className="text-[11px] px-1.5 h-6 rounded-md border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-body)] focus:outline-none"
-        >
-          <option value="editor">Editor</option>
-          <option value="reviewer">Reviewer</option>
-          <option value="viewer">Viewer</option>
-        </select>
+        <Select value={role} onValueChange={(v) => onChangeRole?.(v)}>
+          <SelectTrigger
+            size="sm"
+            aria-label={`Role for ${name}`}
+            className="h-6 gap-1 rounded-md px-1.5 text-[11px] text-[var(--ds-body)] data-[size=sm]:h-6 data-[size=sm]:text-[11px] [&_svg:not([class*='size-'])]:size-3"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end" className="z-[60]">
+            <SelectItem value="editor">Editor</SelectItem>
+            <SelectItem value="reviewer">Reviewer</SelectItem>
+            <SelectItem value="viewer">Viewer</SelectItem>
+          </SelectContent>
+        </Select>
       )}
       {!isOwner && onRemove && (
         <button

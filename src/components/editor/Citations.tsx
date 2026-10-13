@@ -32,6 +32,18 @@ function markerFor(label: string): string {
 
 type Open = { item: EvidenceItem; label: string; rect: DOMRect; el: HTMLElement };
 
+/**
+ * The evidence item a "[See Fig N]" reference points at: by its data-fig-id,
+ * or, where the page view's editor dropped that attribute, by the label in
+ * its text ("[See Fig 1]" is the item labelled "Fig 1").
+ */
+function itemForRef(el: HTMLElement, all: EvidenceItem[]): EvidenceItem | undefined {
+  const id = el.getAttribute("data-fig-id");
+  if (id) return all.find((e) => e.id === id);
+  const label = (el.textContent ?? "").match(/^\s*\[See\s+(.+?)\]\s*$/)?.[1];
+  return label ? all.find((e) => figureLabelFor(e, all) === label) : undefined;
+}
+
 export function CitationLayer({
   draft,
   containerRef,
@@ -56,8 +68,8 @@ export function CitationLayer({
     if (!root) return;
     const paint = () => {
       const all = evidenceRef.current;
-      root.querySelectorAll<HTMLElement>(".figure-ref[data-fig-id]").forEach((el) => {
-        const item = all.find((e) => e.id === el.getAttribute("data-fig-id"));
+      root.querySelectorAll<HTMLElement>(".figure-ref").forEach((el) => {
+        const item = itemForRef(el, all);
         const label = item ? figureLabelFor(item, all) : "";
         const n = label ? markerFor(label) : "";
         if (n && el.getAttribute("data-cite-n") !== n) el.setAttribute("data-cite-n", n);
@@ -81,7 +93,7 @@ export function CitationLayer({
       const el = (target as HTMLElement | null)?.closest?.(".figure-ref[data-cite-n]") as HTMLElement | null;
       if (!el || !root.contains(el)) return false;
       const all = evidenceRef.current;
-      const item = all.find((e) => e.id === el.getAttribute("data-fig-id"));
+      const item = itemForRef(el, all);
       if (!item) return false;
       cancelClose();
       setOpen((prev) => {

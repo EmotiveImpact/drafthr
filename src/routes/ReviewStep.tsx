@@ -11,6 +11,7 @@ import { ReviewRail } from "@/components/editor/ReviewRail";
 import { CollabReviewRail } from "@/components/editor/CollabReviewRail";
 import { ReviewDialog, type ReviewDialogKind } from "@/components/editor/ReviewDialog";
 import { canEditDraft } from "@/lib/permissions";
+import { finaliseBlocked, submitBlocked, useJourney } from "@/lib/journey/stage";
 import { notifyReviewRequested } from "@/lib/collab-notify";
 import { Button } from "@/components/ui/button";
 import "@/components/editor/letter-workspace.css";
@@ -37,6 +38,7 @@ export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const journey = useJourney(draftId);
   const role = useProfileStore((s) => s.profile.workspaceRole);
   const myName = useProfileStore(
     (s) => s.profile.personal.preferredName || s.profile.personal.legalName,
@@ -227,6 +229,11 @@ export function ReviewStep() {
   };
 
   const openSuggestions = draft.sections.filter((s) => s.pendingChange).length;
+  // The same gates as the letter workspace: no Submit for approval past a
+  // failing required check, Finalise only once it can be sent.
+  const submitHeld = journey ? submitBlocked(journey) : null;
+  const finaliseHeld = journey ? finaliseBlocked(journey) : null;
+  const finalisePrimary = journey?.stage === "send" || journey?.stage === "sent";
 
   return (
     <div className="lw-root flex min-h-0 flex-1 flex-col bg-[var(--ds-canvas)]">
@@ -244,7 +251,13 @@ export function ReviewStep() {
               <span className="hidden sm:inline">Open in the workspace</span>
               <span className="sm:hidden">Letter</span>
             </button>
-            <button type="button" className={BAR_BTN} onClick={() => nav(`/editor/${draft.id}/finalize`)}>
+            <button
+              type="button"
+              className={cn(BAR_BTN, "disabled:pointer-events-none disabled:text-[var(--ds-faint)]")}
+              disabled={Boolean(finaliseHeld)}
+              title={finaliseHeld ?? undefined}
+              onClick={() => nav(`/editor/${draft.id}/finalize`)}
+            >
               Finalise
               <ArrowRight className="size-3.5" />
             </button>
@@ -315,6 +328,7 @@ export function ReviewStep() {
               role={role}
               canResolve={canResolve}
               onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
+              submitBlockedReason={submitHeld}
               onWithdraw={onWithdraw}
               pendingComment={pendingComment}
               onPendingCommentConsumed={() => setPendingComment(null)}
@@ -332,6 +346,8 @@ export function ReviewStep() {
               onJumpToSection={(sectionId) => nav(`/editor/${draft.id}?section=${sectionId}`)}
               onJumpToEvidence={() => nav(`/editor/${draft.id}/evidence`)}
               onContinueToFinalize={() => nav(`/editor/${draft.id}/finalize`)}
+              finaliseBlockedReason={finaliseHeld}
+              finalisePrimary={finalisePrimary}
             />
           </div>
         </aside>

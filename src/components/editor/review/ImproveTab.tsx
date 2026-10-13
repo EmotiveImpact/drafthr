@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { useDraftStore } from "@/lib/store";
 import { Markdown } from "@/components/editor/Markdown";
 import { getBillingStatus } from "@/lib/billing/api";
+import { lowestPrice, useExperts } from "@/components/journey/review/experts";
+import { money } from "@/components/journey/review/model";
 import {
   assembleLetterText,
   runCritique,
@@ -22,8 +24,10 @@ import {
  *   AI credit, get a structured critique streamed back (see api/store/critique).
  * - "External consultant" routes to the live /consultants marketplace, carrying
  *   the current draft so the booking has letter context.
- * - "Your team" is an honest "coming soon" placeholder — not clickable, charges
- *   nothing.
+ * - "Your team" opens the letter's reviewer picker on the team pane (the
+ *   same team review the Progress panel sends).
+ * - The consultant price is the marketplace's lowest listed price, the same
+ *   figure the reviewer picker shows.
  */
 export function ImproveTab() {
   const navigate = useNavigate();
@@ -33,6 +37,10 @@ export function ImproveTab() {
 
   const browseConsultants = () =>
     navigate(draftId ? `/consultants?draft=${encodeURIComponent(draftId)}` : "/consultants");
+  const askTeam = () => draftId && navigate(`/editor/${encodeURIComponent(draftId)}?review=team`);
+  const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
+  const experts = useExperts(draft, true);
+  const cheapest = lowestPrice(experts.all);
 
   return (
     <motion.div
@@ -54,8 +62,9 @@ export function ImproveTab() {
         statLabel="Cost"
         statValue={<>Free</>}
         timeLabel="Returns"
-        timeValue="Async"
-        comingSoon
+        timeValue="When they're done"
+        cta="Ask your team"
+        onClick={askTeam}
       />
 
       <ReviewLane
@@ -63,7 +72,7 @@ export function ImproveTab() {
         title="External consultant"
         desc="Vetted HR / employment specialist. Best for settlements, dismissals, tribunal-bound letters."
         statLabel="From"
-        statValue={<>£85</>}
+        statValue={cheapest ? <>{money(cheapest.price, cheapest.symbol)}</> : experts.status === "loading" ? <>…</> : <>See prices</>}
         timeLabel="SLA"
         timeValue="24–48h"
         cta="Browse consultants"

@@ -1,6 +1,7 @@
 import type { Draft, PendingChange, Section } from "@/lib/letters/types";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
 import { useDraftStore } from "@/lib/store";
+import { useReviewStore } from "@/lib/journey/reviews";
 
 /**
  * One suggested edit as the letter workspace shows it: a margin card beside
@@ -163,6 +164,23 @@ export function recordDecision(draftId: string, edits: SuggestedEdit[], accept: 
       },
     });
   }
+  // A reviewer's suggestion decided from the Edits tab or a margin card counts
+  // as your decision on that review point, as it does from Progress, so the
+  // review summary and Activity say what you accepted (REVIEW-82).
+  const rs = useReviewStore.getState();
+  for (const review of Object.values(rs.requests)) {
+    if (review.draftId !== draftId) continue;
+    const round = review.rounds[review.rounds.length - 1];
+    if (!round) continue;
+    const inRound = new Set([...(round.suggestionIds ?? []), ...(round.points ?? []).map((p) => p.id)]);
+    for (const edit of edits) {
+      // One decision per suggestion, under the id the review's points use
+      // (the section proposal's id, else its first mark).
+      const key = edit.pending?.id ?? edit.ids[0];
+      if (!key) continue;
+      if ([edit.pending?.id, ...edit.ids].some((id) => id && inRound.has(id))) rs.decide(review.id, key, accept ? "accepted" : "rejected");
+    }
+  }
 }
 
 /** Decisions recorded on suggested edits by one person (or ids). */
@@ -238,4 +256,27 @@ export function acceptWithSettle(draftId: string, edit: SuggestedEdit, onApplied
       if (i >= 0) sheet.textContent = t.slice(0, i) + t.slice(i + marker.length + 1 + rules.length);
     }, 200);
   }, 760);
+}
+
+/** The short label a DraftHR suggestion carries, by what made it. */
+const SOURCE_CATEGORY: Record<string, string> = {
+  tighten: "Clarity",
+  addClause: "Compliance",
+  regenerate: "Rewrite",
+  chat: "Rewrite",
+  manual: "Edit",
+};
+
+/**
+ * One label for a DraftHR suggestion wherever it shows (the margin card and
+ * the Edits tab): the category of the check its Fix answered, when it came
+ * from a Fix, else what made it ("Clarity" for a tighten).
+ */
+export function suggestionCategory(
+  edit: SuggestedEdit,
+  fixCategory?: Record<string, { category: string; at: number }> | null
+): string {
+  const fc = fixCategory?.[edit.section.id];
+  if (fc && edit.pending && fc.at <= edit.pending.createdAt) return fc.category;
+  return SOURCE_CATEGORY[edit.pending?.source ?? ""] ?? "Rewrite";
 }

@@ -215,6 +215,17 @@ export function WorkspacePane({ line, onSave, saved }: { line: string; onSave: (
                 placeholder="Street, city, postcode"
               />
             </Field>
+            {employer && (
+              <Field label="Phone (optional)" htmlFor="set-co-phone">
+                <Input
+                  id="set-co-phone"
+                  value={profile.employer.phone ?? ""}
+                  onChange={(e) => patchEmployer({ phone: e.target.value })}
+                  placeholder="01472 555 210"
+                  autoComplete="tel"
+                />
+              </Field>
+            )}
             <Field label="Companies House / EIN (optional)" htmlFor="set-co-reg">
               <Input
                 id="set-co-reg"

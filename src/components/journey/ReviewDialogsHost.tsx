@@ -12,7 +12,7 @@ import { notifyReviewRequested } from "@/lib/collab-notify";
 import { currentRound, firstName, useReviewStore, type ReviewRequest } from "@/lib/journey/reviews";
 import { ReviewerPicker } from "./review/ReviewerPicker";
 import { RoundsList } from "./review/parts";
-import { useReviewUI } from "./review/review-ui";
+import { requestApproval, useReviewUI } from "./review/review-ui";
 import { bookingFor, finishReview, isAskerOf, recallReview, sendBackToReviewer, useMe } from "./review/actions";
 import { useAssignedReviews, useReviewSync } from "./review/sync";
 import { openPoints, plural, reviewPoints } from "./review/model";
@@ -198,7 +198,7 @@ function FinishConfirm() {
     if (left.length === 0 && ran.current !== review.id) {
       ran.current = review.id;
       set({ finishFor: null });
-      void finishReview(review);
+      void finishReview(review).then((o) => o === "pick-approver" && requestApproval(review.draftId));
     }
   }, [draftId, review, left.length, set]);
 
@@ -226,7 +226,7 @@ function FinishConfirm() {
           <Button
             onClick={() => {
               close();
-              void finishReview(review);
+              void finishReview(review).then((o) => o === "pick-approver" && requestApproval(review.draftId));
             }}
           >
             Finish review
@@ -371,7 +371,10 @@ function MarketplaceReturn() {
   useEffect(() => {
     if (!draftId) return;
     const params = new URLSearchParams(location.search);
-    if (params.get("review") !== "expert") return;
+    // ?review=expert (back from the marketplace) or ?review=team (the Review
+    // page's "Ask your team") opens the reviewer picker on that pane.
+    const kind = params.get("review");
+    if (kind !== "expert" && kind !== "team") return;
     const key = `${draftId}${location.search}`;
     if (handled.current === key) return;
     handled.current = key;
@@ -383,7 +386,8 @@ function MarketplaceReturn() {
     const open = Object.values(useReviewStore.getState().requests).some(
       (r) => r.draftId === draftId && (r.status === "out" || r.status === "back")
     );
-    if (!open) openReviewPicker(draftId, { kind: "expert", expertId, dueAt, from: "marketplace" });
+    if (!open)
+      openReviewPicker(draftId, kind === "expert" ? { kind: "expert", expertId, dueAt, from: "marketplace" } : { kind: "team", from: "panel" });
     params.delete("review");
     params.delete("expert");
     params.delete("due");

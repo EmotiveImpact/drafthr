@@ -62,6 +62,7 @@ export function EditDetailsSheet({
   const [issueDate, setIssueDate] = useState(draft.context.issueDate);
   const [employerName, setEmployerName] = useState(draft.employer.legalName);
   const [employerAddress, setEmployerAddress] = useState(draft.employer.address);
+  const [employerPhone, setEmployerPhone] = useState(draft.employer.phone ?? "");
   const [employeeName, setEmployeeName] = useState(draft.employee.legalName);
   const [employeeJobTitle, setEmployeeJobTitle] = useState(draft.employee.jobTitle);
   const [employeeAddress, setEmployeeAddress] = useState(draft.employee.address);
@@ -91,6 +92,7 @@ export function EditDetailsSheet({
     setIssueDate(draft.context.issueDate);
     setEmployerName(draft.employer.legalName);
     setEmployerAddress(draft.employer.address);
+    setEmployerPhone(draft.employer.phone ?? "");
     setEmployeeName(draft.employee.legalName);
     setEmployeeJobTitle(draft.employee.jobTitle);
     setEmployeeAddress(draft.employee.address);
@@ -106,6 +108,7 @@ export function EditDetailsSheet({
       issueDate: draft.context.issueDate,
       employerName: draft.employer.legalName,
       employerAddress: draft.employer.address,
+      employerPhone: draft.employer.phone ?? "",
       employeeName: draft.employee.legalName,
       employeeJobTitle: draft.employee.jobTitle,
       employeeAddress: draft.employee.address,
@@ -143,6 +146,7 @@ export function EditDetailsSheet({
     const employer: Partial<Draft["employer"]> = {};
     if (dirty("employerName", employerName)) employer.legalName = employerName;
     if (dirty("employerAddress", employerAddress)) employer.address = employerAddress;
+    if (dirty("employerPhone", employerPhone)) employer.phone = employerPhone.trim() || undefined;
 
     const employee: Partial<Draft["employee"]> = {};
     if (dirty("employeeName", employeeName)) employee.legalName = employeeName;
@@ -268,6 +272,7 @@ export function EditDetailsSheet({
             <Group label={isEmployer ? "Your company (employer)" : "Recipient (employer)"}>
               <TextField label="Legal name" value={employerName} onChange={setEmployerName} />
               <TextField label="Address" value={employerAddress} onChange={setEmployerAddress} multiline />
+              {isEmployer && <TextField label="Phone (optional)" value={employerPhone} onChange={setEmployerPhone} />}
             </Group>
           </div>
 

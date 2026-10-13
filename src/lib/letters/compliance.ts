@@ -87,7 +87,7 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
     jurisdiction: "US",
     states: ["CA", "CO", "NY", "WA", "IL", "MA"],
     severity: "required",
-    label: "Pay transparency — salary range",
+    label: "Pay transparency: salary range",
     description:
       "Pay-transparency states require a good-faith salary range be communicated. Confirm the range on the letter.",
     match: { kind: "regex", value: "salary range|pay range|compensation range", flags: "i" },
@@ -139,7 +139,7 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "Right of appeal (ACAS)",
     description:
-      "UK dismissals must offer a right of appeal in writing — non-compliance can uplift tribunal awards by up to 25% (s.207A TULRCA).",
+      "UK dismissals must offer a right of appeal in writing. Non-compliance can uplift tribunal awards by up to 25% (s.207A TULRCA).",
     match: { kind: "regex", value: "right (?:of|to) appeal", flags: "i" },
     recommendation:
       "Add: 'You have the right of appeal against this dismissal. To exercise it, write to [Appeal Officer] within 5 working days.'",
@@ -199,7 +199,7 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
     letterType: "settlement_cover",
     jurisdiction: "US",
     severity: "required",
-    label: "OWBPA — age 40+ release periods",
+    label: "OWBPA: age 40+ release periods",
     description:
       "Releases by employees aged 40+ require 21 days to consider (45 group), 7 days to revoke; written advice to consult a lawyer; identify ADEA claim (29 USC §626(f)).",
     match: { kind: "regex", value: "21 days|45 days|7[- ]day revocation|consult (?:with )?an attorney", flags: "i" },

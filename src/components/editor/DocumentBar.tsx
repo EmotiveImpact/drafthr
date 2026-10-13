@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useReducer, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import type { Editor } from "@tiptap/react";
 import {
@@ -61,8 +61,9 @@ import { ReviewerModeSwitch } from "@/components/journey/review/reviewer";
 import { getDiffViewMode, setDiffViewMode, type DiffViewMode } from "@/lib/diff-view-mode";
 import { SAFE_IMAGE_ACCEPT } from "@/lib/safe-data-url";
 import { cn } from "@/lib/utils";
-import type { JourneyActionId, JourneyInfo } from "@/lib/journey/stage";
+import { finaliseBlocked, submitBlocked, type JourneyActionId, type JourneyInfo } from "@/lib/journey/stage";
 import { Avatar } from "@/components/ds";
+import { recipientNameFor } from "@/lib/letters/display";
 import { StatusPill } from "@/components/journey/ui";
 import {
   DropdownMenu,
@@ -187,28 +188,46 @@ export function DocumentBar(p: DocumentBarProps) {
 
   // Re-render on every editor transaction so active states stay current.
   const [, force] = useReducer((n: number) => n + 1, 0);
+  // Formatting acts on the section being edited: the tools are live only
+  // while a section has focus (or focus moved into the ribbon or one of its
+  // menus, which hand it back). Otherwise they are greyed with the hint
+  // "Click into a section to format it".
+  const ribbonRef = useRef<HTMLDivElement>(null);
+  const [armed, setArmed] = useState(false);
   useEffect(() => {
+    setArmed(Boolean(editor && !editor.isDestroyed && editor.isFocused));
     if (!editor || editor.isDestroyed) return;
+    const onFocus = () => {
+      setArmed(true);
+      force();
+    };
+    const onBlur = ({ event }: { event: FocusEvent }) => {
+      const to = event?.relatedTarget as Element | null;
+      const stays =
+        !!to && (ribbonRef.current?.contains(to) || !!to.closest?.("[data-radix-popper-content-wrapper],[role=menu],[role=dialog]"));
+      if (!stays) setArmed(false);
+      force();
+    };
     editor.on("transaction", force);
     editor.on("selectionUpdate", force);
-    editor.on("focus", force);
-    editor.on("blur", force);
+    editor.on("focus", onFocus);
+    editor.on("blur", onBlur);
     return () => {
       editor.off("transaction", force);
       editor.off("selectionUpdate", force);
-      editor.off("focus", force);
-      editor.off("blur", force);
+      editor.off("focus", onFocus);
+      editor.off("blur", onBlur);
     };
   }, [editor]);
   const ed = editor && !editor.isDestroyed ? editor : null;
-  const canFormat = Boolean(ed) && p.viewMode === "edit" && p.canEdit && !p.streaming;
+  const canFormat = Boolean(ed) && armed && p.viewMode === "edit" && p.canEdit && !p.streaming;
 
   return (
     <TooltipProvider delayDuration={150}>
       <div className="shrink-0 bg-[var(--ds-surface)]">
         <TopRow {...p} />
         {/* Ribbon: tabs and the chosen tab's tools. */}
-        <div className="border-b border-[var(--ds-line-2)] px-4">
+        <div ref={ribbonRef} className="border-b border-[var(--ds-line-2)] px-4">
           <div className="flex items-center gap-0.5 pt-2" role="tablist" aria-label="Document tools">
             {RIBBON_TABS.map((t) => (
               <button
@@ -246,12 +265,10 @@ export function DocumentBar(p: DocumentBarProps) {
               </PopoverContent>
             </Popover>
           </div>
-          <div className="flex h-[46px] min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
-            {tab === "home" && <HomeRow {...p} ed={ed} canFormat={canFormat} />}
-            {tab === "insert" && <InsertRow {...p} ed={ed} canFormat={canFormat} />}
-            {tab === "layout" && <LayoutRow {...p} />}
-            {tab === "review" && <ReviewRow {...p} />}
-          </div>
+          {tab === "home" && <ToolsRow tools={homeTools({ ...p, ed, canFormat })} saved={p.saved} resetKey={`home:${p.viewMode}`} />}
+          {tab === "insert" && <InsertRow {...p} ed={ed} canFormat={canFormat} resetKey="insert" />}
+          {tab === "layout" && <LayoutRow {...p} resetKey="layout" />}
+          {tab === "review" && <ToolsRow tools={reviewTools(p)} saved={p.saved} resetKey="review" />}
         </div>
       </div>
     </TooltipProvider>
@@ -265,8 +282,11 @@ function TopRow(p: DocumentBarProps) {
   const { draft, journey } = p;
   const evidenceCount = draft.evidence?.length ?? 0;
   const reviewStatus = draft.reviewStatus ?? "draft";
+  const squeeze = useTitleSqueeze(
+    [draft.title, recipientNameFor(draft), journey.statusLabel, p.counselNeeded, p.counselReview?.reviewedBy, p.streaming, reviewStatus].join("|")
+  );
   return (
-    <div className="flex h-[60px] min-w-0 items-center gap-1 border-b xl:gap-1.5 border-[var(--ds-line-2)] pl-3 pr-3.5">
+    <div className="@container flex h-[60px] min-w-0 items-center gap-1 border-b border-[var(--ds-line-2)] pl-3 pr-3.5 @min-[900px]:gap-1.5">
       <Link
         to={p.backTo}
         aria-label="Back to letters"
@@ -275,9 +295,18 @@ function TopRow(p: DocumentBarProps) {
       >
         <ArrowLeft className="size-[18px]" />
       </Link>
-      <div className="ml-0.5 mr-1.5 flex min-w-0 shrink items-center lg:min-w-[76px]">
-        <EditableTitleBar draft={draft} variant="bar" />
+      {/* The name and its pills take the room between the back arrow and the
+       * actions. When the name would be cut short, the employee moves under
+       * it, then the counsel pill drops to its icon (useTitleSqueeze). */}
+      <div ref={squeeze.ref} className="flex min-w-0 flex-1 items-center overflow-hidden">
+      <div data-bar-title className="ml-0.5 mr-1.5 flex min-w-[96px] shrink items-center">
+        <EditableTitleBar draft={draft} variant="bar" stack={squeeze.level >= 1} />
       </div>
+      {p.streaming && (
+        <span className="mr-1 flex shrink-0 items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]" role="status">
+          <Loader2 className="size-3 animate-spin" /> Drafting…
+        </span>
+      )}
       <span className="flex shrink-0 items-center gap-1.5">
         {reviewStatus === "changes_requested" ? (
           <button
@@ -312,18 +341,11 @@ function TopRow(p: DocumentBarProps) {
             }
           >
             <ShieldCheck className="size-3" />
-            <span className="hidden 2xl:inline">{p.counselReview ? "Reviewed" : "Needs review"}</span>
-            <span className="sr-only 2xl:hidden">{p.counselReview ? "Reviewed" : "Needs review"}</span>
+            <span className={cn(squeeze.level >= 2 && "sr-only")}>{p.counselReview ? "Reviewed" : "Needs review"}</span>
           </button>
         )}
-        {p.streaming && (
-          <span className="flex items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]">
-            <Loader2 className="size-3 animate-spin" /> Drafting…
-          </span>
-        )}
       </span>
-
-      <span className="min-w-2 flex-1" />
+      </div>
 
       <InvitePopover
         draft={draft}
@@ -333,12 +355,14 @@ function TopRow(p: DocumentBarProps) {
         trigger={
           <button
             type="button"
-            className="ml-0.5 mr-1 hidden shrink-0 xl:ml-2 xl:mr-1.5 items-center rounded-full pl-1.5 transition-opacity duration-[120ms] hover:opacity-85 focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] lg:inline-flex"
+            className="ml-0.5 mr-1 hidden shrink-0 items-center rounded-full pl-1.5 transition-opacity duration-[120ms] hover:opacity-85 focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] @min-[680px]:inline-flex @min-[900px]:ml-2 @min-[900px]:mr-1.5"
             aria-label="Invite"
             title="Share and invite people"
           >
             {p.people.map((person, i) => (
-              <span key={person.seed + i} className={cn("relative", i > 0 && "-ml-1.5")}>
+              // Earlier avatars sit on top and the overlap is small, so every
+              // set of initials stays readable.
+              <span key={person.seed + i} className={cn("relative", i > 0 && "-ml-1")} style={{ zIndex: p.people.length - i }}>
                 <Avatar size="lg" name={person.name} seed={person.seed} title={person.title ?? person.name} className="ring-2 ring-[var(--ds-surface)]" />
                 {(person.approved || (reviewerBack && person.kind === "reviewer")) && (
                   <span
@@ -367,7 +391,7 @@ function TopRow(p: DocumentBarProps) {
         )}
       >
         <Paperclip className="size-4" />
-        <span className="hidden xl:inline">Evidence</span>
+        <span className="hidden @min-[860px]:inline">Evidence</span>
         {evidenceCount > 0 && (
           <span className="ds-mono rounded-[5px] bg-[var(--ds-surface-3)] px-1.5 text-[12px] font-medium text-[var(--ds-muted)]">
             {evidenceCount}
@@ -375,7 +399,7 @@ function TopRow(p: DocumentBarProps) {
         )}
       </button>
 
-      <button
+      {squeeze.level < 4 && <button
         type="button"
         onClick={p.onOpenActivity}
         className="inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] px-[7px] text-[14px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
@@ -383,16 +407,58 @@ function TopRow(p: DocumentBarProps) {
         title="Activity: the letter's history and saved versions"
       >
         <History className="size-4" />
-        <span className="hidden xl:inline">Activity</span>
-      </button>
+        <span className="hidden @min-[860px]:inline">Activity</span>
+      </button>}
 
-      {p.journey.primaryAction?.id === "send-back" && <BarReviewerMode draftId={draft.id} disabled={p.role === "viewer"} />}
+      {p.journey.primaryAction?.id === "send-back" && squeeze.level < 3 && <BarReviewerMode draftId={draft.id} disabled={p.role === "viewer"} />}
 
-      <MainAction {...p} />
+      <MainAction {...p} short={squeeze.level >= 5} />
 
-      <MoreMenu {...p} />
+      <MoreMenu {...p} activityInMenu={squeeze.level >= 4} />
     </div>
   );
+}
+
+/** How much the document bar's name area has to give: 0 shows "Name ·
+ *  Employee" on one row with the counsel pill's words; 1 puts the employee
+ *  under the name; 2 also drops the counsel pill to its icon; 3 also leaves
+ *  the reviewer's Read / Suggest / Comment switch to the panel (Your review
+ *  has the same switch); 4 also moves Activity into the More menu; 5 also
+ *  shortens "Send back to <name>" to "Send back". It steps up
+ *  before paint while the name or employee is cut short, and starts again
+ *  from 0 when the room or the words change, so the name is never cut to
+ *  a letter or two while there is a way to make room. */
+function useTitleSqueeze(sig: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [level, setLevel] = useState(0);
+  const lastW = useRef(0);
+  useLayoutEffect(() => {
+    setLevel(0);
+  }, [sig]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const w = Math.round(el.clientWidth);
+      if (w !== lastW.current) {
+        lastW.current = w;
+        setLevel(0);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || level >= 5) return;
+    const cut =
+      el.scrollWidth > el.clientWidth + 1 ||
+      Array.from(el.querySelectorAll<HTMLElement>("[data-bar-title] button, [data-bar-employee]")).some(
+        (x) => x.offsetParent !== null && x.scrollWidth > x.clientWidth + 1
+      );
+    if (cut) setLevel((l) => Math.min(5, l + 1));
+  });
+  return { ref, level };
 }
 
 /** True for a moment after the review on this letter came back while it was
@@ -427,7 +493,7 @@ function BarReviewerMode({ draftId, disabled }: { draftId: string; disabled: boo
 }
 
 /** The one main action on the far right of the bar, by stage. */
-export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone" }) {
+export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone"; short?: boolean }) {
   const { draft, journey, role } = p;
   const phone = p.size === "phone";
   const base = phone
@@ -498,8 +564,14 @@ export function MainAction(p: DocumentBarProps & { size?: "bar" | "phone" }) {
       }}
       className={cn(base, tone, disabled && off, disabled && "hover:bg-[var(--ds-accent)]")}
     >
-      {icon && <span className={phone ? "contents" : "contents max-xl:hidden"}>{icon}</span>}
-      {action.label}
+      {icon && <span className={phone ? "contents" : "hidden @min-[900px]:contents"}>{icon}</span>}
+      {p.short && action.id === "send-back" ? (
+        <>
+          Send back<span className="sr-only">{action.label.replace(/^Send back/, "")}</span>
+        </>
+      ) : (
+        action.label
+      )}
       {disabled && reason && <span className="sr-only">. {reason}</span>}
     </button>
   );
@@ -554,7 +626,7 @@ function ExportItems(p: DocumentBarProps) {
 
 /** Overflow: everything from the old File, Tools and View menus. On the
  * phone it also carries Evidence, Activity and the formatting tools. */
-export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: ReactNode }) {
+export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: ReactNode; activityInMenu?: boolean }) {
   const { draft, role, journey } = p;
   const reviewStatus = draft.reviewStatus ?? "draft";
   const ed = p.editor && !p.editor.isDestroyed ? p.editor : null;
@@ -574,6 +646,14 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className={cn("min-w-[248px]", MENU_MOTION)}>
+        {!p.phone && p.activityInMenu && (
+          <>
+            <DropdownMenuItem onClick={p.onOpenActivity}>
+              <History className="mr-2 size-4" /> Activity
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {p.phone && (
           <>
             <DropdownMenuItem onClick={p.onOpenEvidence}>
@@ -670,7 +750,8 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
             <DropdownMenuSeparator />
             {(reviewStatus === "draft" || reviewStatus === "changes_requested") && canSubmitForReview(role) && (
               <DropdownMenuItem
-                disabled={journey.locked || p.streaming}
+                disabled={journey.locked || p.streaming || Boolean(submitBlocked(journey))}
+                title={submitBlocked(journey) ?? undefined}
                 onClick={() => p.onReviewAction("submit")}
               >
                 <Send className="mr-2 size-4" /> {reviewStatus === "changes_requested" ? "Re-submit for approval…" : "Submit for approval…"}
@@ -709,7 +790,14 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
             <DropdownMenuItem onClick={p.onGoReview}>
               <CheckCircle2 className="mr-2 size-4" /> Review step
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={p.onFinalise}>
+            {/* The full Finalise page sends the letter, so it waits for the
+             * journey: not while it is out for review or with the approver,
+             * and not past a failing required check. */}
+            <DropdownMenuItem
+              disabled={Boolean(finaliseBlocked(journey))}
+              title={finaliseBlocked(journey) ?? undefined}
+              onClick={p.onFinalise}
+            >
               <Send className="mr-2 size-4" /> Finalise and send…
             </DropdownMenuItem>
           </>
@@ -770,7 +858,122 @@ function ToneItems({ draft }: { draft: Draft }) {
 
 type FormatProps = DocumentBarProps & { ed: Editor | null; canFormat: boolean };
 
-function HomeRow(p: FormatProps) {
+/**
+ * One tool in a ribbon row. `inline` is the button in the row; `menu` is
+ * the same action as a menu item, used when the row has no room for it and
+ * it moves into the row's "More tools" menu. `drop` orders what moves first
+ * (highest first); 0 or undefined never moves. `sep` draws a thin separator
+ * before the tool when something visible comes before it.
+ */
+type Tool = { key: string; inline: ReactNode; menu?: ReactNode; drop?: number; sep?: boolean };
+
+/**
+ * A ribbon tools row that never scrolls sideways: when the tools do not fit,
+ * the saved indicator turns compact, then tools move one by one (by their
+ * `drop` order) into a "More tools" menu at the end of the row. It measures
+ * itself, so it adapts to the real room (side panel open or not, zoom).
+ */
+function ToolsRow({ tools, saved, resetKey }: { tools: Tool[]; saved: SavedState; resetKey: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [level, setLevel] = useState(0);
+  const droppable = tools.filter((t) => t.drop && t.menu).sort((a, b) => (b.drop ?? 0) - (a.drop ?? 0));
+  const maxLevel = droppable.length + 1;
+  const sig = tools.map((t) => t.key).join("|");
+
+  // Start from everything inline when the row, the room or the tools change.
+  const lastW = useRef(0);
+  useLayoutEffect(() => {
+    setLevel(0);
+  }, [resetKey, sig]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const w = Math.round(el.clientWidth);
+      if (w !== lastW.current) {
+        lastW.current = w;
+        setLevel(0);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Too wide: take the next step (before paint, so nothing is ever cut off).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.scrollWidth > el.clientWidth + 1 && level < maxLevel) setLevel((l) => Math.min(maxLevel, l + 1));
+  });
+
+  const compactSaved = level >= 1;
+  const dropped = new Set(droppable.slice(0, Math.max(0, level - 1)).map((t) => t.key));
+  const shown = tools.filter((t) => !dropped.has(t.key));
+  const menu = tools.filter((t) => dropped.has(t.key));
+  return (
+    <div ref={ref} className="flex h-[46px] min-w-0 items-center gap-0.5 overflow-hidden">
+      {shown.map((t, i) => (
+        <span key={t.key} className="contents">
+          {t.sep && i > 0 && <Sep />}
+          {t.inline}
+        </span>
+      ))}
+      {menu.length > 0 && (
+        <>
+          <Sep />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] text-[var(--ds-body)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] data-[state=open]:bg-[var(--ds-surface-2)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                aria-label="More tools"
+                title="More tools"
+              >
+                <MoreHorizontal className="size-[17px]" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className={cn("min-w-[220px]", MENU_MOTION)} onCloseAutoFocus={(e) => e.preventDefault()}>
+              {menu.map((t, i) => (
+                <span key={t.key} className="contents">
+                  {t.sep && i > 0 && <DropdownMenuSeparator />}
+                  {t.menu}
+                </span>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
+      <SavedIndicator saved={saved} compact={compactSaved} />
+    </div>
+  );
+}
+
+/** A menu item for a tool that moved into "More tools". */
+function MItem({
+  icon,
+  label,
+  onClick,
+  disabled,
+  active,
+  hint,
+}: {
+  icon: ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  hint?: string;
+}) {
+  return (
+    <DropdownMenuItem disabled={disabled} onClick={onClick} title={disabled && hint ? `${label}. ${hint}` : undefined}>
+      <span className="mr-2 inline-flex size-4 items-center justify-center [&>svg]:size-4">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {active && <Check className="size-3.5" />}
+    </DropdownMenuItem>
+  );
+}
+
+function homeTools(p: FormatProps): Tool[] {
   const { ed, canFormat } = p;
   const page = p.viewMode === "preview";
   const locked = !p.canEdit;
@@ -783,103 +986,168 @@ function HomeRow(p: FormatProps) {
       : ed.isActive("heading", { level: 3 })
         ? "Heading 3"
         : "Paragraph";
-  const hint = locked ? undefined : "Click into a section to format it";
-  return (
-    <>
-      <RBtn label={p.outlineOpen ? "Hide sections outline" : "Sections outline"} active={p.outlineOpen} onClick={p.onToggleOutline}>
-        <PanelLeft className="size-[17px]" />
-      </RBtn>
-      <Sep />
-      <RBtn
-        label="Undo"
-        hint={!canFormat && !page ? hint : undefined}
-        disabled={page ? locked : !canFormat || !ed?.can().undo()}
-        onClick={() => (page ? p.pagedActions.current?.undo() : ed?.chain().focus().undo().run())}
-      >
-        <Undo2 className="size-[17px]" />
-      </RBtn>
-      <RBtn
-        label="Redo"
-        hint={!canFormat && !page ? hint : undefined}
-        disabled={page ? locked : !canFormat || !ed?.can().redo()}
-        onClick={() => (page ? p.pagedActions.current?.redo() : ed?.chain().focus().redo().run())}
-      >
-        <Redo2 className="size-[17px]" />
-      </RBtn>
-      <Sep />
-      <ZoomMenu zoom={p.zoom} onZoom={p.onZoom} disabled={locked || page} />
-      <Sep />
-      {page ? (
-        <>
+  // Why a format tool is greyed out.
+  const hint = locked ? "The letter is locked" : p.streaming ? "DraftHR is still drafting" : "Click into a section to format it";
+  const tools: Tool[] = [
+    {
+      key: "outline",
+      inline: (
+        <RBtn label={p.outlineOpen ? "Hide sections outline" : "Sections outline"} active={p.outlineOpen} onClick={p.onToggleOutline}>
+          <PanelLeft className="size-[17px]" />
+        </RBtn>
+      ),
+    },
+    {
+      key: "undo",
+      sep: true,
+      inline: (
+        <RBtn
+          label="Undo"
+          hint={!page ? hint : undefined}
+          disabled={page ? locked : !canFormat || !ed?.can().undo()}
+          onClick={() => (page ? p.pagedActions.current?.undo() : ed?.chain().focus().undo().run())}
+        >
+          <Undo2 className="size-[17px]" />
+        </RBtn>
+      ),
+    },
+    {
+      key: "redo",
+      inline: (
+        <RBtn
+          label="Redo"
+          hint={!page ? hint : undefined}
+          disabled={page ? locked : !canFormat || !ed?.can().redo()}
+          onClick={() => (page ? p.pagedActions.current?.redo() : ed?.chain().focus().redo().run())}
+        >
+          <Redo2 className="size-[17px]" />
+        </RBtn>
+      ),
+    },
+    {
+      key: "zoom",
+      sep: true,
+      drop: 2,
+      inline: <ZoomMenu zoom={p.zoom} onZoom={p.onZoom} disabled={page} />,
+      menu: (
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger disabled={page}>
+            <Search className="mr-2 size-4" /> Zoom <span className="ds-mono ml-auto pl-3 text-[11.5px] text-[var(--ds-muted)]">{p.zoom}%</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="min-w-[120px]">
+            {ZOOM_LEVELS.map((z) => (
+              <DropdownMenuItem key={z} onClick={() => p.onZoom(z)}>
+                <span className="ds-mono flex-1">{z}%</span>
+                {z === p.zoom && <Check className="size-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      ),
+    },
+  ];
+  if (page) {
+    tools.push(
+      {
+        key: "select-all",
+        sep: true,
+        inline: (
           <RBtn label="Select all" disabled={locked} onClick={() => p.pagedActions.current?.selectAll()} text="Select all">
             <TextSelect className="size-4" />
           </RBtn>
+        ),
+      },
+      {
+        key: "page-find",
+        inline: (
           <RBtn label="Find in letter" onClick={() => p.pagedActions.current?.openFind()} text="Find">
             <Search className="size-4" />
           </RBtn>
-          <Sep />
-          <span className="whitespace-nowrap px-1.5 text-[12.5px] text-[var(--ds-muted)]">
+        ),
+      },
+      {
+        key: "page-note",
+        sep: true,
+        drop: 9,
+        inline: (
+          <span className="shrink-0 whitespace-nowrap px-1.5 text-[12.5px] text-[var(--ds-muted)]">
             Page view. Switch to Sections in Layout to format a section.
           </span>
-        </>
-      ) : (
-        <>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild disabled={!canFormat}>
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[13.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] disabled:hover:bg-transparent focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
-                aria-label={`Text style: ${style}`}
-                title={!canFormat ? hint ?? "The letter is locked" : "Text style"}
-              >
-                {style}
-                <ChevronDown className="size-[14px] text-[var(--ds-subtle)]" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className={cn("w-[180px]", MENU_MOTION)} onCloseAutoFocus={(e) => e.preventDefault()}>
-              <DropdownMenuItem onClick={() => ed?.chain().focus().setParagraph().run()}>Paragraph</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => ed?.chain().focus().toggleHeading({ level: 2 }).run()}>Heading 2</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => ed?.chain().focus().toggleHeading({ level: 3 }).run()}>Heading 3</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DocumentPopover draft={p.draft} variant="tools" disabled={locked} />
-          <Sep />
-          <RBtn label="Bold" hint={hint} active={focused && ed?.isActive("bold")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleBold().run()}>
-            <Bold className="size-4" />
-          </RBtn>
-          <RBtn label="Italic" hint={hint} active={focused && ed?.isActive("italic")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleItalic().run()}>
-            <Italic className="size-4" />
-          </RBtn>
-          <Sep />
-          <RBtn label="Bullets" hint={hint} active={focused && ed?.isActive("bulletList")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleBulletList().run()}>
-            <List className="size-[17px]" />
-          </RBtn>
-          <RBtn label="Numbered list" hint={hint} active={focused && ed?.isActive("orderedList")} disabled={!canFormat} onClick={() => ed?.chain().focus().toggleOrderedList().run()}>
-            <ListOrdered className="size-[17px]" />
-          </RBtn>
-          <Sep />
-          <RBtn label="Align left" hint={hint} active={focused && ed?.isActive({ textAlign: "left" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("left").run()}>
-            <AlignLeft className="size-[17px]" />
-          </RBtn>
-          <RBtn label="Align centre" hint={hint} active={focused && ed?.isActive({ textAlign: "center" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("center").run()}>
-            <AlignCenter className="size-[17px]" />
-          </RBtn>
-          <RBtn label="Align right" hint={hint} active={focused && ed?.isActive({ textAlign: "right" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("right").run()}>
-            <AlignRight className="size-[17px]" />
-          </RBtn>
-          <RBtn label="Justify" hint={hint} active={focused && ed?.isActive({ textAlign: "justify" })} disabled={!canFormat} onClick={() => ed?.chain().focus().setTextAlign("justify").run()}>
-            <AlignJustify className="size-[17px]" />
-          </RBtn>
-          <Sep />
-          <RBtn label="Find in letter" disabled={locked} onClick={p.onOpenFind}>
-            <Search className="size-4" />
-          </RBtn>
-        </>
-      )}
-      <SavedIndicator saved={p.saved} />
-    </>
+        ),
+        menu: (
+          <p className="m-0 px-2 py-1.5 text-[12px] text-[var(--ds-muted)]">Page view. Switch to Sections in Layout to format a section.</p>
+        ),
+      }
+    );
+    return tools;
+  }
+  const fmt = (
+    key: string,
+    label: string,
+    icon: ReactNode,
+    active: boolean | undefined,
+    run: () => void,
+    drop?: number,
+    sep?: boolean
+  ): Tool => ({
+    key,
+    sep,
+    drop,
+    inline: (
+      <RBtn label={label} hint={hint} active={focused && active} disabled={!canFormat} onClick={run}>
+        {icon}
+      </RBtn>
+    ),
+    menu: <MItem icon={icon} label={label} hint={hint} disabled={!canFormat} active={focused && active} onClick={run} />,
+  });
+  tools.push(
+    {
+      key: "style",
+      sep: true,
+      inline: (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={!canFormat}>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2 text-[13.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] disabled:hover:bg-transparent focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              aria-label={`Text style: ${style}`}
+              title={!canFormat ? `Text style. ${hint}` : "Text style"}
+            >
+              {style}
+              <ChevronDown className="size-[14px] text-[var(--ds-subtle)]" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className={cn("w-[180px]", MENU_MOTION)} onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuItem onClick={() => ed?.chain().focus().setParagraph().run()}>Paragraph</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => ed?.chain().focus().toggleHeading({ level: 2 }).run()}>Heading 2</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => ed?.chain().focus().toggleHeading({ level: 3 }).run()}>Heading 3</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+    { key: "tone", inline: <DocumentPopover draft={p.draft} variant="tools" disabled={locked} /> },
+    fmt("bold", "Bold", <Bold className="size-4" />, ed?.isActive("bold"), () => ed?.chain().focus().toggleBold().run(), undefined, true),
+    fmt("italic", "Italic", <Italic className="size-4" />, ed?.isActive("italic"), () => ed?.chain().focus().toggleItalic().run()),
+    fmt("bullets", "Bullets", <List className="size-[17px]" />, ed?.isActive("bulletList"), () => ed?.chain().focus().toggleBulletList().run(), 3, true),
+    fmt("numbered", "Numbered list", <ListOrdered className="size-[17px]" />, ed?.isActive("orderedList"), () => ed?.chain().focus().toggleOrderedList().run(), 4),
+    fmt("left", "Align left", <AlignLeft className="size-[17px]" />, ed?.isActive({ textAlign: "left" }), () => ed?.chain().focus().setTextAlign("left").run(), 5, true),
+    fmt("centre", "Align centre", <AlignCenter className="size-[17px]" />, ed?.isActive({ textAlign: "center" }), () => ed?.chain().focus().setTextAlign("center").run(), 6),
+    fmt("right", "Align right", <AlignRight className="size-[17px]" />, ed?.isActive({ textAlign: "right" }), () => ed?.chain().focus().setTextAlign("right").run(), 7),
+    fmt("justify", "Justify", <AlignJustify className="size-[17px]" />, ed?.isActive({ textAlign: "justify" }), () => ed?.chain().focus().setTextAlign("justify").run(), 8),
+    {
+      key: "find",
+      sep: true,
+      drop: 9,
+      inline: (
+        <RBtn label="Find in letter" disabled={locked} onClick={p.onOpenFind}>
+          <Search className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<Search />} label="Find in letter" disabled={locked} onClick={p.onOpenFind} />,
+    }
   );
+  return tools;
 }
 
 function ZoomMenu({ zoom, onZoom, disabled }: { zoom: number; onZoom: (z: number) => void; disabled?: boolean }) {
@@ -908,31 +1176,22 @@ function ZoomMenu({ zoom, onZoom, disabled }: { zoom: number; onZoom: (z: number
   );
 }
 
-export function SavedIndicator({ saved, className }: { saved: SavedState; className?: string }) {
+export function SavedIndicator({ saved, className, compact }: { saved: SavedState; className?: string; compact?: boolean }) {
   // Re-render every 30s so "2 min ago" stays true.
   const [, tick] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
     const t = window.setInterval(tick, 30_000);
     return () => window.clearInterval(t);
   }, []);
+  const text = saved.kind === "saving" ? "Saving" : saved.kind === "locked" ? "Locked after sending" : `Saved ${agoText(saved.at)}`;
   return (
     <span
       aria-live="polite"
+      title={compact ? text : undefined}
       className={cn("ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap pl-3 text-[12.5px] text-[var(--ds-subtle)]", className)}
     >
-      {saved.kind === "saving" ? (
-        <>
-          <Loader2 className="size-3.5 animate-spin" /> Saving
-        </>
-      ) : saved.kind === "locked" ? (
-        <>
-          <Check className="size-3.5" /> Locked after sending
-        </>
-      ) : (
-        <>
-          <Check className="size-3.5" /> Saved {agoText(saved.at)}
-        </>
-      )}
+      {saved.kind === "saving" ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+      <span className={compact ? "sr-only" : undefined}>{text}</span>
     </span>
   );
 }
@@ -947,11 +1206,91 @@ export function agoText(at: number): string {
   return new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-function InsertRow(p: FormatProps) {
-  const { ed, canFormat, draft } = p;
+function InsertTools(p: FormatProps & { fileRef: RefObject<HTMLInputElement | null>; pickerOpen: boolean; setPickerOpen: (o: boolean) => void }): Tool[] {
+  const { ed, canFormat, draft, fileRef, pickerOpen, setPickerOpen } = p;
+  const evidenceCount = draft.evidence?.length ?? 0;
+  const linkRun = () => promptLink(ed);
+  return [
+    {
+      key: "citation",
+      inline:
+        ed && canFormat && evidenceCount > 0 ? (
+          <EvidencePickerPopover
+            draft={draft}
+            editor={ed}
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            onOpenDrawer={() => {
+              setPickerOpen(false);
+              p.onOpenEvidence();
+            }}
+            trigger={
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2 text-[13.5px] text-[var(--ds-body)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                aria-label={`Insert evidence at cursor (${evidenceCount} ${evidenceCount === 1 ? "item" : "items"})`}
+                title="Insert evidence at the cursor (or type / in the letter)"
+              >
+                <Paperclip className="size-4" /> Citation
+              </button>
+            }
+          />
+        ) : (
+          <RBtn
+            label={evidenceCount > 0 ? "Click into a section to insert a citation" : "Add evidence first to insert citations"}
+            disabled
+            onClick={() => {}}
+            text="Citation"
+          >
+            <Paperclip className="size-4" />
+          </RBtn>
+        ),
+    },
+    {
+      key: "image",
+      drop: 3,
+      inline: (
+        <RBtn label="Insert image (or paste or drop one)" disabled={!canFormat} onClick={() => fileRef.current?.click()} text="Image">
+          <ImageIcon className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<ImageIcon />} label="Image" disabled={!canFormat} onClick={() => fileRef.current?.click()} />,
+    },
+    {
+      key: "link",
+      drop: 4,
+      inline: <LinkBtn ed={ed} disabled={!canFormat} text="Link" />,
+      menu: <MItem icon={<LinkIcon />} label="Link" disabled={!canFormat} onClick={linkRun} />,
+    },
+    {
+      key: "comment",
+      drop: 2,
+      inline: (
+        <RBtn label="Comment on the selected text" disabled={!p.activeSection} onClick={p.onComment} text="Comment">
+          <MessageSquarePlus className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<MessageSquarePlus />} label="Comment" disabled={!p.activeSection} onClick={p.onComment} />,
+    },
+    {
+      key: "evidence",
+      sep: true,
+      drop: 1,
+      inline: (
+        <RBtn label="Open evidence" onClick={p.onOpenEvidence} text={evidenceCount > 0 ? `Evidence (${evidenceCount})` : "Add evidence"}>
+          <Paperclip className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<Paperclip />} label={evidenceCount > 0 ? `Evidence (${evidenceCount})` : "Add evidence"} onClick={p.onOpenEvidence} />,
+    },
+  ];
+}
+
+function InsertRow(p: FormatProps & { resetKey: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const evidenceCount = draft.evidence?.length ?? 0;
+  const { ed } = p;
   return (
     <>
       <input
@@ -967,55 +1306,12 @@ function InsertRow(p: FormatProps) {
           if (src) ed.chain().focus().setImage({ src, alt: file.name }).run();
         }}
       />
-      {ed && canFormat && evidenceCount > 0 ? (
-        <EvidencePickerPopover
-          draft={draft}
-          editor={ed}
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          onOpenDrawer={() => {
-            setPickerOpen(false);
-            p.onOpenEvidence();
-          }}
-          trigger={
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[7px] px-2 text-[13.5px] text-[var(--ds-body)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
-              aria-label={`Insert evidence at cursor (${evidenceCount} ${evidenceCount === 1 ? "item" : "items"})`}
-              title="Insert evidence at the cursor (or type / in the letter)"
-            >
-              <Paperclip className="size-4" /> Citation
-            </button>
-          }
-        />
-      ) : (
-        <RBtn
-          label={evidenceCount > 0 ? "Click into a section to insert a citation" : "Add evidence first to insert citations"}
-          disabled
-          onClick={() => {}}
-          text="Citation"
-        >
-          <Paperclip className="size-4" />
-        </RBtn>
-      )}
-      <RBtn label="Insert image (or paste or drop one)" disabled={!canFormat} onClick={() => fileRef.current?.click()} text="Image">
-        <ImageIcon className="size-4" />
-      </RBtn>
-      <LinkBtn ed={ed} disabled={!canFormat} text="Link" />
-      <RBtn label="Comment on the selected text" disabled={!p.activeSection} onClick={p.onComment} text="Comment">
-        <MessageSquarePlus className="size-4" />
-      </RBtn>
-      <Sep />
-      <RBtn label="Open evidence" onClick={p.onOpenEvidence} text={evidenceCount > 0 ? `Evidence (${evidenceCount})` : "Add evidence"}>
-        <Paperclip className="size-4" />
-      </RBtn>
-      <SavedIndicator saved={p.saved} />
+      <ToolsRow tools={InsertTools({ ...p, fileRef, pickerOpen, setPickerOpen })} saved={p.saved} resetKey={p.resetKey} />
     </>
   );
 }
 
-function LayoutRow(p: DocumentBarProps) {
+function LayoutRow(p: DocumentBarProps & { resetKey: string }) {
   const [mode, setMode] = useState<DiffViewMode>(() => getDiffViewMode());
   useEffect(() => {
     const on = (e: Event) => {
@@ -1025,139 +1321,282 @@ function LayoutRow(p: DocumentBarProps) {
     window.addEventListener("drafthr:diff-view-mode", on);
     return () => window.removeEventListener("drafthr:diff-view-mode", on);
   }, []);
-  return (
-    <>
-      <div className="inline-flex shrink-0 rounded-[8px] bg-[var(--ds-surface-2)] p-0.5" role="tablist" aria-label="View mode">
-        {(
-          [
-            ["edit", "Sections", <FileEdit key="e" className="size-3.5" />],
-            ["preview", "Page", <Eye key="p" className="size-3.5" />],
-          ] as const
-        ).map(([m, label, icon]) => (
-          <button
-            key={m}
-            type="button"
-            role="tab"
-            aria-selected={p.viewMode === m}
-            onClick={() => p.onViewMode(m)}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
-              p.viewMode === m
-                ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
-                : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-            )}
-          >
-            {icon}
-            {label}
-          </button>
-        ))}
-      </div>
-      <Sep />
-      <RBtn label="Document settings" onClick={p.onEditDetails} text="Document settings">
-        <Settings2 className="size-4" />
-      </RBtn>
-      <Sep />
-      <span className="shrink-0 whitespace-nowrap px-1 text-[12.5px] text-[var(--ds-muted)]">New edits</span>
-      <RBtn label="Show new edits in the text" active={mode === "inline"} onClick={() => setDiffViewMode("inline")} text="In the text">
-        <AlignLeft className="size-4" />
-      </RBtn>
-      <RBtn label="Show new edits side by side" active={mode === "card"} onClick={() => setDiffViewMode("card")} text="Side by side">
-        <Columns2 className="size-4" />
-      </RBtn>
-      <Sep />
-      <RBtn label={p.outlineOpen ? "Hide outline" : "Show outline"} active={p.outlineOpen} onClick={p.onToggleOutline} text="Outline">
-        <PanelLeft className="size-4" />
-      </RBtn>
-      <RBtn label={p.focusMode ? "Exit focus mode" : "Enter focus mode"} active={p.focusMode} onClick={p.onToggleFocus} text="Focus">
-        <Maximize2 className="size-4" />
-      </RBtn>
-      <SavedIndicator saved={p.saved} />
-    </>
-  );
+  const tools: Tool[] = [
+    {
+      key: "view",
+      inline: (
+        <div className="inline-flex shrink-0 rounded-[8px] bg-[var(--ds-surface-2)] p-0.5" role="tablist" aria-label="View mode">
+          {(
+            [
+              ["edit", "Sections", <FileEdit key="e" className="size-3.5" />],
+              ["preview", "Page", <Eye key="p" className="size-3.5" />],
+            ] as const
+          ).map(([m, label, icon]) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={p.viewMode === m}
+              onClick={() => p.onViewMode(m)}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
+                p.viewMode === m
+                  ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
+                  : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+              )}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: "settings",
+      sep: true,
+      drop: 5,
+      inline: (
+        <RBtn label="Document settings" onClick={p.onEditDetails} text="Document settings">
+          <Settings2 className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<Settings2 />} label="Document settings" onClick={p.onEditDetails} />,
+    },
+    {
+      key: "new-edits",
+      sep: true,
+      drop: 3,
+      inline: (
+        <>
+          <span className="shrink-0 whitespace-nowrap px-1 text-[12.5px] text-[var(--ds-muted)]">New edits</span>
+          <RBtn label="Show new edits in the text" active={mode === "inline"} onClick={() => setDiffViewMode("inline")} text="In the text">
+            <AlignLeft className="size-4" />
+          </RBtn>
+          <RBtn label="Show new edits side by side" active={mode === "card"} onClick={() => setDiffViewMode("card")} text="Side by side">
+            <Columns2 className="size-4" />
+          </RBtn>
+        </>
+      ),
+      menu: (
+        <>
+          <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">New edits</DropdownMenuLabel>
+          <MItem icon={<AlignLeft />} label="In the text" active={mode === "inline"} onClick={() => setDiffViewMode("inline")} />
+          <MItem icon={<Columns2 />} label="Side by side" active={mode === "card"} onClick={() => setDiffViewMode("card")} />
+        </>
+      ),
+    },
+    {
+      key: "outline",
+      sep: true,
+      drop: 4,
+      inline: (
+        <RBtn label={p.outlineOpen ? "Hide outline" : "Show outline"} active={p.outlineOpen} onClick={p.onToggleOutline} text="Outline">
+          <PanelLeft className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<PanelLeft />} label="Outline" active={p.outlineOpen} onClick={p.onToggleOutline} />,
+    },
+    {
+      key: "focus",
+      drop: 2,
+      inline: (
+        <RBtn label={p.focusMode ? "Exit focus mode" : "Enter focus mode"} active={p.focusMode} onClick={p.onToggleFocus} text="Focus">
+          <Maximize2 className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<Maximize2 />} label="Focus" active={p.focusMode} onClick={p.onToggleFocus} />,
+    },
+  ];
+  return <ToolsRow tools={tools} saved={p.saved} resetKey={p.resetKey} />;
 }
 
-function ReviewRow(p: DocumentBarProps) {
+/** Sending on (for review or for approval) is blocked by the Draft gate:
+ *  a required check failing, a required section empty, DraftHR writing. */
+
+function reviewTools(p: DocumentBarProps): Tool[] {
   const { role, draft, journey } = p;
   const reviewStatus = draft.reviewStatus ?? "draft";
-  return (
-    <>
-      <RBtn label="Open edits to review" onClick={p.onOpenEdits} text={`Edits${p.pendingEdits ? ` (${p.pendingEdits})` : ""}`}>
-        <MessageSquareWarning className="size-4" />
-      </RBtn>
-      {p.pendingEdits > 0 && p.canEdit && (
-        <>
+  const blocked = submitBlocked(journey);
+  const tools: Tool[] = [
+    {
+      key: "edits",
+      inline: (
+        <RBtn label="Open edits to review" onClick={p.onOpenEdits} text={`Edits${p.pendingEdits ? ` (${p.pendingEdits})` : ""}`}>
+          <MessageSquareWarning className="size-4" />
+        </RBtn>
+      ),
+    },
+  ];
+  if (p.pendingEdits > 0 && p.canEdit) {
+    tools.push(
+      {
+        key: "reject-all",
+        drop: 3,
+        inline: (
           <RBtn label="Reject every pending edit" onClick={p.onRejectAll} text="Reject all">
             <X className="size-4" />
           </RBtn>
+        ),
+        menu: <MItem icon={<X />} label="Reject all" onClick={p.onRejectAll} />,
+      },
+      {
+        key: "accept-all",
+        drop: 2,
+        inline: (
           <RBtn label="Accept every pending edit" onClick={p.onAcceptAll} text="Accept all">
             <CheckCheck className="size-4" />
           </RBtn>
-        </>
-      )}
-      <Sep />
-      <RBtn label="All comments" onClick={p.onOpenComments} text={`Comments${p.commentCount ? ` (${p.commentCount})` : ""}`}>
-        <MessageSquare className="size-4" />
-      </RBtn>
-      <RBtn label="Timeline" onClick={p.onOpenTimeline} text="Timeline">
-        <Clock3 className="size-4" />
-      </RBtn>
-      <Sep />
-      {p.streaming ? (
-        <RBtn label="Stop generation" onClick={p.onStop} text="Stop">
-          <StopCircle className="size-4" />
+        ),
+        menu: <MItem icon={<CheckCheck />} label="Accept all" onClick={p.onAcceptAll} />,
+      }
+    );
+  }
+  tools.push(
+    {
+      key: "comments",
+      sep: true,
+      drop: 5,
+      inline: (
+        <RBtn label="All comments" onClick={p.onOpenComments} text={`Comments${p.commentCount ? ` (${p.commentCount})` : ""}`}>
+          <MessageSquare className="size-4" />
         </RBtn>
-      ) : (
-        <RBtn label="Redraft every section" disabled={!p.canEdit} onClick={p.onRegenerateAll} text="Redraft all">
-          <Sparkles className="size-4" />
+      ),
+      menu: <MItem icon={<MessageSquare />} label={`Comments${p.commentCount ? ` (${p.commentCount})` : ""}`} onClick={p.onOpenComments} />,
+    },
+    {
+      key: "timeline",
+      drop: 6,
+      inline: (
+        <RBtn label="Timeline" onClick={p.onOpenTimeline} text="Timeline">
+          <Clock3 className="size-4" />
         </RBtn>
-      )}
-      <RBtn label="Refine current section" disabled={!p.activeSection || !p.canEdit} onClick={p.onRefineSection} text="Refine section">
-        <Wand2 className="size-4" />
-      </RBtn>
-      {p.counselNeeded && (
-        <RBtn label="Counsel review" onClick={p.onOpenCounsel} text={p.counselReview ? "Counsel reviewed" : "Counsel review"}>
+      ),
+      menu: <MItem icon={<Clock3 />} label="Timeline" onClick={p.onOpenTimeline} />,
+    },
+    p.streaming
+      ? {
+          key: "stop",
+          sep: true,
+          inline: (
+            <RBtn label="Stop generation" onClick={p.onStop} text="Stop">
+              <StopCircle className="size-4" />
+            </RBtn>
+          ),
+        }
+      : {
+          key: "redraft",
+          sep: true,
+          drop: 7,
+          inline: (
+            <RBtn label="Redraft every section" disabled={!p.canEdit} onClick={p.onRegenerateAll} text="Redraft all">
+              <Sparkles className="size-4" />
+            </RBtn>
+          ),
+          menu: <MItem icon={<Sparkles />} label="Redraft all" disabled={!p.canEdit} onClick={p.onRegenerateAll} />,
+        },
+    {
+      key: "refine",
+      drop: 8,
+      inline: (
+        <RBtn label="Refine current section" disabled={!p.activeSection || !p.canEdit} onClick={p.onRefineSection} text="Refine section">
+          <Wand2 className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<Wand2 />} label="Refine section" disabled={!p.activeSection || !p.canEdit} onClick={p.onRefineSection} />,
+    }
+  );
+  if (p.counselNeeded) {
+    const label = p.counselReview ? "Counsel reviewed" : "Counsel review";
+    tools.push({
+      key: "counsel",
+      drop: 9,
+      inline: (
+        <RBtn label="Counsel review" onClick={p.onOpenCounsel} text={label}>
           <ShieldCheck className="size-4" />
         </RBtn>
-      )}
-      {!draft.isTemplateSource && (
-        <>
-          <Sep />
-          {journey.primaryAction && journey.primaryAction.id !== "export" && journey.primaryAction.id !== "download" && (
-            <RBtn
-              label={journey.primaryAction.label}
-              disabled={Boolean(journey.primaryAction.disabled) || !canSubmitForReview(role)}
-              onClick={() => p.onJourneyAction(journey.primaryAction!.id)}
-              text={journey.primaryAction.label}
-            >
-              <Send className="size-4" />
-            </RBtn>
-          )}
-          {(reviewStatus === "draft" || reviewStatus === "changes_requested") && canSubmitForReview(role) && (
-            <RBtn label="Submit for approval" disabled={journey.locked} onClick={() => p.onReviewAction("submit")} text={reviewStatus === "draft" ? "Submit for approval" : "Re-submit"}>
-              <Stamp className="size-4" />
-            </RBtn>
-          )}
-          {reviewStatus === "in_review" && canApprove(role) && (
-            <>
-              <RBtn label="Approve" onClick={() => p.onReviewAction("approve")} text="Approve">
-                <Check className="size-4" />
-              </RBtn>
-              <RBtn label="Request changes" onClick={() => p.onReviewAction("request_changes")} text="Request changes">
-                <MessageSquareWarning className="size-4" />
-              </RBtn>
-            </>
-          )}
-          <RBtn label="Open the Review step" onClick={p.onGoReview} text="Review step">
-            <ArrowRight className="size-4" />
+      ),
+      menu: <MItem icon={<ShieldCheck />} label={label} onClick={p.onOpenCounsel} />,
+    });
+  }
+  if (!draft.isTemplateSource) {
+    const a = journey.primaryAction;
+    if (a && a.id !== "export" && a.id !== "download") {
+      const disabled = Boolean(a.disabled) || !canSubmitForReview(role) || (p.streaming && a.id.startsWith("send"));
+      tools.push({
+        key: "primary",
+        sep: true,
+        drop: 1,
+        inline: (
+          <RBtn label={a.label} hint={a.reason} disabled={disabled} onClick={() => p.onJourneyAction(a.id)} text={a.label}>
+            <Send className="size-4" />
           </RBtn>
-        </>
-      )}
-      <SavedIndicator saved={p.saved} />
-    </>
-  );
+        ),
+        menu: <MItem icon={<Send />} label={a.label} hint={a.reason} disabled={disabled} onClick={() => p.onJourneyAction(a.id)} />,
+      });
+    }
+    if ((reviewStatus === "draft" || reviewStatus === "changes_requested") && canSubmitForReview(role) && a?.id !== "send-for-approval") {
+      const label = reviewStatus === "draft" ? "Submit for approval" : "Re-submit";
+      const disabled = journey.locked || p.streaming || Boolean(blocked);
+      tools.push({
+        key: "submit",
+        drop: 4,
+        inline: (
+          <RBtn label="Submit for approval" hint={blocked ?? undefined} disabled={disabled} onClick={() => p.onReviewAction("submit")} text={label}>
+            <Stamp className="size-4" />
+          </RBtn>
+        ),
+        menu: <MItem icon={<Stamp />} label={label} hint={blocked ?? undefined} disabled={disabled} onClick={() => p.onReviewAction("submit")} />,
+      });
+    }
+    if (reviewStatus === "in_review" && canApprove(role)) {
+      tools.push(
+        {
+          key: "approve",
+          drop: 1,
+          inline: (
+            <RBtn label="Approve" onClick={() => p.onReviewAction("approve")} text="Approve">
+              <Check className="size-4" />
+            </RBtn>
+          ),
+          menu: <MItem icon={<Check />} label="Approve" onClick={() => p.onReviewAction("approve")} />,
+        },
+        {
+          key: "request",
+          drop: 4,
+          inline: (
+            <RBtn label="Request changes" onClick={() => p.onReviewAction("request_changes")} text="Request changes">
+              <MessageSquareWarning className="size-4" />
+            </RBtn>
+          ),
+          menu: <MItem icon={<MessageSquareWarning />} label="Request changes" onClick={() => p.onReviewAction("request_changes")} />,
+        }
+      );
+    }
+    tools.push({
+      key: "review-step",
+      drop: 10,
+      inline: (
+        <RBtn label="Open the Review step" onClick={p.onGoReview} text="Review step">
+          <ArrowRight className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<ArrowRight />} label="Review step" onClick={p.onGoReview} />,
+    });
+  }
+  return tools;
 }
 
 /* ------------------------------ Atoms ----------------------------------- */
+
+function promptLink(ed: Editor | null) {
+  if (!ed) return;
+  const prev = ed.getAttributes("link").href as string | undefined;
+  const url = prompt("Link address", prev ?? "https://");
+  if (url == null) return;
+  if (url === "") ed.chain().focus().unsetLink().run();
+  else ed.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+}
 
 function LinkBtn({ ed, disabled, text }: { ed: Editor | null; disabled?: boolean; text?: string }) {
   return (
@@ -1166,14 +1605,7 @@ function LinkBtn({ ed, disabled, text }: { ed: Editor | null; disabled?: boolean
       text={text}
       active={Boolean(ed?.isFocused) && ed?.isActive("link")}
       disabled={disabled}
-      onClick={() => {
-        if (!ed) return;
-        const prev = ed.getAttributes("link").href as string | undefined;
-        const url = prompt("Link address", prev ?? "https://");
-        if (url == null) return;
-        if (url === "") ed.chain().focus().unsetLink().run();
-        else ed.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-      }}
+      onClick={() => promptLink(ed)}
     >
       <LinkIcon className="size-4" />
     </RBtn>

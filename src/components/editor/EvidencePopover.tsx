@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { toast } from "sonner";
 import type { Draft, EvidenceItem, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { uid } from "@/lib/utils";
@@ -73,7 +74,9 @@ export function EvidencePopover({
 
   const addFile = async (file: File) => {
     if (file.size > MAX_INLINE_EVIDENCE_BYTES) {
-      window.alert(`${file.name} is larger than 10 MB. Use the Evidence step to summarize it instead.`);
+      toast.error(`${file.name} is larger than 10 MB`, {
+        description: "Use a smaller file, or summarise it as a note in the evidence drawer.",
+      });
       return;
     }
     const dataUrl = (await readAsDataUrl(file)) ?? undefined;

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   motion,
   useMotionValue,
@@ -85,6 +85,21 @@ export function MobileBottomSheet({
     const controls = animate(y, target, TWEEN);
     return () => controls.stop();
   }, [open, snap, y, reduce]);
+
+  // Escape closes the sheet, as tapping the backdrop does. A menu, list or
+  // dialog open on top of it takes the key first.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector('[role="menu"], [role="listbox"], [role="dialog"][data-state="open"], [role="alertdialog"]')) return;
+      dismissRef.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   const handleDragEnd = (_e: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
     // info.offset.y is pixels dragged from drag-start position.

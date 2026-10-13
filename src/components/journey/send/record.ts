@@ -91,6 +91,22 @@ export function givenByPhrase(v: GivenBy, way: SendWay = "self"): string {
   }
 }
 
+/** The letter's delivery method in words, when no send was recorded. */
+function plannedDeliveryPhrase(v: GivenBy | undefined): string {
+  switch (v) {
+    case "hand-delivery":
+      return "handed over in person";
+    case "post":
+      return "sent by post";
+    case "recorded-delivery":
+      return "sent by recorded delivery";
+    case "email":
+      return "sent by email";
+    default:
+      return "given to the employee";
+  }
+}
+
 /** The Activity entry for the send ("Handed over in person"). */
 export function givenByActivity(v: GivenBy, way: SendWay = "self", emailedName?: string): string {
   if (way === "email") return emailedName ? `Emailed to ${emailedName}` : "Emailed from DraftHR";
@@ -435,7 +451,10 @@ export function sentBannerText(
     };
   }
 
-  const how = givenByPhrase(rec?.givenBy ?? draft.context.deliveryMethod ?? "hand-delivery", "self");
+  // With a send record, how it was given as recorded. Without one (an older
+  // send), only the letter's delivery method: "sent by email", not a claim
+  // about which inbox it went from.
+  const how = rec ? givenByPhrase(rec.givenBy, "self") : plannedDeliveryPhrase(draft.context.deliveryMethod);
   const files = (rec?.downloaded ?? []).map((k) => DOWNLOAD_WORDS[k]).filter(Boolean);
   const first = files.length
     ? `${cap(joinAnd(files))} ${files.length === 1 ? "is" : "are"} in your downloads and ${where}.`

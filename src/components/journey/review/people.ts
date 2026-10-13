@@ -184,19 +184,22 @@ export const useSavedReviewers = create<SavedStore>()(
 /* ------------------------------------------------------------------ */
 
 /** The approver you asked most recently on any letter, if any. */
+export function defaultApproverName(drafts: Record<string, Draft>): string | null {
+  let best: { name: string; at: number } | null = null;
+  for (const d of Object.values(drafts)) {
+    for (const a of d.approvals ?? []) {
+      const name = a.reviewerName?.trim();
+      if (a.decision !== "submitted" || !name || /^workspace reviewer$/i.test(name)) continue;
+      if (!best || a.createdAt > best.at) best = { name, at: a.createdAt };
+    }
+  }
+  return best?.name ?? null;
+}
+
+/** The approver you asked most recently on any letter, if any. */
 export function useDefaultApprover(): string | null {
   const drafts = useDraftStore((s) => s.drafts);
-  return useMemo(() => {
-    let best: { name: string; at: number } | null = null;
-    for (const d of Object.values(drafts)) {
-      for (const a of d.approvals ?? []) {
-        const name = a.reviewerName?.trim();
-        if (a.decision !== "submitted" || !name || /^workspace reviewer$/i.test(name)) continue;
-        if (!best || a.createdAt > best.at) best = { name, at: a.createdAt };
-      }
-    }
-    return best?.name ?? null;
-  }, [drafts]);
+  return useMemo(() => defaultApproverName(drafts), [drafts]);
 }
 
 /** All review requests (for reply-time history). */

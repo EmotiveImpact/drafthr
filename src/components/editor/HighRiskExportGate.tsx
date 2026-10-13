@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { Draft } from "@/lib/letters/types";
-import { getLetterMeta } from "@/lib/letters/catalog";
+import { briefTitleFor } from "@/lib/letters/display";
 import { todayDateOnly } from "@/lib/date-only";
 import { ShieldAlert } from "lucide-react";
 
@@ -26,7 +26,6 @@ type Props = {
  * redundancy, settlement, immigration) can be exported.
  */
 export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
-  const meta = getLetterMeta(draft.letterType);
   const [reviewedBy, setReviewedBy] = useState("");
   const today = todayDateOnly();
   const [reviewedOn, setReviewedOn] = useState(today);
@@ -42,17 +41,19 @@ export function HighRiskExportGate({ draft, open, onClose, onConfirm }: Props) {
       <DialogContent className="sm:max-w-[540px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ShieldAlert className="size-4 text-[var(--ds-red-fg)]" />
+            <ShieldAlert className="size-4 text-[var(--ds-amber-fg)]" />
             Counsel review required
           </DialogTitle>
           <DialogDescription>
-            <strong className="font-medium text-[var(--ds-ink)]">{meta.title}</strong> is a high-risk letter. Before
+            <strong className="font-medium text-[var(--ds-ink)]">{briefTitleFor(draft)}</strong> is a high-risk letter. Before
             exporting, confirm a qualified employment-law reviewer has approved the content.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          <div className="rounded-[10px] bg-[var(--ds-red-bg)] p-3 text-[12.5px] leading-relaxed text-[var(--ds-ink)]">
+          {/* A legal note, not an error: the calm neutral fill (red is for
+              errors and failing checks only). */}
+          <div className="rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface-2)] p-3 text-[12.5px] leading-relaxed text-[var(--ds-body)]">
             {draft.context.jurisdiction === "UK" ? (
               <>
                 The ACAS Code of Practice and Employment Rights Act 1996 governing this letter type carry compensation

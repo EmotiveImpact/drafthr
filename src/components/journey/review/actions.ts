@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { Draft, EvidenceItem } from "@/lib/letters/types";
 import { displayTitleFor } from "@/lib/letters/display";
 import { useDraftStore } from "@/lib/store";
+import { getJourney } from "@/lib/journey/stage";
 import { useProfileStore } from "@/lib/profile";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getFlag } from "@/lib/flags";
@@ -27,7 +28,7 @@ import {
   type ReviewShare,
 } from "@/lib/journey/reviews";
 import type { Teammate } from "./people";
-import { useSavedReviewers } from "./people";
+import { defaultApproverName, useSavedReviewers } from "./people";
 import type { Expert } from "./experts";
 import { reviewPoints, shareableEvidence, openPoints, type ReviewPoint } from "./model";
 import {
@@ -451,9 +452,16 @@ export async function sendBackToReviewer(review: ReviewRequest, question: string
   toast(`Sent back to ${firstName(review.reviewer.name) || "the reviewer"}`);
 }
 
-/** Finish the review: the letter moves on to approval (or straight to Send
- *  when a teammate approved it in the same step). */
-export async function finishReview(review: ReviewRequest): Promise<void> {
+/** What finishing led to: ready to send (a teammate approved in the same
+ *  step), with the approver (the usual one), the approver still to pick, or
+ *  held at "Send for approval" because a required check fails. */
+export type FinishOutcome = "ready-to-send" | "with-approver" | "pick-approver" | "blocked";
+
+/** Finish the review: the letter goes on to the usual approver (or straight
+ *  to Send when a teammate approved it in the same step). With no usual
+ *  approver the caller asks who approves; a failing required check holds it
+ *  at "Send for approval" with the reason. */
+export async function finishReview(review: ReviewRequest): Promise<FinishOutcome> {
   const draft = useDraftStore.getState().drafts[review.draftId];
   if (draft) {
     const round = currentRound(review);
@@ -473,13 +481,30 @@ export async function finishReview(review: ReviewRequest): Promise<void> {
   }
   useReviewStore.getState().finish(review.id);
   const fresh = useReviewStore.getState().requests[review.id];
+  let outcome: FinishOutcome;
   if (fresh?.kind === "team" && fresh.approveInSameStep && fresh.approvedAt) {
     useDraftStore.getState().approveDraft(review.draftId, fresh.reviewer.name, "Approved during review");
     toast.success(`Review finished. ${firstName(fresh.reviewer.name)} approved it, so it's ready to send.`);
+    outcome = "ready-to-send";
   } else {
-    toast.success("Review finished");
+    const drafts = useDraftStore.getState().drafts;
+    const now = drafts[review.draftId];
+    const action = now ? getJourney(now, fresh ?? review).primaryAction : null;
+    const approver = defaultApproverName(drafts);
+    if (!now || action?.id !== "send-for-approval" || action.disabled) {
+      toast.success("Review finished");
+      outcome = "blocked";
+    } else if (approver) {
+      useDraftStore.getState().submitForReview(review.draftId, approver, undefined);
+      toast.success(`Review finished. Sent to ${firstName(approver)} to approve.`);
+      outcome = "with-approver";
+    } else {
+      toast.success("Review finished. Choose who approves it.");
+      outcome = "pick-approver";
+    }
   }
   if (review.trustedLinkId) void revokeTrustedLink(review.trustedLinkId, "finished");
+  return outcome;
 }
 
 /* ------------------------------------------------------------------ */

@@ -152,6 +152,18 @@ const mobileLetterStyles = `
 .mobile-letter { overflow-wrap: anywhere; }
 .mobile-letter .attachments-block h3 { font-size: 1.05rem; }
 .mobile-letter [contenteditable] { -webkit-user-modify: read-only; user-select: text; }
+/* The branded export footer carries inline print colours and a system font
+ * stack for PDF and Word. On screen it takes the workspace tokens and Inter,
+ * so its grey reads at AA. */
+.mobile-letter .drafthr-export-footer {
+  color: var(--ds-muted) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12px !important;
+  border-top-color: var(--ds-line) !important;
+}
+.mobile-letter .drafthr-export-footer strong {
+  color: var(--ds-body) !important;
+}
 `;
 
 export default MobileReadView;

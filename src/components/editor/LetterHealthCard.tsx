@@ -148,11 +148,15 @@ export function LetterHealthCard({
   draft,
   journey,
   canFix,
+  onFix,
 }: {
   draft: Draft;
   journey: JourneyInfo;
   /** The person can edit (no fixes for viewers or a locked letter). */
   canFix: boolean;
+  /** Outside the letter workspace (the old /review page): what Fix does,
+   *  since there is no workspace handler to ask DraftHR. */
+  onFix?: (check: HealthCheck) => void;
 }) {
   const ws = useWorkspaceFor(draft.id);
   const checks = useMemo(() => runHealthChecks(draft), [draft]);
@@ -168,34 +172,64 @@ export function LetterHealthCard({
     [checks]
   );
 
-  // Rows that just passed stay a moment, ticked, then fold away.
-  const [done, setDone] = useState<Record<string, HealthCheck>>({});
-  const prevFailing = useRef<HealthCheck[]>(failing);
-  useEffect(() => {
+  // Rows that just passed stay a moment where they were, ticked, then fold
+  // away. A check passes when it was failing and no longer is, whether it now
+  // reports "pass" or drops out of the list (a filled placeholder). Each
+  // removal timer lives in a ref so a later draft change cannot cancel it and
+  // leave the row stuck.
+  const [done, setDone] = useState<Record<string, { check: HealthCheck; at: number }>>({});
+  const [prevFailing, setPrevFailing] = useState<HealthCheck[]>(failing);
+  if (prevFailing !== failing) {
+    // Worked out during render (not in an effect) so the row never unmounts
+    // between "failing" and "done": the same element turns green, draws its
+    // tick and then folds.
     const now = new Set(failing.map((c) => c.id));
-    const passed = prevFailing.current.filter((c) => !now.has(c.id) && checks.some((x) => x.id === c.id && x.severity === "pass"));
-    prevFailing.current = failing;
-    if (passed.length === 0) return;
-    setDone((d) => {
-      const next = { ...d };
-      for (const c of passed) next[c.id] = c;
-      return next;
-    });
-    const t = window.setTimeout(
-      () =>
-        setDone((d) => {
-          const next = { ...d };
-          for (const c of passed) delete next[c.id];
-          return next;
-        }),
-      prefersReducedMotion() ? 0 : 1000
-    );
-    return () => window.clearTimeout(t);
-  }, [failing, checks]);
+    const passed = prevFailing
+      .map((c, at) => ({ check: c, at }))
+      .filter(({ check }) => !now.has(check.id) && !checks.some((x) => x.id === check.id && x.severity !== "pass"));
+    setPrevFailing(failing);
+    if (passed.length > 0) {
+      setDone((d) => {
+        const next = { ...d };
+        for (const p of passed) next[p.check.id] = p;
+        return next;
+      });
+    }
+  }
+  const timers = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    for (const id of Object.keys(done)) {
+      if (timers.current.has(id)) continue;
+      timers.current.set(
+        id,
+        window.setTimeout(
+          () => {
+            timers.current.delete(id);
+            setDone((d) => {
+              const next = { ...d };
+              delete next[id];
+              return next;
+            });
+          },
+          prefersReducedMotion() ? 0 : 1100
+        )
+      );
+    }
+  }, [done]);
+  useEffect(() => {
+    const map = timers.current;
+    return () => {
+      for (const t of map.values()) window.clearTimeout(t);
+      map.clear();
+    };
+  }, []);
 
   const rows: { check: HealthCheck; done: boolean }[] = useMemo(() => {
     const list = failing.map((c) => ({ check: c, done: false }));
-    for (const c of Object.values(done)) if (!list.some((r) => r.check.id === c.id)) list.push({ check: c, done: true });
+    const finished = Object.values(done)
+      .filter((d) => !list.some((r) => r.check.id === d.check.id))
+      .sort((a, b) => a.at - b.at);
+    for (const d of finished) list.splice(Math.min(d.at, list.length), 0, { check: d.check, done: true });
     return list;
   }, [failing, done]);
 
@@ -228,7 +262,7 @@ export function LetterHealthCard({
   else if (fixesToNinety > 0) line = `Fix ${fixesToNinety} to reach 90 or more`;
   else line = `${failing.length} to look at`;
 
-  const fix = (c: HealthCheck) => ws?.handlers.fixCheck?.(c);
+  const fix = (c: HealthCheck) => (ws?.handlers.fixCheck ? ws.handlers.fixCheck(c) : onFix?.(c));
   const fixing = ws?.fixing ?? {};
 
   return (

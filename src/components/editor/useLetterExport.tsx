@@ -2,7 +2,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { getLetterMeta } from "@/lib/letters/catalog";
 import { exportRequiresCounselGate } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
@@ -92,11 +91,9 @@ export function useLetterExport(draft: Draft | undefined) {
           .filter(Boolean)
           .join("\n\n");
         const blob = new Blob([plain], { type: "text/plain;charset=utf-8" });
-        const slug = (draft.title ?? getLetterMeta(draft.letterType).title)
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "");
-        downloadBlob(blob, `${slug || "letter"}.txt`);
+        // Same name as the PDF and Word files: type, person, issue date.
+        const safe = (draft.employee.legalName || "letter").replace(/[^a-z0-9]+/gi, "-");
+        downloadBlob(blob, `${draft.letterType}-${safe}-${draft.context.issueDate}.txt`);
       } else {
         const { exportLetterPack } = await import("@/lib/export/pack");
         await exportLetterPack(draft, att);
@@ -104,8 +101,13 @@ export function useLetterExport(draft: Draft | undefined) {
       recordExport(draft.id, { format, reviewedBy: att?.reviewedBy, reviewedOn: att?.reviewedOn });
     } catch (err) {
       const label = EXPORT_FORMATS.find((f) => f.format === format)?.label ?? format;
+      // The cause goes to the console for support; the person gets what to do.
+      console.error(`${label} export failed`, err);
+      const offline = typeof navigator !== "undefined" && navigator.onLine === false;
       toast.error(`${label} export failed`, {
-        description: err instanceof Error ? err.message : String(err),
+        description: offline
+          ? "You're offline. Reconnect, then try again."
+          : "The file couldn't be made. Try again, and reload the page if it keeps failing.",
       });
     } finally {
       setBusy(null);

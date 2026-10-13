@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle } from "@/lib/letters/display";
+import { cn } from "@/lib/utils";
+import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle, briefTitleFor } from "@/lib/letters/display";
 
 /**
  * Editable letter title that sits at the TOP of the canvas content
@@ -21,6 +22,7 @@ import { displayTitleFor, recipientNameFor, letterTypeLabelFor, hasCustomTitle }
 export function EditableTitleBar({
   draft,
   variant = "canvas",
+  stack,
 }: {
   draft: Draft;
   /** "canvas" (default): the large heading above the sections.
@@ -28,6 +30,9 @@ export function EditableTitleBar({
    * the employee's name in grey (mock f1). Click the name to rename.
    * "phone": the phone top bar's name in serif 20px (mock phone-letter). */
   variant?: "canvas" | "bar" | "phone";
+  /** "bar" only: true puts the employee under the name, false keeps them on
+   * one row. Left out, the bar's width decides (container query). */
+  stack?: boolean;
 }) {
   const setTitle = useDraftStore((s) => s.setDraftTitle);
   // Auto-composed default = "Letter type · Recipient name", reused
@@ -88,9 +93,23 @@ export function EditableTitleBar({
     // The bar shows the letter's own name (the rename or the letter type)
     // and the employee separately, rather than the composed "Type ·
     // Recipient" string twice.
-    const barTitle = isCustom ? displayTitle : letterTypeLabelFor(draft) || displayTitle;
+    // The short sentence-case name the Letters list, Home and Approvals use
+    // ("Warning letter", "Pay rise"), so a letter has one name everywhere.
+    const barTitle = isCustom ? displayTitle : briefTitleFor(draft) || displayTitle;
     return (
-      <div className="flex min-w-0 items-center gap-1.5">
+      // Room for both: one row, "Name · Employee". A narrow bar stacks the
+      // employee under the name in small grey, so neither is cut short.
+      <div
+        className={
+          phone
+            ? "flex min-w-0 items-center gap-1.5"
+            : stack === undefined
+              ? "flex min-w-0 flex-col items-start @min-[780px]:flex-row @min-[780px]:items-center @min-[780px]:gap-1.5"
+              : stack
+                ? "flex min-w-0 flex-col items-start"
+                : "flex min-w-0 flex-row items-center gap-1.5"
+        }
+      >
         {editing ? (
           <input
             ref={inputRef}
@@ -121,7 +140,10 @@ export function EditableTitleBar({
             className={
               phone
                 ? "min-w-0 truncate rounded-[6px] text-left font-serif text-[20px] leading-[1.25] tracking-[-0.01em] text-[var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
-                : "min-w-0 truncate rounded-[6px] px-1 py-0.5 text-left text-[15px] font-medium text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                : cn(
+                    "max-w-full min-w-0 shrink truncate rounded-[6px] px-1 text-left text-[15px] font-medium leading-[20px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
+                    stack === undefined ? "@min-[780px]:py-0.5" : !stack && "py-0.5"
+                  )
             }
             title={subline ? `${displayTitle}. ${subline}. Click to rename.` : "Click to rename"}
             aria-label={`Letter title: ${displayTitle}. Click to rename.`}
@@ -131,8 +153,27 @@ export function EditableTitleBar({
         )}
         {!editing && !phone && recipientLabel && (
           <>
-            <span aria-hidden className="hidden shrink-0 text-[15px] text-[var(--ds-faint)] xl:inline">·</span>
-            <span className="hidden min-w-0 shrink-[3] truncate text-[15px] text-[var(--ds-muted)] xl:inline">{recipientLabel}</span>
+            {/* The employee shows when the bar has room for the whole name
+             * (container query on the document bar); never cut to "· .". */}
+            <span
+              aria-hidden
+              className={cn("shrink-0 text-[15px] text-[var(--ds-faint)]", stack === undefined ? "hidden @min-[780px]:inline" : stack ? "hidden" : "inline")}
+            >
+              ·
+            </span>
+            <span
+              data-bar-employee
+              className={cn(
+                "max-w-full truncate whitespace-nowrap text-[var(--ds-muted)]",
+                stack === undefined
+                  ? "px-1 text-[12.5px] leading-[16px] @min-[780px]:min-w-[72px] @min-[780px]:shrink-[3] @min-[780px]:px-0 @min-[780px]:text-[15px] @min-[780px]:leading-normal"
+                  : stack
+                    ? "px-1 text-[12.5px] leading-[16px]"
+                    : "min-w-[72px] shrink-[3] text-[15px] leading-normal"
+              )}
+            >
+              {recipientLabel}
+            </span>
           </>
         )}
       </div>

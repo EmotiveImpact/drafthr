@@ -6,6 +6,7 @@ import { runHealthChecks } from "@/lib/finalize/healthChecks";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
 import { CheckList, CheckRow } from "@/components/journey/ui";
 import { useWorkspaceFor } from "@/components/editor/workspace-store";
+import { HEAVY_EVIDENCE_MIN, letterEvidenceTier } from "@/components/editor/evidence-tier";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -42,7 +43,8 @@ export function DraftStage({ draftId }: { draftId: string }) {
     const sectionNumbers = draft.sections
       .map((s, i) => (linked.has(s.id) ? String(i + 1) : null))
       .filter((x): x is string => Boolean(x));
-    return { firstFail, requiredMissing, sectionNumbers };
+    const heavyShort = letterEvidenceTier(draft) === "heavy" ? Math.max(0, HEAVY_EVIDENCE_MIN - (draft.evidence?.length ?? 0)) : 0;
+    return { firstFail, requiredMissing, sectionNumbers, heavyShort };
   }, [draft]);
 
   if (!journey || !draft || !facts) return null;
@@ -54,8 +56,41 @@ export function DraftStage({ draftId }: { draftId: string }) {
   const sectionsDone = !streaming && c.requiredSectionsEmpty === 0 && c.sectionsDrafted > 0;
   const allPass = c.checksTotal > 0 && c.checksPassing === c.checksTotal;
 
+  // The approver's change request, in their words (HOME-70): the note and a
+  // way to open the full feedback, so the drafter knows what to change.
+  const changes =
+    draft.reviewStatus === "changes_requested"
+      ? [...(draft.approvals ?? [])].reverse().find((a) => a.decision === "changes_requested")
+      : undefined;
+
   return (
     <div className="flex flex-col gap-2">
+      {changes && (
+        <div
+          data-testid="changes-feedback"
+          className="rounded-[10px] border border-[var(--ds-amber-bd)] bg-[var(--ds-amber-soft)] px-3 py-2.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12.5px] font-medium text-[var(--ds-amber-fg)]">
+              {changes.reviewerName ? `${changes.reviewerName}'s feedback` : "The approver's feedback"}
+            </span>
+            {h?.openFeedback && (
+              <button
+                type="button"
+                onClick={h.openFeedback}
+                className="shrink-0 rounded-[6px] text-[12.5px] font-medium text-[var(--ds-ink)] underline underline-offset-2 hover:text-[var(--ds-body)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              >
+                Read feedback
+              </button>
+            )}
+          </div>
+          {changes.body?.trim() ? (
+            <p className="m-0 mt-1 line-clamp-3 text-[13px] leading-snug text-[var(--ds-body)]">“{changes.body.trim()}”</p>
+          ) : (
+            <p className="m-0 mt-1 text-[13px] leading-snug text-[var(--ds-muted)]">No note was left.</p>
+          )}
+        </div>
+      )}
       <CheckList label="Finish the draft">
         {streaming ? (
           <CheckRow
@@ -109,6 +144,15 @@ export function DraftStage({ draftId }: { draftId: string }) {
         {facts.requiredMissing > 0 ? (
           <CheckRow state="need" action={h?.openEvidence ? { label: canEdit ? "Add" : "Open", onClick: h.openEvidence } : undefined}>
             {plural(facts.requiredMissing, "required evidence item")} missing
+          </CheckRow>
+        ) : facts.heavyShort > 0 ? (
+          // A heavy-evidence letter (the review handoff asks for at least 2).
+          <CheckRow
+            state="need"
+            note={`needs ${HEAVY_EVIDENCE_MIN}`}
+            action={h?.openEvidence ? { label: canEdit ? "Add" : "Open", onClick: h.openEvidence } : undefined}
+          >
+            {c.evidence} of {HEAVY_EVIDENCE_MIN} evidence items linked
           </CheckRow>
         ) : c.evidence > 0 ? (
           <CheckRow

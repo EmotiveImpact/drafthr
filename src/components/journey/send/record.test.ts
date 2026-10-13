@@ -157,6 +157,13 @@ describe("sent banner", () => {
     );
   });
 
+  it("an older send with no record names only the delivery method, not an inbox", () => {
+    const at = new Date(2026, 9, 14, 16, 5).getTime();
+    const base = makeDraft({ exports: [{ id: "e1", format: "marked-sent", exportedAt: at }] as Draft["exports"] });
+    const d = { ...base, context: { ...base.context, deliveryMethod: "email" as const } };
+    expect(sentBannerText(d)?.title).toBe("Marked as sent on 14 October, sent by email.");
+  });
+
   it("leaves out the appeal sentence for a letter with no right of appeal", () => {
     const d = sentDraft(
       { downloaded: ["pdf"] },

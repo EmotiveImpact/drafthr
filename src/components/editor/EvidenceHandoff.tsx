@@ -153,7 +153,7 @@ export function EvidenceHandoff({
               </div>
               <div>
                 <Dialog.Title className="m-0 text-[15px] font-semibold leading-tight">
-                  Evidence check before Review
+                  Evidence check before review
                 </Dialog.Title>
                 <Dialog.Description className="text-[11.5px] text-[var(--ds-muted)] mt-0.5">
                   Quick look at your supporting evidence.
@@ -197,7 +197,7 @@ export function EvidenceHandoff({
                 className="h-8 px-3 rounded-md border border-[var(--ds-line)] bg-white text-[12px] font-semibold text-[var(--ds-ink)] hover:bg-[var(--ds-line-2)] inline-flex items-center gap-1.5 transition"
               >
                 <Paperclip className="size-3.5" />
-                Open Evidence
+                Open evidence
               </button>
               <button
                 type="button"
@@ -207,7 +207,7 @@ export function EvidenceHandoff({
                 }}
                 className="h-8 px-3 rounded-md bg-[var(--ds-ink)] text-white text-[12px] font-semibold hover:opacity-90 inline-flex items-center gap-1.5 transition"
               >
-                Continue to Review
+                Continue to review
                 <ArrowRight className="size-3.5" />
               </button>
             </div>
@@ -258,10 +258,18 @@ function HeavyLowCountBody({
   const { count } = reason;
   return (
     <p className="m-0">
-      This letter type relies heavily on supporting evidence, but you only have{" "}
-      <strong>{count === 0 ? "no items" : `${count} item${count === 1 ? "" : "s"}`}</strong>{" "}
-      attached. Reviewers expect at least two, usually the chronology plus
-      one or two specific incidents. Consider adding more before exporting.
+      This letter type relies heavily on supporting evidence, but{" "}
+      {count === 0 ? (
+        <>
+          <strong>nothing is attached</strong> yet.
+        </>
+      ) : (
+        <>
+          only <strong>{count === 1 ? "1 item is" : `${count} items are`}</strong> attached.
+        </>
+      )}{" "}
+      Reviewers expect at least two, usually the chronology plus one or two
+      specific incidents. Consider adding more before you send it for review.
     </p>
   );
 }

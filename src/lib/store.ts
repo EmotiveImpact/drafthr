@@ -688,7 +688,9 @@ export const useDraftStore = create<Store>()(
                 : undefined,
             confidentiality:
               (a.confidentiality as Draft["context"]["confidentiality"]) ??
-              (meta.tribunalBound ? "private_and_confidential" : "public"),
+              // Disciplinary and other high-risk letters are marked "Private
+              // and confidential" by default (UK practice, mock f1).
+              (meta.tribunalBound || meta.riskClass === "high" ? "private_and_confidential" : "public"),
             withoutPrejudice: meta.withoutPrejudiceDefault ?? false,
             protectedCharacteristics: Array.isArray(a.protectedCharacteristics)
               ? (a.protectedCharacteristics as Draft["context"]["protectedCharacteristics"])
@@ -705,6 +707,7 @@ export const useDraftStore = create<Store>()(
             legalName: (a.employerLegalName as string) ?? "",
             address: (a.employerAddress as string) ?? "",
             registrationNumber: a.employerRegNumber as string | undefined,
+            phone: (a.employerPhone as string | undefined) || undefined,
             hasLetterhead: Boolean(a.hasLetterhead),
             letterheadDataUrl: isSafeImageRef(a.letterheadDataUrl)
               ? a.letterheadDataUrl

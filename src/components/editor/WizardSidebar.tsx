@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WizardChrome } from "@/components/editor/WizardChrome";
 import { sidebarLabelFor } from "@/components/editor/SectionsList";
+import { hasText } from "@/lib/journey/stage";
 
 /**
  * Shared inner contents for the left rail across all three wizard pages
@@ -56,6 +57,9 @@ type Props = {
   secondaryTabLabel?: string;
   /** Optional badge shown on the tab (e.g. "5/8" or "2 issues"). */
   secondaryTabBadge?: string;
+  /** Show the old Edit / Review / Finalise steps at the top. The letter
+   *  workspace's outline leaves them out: the Progress panel owns the steps. */
+  chrome?: boolean;
 };
 
 export function WizardSidebar({
@@ -67,9 +71,11 @@ export function WizardSidebar({
   secondaryTab,
   secondaryTabLabel = "More",
   secondaryTabBadge,
+  chrome = true,
 }: Props) {
   const total = draft.sections.length;
-  const ready = draft.sections.filter((s) => s.status === "ready").length;
+  // Sections with words in them, counted as the Progress panel counts them.
+  const ready = draft.sections.filter((s) => hasText(s.html)).length;
 
   type Tab = "sections" | "secondary";
   const [tab, setTab] = useState<Tab>("sections");
@@ -84,12 +90,14 @@ export function WizardSidebar({
 
   return (
     <>
-      <WizardChrome
-        draftId={draft.id}
-        mode={draft.mode}
-        current={current}
-        disabled={disabled}
-      />
+      {chrome && (
+        <WizardChrome
+          draftId={draft.id}
+          mode={draft.mode}
+          current={current}
+          disabled={disabled}
+        />
+      )}
 
       {showTabs && (
         <div className="shrink-0 border-b border-[var(--ds-line-2)] px-3 py-2.5">
@@ -103,6 +111,7 @@ export function WizardSidebar({
               onClick={() => setTab("sections")}
               label="Sections"
               badge={`${ready}/${total}`}
+              badgeTitle={`${ready} of ${total} sections drafted`}
             />
             <TabButton
               active={activeTab === "secondary"}
@@ -124,7 +133,7 @@ export function WizardSidebar({
               <h2 className="m-0 text-[12.5px] font-medium text-[var(--ds-muted)]">Sections</h2>
               <span
                 className="ds-mono text-[11.5px] text-[var(--ds-muted)]"
-                title={`${ready} of ${total} sections marked ready`}
+                title={`${ready} of ${total} sections drafted`}
               >
                 {ready}/{total}
               </span>
@@ -218,11 +227,13 @@ function TabButton({
   onClick,
   label,
   badge,
+  badgeTitle,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   badge?: string;
+  badgeTitle?: string;
 }) {
   return (
     <button
@@ -239,7 +250,9 @@ function TabButton({
     >
       <span>{label}</span>
       {badge && (
-        <span className="ds-mono text-[11px] text-[var(--ds-faint)]">{badge}</span>
+        <span className="ds-mono text-[11px] text-[var(--ds-muted)]" title={badgeTitle}>
+          {badge}
+        </span>
       )}
     </button>
   );
