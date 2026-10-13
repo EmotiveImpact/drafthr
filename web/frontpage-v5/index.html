@@ -454,7 +454,7 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 .lv-head .intro{color:var(--mute);font-size:clamp(17px,1.5vw,20px);line-height:1.5;padding-top:44px;max-width:40ch}
 .lv-head .intro p+p{margin-top:18px}
 .levels{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-radius:6px;overflow:hidden}
-.lvl{position:relative;display:flex;flex-direction:column;min-height:620px;padding:40px 36px 0;overflow:hidden;--ink:#121210;--ink-2:rgba(18,18,16,.66);color:var(--ink)}
+.lvl{position:relative;display:flex;flex-direction:column;min-height:700px;padding:40px 36px 0;overflow:hidden;--ink:#121210;--ink-2:rgba(18,18,16,.66);color:var(--ink)}
 .lvl:nth-child(1){background:#ECE9E2}
 .lvl:nth-child(2){background:#DCD7CC}
 .lvl:nth-child(3){background:#121210;--ink:#fff;--ink-2:rgba(255,255,255,.68)}
@@ -462,11 +462,33 @@ html[data-theme=light] :is(.nav,.hero,.statement,.close) .btn-line:hover{backgro
 .lvl h3{font-weight:600;font-size:clamp(26px,2.4vw,34px);line-height:1.05;letter-spacing:-.05em;color:var(--ink);margin-bottom:22px;max-width:14ch}
 .lvl p{font-size:16px;line-height:1.55;color:var(--ink);max-width:36ch}
 .lvl p+p{margin-top:14px;color:var(--ink-2)}
-.lvl .shot{position:relative;margin-top:auto;height:300px;margin-right:-36px}
-.lvl .shot img{position:absolute;left:0;top:36px;width:100%;max-width:none;border-radius:12px 0 0 0;box-shadow:0 30px 60px -25px rgba(0,0,0,.35),0 0 0 1px rgba(0,0,0,.06)}
-.lvl:nth-child(3) .shot img{box-shadow:0 30px 60px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.08)}
-@media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:360px}.lvl .shot img{width:min(100%,520px)}}
-@media (max-width:600px){.lvl{padding:30px 22px 0}.lvl .shot{height:280px;margin-right:-22px}}
+.lvl .shot{position:relative;margin:auto -36px 0;height:340px;overflow:hidden}
+.lvl .shot>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.lvl .shot::after{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(0,0,0,0) 30%,rgba(0,0,0,.35) 100%)}
+/* Crisp product moment floating on the photo (real app wording, set as live text) */
+.ui{position:absolute;left:24px;right:24px;bottom:24px;z-index:2;background:#fff;color:#16171A;border-radius:14px;padding:16px 16px 14px;font:500 13px/1.45 var(--font);box-shadow:0 24px 50px -18px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.04);max-width:360px}
+.ui-doc{font:400 14px/1.55 Georgia,"Source Serif 4",serif;color:#24252A}
+.ui-doc s{color:#C2412F;text-decoration-thickness:1px}
+.ui-doc ins{text-decoration:none;color:#1E6B45;background:#E5F3EA;border-bottom:1px solid #7FBF98}
+.ui-doc mark{background:#FBEFC4;color:inherit;padding:0 1px}
+.ui-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #EEEEF0}
+.ui-who{display:flex;align-items:center;gap:8px;font-weight:600;font-size:12.5px}
+.ui-who i{width:22px;height:22px;border-radius:6px;background:#16171A;display:grid;place-items:center;color:#fff;font-style:normal;font-size:12px}
+.ui-who i.av{border-radius:50%;background:#ECEAF6;color:#4B4A7A;font-size:9.5px;font-weight:700}
+.ui-btns{display:flex;gap:6px}
+.ui-btns b,.ui-btns em{font:600 12px/1 var(--font);font-style:normal;padding:7px 11px;border-radius:7px}
+.ui-btns b{background:#16171A;color:#fff}.ui-btns em{box-shadow:inset 0 0 0 1px #DADBDF;color:#16171A}
+.ui-note{font-size:13px;color:#4A4B52;margin-top:8px}
+.ui-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ui-head strong{font:400 15px/1.3 Georgia,"Source Serif 4",serif}
+.ui-head span{font-size:11.5px;color:#6A6B72;display:block;margin-top:2px;font-family:var(--font)}
+.ui-stamp{flex:none;font:700 10px/1 var(--font);letter-spacing:.08em;color:#1E7A4C;padding:7px 9px;border-radius:99px;box-shadow:inset 0 0 0 1.5px #1E7A4C;transform:rotate(-4deg)}
+.ui-log{list-style:none;margin-top:12px;padding-top:10px;border-top:1px solid #EEEEF0;display:grid;gap:7px}
+.ui-log li{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.ui-log li::before{content:"";flex:none;width:7px;height:7px;border-radius:50%;background:#2E9A62;transform:translateY(-1px)}
+.ui-log li span{color:#6A6B72;margin-left:auto;white-space:nowrap;padding-left:8px}
+@media (max-width:1000px){.lv-head{grid-template-columns:1fr}.lv-head .intro{padding-top:0}.levels{grid-template-columns:1fr}.lvl{min-height:0}.lvl .shot{height:380px;margin-top:36px}}
+@media (max-width:600px){.lvl{padding:30px 22px 0}.lvl .shot{height:340px;margin:30px -22px 0}.ui{left:16px;right:16px;bottom:16px}}
 
 /* ===== Footer (Edem's reference): black, grouped columns, quiet bottom row ===== */
 footer{background:#000;border-top:0;padding:72px 0 0;margin-top:clamp(96px,10vw,140px);
@@ -583,15 +605,28 @@ html[data-font=manrope] :is(.tag,.btn,.ch-n,.lvl .ln,.cat .ct,.who-lead,.plan .t
       <article class="lvl rv"><div class="ln">01 Draft</div><h3>Drafted in the right structure</h3>
         <p>Pick one of 35 letters for the UK or the US and answer a few plain questions.</p>
         <p>DraftHR writes it section by section. Every AI change waits as a proposal until you accept it.</p>
-        <div class="shot"><img src="img/lv-draft.jpg" alt="A letter being drafted: DraftHR suggests a change to one sentence, shown in the letter, with Accept and Reject"></div></article>
+        <div class="shot"><img src="img/h-employee.jpg" alt="" loading="lazy">
+          <div class="ui" role="img" aria-label="In the letter, DraftHR suggests replacing one sentence, with Accept and Reject">
+            <div class="ui-doc"><s>This warning will remain on your file indefinitely.</s> <ins>This warning will remain live for 12 months, in line with our Disciplinary Policy.</ins></div>
+            <div class="ui-row"><span class="ui-who"><i>&#10022;</i>DraftHR suggests</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+          </div></div></article>
       <article class="lvl rv"><div class="ln">02 Review</div><h3>Read by someone you trust</h3>
         <p>Send it to a teammate, someone outside your organisation, or an HR expert from the marketplace.</p>
         <p>Their suggestions come back beside the words they are about. Go back and forth until it is right.</p>
-        <div class="shot"><img src="img/lv-review.jpg" alt="A reviewer's suggestion shown beside the words it is about, with Accept and Reject"></div></article>
+        <div class="shot"><img src="img/bd-meeting.jpg" alt="" loading="lazy">
+          <div class="ui" role="img" aria-label="A reviewer's note beside the highlighted words in the letter, with Accept and Reject">
+            <div class="ui-doc">&hellip;a final written warning for persistent lateness<mark>, in breach of our Attendance Policy</mark>.</div>
+            <div class="ui-row"><span class="ui-who"><i class="av">CD</i>Claire Donnelly</span><span class="ui-btns"><b>Accept</b><em>Reject</em></span></div>
+            <div class="ui-note">Name the policy that was broken. It makes the warning easier to stand behind at an appeal.</div>
+          </div></div></article>
       <article class="lvl rv"><div class="ln">03 Approve and send</div><h3>Signed off, sent and on record</h3>
         <p>The right person approves it. Then download it and send it yourself, or email it from DraftHR.</p>
         <p>Appeal windows go in your calendar, and the record stays with the matter.</p>
-        <div class="shot"><img src="img/lv-send.jpg" alt="A sent letter stamped Sent, with its record of who approved it and when it was handed over"></div></article>
+        <div class="shot"><img src="img/h-sign.jpg" alt="" loading="lazy" style="object-position:72% 70%">
+          <div class="ui" role="img" aria-label="A sent letter stamped Sent, with its record: approved, handed over, and the appeal window in the calendar">
+            <div class="ui-head"><div><strong>Final written warning</strong><span>Jordan Hale &middot; Warehouse operative</span></div><div class="ui-stamp">SENT &middot; 14 OCT</div></div>
+            <ul class="ui-log"><li>Approved by Priya Shah<span>16:05</span></li><li>Handed over in person<span>16:20</span></li><li>Appeal window closes 21 Oct<span>In your calendar</span></li></ul>
+          </div></div></article>
     </div>
   </div></section>
 
