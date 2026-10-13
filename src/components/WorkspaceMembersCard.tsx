@@ -1,29 +1,28 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  Badge,
-  Box,
-  Button,
-  Dialog,
-  Flex,
-  IconButton,
-  Select,
-  Text,
-  TextField,
-} from "@radix-ui/themes";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Copy, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
-import { Avatar } from "@/components/ds";
-import { SectionCard, StatusPill } from "@/components/reports/parts";
-
-const ROW =
-  "relative flex items-center justify-between gap-3 rounded-[var(--ds-r-m)] px-3 py-2.5 hover:bg-[var(--ds-surface-2)] [&+&]:before:absolute [&+&]:before:inset-x-3 [&+&]:before:top-0 [&+&]:before:border-t [&+&]:before:border-[var(--ds-line)] [&+&]:before:content-['']";
+import { Avatar, Pill } from "@/components/ds";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Callout,
+  ConfirmDialog,
+  FadeIn,
+  Field,
+  KitDialogContent,
+  KitDialogFooter,
+  LoadingRows,
+  Spinner,
+} from "@/components/wizard/kit";
+import { KitSelect } from "@/routes/settings/parts";
 
 /**
- * Settings → Workspace section. Lists members + pending invites with
- * admin-only actions (invite, role change, remove, revoke). The plain-old
- * role picker stays for solo workspaces (rendered separately in Settings.tsx);
- * this card adds the team-scale controls.
+ * Settings, Team and roles. Lists members and pending invites with the
+ * admin-only actions (invite, role change, remove, revoke). Rows follow the
+ * 13B style: avatar, name and email, the role on the right. The simulated
+ * role for solo dev workspaces is rendered separately in Settings.
  */
 type Member = {
   userId: string;
@@ -52,12 +51,29 @@ const ROLE_LABELS: Record<string, string> = {
   reviewer: "Reviewer",
   viewer: "Viewer",
 };
+const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label }));
 
-export function WorkspaceMembersCard() {
+const ROW =
+  "relative flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3 [&+&]:border-t [&+&]:border-[var(--ds-line-2)]";
+
+function formatExpiry(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+export function WorkspaceMembersCard({
+  header,
+}: {
+  /** Renders the pane header; receives the "Invite member" button (admins only). */
+  header?: (inviteButton: ReactNode) => ReactNode;
+} = {}) {
   const { user, activeTenant } = useAuth();
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? "");
 
@@ -66,9 +82,10 @@ export function WorkspaceMembersCard() {
     setLoading(true);
     try {
       const [m, i] = await Promise.all([
-        fetch("/api/workspace/members", { credentials: "same-origin" }).then((r) =>
-          r.ok ? r.json() : { members: [] },
-        ),
+        fetch("/api/workspace/members", { credentials: "same-origin" }).then((r) => {
+          if (!r.ok) throw new Error(`members ${r.status}`);
+          return r.json();
+        }),
         isAdmin
           ? fetch("/api/workspace/invites", { credentials: "same-origin" }).then((r) =>
               r.ok ? r.json() : { invites: [] },
@@ -77,10 +94,13 @@ export function WorkspaceMembersCard() {
       ]);
       setMembers((m.members ?? []) as Member[]);
       setInvites((i.invites ?? []) as Invite[]);
+      setLoadError(false);
     } catch (err) {
       console.warn("[workspace members] failed", err);
+      setLoadError(true);
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, [activeTenant, isAdmin]);
 
@@ -90,55 +110,74 @@ export function WorkspaceMembersCard() {
 
   if (!activeTenant) return null;
 
+  const inviteButton = isAdmin ? (
+    <Button onClick={() => setShowInvite(true)} className="shrink-0">
+      <Plus className="size-4" />
+      Invite member
+    </Button>
+  ) : null;
+
   return (
-    <SectionCard
-      title={`Workspace: ${activeTenant.name}`}
-      description="People with access to this workspace. Admins can invite, change roles and remove members."
-      actions={
-        isAdmin ? (
-          <Button onClick={() => setShowInvite(true)} variant="solid">
-            <Plus className="size-4" />
-            Invite member
-          </Button>
-        ) : undefined
-      }
+    <>
+      {header ? (
+        header(inviteButton)
+      ) : (
+        <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <p className="m-0 min-w-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
+            People with access to this workspace. Admins can invite, change roles and remove members.
+          </p>
+          {inviteButton}
+        </div>
+      )}
+    <section
+      aria-label={`Members of ${activeTenant.name}`}
+      className="min-w-0 rounded-[16px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-5 py-[14px] sm:px-[22px] sm:py-4"
     >
-      <h3 className="m-0 mb-1 text-[12.5px] font-medium text-[var(--ds-muted)]">
-        Members <span className="ds-mono">{members.length}</span>
-      </h3>
-      <div className="-mx-3 flex flex-col">
-        {loading && <Text size="2" color="gray" className="px-3 py-2">Loading…</Text>}
-        {!loading && members.length === 0 && (
-          <Text size="2" color="gray" className="px-3 py-2">No members yet.</Text>
-        )}
-        {members.map((m) => (
-          <MemberRow
-            key={m.userId}
-            member={m}
-            isAdmin={isAdmin}
-            isSelf={user?.id === m.userId || (m.email ?? "").toLowerCase() === (user?.email ?? "").toLowerCase()}
-            onChanged={refresh}
-          />
-        ))}
-      </div>
+      <h4 className="m-0 mb-1 flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--ds-muted)]">
+        Members <span className="ds-mono text-[var(--ds-subtle)]">{members.length}</span>
+      </h4>
+      {loading && !loaded ? (
+        <LoadingRows rows={3} className="py-3" label="Loading members" />
+      ) : loadError && members.length === 0 ? (
+        <Callout tone="error" title="Couldn't load the team." className="mt-2" action={
+          <button type="button" className="underline underline-offset-2" onClick={() => void refresh()}>
+            Try again
+          </button>
+        }>
+          Check your connection and try again.
+        </Callout>
+      ) : members.length === 0 ? (
+        <p className="m-0 py-3 text-[13.5px] text-[var(--ds-muted)]">No members yet.</p>
+      ) : (
+        <FadeIn className="flex flex-col">
+          {members.map((m) => (
+            <MemberRow
+              key={m.userId}
+              member={m}
+              isAdmin={isAdmin}
+              isSelf={user?.id === m.userId || (m.email ?? "").toLowerCase() === (user?.email ?? "").toLowerCase()}
+              onChanged={refresh}
+            />
+          ))}
+        </FadeIn>
+      )}
 
       {isAdmin && invites.length > 0 && (
         <>
-          <h3 className="m-0 mb-1 mt-5 text-[12.5px] font-medium text-[var(--ds-muted)]">
-            Pending invites <span className="ds-mono">{invites.length}</span>
-          </h3>
-          <div className="-mx-3 flex flex-col">
+          <h4 className="m-0 mb-1 mt-5 flex items-center gap-1.5 text-[12.5px] font-medium text-[var(--ds-muted)]">
+            Pending invites <span className="ds-mono text-[var(--ds-subtle)]">{invites.length}</span>
+          </h4>
+          <FadeIn className="flex flex-col">
             {invites.map((inv) => (
               <InviteRow key={inv.id} invite={inv} onChanged={refresh} />
             ))}
-          </div>
+          </FadeIn>
         </>
       )}
 
-      {showInvite && (
-        <InviteDialog onClose={() => setShowInvite(false)} onInvited={refresh} />
-      )}
-    </SectionCard>
+      {showInvite && <InviteDialog onClose={() => setShowInvite(false)} onInvited={refresh} />}
+    </section>
+    </>
   );
 }
 
@@ -154,6 +193,8 @@ function MemberRow({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const name = member.legalName ?? member.email ?? "Unnamed";
 
   const onRoleChange = async (role: string) => {
     if (role === member.role) return;
@@ -172,13 +213,14 @@ function MemberRow({
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(data.error ?? "Failed to update role");
       }
+    } catch {
+      toast.error("Network error. Please try again.");
     } finally {
       setBusy(false);
     }
   };
 
   const onRemove = async () => {
-    if (!confirm(`Remove ${member.email ?? member.legalName ?? "this member"}?`)) return;
     setBusy(true);
     try {
       const res = await fetch("/api/workspace/member-remove", {
@@ -189,55 +231,85 @@ function MemberRow({
       });
       if (res.ok) {
         toast.success("Member removed");
+        setConfirming(false);
         onChanged();
       } else {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         toast.error(data.error ?? "Failed to remove member");
       }
+    } catch {
+      toast.error("Network error. Please try again.");
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Flex justify="between" align="center" gap="3" className={ROW}>
-      <Flex align="center" gap="3" className="min-w-0">
-        <Avatar seed={member.email ?? member.userId} name={member.legalName ?? undefined} email={member.email ?? undefined} size="xl" />
-        <Box className="min-w-0">
-          <Text size="2" weight="medium" className="truncate block text-[var(--ds-ink)]">
-            {member.legalName ?? member.email ?? "Unnamed"}
-            {isSelf && <span className="ml-2 text-[12px] font-normal text-[var(--ds-muted)]">you</span>}
-          </Text>
+    <div className={ROW}>
+      <div className="flex min-w-0 flex-1 basis-[220px] items-center gap-3">
+        <Avatar
+          seed={member.email ?? member.userId}
+          name={member.legalName ?? undefined}
+          email={member.email ?? undefined}
+          size="2xl"
+        />
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-medium text-[var(--ds-ink)]">
+            {name}
+            {isSelf && <span className="ml-2 text-[12.5px] font-normal text-[var(--ds-subtle)]">you</span>}
+          </div>
           {member.email && member.email !== member.legalName && (
-            <Text className="truncate block text-[12.5px] text-[var(--ds-muted)]">{member.email}</Text>
+            <div className="truncate text-[12.5px] text-[var(--ds-muted)]">{member.email}</div>
           )}
-        </Box>
-      </Flex>
-      <Flex align="center" gap="2">
+        </div>
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {isAdmin && !isSelf ? (
-          <Select.Root value={member.role} onValueChange={onRoleChange} disabled={busy}>
-            <Select.Trigger />
-            <Select.Content>
-              {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                <Select.Item key={k} value={k}>{v}</Select.Item>
-              ))}
-            </Select.Content>
-          </Select.Root>
+          <KitSelect
+            value={member.role}
+            onValueChange={onRoleChange}
+            options={ROLE_OPTIONS}
+            disabled={busy}
+            size="sm"
+            ariaLabel={`Role for ${name}`}
+            className="w-[124px]"
+          />
         ) : (
-          <StatusPill tone="neutral" dot={false}>{ROLE_LABELS[member.role] ?? member.role}</StatusPill>
+          <Pill tone="grey" dot={false}>
+            {ROLE_LABELS[member.role] ?? member.role}
+          </Pill>
         )}
         {isAdmin && !isSelf && (
-          <IconButton variant="ghost" color="red" onClick={onRemove} disabled={busy} aria-label="Remove member">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setConfirming(true)}
+            disabled={busy}
+            aria-label="Remove member"
+            className="text-[var(--ds-red-fg)] hover:bg-[var(--ds-red-soft)]"
+          >
             <Trash2 className="size-4" />
-          </IconButton>
+          </Button>
         )}
-      </Flex>
-    </Flex>
+      </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(o) => !busy && setConfirming(o)}
+        title={`Remove ${name}?`}
+        description="They lose access to this workspace straight away. Letters they wrote stay in the workspace."
+        confirmLabel="Remove member"
+        busyLabel="Removing…"
+        busy={busy}
+        destructive
+        onConfirm={() => void onRemove()}
+      />
+    </div>
   );
 }
 
 function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const onCopy = async () => {
     const link = `${window.location.origin}/join/${invite.inviteCode}`;
@@ -250,7 +322,6 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
   };
 
   const onRevoke = async () => {
-    if (!confirm(`Revoke invite for ${invite.email}?`)) return;
     setBusy(true);
     try {
       const res = await fetch("/api/workspace/invite-revoke", {
@@ -261,37 +332,59 @@ function InviteRow({ invite, onChanged }: { invite: Invite; onChanged: () => voi
       });
       if (res.ok) {
         toast.success("Invite revoked");
+        setConfirming(false);
         onChanged();
       } else {
-        toast.error("Failed to revoke");
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        toast.error(data.error ?? "Failed to revoke");
       }
+    } catch {
+      toast.error("Network error. Please try again.");
     } finally {
       setBusy(false);
     }
   };
 
+  const expires = formatExpiry(invite.expiresAt);
+
   return (
-    <Flex justify="between" align="center" gap="3" wrap="wrap" className={ROW}>
-      <Flex align="center" gap="3" className="min-w-0">
-        <Avatar seed={invite.email} email={invite.email} size="xl" />
-        <Box className="min-w-0">
-          <Text size="2" weight="medium" className="truncate block text-[var(--ds-ink)]">{invite.email}</Text>
-          <Text className="text-[12.5px] text-[var(--ds-muted)]">
-            Expires {new Date(invite.expiresAt).toLocaleDateString("en-GB")}
-          </Text>
-        </Box>
-      </Flex>
-      <Flex align="center" gap="2">
-        <StatusPill tone="warn">{ROLE_LABELS[invite.role] ?? invite.role}</StatusPill>
-        <Button variant="soft" color="gray" size="1" onClick={onCopy}>
+    <div className={ROW}>
+      <div className="flex min-w-0 flex-1 basis-[220px] items-center gap-3">
+        <Avatar seed={invite.email} email={invite.email} size="2xl" />
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-medium text-[var(--ds-ink)]">{invite.email}</div>
+          {expires && <div className="text-[12.5px] text-[var(--ds-muted)]">Expires {expires}</div>}
+        </div>
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <Pill tone="amber">{ROLE_LABELS[invite.role] ?? invite.role}</Pill>
+        <Button variant="outline" size="sm" onClick={() => void onCopy()}>
           <Copy className="size-3.5" />
           Copy link
         </Button>
-        <IconButton variant="ghost" color="red" size="1" onClick={onRevoke} disabled={busy} aria-label="Revoke">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setConfirming(true)}
+          disabled={busy}
+          aria-label="Revoke"
+          className="text-[var(--ds-red-fg)] hover:bg-[var(--ds-red-soft)]"
+        >
           <X className="size-4" />
-        </IconButton>
-      </Flex>
-    </Flex>
+        </Button>
+      </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={(o) => !busy && setConfirming(o)}
+        title={`Revoke invite for ${invite.email}?`}
+        description="The link stops working straight away. You can send a new invite later."
+        confirmLabel="Revoke invite"
+        busyLabel="Revoking…"
+        busy={busy}
+        destructive
+        onConfirm={() => void onRevoke()}
+      />
+    </div>
   );
 }
 
@@ -323,12 +416,24 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
         return;
       }
       const data = (await res.json()) as {
-        invite: { inviteLink: string };
+        invite?: { inviteLink?: string; inviteCode?: string };
+        inviteUrl?: string;
+        inviteCode?: string;
         emailSent?: boolean;
       };
-      setInviteLink(data.invite.inviteLink);
+      const code = data.invite?.inviteCode ?? data.inviteCode;
+      const link =
+        data.invite?.inviteLink ?? data.inviteUrl ?? (code ? `${window.location.origin}/join/${code}` : null);
+      if (!link) {
+        setError("The invite was created but no link came back. Copy it from Pending invites.");
+        onInvited();
+        return;
+      }
+      setInviteLink(link);
       setEmailSent(data.emailSent ?? false);
       onInvited();
+    } catch {
+      setError("Network error. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -345,76 +450,66 @@ function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: 
   };
 
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
-      <Dialog.Content maxWidth="500px">
-        <Dialog.Title>Invite member</Dialog.Title>
-        <Dialog.Description>
-          {inviteLink
-            ? emailSent
-              ? "Email sent. The link is also below if you'd like to share it directly."
-              : "Email delivery isn't configured. Share this link with the invitee. It expires in 7 days."
-            : "We'll email the invite if Resend is configured, and always return a copy-able link as a fallback."}
-        </Dialog.Description>
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <KitDialogContent>
+        <DialogHeader>
+          <DialogTitle>Invite member</DialogTitle>
+          <DialogDescription>
+            {inviteLink
+              ? emailSent
+                ? "Email sent. The link is also below if you'd like to share it directly."
+                : "Email delivery isn't configured. Share this link with the invitee. It expires in 7 days."
+              : "We'll email the invite if email is set up, and always give you a link to copy as a fallback."}
+          </DialogDescription>
+        </DialogHeader>
 
         {inviteLink ? (
-          <Flex direction="column" gap="3" mt="3">
-            {emailSent !== null && (
-              <Badge color={emailSent ? "green" : "amber"} size="2">
-                {emailSent ? "Email sent" : "Couldn't email. Copy the link manually"}
-              </Badge>
-            )}
-            <TextField.Root value={inviteLink} readOnly>
-              <TextField.Slot side="right">
-                <IconButton variant="ghost" onClick={onCopy} aria-label="Copy">
-                  <Copy className="size-4" />
-                </IconButton>
-              </TextField.Slot>
-            </TextField.Root>
-            <Flex justify="end">
-              <Dialog.Close>
-                <Button onClick={onClose}>Done</Button>
-              </Dialog.Close>
-            </Flex>
-          </Flex>
+          <>
+            <div className="flex min-w-0 items-center gap-2">
+              <Input value={inviteLink} readOnly aria-label="Invite link" className="ds-mono min-w-0 flex-1 text-[13px]" onFocus={(e) => e.currentTarget.select()} />
+              <Button variant="outline" size="icon" onClick={() => void onCopy()} aria-label="Copy">
+                <Copy className="size-4" />
+              </Button>
+            </div>
+            <KitDialogFooter>
+              <Button onClick={onClose}>Done</Button>
+            </KitDialogFooter>
+          </>
         ) : (
-          <Flex direction="column" gap="3" mt="3">
-            <label>
-              <Text size="2" weight="medium">Email</Text>
-              <TextField.Root
-                size="3"
-                placeholder="teammate@acme.com"
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void onSubmit();
+            }}
+          >
+            <Field label="Email" htmlFor="invite-email" error={error ?? undefined}>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="teammate@company.co.uk"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={busy}
+                aria-invalid={error ? true : undefined}
+                autoFocus
               />
-            </label>
-            <label>
-              <Text size="2" weight="medium">Role</Text>
-              <Select.Root value={role} onValueChange={setRole} disabled={busy}>
-                <Select.Trigger />
-                <Select.Content>
-                  {Object.entries(ROLE_LABELS).map(([k, v]) => (
-                    <Select.Item key={k} value={k}>{v}</Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </label>
-            <Text size="1" color="gray">
-              We'll email the invitee if email delivery is configured. Either way you'll get a
-              copy-able link as a fallback.
-            </Text>
-            {error && <Badge color="red">{error}</Badge>}
-            <Flex justify="end" gap="2">
-              <Dialog.Close>
-                <Button variant="soft" color="gray" onClick={onClose}>Cancel</Button>
-              </Dialog.Close>
-              <Button onClick={onSubmit} disabled={busy}>
+            </Field>
+            <Field label="Role" htmlFor="invite-role">
+              <KitSelect id="invite-role" value={role} onValueChange={setRole} options={ROLE_OPTIONS} disabled={busy} />
+            </Field>
+            <KitDialogFooter>
+              <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy && <Spinner />}
                 {busy ? "Creating…" : "Create invite"}
               </Button>
-            </Flex>
-          </Flex>
+            </KitDialogFooter>
+          </form>
         )}
-      </Dialog.Content>
-    </Dialog.Root>
+      </KitDialogContent>
+    </Dialog>
   );
 }

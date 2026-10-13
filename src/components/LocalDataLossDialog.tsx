@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertDialog, Button, Flex, Text } from "@radix-ui/themes";
-import { Download } from "lucide-react";
+import { Check, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { KitDialogContent, KitDialogFooter } from "@/components/wizard/kit";
 import {
   downloadLocalBackup,
   setLocalDataLossPresenter,
@@ -18,7 +20,8 @@ type Pending = {
  * Confirm before signing out (or switching workspace without room to keep the
  * current one) would delete data that only lives on this device. Lists what
  * would go and offers a JSON backup first. Mounted once near the app root;
- * confirmLocalDataLoss() drives it.
+ * confirmLocalDataLoss() drives it. A kit dialog: Esc, the overlay and
+ * Cancel all resolve as cancel.
  */
 export function LocalDataLossDialog() {
   const [pending, setPending] = useState<Pending | null>(null);
@@ -45,51 +48,57 @@ export function LocalDataLossDialog() {
   };
 
   const signingOut = pending?.reason !== "switch";
+  const others = pending?.summary.otherWorkspaces ?? 0;
 
   return (
-    <AlertDialog.Root open={Boolean(pending)} onOpenChange={(open) => !open && finish(false)}>
-      <AlertDialog.Content maxWidth="460px">
-        <AlertDialog.Title>
-          {signingOut ? "Delete data stored only on this device?" : "Not enough space to keep this workspace's data"}
-        </AlertDialog.Title>
-        <AlertDialog.Description size="2">
-          {signingOut
-            ? "Signing out clears DraftHR from this browser. This has not been saved to your workspace and will be lost:"
-            : "Your browser storage is too full to keep this workspace's data on this device while you switch. Switching now will delete:"}
-        </AlertDialog.Description>
-        <ul className="mt-3 mb-1 list-disc pl-5 text-sm leading-6" data-testid="local-data-loss-items">
+    <Dialog open={Boolean(pending)} onOpenChange={(open) => !open && finish(false)}>
+      <KitDialogContent showCloseButton={false} className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>
+            {signingOut ? "Delete data stored only on this device?" : "Not enough space to keep this workspace's data"}
+          </DialogTitle>
+          <DialogDescription>
+            {signingOut
+              ? "Signing out clears DraftHR from this browser. This has not been saved to your workspace and will be lost:"
+              : "Your browser storage is too full to keep this workspace's data on this device while you switch. Switching now will delete:"}
+          </DialogDescription>
+        </DialogHeader>
+        <ul
+          className="m-0 list-disc rounded-[12px] bg-[var(--ds-surface-2)] py-3 pl-8 pr-4 text-[14px] leading-6 text-[var(--ds-ink)]"
+          data-testid="local-data-loss-items"
+        >
           {pending?.summary.items.map((item) => <li key={item.label}>{item.label}</li>)}
-          {pending?.summary.otherWorkspaces ? (
+          {others ? (
             <li>
-              data kept for {pending.summary.otherWorkspaces} other workspace
-              {pending.summary.otherWorkspaces === 1 ? "" : "s"}
+              data kept for {others} other workspace{others === 1 ? "" : "s"}
             </li>
           ) : null}
         </ul>
-        <Text as="p" size="2" color="gray" mt="2">
+        <p className="m-0 text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
           Download a backup first if you might need it. On a shared computer, delete it so the next person can't see it.
-        </Text>
-        <Flex gap="3" mt="4" justify="end" wrap="wrap">
-          <AlertDialog.Cancel>
-            <Button variant="soft" color="gray">
-              Cancel
-            </Button>
-          </AlertDialog.Cancel>
+        </p>
+        <KitDialogFooter className="flex-wrap">
+          <Button variant="outline" onClick={() => finish(false)}>
+            Cancel
+          </Button>
           <Button
-            variant="soft"
+            variant="outline"
             onClick={() => {
               downloadLocalBackup();
               setDownloaded(true);
             }}
           >
-            <Download className="size-4" />
+            {downloaded ? <Check className="size-4" /> : <Download className="size-4" />}
             {downloaded ? "Backup downloaded" : "Download backup"}
           </Button>
-          <Button color="red" onClick={() => finish(true)}>
+          <Button
+            onClick={() => finish(true)}
+            className="border-0 bg-[var(--ds-red-solid)] text-[var(--ds-on-accent)] hover:bg-[var(--ds-red-fg)] active:bg-[var(--ds-red-fg)]"
+          >
             {signingOut ? "Sign out and delete" : "Switch and delete"}
           </Button>
-        </Flex>
-      </AlertDialog.Content>
-    </AlertDialog.Root>
+        </KitDialogFooter>
+      </KitDialogContent>
+    </Dialog>
   );
 }

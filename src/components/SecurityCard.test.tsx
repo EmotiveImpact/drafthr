@@ -11,7 +11,6 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { Theme } from "@radix-ui/themes";
 import { Toaster } from "sonner";
 import { SecurityCard } from "./SecurityCard";
 
@@ -25,10 +24,10 @@ const mockUseAuth = vi.mocked(useAuth);
 
 function withTheme(children: React.ReactNode) {
   return (
-    <Theme>
+    <>
       {children}
       <Toaster />
-    </Theme>
+    </>
   );
 }
 
@@ -53,7 +52,7 @@ describe("SecurityCard", () => {
       refresh: vi.fn(),
     });
     render(withTheme(<SecurityCard />));
-    // The Theme wrapper + Toaster portal always render — verify
+    // The Toaster portal always renders; verify
     // SecurityCard itself emits nothing by absence of its heading.
     expect(screen.queryByText(/^security$/i)).not.toBeInTheDocument();
     expect(

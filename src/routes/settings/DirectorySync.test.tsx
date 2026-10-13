@@ -8,7 +8,6 @@
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { Theme } from "@radix-ui/themes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DirectorySync } from "./DirectorySync";
@@ -40,9 +39,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 function renderRoute() {
   return render(
     <MemoryRouter>
-      <Theme appearance="light">
-        <DirectorySync />
-      </Theme>
+      <DirectorySync />
     </MemoryRouter>,
   );
 }

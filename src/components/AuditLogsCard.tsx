@@ -1,23 +1,25 @@
 /**
- * Settings → Audit Logs (WorkOS) card. Admin-only.
+ * Settings, Audit logs (WorkOS) card. Admin only.
  *
- * Surfaces the dual-chain status:
- *   - "Streaming to WorkOS Audit Logs" pill when enabled + configured
+ * Shows the dual-chain status:
+ *   - a "Streaming to WorkOS" pill when enabled and configured
  *   - "Not configured" otherwise
- *   - Last successful event timestamp
- *   - "Open Admin Portal" button (POST /api/workos/portal-link with
+ *   - the last successful event time
+ *   - "Open WorkOS Admin Portal" (POST /api/workos/portal-link with
  *     intent: "audit_logs")
- *   - "Send test event" button (POST /api/workos/audit-logs-test) — emits
- *     a synthetic event so the admin can confirm the SIEM pipeline works
- *     end-to-end without performing a real draft action.
+ *   - "Send test event" (POST /api/workos/audit-logs-test), which emits a
+ *     synthetic event so the admin can confirm the SIEM pipeline end to end
+ *     without performing a real draft action.
  *
- * Non-admin members never see this card — gated by activeTenant.role.
+ * Non-admin members never see this card (gated by activeTenant.role).
  */
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@radix-ui/themes";
-import { SectionCard, StatusPill } from "@/components/reports/parts";
 import { ExternalLink, ScrollText, Send } from "lucide-react";
 import { toast } from "sonner";
+import { Pill } from "@/components/ds";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/wizard/kit";
+import { DefRow, SettingsCard } from "@/routes/settings/parts";
 import { useAuth } from "@/lib/auth";
 
 const ADMIN_ROLES = new Set(["owner", "admin"]);
@@ -113,67 +115,59 @@ export function AuditLogsCard() {
   const streaming = Boolean(status?.enabled && status?.configured);
 
   return (
-    <SectionCard
-      icon={ScrollText}
+    <SettingsCard
+      icon={<ScrollText />}
       title={
         <span className="flex flex-wrap items-center gap-2">
           Audit logs (WorkOS)
           {loading ? (
-            <StatusPill tone="neutral" size="sm">Loading…</StatusPill>
+            <Pill tone="grey">Loading…</Pill>
           ) : streaming ? (
-            <StatusPill tone="ok" size="sm">Streaming to WorkOS</StatusPill>
+            <Pill tone="green">Streaming to WorkOS</Pill>
           ) : status?.configured ? (
-            <StatusPill tone="warn" size="sm">Configured, mirror disabled</StatusPill>
+            <Pill tone="amber">Configured, mirror disabled</Pill>
           ) : (
-            <StatusPill tone="neutral" size="sm">Not configured</StatusPill>
+            <Pill tone="grey">Not configured</Pill>
           )}
         </span>
       }
       description="Every audit event written to the local tamper-evident chain is also mirrored to WorkOS Audit Logs, so your SOC team can subscribe a SIEM feed. The local chain remains the source of truth."
     >
-      <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)] text-[13px]">
-        <div className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-          <dt className="text-[var(--ds-muted)]">WorkOS organisation</dt>
-          <dd className="m-0 text-[var(--ds-ink)]">
-            {status?.workosOrgId ? (
-              <code className="ds-mono text-xs">{status.workosOrgId}</code>
-            ) : (
-              <span>Not paired, contact support</span>
-            )}
-          </dd>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 py-2.5">
-          <dt className="text-[var(--ds-muted)]">Last successful mirror</dt>
-          <dd className="m-0 text-[var(--ds-ink)]">{formatLastSent(status?.lastSentAt ?? null)}</dd>
-        </div>
+      <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)]">
+        <DefRow label="WorkOS organisation">
+          {status?.workosOrgId ? (
+            <code className="ds-mono text-[12.5px]">{status.workosOrgId}</code>
+          ) : (
+            "Not paired, contact support"
+          )}
+        </DefRow>
+        <DefRow label="Last successful mirror">{formatLastSent(status?.lastSentAt ?? null)}</DefRow>
       </dl>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          variant="soft"
-          color="gray"
-          disabled={!status?.configured || portalLoading}
-          onClick={onOpenPortal}
-        >
-          <ExternalLink className="size-4" />
+        <Button variant="outline" disabled={!status?.configured || portalLoading} onClick={onOpenPortal}>
+          {portalLoading ? <Spinner /> : <ExternalLink className="size-4" />}
           {portalLoading ? "Opening…" : "Open WorkOS Admin Portal"}
         </Button>
-        <Button
-          variant="soft"
-          disabled={!streaming || testLoading}
-          onClick={onSendTest}
-        >
-          <Send className="size-4" />
+        <Button variant="outline" disabled={!streaming || testLoading} onClick={onSendTest}>
+          {testLoading ? <Spinner /> : <Send className="size-4" />}
           {testLoading ? "Sending…" : "Send test event"}
         </Button>
       </div>
-    </SectionCard>
+    </SettingsCard>
   );
 }
 
-function formatLastSent(iso: string | null): string {
+/** "13 Oct 2026, 01:17" (en-GB), or "Never". */
+export function formatLastSent(iso: string | null): string {
   if (!iso) return "Never";
   const date = new Date(iso);
   if (isNaN(date.getTime())) return "Never";
-  return date.toLocaleString();
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
