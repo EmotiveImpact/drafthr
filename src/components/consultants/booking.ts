@@ -14,7 +14,7 @@ import type { Draft } from "@/lib/letters/types";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { pushBookingCreate } from "@/lib/marketplaceSync";
 import { toServerUuid } from "@/lib/remote-ids";
-import { displayTitleFor } from "@/lib/letters/display";
+import { letterTitle } from "@/components/consultants/letters";
 import { useReviewStore } from "@/lib/journey/reviews";
 import { letterSnapshot, sharedEvidence, type Me } from "@/components/journey/review/actions";
 import { createReviewLink } from "@/components/journey/review/trusted-api";
@@ -49,7 +49,7 @@ export async function bookExpertFromMarketplace({
 }): Promise<BookResult> {
   const message = bookingMessage(needs, note);
   const expectedDeliveryAt = Date.now() + planHours(c.sla) * 3600_000;
-  const title = draft ? displayTitleFor(draft) : undefined;
+  const title = draft ? letterTitle(draft) : undefined;
   const store = useBookingsStore.getState();
   const placeholder = store.recordBooking({
     consultantInitials: c.initials,

@@ -181,6 +181,9 @@ export type BookingDTO = {
   acceptedAt: number | null;
   deliveredAt: number | null;
   completedAt: number | null;
+  /** When the consultant declined; null for other statuses and for
+   *  bookings declined before the column existed. */
+  declinedAt?: number | null;
   /** Only present on /api/bookings/inbox responses. */
   requesterEmail?: string | null;
   requesterName?: string | null;

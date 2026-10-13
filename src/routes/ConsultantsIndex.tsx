@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, ArrowUpDown, Check, ChevronDown, Eye, FileText, Info, Plus, SearchX, Store } from "lucide-react";
 import { toast } from "sonner";
@@ -223,6 +223,8 @@ export function ConsultantsIndex() {
   const [bookingFor, setBookingFor] = useState<Consultant | null>(null);
   const [profileFor, setProfileFor] = useState<Consultant | null>(null);
   const [pickingLetter, setPickingLetter] = useState(false);
+  // The card button that opened a sheet, so closing it puts focus back there.
+  const [opener, setOpener] = useState<HTMLElement | null>(null);
 
   // Booking requires a signed-in account: with auth on and no session, go to
   // sign-in and come back here, never a phantom booking.
@@ -244,6 +246,7 @@ export function ConsultantsIndex() {
     expertHandled.current = expertParam;
     const c = all.find((x) => x.profileId === expertParam);
     if (c) {
+      setOpener(null);
       if (letterMode) setProfileFor(c);
       else requestBooking(c);
     }
@@ -276,7 +279,9 @@ export function ConsultantsIndex() {
         </b>
         {(() => {
           const words = letterMode ? describeForLetter(filters, shown.length, sort, dueMs) : describeBrowse(filters);
-          return words ? ` ${words}` : "";
+          // A description continues after the count; a lone note (". Your
+          // top 3 ...") already starts with the full stop that ends the count.
+          return words ? (words.startsWith(".") ? words : ` ${words}`) : "";
         })()}
         {myCard && (myCard.pending ? " · your profile is pending review" : " · you are listed")}
       </p>
@@ -370,52 +375,15 @@ export function ConsultantsIndex() {
           {/* Filters */}
           {loadState === "ready" && all.length > 0 && (
             <div className={cn("flex flex-col gap-2.5", letterMode || !isConsultant ? "mt-[18px]" : "mt-1")}>
-              <FilterRow label="Specialty">
-                <FilterPill on={specialties.length === 0} onClick={() => setChosenSpecialties([])}>
-                  All
-                </FilterPill>
-                {(() => {
-                  const visible = moreOpen ? tags : tags.slice(0, VISIBLE_SPECIALTIES);
-                  const extra = moreOpen
-                    ? []
-                    : tags.slice(VISIBLE_SPECIALTIES).filter((t) => specialties.some((s) => s.toLowerCase() === t.toLowerCase()));
-                  const hidden = tags.length - visible.length - extra.length;
-                  return (
-                    <>
-                      {[...visible, ...extra].map((t) => (
-                        <FilterPill
-                          key={t}
-                          on={specialties.some((s) => s.toLowerCase() === t.toLowerCase())}
-                          onClick={() => toggleSpecialty(t)}
-                        >
-                          {t}
-                        </FilterPill>
-                      ))}
-                      {hidden > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setMoreOpen(true)}
-                          aria-expanded={false}
-                          data-testid="specialty-more"
-                          className={cn(PILL, "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)]")}
-                        >
-                          <Plus className="size-[13px]" aria-hidden />
-                          {hidden} more
-                        </button>
-                      )}
-                      {moreOpen && tags.length > VISIBLE_SPECIALTIES && (
-                        <button
-                          type="button"
-                          onClick={() => setMoreOpen(false)}
-                          aria-expanded
-                          className={cn(PILL, "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)]")}
-                        >
-                          Show fewer
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
+              <FilterRow label="Specialty" fill>
+                <SpecialtyPills
+                  tags={tags}
+                  chosen={specialties}
+                  onAll={() => setChosenSpecialties([])}
+                  onToggle={toggleSpecialty}
+                  moreOpen={moreOpen}
+                  onMoreOpen={setMoreOpen}
+                />
               </FilterRow>
               <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:gap-[22px]">
                 <FilterRow label="Price">
@@ -518,8 +486,14 @@ export function ConsultantsIndex() {
                   disabledReason={
                     actionBlocked ?? (letterMode && !c.profileId ? "This expert can't be chosen yet" : undefined)
                   }
-                  onBook={() => requestBooking(c)}
-                  onProfile={() => setProfileFor(c)}
+                  onBook={(el) => {
+                    setOpener(el);
+                    requestBooking(c);
+                  }}
+                  onProfile={(el) => {
+                    setOpener(el);
+                    setProfileFor(c);
+                  }}
                   onChoose={() => choose(c)}
                 />
               ))}
@@ -534,6 +508,7 @@ export function ConsultantsIndex() {
           draftId={bookingDraftId}
           onDraftChange={setContextLetter}
           onClose={() => setBookingFor(null)}
+          returnFocusTo={opener}
           onBooked={(_res, c) =>
             toast.success(`Booking request sent to ${c.name}.`, {
               description: "You'll pay once they accept. It's in My bookings.",
@@ -548,6 +523,7 @@ export function ConsultantsIndex() {
           onClose={() => setProfileFor(null)}
           onChoose={choose}
           chooseDisabledReason={actionBlocked}
+          returnFocusTo={opener}
         />
       )}
       {!letterMode && !isConsultant && (
@@ -562,7 +538,11 @@ export function ConsultantsIndex() {
   );
 }
 
-const GRID = "grid grid-cols-1 gap-4 @[600px]:grid-cols-2 @[1000px]:grid-cols-3 @[1560px]:grid-cols-4";
+/** One column on phones, two from about 640px windows (a 500px content
+ *  column, also with the 268px sidebar beside it at 900px), three at desktop
+ *  widths (a 1440 window gives about 1076px). Three is the most, as in the
+ *  mock. */
+const GRID = "grid grid-cols-1 gap-4 @[500px]:grid-cols-2 @[960px]:grid-cols-3";
 
 const PILL =
   "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[13px] text-[var(--ds-body)] transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]";
@@ -586,9 +566,167 @@ function FilterPill({ on, onClick, children }: { on: boolean; onClick: () => voi
   );
 }
 
+/**
+ * The specialty pills: "All", the tags, then "+ N more". On desktop the row
+ * stays on one line (as in the mock): it shows as many tags as fit, always
+ * including the ones already chosen (a letter arrives with its own chosen),
+ * and the rest go behind "+ N more". Widths come from a hidden copy of every
+ * pill, re-measured when the row resizes. On phones the row scrolls sideways
+ * and shows the first few. "Show fewer" folds it back.
+ */
+function SpecialtyPills({
+  tags,
+  chosen,
+  onAll,
+  onToggle,
+  moreOpen,
+  onMoreOpen,
+}: {
+  tags: string[];
+  chosen: string[];
+  onAll: () => void;
+  onToggle: (t: string) => void;
+  moreOpen: boolean;
+  onMoreOpen: (open: boolean) => void;
+}) {
+  const isOn = useCallback((t: string) => chosen.some((x) => x.toLowerCase() === t.toLowerCase()), [chosen]);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  // How many tags fit beside "All" and "+ N more"; null until measured
+  // (phones and the first paint use the fixed count).
+  const [fit, setFit] = useState<number | null>(null);
+  const chosenNone = chosen.length === 0;
+
+  const visible = useMemo(() => {
+    if (moreOpen) return tags;
+    const on = tags.filter(isOn);
+    const room = Math.max(0, (fit ?? VISIBLE_SPECIALTIES) - on.length);
+    const keep = new Set([...on, ...tags.filter((t) => !isOn(t)).slice(0, room)]);
+    return tags.filter((t) => keep.has(t));
+  }, [tags, isOn, fit, moreOpen]);
+  const hidden = tags.length - visible.length;
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measure = measureRef.current;
+    if (!row || !measure) return;
+    const compute = () => {
+      // Phones scroll the row sideways, so there is no line to fit.
+      if (!window.matchMedia("(min-width: 640px)").matches) {
+        setFit(null);
+        return;
+      }
+      const width = row.clientWidth;
+      // The copy holds "All" chosen, "All" not chosen, every tag not chosen,
+      // then "+ N more". A chosen pill is wider by its tick and weight.
+      const pills = Array.from(measure.children) as HTMLElement[];
+      const GAP = 8;
+      const allOnW = pills[0]?.offsetWidth ?? 0;
+      const allOffW = pills[1]?.offsetWidth ?? 0;
+      const onExtra = Math.max(0, allOnW - allOffW);
+      const moreW = pills[pills.length - 1]?.offsetWidth ?? 0;
+      const tagW = new Map(tags.map((t, i) => [t, (pills[i + 2]?.offsetWidth ?? 0) + (isOn(t) ? onExtra : 0)]));
+      const allW = chosenNone ? allOnW : allOffW;
+      const total = (list: string[], withMore: boolean) =>
+        allW + list.reduce((sum, t) => sum + GAP + (tagW.get(t) ?? 0), 0) + (withMore ? GAP + moreW : 0);
+      if (total(tags, false) <= width) {
+        setFit(tags.length);
+        return;
+      }
+      const on = tags.filter(isOn);
+      const off = tags.filter((t) => !isOn(t));
+      let n = 0;
+      while (n < off.length && total([...on, ...off.slice(0, n + 1)], true) <= width) n++;
+      setFit(on.length + n);
+    };
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(row);
+    // Widths change once the web font arrives (the fallback is wider), and
+    // that does not resize the row: measure again then.
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    let live = true;
+    void fonts?.ready.then(() => live && compute());
+    fonts?.addEventListener?.("loadingdone", compute);
+    return () => {
+      live = false;
+      ro.disconnect();
+      fonts?.removeEventListener?.("loadingdone", compute);
+    };
+  }, [tags, isOn, chosenNone]);
+
+  return (
+    <div ref={rowRef} className="relative flex min-w-0 flex-1 gap-2 max-sm:contents sm:flex-wrap">
+      <FilterPill on={chosen.length === 0} onClick={onAll}>
+        All
+      </FilterPill>
+      {visible.map((t) => (
+        <FilterPill key={t} on={isOn(t)} onClick={() => onToggle(t)}>
+          {t}
+        </FilterPill>
+      ))}
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => onMoreOpen(true)}
+          aria-expanded={false}
+          data-testid="specialty-more"
+          className={cn(PILL, "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)]")}
+        >
+          <Plus className="size-[13px]" aria-hidden />
+          {hidden} more
+        </button>
+      )}
+      {moreOpen && tags.length > VISIBLE_SPECIALTIES && (
+        <button
+          type="button"
+          onClick={() => onMoreOpen(false)}
+          aria-expanded
+          className={cn(PILL, "text-[var(--ds-muted)] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)]")}
+        >
+          Show fewer
+        </button>
+      )}
+      {/* Hidden copy of the pills, for widths. */}
+      <div
+        ref={measureRef}
+        aria-hidden
+        inert
+        className="pointer-events-none invisible absolute left-0 top-0 flex h-0 gap-2 overflow-hidden whitespace-nowrap max-sm:hidden"
+      >
+        <span className={cn(PILL, "font-medium")}>
+          <Check className="size-[13px]" aria-hidden />
+          All
+        </span>
+        <span className={PILL}>All</span>
+        {tags.map((t) => (
+          <span key={t} className={PILL}>
+            {t}
+          </span>
+        ))}
+        <span className={PILL}>
+          <Plus className="size-[13px]" aria-hidden />
+          {tags.length} more
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /** One labelled filter group: label on the left (above on phones), pills
  *  that wrap on desktop and scroll sideways in their own row on phones. */
-function FilterRow({ label, narrow = false, children }: { label: string; narrow?: boolean; children: React.ReactNode }) {
+function FilterRow({
+  label,
+  narrow = false,
+  fill = false,
+  children,
+}: {
+  label: string;
+  narrow?: boolean;
+  /** The pills take the rest of the line (the specialty row measures it). */
+  fill?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div role="group" aria-label={`Filter by ${label.toLowerCase()}`} className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-2">
       <span
@@ -597,7 +735,12 @@ function FilterRow({ label, narrow = false, children }: { label: string; narrow?
       >
         {label}
       </span>
-      <div className="no-scrollbar -mx-4 flex min-w-0 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+      <div
+        className={cn(
+          "no-scrollbar -mx-4 flex min-w-0 gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0",
+          fill && "sm:flex-1",
+        )}
+      >
         {children}
       </div>
     </div>

@@ -236,5 +236,6 @@ function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: st
     acceptedAt: row.acceptedAt?.getTime() ?? null,
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
+    declinedAt: row.declinedAt?.getTime() ?? null,
   };
 }

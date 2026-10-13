@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Dialog as D } from "radix-ui";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
  *
  * A labelled modal dialog (Radix): focus is trapped while open, the page
  * behind does not scroll, Esc and the scrim close it, and focus returns to
- * the control that opened it.
+ * the control that opened it. The sheets open from state, not a Radix
+ * Trigger, so Radix has no trigger to go back to: the opener is passed in
+ * (`returnFocusTo`) or, failing that, is whatever had focus when it opened.
  */
 export function SideSheet({
   open,
@@ -24,6 +26,7 @@ export function SideSheet({
   footer,
   children,
   onEscapeBlocked,
+  returnFocusTo,
   className,
 }: {
   open: boolean;
@@ -38,8 +41,20 @@ export function SideSheet({
   children: ReactNode;
   /** When true, Esc and the scrim do not close the sheet (work in flight). */
   onEscapeBlocked?: boolean;
+  /** The button that opened the sheet; focus goes back to it on close. */
+  returnFocusTo?: HTMLElement | null;
   className?: string;
 }) {
+  // Remember what had focus as the sheet opens (read during the render that
+  // opens it, before Radix moves focus inside).
+  const focusedAtOpen = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current && typeof document !== "undefined") {
+    const el = document.activeElement;
+    focusedAtOpen.current = el instanceof HTMLElement && el !== document.body ? el : null;
+  }
+  wasOpen.current = open;
+
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       {/* Portalled to the body; the toaster's own z-index keeps a toast (an
@@ -58,6 +73,12 @@ export function SideSheet({
           onEscapeKeyDown={(e) => onEscapeBlocked && e.preventDefault()}
           onPointerDownOutside={(e) => onEscapeBlocked && e.preventDefault()}
           onInteractOutside={(e) => onEscapeBlocked && e.preventDefault()}
+          onCloseAutoFocus={(e) => {
+            const back = [returnFocusTo, focusedAtOpen.current].find((el) => el && el.isConnected);
+            if (!back) return;
+            e.preventDefault();
+            back.focus({ preventScroll: true });
+          }}
           style={{ ["--sheet-w" as string]: `${width}px` }}
           className={cn(
             "fixed z-50 flex flex-col overflow-hidden bg-[var(--ds-surface)] text-[var(--ds-body)] shadow-[var(--ds-shadow-xl)] outline-none",

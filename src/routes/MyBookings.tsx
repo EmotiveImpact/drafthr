@@ -26,10 +26,10 @@ import {
   paymentsOffNote,
   processingNote,
 } from "@/components/consultants/payments";
-import { agoWords, dayAndTime, firstNameOf, sentWhen, shortDate } from "@/components/consultants/market";
+import { agoWords, dayAndTime, declinedLine, firstNameOf, sentWhen, shortDate } from "@/components/consultants/market";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useDraftStore } from "@/lib/store";
-import { displayTitleFor } from "@/lib/letters/display";
+import { letterTitle } from "@/components/consultants/letters";
 import { pullMyBookings, pushBookingRespond } from "@/lib/marketplaceSync";
 import { getStripeConnectStatus, startBookingCheckout } from "@/lib/consultantApi";
 import { cn } from "@/lib/utils";
@@ -136,7 +136,7 @@ export function MyBookings() {
       const linkable = !!draft && !id.startsWith("demo-");
       return {
         id: linkable ? id : null,
-        title: (draft ? displayTitleFor(draft) : undefined) ?? b.matterTitle ?? "Review with no letter",
+        title: (draft ? letterTitle(draft) : undefined) ?? b.matterTitle ?? "Review with no letter",
       };
     },
     [drafts],
@@ -539,7 +539,7 @@ function BookingRow({
               )}
               {status === "declined" && (
                 <NoteLine icon={<Info aria-hidden />}>
-                  {b.responseNote ? `Declined: ${b.responseNote.trim().replace(/\.$/, "")}.` : "Declined."} No payment was taken.
+                  {declinedLine(b)} No payment was taken.
                 </NoteLine>
               )}
               {status !== "declined" && b.responseNote && <RowNote label="Specialist note">{b.responseNote}</RowNote>}

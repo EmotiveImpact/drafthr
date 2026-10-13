@@ -27,18 +27,22 @@ export function ProfileSheet({
   onClose,
   onChoose,
   chooseDisabledReason,
+  returnFocusTo,
 }: {
   consultant: Consultant | null;
   dueMs: number | null;
   onClose: () => void;
   onChoose: (c: Consultant) => void;
   chooseDisabledReason?: string;
+  /** The "Profile" button that opened it; focus goes back there on close. */
+  returnFocusTo?: HTMLElement | null;
 }) {
   const open = !!c;
   return (
     <SideSheet
       open={open}
       onOpenChange={(o) => !o && onClose()}
+      returnFocusTo={returnFocusTo}
       label={c ? `${c.name}'s profile` : "Profile"}
       width={560}
       footer={c ? <Footer c={c} dueMs={dueMs} onChoose={onChoose} disabledReason={chooseDisabledReason} /> : null}

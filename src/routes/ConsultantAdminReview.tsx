@@ -30,6 +30,13 @@ const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
+/** The tab a profile status belongs to: the Pending tab holds the
+ *  "pending_review" profiles; every other status has a tab of its own name. */
+function tabOf(status: string | undefined): AdminTab | null {
+  if (status === "pending_review") return "pending";
+  return ADMIN_TABS.some((t) => t.id === status && t.id !== "all") ? (status as AdminTab) : null;
+}
+
 /**
  * /admin/consultants — consultant vetting queue.
  *
@@ -123,12 +130,12 @@ export function ConsultantAdminReview() {
   const visible =
     profiles === null || tab === "pending" || tab === "all"
       ? profiles
-      : profiles.filter((p) => p.status === tab);
+      : profiles.filter((p) => tabOf(p.status) === tab);
   const counts = showAll && profiles
     ? Object.fromEntries(
         ADMIN_TABS.map((t) => [
           t.id,
-          t.id === "all" ? profiles.length : profiles.filter((p) => p.status === t.id).length,
+          t.id === "all" ? profiles.length : profiles.filter((p) => tabOf(p.status) === t.id).length,
         ]),
       )
     : null;

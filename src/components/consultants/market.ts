@@ -130,6 +130,12 @@ export const AVAILABILITY_WORDS: Record<AvailabilityCode, string> = {
   booked: "Booked, not taking new work",
 };
 
+/** Availability in words when it misses the deadline (shorter, for the flag). */
+const LATE_WORDS: Record<Exclude<AvailabilityCode, "this_week" | "booked">, string> = {
+  one_two_weeks: "In 1 to 2 weeks",
+  three_four_weeks: "In 3 to 4 weeks",
+};
+
 export function availabilityWords(code: AvailabilityCode | undefined): string {
   return AVAILABILITY_WORDS[code ?? "this_week"] ?? AVAILABILITY_WORDS.this_week;
 }
@@ -150,7 +156,10 @@ export function availabilityPill(c: Consultant, dueMs: number | null, now = Date
   const code = c.availability ?? "this_week";
   if (dueMs != null && !canMeet(c, dueMs, now)) {
     if (code === "booked") return { label: availabilityWords(code), tone: "late" };
-    if (code !== "this_week") return { label: `${availabilityWords(code)}, after your deadline`, tone: "late" };
+    // Short form so the flag stays on one line in the band ("In 3 to 4
+    // weeks, after your deadline"); the card truncates it with a title if
+    // it still does not fit.
+    if (code !== "this_week") return { label: `${LATE_WORDS[code]}, after your deadline`, tone: "late" };
     return { label: "Back after your deadline", tone: "late" };
   }
   return code === "this_week"
@@ -198,6 +207,14 @@ export function shortDate(ms: number, now = Date.now()): string {
   const d = new Date(ms);
   const sameYear = d.getFullYear() === new Date(now).getFullYear();
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
+}
+
+/** A declined booking's note: "Declined 9 Oct: <reason>." with the date when
+ *  it was recorded and the reason when the expert gave one. */
+export function declinedLine(b: { declinedAt?: number; responseNote?: string }, now = Date.now()): string {
+  const when = b.declinedAt ? `Declined ${shortDate(b.declinedAt, now)}` : "Declined";
+  const reason = (b.responseNote ?? "").trim().replace(/[.\s]+$/, "");
+  return reason ? `${when}: ${reason}.` : `${when}.`;
 }
 
 /** "today at 14:20", "yesterday at 09:10", "10 Oct". */
@@ -474,10 +491,13 @@ export function describeForLetter(f: Filters, n: number, sort: SortKey, dueMs: n
   if (f.reviewer === "cipd") parts.push("Chartered CIPD");
   if (f.reviewer === "before") parts.push("worked with you before");
   if (f.query.trim()) parts.push(`matching "${f.query.trim()}"`);
+  // The line follows "<b>N experts</b>": a filter description continues the
+  // sentence ("6 experts for disciplinary letters. Your top 3 ..."); with no
+  // filters the count ends its own sentence first ("8 experts. Your top 3 ...").
   let line = parts.join(", ");
-  if (line) line += ".";
-  if (sort === "best" && n > 0) line += `${line ? " " : ""}${n >= 3 ? "Your top 3 match comes first." : "Your best match comes first."}`;
-  return line;
+  const best = sort === "best" && n > 0 ? (n >= 3 ? "Your top 3 match comes first." : "Your best match comes first.") : "";
+  if (line) return best ? `${line}. ${best}` : `${line}.`;
+  return best ? `. ${best}` : "";
 }
 
 /* ------------------------------------------------------------------ */

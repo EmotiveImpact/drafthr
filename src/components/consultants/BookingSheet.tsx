@@ -16,7 +16,7 @@ import {
 } from "@/components/consultants/ui";
 import { StatusBadge } from "@/components/consultants/StatusBadge";
 import { LetterPicker } from "@/components/consultants/LetterPicker";
-import { letterMeta, useLetterFacts } from "@/components/consultants/letters";
+import { letterMeta, openReviewNote, useLetterFacts } from "@/components/consultants/letters";
 import { NEEDS, bookExpertFromMarketplace, type BookResult } from "@/components/consultants/booking";
 import { useMe } from "@/components/journey/review/actions";
 import { VAT_RATE_CHARGED, bookingTotals, firstNameOf, money, turnaroundWords } from "@/components/consultants/market";
@@ -40,6 +40,7 @@ export function BookingSheet({
   onDraftChange,
   onClose,
   onBooked,
+  returnFocusTo,
 }: {
   /** The expert to book; null closes the sheet. */
   consultant: Consultant | null;
@@ -49,6 +50,8 @@ export function BookingSheet({
   onDraftChange: (id: string) => void;
   onClose: () => void;
   onBooked?: (result: Extract<BookResult, { ok: true }>, consultant: Consultant) => void;
+  /** The "Book review" button that opened it; focus goes back there on close. */
+  returnFocusTo?: HTMLElement | null;
 }) {
   const open = !!consultant;
   const [needs, setNeeds] = useState<string[]>([]);
@@ -104,6 +107,7 @@ export function BookingSheet({
         open={open}
         onOpenChange={(o) => !o && !sending && onClose()}
         onEscapeBlocked={sending}
+        returnFocusTo={returnFocusTo}
         label="Book a review"
         description={`Book a review with ${c.name}.`}
         width={540}
@@ -186,8 +190,7 @@ export function BookingSheet({
             {letter?.activeReview && (
               <p className="m-0 mt-2 flex items-start gap-1.5 rounded-[9px] bg-[var(--ds-amber-soft)] px-3 py-2 text-[12.5px] leading-[1.45] text-[var(--ds-amber-fg)]">
                 <CircleAlert className="mt-[2px] size-3.5 shrink-0" aria-hidden />
-                This letter is out for review with {letter.activeReview.reviewer.name || "someone"}. Sending this request takes it back from
-                them.
+                {openReviewNote(letter.activeReview, "long")}
               </p>
             )}
           </Q>

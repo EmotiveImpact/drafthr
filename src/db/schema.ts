@@ -582,6 +582,8 @@ export const consultantBookings = pgTable(
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /** When the consultant declined (null on rows declined before 0023). */
+    declinedAt: timestamp("declined_at", { withTimezone: true }),
     /** Random bearer token generated once the booking is paid. Tied
      *  to {bookingId, draftId}; expires shareTokenExpiresAt. Used by the
      *  consultant to fetch the specific draft they're reviewing without

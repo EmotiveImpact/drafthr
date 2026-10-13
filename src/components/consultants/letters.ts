@@ -7,7 +7,7 @@
 import { useMemo } from "react";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
-import { displayTitleFor } from "@/lib/letters/display";
+import { briefTitleFor, displayTitleFor, hasCustomTitle, recipientNameFor, sentenceCaseTitle } from "@/lib/letters/display";
 import { computeHealthScore, runHealthChecks } from "@/lib/finalize/healthChecks";
 import { getJourney } from "@/lib/journey/stage";
 import { activeReviewIn, latestReviewIn, useReviewStore, type ReviewRequest } from "@/lib/journey/reviews";
@@ -27,12 +27,25 @@ export type LetterFacts = {
   activeReview: ReviewRequest | null;
 };
 
+/**
+ * The letter's name as the rest of the app shows it, in sentence case:
+ * "Offer letter · Priya Shah" (the short letter name and the employee), not
+ * the catalogue's Title Case "Offer of Employment". A name the person gave
+ * the letter is kept as they wrote it.
+ */
+export function letterTitle(draft: Draft): string {
+  if (hasCustomTitle(draft)) return displayTitleFor(draft);
+  const name = sentenceCaseTitle(briefTitleFor(draft));
+  const who = recipientNameFor(draft);
+  return who ? `${name} · ${who}` : name;
+}
+
 export function letterFacts(draft: Draft, requests: Record<string, ReviewRequest>): LetterFacts {
   const checks = runHealthChecks(draft);
   const j = getJourney(draft, latestReviewIn(requests, draft.id), { checks });
   return {
     id: draft.id,
-    title: displayTitleFor(draft),
+    title: letterTitle(draft),
     status: j.statusLabel,
     health: computeHealthScore(checks).score,
     // The files a booking shares (hearing notes stay with you unless you
@@ -66,6 +79,26 @@ export function useLetterFacts(draftId: string | null | undefined): LetterFacts 
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
   const requests = useReviewStore((s) => s.requests);
   return useMemo(() => (draft ? letterFacts(draft, requests) : null), [draft, requests]);
+}
+
+/**
+ * What booking would do to the letter's open review, in words. "Out" is still
+ * with the reviewer (booking takes it back); "back" has already come back to
+ * you (booking closes it and starts a new one).
+ *   short  the letter picker's second line
+ *   long   the booking sheet's warning
+ */
+export function openReviewNote(review: ReviewRequest, form: "short" | "long"): string {
+  const who = review.reviewer.name?.trim() || (form === "short" ? "a reviewer" : "Your reviewer");
+  if (review.status === "back") {
+    return form === "short"
+      ? `Back from ${who}. Booking ends that review.`
+      : `${who} has sent this letter back to you. Sending this request closes that review and starts a new one.`;
+  }
+  const whom = review.reviewer.name?.trim() || "someone";
+  return form === "short"
+    ? `Out for review with ${who}. Booking takes it back from them.`
+    : `This letter is out for review with ${whom}. Sending this request takes it back from them.`;
 }
 
 /** "Ready for review · Health 94 · 4 evidence files" */

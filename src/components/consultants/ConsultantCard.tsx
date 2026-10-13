@@ -38,8 +38,9 @@ export function ConsultantCard({
   bookButtonRef,
 }: {
   consultant: Consultant;
-  onBook?: () => void;
-  onProfile?: () => void;
+  /** Called with the button pressed, so a sheet can hand focus back to it. */
+  onBook?: (opener: HTMLButtonElement) => void;
+  onProfile?: (opener: HTMLButtonElement) => void;
   onChoose?: () => void;
   mode?: "book" | "choose" | "preview";
   /** @deprecated use mode="preview" */
@@ -140,7 +141,7 @@ export function ConsultantCard({
             <button
               ref={profileButtonRef}
               type="button"
-              onClick={onProfile}
+              onClick={(e) => onProfile?.(e.currentTarget)}
               aria-label={`${c.name}'s profile`}
               className={cn(BTN_OUTLINE, "h-[34px] text-[13.5px] max-sm:h-10")}
             >
@@ -161,7 +162,7 @@ export function ConsultantCard({
           <button
             ref={bookButtonRef}
             type="button"
-            onClick={inert || disabledReason ? undefined : onBook}
+            onClick={inert || disabledReason ? undefined : (e) => onBook?.(e.currentTarget)}
             aria-disabled={inert || disabledReason ? true : undefined}
             tabIndex={inert ? -1 : undefined}
             title={disabledReason}
@@ -181,12 +182,15 @@ export function ConsultantCard({
   );
 }
 
-/** The small white availability pill on a tint band. */
+/** The small white availability pill on a tint band. Always one line: it
+ *  keeps clear of the avatar (52px, 18px in) and, if a narrow card still
+ *  cannot fit the words, ends in an ellipsis with the full text as its title. */
 export function AvailabilityBadge({ pill, className }: { pill: AvailabilityPill; className?: string }) {
   return (
     <span
+      title={pill.label}
       className={cn(
-        "relative inline-flex max-w-[calc(100%-80px)] items-center gap-1.5 rounded-[11px] bg-[var(--ds-surface)] px-[9px] py-[3px] text-[12px] font-medium leading-[16px]",
+        "relative inline-flex min-w-0 max-w-[calc(100%-62px)] items-center gap-1.5 whitespace-nowrap rounded-[11px] bg-[var(--ds-surface)] px-[9px] py-[3px] text-[12px] font-medium leading-[16px]",
         pill.tone === "live" && "text-[var(--ds-green-fg)]",
         pill.tone === "quiet" && "text-[var(--ds-muted)]",
         (pill.tone === "late" || pill.tone === "pending") && "text-[var(--ds-amber-fg)]",
@@ -194,7 +198,7 @@ export function AvailabilityBadge({ pill, className }: { pill: AvailabilityPill;
       )}
     >
       {pill.tone === "live" && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[var(--ds-green-solid)]" />}
-      <span className="min-w-0">{pill.label}</span>
+      <span className="min-w-0 truncate">{pill.label}</span>
     </span>
   );
 }

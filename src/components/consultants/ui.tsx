@@ -273,7 +273,9 @@ export function RowNote({
   return (
     <div className={cn("rounded-[9px] px-3 py-2 text-[12.5px] leading-snug", tones[tone], className)}>
       {label && <p className={cn("m-0 mb-0.5 text-[12px] font-medium", labelTone[tone])}>{label}</p>}
-      {children}
+      {/* Notes are typed text: keep their line breaks (a delivered review is
+       * the verdict, a blank line, then the note) and break long words. */}
+      <div className="whitespace-pre-line break-words">{children}</div>
     </div>
   );
 }

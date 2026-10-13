@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, FilePlus2, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PaperThumb } from "@/components/consultants/ui";
-import { useBookableLetters, type LetterFacts } from "@/components/consultants/letters";
+import { openReviewNote, useBookableLetters, type LetterFacts } from "@/components/consultants/letters";
 import { cn } from "@/lib/utils";
 
 /**
@@ -96,9 +96,7 @@ export function LetterPicker({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[14px] font-medium text-[var(--ds-ink)]">{l.title}</span>
                         <span className="block truncate text-[12.5px] text-[var(--ds-muted)]">
-                          {l.activeReview
-                            ? `Out for review with ${l.activeReview.reviewer.name || "a reviewer"}. Booking takes it back from them.`
-                            : l.status}
+                          {l.activeReview ? openReviewNote(l.activeReview, "short") : l.status}
                         </span>
                       </span>
                       {on && <Check className="size-4 shrink-0 text-[var(--ds-ink)]" aria-hidden />}

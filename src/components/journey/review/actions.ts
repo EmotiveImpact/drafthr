@@ -398,6 +398,15 @@ function pendingMarkIdsOf(html: string): string[] {
   return ids;
 }
 
+/** Take back one optimistic message from a booking's local thread. */
+function removeBookingMessage(bookingId: string, messageId: string) {
+  useBookingsStore.setState((state) => ({
+    bookings: state.bookings.map((b) =>
+      b.id === bookingId ? { ...b, messages: (b.messages ?? []).filter((m) => m.id !== messageId) } : b
+    ),
+  }));
+}
+
 /** A message to the reviewer (an expert's goes on the booking's thread). */
 export async function messageTheReviewer(review: ReviewRequest, text: string, me: Me): Promise<boolean> {
   const body = text.trim();
@@ -405,8 +414,12 @@ export async function messageTheReviewer(review: ReviewRequest, text: string, me
   if (review.kind === "expert" && review.bookingId) {
     const id = useBookingsStore.getState().appendMessage(review.bookingId, "requester", body);
     if (!id) return false;
-    void pushBookingMessage(review.bookingId, "requester", body);
-    return true;
+    // The expert only sees the server's thread. If it didn't get there, take
+    // the bubble back (the sync layer says so) and give the words back to
+    // the reply box, rather than showing a message as sent that never was.
+    const ok = await pushBookingMessage(review.bookingId, "requester", body);
+    if (!ok) removeBookingMessage(review.bookingId, id);
+    return ok;
   }
   const id = useReviewStore.getState().addMessage(review.id, { from: "asker", name: me.name, body });
   if (!id) return false;
@@ -515,9 +528,15 @@ export async function sendBackToReviewer(review: ReviewRequest, question: string
     }
   }
   useReviewStore.getState().sendBack(review.id, q);
-  if (review.kind === "expert" && review.bookingId) {
-    useBookingsStore.getState().appendMessage(review.bookingId, "requester", q);
-    void pushBookingMessage(review.bookingId, "requester", q);
+  if (review.kind === "expert" && review.bookingId && q) {
+    const bookingId = review.bookingId;
+    const id = useBookingsStore.getState().appendMessage(bookingId, "requester", q);
+    // With a review link the question also reaches them there (askAgain
+    // below), so a failed thread copy needs no alarm; without one, the
+    // sync layer tells the person it didn't send.
+    void pushBookingMessage(bookingId, "requester", q, { quiet: !!review.trustedLinkId }).then((ok) => {
+      if (!ok && id) removeBookingMessage(bookingId, id);
+    });
   }
   if (review.trustedLinkId) {
     const d = useDraftStore.getState().drafts[review.draftId];

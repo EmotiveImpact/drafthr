@@ -157,6 +157,7 @@ export async function POST(req: Request): Promise<Response> {
       if (booking.status !== "requested")
         return jsonError(`Cannot decline from status '${booking.status}'`, 409);
       update.status = "declined";
+      update.declinedAt = now;
       if (body.note) update.responseNote = body.note.slice(0, 2000);
       break;
     case "deliver":
@@ -296,5 +297,6 @@ function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: st
     acceptedAt: row.acceptedAt?.getTime() ?? null,
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
+    declinedAt: row.declinedAt?.getTime() ?? null,
   };
 }

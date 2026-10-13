@@ -174,7 +174,7 @@ function BookingRow({ booking }: { booking: Booking }) {
             (booking.status === "delivered" && booking.deliveryNote)) && (
             <div className="mt-2.5 flex flex-col gap-2">
               {booking.message && (
-                <RowNote label="From HR" className={booking.status === "requested" ? "bg-[var(--ds-surface)]" : undefined}>
+                <RowNote label={`From ${booking.requesterName || "HR"}`} className={booking.status === "requested" ? "bg-[var(--ds-surface)]" : undefined}>
                   {booking.message}
                 </RowNote>
               )}
@@ -309,7 +309,7 @@ function BookingRow({ booking }: { booking: Booking }) {
               <BookingThread
                 booking={booking}
                 perspective="consultant"
-                title="HR"
+                title={booking.requesterName || "HR"}
                 subtitle={matterTitle}
                 testId={`inbox-messages-${booking.id}`}
               />

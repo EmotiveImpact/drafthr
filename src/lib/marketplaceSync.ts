@@ -162,6 +162,7 @@ function dtoToBooking(
     acceptedAt: dto.acceptedAt ?? undefined,
     deliveredAt: dto.deliveredAt ?? undefined,
     completedAt: dto.completedAt ?? undefined,
+    declinedAt: dto.declinedAt ?? prior?.declinedAt,
     // Like the consultant display fields below, the respond/create/message
     // DTOs don't carry expectedDeliveryAt (only the list-join does). Fall back
     // to the prior local row so a state transition doesn't silently reset the
@@ -181,6 +182,9 @@ function dtoToBooking(
     consultantName: dto.consultantName ?? prior?.consultantName,
     consultantRole: dto.consultantRole ?? prior?.consultantRole,
     consultantPhotoUrl: dto.consultantPhotoUrl ?? prior?.consultantPhotoUrl,
+    // Only the consultant's inbox carries who booked; keep it across the
+    // respond/message DTOs that don't.
+    requesterName: dto.requesterName?.trim() || prior?.requesterName,
     consultantCurrency: dto.consultantCurrency
       ? ({ GBP: "£", USD: "$", EUR: "€" } as const)[dto.consultantCurrency]
       : prior?.consultantCurrency,
@@ -300,7 +304,15 @@ export async function pushBookingMessage(
   bookingId: string,
   from: "requester" | "consultant",
   text: string,
+  opts?: {
+    /** No toast on failure: the caller delivers the same words another way
+     *  (a review link) or tells the person itself. */
+    quiet?: boolean;
+  },
 ): Promise<boolean> {
+  // Nothing to send: not a failure worth telling anyone about (the server
+  // would answer 400 and the person would see a false "didn't send").
+  if (!text.trim()) return false;
   const res = await sendBookingMessage(bookingId, text);
   if (!res.ok) {
     // Don't silently leave the optimistic bubble looking "delivered" while
@@ -308,7 +320,7 @@ export async function pushBookingMessage(
     // SERVER thread and would never get this message (the B9/R19 silent-lie
     // class, mirrored from pushBookingRespond). Tell the sender and re-pull
     // both sides' threads so the local state reconciles to the server truth.
-    toast.error("Message didn't send — check your connection and try again.");
+    if (!opts?.quiet) toast.error("Message didn't send. Check your connection and try again.");
     void pullInbox();
     void pullMyBookings();
     return false;
@@ -344,7 +356,7 @@ export async function pushBookingRespond(
     // this booking; other codes are a transient failure.
     toast.error(
       res.status === 409
-        ? "This booking already changed — refreshing."
+        ? "This booking already changed. Refreshing its status."
         : "Couldn't update the booking. Refreshing its status.",
     );
     void pullInbox();

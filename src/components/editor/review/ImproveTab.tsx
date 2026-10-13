@@ -101,7 +101,10 @@ function AiSpecialistLane({ draftId }: { draftId?: string }) {
   useEffect(() => {
     let cancelled = false;
     void getBillingStatus().then((s) => {
-      if (!cancelled) setCredits(s?.credits ?? 0);
+      // Unknown (the status call failed) is not "no credits": leave the count
+      // unshown and the button usable; a run that truly lacks credits gets
+      // a 402 and says so.
+      if (!cancelled && s) setCredits(s.credits ?? 0);
     });
     return () => {
       cancelled = true;
