@@ -27,9 +27,12 @@ import { Label } from "@/components/ui/label";
 
 import { letterCatalogByMode, getLetterMeta } from "@/lib/letters/catalog";
 import { useDraftStore } from "@/lib/store";
+import { draftErrorCopy } from "@/components/editor/draft-error";
 import type { LetterTypeId } from "@/lib/letters/types";
 import {
   findMissingMergeValues,
+  humaniseField,
+  missingFieldsLabel,
   parseCsv,
   rowSummary,
   rowToAnswers,
@@ -196,10 +199,13 @@ export default function BulkOperations() {
         setGenerateState({ phase: "idle" });
         return;
       }
-      const message =
-        err instanceof Error ? err.message : "We couldn't draft the template letter.";
+      // Plain words on screen (the same ones the letter workspace uses); the
+      // technical detail ("ANTHROPIC_API_KEY is not configured...") goes to
+      // the console for whoever sets DraftHR up (LISTS-X28).
+      console.error("Bulk letters: drafting the template letter failed", err);
+      const message = draftErrorCopy(err);
       setGenerateState({ phase: "error", message });
-      toast.error("Generation failed", { description: message });
+      toast.error("The letters were not drafted", { description: message });
       return;
     }
 
@@ -784,10 +790,10 @@ function StepUpload({
   );
 }
 
-/** "Row 3 (Jane Patel): salary, review_date; Row 5: ..." for at most `limit` rows. */
+/** "Row 3 (Jane Patel): no salary, no review date; Row 5: ..." for at most `limit` rows. */
 function describeMissing(missing: MissingMergeValues[], limit = 5): string {
   const shown = missing.slice(0, limit).map(
-    (m) => `Row ${m.rowNumber}${m.employeeName ? ` (${m.employeeName})` : ""}: ${m.fields.join(", ")}`,
+    (m) => `Row ${m.rowNumber}${m.employeeName ? ` (${m.employeeName})` : ""}: ${missingFieldsLabel(m.fields)}`,
   );
   const more = missing.length - shown.length;
   return shown.join("; ") + (more > 0 ? `; and ${more} more` : "");
@@ -853,7 +859,7 @@ function StepPreview({
                   Row {m.rowNumber}
                   {m.employeeName ? ` (${m.employeeName})` : ""}:
                 </span>{" "}
-                {m.fields.join(", ")}
+                {missingFieldsLabel(m.fields)}
               </li>
             ))}
             {missing.length > 20 && <li>and {missing.length - 20} more rows</li>}
@@ -997,7 +1003,7 @@ function StepResults({
       <section>
         <div className="rounded-[var(--ds-r-l)] bg-[var(--ds-red-bg)] p-8 text-center">
           <AlertTriangle className="mx-auto size-9 text-[var(--ds-red-fg)]" />
-          <h2 className="m-0 mt-4 text-[17px] font-semibold text-[var(--ds-ink)]">Generation failed</h2>
+          <h2 className="m-0 mt-4 text-[17px] font-semibold text-[var(--ds-ink)]">The letters were not drafted</h2>
           <p className="m-0 mt-2 max-w-md mx-auto text-[13px] text-[var(--ds-body)]">
             {state.message}
           </p>
@@ -1052,8 +1058,8 @@ function StepResults({
                 <>
                   {" "}
                   <span className="font-medium text-[var(--ds-amber-fg)]">
-                    {incompleteCount} row{incompleteCount === 1 ? " has" : "s have"}{" "}
-                    unfilled placeholders, flagged below.
+                    {incompleteCount} letter{incompleteCount === 1 ? " has" : "s have"}{" "}
+                    gaps to fill in, flagged below.
                   </span>
                 </>
               )}
@@ -1075,8 +1081,8 @@ function StepResults({
                 <PaperIcon tint={tint} />
                 {g.unresolved.length > 0 ? (
                   <span
-                    aria-label="Has unfilled placeholders"
-                    title={`Missing: ${g.unresolved.join(", ")}`}
+                    aria-label="Has gaps to fill in"
+                    title={`Missing: ${g.unresolved.map(humaniseField).join(", ")}`}
                     className="size-2 flex-shrink-0 rounded-full bg-[var(--ds-amber-dot)]"
                   />
                 ) : (
@@ -1087,7 +1093,7 @@ function StepResults({
                 )}
                 <span className="truncate text-[14px] font-semibold text-[var(--ds-ink)]">{g.title}</span>
                 {g.unresolved.length > 0 && (
-                  <Pill tone="amber" title={`Missing: ${g.unresolved.join(", ")}`}>
+                  <Pill tone="amber" title={`Missing: ${g.unresolved.map(humaniseField).join(", ")}`}>
                     Missing {g.unresolved.length} field
                     {g.unresolved.length === 1 ? "" : "s"}
                   </Pill>

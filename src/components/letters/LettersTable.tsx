@@ -7,7 +7,7 @@
  * Used by the Letters page, the matter page's Letters tab and the employee
  * page's Letters tab.
  */
-import type { MouseEvent, ReactNode } from "react";
+import { useMemo, type MouseEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowUpRight, Folder, MoreHorizontal, Trash2 } from "lucide-react";
@@ -24,53 +24,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { LetterRowData } from "./rows";
-import { updatedColumnLabel } from "./letterView";
+import { tableWhereLabel, updatedColumnLabel } from "./letterView";
+import { letterTableLayout, makeMeasure, type LetterColumn, type TableColumn, type TableLayout } from "./tableLayout";
+import { useTableBox } from "./useTableBox";
 import { Initials, MENU_MOTION, PaperIcon, TickBox } from "./parts";
 
-export type LetterColumn = "select" | "recipient" | "matter" | "where" | "health" | "updated" | "owner";
+export type { LetterColumn } from "./tableLayout";
 
 export type Selection = {
   selected: ReadonlySet<string>;
   toggle: (id: string, on: boolean) => void;
   toggleAll: (on: boolean) => void;
 };
-
-/**
- * Column shares of the full table. "Where it is" is wide enough for the
- * longest where lines ("Review · ready to send for review", "Approve · ready
- * to send for approval") on one line at 1440, so every row is the same
- * height (LISTS-X22); the letter column takes whatever is left.
- */
-const SHARE: Partial<Record<LetterColumn, number>> = {
-  recipient: 14,
-  matter: 12,
-  where: 22.5,
-  health: 10,
-  updated: 9,
-};
-/** The letter column's share of the full table (it is left to fill the rest). */
-const LETTER_SHARE = 21;
-const FIXED: Partial<Record<LetterColumn, string>> = { select: "40px", owner: "82px" };
-
-/**
- * Widths for the columns a table shows. A table without some columns (the
- * employee page has no Recipient, the matter page no Matter) spreads their
- * share over the columns it keeps, so the row still runs to the menu
- * instead of leaving a gap before it (LISTS-X24).
- */
-function columnWidths(order: (LetterColumn | "letter")[]): Record<string, string | undefined> {
-  const kept = order.filter((c): c is LetterColumn => c !== "letter" && SHARE[c as LetterColumn] != null);
-  const full = LETTER_SHARE + Object.values(SHARE).reduce((a, b) => a + (b ?? 0), 0);
-  const present = LETTER_SHARE + kept.reduce((a, c) => a + (SHARE[c] ?? 0), 0);
-  const scale = full / present;
-  const out: Record<string, string | undefined> = {};
-  for (const c of order) {
-    if (c === "letter") out[c] = undefined;
-    else if (FIXED[c]) out[c] = FIXED[c];
-    else if (SHARE[c] != null) out[c] = `${+((SHARE[c] ?? 0) * scale).toFixed(2)}%`;
-  }
-  return out;
-}
 
 const HEAD: Record<LetterColumn | "letter", string> = {
   select: "",
@@ -83,8 +48,11 @@ const HEAD: Record<LetterColumn | "letter", string> = {
   owner: "Owner",
 };
 
-/** Lets StageBar's where line wrap in a narrow column (its label is the last child). */
+/** Lets StageBar's where line wrap on phones, where the row has the whole width (its label is the last child). */
 const WHERE_WRAP = "[&>div:last-child]:whitespace-normal [&>div:last-child]:break-words";
+
+/** Cell padding (tableLayout's CELL_PAD, 20px); the select column keeps its 12px. */
+const PAD = "px-2.5";
 
 /** "/ 100" in the muted grey, which keeps 4.5:1 on the amber needs-you tint. */
 const OUT_OF_MUTED = "[&>span]:text-[var(--ds-muted)]";
@@ -124,16 +92,51 @@ export function LettersTable({
   };
 
   const dateFor = (r: LetterRowData) => updatedColumnLabel(dateColumn === "sent" ? (r.sentAt ?? r.updatedAt) : r.updatedAt, now);
-  const order: (LetterColumn | "letter")[] = cols.includes("select") ? ["select", "letter", ...cols.filter((c) => c !== "select")] : ["letter", ...cols];
-  const widths = columnWidths(order);
+  const asked: TableColumn[] = cols.includes("select") ? ["select", "letter", ...cols.filter((c) => c !== "select")] : ["letter", ...cols];
+  const askedKey = asked.join(",");
+  const box = useTableBox();
+  const layout = useMemo(() => {
+    const { measure, done } = makeMeasure(box.width > 0 ? box.host : null);
+    try {
+      return letterTableLayout({
+        width: box.width,
+        columns: askedKey.split(",") as TableColumn[],
+        rows: rows.map((r) => ({
+          label: r.label,
+          subLine: r.subLine,
+          recipient: r.recipient,
+          recipientRole: r.recipientRole,
+          matter: r.matter?.name,
+          where: tableWhereLabel(r.journey.whereLabel),
+          date: updatedColumnLabel(dateColumn === "sent" ? (r.sentAt ?? r.updatedAt) : r.updatedAt, now),
+        })),
+        measure,
+      });
+    } finally {
+      done();
+    }
+    // box.fonts: measure again once the web font has loaded. `now` moves on
+    // every render; the dates it gives only change the widths by a few px.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [box.width, box.host, box.fonts, rows, askedKey, dateColumn]);
+  const order = layout.columns;
 
   return (
-    <div className={cn("min-w-0", className)}>
-      {/* Desktop and tablet: the table. */}
-      <table aria-label={ariaLabel} className="hidden w-full table-fixed border-separate border-spacing-0 md:table">
+    <div ref={box.ref} className={cn("min-w-0", className)}>
+      {/* Desktop and tablet: the table. Columns fit what the rows hold; on a
+          narrow table the least needed make way (tableLayout.ts). */}
+      <table
+        aria-label={ariaLabel}
+        data-layout={
+          [layout.healthCompact && "health-compact", layout.ownerCompact && "owner-compact", layout.recipientInLetter && "recipient-in-letter"]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
+        className="hidden w-full table-fixed border-separate border-spacing-0 md:table"
+      >
         <colgroup>
           {order.map((c) => (
-            <col key={c} style={widths[c] ? { width: widths[c] } : undefined} />
+            <col key={c} style={layout.widths[c] != null ? { width: `${layout.widths[c]}px` } : undefined} />
           ))}
         </colgroup>
         <thead>
@@ -142,12 +145,17 @@ export function LettersTable({
               <th
                 key={c}
                 scope="col"
-                className="whitespace-nowrap border-b border-[var(--ds-line)] px-3 pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)]"
+                className={cn(
+                  "whitespace-nowrap border-b border-[var(--ds-line)] pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)]",
+                  c === "select" ? "px-3" : PAD
+                )}
               >
                 {c === "select" && selection ? (
                   <TickBox checked={allState} onChange={(on) => selection.toggleAll(on)} label={allState === true ? "Clear selection on this page" : "Select every letter on this page"} />
                 ) : c === "updated" && dateColumn === "sent" ? (
                   "Sent"
+                ) : c === "owner" && layout.ownerCompact ? (
+                  <span className="sr-only">Owner and actions</span>
                 ) : (
                   HEAD[c]
                 )}
@@ -172,7 +180,8 @@ export function LettersTable({
                   <td
                     key={c}
                     className={cn(
-                      "border-b px-3 py-3.5 align-middle transition-colors duration-[120ms]",
+                      "border-b py-3.5 align-middle transition-colors duration-[120ms]",
+                      c === "select" ? "px-3" : PAD,
                       tint
                         ? "border-transparent bg-[var(--ds-amber-row)] group-hover/row:bg-[var(--ds-amber-row-hover)]"
                         : "border-[var(--ds-line-2)] group-hover/row:bg-[var(--ds-hover)] group-data-[selected]/row:bg-[var(--ds-surface-2)]",
@@ -181,7 +190,7 @@ export function LettersTable({
                       c === "owner" && "pr-1.5"
                     )}
                   >
-                    <Cell c={c} r={r} on={on} selection={selection} date={dateFor(r)} menuExtra={menuExtra} />
+                    <Cell c={c} r={r} on={on} selection={selection} date={dateFor(r)} menuExtra={menuExtra} layout={layout} />
                   </td>
                 ))}
               </tr>
@@ -247,18 +256,22 @@ function Cell({
   selection,
   date,
   menuExtra,
+  layout,
 }: {
-  c: LetterColumn | "letter";
+  c: TableColumn;
   r: LetterRowData;
   on: boolean;
   selection?: Selection;
   date: string;
   menuExtra?: (row: LetterRowData) => ReactNode;
+  layout: TableLayout;
 }) {
   switch (c) {
     case "select":
       return selection ? <TickBox checked={on} onChange={(v) => selection.toggle(r.id, v)} label={`Select ${r.label}`} /> : null;
-    case "letter":
+    case "letter": {
+      // On a narrow table the recipient has no column and leads the sub line.
+      const sub = layout.recipientInLetter && r.recipient ? `${r.recipient} · ${r.subLine}` : r.subLine;
       return (
         <div className="flex min-w-0 items-center gap-3">
           <PaperIcon tint={r.tint} />
@@ -270,13 +283,14 @@ function Cell({
             >
               {r.label}
             </Link>
-            {/* One line, like the mock: the full text is in the tooltip. Only the where line wraps. */}
-            <div className="mt-px truncate text-[12.5px] text-[var(--ds-muted)]" title={r.subLine}>
-              {r.subLine}
+            {/* One line, like the mock: the full text is in the tooltip. */}
+            <div className="mt-px truncate text-[12.5px] text-[var(--ds-muted)]" title={sub}>
+              {sub}
             </div>
           </div>
         </div>
       );
+    }
     case "recipient":
       return r.recipient ? (
         <div className="flex min-w-0 items-center gap-2.5">
@@ -302,19 +316,34 @@ function Cell({
         <span className="text-[13.5px] text-[var(--ds-muted)]">No matter</span>
       );
     case "where":
-      // The where line is the row's key status: let it wrap instead of
-      // ending in an ellipsis ("Review · with Claire Booth").
-      return <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} className={WHERE_WRAP} />;
+      // One line, so every row is the same height: the column is as wide as
+      // the longest where line (tableLayout.ts), and the long "ready" lines
+      // read "Review · ready", with the full line on hover.
+      return (
+        <div title={r.journey.whereLabel} className="min-w-0">
+          <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={tableWhereLabel(r.journey.whereLabel)} />
+        </div>
+      );
     case "health":
       return r.health != null ? (
-        <HealthRing score={r.health} label={`Health ${r.health} of 100`} className={cn("whitespace-nowrap text-[13.5px]", OUT_OF_MUTED)} />
+        <HealthRing
+          score={r.health}
+          showOutOf={!layout.healthCompact}
+          label={`Health ${r.health} of 100`}
+          className={cn("whitespace-nowrap text-[13.5px]", OUT_OF_MUTED)}
+        />
       ) : (
         <span className="text-[13px] text-[var(--ds-muted)]">No score</span>
       );
     case "updated":
       return <span className="whitespace-nowrap text-[13.5px] text-[var(--ds-muted)]">{date}</span>;
     case "owner":
-      return (
+      return layout.ownerCompact ? (
+        <div className="flex items-center justify-end">
+          <span className="sr-only">Owner: {r.owner.name}</span>
+          <LetterRowMenu row={r} extra={menuExtra?.(r)} />
+        </div>
+      ) : (
         <div className="flex items-center justify-between gap-1">
           <span title={`Owner: ${r.owner.name}`} className="inline-flex">
             <Initials name={r.owner.name} seed={r.owner.seed} size={26} ring={r.journey.needsYou} />

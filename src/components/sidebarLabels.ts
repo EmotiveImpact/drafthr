@@ -1,9 +1,10 @@
 /**
  * The names the sidebar gives its recent letters: the short form from the
  * mocks ("Warning letter · J. Hale"), told apart when two would read the
- * same (FOUNDATION-X9).
+ * same (FOUNDATION-X9, X12), with the person always in full (FOUNDATION-X14).
  */
-import { briefTitleFor } from "@/lib/letters/display";
+import { format } from "date-fns";
+import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
 import type { Draft } from "@/lib/letters/types";
 
 /** "J. Hale" from "Jordan Hale". */
@@ -14,51 +15,133 @@ export function shortName(name: string | undefined): string {
   return `${parts[0][0]}. ${parts[parts.length - 1]}`;
 }
 
-/** A warning's level, short enough for a nested row. */
+/**
+ * A warning's level, as the marketplace, the export pack and the mocks name
+ * it (FOUNDATION-X13). Used when two warnings for the same person are among
+ * the recent letters, so they read apart.
+ */
 const WARNING_LEVEL: Record<string, string> = {
   verbal: "Verbal warning",
-  written: "Written warning",
-  final_written: "Final warning",
+  written: "First written warning",
+  final_written: "Final written warning",
 };
 
 /**
- * The short name a recent letter goes by: "Offer letter", or for a warning
- * with its level chosen "Final warning", so two warnings for the same person
- * read apart (FOUNDATION-X9). A name the person gave the letter is kept.
+ * Shorter names for the letter types whose usual name, with the person,
+ * is wider than a nested row (about 175px at 14px). Used only when the full
+ * name would be cut; the full name stays on hover.
  */
-function recentTitle(d: Draft): string {
-  if (!d.title?.trim() && d.letterType === "warning") {
-    const level = String((d.answers as Record<string, unknown> | undefined)?.warningLevel ?? "");
-    if (WARNING_LEVEL[level]) return WARNING_LEVEL[level];
-  }
-  return briefTitleFor(d);
+const COMPACT_TITLE: Record<string, string> = {
+  probation_outcome: "Probation",
+  contract_amendment: "Contract change",
+  right_to_work: "Right to work",
+  reference_dispute: "Reference",
+  settlement_cover: "Settlement",
+  settlement_counter_offer: "Counter-offer",
+  acas_ec_notification: "ACAS cover",
+  right_to_disconnect: "Overtime",
+  grievance: "Grievance",
+  accommodation_request: "Adjustments",
+  resignation_constructive: "Resignation",
+  resignation_with_grievance: "Resignation",
+  resignation_acceptance: "Resignation",
+  resignation_withdrawal: "Withdrawal",
+  subject_access_request: "Data request",
+  redundancy_consultation_response: "Redundancy",
+  sickness_notification: "Sickness",
+};
+
+/** "Harbour Foods" from "Harbour Foods Ltd": the legal suffix is noise in a short row. */
+function orgShort(name: string): string {
+  return name.replace(/\s+(ltd\.?|limited|plc|llp|inc\.?|llc)$/i, "").trim() || name;
 }
 
-function recentWho(d: Draft): string | undefined {
-  return d.mode === "employer" ? shortName(d.employee.legalName) : d.employer.legalName?.trim();
+export type RecentLabel = {
+  /** The whole label, "Warning letter · J. Hale" (menus, toasts, tests). */
+  text: string;
+  /** The letter part, "Warning letter" or "Final written warning". */
+  title: string;
+  /** A shorter letter part for when `title` would be cut ("Probation"). */
+  compact?: string;
+  /** The person part, "J. Hale"; always shown in full. */
+  who?: string;
+  /**
+   * The hover text, which tells two similar letters apart: the label with
+   * the full name, where the letter is and when it was started
+   * ("Warning letter 1 · Jordan Hale (Draft · 1 check to fix, started 12 Oct)").
+   */
+  hover: string;
+};
+
+function recentWho(d: Draft): { short?: string; full?: string } {
+  if (d.mode === "employer") {
+    const full = d.employee.legalName?.trim();
+    return { short: shortName(full) || undefined, full: full || undefined };
+  }
+  const org = d.employer.legalName?.trim();
+  return { short: org ? orgShort(org) : undefined, full: org || undefined };
 }
 
 /**
- * "Warning letter · J. Hale" for each recent letter. Two that would still
- * read the same (same kind of letter, same person, no level or name to tell
- * them apart) are numbered in the order they were started ("Warning letter
- * 1 · J. Hale", "Warning letter 2 · J. Hale"), so no two rows look identical.
+ * The recent letters' labels. Each is "<letter> · <person>". When two would
+ * read the same (same kind of letter, same person), a warning's level tells
+ * them apart ("First written warning", "Final written warning"); if that is
+ * not enough (no level chosen, or the same level) they are numbered in the
+ * order they were started ("Warning letter 1", "Warning letter 2"). A name
+ * the person gave the letter is kept as it is.
+ *
+ * `whereOf` gives each letter's where line ("Draft · 1 check to fix"), for
+ * the hover text.
  */
-export function recentLabels(list: Draft[]): string[] {
-  const titles = list.map(recentTitle);
+export function recentLabelParts(list: Draft[], whereOf?: (d: Draft) => string | undefined): RecentLabel[] {
   const whos = list.map(recentWho);
-  const keyOf = (i: number) => `${titles[i]}\u0000${whos[i] ?? ""}`;
-  const groups = new Map<string, number[]>();
-  list.forEach((_, i) => groups.set(keyOf(i), [...(groups.get(keyOf(i)) ?? []), i]));
+  const base = list.map(briefTitleFor);
+  const key = (titles: string[], i: number) => `${titles[i]}\u0000${whos[i].short ?? ""}`;
+  const clashes = (titles: string[]) => {
+    const groups = new Map<string, number[]>();
+    list.forEach((_, i) => groups.set(key(titles, i), [...(groups.get(key(titles, i)) ?? []), i]));
+    return [...groups.values()].filter((g) => g.length > 1);
+  };
+
+  // A warning's level, only where it is needed to tell two apart.
+  const titles = [...base];
+  for (const group of clashes(base)) {
+    for (const i of group) {
+      const d = list[i];
+      if (d.title?.trim() || d.letterType !== "warning") continue;
+      const level = String((d.answers as Record<string, unknown> | undefined)?.warningLevel ?? "");
+      if (WARNING_LEVEL[level]) titles[i] = WARNING_LEVEL[level];
+    }
+  }
+  // Still the same: number them in the order they were started.
   const number = new Map<number, number>();
-  for (const idx of groups.values()) {
-    if (idx.length < 2) continue;
-    [...idx]
+  for (const group of clashes(titles)) {
+    [...group]
       .sort((a, b) => list[a].createdAt - list[b].createdAt || list[a].id.localeCompare(list[b].id))
       .forEach((i, n) => number.set(i, n + 1));
   }
-  return list.map((_, i) => {
-    const title = number.has(i) ? `${titles[i]} ${number.get(i)}` : titles[i];
-    return whos[i] ? `${title} · ${whos[i]}` : title;
+
+  return list.map((d, i) => {
+    const n = number.get(i);
+    const title = n ? `${titles[i]} ${n}` : titles[i];
+    const compactBase = !d.title?.trim() && titles[i] === base[i] ? COMPACT_TITLE[d.letterType] : undefined;
+    const compact = compactBase ? (n ? `${compactBase} ${n}` : compactBase) : undefined;
+    const who = whos[i].short;
+    const where = whereOf?.(d);
+    const started = d.createdAt > 0 ? `started ${format(new Date(d.createdAt), "d MMM")}` : "";
+    const detail = [where, started].filter(Boolean).join(", ");
+    const named = whos[i].full ? `${title} · ${whos[i].full}` : displayTitleFor(d);
+    return {
+      text: who ? `${title} · ${who}` : title,
+      title,
+      compact: compact && compact !== title ? compact : undefined,
+      who,
+      hover: detail ? `${named} (${detail})` : named,
+    };
   });
+}
+
+/** Just the labels: "Warning letter · J. Hale" for each recent letter. */
+export function recentLabels(list: Draft[]): string[] {
+  return recentLabelParts(list).map((l) => l.text);
 }

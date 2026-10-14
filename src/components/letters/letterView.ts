@@ -152,6 +152,18 @@ export function letterIsLong(d: Draft): boolean {
 }
 
 /**
+ * The where line as the letters table shows it. The table's "Where it is"
+ * column is narrow in the mock (f9: "Review · back to you", "Approve · with
+ * Priya"), so the two long "ready" lines read like "Send · ready":
+ * "Review · ready to send for review" becomes "Review · ready" and
+ * "Approve · ready to send for approval" becomes "Approve · ready". The
+ * full line stays on hover (LISTS-X22).
+ */
+export function tableWhereLabel(where: string): string {
+  return where.replace(/^(.+?) · ready to send for (review|approval)$/, "$1 · ready");
+}
+
+/**
  * The Updated column (f9-letters): "Just now", "4 min ago", "2 hours ago"
  * for the last few hours, the time ("14:32") earlier today, "Yesterday",
  * then the date with the year ("9 Oct 2026").

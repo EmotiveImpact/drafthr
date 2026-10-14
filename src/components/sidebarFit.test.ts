@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitSubLists } from "./sidebarFit";
+import { fitSubLists, subListHeight } from "./sidebarFit";
 
 // Middle-area heights the sidebar actually gets: 480px at 1366x768, 612px at 1440x900.
 const HR = { rows: 7, letterRows: 4, matterRows: 3 };
@@ -18,11 +18,35 @@ describe("fitSubLists", () => {
     expect(fitSubLists({ ...HR, available: 480, prefer: "matters" })).toEqual({ letters: false, matters: true });
   });
 
-  it("falls back to the other list when the current one is too long", () => {
+  it("keeps a long matter list open on a matter page, cut to what fits (FOUNDATION-X15)", () => {
+    // 292px of rows leave 188px: five nested rows (four matters and View all).
     expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 8, available: 480, prefer: "matters" })).toEqual({
-      letters: true,
-      matters: false,
+      letters: false,
+      matters: true,
+      matterLimit: 5,
     });
+  });
+
+  it("shows both lists on a tall screen with 13 matters, the matters cut to fit", () => {
+    // 1440x900: 292 + 144 for Letters leaves 176px, four nested matter rows.
+    expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 13, available: 612, prefer: "letters" })).toEqual({
+      letters: true,
+      matters: true,
+      matterLimit: 4,
+    });
+  });
+
+  it("never lets an open list push the main rows under the footer", () => {
+    for (const available of [480, 540, 612, 700]) {
+      for (const matterRows of [1, 3, 8, 13, 30]) {
+        for (const keep of [null, "letters", "matters"] as const) {
+          const plan = fitSubLists({ rows: 7, letterRows: 4, matterRows, available, prefer: "letters", keep });
+          const matters = plan.matters ? subListHeight(plan.matterLimit ?? matterRows) : 0;
+          const used = 7 * 40 + 6 * 2 + (plan.letters ? subListHeight(4) : 0) + matters;
+          expect(used).toBeLessThanOrEqual(available);
+        }
+      }
+    }
   });
 
   it("folds both on very short screens", () => {
@@ -63,10 +87,11 @@ describe("fitSubLists with the person's chevrons", () => {
     });
   });
 
-  it("keeps the list the person opened even when it is too long on its own", () => {
+  it("keeps the list the person opened, cut to what fits when it is too long (FOUNDATION-X15)", () => {
     expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 12, available: 480, prefer: "letters", keep: "matters" })).toEqual({
       letters: false,
       matters: true,
+      matterLimit: 5,
     });
   });
 

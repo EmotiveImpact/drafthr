@@ -35,6 +35,9 @@ import { NewLetterForPerson } from "@/components/employees/NewLetterForPerson";
 import { DirectorySyncStrip } from "@/components/employees/DirectorySyncStrip";
 import { DeleteEmployeeDialog, EmployeeStatusPill } from "@/components/employees/parts";
 import { displayName, employeesCsv, startDateLabel, useEmployeeRows, type EmployeeRow } from "@/components/employees/model";
+import { employeeTableLayout, type EmployeeColumn } from "@/components/employees/tableLayout";
+import { makeMeasure } from "@/components/letters/tableLayout";
+import { useTableBox } from "@/components/letters/useTableBox";
 
 /**
  * /employees: the workspace directory (employees mock). Every Employee
@@ -62,7 +65,6 @@ const SORTS: { value: SortId; label: string }[] = [
 ];
 
 const PAGE = 25;
-const COLS = ["40px", "27%", "19%", "11%", "11%", "11%", "8%", "11%", "40px"];
 const norm = (s?: string) => (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 function readTab(v: string | null): TabId {
@@ -460,13 +462,47 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
     nav(`/employees/${id}`);
   };
   const byName = sort === "name-asc" || sort === "name-desc";
-  const th = "whitespace-nowrap border-b border-[var(--ds-line)] px-3 pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)]";
+  const th = "whitespace-nowrap border-b border-[var(--ds-line)] px-2.5 pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)]";
+  // Columns fit what the rows hold; on a narrow table the department moves
+  // under the job title and the least needed columns make way (LISTS-X27).
+  const box = useTableBox();
+  const layout = useMemo(() => {
+    const { measure, done } = makeMeasure(box.width > 0 ? box.host : null);
+    try {
+      return employeeTableLayout({
+        width: box.width,
+        rows: rows.map((r) => ({
+          name: displayName(r.employee),
+          email: r.employee.email,
+          job: r.employee.jobTitle,
+          department: r.employee.department,
+          start: startDateLabel(r.employee.startDate),
+        })),
+        measure,
+      });
+    } finally {
+      done();
+    }
+  }, [box.width, box.host, box.fonts, rows]);
+  const show = (c: EmployeeColumn) => layout.columns.includes(c);
+  const HEADS: [EmployeeColumn, string][] = [
+    ["job", "Job title"],
+    ["department", "Department"],
+    ["start", "Start date"],
+    ["matters", "Open matters"],
+    ["letters", "Letters"],
+    ["status", "Status"],
+  ];
   return (
-    <div className="min-w-0 animate-in fade-in-0 duration-200">
-      <table aria-label="Employees" className="hidden w-full table-fixed border-separate border-spacing-0 lg:table">
+    <div ref={box.ref} className="min-w-0 animate-in fade-in-0 duration-200">
+      <table
+        aria-label="Employees"
+        data-layout={layout.departmentInJob ? "department-in-job" : undefined}
+        className="hidden w-full table-fixed border-separate border-spacing-0 lg:table"
+      >
         <colgroup>
-          {COLS.map((w, i) => (
-            <col key={i} style={{ width: w }} />
+          {layout.columns.map((c) => (
+            <col key={c} style={layout.widths[c] != null ? { width: `${layout.widths[c]}px` } : undefined} />
           ))}
         </colgroup>
         <thead>
@@ -491,8 +527,8 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
                 <span className="sr-only">{byName ? (sort === "name-asc" ? ", A to Z. Sort Z to A" : ", Z to A. Sort A to Z") : ". Sort by name"}</span>
               </button>
             </th>
-            {["Job title", "Department", "Start date", "Open matters", "Letters", "Status"].map((h) => (
-              <th key={h} scope="col" className={th}>
+            {HEADS.filter(([c]) => show(c)).map(([c, h]) => (
+              <th key={c} scope="col" className={th}>
                 {h}
               </th>
             ))}
@@ -506,12 +542,12 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
             const e = r.employee;
             const on = selection.selected.has(e.id);
             const td = cn(
-              "whitespace-nowrap border-b border-[var(--ds-line-2)] px-3 py-[11px] align-middle text-[13.5px] text-[var(--ds-body)] transition-colors duration-[120ms]",
+              "whitespace-nowrap border-b border-[var(--ds-line-2)] px-2.5 py-[11px] align-middle text-[13.5px] text-[var(--ds-body)] transition-colors duration-[120ms]",
               on ? "bg-[var(--ds-surface-2)]" : "group-hover/row:bg-[var(--ds-hover)]"
             );
             return (
               <tr key={e.id} data-employee-id={e.id} onClick={(ev) => open(ev, e.id)} className="group/row cursor-pointer">
-                <td className={td}>
+                <td className={cn(td, "pl-3")}>
                   <TickBox checked={on} onChange={() => selection.toggle(e.id)} label={`Select ${e.legalName}`} />
                 </td>
                 <td className={td}>
@@ -524,25 +560,48 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
                       >
                         {displayName(e)}
                       </Link>
-                      {e.email && <div className="truncate text-[12.5px] leading-[1.3] text-[var(--ds-muted)]">{e.email}</div>}
+                      {e.email && (
+                        <div className="truncate text-[12.5px] leading-[1.3] text-[var(--ds-muted)]" title={e.email}>
+                          {e.email}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </td>
                 <td className={td}>
-                  <Cell value={e.jobTitle} />
+                  {layout.departmentInJob ? (
+                    <div className="min-w-0">
+                      <Cell value={e.jobTitle} />
+                      {e.department && (
+                        <span className="block truncate text-[12.5px] leading-[1.3] text-[var(--ds-muted)]" title={e.department}>
+                          {e.department}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <Cell value={e.jobTitle} />
+                  )}
                 </td>
-                <td className={td}>
-                  <Cell value={e.department} />
-                </td>
-                <td className={td}>
-                  <Cell value={startDateLabel(e.startDate)} />
-                </td>
-                <td className={td}>
-                  <Count n={r.openMatters.length} icon={Folder} label="open matters" />
-                </td>
-                <td className={td}>
-                  <Count n={r.letters.length} icon={FileText} label="letters" />
-                </td>
+                {show("department") && (
+                  <td className={td}>
+                    <Cell value={e.department} />
+                  </td>
+                )}
+                {show("start") && (
+                  <td className={td}>
+                    <Cell value={startDateLabel(e.startDate)} />
+                  </td>
+                )}
+                {show("matters") && (
+                  <td className={td}>
+                    <Count n={r.openMatters.length} icon={Folder} label="open matters" />
+                  </td>
+                )}
+                {show("letters") && (
+                  <td className={td}>
+                    <Count n={r.letters.length} icon={FileText} label="letters" />
+                  </td>
+                )}
                 <td className={td}>
                   <EmployeeStatusPill status={e.status} />
                 </td>
@@ -590,7 +649,13 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
 }
 
 function Cell({ value }: { value?: string }) {
-  return value ? <span className="block truncate">{value}</span> : <span className="text-[var(--ds-muted)]">-</span>;
+  return value ? (
+    <span className="block truncate" title={value}>
+      {value}
+    </span>
+  ) : (
+    <span className="text-[var(--ds-muted)]">-</span>
+  );
 }
 
 function Count({ n, icon: Icon, label, showLabel }: { n: number; icon: typeof Folder; label: string; showLabel?: boolean }) {
