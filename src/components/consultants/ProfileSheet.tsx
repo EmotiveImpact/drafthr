@@ -126,8 +126,14 @@ function Body({ c, dueMs }: { c: Consultant; dueMs: number | null }) {
           </Section>
         )}
 
+        {/* Profiles hold a rating and a count, not review text, so this says
+         * what the count is rather than "no reviews" beside "212 reviews". */}
         <Section title="Recent reviews">
-          <p className="m-0 text-[13px] text-[var(--ds-muted)]">No written reviews yet.</p>
+          <p className="m-0 text-[13px] text-[var(--ds-muted)]">
+            {c.reviews > 0
+              ? `Rated ${c.rating.toFixed(1)} out of 5 across ${c.reviews} review${c.reviews === 1 ? "" : "s"}. Written comments are not shown yet.`
+              : "No reviews yet."}
+          </p>
         </Section>
 
         <Section title="Price">

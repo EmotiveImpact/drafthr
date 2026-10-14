@@ -16,7 +16,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { canApprove } from "@/lib/permissions";
 import { daysUntilDateOnly, formatDateOnly } from "@/lib/date-only";
-import { getJourney, type JourneyInfo, type JourneyPillTone } from "@/lib/journey/stage";
+import { getJourney, type JourneyInfo, type JourneyPillTone, type JourneyStage } from "@/lib/journey/stage";
 import { latestReviewIn, useReviewStore, firstName, currentRound, type ReviewRequest } from "@/lib/journey/reviews";
 import { allCalendarEvents, type CalendarEvent } from "./calendarEvents";
 import { metaFor } from "./letterArt";
@@ -149,6 +149,14 @@ export type NeedItem = {
 
 const DAY = 86400000;
 
+/** The pill for a letter row: the journey stage it is at. */
+const STAGE_PILL: Partial<Record<JourneyStage, string>> = {
+  draft: "Draft",
+  review: "Review",
+  approve: "Approval",
+  send: "Send",
+};
+
 export function needsYouItems({
   journeys,
   tasks,
@@ -208,11 +216,12 @@ export function needsYouItems({
       });
     } else if (j.stage === "draft") {
       // A draft with a required check failing or a suggested edit to decide.
+      // Its pill names the stage it is at, as on the Letters page.
       const edits = j.counts.pendingSuggestions;
       out.push({
         id: `draft:${d.id}`,
         kind: "draft",
-        pill: { label: "Review", tone: "amber" },
+        pill: { label: "Draft", tone: "amber" },
         title,
         meta: fails > 0 ? issues : `${edits} suggested ${edits === 1 ? "edit" : "edits"} to decide`,
         href: `/editor/${d.id}`,
@@ -246,7 +255,7 @@ export function needsYouItems({
       out.push({
         id: `letter:${d.id}`,
         kind: "draft",
-        pill: { label: "Review", tone: "amber" },
+        pill: { label: STAGE_PILL[j.stage] ?? "Letter", tone: "amber" },
         title,
         meta: j.whereLabel,
         href: `/editor/${d.id}`,

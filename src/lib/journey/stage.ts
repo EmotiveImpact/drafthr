@@ -698,7 +698,9 @@ export function getJourney(
     tone: "yours",
     statusLabel: "Ready for review",
     statusTone: "blue",
-    whereLabel: "Review · ready to send",
+    // Mirrors "Approve · ready to send for approval": it is ready to go to a
+    // reviewer, not ready to send to the recipient.
+    whereLabel: "Review · ready to send for review",
     whatNow: {
       lead: "Ready for a second look.",
       detail: `${allPass ? `All ${counts.checksTotal} checks pass.` : "No required check is failing."} ${

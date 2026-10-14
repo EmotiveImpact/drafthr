@@ -185,6 +185,7 @@ describe("getJourney: review", () => {
     expect(j.tone).toBe("yours");
     expect(j.statusLabel).toBe("Ready for review");
     expect(j.statusTone).toBe("blue");
+    expect(j.whereLabel).toBe("Review · ready to send for review");
     expect(j.whatNow.detail).toContain("All 3 checks pass.");
     expect(j.primaryAction).toMatchObject({ id: "send-for-review" });
     expect(j.primaryAction?.disabled).toBeUndefined();

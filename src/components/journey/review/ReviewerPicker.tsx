@@ -578,12 +578,12 @@ export function ReviewerPicker({
 
 /** "£180 plus VAT, £216 in total." The same totals the booking sheet shows
  *  and checkout charges (market.ts bookingTotals); while DraftHR adds no
- *  VAT, the line says so instead of inventing a VAT amount. */
+ *  VAT, the line is one clear total ("£180 in total."). */
 function priceLine(e: Expert): string {
   const t = bookingTotals(e.price);
   return VAT_RATE_CHARGED > 0
     ? `${money(t.fee, e.symbol)} plus VAT, ${money(t.total, e.symbol)} in total.`
-    : `${money(t.total, e.symbol)} in total, no VAT added.`;
+    : `${money(t.total, e.symbol)} in total.`;
 }
 
 function validEmail(v: string): boolean {

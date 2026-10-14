@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
  *
  * Only the expert's standard rate exists (profiles have one price and one
  * turnaround), so only Standard shows. No VAT is added at checkout, so the
- * total is the fee.
+ * total is the fee and the summary shows no VAT row.
  */
 export function BookingSheet({
   consultant,
@@ -290,10 +290,12 @@ export function BookingSheet({
               <span>{appeal ? "Expert fee, standard" : "Review fee, standard"}</span>
               <b className="ds-mono font-medium text-[var(--ds-ink)]">{money(totals.fee, symbol)}</b>
             </div>
-            <div className="flex justify-between text-[13.5px] leading-5 text-[var(--ds-muted)]">
-              <span>{VAT_RATE_CHARGED > 0 ? `VAT at ${Math.round(VAT_RATE_CHARGED * 100)}%` : "VAT"}</span>
-              <b className="font-medium text-[var(--ds-ink)]">{VAT_RATE_CHARGED > 0 ? money(totals.vat, symbol) : "Not added"}</b>
-            </div>
+            {VAT_RATE_CHARGED > 0 && (
+              <div className="flex justify-between text-[13.5px] leading-5 text-[var(--ds-muted)]">
+                <span>VAT at {Math.round(VAT_RATE_CHARGED * 100)}%</span>
+                <b className="font-medium text-[var(--ds-ink)]">{money(totals.vat, symbol)}</b>
+              </div>
+            )}
             <div className="mt-[7px] flex items-baseline justify-between border-t border-[var(--ds-line)] pt-[7px] text-[13.5px] font-medium leading-5 text-[var(--ds-ink)]">
               <span>Total</span>
               <b className="ds-mono text-[15px] font-semibold">{money(totals.total, symbol)}</b>

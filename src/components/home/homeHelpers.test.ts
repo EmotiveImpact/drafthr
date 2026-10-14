@@ -221,7 +221,7 @@ describe("needs you agrees with the Letters page", () => {
     const fix = items.find((i) => i.id === "draft:fix")!;
     expect(fix.title).toMatch(/ for Jordan Hale$/);
     expect(fix.meta).toBe("1 compliance issue to fix before sending");
-    expect(fix.pill.tone).toBe("amber");
+    expect(fix.pill).toEqual({ label: "Draft", tone: "amber" });
     const send = items.find((i) => i.id === "send:send")!;
     expect(send.meta).toBe("Approved by Ruth Adeyemi, ready to send");
   });
