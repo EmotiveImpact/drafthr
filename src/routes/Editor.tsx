@@ -9,7 +9,7 @@ import { useProfileStore } from "@/lib/profile";
 import { meIdentity } from "@/lib/comments/identity";
 import { generateAllSections, regenerateSectionAsPending } from "@/lib/llm/draft";
 import type { Section } from "@/lib/letters/types";
-import { categoryOf, getLetterMeta } from "@/lib/letters/catalog";
+import { getLetterMeta } from "@/lib/letters/catalog";
 import { canSubmitForReview, canEditDraft } from "@/lib/permissions";
 import { todayDateOnly } from "@/lib/date-only";
 import { useIsLargeViewport } from "@/lib/use-large-viewport";
@@ -71,8 +71,8 @@ import { ChecksDialog } from "@/components/editor/LetterHealthCard";
 import { PhoneBottomBar, PhoneDisclaimer, PhoneFlagHint, PhoneStrip, PhoneTopBar, usePhoneFlag } from "@/components/editor/PhoneChrome";
 import { useLetterWorkspace, type WorkspaceHandlers } from "@/components/editor/workspace-store";
 import { planFix } from "@/components/editor/health-fix";
-import { HEAVY_EVIDENCE_MIN, letterEvidenceTier } from "@/components/editor/evidence-tier";
-import { openAnchoredComments, recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
+import { letterEvidenceTier } from "@/components/editor/evidence-tier";
+import { blockWithText, openAnchoredComments, recordDecision, suggestedEdits } from "@/components/editor/suggestion-groups";
 import { draftErrorCopy } from "@/components/editor/draft-error";
 import { ConfirmDialog } from "@/components/letters/dialogs";
 import {
@@ -94,8 +94,7 @@ import "@/components/editor/letter-workspace.css";
  * Progress / Chat tabs, "evidence" shows the pinned evidence rail, null hides
  * the panel. It is stored under `drafthr.pinnedDock:{draftId}`, with "none"
  * recording a deliberately closed panel. With no stored value the panel opens
- * on its tabs; heavy-tier drafts open on evidence (the same auto-pin as
- * before).
+ * on its tabs.
  * ------------------------------------------------------------------------ */
 const DOCK_KEY = (draftId: string) => `drafthr.pinnedDock:${draftId}`;
 
@@ -104,24 +103,20 @@ const PAGE_W = 640;
 const MARGIN_GAP = 20;
 const MARGIN_W = 256;
 const CANVAS_PAD_L = 48;
+/** The page's zoom when 100% leaves no room for the margin (a toolbar step). */
+const AUTO_ZOOM = 90;
 
 /**
- * Where the side panel opens on a first visit. A heavy-evidence letter that
- * is built from evidence (a grievance, an appeal, a constructive dismissal
- * or tribunal letter) still being drafted with too little evidence (fewer
- * than the 2 items the review handoff asks for) opens with the evidence
- * pinned, so it gets gathered while drafting. Everything else, including
- * warnings and dismissals (mock f1), opens on the Edits / Progress / Chat
- * tabs. Pin or unpin is then remembered per letter.
+ * Where the side panel opens on a first visit: always the Edits / Progress
+ * / Chat tabs (mocks f1 to f8), so the tracker, the stage's main action and
+ * Ask DraftHR are there on every letter and for every mode. An
+ * evidence-led letter short of evidence says so in the Draft step ("0 of 2
+ * evidence items linked", with Add) instead of opening on the evidence and
+ * hiding the journey (LETTER-X3, X45). Pinning evidence is the person's
+ * choice and is remembered per letter.
  */
-const letterTier = letterEvidenceTier;
-
-function defaultDock(draft: import("@/lib/letters/types").Draft | undefined): "evidence" | "ai" {
-  if (!draft) return "ai";
-  const tier = letterTier(draft);
-  const drafting = (draft.reviewStatus ?? "draft") === "draft" && !(draft.exports ?? []).some((e) => e.format === "marked-sent");
-  const evidenceLed = ["dispute", "tribunal_legal", "departure"].includes(categoryOf(draft.letterType) ?? "");
-  return tier === "heavy" && evidenceLed && drafting && (draft.evidence?.length ?? 0) < HEAVY_EVIDENCE_MIN ? "evidence" : "ai";
+function defaultDock(): "evidence" | "ai" {
+  return "ai";
 }
 
 function useIsPhone(): boolean {
@@ -204,10 +199,11 @@ export function Editor() {
   const [checksOpen, setChecksOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [confirmDiscardTemplate, setConfirmDiscardTemplate] = useState(false);
-  const [zoom, setZoom] = useState(100);
+  // The zoom the person picked; until they pick one it follows the room.
+  const [zoomChoice, setZoomChoice] = useState<number | null>(null);
   const [tickStep, setTickStep] = useState<string | null>(null);
   const [pinnedDock, setPinnedDock] = useState<"evidence" | "ai" | null>(() => {
-    const fallback = defaultDock(draft);
+    const fallback = defaultDock();
     if (typeof window === "undefined") return fallback;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draft?.id ?? draftId ?? ""));
@@ -280,7 +276,7 @@ export function Editor() {
   const shownBack = useRef<string | null>(null);
   useEffect(() => {
     if (!draftId || typeof window === "undefined") return;
-    const fallback = defaultDock(draft);
+    const fallback = defaultDock();
     let next: "evidence" | "ai" | null = fallback;
     try {
       const raw = window.localStorage.getItem(DOCK_KEY(draftId));
@@ -451,8 +447,13 @@ export function Editor() {
   // does not (zoomed in, or a narrow window), the page centres in the
   // canvas, never wider than the canvas, and the cards are in the Edits tab
   // (LETTER-33): nothing is pushed under the side panel or cut off.
-  const pageW = (PAGE_W * zoom) / 100;
   const fitsAt = (z: number) => !isPhone && canvasW >= CANVAS_PAD_L + (PAGE_W * z) / 100 + MARGIN_GAP + MARGIN_W + 16;
+  // On a laptop (1366 wide) the page at 100% leaves no room for the margin
+  // column, so the margin cards beside their paragraphs would be lost
+  // (LETTER-X1): until the person picks a zoom, the page steps down to 90%
+  // when that makes room. Narrower than that, the cards are in Edits.
+  const zoom = zoomChoice ?? (!fitsAt(100) && fitsAt(AUTO_ZOOM) ? AUTO_ZOOM : 100);
+  const pageW = (PAGE_W * zoom) / 100;
   const marginFits = fitsAt(zoom);
 
   // Approval lands while the sender is looking: the approver's tick, a
@@ -925,7 +926,7 @@ export function Editor() {
   /** Send for review: the evidence check first, then the reviewer picker. */
   const sendForReview = (from: "bar" | "panel" = "bar") => {
     handoffFrom.current = from;
-    const tier = letterTier(draft);
+    const tier = letterEvidenceTier(draft);
     const reason = evaluateEvidenceHandoff(draft, tier);
     if (reason) {
       // Esc or Cancel on the check puts focus back on the button pressed.
@@ -1028,10 +1029,21 @@ export function Editor() {
   };
 
   const onFocusComment = (commentId: string) => {
-    const markEl = document.querySelector<HTMLElement>(`mark[data-comment-id="${commentId}"]`);
-    if (!markEl) return;
+    // The comment's highlight, else (a reviewer's comment that came with
+    // only the words it is about) the paragraph holding those words, else
+    // its section (LETTER-X44).
+    let el = document.querySelector<HTMLElement>(`mark[data-comment-id="${CSS.escape(commentId)}"]`);
+    if (!el) {
+      const c = draft.comments?.find((x) => x.id === commentId);
+      const sectionEl = c?.sectionId
+        ? paperRef.current?.querySelector<HTMLElement>(`[data-section-id="${CSS.escape(c.sectionId)}"]`) ?? null
+        : null;
+      el = (sectionEl && c?.quote ? blockWithText(sectionEl, c.quote) : null) ?? sectionEl;
+    }
+    if (!el) return;
+    const anchorEl = el;
     setFloatingComment({
-      anchor: { getRect: () => markEl.getBoundingClientRect(), containerEl: markEl },
+      anchor: { getRect: () => anchorEl.getBoundingClientRect(), containerEl: anchorEl },
       mode: { kind: "existing", commentId },
     });
   };
@@ -1192,7 +1204,7 @@ export function Editor() {
       // Zooming in past the room for the margin: its cards move to the
       // Edits tab, so open it when there is something there to decide.
       const leaving = fitsAt(zoom) && !fitsAt(z);
-      setZoom(z);
+      setZoomChoice(z);
       if (leaving && pendingEdits + reviewerOpenComments > 0 && !viewerIsReviewer) {
         setEditsFilter("edits");
         openPanelTab("edits");
@@ -1554,7 +1566,9 @@ export function Editor() {
                         setActivityTab("versions");
                         setActivityOpen(true);
                       }}
-                      onReplyComment={onFocusComment}
+                      // A teammate whose review was recalled or sent
+                      // back has nothing to reply to here (LETTER-X44).
+                      onReplyComment={viewerIsReviewer && reviewerOf?.status !== "out" ? undefined : onFocusComment}
                       onResolveComment={(commentId) => useDraftStore.getState().resolveComment(draft.id, commentId, true)}
                       onJumpToSection={jumpToSection}
                       left={pageW + MARGIN_GAP}

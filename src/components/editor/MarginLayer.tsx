@@ -1,10 +1,10 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { Comment, Draft } from "@/lib/letters/types";
 import type { JourneyInfo } from "@/lib/journey/stage";
 import { currentRound, type ReviewRequest } from "@/lib/journey/reviews";
 import { ActivityCard, MarginCard, type ActivityEvent } from "@/components/journey/ui";
 import { cn } from "@/lib/utils";
-import { acceptWithSettle, decideEdit, openAnchoredComments, prefersReducedMotion, suggestedEdits, suggestionCategory, type SuggestedEdit } from "./suggestion-groups";
+import { acceptWithSettle, blockWithText, decideEdit, openAnchoredComments, prefersReducedMotion, suggestedEdits, suggestionCategory, type SuggestedEdit } from "./suggestion-groups";
 import { useLetterWorkspace } from "./workspace-store";
 import type { MyPoint } from "@/components/journey/review/reviewer";
 import type { Me } from "@/components/journey/review/actions";
@@ -38,18 +38,6 @@ function offsetWithin(el: HTMLElement, ancestor: HTMLElement): number | null {
   return el.getBoundingClientRect().top - ancestor.getBoundingClientRect().top;
 }
 
-/** The block (paragraph, list item, heading) holding the first occurrence
- *  of `quote` inside `root`, for a comment saved without a highlight. */
-function blockWithText(root: HTMLElement, quote: string): HTMLElement | null {
-  const needle = quote.replace(/\s+/g, " ").trim().slice(0, 60);
-  if (!needle) return null;
-  const blocks = root.querySelectorAll<HTMLElement>("p, li, h1, h2, h3, blockquote");
-  for (const b of blocks) {
-    if ((b.textContent ?? "").replace(/\s+/g, " ").includes(needle)) return b;
-  }
-  return null;
-}
-
 export function MarginLayer({
   draft,
   journey,
@@ -73,7 +61,9 @@ export function MarginLayer({
   canResolve: boolean;
   activity: ActivityEvent[] | null;
   onAllVersions: () => void;
-  onReplyComment: (commentId: string) => void;
+  /** Reply on a comment card; left out when the person can no longer reply
+   *  (a teammate whose review was recalled or sent back). */
+  onReplyComment?: (commentId: string) => void;
   onResolveComment: (commentId: string) => void;
   onJumpToSection: (sectionId: string) => void;
   /** Left edge of the margin column in the wrapper (page width + 20). */
@@ -125,6 +115,15 @@ export function MarginLayer({
   }, [activity, edits, reviewComments, otherComments, reviewer]);
 
   const [leaving, setLeaving] = useState<Record<string, boolean>>({});
+  // A card that has gone forgets that it was leaving, so nothing that comes
+  // later under the same key starts out hidden (REVIEW-X28).
+  useEffect(() => {
+    setLeaving((l) => {
+      const live = new Set(items.map((it) => it.key));
+      const kept = Object.keys(l).filter((k) => live.has(k));
+      return kept.length === Object.keys(l).length ? l : Object.fromEntries(kept.map((k) => [k, true]));
+    });
+  }, [items]);
   const [tops, setTops] = useState<Record<string, number>>({});
   const cardRefs = useRef(new Map<string, HTMLElement>());
   const [tick, setTick] = useState(0);
@@ -265,7 +264,7 @@ export function MarginLayer({
                 meta="Comment"
                 actions={
                   <>
-                    <QuietAction onClick={() => onReplyComment(c.id)}>Reply</QuietAction>
+                    {onReplyComment && <QuietAction onClick={() => onReplyComment(c.id)}>Reply</QuietAction>}
                     {canResolve && (
                       <QuietAction onClick={() => leave(it.key, () => onResolveComment(c.id))}>Resolve</QuietAction>
                     )}

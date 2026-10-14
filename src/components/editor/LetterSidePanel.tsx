@@ -33,6 +33,15 @@ function chipsFor(stage: JourneyStage, reviewBack: boolean, draft: Draft): { lab
             { label: "Summarise for counsel", prompt: COUNSEL },
           ]
         : [{ label: "Summarise for counsel", prompt: COUNSEL }];
+    case "approve":
+      return [
+        {
+          label: "Summarise for the approver",
+          prompt:
+            "Summarise this letter for the person approving it: what it decides, what it relies on, and anything they should check before they approve. Do not change the letter.",
+        },
+        { label: "Summarise for counsel", prompt: COUNSEL },
+      ];
     case "send":
       return [
         { label: "Draft a covering email", prompt: "Draft a short, neutral covering email to send with this letter. Do not repeat the letter's content; say it is attached and how to ask questions." },
@@ -148,6 +157,7 @@ export function LetterSidePanel({
           onSent={() => onTabChange("chat")}
           onOpenEvidence={onOpenEvidence}
           chips={chipsFor(stage, reviewBack, draft)}
+          locked={progress.journey.locked}
         />
       </div>
     </div>

@@ -9,6 +9,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
@@ -172,6 +175,7 @@ export function AIPanel({
   onSent,
   onOpenEvidence,
   chips,
+  locked,
 }: {
   draft: Draft;
   activeSectionId: string | null;
@@ -204,6 +208,10 @@ export function AIPanel({
   onOpenEvidence?: () => void;
   /** Prompt chips above the box, fitting the letter's stage. A click sends. */
   chips?: { label: string; prompt: string }[];
+  /** The letter is locked at this stage (with the approver, approved,
+   *  sent): DraftHR answers and drafts what comes next, but offers no edits
+   *  to the letter (LETTER-X48). */
+  locked?: boolean;
 }) {
   const profile = useProfileStore((s) => s.profile);
 
@@ -752,12 +760,24 @@ export function AIPanel({
               // Empty state: what DraftHR can do, one starter per tool, then
               // the user's recent prompts.
               <div className="pt-2">
-                <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">What should DraftHR change?</p>
-                <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
-                  Pick a starter or describe your own. DraftHR shows each change for you to accept.
-                </p>
+                {locked ? (
+                  <>
+                    <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">Ask DraftHR about this letter</p>
+                    <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                      The letter is locked now, so DraftHR won't change it. It can explain it, summarise it or draft
+                      what comes next.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="m-0 text-[14px] font-medium text-[var(--ds-ink)]">What should DraftHR change?</p>
+                    <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-[var(--ds-muted)]">
+                      Pick a starter or describe your own. DraftHR shows each change for you to accept.
+                    </p>
+                  </>
+                )}
                 <div className="mt-4 flex flex-col gap-1">
-                  {startersFor(draft).map((p) => (
+                  {(locked ? [] : startersFor(draft)).map((p) => (
                     <button
                       key={p.label}
                       type="button"
@@ -940,7 +960,7 @@ export function AIPanel({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="top" className="w-[260px] duration-[160ms] data-[state=closed]:duration-[100ms]">
                   <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Saved prompts</DropdownMenuLabel>
-                  {quickPromptsFor(draft).map((q) => (
+                  {(locked ? chips ?? [] : quickPromptsFor(draft)).map((q) => (
                     <DropdownMenuItem
                       key={q.label}
                       onClick={() => {
@@ -970,37 +990,6 @@ export function AIPanel({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    disabled={busy}
-                    className="inline-flex h-7 max-w-[120px] items-center gap-1 rounded-[7px] px-1.5 text-[12.5px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
-                    aria-label={`Model: ${modelLabel(model)}`}
-                    title={modelChoice ? "Model for this chat (your default is in Settings)" : "Model (your default, set in Settings)"}
-                    data-testid="composer-model"
-                  >
-                    <span className="truncate">{modelLabel(model, true)}</span>
-                    <ChevronDown className="size-3 shrink-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" side="top" className="w-[260px] duration-[160ms] data-[state=closed]:duration-[100ms]">
-                  <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Model for this chat</DropdownMenuLabel>
-                  {MODEL_OPTIONS.map((m) => (
-                    <DropdownMenuItem key={m.id} onClick={() => setModelChoice(m.id === defaultModel ? null : m.id)}>
-                      <span className="flex-1 truncate">
-                        {m.label}
-                        {m.id === defaultModel && <span className="text-[var(--ds-muted)]"> · default</span>}
-                      </span>
-                      {model === m.id && <Check className="size-3.5" />}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => nav("/settings")}>
-                    <span className="text-[var(--ds-muted)]">Change the default in Settings</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
                     className="grid size-7 place-items-center rounded-[7px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                     aria-label="Options"
                     title="Options"
@@ -1018,6 +1007,36 @@ export function AIPanel({
                     <span className="flex-1">Side by side</span>
                     {diffMode === "card" && <Check className="size-3.5" />}
                   </DropdownMenuItem>
+                  {/* The model sits here, not in the box (mocks f1, f8):
+                   * the default is in Settings, this chat can use another. */}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      disabled={busy}
+                      aria-label={`Model: ${modelLabel(model)}`}
+                      title={modelChoice ? "Model for this chat (your default is in Settings)" : "Model (your default, set in Settings)"}
+                      data-testid="composer-model"
+                    >
+                      <span className="flex-1">Model</span>
+                      <span className="ml-3 truncate text-[12px] text-[var(--ds-muted)]">{modelLabel(model, true)}</span>
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="w-[260px]">
+                      <DropdownMenuLabel className="text-[11.5px] font-normal text-[var(--ds-muted)]">Model for this chat</DropdownMenuLabel>
+                      {MODEL_OPTIONS.map((m) => (
+                        <DropdownMenuItem key={m.id} onClick={() => setModelChoice(m.id === defaultModel ? null : m.id)}>
+                          <span className="flex-1 truncate">
+                            {m.label}
+                            {m.id === defaultModel && <span className="text-[var(--ds-muted)]"> · default</span>}
+                          </span>
+                          {model === m.id && <Check className="size-3.5" />}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => nav("/settings")}>
+                        <span className="text-[var(--ds-muted)]">Change the default in Settings</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                   {messages.length > 0 && (
                     <>
                       <DropdownMenuSeparator />

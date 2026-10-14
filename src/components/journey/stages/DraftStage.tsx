@@ -6,7 +6,7 @@ import { runHealthChecks } from "@/lib/finalize/healthChecks";
 import { buildExpectedEvidenceStatus } from "@/lib/evidence";
 import { CheckList, CheckRow } from "@/components/journey/ui";
 import { useWorkspaceFor } from "@/components/editor/workspace-store";
-import { HEAVY_EVIDENCE_MIN, letterEvidenceTier } from "@/components/editor/evidence-tier";
+import { HEAVY_EVIDENCE_MIN, evidenceUsage, letterEvidenceTier } from "@/components/editor/evidence-tier";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -43,8 +43,12 @@ export function DraftStage({ draftId }: { draftId: string }) {
     const sectionNumbers = draft.sections
       .map((s, i) => (linked.has(s.id) ? String(i + 1) : null))
       .filter((x): x is string => Boolean(x));
-    const heavyShort = letterEvidenceTier(draft) === "heavy" ? Math.max(0, HEAVY_EVIDENCE_MIN - (draft.evidence?.length ?? 0)) : 0;
-    return { firstFail, requiredMissing, sectionNumbers, heavyShort };
+    const tier = letterEvidenceTier(draft);
+    const heavyShort = tier === "heavy" ? Math.max(0, HEAVY_EVIDENCE_MIN - (draft.evidence?.length ?? 0)) : 0;
+    // Evidence the letter does not use yet: the same count the evidence
+    // check before review gives (LETTER-X46).
+    const unused = tier === "light" ? 0 : evidenceUsage(draft).unused.length;
+    return { firstFail, requiredMissing, sectionNumbers, heavyShort, unused };
   }, [draft]);
 
   if (!journey || !draft || !facts) return null;
@@ -153,6 +157,10 @@ export function DraftStage({ draftId }: { draftId: string }) {
             action={h?.openEvidence ? { label: canEdit ? "Add" : "Open", onClick: h.openEvidence } : undefined}
           >
             {c.evidence} of {HEAVY_EVIDENCE_MIN} evidence items linked
+          </CheckRow>
+        ) : facts.unused > 0 ? (
+          <CheckRow state="need" action={h?.openEvidence ? { label: "Open", onClick: h.openEvidence } : undefined}>
+            {c.evidence - facts.unused} of {plural(c.evidence, "evidence item")} used in the letter
           </CheckRow>
         ) : c.evidence > 0 ? (
           <CheckRow

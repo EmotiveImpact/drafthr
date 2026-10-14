@@ -69,7 +69,7 @@ export function ReviewerPicker({
   const draft = useDraftStore((s) => s.drafts[draftId]);
   const me = useMe();
   const navigate = useNavigate();
-  const returnFocus = useReturnFocus(true);
+  const returnFocus = useReturnFocus(true, preset?.from === "panel" ? '[data-testid="review-send-for-review"]' : undefined);
   const trustedOn = getFlag("trustedReviewLinks");
   const employeeLetter = draft?.mode === "employee";
   const suggestion = useMemo(() => (draft ? expertSuggestion(draft) : null), [draft]);

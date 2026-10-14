@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DraftTimelineItem } from "@/lib/timeline";
-import { readableTimeline } from "./timeline-view";
+import { downloads, readableTimeline } from "./timeline-view";
 
 const item = (p: Partial<DraftTimelineItem> & Pick<DraftTimelineItem, "id" | "kind" | "createdAt" | "title">): DraftTimelineItem => ({
   category: p.kind === "exported" ? "exports" : p.kind === "counsel_review" ? "reviews" : "changes",
@@ -41,5 +41,16 @@ describe("readableTimeline", () => {
     ]);
     expect(rows.map((e) => e.title)).toEqual(["Handed over in person"]);
     expect(rows[0].createdAt).toBe(t);
+  });
+});
+
+describe("downloads", () => {
+  it("does not count Marked as sent as a download (LETTER-X49)", () => {
+    const t = 1_760_000_000_000;
+    const rows = [
+      item({ id: "e1", kind: "exported", createdAt: t, title: "Marked as sent", meta: { exportId: "x1", format: "marked-sent" } }),
+      item({ id: "e2", kind: "exported", createdAt: t - 1000, title: "Downloaded as PDF", meta: { exportId: "x2", format: "pdf" } }),
+    ];
+    expect(downloads(rows)).toBe(1);
   });
 });

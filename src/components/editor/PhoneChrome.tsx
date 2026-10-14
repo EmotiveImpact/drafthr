@@ -43,7 +43,18 @@ export function PhoneTopBar({ bar, matter }: { bar: DocumentBarProps; matter?: M
         {sub && <p className="m-0 mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">{sub}</p>}
       </div>
       {reviewer ? (
-        <PhoneReviewerMode draftId={draft.id} disabled={bar.role === "viewer"} />
+        <>
+          <PhoneReviewerMode draftId={draft.id} disabled={bar.role === "viewer"} />
+          {/* No Share button here: "Share and invite…" in More opens the
+           * People popover under More (LETTER-X44). */}
+          <InvitePopover
+            draft={draft}
+            open={bar.inviteOpen}
+            onOpenChange={bar.onInviteOpenChange}
+            onOpenOnPhone={bar.onOpenOnMobile}
+            anchor={() => document.querySelector("[data-phone-more]")}
+          />
+        </>
       ) : (
         <InvitePopover
           draft={draft}
@@ -61,7 +72,7 @@ export function PhoneTopBar({ bar, matter }: { bar: DocumentBarProps; matter?: M
         {...bar}
         phone
         trigger={
-          <button type="button" aria-label="More" title="More" className={iconBtn}>
+          <button type="button" aria-label="More" title="More" className={iconBtn} data-phone-more>
             <MoreHorizontal className="size-5" />
           </button>
         }

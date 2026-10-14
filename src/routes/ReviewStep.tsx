@@ -14,6 +14,10 @@ import { canEditDraft } from "@/lib/permissions";
 import { finaliseBlocked, submitBlocked, useJourney } from "@/lib/journey/stage";
 import { notifyReviewRequested } from "@/lib/collab-notify";
 import { Button } from "@/components/ui/button";
+import { useLatestReview } from "@/lib/journey/reviews";
+import { isAskerOf, isReviewerOf, useMe } from "@/components/journey/review/actions";
+import { requestFinishReview, requestRecall } from "@/components/journey/review/review-ui";
+import { ReviewDialogsHost } from "@/components/journey/ReviewDialogsHost";
 import "@/components/editor/letter-workspace.css";
 
 type PanelTab = "edits" | "progress";
@@ -38,7 +42,15 @@ export function ReviewStep() {
   const { draftId } = useParams<{ draftId: string }>();
   const nav = useNavigate();
   const draft = useDraftStore((s) => (draftId ? s.drafts[draftId] : undefined));
-  const journey = useJourney(draftId);
+  // The journey as this person sees it (as in the workspace): the named
+  // teammate reviewer gets their own actions, someone else's review is read
+  // only.
+  const review = useLatestReview(draftId);
+  const me = useMe();
+  const open = review && (review.status === "out" || review.status === "back") ? review : null;
+  const viewerIsReviewer = Boolean(open && open.kind === "team" && isReviewerOf(open, me) && !isAskerOf(open, me));
+  const viewerIsAsker = open && !viewerIsReviewer ? isAskerOf(open, me) : undefined;
+  const journey = useJourney(draftId, { viewerIsReviewer, viewerIsAsker });
   const role = useProfileStore((s) => s.profile.workspaceRole);
   const myName = useProfileStore(
     (s) => s.profile.personal.preferredName || s.profile.personal.legalName,
@@ -235,6 +247,40 @@ export function ReviewStep() {
   const finaliseHeld = journey ? finaliseBlocked(journey) : null;
   const finalisePrimary = journey?.stage === "send" || journey?.stage === "sent";
 
+  // While a review is out or back, the footer is the review's own next step
+  // (as in the workspace: Recall, Finish review), never "Submit for
+  // approval": the review is decided and finished first (LETTER-X47).
+  const reviewAction = journey?.stage === "review" ? journey.primaryAction : undefined;
+  const reviewFooter =
+    reviewAction && (reviewAction.id === "finish-review" || reviewAction.id === "recall" || reviewAction.id === "send-back") ? (
+      <>
+        <p className="mb-2 text-[12px] leading-snug text-[var(--ds-muted)]">
+          <b className="font-medium text-[var(--ds-ink)]">{journey!.whatNow.lead}</b>
+          {journey!.whatNow.detail ? ` ${journey!.whatNow.detail}` : null}
+        </p>
+        {reviewAction.id === "send-back" ? (
+          <Button size="sm" className="w-full" onClick={() => nav(`/editor/${draft.id}`)}>
+            Open in the workspace to send it back
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="w-full"
+            variant={reviewAction.id === "recall" ? "outline" : "default"}
+            disabled={reviewAction.disabled}
+            title={reviewAction.reason}
+            data-journey-action={reviewAction.id}
+            onClick={() => (reviewAction.id === "recall" ? requestRecall(draft.id) : requestFinishReview(draft.id))}
+          >
+            {reviewAction.label}
+          </Button>
+        )}
+        {reviewAction.disabled && reviewAction.reason && (
+          <p className="mt-1.5 text-[11.5px] leading-snug text-[var(--ds-muted)]">{reviewAction.reason}</p>
+        )}
+      </>
+    ) : undefined;
+
   return (
     <div className="lw-root flex min-h-0 flex-1 flex-col bg-[var(--ds-canvas)]">
       <SubPageBar
@@ -329,6 +375,7 @@ export function ReviewStep() {
               canResolve={canResolve}
               onOpenReviewDialog={(kind) => setReviewDialogKind(kind)}
               submitBlockedReason={submitHeld}
+              stageFooter={reviewFooter}
               onWithdraw={onWithdraw}
               pendingComment={pendingComment}
               onPendingCommentConsumed={() => setPendingComment(null)}
@@ -385,6 +432,9 @@ export function ReviewStep() {
           </button>
         </div>
       )}
+
+      {/* Recall and Finish review confirm in the review loop's dialogs. */}
+      <ReviewDialogsHost />
 
       {reviewDialogKind && (
         <ReviewDialog

@@ -18,7 +18,7 @@ import {
   type TimelineCategory,
 } from "@/lib/timeline";
 import { cn } from "@/lib/utils";
-import { readableTimeline } from "./timeline-view";
+import { downloads, readableTimeline } from "./timeline-view";
 
 type FilterId = "all" | TimelineCategory;
 
@@ -52,7 +52,7 @@ export function TimelinePanel({ draft }: { draft: Draft }) {
           <span aria-hidden className="text-[var(--ds-subtle)]">·</span>
           <span>{plural(count(events, "comments"), "comment")}</span>
           <span aria-hidden className="text-[var(--ds-subtle)]">·</span>
-          <span>{plural(count(events, "exports"), "download")}</span>
+          <span>{plural(downloads(events), "download")}</span>
         </div>
       </div>
 

@@ -25,6 +25,7 @@ import { priorityDifference } from "@/components/consultants/payments";
 import { pushBookingRespond } from "@/lib/marketplaceSync";
 import { useDraftStore } from "@/lib/store";
 import type { Draft } from "@/lib/letters/types";
+import { evidenceUsage, letterEvidenceTier } from "@/components/editor/evidence-tier";
 import {
   REVIEW_VERDICT_ASKER_LABELS,
   currentRound,
@@ -918,6 +919,10 @@ export function ReadyChecklist({ draft, checksTotal, checksPassing }: { draft: D
   // ("Share evidence, 3 files"); hearing notes are shared separately.
   const { files, hearingNotes } = shareableEvidence(draft.evidence);
   const evidence = files.length;
+  // Evidence the letter does not use yet: the same count the evidence check
+  // before review gives, so the two never disagree (LETTER-X46).
+  const total = draft.evidence?.length ?? 0;
+  const unused = letterEvidenceTier(draft) === "light" ? 0 : evidenceUsage(draft).unused.length;
   return (
     <CheckList label="Ready for review">
       <CheckRow state="ok" note={accepted > 0 ? `${plural(accepted, "edit")} accepted` : undefined}>
@@ -926,7 +931,11 @@ export function ReadyChecklist({ draft, checksTotal, checksPassing }: { draft: D
       <CheckRow state={checksPassing === checksTotal ? "ok" : "need"}>
         {checksPassing === checksTotal ? `All ${checksTotal} checks pass` : `${checksPassing} of ${checksTotal} checks pass`}
       </CheckRow>
-      {evidence > 0 ? (
+      {unused > 0 ? (
+        <CheckRow state="need">
+          {total - unused} of {plural(total, "evidence item")} used in the letter
+        </CheckRow>
+      ) : evidence > 0 ? (
         <CheckRow state="ok" note={hearingNotes.length > 0 ? "and hearing notes" : undefined}>
           {plural(evidence, "evidence file")} linked
         </CheckRow>

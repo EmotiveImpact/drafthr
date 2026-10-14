@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useProfileStore } from "@/lib/profile";
 import { useDefaultApprover } from "@/components/journey/review/people";
+import { useReturnFocus } from "@/components/journey/review/review-ui";
 
 export type ReviewDialogKind = "submit" | "approve" | "request_changes";
 
@@ -56,6 +57,9 @@ export function ReviewDialog({
   const [selected, setSelected] = useState<string>(OTHER);
   const personRef = useRef<HTMLElement | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  // Opened from code (a menu, the panel), the dialog has no trigger to give
+  // focus back to: return it to whatever opened it.
+  const returnFocus = useReturnFocus(open);
 
   useEffect(() => {
     if (!open) {
@@ -117,6 +121,7 @@ export function ReviewDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-[var(--ds-scrim)]" />
         <Dialog.Content
+          onCloseAutoFocus={returnFocus}
           onOpenAutoFocus={(e) => {
             // Start in the first field (the approver on "submit", else the
             // note), not on the close button.

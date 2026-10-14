@@ -148,7 +148,7 @@ export function focusReviewReply(draftId: string): void {
  * the stage), the document bar's main action takes focus instead.
  * Pass the result as the dialog's onCloseAutoFocus.
  */
-export function useReturnFocus(open: boolean): (e: Event) => void {
+export function useReturnFocus(open: boolean, prefer?: string): (e: Event) => void {
   const opener = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
   if (open && !wasOpen.current && typeof document !== "undefined") {
@@ -164,9 +164,14 @@ export function useReturnFocus(open: boolean): (e: Event) => void {
       !!x && x.isConnected && !x.matches(":disabled") && !x.closest("[role=dialog]") && x.getClientRects().length > 0;
     const target = usable(el)
       ? el
-      : Array.from(
-          document.querySelectorAll<HTMLElement>('[data-journey-action], [data-testid="review-send-for-review"], [data-testid="review-finish"]')
-        ).find(usable);
+      : [
+          // Where it was opened from, when the opener itself has gone (the
+          // panel's Send for review behind the evidence check, LETTER-X50).
+          ...(prefer ? Array.from(document.querySelectorAll<HTMLElement>(prefer)) : []),
+          ...Array.from(
+            document.querySelectorAll<HTMLElement>('[data-journey-action], [data-testid="review-send-for-review"], [data-testid="review-finish"]')
+          ),
+        ].find(usable);
     target?.focus({ preventScroll: true });
-  }, []);
+  }, [prefer]);
 }

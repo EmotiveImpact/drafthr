@@ -109,6 +109,14 @@ export function EditsTab({
   const edits = useMemo(() => suggestedEdits(draft), [draft]);
   const fixCategory = useLetterWorkspace((s) => (s.draftId === draft.id ? s.fixCategory : null));
   const [leaving, setLeaving] = useState<Record<string, boolean>>({});
+  // Forget cards that have gone (REVIEW-X28).
+  useEffect(() => {
+    setLeaving((l) => {
+      const live = new Set(edits.map((e) => e.key));
+      const kept = Object.keys(l).filter((k) => live.has(k));
+      return kept.length === Object.keys(l).length ? l : Object.fromEntries(kept.map((k) => [k, true]));
+    });
+  }, [edits]);
   const comments = (draft.comments ?? []).filter(
     (c) => !c.parentId && !c.resolved,
   ).length;

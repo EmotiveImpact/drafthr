@@ -81,3 +81,9 @@ function dayInWords(iso: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
   return formatDateOnly(iso, { day: "numeric", month: "long", year: "numeric" }, "en-GB");
 }
+
+/** How many files were downloaded: the exports, less "Marked as sent",
+ *  which records a send and downloads nothing (LETTER-X49). */
+export function downloads(events: DraftTimelineItem[]): number {
+  return events.filter((e) => e.category === "exports" && e.meta?.format !== "marked-sent").length;
+}

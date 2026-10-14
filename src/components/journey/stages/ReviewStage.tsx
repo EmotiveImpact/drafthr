@@ -158,15 +158,21 @@ function ReadyState({
           className="h-10 w-full text-[13.5px]"
           disabled={!allowed}
           title={!allowed ? VIEWER_REASON : undefined}
-          onClick={() => {
+          onClick={(e) => {
+            const panel = e.currentTarget.closest<HTMLElement>('[data-slot="journey-panel"]');
             // An employee's own letter has no approver: skipping review
             // makes it ready to send (LETTER-X25).
             if (ownLetter) {
-              if (markOwnLetterReady(draft.id)) toast.success("Ready to send");
+              if (markOwnLetterReady(draft.id)) {
+                toast.success("Ready to send");
+                focusNextStep(panel);
+              }
               return;
             }
-            if (approverName) skipReviewTo(draft.id, { name: approverName, userId: approverUserId });
-            else requestApproval(draft.id);
+            if (approverName) {
+              skipReviewTo(draft.id, { name: approverName, userId: approverUserId });
+              focusNextStep(panel);
+            } else requestApproval(draft.id);
           }}
           data-testid="review-skip"
         >
@@ -180,6 +186,22 @@ function ReadyState({
       </div>
     </div>
   );
+}
+
+/**
+ * After a step that moves the letter on from this panel (skip review), the
+ * button pressed is gone: focus the panel's "what to do now" line, which
+ * says where the letter is now, instead of dropping to the page (LETTER-X50).
+ */
+function focusNextStep(panel: HTMLElement | null): void {
+  if (!panel) return;
+  window.requestAnimationFrame(() => {
+    if (!panel.isConnected || document.querySelector('[role="dialog"][data-state="open"]')) return;
+    const line = panel.querySelector<HTMLElement>('[data-slot="what-now"]');
+    if (!line) return;
+    line.tabIndex = -1;
+    line.focus({ preventScroll: true });
+  });
 }
 
 /** The review that ended without finishing: recalled, or the expert declined. */

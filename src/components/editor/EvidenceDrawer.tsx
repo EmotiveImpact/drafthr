@@ -347,7 +347,7 @@ export function EvidenceDrawer({
         Unpin
       </button>
       <span className="text-[11px] text-[var(--ds-muted)]">
-        Evidence pinned · Ask DraftHR is at the bottom right
+        Evidence pinned here. Unpin to bring back Progress and Ask DraftHR.
       </span>
     </div>
   ) : null;

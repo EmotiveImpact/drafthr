@@ -57,7 +57,10 @@ export function suggestedEdits(draft: Draft): SuggestedEdit[] {
         ? [...new Set(tags.map((t) => attr(t, "data-suggestion-id")).filter(Boolean) as string[])]
         : [];
       out.push({
-        key: `sec:${section.id}`,
+        // Keyed by the suggestion too: a new change in the same section
+        // (a held reviewer change placed after DraftHR's was rejected) is a
+        // new card, not the one that just left (REVIEW-X28).
+        key: `sec:${section.id}:${p.id}`,
         kind: "section",
         section,
         ids,
@@ -319,4 +322,16 @@ export function openAnchoredComments(draft: Draft): Comment[] {
   return (draft.comments ?? []).filter(
     (c) => !c.parentId && !c.resolved && Boolean(c.sectionId) && (marked.has(c.id) || Boolean(c.quote?.trim()))
   );
+}
+
+/** The block (paragraph, list item, heading) holding the first occurrence
+ *  of `quote` inside `root`, for a comment saved without a highlight. */
+export function blockWithText(root: HTMLElement, quote: string): HTMLElement | null {
+  const needle = quote.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!needle) return null;
+  const blocks = root.querySelectorAll<HTMLElement>("p, li, h1, h2, h3, blockquote");
+  for (const b of blocks) {
+    if ((b.textContent ?? "").replace(/\s+/g, " ").includes(needle)) return b;
+  }
+  return null;
 }

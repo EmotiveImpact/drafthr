@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Mail, UserPlus, Copy, Check, X, Users as UsersIcon, Smartphone } from "lucide-react";
 import type { CollaboratorRole, Draft } from "@/lib/letters/types";
@@ -27,15 +27,22 @@ export function InvitePopover({
   open: openProp,
   onOpenChange,
   onOpenOnPhone,
+  anchor,
 }: {
   draft: Draft;
-  trigger: React.ReactNode;
+  /** Opens the popover; leave out when it only opens from elsewhere. */
+  trigger?: React.ReactNode;
   defaultOpen?: boolean;
   /** Controlled mode — pass open + onOpenChange to drive externally. */
   open?: boolean;
   onOpenChange?: (next: boolean) => void;
   /** Shows "Open on your phone" under the share link (the mobile share dialog). */
   onOpenOnPhone?: () => void;
+  /** Where the popover sits, when that is not always the trigger: the
+   *  element returned, read each time it is placed. The document bar hides
+   *  its avatars on a narrow bar, so "Share and invite…" in the More menu
+   *  places it under More instead (LETTER-X44). */
+  anchor?: () => Element | null;
 }) {
   const invite = useDraftStore((s) => s.inviteCollaborator);
   const remove = useDraftStore((s) => s.removeCollaborator);
@@ -98,9 +105,16 @@ Sent from DRAFTHR`
     }
   };
 
+  const anchorRef = useRef(anchor);
+  anchorRef.current = anchor;
+  const virtualAnchor = useRef({
+    getBoundingClientRect: () => anchorRef.current?.()?.getBoundingClientRect() ?? new DOMRect(),
+  });
+
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      {trigger && <Popover.Trigger asChild>{trigger}</Popover.Trigger>}
+      {anchor && <Popover.Anchor virtualRef={virtualAnchor} />}
       <Popover.Portal>
         <Popover.Content
           align="end"

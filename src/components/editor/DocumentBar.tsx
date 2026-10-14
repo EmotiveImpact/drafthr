@@ -289,8 +289,17 @@ function TopRow(p: DocumentBarProps) {
   const squeeze = useTitleSqueeze(
     [draft.title, recipientNameFor(draft), journey.statusLabel, p.counselNeeded, p.counselReview?.reviewedBy, p.streaming, reviewStatus].join("|")
   );
+  // The People popover sits under the avatars, or under More when the bar
+  // is too narrow to show them ("Share and invite…" in More, LETTER-X44).
+  const rowRef = useRef<HTMLDivElement>(null);
+  const inviteAnchor = () => {
+    const row = rowRef.current;
+    const avatars = row?.querySelector('[data-invite-trigger]');
+    if (avatars && avatars.getClientRects().length > 0) return avatars;
+    return row?.querySelector('[data-more-trigger]') ?? null;
+  };
   return (
-    <div className="@container flex h-[60px] min-w-0 items-center gap-1 border-b border-[var(--ds-line-2)] pl-3 pr-3.5 @min-[900px]:gap-1.5">
+    <div ref={rowRef} className="@container flex h-[60px] min-w-0 items-center gap-1 border-b border-[var(--ds-line-2)] pl-3 pr-3.5 @min-[900px]:gap-1.5">
       <Link
         to={p.backTo}
         aria-label="Back to letters"
@@ -339,9 +348,11 @@ function TopRow(p: DocumentBarProps) {
         open={p.inviteOpen}
         onOpenChange={p.onInviteOpenChange}
         onOpenOnPhone={p.onOpenOnMobile}
+        anchor={inviteAnchor}
         trigger={
           <button
             type="button"
+            data-invite-trigger
             className="ml-0.5 mr-1 hidden shrink-0 items-center rounded-full pl-1.5 transition-opacity duration-[120ms] hover:opacity-85 focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)] @min-[680px]:inline-flex @min-[900px]:ml-2 @min-[900px]:mr-1.5"
             aria-label="Invite"
             title="Share and invite people"
@@ -612,6 +623,15 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
   const reviewStatus = draft.reviewStatus ?? "draft";
   const ed = p.editor && !p.editor.isDestroyed ? p.editor : null;
   const canFormat = Boolean(ed) && p.viewMode === "edit" && p.canEdit && !p.streaming;
+  // Items that open a dialog or popover run once the menu has closed and
+  // focus is back on More (LETTER-X42, X44). Opened while the menu is still
+  // closing, the new surface lost focus to the menu's return focus: a
+  // dialog kept focus on its own box, and the People popover saw focus
+  // leave it and closed at once. The dialog then returns focus to More.
+  const afterClose = useRef<(() => void) | null>(null);
+  const later = (fn: () => void) => () => {
+    afterClose.current = fn;
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -621,15 +641,26 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
             className="grid size-[34px] shrink-0 place-items-center rounded-[8px] text-[var(--ds-muted)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
             aria-label="More"
             title="More"
+            data-more-trigger
           >
             <MoreHorizontal className="size-[18px]" />
           </button>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn("min-w-[248px]", MENU_MOTION)}>
+      <DropdownMenuContent
+        align="end"
+        className={cn("min-w-[248px]", MENU_MOTION)}
+        onCloseAutoFocus={() => {
+          // Focus goes back to More first (the default), then the item's
+          // dialog or popover opens and takes it.
+          const fn = afterClose.current;
+          afterClose.current = null;
+          if (fn) window.setTimeout(fn, 0);
+        }}
+      >
         {!p.phone && p.activityInMenu && (
           <>
-            <DropdownMenuItem onClick={p.onOpenActivity}>
+            <DropdownMenuItem onClick={later(p.onOpenActivity)}>
               <History className="mr-2 size-4" /> Activity
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -637,13 +668,13 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
         )}
         {p.phone && (
           <>
-            <DropdownMenuItem onClick={p.onOpenEvidence}>
+            <DropdownMenuItem onClick={later(p.onOpenEvidence)}>
               <Paperclip className="mr-2 size-4" /> Evidence
               {(draft.evidence?.length ?? 0) > 0 && (
                 <span className="ds-mono ml-auto text-[11px] text-[var(--ds-muted)]">{draft.evidence?.length}</span>
               )}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={p.onOpenActivity}>
+            <DropdownMenuItem onClick={later(p.onOpenActivity)}>
               <History className="mr-2 size-4" /> Activity
             </DropdownMenuItem>
             <DropdownMenuSub>
@@ -687,7 +718,7 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
                   <AlignJustify className="mr-2 size-4" /> Justify
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={p.onOpenFind}>
+                <DropdownMenuItem onClick={later(p.onOpenFind)}>
                   <Search className="mr-2 size-4" /> Find in letter
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
@@ -703,14 +734,14 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem onClick={p.onEditDetails}>
+        <DropdownMenuItem onClick={later(p.onEditDetails)}>
           <Settings2 className="mr-2 size-4" /> Edit details
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={p.onOpenComments}>
+        <DropdownMenuItem onClick={later(p.onOpenComments)}>
           <MessageSquare className="mr-2 size-4" /> Comments
           {p.commentCount > 0 && <span className="ds-mono ml-auto text-[11px] text-[var(--ds-muted)]">{p.commentCount}</span>}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={p.onOpenTimeline}>
+        <DropdownMenuItem onClick={later(p.onOpenTimeline)}>
           <Clock3 className="mr-2 size-4" /> Timeline
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -723,7 +754,7 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
             <Sparkles className="mr-2 size-4" /> Regenerate all sections
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem disabled={!p.activeSection || !p.canEdit} onClick={p.onRefineSection}>
+        <DropdownMenuItem disabled={!p.activeSection || !p.canEdit} onClick={later(p.onRefineSection)}>
           <Wand2 className="mr-2 size-4" /> Refine current section…
         </DropdownMenuItem>
         {!draft.isTemplateSource && (
@@ -733,7 +764,7 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
               <DropdownMenuItem
                 disabled={journey.locked || p.streaming || Boolean(submitBlocked(journey))}
                 title={submitBlocked(journey) ?? undefined}
-                onClick={() => p.onReviewAction("submit")}
+                onClick={later(() => p.onReviewAction("submit"))}
               >
                 <Send className="mr-2 size-4" /> {reviewStatus === "changes_requested" ? "Re-submit for approval…" : "Submit for approval…"}
               </DropdownMenuItem>
@@ -741,7 +772,7 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
             {reviewStatus === "in_review" && (
               <>
                 {canSubmitForReview(role) && (
-                  <DropdownMenuItem onClick={p.onWithdraw}>
+                  <DropdownMenuItem onClick={later(p.onWithdraw)}>
                     <Undo className="mr-2 size-4" /> Withdraw from review
                   </DropdownMenuItem>
                 )}
@@ -749,17 +780,17 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
                  * the person who sent it to Ruth cannot approve it themselves. */}
                 {canApprove(role) && p.viewerIsApprover && (
                   <>
-                    <DropdownMenuItem onClick={() => p.onReviewAction("approve")}>
+                    <DropdownMenuItem onClick={later(() => p.onReviewAction("approve"))}>
                       <CheckCircle2 className="mr-2 size-4" /> Approve
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => p.onReviewAction("request_changes")}>
+                    <DropdownMenuItem onClick={later(() => p.onReviewAction("request_changes"))}>
                       <MessageSquareWarning className="mr-2 size-4" /> Request changes…
                     </DropdownMenuItem>
                   </>
                 )}
               </>
             )}
-            <DropdownMenuItem onClick={p.onSaveAsTemplate}>
+            <DropdownMenuItem onClick={later(p.onSaveAsTemplate)}>
               <BookmarkPlus className="mr-2 size-4" /> Save as template
             </DropdownMenuItem>
             <DropdownMenuSub>
@@ -786,10 +817,10 @@ export function MoreMenu(p: DocumentBarProps & { phone?: boolean; trigger?: Reac
           </>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={p.onOpenOnMobile} data-testid="open-on-mobile-menu-item">
+        <DropdownMenuItem onClick={later(p.onOpenOnMobile)} data-testid="open-on-mobile-menu-item">
           <Smartphone className="mr-2 size-4" /> Open on mobile…
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => p.onInviteOpenChange(true)}>
+        <DropdownMenuItem onClick={later(() => p.onInviteOpenChange(true))}>
           <Share2 className="mr-2 size-4" /> Share and invite…
         </DropdownMenuItem>
         {!p.phone && (

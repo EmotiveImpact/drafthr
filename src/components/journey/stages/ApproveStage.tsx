@@ -48,6 +48,12 @@ function storedApproverRole(draftId: string): string | null {
  * before it is sent for approval: the review summary and Send for approval.
  * Everything shown is read from the draft's approvals, timeline and review.
  */
+/** "a", "a and b", "a, b and c". */
+function listWords(parts: string[]): string {
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
 export function ApproveStage({ draftId }: { draftId: string }) {
   const draft = useDraftStore((s) => s.drafts[draftId]);
   const drafts = useDraftStore((s) => s.drafts);
@@ -172,13 +178,14 @@ function ReviewSummary({
       </section>
     );
   }
-  const decided = facts.accepted + facts.kept + facts.resolved;
+  // What was decided, in words, leaving out what did not happen
+  // ("You kept your wording on 1 change", not "accepted 0, kept 1").
+  const did: string[] = [];
+  if (facts.accepted > 0) did.push(`accepted ${plural(facts.accepted, "change")}`);
+  if (facts.kept > 0) did.push(`kept your wording on ${plural(facts.kept, "change")}`);
+  if (facts.resolved > 0) did.push(`resolved ${plural(facts.resolved, "comment")}`);
   const parts: string[] = [];
-  if (decided > 0) {
-    parts.push(`You accepted ${plural(facts.accepted, "change")}`);
-    parts.push(`kept ${facts.kept}`);
-    parts.push(`resolved ${plural(facts.resolved, "comment")}`);
-  }
+  if (did.length > 0) parts.push(`You ${listWords(did)}`);
   if (facts.open > 0) parts.push(`${plural(facts.open, "point")} still open`);
   if (parts.length === 0) parts.push("Nothing to decide");
   const roundsLink = facts.n === 2 ? "See both rounds" : facts.n > 2 ? "See all rounds" : "See the round";
@@ -187,9 +194,10 @@ function ReviewSummary({
       <h4 className="m-0 mb-1.5 text-[11.5px] font-medium uppercase tracking-[0.06em] text-[var(--ds-subtle)]">Review</h4>
       <p className="m-0 flex items-start gap-2 text-[13px] text-[var(--ds-ink)]">
         <CircleCheck aria-hidden className="mt-[2px] size-3.5 shrink-0 text-[var(--ds-green-fg)]" />
-        <span>
+        <span className="text-pretty">
           {review.reviewer.name} · {plural(facts.n, "round")}
-          {facts.verdict ? ` · ${facts.verdict}` : ""}
+          {/* The verdict's last two words stay together on a wrap. */}
+          {facts.verdict ? ` · ${facts.verdict.replace(/ (\S+)$/, "\u00a0$1")}` : ""}
         </span>
       </p>
       <p className="m-0 mt-1 flex items-start gap-2 text-[13px] text-[var(--ds-body)]">
@@ -198,7 +206,7 @@ function ReviewSummary({
         ) : (
           <Check aria-hidden className="mt-[2px] size-3.5 shrink-0 text-[var(--ds-muted)]" />
         )}
-        <span>{parts.join(", ")}</span>
+        <span className="text-pretty">{parts.join(", ").replace(/(\d) /g, "$1\u00a0")}</span>
       </p>
       {onRounds && (
         <button
