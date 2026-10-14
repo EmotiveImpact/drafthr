@@ -18,9 +18,10 @@
  *      recipient moves into the letter's sub line too, then Updated goes.
  *      Every row keeps one line per cell, so all rows are the same height.
  *   3. Room left over is shared between the letter's sub line and the
- *      recipient's job title so that as few of them as possible are cut
- *      (short lines like "Conduct · 1 check to fix" are shown in full before
- *      a long one like "Conduct · PDF · reviewed by Alex Morgan"). What is
+ *      recipient's job title so that as few of them as possible are cut,
+ *      with the letter's own line counting double (short lines like
+ *      "Conduct · 1 check to fix" are shown in full before a long one like
+ *      "Conduct · PDF · reviewed by Alex Morgan"). What is
  *      still too long ends in an ellipsis, as in the mock, with the full
  *      text on hover.
  *
@@ -225,14 +226,17 @@ export function letterTableLayout({
         Math.min(x, roleCap)
       );
       // Two columns, so every split can be tried: the one that shows the most
-      // lines in full wins (on a tie, the one giving the letter more), and
-      // whatever the recipient does not take goes to the letter.
+      // lines in full wins, and whatever the recipient does not take goes to
+      // the letter. A letter's sub line (its type and where it is) counts
+      // twice a job title, so a status like "Absence · expert review" is not
+      // cut to show a job title in full; on a tie the letter gets the room.
       const fixed = (xs: number[], at: number) => xs.filter((x) => x <= at).length;
-      let best = { role: 0, lines: fixed(letterExtra, spare) };
+      const score = (role: number) => fixed(roleExtra, role) + 2 * fixed(letterExtra, spare - role);
+      let best = { role: 0, score: score(0) };
       for (const role of new Set(roleExtra)) {
         if (role > spare) break;
-        const lines = fixed(roleExtra, role) + fixed(letterExtra, spare - role);
-        if (lines > best.lines) best = { role, lines };
+        const s = score(role);
+        if (s > best.score) best = { role, score: s };
       }
       widths.recipient += best.role;
     }

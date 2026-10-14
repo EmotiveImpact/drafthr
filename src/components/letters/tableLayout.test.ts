@@ -122,6 +122,23 @@ describe("letterTableLayout", () => {
     expect(base.widths.recipient).toBeGreaterThan(l.widths.recipient ?? 0);
   });
 
+  it("shows a letter's sub line in full before two job titles when they compete for the room", () => {
+    const rows: LayoutRow[] = [
+      { label: "Offer", subLine: "Hiring · aaaaaaaaaaaaaaaaaaaaaaa", recipient: "Al", recipientRole: "Role long long long long", matter: "M", where: "Draft", date: "Now" },
+      { label: "Offer", subLine: "Hiring", recipient: "Al", recipientRole: "Role long long long long", matter: "M", where: "Draft", date: "Now" },
+    ];
+    const full = letterTableLayout({ width: 0, columns: ALL, rows, measure });
+    const letterNeed = Math.ceil(measure("Offer", "name")) + 70;
+    const subNeed = 70 + measure(rows[0].subLine, "small");
+    const roleRoom = Math.ceil(measure("Role long long long long", "small")) + 58 - (full.widths.recipient ?? 0);
+    // Room for the long sub line, or for both job titles, but not for both.
+    const spare = Math.ceil(subNeed - letterNeed) + Math.floor(roleRoom / 2);
+    const width = sum(full.widths) + letterNeed + spare;
+    const l = letterTableLayout({ width, columns: ALL, rows, measure });
+    expect(l.widths.recipient).toBe(full.widths.recipient);
+    expect(width - sum(l.widths)).toBeGreaterThanOrEqual(subNeed);
+  });
+
   it("gives every job title its room when there is plenty", () => {
     const l = letterTableLayout({ width: 1400, columns: ALL, rows: ROWS, measure });
     expect(l.widths.recipient).toBe(Math.ceil(measure("Customer service advisor", "small")) + 58);
