@@ -21,7 +21,7 @@ import { PersonCard, CheckList, CheckRow, type PersonTimelineItem } from "@/comp
 import type { Booking } from "@/lib/bookings";
 import { useBookingsStore } from "@/lib/bookings";
 import { startBookingCheckout, getStripeConnectStatus } from "@/lib/consultantApi";
-import { priorityDifference } from "@/components/consultants/payments";
+import { checkoutErrorMessage, priorityDifference } from "@/components/consultants/payments";
 import { pushBookingRespond } from "@/lib/marketplaceSync";
 import { useDraftStore } from "@/lib/store";
 import type { Draft } from "@/lib/letters/types";
@@ -279,7 +279,7 @@ export function OutCard({
     const r = await startBookingCheckout(booking.id);
     if (r.ok) window.location.assign(r.data.url);
     else {
-      toast.error(r.error || "Couldn't start checkout");
+      toast.error(checkoutErrorMessage(r.status));
       setPaying(false);
     }
   };

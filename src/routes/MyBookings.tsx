@@ -21,15 +21,17 @@ import {
   agreedPrice,
   awaitingPayment,
   canRate as canRateBooking,
+  checkoutErrorMessage,
   checkoutNote,
   disputeNote,
   isPriority,
   lateRefundNote,
+  payLine,
   paymentsOffNote,
   priorityDifference,
   processingNote,
 } from "@/components/consultants/payments";
-import { agoWords, dayAndTime, declinedLine, firstNameOf, sentWhen, shortDate } from "@/components/consultants/market";
+import { dayAndTime, declinedLine, firstNameOf, sentWhen, shortDate } from "@/components/consultants/market";
 import { useBookingsStore, type Booking } from "@/lib/bookings";
 import { useDraftStore } from "@/lib/store";
 import { letterTitle } from "@/components/consultants/letters";
@@ -402,7 +404,8 @@ function BookingRow({
       window.location.assign(r.data.url);
       return;
     }
-    toast.error(r.error || "Couldn't start checkout");
+    // Never the server's own text: it is developer copy.
+    toast.error(checkoutErrorMessage(r.status));
     setPaying(false);
   };
   // Back from Stripe with the browser's back button: the page comes from the
@@ -538,9 +541,7 @@ function BookingRow({
             <div className="mt-2 flex flex-col gap-1.5 empty:hidden">
               {payable && (
                 <NoteLine icon={<CreditCard aria-hidden />}>
-                  {b.acceptedAt ? `${first} accepted ${agoWords(b.acceptedAt)}.` : `${first} accepted.`}{" "}
-                  {status === "delivered" ? "Pay to close the booking and rate it." : "The review starts once you pay."}
-                  {b.paymentStatus === "failed" ? " Your last payment didn't go through." : ""}
+                  {payLine(b, first)}
                 </NoteLine>
               )}
               {payable && <p className="m-0 pl-[19px] text-[12px] text-[var(--ds-muted)]">{checkoutNote(b)}</p>}

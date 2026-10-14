@@ -4,7 +4,9 @@
  * to complete it unpaid), and the rating only appears once it is paid.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
+import { startBookingCheckout } from "@/lib/consultantApi";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("@/lib/marketplaceSync", () => ({
@@ -82,5 +84,27 @@ describe("MyBookings payment", () => {
     expect(await screen.findByText("This booking was refunded.")).toBeInTheDocument();
     expect(screen.queryByRole("radiogroup", { name: /rate this review/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pay for review" })).not.toBeInTheDocument();
+  });
+
+  it("says when an unpaid delivered booking came back", async () => {
+    seed({ status: "delivered", paymentStatus: "unpaid", acceptedAt: Date.now() - 8 * 86_400_000, deliveredAt: Date.now() - 6 * 86_400_000 });
+    renderPage();
+    expect(await screen.findByText(/^Review delivered .+\. Pay to close the booking and rate it\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/accepted 8 days ago/)).not.toBeInTheDocument();
+  });
+
+  it("shows its own copy, not the server's, when checkout can't start", async () => {
+    vi.mocked(startBookingCheckout).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      error: "Session expired \u2014 please sign in again.",
+    });
+    seed({ status: "accepted", paymentStatus: "unpaid" });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Pay for review" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("You've been signed out. Sign in again, then pay for the review."),
+    );
+    expect(await screen.findByRole("button", { name: "Pay for review" })).toBeEnabled();
   });
 });

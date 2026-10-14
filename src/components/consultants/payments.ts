@@ -5,6 +5,7 @@
  * the work start or the booking complete.
  */
 import type { Booking } from "@/lib/bookings";
+import { agoWords, shortDate } from "./market";
 
 /** Accepted but not yet paid (or a previous attempt failed): the requester
  *  needs to pay before the specialist can start. A booking delivered before
@@ -94,6 +95,49 @@ export function checkoutNote(b: Booking): string {
     return `${p} for a priority review, as agreed when you booked. The 24 hours start when you pay. Secure checkout via Stripe.`;
   }
   return p ? `${p}, as agreed when you booked. Secure checkout via Stripe.` : "Secure checkout via Stripe.";
+}
+
+/**
+ * The "you need to pay" line on a payable booking. A delivered booking says
+ * when the review came back (the event that matters now); an accepted one
+ * says when the expert accepted. `first` is the expert's first name.
+ */
+export function payLine(b: Booking, first: string, now = Date.now()): string {
+  const failed = b.paymentStatus === "failed" ? " Your last payment didn't go through." : "";
+  if (b.status === "delivered") {
+    const when = b.deliveredAt ? `Review delivered ${shortDate(b.deliveredAt, now)}.` : "Review delivered.";
+    return `${when} Pay to close the booking and rate it.${failed}`;
+  }
+  const when = b.acceptedAt ? `${first} accepted ${agoWords(b.acceptedAt, now)}.` : `${first} accepted.`;
+  return `${when} The review starts once you pay.${failed}`;
+}
+
+/**
+ * What to tell the person when checkout couldn't start, chosen by the HTTP
+ * status. The server's own error text is written for developers (and can say
+ * "specialist" or carry an em dash), so it is never shown as is.
+ */
+export function checkoutErrorMessage(status: number): string {
+  switch (status) {
+    case 0:
+      return "We couldn't reach the payment service. Check your connection and try again.";
+    case 401:
+      return "You've been signed out. Sign in again, then pay for the review.";
+    case 403:
+      return "You can't pay for this booking. Only the person who booked it can.";
+    case 404:
+      return "We couldn't find this booking. Refresh the page and try again.";
+    case 409:
+      return "This booking can't be paid right now. It may already be paid or have a payment under way. Refresh to see where it is.";
+    case 412:
+      return "This expert can't take payment for this booking yet. Send them a message or try again later.";
+    case 429:
+      return "Too many attempts. Wait a minute, then try again.";
+    case 503:
+      return "Online payment isn't available yet. Try again later.";
+    default:
+      return "We couldn't start the payment. Try again in a moment.";
+  }
 }
 
 /** Rating closes the booking, which needs a paid booking. */
