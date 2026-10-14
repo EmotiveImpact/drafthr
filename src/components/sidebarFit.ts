@@ -9,8 +9,14 @@
  * rows, 8px around each nested list), so the answer is exact and does not
  * depend on measuring the lists themselves. When both lists do not fit, the
  * list for the section the person is in stays open and the other folds to
- * its chevron; when even that one does not fit, both fold. The person can
- * still open either with its chevron (the middle then scrolls).
+ * its chevron; when even that one does not fit, both fold.
+ *
+ * The chevrons say which lists the person wants (`want`). Opening one with
+ * its chevron makes it the list to keep (`keep`): when the two do not fit
+ * together, the other folds rather than pushing Experts and Reports under
+ * the footer (FOUNDATION-X11), and the kept list stays open even if it is
+ * too long on its own (the middle then scrolls). Opening the folded one
+ * swaps them.
  */
 
 export const SIDEBAR_ROW_H = 40;
@@ -35,21 +41,29 @@ export function fitSubLists(input: {
   matterRows: number;
   /** The section the current page belongs to keeps its list first. */
   prefer: "letters" | "matters";
+  /** The lists the person has not folded with their chevrons (default both). */
+  want?: SubListPlan;
+  /** The list the person last opened with its chevron: it stays open. */
+  keep?: "letters" | "matters" | null;
 }): SubListPlan {
   const { available, rows, letterRows, matterRows, prefer } = input;
-  if (!(available > 0)) return { letters: true, matters: true };
+  const want = input.want ?? { letters: true, matters: true };
+  const keep = input.keep && want[input.keep] ? input.keep : null;
+  if (!(available > 0)) return { ...want };
   const base = rows * SIDEBAR_ROW_H + Math.max(0, rows - 1) * SIDEBAR_ROW_GAP;
-  const letters = subListHeight(letterRows);
-  const matters = subListHeight(matterRows);
-  if (base + letters + matters <= available) return { letters: true, matters: true };
-  const first = prefer === "matters" ? matters : letters;
-  const second = prefer === "matters" ? letters : matters;
-  if (base + first <= available) {
-    return prefer === "matters" ? { letters: false, matters: true } : { letters: true, matters: false };
+  const height = { letters: subListHeight(letterRows), matters: subListHeight(matterRows) };
+  const only = (list: "letters" | "matters"): SubListPlan => ({ letters: list === "letters", matters: list === "matters" });
+  const fits = (list: "letters" | "matters") => want[list] && base + height[list] <= available;
+
+  if (want.letters && want.matters && base + height.letters + height.matters <= available) {
+    return { letters: true, matters: true };
   }
+  // The person opened this one: keep it, fold the other.
+  if (keep) return only(keep);
+  const first = prefer;
+  const second = prefer === "matters" ? "letters" : "matters";
+  if (fits(first)) return only(first);
   // Only the other list fits (the current section's list is very long).
-  if (base + second <= available) {
-    return prefer === "matters" ? { letters: true, matters: false } : { letters: false, matters: true };
-  }
+  if (fits(second)) return only(second);
   return { letters: false, matters: false };
 }

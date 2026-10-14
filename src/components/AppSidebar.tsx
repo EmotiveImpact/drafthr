@@ -74,10 +74,13 @@ import { useAuth } from "@/lib/auth";
 import { resetTour } from "@/lib/onboarding";
 import { getJourney, type StageTone } from "@/lib/journey/stage";
 import { latestReviewIn, useReviewStore } from "@/lib/journey/reviews";
+import { canApprove } from "@/lib/permissions";
+import { useMe, viewerIsNamedApprover } from "@/components/letters/rows";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceLoad } from "@/components/home/loadState";
 import { fitSubLists } from "@/components/sidebarFit";
+import { recentLabels } from "@/components/sidebarLabels";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { NotificationsBell } from "@/components/NotificationsBell";
 
@@ -100,7 +103,9 @@ import { NotificationsBell } from "@/components/NotificationsBell";
  * search. Pages under Home or Experts mark that row current without a nested
  * list. On short screens (a 1366x768 laptop) the nested lists fold to their
  * chevrons when they would push rows under the footer (sidebarFit.ts), so
- * all seven rows stay in view. While the first workspace pull is in flight
+ * all seven rows stay in view; opening one with its chevron folds the other
+ * there. A list too long on its own scrolls, with soft fades at the edges.
+ * While the first workspace pull is in flight
  * the nested lists show soft placeholders rather than "No letters yet".
  *
  * Collapses to a 64px icon rail on desktop (Cmd/Ctrl B, the collapse button,
@@ -153,8 +158,49 @@ function useSidebarMode(): SidebarMode | null {
   return profileRole ?? (consultantEnrolled ? "consultant" : null);
 }
 
+/**
+ * Soft fades at the top and bottom of the sidebar's middle while there is
+ * more to scroll that way, so a long open list (a workspace with many
+ * matters) never just cuts rows off under the footer (FOUNDATION-X11).
+ */
+function useScrollCue(ref: RefObject<HTMLElement | null>) {
+  const [cue, setCue] = useState<{ above: boolean; below: boolean }>({ above: false, below: false });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => {
+      const above = el.scrollTop > 1;
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+      setCue((c) => (c.above === above && c.below === below ? c : { above, below }));
+    };
+    read();
+    el.addEventListener("scroll", read, { passive: true });
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(read);
+    ro?.observe(el);
+    // The lists inside change height without the area itself resizing.
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(read);
+    mo?.observe(el, { childList: true, subtree: true });
+    return () => {
+      el.removeEventListener("scroll", read);
+      ro?.disconnect();
+      mo?.disconnect();
+    };
+  }, [ref]);
+  return cue;
+}
+
+const FADE = "24px";
+
 export function AppSidebar() {
   const mode = useSidebarMode();
+  const middleRef = useRef<HTMLDivElement>(null);
+  const cue = useScrollCue(middleRef);
+  const mask =
+    cue.above || cue.below
+      ? `linear-gradient(to bottom, ${cue.above ? `transparent, black ${FADE}` : "black"}, ${
+          cue.below ? `black calc(100% - ${FADE}), transparent` : "black"
+        })`
+      : undefined;
   return (
     <SidebarShell>
       <SidebarHeader className="gap-0 pt-3.5 pr-2 pb-0 pl-3 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:px-3">
@@ -162,7 +208,13 @@ export function AppSidebar() {
         <NewLetterButton mode={mode} />
       </SidebarHeader>
 
-      <SidebarContent className="gap-0 px-3 group-data-[collapsible=icon]:items-center">
+      <SidebarContent
+        ref={middleRef}
+        data-scroll-above={cue.above || undefined}
+        data-scroll-below={cue.below || undefined}
+        style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
+        className="gap-0 px-3 group-data-[collapsible=icon]:items-center"
+      >
         <NavigatePrimary mode={mode} />
       </SidebarContent>
 
@@ -171,7 +223,11 @@ export function AppSidebar() {
         <NavUser mode={mode} />
       </SidebarFooter>
 
-      <SidebarRail />
+      {/* The rail edge sits inside the sidebar (its last 8px, the line on the
+       * border) rather than straddling it: hanging 8px over the page, its
+       * layer painted stray fragments of the page beside the sidebar when the
+       * middle scrolled (FOUNDATION-X11). */}
+      <SidebarRail className="w-2 translate-x-0 group-data-[side=left]:right-0 ltr:translate-x-0 rtl:translate-x-0 after:start-auto after:end-0" />
     </SidebarShell>
   );
 }
@@ -443,6 +499,17 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
   // null: follow the fit below; true or false once the person uses a chevron.
   const [lettersChoice, setLettersChoice] = useState<boolean | null>(null);
   const [mattersChoice, setMattersChoice] = useState<boolean | null>(null);
+  // The list last opened with its chevron: it stays open and, on a short
+  // screen, the other folds so no main row slips under the footer.
+  const [kept, setKept] = useState<"letters" | "matters" | null>(null);
+  const chooseLetters = (open: boolean) => {
+    setLettersChoice(open);
+    setKept(open ? "letters" : (k) => (k === "letters" ? null : k));
+  };
+  const chooseMatters = (open: boolean) => {
+    setMattersChoice(open);
+    setKept(open ? "matters" : (k) => (k === "matters" ? null : k));
+  };
 
   // The rail hides the top row's tools, so search and the bell get their own
   // icons there.
@@ -525,9 +592,11 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
       (under(path, "/bulk") ? 1 : 0),
     matterRows: (mattersLoading ? LOADING_ROWS : Math.max(1, matterList.matters.length)) + matterList.nestedCount(path),
     prefer: under(path, "/matters") ? "matters" : "letters",
+    want: { letters: lettersChoice ?? true, matters: mattersChoice ?? true },
+    keep: kept,
   });
-  const lettersOpen = lettersChoice ?? plan.letters;
-  const mattersOpen = mattersChoice ?? plan.matters;
+  const lettersOpen = plan.letters;
+  const mattersOpen = plan.matters;
   // Home stays the current row on the pages that hang off it (its tabs, and
   // Notifications from the bell). They get no nested list: no mock has one,
   // and it pushed Experts and Reports under the footer on short screens
@@ -546,14 +615,14 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
             recent={recent}
             loading={lettersLoading}
             expanded={lettersOpen}
-            setExpanded={setLettersChoice}
+            setExpanded={chooseLetters}
           />
           <NavMatters
             matters={matterList.matters}
             allDrafts={matterList.allDrafts}
             loading={mattersLoading}
             expanded={mattersOpen}
-            setExpanded={setMattersChoice}
+            setExpanded={chooseMatters}
           />
           {employer && (
             <NavRow
@@ -596,20 +665,6 @@ const JOURNEY_DOT: Partial<Record<StageTone, { className: string; label: string 
   done: { className: "bg-[var(--ds-green-solid)]", label: "Sent" },
 };
 
-/** "J. Hale" from "Jordan Hale". */
-function shortName(name: string | undefined): string {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "";
-  if (parts.length === 1) return parts[0];
-  return `${parts[0][0]}. ${parts[parts.length - 1]}`;
-}
-
-function recentLabel(d: Draft): string {
-  const title = briefTitleFor(d);
-  const who = d.mode === "employer" ? shortName(d.employee.legalName) : d.employer.legalName?.trim();
-  return who ? `${title} · ${who}` : title;
-}
-
 /** Small state marker after a recent letter: drafting spinner or journey dot. */
 function DraftMarker({ d, tone }: { d: Draft; tone: StageTone }) {
   if (d.sections.some((s) => s.status === "streaming")) {
@@ -629,7 +684,7 @@ function DraftMarker({ d, tone }: { d: Draft; tone: StageTone }) {
   );
 }
 
-type RecentLetter = { d: Draft; tone: StageTone };
+type RecentLetter = { d: Draft; tone: StageTone; label: string };
 
 /** Nested placeholder rows while the first workspace pull is in flight. */
 const LOADING_ROWS = 2;
@@ -638,13 +693,26 @@ const LOADING_ROWS = 2;
 function useRecentLetters(mode: Mode): RecentLetter[] {
   const drafts = useDraftStore((s) => s.drafts);
   const requests = useReviewStore((s) => s.requests);
+  const workspaceRole = useProfileStore((s) => s.profile.workspaceRole);
+  const legalName = useProfileStore((s) => s.profile.personal.legalName);
+  const me = useMe();
+  const viewerCanApprove = canApprove(workspaceRole);
   return useMemo(() => {
     const list = Object.values(drafts)
       .filter((d) => !d.isTemplateSource && d.mode === mode)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 3);
-    return list.map((d) => ({ d, tone: getJourney(d, latestReviewIn(requests, d.id)).listTone }));
-  }, [drafts, requests, mode]);
+    const labels = recentLabels(list);
+    // The same needs-you rule as the Letters list (rows.ts): a letter waiting
+    // for your own approval is amber here too, not lilac (FOUNDATION-X8).
+    return list.map((d, i) => ({
+      d,
+      label: labels[i],
+      tone: getJourney(d, latestReviewIn(requests, d.id), {
+        viewerIsApprover: viewerCanApprove && viewerIsNamedApprover(d, me, legalName),
+      }).listTone,
+    }));
+  }, [drafts, requests, mode, me, legalName, viewerCanApprove]);
 }
 
 /** Active matters for this mode, plus how many letters nest under the open one. */
@@ -786,9 +854,8 @@ function NavLetters({
             ) : recent.length === 0 ? (
               <li className="px-2.5 py-2 text-[13px] text-[var(--ds-subtle)]">No letters yet</li>
             ) : (
-              recent.map(({ d, tone }) => {
+              recent.map(({ d, tone, label }) => {
                 const href = `/editor/${d.id}`;
-                const label = recentLabel(d);
                 const on = path === href || path.startsWith(`${href}/`);
                 return (
                   <SidebarMenuItem key={d.id}>

@@ -40,3 +40,57 @@ describe("fitSubLists", () => {
     });
   });
 });
+
+describe("fitSubLists with the person's chevrons", () => {
+  it("folds Letters when the person opens Matters on a short screen (FOUNDATION-X11)", () => {
+    expect(fitSubLists({ ...HR, available: 480, prefer: "letters", keep: "matters" })).toEqual({
+      letters: false,
+      matters: true,
+    });
+  });
+
+  it("swaps back when the person reopens Letters", () => {
+    expect(fitSubLists({ ...HR, available: 480, prefer: "letters", keep: "letters" })).toEqual({
+      letters: true,
+      matters: false,
+    });
+  });
+
+  it("keeps both open on a tall screen whichever was opened last", () => {
+    expect(fitSubLists({ ...HR, available: 612, prefer: "letters", keep: "matters" })).toEqual({
+      letters: true,
+      matters: true,
+    });
+  });
+
+  it("keeps the list the person opened even when it is too long on its own", () => {
+    expect(fitSubLists({ rows: 7, letterRows: 4, matterRows: 12, available: 480, prefer: "letters", keep: "matters" })).toEqual({
+      letters: false,
+      matters: true,
+    });
+  });
+
+  it("never opens a list the person folded", () => {
+    expect(fitSubLists({ ...HR, available: 612, prefer: "letters", want: { letters: false, matters: true } })).toEqual({
+      letters: false,
+      matters: true,
+    });
+    expect(fitSubLists({ ...HR, available: 0, prefer: "letters", want: { letters: true, matters: false } })).toEqual({
+      letters: true,
+      matters: false,
+    });
+  });
+
+  it("uses the room a folded list leaves for the other one", () => {
+    expect(fitSubLists({ ...HR, available: 480, prefer: "letters", want: { letters: false, matters: true } })).toEqual({
+      letters: false,
+      matters: true,
+    });
+  });
+
+  it("ignores a kept list the person has since folded", () => {
+    expect(
+      fitSubLists({ ...HR, available: 480, prefer: "letters", keep: "matters", want: { letters: true, matters: false } })
+    ).toEqual({ letters: true, matters: false });
+  });
+});

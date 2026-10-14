@@ -109,9 +109,13 @@ export function NotificationRow({
             )}
             {item.unread && <span className="sr-only">, unread</span>}
           </button>
-          <div className="mt-[3px] flex min-w-0 items-center gap-1.5 text-[12.5px] text-[var(--ds-muted)]">
-            {item.dot && <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: item.dot }} />}
-            <span className={cn(wide ? "line-clamp-2" : "truncate")}>{meta}</span>
+          {/* Up to two lines, in the narrow bell too: a deadline's date is
+           * the fact that matters and must not be cut off (HOME-X35). */}
+          <div className="mt-[3px] flex min-w-0 items-start gap-1.5 text-[12.5px] leading-[1.4] text-[var(--ds-muted)]">
+            {item.dot && (
+              <span aria-hidden className="mt-[6px] size-1.5 shrink-0 rounded-full" style={{ background: item.dot }} />
+            )}
+            <span className="line-clamp-2 min-w-0">{meta}</span>
           </div>
           {item.primary && (
             <div className="relative z-[1] mt-[9px] flex gap-1.5">
