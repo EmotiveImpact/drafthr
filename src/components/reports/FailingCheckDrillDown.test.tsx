@@ -387,6 +387,25 @@ describe("FailingCheckDrillDown", () => {
     expect(screen.getByTestId("failing-count")).toHaveTextContent("1 failing");
   });
 
+  it("an advisory rule is not shown in red, and a letter with no matter says so as on Letters", () => {
+    storeMock.drafts = {
+      stale: makeDraft({
+        id: "stale",
+        title: "Loose letter",
+        reviewStatus: "draft",
+        updatedAt: Date.now() - 20 * 24 * 60 * 60 * 1000,
+      }),
+    };
+    renderAt("/reports/checks/unapproved-7d");
+    const pill = screen.getByTestId("failing-count").firstElementChild as HTMLElement;
+    expect(pill).toHaveTextContent("1 failing");
+    expect(pill.className).not.toMatch(/ds-red/);
+    const reason = screen.getByText(/^Not approved\. Last edited/);
+    expect(reason.className).not.toMatch(/ds-red/);
+    expect(screen.getByText("No matter")).toBeInTheDocument();
+    expect(screen.queryByText("Unfiled")).not.toBeInTheDocument();
+  });
+
   it("navigates to /editor/:id when a row is clicked", () => {
     storeMock.drafts = {
       stale: makeDraft({

@@ -72,14 +72,13 @@ describe("approvals", () => {
     expect(isForMe({ approver: "Ruth Adeyemi" }, "Alex Morgan")).toBe(false);
   });
 
-  it("the band line names the oldest wait", () => {
-    const parts = approvalsLedeParts(
-      [draft("a", { submittedForReviewAt: NOW - 2 * DAY }), draft("b", { submittedForReviewAt: NOW - HOUR })],
-      true,
-      NOW
-    );
-    expect(parts).toMatchObject({ count: 2, whose: "your sign-off", age: "2 days" });
-    expect(approvalsLedeParts([], true, NOW)).toBeNull();
+  it("the band line counts every waiting letter and words the oldest wait like the rows", () => {
+    const parts = approvalsLedeParts([{ askedAt: NOW - 2 * DAY }, { askedAt: NOW - HOUR }], 1, NOW);
+    expect(parts).toEqual({ count: 2, mine: 1, sent: "sent 2 days ago" });
+    // The same words as the row's askedAgo ("Just now"), never "a minute ago".
+    expect(approvalsLedeParts([{ askedAt: NOW - 10_000 }], 1, NOW)?.sent).toBe("sent just now");
+    expect(approvalsLedeParts([{ askedAt: NOW - 30 * HOUR }], 0, NOW)?.sent).toBe("sent yesterday");
+    expect(approvalsLedeParts([], 0, NOW)).toBeNull();
   });
 
   it("recently approved by me, newest first", () => {

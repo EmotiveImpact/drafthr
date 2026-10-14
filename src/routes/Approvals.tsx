@@ -130,16 +130,17 @@ export function Approvals() {
     toast.success("Changes requested", { description: r.person ? `${r.title} for ${r.person}` : r.title });
   };
 
-  // "Waiting for your sign-off" counts only the letters you can sign off;
-  // a letter you sent to someone else is just waiting for sign-off.
+  // The band counts the same letters as the queue and the tab badge. When
+  // some wait on you and some on others it says both ("2 letters are
+  // waiting for sign-off, 1 for you"); when none wait on you it names the
+  // approver if every letter went to one person.
   const mine = rows.filter(canActOn);
-  const lede = mine.length > 0 ? approvalsLedeParts(mine.map((r) => r.draft), true) : approvalsLedeParts(home.waiting, false);
-  // Not yours: name the approver when every waiting letter went to one person.
+  const lede = approvalsLedeParts(rows, mine.length);
   const approvers = [...new Set(rows.map((r) => r.approver))];
   const whose =
-    mine.length > 0
+    mine.length === rows.length
       ? "your sign-off"
-      : approvers.length === 1 && !/^workspace reviewer$/i.test(approvers[0])
+      : mine.length === 0 && approvers.length === 1 && !/^workspace reviewer$/i.test(approvers[0])
         ? `${firstName(approvers[0]) || approvers[0]}'s sign-off`
         : "sign-off";
 
@@ -155,6 +156,11 @@ export function Approvals() {
                 {lede.count} {lede.count === 1 ? "letter" : "letters"}
               </b>{" "}
               {lede.count === 1 ? "is" : "are"} waiting for {whose}
+              {lede.mine > 0 && lede.mine < lede.count && (
+                <>
+                  , <b>{lede.mine}</b> for you
+                </>
+              )}
               {lede.count === 1 ? `, ${lede.sent}.` : `. The oldest was ${lede.sent}.`}
             </>
           ) : (

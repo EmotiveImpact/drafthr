@@ -25,7 +25,7 @@ import { StatTiles, TileFoot, weeklySeries, type StatTileProps } from "@/compone
 import { TemplateCards } from "@/components/home/TemplateCards";
 import { FADE_IN_GROUP, HomeGrid, ListPlaceholder, RailBox, SectionHead } from "@/components/home/HomeParts";
 import { useLettersLoading } from "@/components/home/loadState";
-import { Band, BAND_BTN_DARK, BAND_BTN_GHOST, HomeBand, OverviewLede } from "@/components/home/HomeBand";
+import { Band, BAND_BTN_DARK, BAND_BTN_GHOST, HomeBand, OverviewLede, PhoneHomeTabLinks } from "@/components/home/HomeBand";
 import { ContinueCards, HistoryCard, NeedRow, NeedsYouCard, NeedsYouList, StatusPill } from "@/components/home/OverviewCards";
 import { PageThumb, categoryName } from "@/components/home/letterArt";
 import {
@@ -177,6 +177,7 @@ function HrHome() {
                       ))}
                     </ul>
                   )}
+                  <PhoneHomeTabLinks approvals={data.waiting.length} className="mt-3" />
                 </PhoneSection>
                 <PhoneSection title="Recent letters" to="/letters">
                   {loading ? <ListPlaceholder rows={3} /> : <RecentRows letters={recentLetters} />}

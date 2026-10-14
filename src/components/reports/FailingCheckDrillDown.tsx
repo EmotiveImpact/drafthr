@@ -16,6 +16,7 @@ import {
 } from "@/lib/reports/check-predicates";
 import { plainReason, ruleCopy } from "@/components/reports/reportsData";
 import { letterOwner, useMe } from "@/components/letters/rows";
+import { cn } from "@/lib/utils";
 
 /* ============================================================================
  * /reports/checks/:checkId: per-check drill-down for HR Director.
@@ -90,7 +91,11 @@ export function FailingCheckDrillDown() {
               {copy.advisory && " Advisory: this rule is not part of the health score, so it does not change the compliance rate."}
             </span>
             <span data-testid="failing-count">
-              <Pill tone={failing.length === 0 ? "green" : "red"}>{failing.length} failing</Pill>
+              {/* Red is for failing required checks only: an advisory rule
+               * (not part of the score) shows its count in grey. */}
+              <Pill tone={failing.length === 0 ? "green" : copy.advisory ? "grey" : "red"}>
+                {failing.length} failing
+              </Pill>
             </span>
           </span>
         }
@@ -104,7 +109,12 @@ export function FailingCheckDrillDown() {
               body="Every letter in this workspace passes this rule."
             />
           ) : (
-            <FailingTable rows={failing} matters={matters} onRowClick={(id) => nav(`/editor/${id}`)} />
+            <FailingTable
+              rows={failing}
+              matters={matters}
+              advisory={copy.advisory}
+              onRowClick={(id) => nav(`/editor/${id}`)}
+            />
           )}
         </section>
       </DrillBody>
@@ -117,10 +127,13 @@ export function FailingCheckDrillDown() {
 function FailingTable({
   rows,
   matters,
+  advisory,
   onRowClick,
 }: {
   rows: FailingDraft[];
   matters: Record<string, Matter>;
+  /** An advisory rule: its reasons are not errors, so they are not red. */
+  advisory: boolean;
   onRowClick: (draftId: string) => void;
 }) {
   const me = useMe();
@@ -163,12 +176,17 @@ function FailingTable({
                 </span>
               </td>
               <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-muted)] md:text-[13px] md:text-[var(--ds-body)]">
-                {matter?.name ?? <span className="text-[var(--ds-subtle)]">Unfiled</span>}
+                {matter?.name ?? <span className="text-[var(--ds-muted)]">No matter</span>}
               </td>
               <td className="hidden md:table-cell md:px-4 md:py-3 text-[var(--ds-body)] truncate max-w-[160px]">
                 {owner}
               </td>
-              <td className="block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] text-[var(--ds-red-fg)] md:max-w-[320px] md:text-[13px]">
+              <td
+                className={cn(
+                  "block p-0 md:table-cell md:px-4 md:py-3 md:align-middle text-[12.5px] md:max-w-[320px] md:text-[13px]",
+                  advisory ? "text-[var(--ds-body)]" : "text-[var(--ds-red-fg)]"
+                )}
+              >
                 {reason}
               </td>
               <td className="hidden whitespace-nowrap text-[13px] text-[var(--ds-muted)] md:table-cell md:px-4 md:py-3">

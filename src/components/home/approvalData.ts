@@ -141,25 +141,19 @@ export function recentlyApprovedBy(drafts: Record<string, Draft>, me: string, li
   return out.sort((a, b) => b.at - a.at).slice(0, limit);
 }
 
-/** The band's line on the Needs approval tab. */
-export function approvalsLedeParts(waiting: Draft[], approver: boolean, now = Date.now()) {
-  if (waiting.length === 0) return null;
-  const oldest = Math.min(...waiting.map((d) => d.submittedForReviewAt ?? d.updatedAt));
+/**
+ * The band's line on the Needs approval tab, from the same rows as the
+ * queue: how many letters wait (the tab badge's number), how many of them
+ * wait on you, and when the oldest was sent, in the rows' own words
+ * ("sent just now", "sent 20m ago", "sent yesterday", "sent 2 days ago").
+ */
+export function approvalsLedeParts(rows: Array<Pick<ApprovalRow, "askedAt">>, mine: number, now = Date.now()) {
+  if (rows.length === 0) return null;
+  const oldest = Math.min(...rows.map((r) => r.askedAt));
+  const ago = askedAgo(oldest, now);
   return {
-    count: waiting.length,
-    whose: approver ? "your sign-off" : "sign-off",
-    age: ageForLede(now - oldest),
-    /** "sent a minute ago", "sent 2 days ago". */
-    sent: `sent ${ageForLede(now - oldest)} ago`,
+    count: rows.length,
+    mine,
+    sent: `sent ${ago.charAt(0).toLowerCase()}${ago.slice(1)}`,
   };
-}
-
-/** "2 days", "5 hours", "20 minutes", "a minute". */
-function ageForLede(ms: number): string {
-  const m = Math.max(1, Math.floor(ms / 60000));
-  if (m < 60) return m === 1 ? "a minute" : `${m} minutes`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return h === 1 ? "an hour" : `${h} hours`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "a day" : `${d} days`;
 }

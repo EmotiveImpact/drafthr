@@ -11,7 +11,7 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronRight, FolderPlus, Plus } from "lucide-react";
+import { CalendarDays, ChevronRight, ClipboardCheck, FolderPlus, History, Plus, type LucideIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useProfileStore } from "@/lib/profile";
 import { avatarColor, avatarInitials, avatarInk } from "@/components/ds";
@@ -275,9 +275,9 @@ function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number 
       className={cn(
         "no-scrollbar -mx-5 mt-5 overflow-x-auto px-5 md:mx-0 md:mt-[26px] md:overflow-visible md:px-0",
         // Phone Home (mock phone-home) has no tab row: Needs approval,
-        // Calendar and Activity are reached from the account menu, the
-        // Needs you rows and search. The other tabs keep it, so a phone
-        // user can come back to Overview.
+        // Calendar and Activity are the links under Needs you
+        // (PhoneHomeTabLinks). The other tabs keep it, so a phone user can
+        // come back to Overview.
         active === "overview" && "max-md:hidden"
       )}
     >
@@ -334,6 +334,46 @@ function HomeTabs({ active, approvals }: { active: HomeTabId; approvals: number 
         )}
       </nav>
     </div>
+  );
+}
+
+const TAB_ICONS: Partial<Record<HomeTabId, LucideIcon>> = {
+  approvals: ClipboardCheck,
+  calendar: CalendarDays,
+  activity: History,
+};
+
+/**
+ * Phone Home has no tab row (mock phone-home), so the other Home tabs are
+ * small links instead: Needs approval (with the same count as the tab's
+ * badge), Calendar and Activity. Hidden from md up, where the tabs show.
+ */
+export function PhoneHomeTabLinks({ approvals, className }: { approvals: number; className?: string }) {
+  return (
+    <nav aria-label="More on Home" className={cn("flex flex-wrap gap-1.5 md:hidden", className)}>
+      {TABS.filter((t) => t.id !== "overview").map((t) => {
+        const Icon = TAB_ICONS[t.id];
+        const count = t.id === "approvals" ? approvals : 0;
+        return (
+          <Link
+            key={t.id}
+            to={t.href}
+            className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-2 text-[13px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ds-focus)]"
+          >
+            {Icon && <Icon className="size-3.5 shrink-0 text-[var(--ds-muted)]" aria-hidden />}
+            {t.label}
+            {count > 0 && (
+              <span
+                aria-label={`${count} waiting`}
+                className="inline-grid h-[18px] min-w-[19px] place-items-center rounded-[9px] bg-[var(--ds-chip)] px-[5px] text-[11.5px] font-medium text-[var(--ds-muted)]"
+              >
+                {count}
+              </span>
+            )}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -493,6 +533,11 @@ export function HomeBand({
 /**
  * "<b>3 letters</b> in progress, <b>1</b> needs you today." The second
  * number is the Letters page's "Needs you" count (the same rule).
+ *
+ * Deliberate change from the mock (and HOME-04), noted for Edem: the mock
+ * says "<M> needs your review today", but this count also holds letters
+ * that are not a review (for example "Send · ready" and drafts with a
+ * check to fix), so it says "needs you" rather than "needs your review".
  */
 export function OverviewLede({ inProgress, needYou }: { inProgress: number; needYou: number }) {
   if (inProgress === 0 && needYou === 0) return <>Nothing in progress yet. Start a letter when you need one.</>;

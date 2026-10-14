@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarClock,
@@ -30,7 +30,6 @@ import { useHomeData } from "@/components/home/homeData";
 import {
   EVENT_TONE,
   EVENT_TYPE_LABEL,
-  EVENT_TYPE_SHORT,
   EVENT_TYPES,
   allCalendarEvents,
   buildIcs,
@@ -45,6 +44,7 @@ import { cn } from "@/lib/utils";
 
 type View = "month" | "agenda";
 
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const TOOL_BTN = cn(BAND_BTN_GHOST, "h-[34px] px-3 text-[13.5px]");
 const NAV_BTN =
@@ -65,12 +65,11 @@ function parts(isoDate: string) {
   return {
     weekday: date.toLocaleDateString("en-GB", { weekday: "short" }),
     day: d,
-    /** "Apr", or "Apr 27" in another year: shown under the day when the
-     *  date is not in this month, so 11 Apr never reads as 11 Oct. */
-    month:
-      otherYear || m - 1 !== now.getMonth()
-        ? `${date.toLocaleDateString("en-GB", { month: "short" })}${otherYear ? ` ${String(y).slice(2)}` : ""}`
-        : null,
+    /** "Apr" under the day when the date is not in this month, so 11 Apr
+     *  never reads as 11 Oct. Always three letters (en-GB writes "Sept"). */
+    month: otherYear || m - 1 !== now.getMonth() ? MONTHS_SHORT[m - 1] : null,
+    /** "2027" on its own line for a date in another year. */
+    year: otherYear ? String(y) : null,
     long: date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", ...(otherYear ? { year: "numeric" } : {}) }),
   };
 }
@@ -118,10 +117,14 @@ export function Calendar() {
     typeof window !== "undefined" && window.matchMedia?.("(max-width: 767px)").matches ? "agenda" : "month"
   );
 
-  // The legend lists the kinds of date this calendar holds (for the matter
-  // picked), in a fixed order, so it fits one row like the mock and never
-  // explains a colour that is not on the page.
-  const legendTypes = useMemo(() => EVENT_TYPES.filter((t) => events.some((e) => e.type === t)), [events]);
+  // The legend is a fixed key with the mock's labels: the five kinds of
+  // date every letter can carry, then "Matter deadlines" when the workspace
+  // has any (judged on every date, not the matter picked), so the items and
+  // their wording never change as the filter or the month changes.
+  const legendTypes = useMemo(
+    () => EVENT_TYPES.filter((t) => t !== "deadline" || all.some((e) => e.type === "deadline")),
+    [all]
+  );
 
   const upcoming = events.filter((e) => e.daysAway >= 0);
   const comingUp = upcoming.slice(0, 4);
@@ -261,7 +264,7 @@ export function Calendar() {
                       type="button"
                       aria-label={`Matter: ${matterLabel}`}
                       title={matterLabel}
-                      className="ml-auto inline-flex max-w-[200px] min-w-[112px] shrink-[100] items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] data-[state=open]:bg-[var(--ds-hover)]"
+                      className="ml-auto inline-flex max-w-[200px] min-w-0 shrink-0 items-center gap-[5px] rounded-[6px] px-1 py-0.5 text-[12.5px] text-[var(--ds-ink)] outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--ds-focus)] data-[state=open]:bg-[var(--ds-hover)]"
                     >
                       <ListFilter className="size-3.5 shrink-0" aria-hidden />
                       <span className="min-w-0 truncate">{matterLabel}</span>
@@ -351,53 +354,23 @@ export function Calendar() {
 /* ─── Legend row ───────────────────────────────────────────────────── */
 
 /**
- * The legend and the matter filter on one row, as in the mock: the legend
- * names the kinds of date this calendar holds (for the matter picked), the
- * filter sits on the right. The mock's labels are used when they fit; when
- * they do not (six kinds of date, or a long matter name in the filter) the
- * short labels are used ("Appeals" for "Appeal deadlines"), and the filter
- * is cut short before the legend gives way (its shrink weight is far higher; both weights stay at 1 or more, as weights under 1 leave part of the overflow unshrunk). Only on a narrow screen, where
- * even the short labels do not fit, does the legend wrap.
+ * The legend and the matter filter on one row, as in the mock. The legend
+ * always uses the full labels; when they do not all fit beside the filter
+ * (a sixth kind, a long matter name) the legend wraps onto a second line
+ * rather than switching to other words. The filter keeps its own width (up
+ * to 200px); on a phone it drops below the legend.
  */
 function LegendRow({ types, children }: { types: CalendarEventType[]; children: ReactNode }) {
-  const legend = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const el = legend.current;
-    if (!el) return;
-    const fit = () => {
-      el.dataset.mode = "full";
-      if (el.scrollWidth <= el.clientWidth + 1) return;
-      el.dataset.mode = "short";
-      if (el.scrollWidth <= el.clientWidth + 1) return;
-      el.dataset.mode = "wrap";
-    };
-    fit();
-    // Widths change once the web font has loaded.
-    let live = true;
-    void document.fonts?.ready.then(() => live && fit());
-    const row = el.parentElement;
-    const ro = typeof ResizeObserver !== "undefined" && row ? new ResizeObserver(fit) : null;
-    if (ro && row) ro.observe(row);
-    return () => {
-      live = false;
-      ro?.disconnect();
-    };
-  }, [types]);
   return (
-    <div className="mb-3 flex min-w-0 items-start gap-3">
+    <div className="mb-3 flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2">
       <div
-        ref={legend}
         data-testid="calendar-legend"
-        data-mode="full"
-        className="group/lg flex min-w-0 flex-[0_1_auto] flex-nowrap items-center gap-x-4 gap-y-2 overflow-hidden pt-0.5 text-[12.5px] text-[var(--ds-muted)] data-[mode=wrap]:flex-wrap"
+        className="flex min-w-[min(100%,340px)] flex-[1_1_0%] flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5 text-[12.5px] text-[var(--ds-muted)]"
       >
         {types.map((t) => (
           <span key={t} className="inline-flex items-center gap-1.5 whitespace-nowrap">
             <i aria-hidden className="inline-block size-2 shrink-0 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
-            <span className="group-data-[mode=short]/lg:hidden group-data-[mode=wrap]/lg:hidden">{EVENT_TYPE_LABEL[t]}</span>
-            <span className="hidden group-data-[mode=short]/lg:inline group-data-[mode=wrap]/lg:inline">
-              {EVENT_TYPE_SHORT[t]}
-            </span>
+            {EVENT_TYPE_LABEL[t]}
           </span>
         ))}
       </div>
@@ -577,6 +550,15 @@ function EventRow({ e, wide = false }: { e: CalendarEvent; wide?: boolean }) {
               className="block text-[10.5px] leading-tight font-medium tracking-[0.04em] whitespace-nowrap text-[var(--ds-subtle)] uppercase"
             >
               {p.month}
+            </span>
+          )}
+          {p.year && (
+            <span
+              aria-hidden
+              data-testid="date-block-year"
+              className="block text-[10.5px] leading-tight font-medium tracking-[0.04em] whitespace-nowrap text-[var(--ds-subtle)] tabular-nums"
+            >
+              {p.year}
             </span>
           )}
         </span>

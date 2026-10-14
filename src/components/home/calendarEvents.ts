@@ -82,16 +82,6 @@ export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
   deadline: "Matter deadlines",
 };
 
-/** Shorter legend labels, used when the full ones do not fit one row. */
-export const EVENT_TYPE_SHORT: Record<CalendarEventType, string> = {
-  hearing: "Hearings",
-  appeal: "Appeals",
-  probation: "Probation",
-  tribunal: "Tribunal limits",
-  response: "Responses",
-  deadline: "Matter dates",
-};
-
 export const EVENT_TYPES: CalendarEventType[] = ["hearing", "appeal", "probation", "tribunal", "response", "deadline"];
 
 /** Ink and pale fill for each type, from the status tokens. */
