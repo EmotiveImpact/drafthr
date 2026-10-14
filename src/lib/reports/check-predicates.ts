@@ -47,7 +47,19 @@ function bodyText(draft: Draft): string {
   return draft.sections.map((s) => stripHtml(s.html ?? "")).join("\n");
 }
 
-const PLACEHOLDER_RE = /\[([a-z][a-z0-9_]*)\]/gi;
+// The same blank-detection rule as the letter health score
+// (lib/finalize/healthChecks.ts, checkPlaceholders), so Reports' failing
+// checks and its "Letters needing attention" list always agree (HOME-X40).
+// It catches the blanks the pipeline writes, spaces included:
+// [date of review meeting], [TBD], [TBD: ...], [employer name], mail
+// merge's [x not set] and any {{token}} left behind. Case citations like
+// [2023] start with a digit and do not match.
+const PLACEHOLDER_RE = /\[(TBD[^\]]{0,80}|[A-Za-z][A-Za-z0-9_ ]{0,40})\]|\{\{\s*([^}]{1,60}?)\s*\}\}/g;
+// Brackets a finished letter legitimately carries: editorial marks in quoted
+// material, and "[See Fig 2]" / "[See Attachments]" evidence references
+// (checked by the broken-evidence rule instead).
+const NOT_PLACEHOLDERS = new Set(["sic", "emphasis added", "emphasis in original", "redacted"]);
+const EVIDENCE_REF_RE = /^see\s/i;
 const PII_PATTERNS: { id: string; re: RegExp; label: string }[] = [
   { id: "ni-number", re: /\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b/, label: "UK NI number" },
   { id: "us-ssn", re: /\b\d{3}-\d{2}-\d{4}\b/, label: "US SSN" },
@@ -92,7 +104,11 @@ function predicateUnapprovedSevenDays(draft: Draft): null | string {
 function predicateUnresolvedPlaceholders(draft: Draft): null | string {
   const text = bodyText(draft);
   const found = new Set<string>();
-  for (const m of text.matchAll(PLACEHOLDER_RE)) found.add(m[1]);
+  for (const m of text.matchAll(PLACEHOLDER_RE)) {
+    const name = (m[1] ?? m[2] ?? "").trim();
+    if (m[1] !== undefined && EVIDENCE_REF_RE.test(name)) continue;
+    if (name && !NOT_PLACEHOLDERS.has(name.toLowerCase())) found.add(name);
+  }
   if (found.size === 0) return null;
   const list = [...found].slice(0, 3).join(", ");
   const more = found.size > 3 ? ` (+${found.size - 3} more)` : "";

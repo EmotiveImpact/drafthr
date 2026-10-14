@@ -95,6 +95,33 @@ describe("SecurityCard", () => {
     expect(init.body).toBe(JSON.stringify({ email: "alice@example.com" }));
   });
 
+  it("puts the explanation in the card's description under the title, like the Audit log card (CREATE-X33)", () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: "user_123",
+        email: "alice@example.com",
+        firstName: "Alice",
+        lastName: null,
+        profilePictureUrl: null,
+      },
+      activeTenant: null,
+      hasAnyTenant: false,
+      isConsultant: false,
+      isLoaded: true,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+      refresh: vi.fn(),
+    });
+    render(withTheme(<SecurityCard />));
+    const heading = screen.getByRole("heading", { name: "Password" });
+    const description = heading.nextElementSibling;
+    expect(description?.tagName).toBe("P");
+    expect(description).toHaveTextContent(/one-time reset link to alice@example\.com\./);
+    // The action sits below the header, not inside it.
+    const button = screen.getByRole("button", { name: /send password reset link/i });
+    expect(heading.parentElement?.contains(button)).toBe(false);
+  });
+
   it("surfaces a server error when the endpoint 4xxes", async () => {
     mockUseAuth.mockReturnValue({
       user: {

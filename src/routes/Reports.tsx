@@ -1135,7 +1135,15 @@ function FailingCheckRow({ check, count, onClick }: { check: ReportsHealthCheck;
         onClick={onClick}
         className="-mx-2 flex w-[calc(100%+16px)] items-start gap-3 rounded-[8px] border-b border-[var(--ds-line-2)] px-2 py-2.5 text-left transition-colors duration-[120ms] last:border-b-0 hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:outline-2 focus-visible:outline-[var(--ds-focus)]"
       >
-        <span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--ds-red-fg)]" />
+        {/* Red only for a rule that blocks sending; an advisory rule is a
+            warning, amber as in "Letters needing attention" (HOME-X39). */}
+        <span
+          aria-hidden
+          className={cn(
+            "mt-1.5 size-1.5 shrink-0 rounded-full",
+            copy.advisory ? "bg-[var(--ds-amber-dot)]" : "bg-[var(--ds-red-fg)]"
+          )}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5 text-[13.5px] leading-snug font-medium text-[var(--ds-ink)]">
             <span className="truncate">{copy.label}</span>

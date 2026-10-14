@@ -7,6 +7,7 @@ import {
   HEALTH_CHECKS,
   failingDraftsForCheck,
 } from "@/lib/reports/check-predicates";
+import { runHealthChecks } from "@/lib/finalize/healthChecks";
 
 /* ============================================================================
  * Tests for FailingCheckDrillDown — /reports/checks/:checkId
@@ -205,6 +206,46 @@ describe("HEALTH_CHECKS predicates", () => {
     expect(reason).toBeTruthy();
     expect(reason).toMatch(/placeholder/);
     expect(reason).toMatch(/employee_name|date/);
+  });
+
+  it("unresolved-placeholders agrees with the letter health score, blanks with spaces included (HOME-X40)", () => {
+    const withBody = (id: string, body: string) =>
+      makeDraft({
+        id,
+        sections: [
+          {
+            id: "sec_1",
+            sectionId: "opening",
+            title: "Intro",
+            html:
+              `<p>${body} ` +
+              "Filler text to push word-count past the lower bound ".repeat(20) +
+              "</p><hr/><p>Confidential and without prejudice.</p>",
+            required: true,
+            status: "ready",
+            versions: [],
+          },
+        ] as Draft["sections"],
+      });
+    const pred = HEALTH_CHECKS.find((c) => c.id === "unresolved-placeholders")!.predicate;
+    const cases: [string, boolean][] = [
+      ["We will meet on [date of review meeting].", true],
+      ["Outcome: [TBD: hearing outcome].", true],
+      ["Dear {{ employee_name }},", true],
+      ["Dear [employee_name],", true],
+      ["As held in [2023] ICR 1, the employer [sic] acted fairly.", false],
+      ["See the notes [See Fig 1] and [See Attachments].", false],
+      ["No blanks at all.", false],
+    ];
+    for (const [body, fails] of cases) {
+      const draft = withBody(`ph-${body.length}`, body);
+      const scorer = runHealthChecks(draft).find((c) => c.id === "placeholders")!;
+      expect(scorer.severity !== "pass", `scorer on: ${body}`).toBe(fails);
+      expect(Boolean(pred(draft)), `reports on: ${body}`).toBe(fails);
+    }
+    expect(pred(withBody("ph-spaces", "We will meet on [date of review meeting]."))).toBe(
+      "1 unresolved placeholder in body: date of review meeting"
+    );
   });
 
   it("pii-leak predicate trips an NI-number body", () => {

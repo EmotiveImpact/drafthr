@@ -299,7 +299,7 @@ export function OutCard({
         <div className="mt-3 flex items-center gap-2.5 rounded-[10px] bg-[var(--ds-amber-soft)] px-3 py-2 text-[13px] text-[var(--ds-amber-fg)]">
           <span className="min-w-0 flex-1">
             {paymentsOn === false
-              ? "Awaiting payment. Online payment isn't available yet, so the specialist can't start on this booking."
+              ? "Awaiting payment. Online payment isn't available yet, so the expert can't start on this booking."
               : `Pay ${price ?? "the fee"} to start`}
           </span>
           {paymentsOn === false ? (
@@ -315,7 +315,7 @@ export function OutCard({
       )}
       {booking?.paymentStatus === "processing" && booking.status === "accepted" && (
         <p className="m-0 mt-3 text-[12.5px] leading-[1.45] text-[var(--ds-muted)]">
-          Payment processing. Bank payments such as Direct Debit can take a few working days to clear; the specialist starts once it does.
+          Payment processing. Bank payments such as Direct Debit can take a few working days to clear; the expert starts once it does.
         </p>
       )}
       {note && <p className="m-0 mt-3 text-[12.5px] leading-[1.45] text-[var(--ds-amber-fg)]">{note}</p>}

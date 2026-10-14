@@ -69,14 +69,21 @@ export function SecurityCard() {
   };
 
   return (
-    <SettingsCard icon={<KeyRound />} title="Password">
-      <p className="m-0 max-w-[62ch] text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
-        We'll email a one-time reset link to <strong className="font-medium text-[var(--ds-ink)]">{user.email}</strong>.
-        The link expires in a few minutes for safety. You stay signed in until you finish the reset on the linked
-        page.
-      </p>
-
-      <div className="mt-4">
+    // Laid out like the Audit log copy card beside it: the explanation is the
+    // card's description under the title, and the action sits below the
+    // header (CREATE-X33).
+    <SettingsCard
+      icon={<KeyRound />}
+      title="Password"
+      description={
+        <>
+          We'll email a one-time reset link to{" "}
+          <strong className="font-medium text-[var(--ds-ink)]">{user.email}</strong>. The link expires in a few minutes
+          for safety. You stay signed in until you finish the reset on the linked page.
+        </>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={() => void onSendReset()} disabled={sending}>
           {sending ? <Spinner /> : <Mail className="size-4" aria-hidden />}
           {sending ? "Sending…" : "Send password reset link"}

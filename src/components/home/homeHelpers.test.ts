@@ -204,6 +204,11 @@ describe("needs you agrees with the Letters page", () => {
       draft: draft("away", { reviewStatus: "in_review" }),
       journey: j({ stage: "approve", tone: "away", statusLabel: "Waiting for Ruth", statusTone: "blue" }),
     },
+    // Waiting for your own approval: needs you, at the Approve stage.
+    {
+      draft: draft("mine", { reviewStatus: "in_review" }),
+      journey: j({ stage: "approve", tone: "needs-you", statusLabel: "Needs your approval", needsYou: true, whereLabel: "Approve · needs you" }),
+    },
     // Ready for review, nothing to fix: does not need you.
     { draft: draft("ready"), journey: j({ stage: "review", statusLabel: "Ready for review", statusTone: "blue" }) },
     // Sent.
@@ -211,17 +216,24 @@ describe("needs you agrees with the Letters page", () => {
   ];
 
   it("counts the letters that need you, the same rule as Letters", () => {
-    expect(summaryFor(letters)).toEqual({ inProgress: 4, needYou: 2 });
+    expect(summaryFor(letters)).toEqual({ inProgress: 5, needYou: 3 });
   });
 
   it("lists every letter that needs you, and only those", () => {
     const items = needsYouItems({ journeys: letters, tasks: {}, matters: {}, events: [], now: NOW });
-    expect(items.map((i) => i.id).sort()).toEqual(["draft:fix", "send:send"]);
+    expect(items.map((i) => i.id).sort()).toEqual(["draft:fix", "review:mine", "send:send"]);
     const fix = items.find((i) => i.id === "draft:fix")!;
     expect(fix.title).toMatch(/ for Jordan Hale$/);
     expect(fix.meta).toBe("1 compliance issue to fix before sending");
     expect(fix.pill).toEqual({ label: "Draft", tone: "amber" });
     const send = items.find((i) => i.id === "send:send")!;
     expect(send.meta).toBe("Approved by Ruth Adeyemi, ready to send");
+  });
+
+  it("calls a letter waiting for your own approval Approval, not Review (HOME-X36)", () => {
+    const items = needsYouItems({ journeys: letters, tasks: {}, matters: {}, events: [], now: NOW });
+    const mine = items.find((i) => i.id === "review:mine")!;
+    expect(mine.pill).toEqual({ label: "Approval", tone: "amber" });
+    expect(mine.meta).toMatch(/^Waiting for your approval, asked /);
   });
 });

@@ -357,18 +357,22 @@ export function Calendar() {
  * The legend and the matter filter on one row, as in the mock. The legend
  * always uses the full labels; when they do not all fit beside the filter
  * (a sixth kind, a long matter name) the legend wraps onto a second line
- * rather than switching to other words. The filter keeps its own width (up
- * to 200px); on a phone it drops below the legend.
+ * rather than switching to other words. The lines are balanced, so a wrap
+ * splits the key evenly (three and three) and no label is left alone on
+ * the second line (HOME-X38). The filter keeps its own width (up to
+ * 200px); on a phone it drops below the legend.
  */
 function LegendRow({ types, children }: { types: CalendarEventType[]; children: ReactNode }) {
   return (
     <div className="mb-3 flex min-w-0 flex-wrap items-start gap-x-3 gap-y-2">
       <div
         data-testid="calendar-legend"
-        className="flex min-w-[min(100%,340px)] flex-[1_1_0%] flex-wrap items-center gap-x-3.5 gap-y-1.5 pt-0.5 text-[12.5px] text-[var(--ds-muted)]"
+        // A block of inline items (not a flex row) so `text-wrap: balance`
+        // can even out the lines when the key wraps.
+        className="min-w-[min(100%,340px)] flex-[1_1_0%] pt-px text-[12.5px] leading-[19px] text-[var(--ds-muted)] [text-wrap:balance]"
       >
         {types.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <span key={t} className="mr-3.5 inline-flex items-center gap-1.5 whitespace-nowrap align-top last:mr-0">
             <i aria-hidden className="inline-block size-2 shrink-0 rounded-[3px]" style={{ background: EVENT_TONE[t].fg }} />
             {EVENT_TYPE_LABEL[t]}
           </span>
