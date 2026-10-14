@@ -1,5 +1,6 @@
 import type { DraftTimelineItem } from "@/lib/timeline";
 import { formatDateOnly } from "@/lib/date-only";
+import { sentForApprovalTitle } from "@/components/journey/send/record";
 
 const FORMAT_WORDS: Record<string, string> = {
   pdf: "Downloaded as PDF",
@@ -62,6 +63,12 @@ export function readableTimeline(events: DraftTimelineItem[]): DraftTimelineItem
         title: by ? `Counsel review by ${by}` : "Counsel review recorded",
         detail: on ? `Reviewed on ${dayInWords(on)}` : undefined,
       });
+      continue;
+    }
+    if (e.kind === "review_submitted") {
+      // The store records the approver as this entry's actor; they are who
+      // it went to, not who sent it (SEND-X38).
+      out.push({ ...e, title: sentForApprovalTitle(e.actorName), actorName: undefined });
       continue;
     }
     if (e.kind === "ai_message") {

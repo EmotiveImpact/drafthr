@@ -7,7 +7,8 @@ import {
   runHealthChecks,
   type HealthActionRoute,
 } from "@/lib/finalize/healthChecks";
-import { journeyStepsFor, sendWhatNow, useJourney, type JourneyStage } from "@/lib/journey/stage";
+import { journeyStepsFor, useJourney, type JourneyStage } from "@/lib/journey/stage";
+import { sentWhatNow } from "./send/record";
 import { SEND_FADE_MS, useSendMoment } from "./ui-store";
 import { HealthCard, StageTracker, WhatNow, type HealthFix } from "@/components/journey/ui";
 import { DraftStage } from "./stages/DraftStage";
@@ -59,14 +60,21 @@ export function JourneyPanel({
   // for it, only the drafting checklist and health (LETTER-X24).
   const isTemplate = useDraftStore((s) => !!s.drafts[draftId]?.isTemplateSource);
   const mode = useDraftStore((s) => s.drafts[draftId]?.mode);
-  const sections = useDraftStore((s) => s.drafts[draftId]?.sections);
-  // Right after sending, the Send step stays on screen for a moment (SentStage);
-  // the line above it keeps the Send step's words until both swap (SEND-X36).
+  const draft = useDraftStore((s) => s.drafts[draftId]);
+  // Right after sending, the Send step stays on screen for a moment
+  // (SentStage), every step already green: the line above it says what was
+  // just recorded, then turns into What's next's own line as the panel
+  // swaps (SEND-X36, SEND-X37). A letter whose two lines are the same keeps
+  // it in place rather than fading it out and back.
   const moment = useSendMoment(draftId);
   if (!journey) return null;
   const Stage = STAGES[journey.stage];
-  const sending = journey.stage === "sent" && moment !== "next" && mode !== undefined;
-  const whatNow = sending && mode ? sendWhatNow({ mode, sections: sections ?? [] }) : journey.whatNow;
+  const sent = journey.stage === "sent" && draft ? draft : null;
+  const momentLine = sent ? sentWhatNow(sent, "moment") : null;
+  const nextLine = sent ? sentWhatNow(sent, "next") : null;
+  const swaps = !!momentLine && !!nextLine && momentLine.detail !== nextLine.detail;
+  const sending = swaps && moment !== "next";
+  const whatNow = sent && momentLine && nextLine ? (moment === "next" ? nextLine : momentLine) : journey.whatNow;
   const showHealth = health !== false && journey.stage !== "send" && journey.stage !== "sent";
 
   return (
@@ -87,7 +95,7 @@ export function JourneyPanel({
           "transition-opacity ease-out motion-reduce:transition-none",
           sending && moment === "fade" && "opacity-0",
           // What's next fades in with the Sent stage under it.
-          journey.stage === "sent" && moment === "next" && "animate-in fade-in-0 duration-300 motion-reduce:animate-none"
+          swaps && moment === "next" && "animate-in fade-in-0 duration-300 motion-reduce:animate-none"
         )}
         style={sending ? { transitionDuration: `${SEND_FADE_MS}ms` } : undefined}
       />

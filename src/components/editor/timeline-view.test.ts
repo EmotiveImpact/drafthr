@@ -54,3 +54,13 @@ describe("downloads", () => {
     expect(downloads(rows)).toBe(1);
   });
 });
+
+describe("sent for approval (SEND-X38)", () => {
+  it("names the approver as who it went to, not as who sent it", () => {
+    const [row] = readableTimeline([
+      item({ id: "s", kind: "review_submitted", createdAt: 1, title: "Submitted for review to Ruth Adeyemi", actorName: "Ruth Adeyemi" }),
+    ]);
+    expect(row.title).toBe("Sent to Ruth Adeyemi to approve");
+    expect(row.actorName).toBeUndefined();
+  });
+});

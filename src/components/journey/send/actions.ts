@@ -111,6 +111,16 @@ export function markLetterSent(draftId: string, input: MarkSentInput, now = new 
 
   const after = useDraftStore.getState().drafts[draftId];
   if (!after) return;
+  // The export keeps the date given (the seal, the lists and the appeal
+  // window read it), but its timeline entry is when the send was recorded:
+  // Activity, Home and the audit record list what happened when it
+  // happened, never at a time on the day given (SEND-X35).
+  const sentExport = [...(after.exports ?? [])].reverse().find((e) => e.format === "marked-sent" && e.exportedAt === at);
+  const timeline = sentExport
+    ? (after.timeline ?? []).map((t) =>
+        t.kind === "exported" && t.meta?.exportId === sentExport.id ? { ...t, createdAt: now.getTime() } : t
+      )
+    : after.timeline;
   const prevAnswers = after.answers as Answers;
   const close = appealCloseDate(after, input.dateGiven);
   const record: SentRecord = {
@@ -141,6 +151,7 @@ export function markLetterSent(draftId: string, input: MarkSentInput, now = new 
         [draftId]: {
           ...cur,
           answers,
+          timeline,
           context: { ...cur.context, deliveryMethod: record.givenBy },
           updatedAt: Date.now(),
         },
@@ -150,7 +161,7 @@ export function markLetterSent(draftId: string, input: MarkSentInput, now = new 
   // Activity lists the send when it was recorded (newest first), and says
   // the date given when that was an earlier day (SEND-X2). The marked-sent
   // export keeps the date given, which the seal and the appeal window use;
-  // sentExportAt ties the two so Activity shows one line.
+  // sentExportAt ties the two so Activity shows one line for the send.
   const backDated = toDateOnly(now) !== input.dateGiven;
   useDraftStore.getState().recordTimelineEvent(draftId, {
     kind: "details_updated",

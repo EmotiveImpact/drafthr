@@ -19,6 +19,9 @@ import {
  * The Send step's content (mock f7-send, "Open full page" from as-panel-c).
  * `frozen` is the moment right after sending: the same choices, read-only,
  * with the button reading "Sent", before the panel turns into What's next.
+ * Everything keeps its place in that moment (the counsel line stays), and
+ * "Open full page" is left out: the letter is sent, and the card would only
+ * sit cut off under the panel's foot while it fades (SEND-X40).
  */
 export function SendStepBody({ flow, frozen = false }: { flow: SendFlow; frozen?: boolean }) {
   const { recipient, prefs, draft } = flow;
@@ -47,45 +50,47 @@ export function SendStepBody({ flow, frozen = false }: { flow: SendFlow; frozen?
       ) : (
         <EmailDateNote />
       )}
-      {!frozen && (
-        <>
-          <CounselNote flow={flow} />
-          <EmailErrorBox flow={flow} />
-        </>
-      )}
+      <CounselNote flow={flow} />
+      {!frozen && <EmailErrorBox flow={flow} />}
       {frozen ? (
         <div className="mt-4 inline-flex h-[42px] w-full items-center justify-center gap-[7px] rounded-[10px] bg-[var(--ds-accent)] text-[14.5px] font-medium text-[var(--ds-on-accent)]">
           <Check aria-hidden className="size-4" />
           Sent
         </div>
       ) : (
-        <PinnedSendBar flow={flow} />
+        <>
+          <PinnedSendBar flow={flow} />
+          {/* Follows the step: at 1440x900 every choice, the counsel line and
+           * the button fit above the fold, and this card is the one thing
+           * the panel scrolls to (SEND-X30). */}
+          <OpenFullPageCard draftId={draft.id} className="mb-2" />
+        </>
       )}
-      {frozen && <OpenFullPageCard draftId={draft.id} />}
       {!frozen && flow.gate}
     </section>
   );
 }
 
 /**
- * The button and "Open full page" under it stay in view at the foot of the
- * panel while the step scrolls, above the Ask DraftHR chips (SEND-X5); on a
- * phone the sheet pins the button alone. Nothing of the step sits below
- * them on a desktop, so no line is ever cut under the button; while they are pinned over more of the step, what
- * scrolls under them fades into them instead of being cut in half
- * (SEND-X30). The panel's own bottom fade is off while this bar is there
- * (globals.css), so the button is never faded either.
+ * Only the button (and why it is disabled) stays in view at the foot of the
+ * panel while the step scrolls, above the Ask DraftHR chips (SEND-X5);
+ * "Open full page" follows the step under it, so the bar covers as little
+ * of the step as it can: at 1440x900 nothing of the step is under it, and
+ * on shorter screens what scrolls under it fades into it instead of being
+ * cut in half (SEND-X30). The panel's own bottom fade is off while the bar
+ * is pinned (globals.css), so the button is never faded either.
  */
 function PinnedSendBar({ flow }: { flow: SendFlow }) {
   const barRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLSpanElement>(null);
-  const stuck = useStuck(barRef, endRef);
+  const { stuck, nearFoot } = useStuck(barRef, endRef);
   return (
     <>
       <div
         ref={barRef}
         data-slot="send-button-bar"
         data-stuck={stuck || undefined}
+        data-near-foot={nearFoot || undefined}
         className={
           "sticky bottom-0 z-10 -mx-1 flex flex-col bg-[var(--ds-surface)] px-1 pb-2 " +
           // The fade above the pinned bar: what scrolls under it dissolves.
@@ -95,27 +100,45 @@ function PinnedSendBar({ flow }: { flow: SendFlow }) {
         {/* Why it is disabled stays with the button. */}
         <BlockLine block={flow.block} />
         <SendButton flow={flow} className={flow.block ? "mt-2" : undefined} />
-        <OpenFullPageCard draftId={flow.draft.id} className="max-md:hidden" />
       </div>
       {/* Marks where the bar sits in the flow: it is pinned while it shows above this. */}
       <span ref={endRef} aria-hidden className="block h-0" />
-      {/* On a phone the sheet is short, so only the button is pinned and the
-       * card follows the step. */}
-      <OpenFullPageCard draftId={flow.draft.id} className="mb-2 md:hidden" />
     </>
   );
 }
 
-/** True while a sticky element is pinned away from its place in the flow (marked by `end`, right after it). */
-function useStuck(barRef: RefObject<HTMLElement | null>, endRef: RefObject<HTMLElement | null>): boolean {
-  const [stuck, setStuck] = useState(false);
+/** The panel's bottom fade, in px, when nothing is pinned (globals.css `.ai-panel-scroll[data-more-below]`). */
+const PANEL_FADE_PX = 36;
+
+/**
+ * Where the sticky bar is: `stuck` while it is pinned away from its place in
+ * the flow (marked by `end`, right after it), and `nearFoot` while it sits
+ * in its place within the panel's bottom fade. Then the fade is shortened
+ * to the room under the bar (--send-foot-fade on the scroll area), so it
+ * fades what follows the bar ("Open full page") and never the button.
+ */
+function useStuck(
+  barRef: RefObject<HTMLElement | null>,
+  endRef: RefObject<HTMLElement | null>
+): { stuck: boolean; nearFoot: boolean } {
+  const [state, setState] = useState({ stuck: false, nearFoot: false });
   useEffect(() => {
     const bar = barRef.current;
     const end = endRef.current;
     if (!bar || !end) return;
     let scroller: HTMLElement | null = bar.parentElement;
     while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
-    const measure = () => setStuck(end.getBoundingClientRect().top - bar.getBoundingClientRect().bottom > 1);
+    const measure = () => {
+      const b = bar.getBoundingClientRect();
+      const stuck = end.getBoundingClientRect().top - b.bottom > 1;
+      const room = scroller ? scroller.getBoundingClientRect().bottom - b.bottom : Infinity;
+      const nearFoot = !stuck && room < PANEL_FADE_PX;
+      if (scroller) {
+        if (nearFoot) scroller.style.setProperty("--send-foot-fade", `${Math.max(0, Math.round(room))}px`);
+        else scroller.style.removeProperty("--send-foot-fade");
+      }
+      setState((s) => (s.stuck === stuck && s.nearFoot === nearFoot ? s : { stuck, nearFoot }));
+    };
     measure();
     const target: HTMLElement | Window = scroller ?? window;
     target.addEventListener("scroll", measure, { passive: true });
@@ -128,7 +151,8 @@ function useStuck(barRef: RefObject<HTMLElement | null>, endRef: RefObject<HTMLE
       target.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
       ro?.disconnect();
+      scroller?.style.removeProperty("--send-foot-fade");
     };
   }, [barRef, endRef]);
-  return stuck;
+  return state;
 }

@@ -63,12 +63,16 @@ export function buildDraftTimeline(draft: Draft): DraftTimelineItem[] {
       exportEvent.reviewedBy &&
       !hasMeta(items, "counsel_review", "exportId", exportEvent.id)
     ) {
+      // Listed beside its export's entry: a back-dated send's export is
+      // timed at the date given, but its entry (and so this) at the time it
+      // was recorded (SEND-X35).
+      const entry = items.find((item) => item.kind === "exported" && item.meta?.exportId === exportEvent.id);
       items.push(
         normalize(
           {
             id: `review:${exportEvent.id}`,
             kind: "counsel_review",
-            createdAt: exportEvent.exportedAt,
+            createdAt: entry?.createdAt ?? exportEvent.exportedAt,
             title: `Counsel review attested by ${exportEvent.reviewedBy}`,
             detail: exportEvent.reviewedOn,
             meta: {

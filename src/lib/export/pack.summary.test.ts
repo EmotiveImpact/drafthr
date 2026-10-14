@@ -107,3 +107,21 @@ describe("packDateTime", () => {
     expect(us).toMatch(/^Sep 10, 2026/);
   });
 });
+
+describe("pack copy people read (SEND-X37)", () => {
+  it("shows dates in words and template guidance without em dashes", async () => {
+    const { packDate, plainPunctuation } = await import("@/lib/export/pack");
+    const draft = makeDraft();
+    const attested = { reviewedBy: "Priya Shah", reviewedOn: "2026-01-01" };
+    const html = buildExportPackHtml(draft, attested);
+    expect(html).toContain("Issued 2 Jan 2026");
+    expect(html).toContain("Priya Shah on 1 Jan 2026");
+    // Only the letter's own text (none here) may carry a raw date; the pack's copy never does.
+    expect(html.replace(/<article[\s\S]*<\/article>/, "")).not.toMatch(/\b\d{4}-\d{2}-\d{2}\b/);
+    expect(html).not.toMatch(/—/);
+    expect(packDate({ context: { jurisdiction: "US" } } as Draft, "2026-10-14")).toBe("Oct 14, 2026");
+    expect(plainPunctuation("MUST NOT use intensifiers ('serious', 'severe') — let the facts carry the weight.")).toBe(
+      "MUST NOT use intensifiers ('serious', 'severe'): let the facts carry the weight."
+    );
+  });
+});

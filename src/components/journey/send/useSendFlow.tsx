@@ -270,7 +270,10 @@ export function useSendFlow(draftId: string, variant: "panel" | "page" = "panel"
       try {
         for (const f of formats) {
           try {
-            await runExport(fresh, f, att, {
+            // Read the letter again for each file: the audit record lists the
+            // files that went out before it in this same send (SEND-X39).
+            const current = useDraftStore.getState().drafts[draft.id] ?? fresh;
+            await runExport(current, f, att, {
               excludeEvidence: variant === "page" ? prefs.excludedEvidence : undefined,
               coverNote: variant === "page" ? prefs.coverNote : undefined,
               // The audit record goes out with this send, so it records it

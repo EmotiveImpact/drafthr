@@ -798,6 +798,18 @@
   -webkit-mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
   mask-image: linear-gradient(to top, black calc(100% - 20px), transparent);
 }
+/* The Send step's button in its place, just above the panel's foot, with
+ * "Open full page" following it out of view: the fade covers only the room
+ * under the button (--send-foot-fade, set by the step), so the card fades
+ * and the button never does (SEND-X30). */
+.ai-panel-scroll[data-more-below]:has([data-slot="send-button-bar"][data-near-foot]) {
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+}
+.ai-panel-scroll[data-more-above][data-more-below]:has([data-slot="send-button-bar"][data-near-foot]) {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - var(--send-foot-fade, 36px)), transparent);
+}
 
 /* The paged letter on a phone (PagedlyDocEditor): the page narrows to the
  * screen with smaller margins, so the words keep their size instead of the

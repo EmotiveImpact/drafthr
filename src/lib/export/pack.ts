@@ -8,6 +8,7 @@ import {
 import { renderLetterPdfBlob, filenameFor as pdfFilenameFor, letterBodyHtml } from "./pdf";
 import { renderLetterDocxBlob, docxFilenameFor } from "./docx";
 import { isSafeImageDataUrl } from "@/lib/safe-data-url";
+import { formatDateOnly } from "@/lib/date-only";
 import { loadTemplate } from "@/lib/letters/templates";
 import { displayTitleFor, letterTypeLabelFor, recipientNameFor } from "@/lib/letters/display";
 
@@ -176,13 +177,13 @@ function buildReadme(
   lines.push(`====================`);
   lines.push("");
   lines.push(`Letter type:    ${letterTypeLabelFor(draft)}`);
-  lines.push(`Mode:           ${draft.mode}`);
+  lines.push(`Written by:     ${modeLabel(draft)}`);
   lines.push(`Jurisdiction:   ${draft.context.jurisdiction}`);
-  lines.push(`Issue date:     ${draft.context.issueDate}`);
-  lines.push(`Generated:      ${new Date().toISOString()}`);
+  lines.push(`Issue date:     ${packDate(draft, draft.context.issueDate)}`);
+  lines.push(`Generated:      ${packDateTime(draft, Date.now())}`);
   lines.push("");
   if (attestation) {
-    lines.push(`Counsel review: ${attestation.reviewedBy} on ${attestation.reviewedOn}`);
+    lines.push(`Counsel review: ${attestation.reviewedBy} on ${packDate(draft, attestation.reviewedOn)}`);
   } else {
     lines.push(`Counsel review: not attested`);
   }
@@ -464,7 +465,7 @@ export function buildExportPackHtml(
   <main>
     <header>
       <h1>${escapeHtml(packTitle(draft))}</h1>
-      <p class="meta">Generated ${escapeHtml(generatedAt)} · ${escapeHtml(draft.context.jurisdiction)} · ${escapeHtml(draft.context.issueDate)}</p>
+      <p class="meta">Generated ${escapeHtml(generatedAt)} · ${escapeHtml(draft.context.jurisdiction)} · Issued ${escapeHtml(packDate(draft, draft.context.issueDate))}</p>
     </header>
 
     <section class="section">
@@ -472,9 +473,9 @@ export function buildExportPackHtml(
       <div class="grid">
         ${summaryCard("Letter type", letterTypeLabelFor(draft))}
         ${summaryCard(draft.mode === "employer" ? "Recipient" : "Employer", draft.mode === "employer" ? draft.employee.legalName : draft.employer.legalName)}
-        ${summaryCard("Issue date", draft.context.issueDate)}
+        ${summaryCard("Issue date", packDate(draft, draft.context.issueDate))}
         ${summaryCard("Evidence items", String(evidence.length))}
-        ${summaryCard("Counsel review", attestation ? `${attestation.reviewedBy} on ${attestation.reviewedOn}` : draft.context.counselReviewRequired ? "Required" : "Not required")}
+        ${summaryCard("Counsel review", attestation ? `${attestation.reviewedBy} on ${packDate(draft, attestation.reviewedOn)}` : draft.context.counselReviewRequired ? "Required" : "Not required")}
       </div>
     </section>
 
@@ -519,7 +520,7 @@ export function buildExportPackHtml(
                   .map(
                     (requirement) => `<li>
                       <span class="pill ${statusClass(requirement.status)}">${escapeHtml(statusLabel(requirement.status))}</span>
-                      <span class="small">${escapeHtml(requirement.text)}</span>
+                      <span class="small">${escapeHtml(plainPunctuation(requirement.text))}</span>
                     </li>`
                   )
                   .join("")}
@@ -541,7 +542,7 @@ export function buildExportPackHtml(
                   <div class="timeline-time">${escapeHtml(packDateTime(draft, event.createdAt))}</div>
                   <strong>${escapeHtml(event.title)}</strong>
                   ${event.sectionTitle ? `<div class="small muted">${escapeHtml(event.sectionTitle)}</div>` : ""}
-                  ${event.detail ? `<p class="small muted">${escapeHtml(event.detail)}</p>` : ""}
+                  ${event.detail ? `<p class="small muted">${escapeHtml(timelineDetail(draft, event.detail))}</p>` : ""}
                 </li>`
               )
               .join("")}</ul>`
@@ -587,7 +588,7 @@ function buildReviewChecklist(
       detail:
         complianceMissing.length === 0
           ? "No missing live compliance rules detected."
-          : complianceMissing.map((item) => item.rule.label).join(", "),
+          : complianceMissing.map((item) => plainPunctuation(item.rule.label)).join(", "),
     },
     {
       label: "Evidence and attachments",
@@ -604,7 +605,7 @@ function buildReviewChecklist(
           ? "check"
           : "ok",
       detail: attestation
-        ? `Current export attested by ${attestation.reviewedBy} on ${attestation.reviewedOn}.`
+        ? `Current export attested by ${attestation.reviewedBy} on ${packDate(draft, attestation.reviewedOn)}.`
         : latestReview(draft) ?? (draft.context.counselReviewRequired ? "Counsel review is required before issuance." : "No counsel-review gate required for this draft."),
     },
   ];
@@ -615,7 +616,7 @@ function latestReview(draft: Draft): string | undefined {
     .filter((event) => event.reviewedBy)
     .sort((a, b) => b.exportedAt - a.exportedAt)[0];
   if (!reviewed?.reviewedBy) return undefined;
-  return `Prior export attested by ${reviewed.reviewedBy}${reviewed.reviewedOn ? ` on ${reviewed.reviewedOn}` : ""}.`;
+  return `Prior export attested by ${reviewed.reviewedBy}${reviewed.reviewedOn ? ` on ${packDate(draft, reviewed.reviewedOn)}` : ""}.`;
 }
 
 function renderChecklistItem(item: ChecklistItem): string {
@@ -666,6 +667,36 @@ function statusClass(status: TemplateRequirementStatus): string {
 export function packDateTime(draft: Pick<Draft, "context">, at: number | string | Date): string {
   const locale = draft.context?.jurisdiction === "US" ? "en-US" : "en-GB";
   return new Date(at).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/**
+ * A calendar date (YYYY-MM-DD) in words for the pack, in the letter's
+ * jurisdiction: "14 Oct 2026" (UK), "Oct 14, 2026" (US). Anything that is
+ * not a date-only string is shown as it is (SEND-X37).
+ */
+export function packDate(draft: Pick<Draft, "context">, iso: string | undefined): string {
+  if (!iso) return "";
+  const locale = draft.context?.jurisdiction === "US" ? "en-US" : "en-GB";
+  return formatDateOnly(iso, { day: "numeric", month: "short", year: "numeric" }, locale);
+}
+
+/** A timeline line's detail: a bare date (a counsel review's "reviewed on") in words. */
+function timelineDetail(draft: Pick<Draft, "context">, detail: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(detail) ? `Reviewed on ${packDate(draft, detail)}` : detail;
+}
+
+/** Who the letter is written as, in words (never the "employer" slug). */
+function modeLabel(draft: Pick<Draft, "mode">): string {
+  return draft.mode === "employee" ? "Employee" : "HR team";
+}
+
+/**
+ * Template guidance shown to people in the pack (the quality inspector's
+ * requirements, compliance rule names) is written for the drafting model
+ * and uses dashes; the pack shows it with plain punctuation (SEND-X37).
+ */
+export function plainPunctuation(text: string): string {
+  return text.replace(/\s+[\u2014\u2013]\s+/g, ": ").replace(/\u2014/g, ", ");
 }
 
 function packTitle(draft: Draft): string {

@@ -163,15 +163,34 @@ export function letterBodyHtml(draft: Draft): string {
     resolved +
     attachments +
     // The notice and disclaimer belong to the letter, so they close it,
-    // before the Exhibits appendix starts its own page (SEND-X32).
-    "<hr />" +
-    sanitizeLetterHtml(disclaimerHtmlFor(draft)) +
+    // before the Exhibits appendix starts its own page (SEND-X32). They are
+    // one block, set as the letter's small print, that is never split
+    // across pages (break-inside) and never sits alone on a page away from
+    // the letter (paginateForPdf brings the sign-off with it) (SEND-X36).
+    closingBlockHtml(sanitizeLetterHtml(disclaimerHtmlFor(draft))) +
     // Exhibits appendix: same builder as the page preview and the DOCX.
     buildExhibitsAppendixHtml(draft) +
     // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands
     // when billing ships; for now everyone's on free, so this renders for all
     // unless VITE_DRAFTHR_EXPORT_FOOTER=false. See src/lib/branding/export-footer.ts.
     brandedExportFooterHtml({ envEnabled: resolveClientEnvFlag() })
+  );
+}
+
+/** Class of the closing block (the notice and disclaimer under the letter). */
+const CLOSING_CLASS = "letter-closing";
+
+/**
+ * The rule and the notice and disclaimer under it, as one block: small print
+ * (like the page footer, so it reads as the letter's fine print, not part of
+ * what the letter says) that the server renderer keeps on one page too.
+ */
+function closingBlockHtml(disclaimer: string): string {
+  return (
+    `<div class="${CLOSING_CLASS}" style="break-inside:avoid;page-break-inside:avoid;font-size:9.5pt;line-height:1.45;color:#334155;">` +
+    "<hr />" +
+    disclaimer +
+    "</div>"
   );
 }
 
@@ -300,6 +319,14 @@ async function renderClientSidePdf(pages: HTMLElement[]): Promise<Blob> {
   return pdf.output("blob");
 }
 
+/** The block is the letter's closing: kept whole and kept with the letter. */
+function keepsWithLetter(el: Element): boolean {
+  return el.classList.contains(CLOSING_CLASS);
+}
+
+/** How many of the letter's last blocks go over with a closing that does not fit (the sign-off). */
+const CLOSING_CARRY = 2;
+
 /** The block starts a new page (the Exhibits and Attachments appendices). */
 function breaksBefore(el: Element): boolean {
   if (el.classList.contains("page-break-before")) return true;
@@ -374,6 +401,10 @@ export function paginateForPdf(source: HTMLElement, ownerDocument: Document): HT
       return;
     }
     target().removeChild(node);
+    // The closing does not fit under the letter: rather than a page holding
+    // only the small print, the sign-off goes over with it, as long as the
+    // page it leaves keeps some of the letter and the two fit together.
+    if (el && keepsWithLetter(el) && stack.length === 1 && carryWithClosing(el)) return;
     if (placed > 0) {
       newPage();
       target().appendChild(node);
@@ -399,6 +430,33 @@ export function paginateForPdf(source: HTMLElement, ownerDocument: Document): HT
     }
     target().appendChild(node);
     placed += 1;
+  };
+
+  /** Move the page's last blocks and the closing to a new page; false (and nothing moved) when they do not fit there. */
+  const carryWithClosing = (closing: HTMLElement): boolean => {
+    const from = stack[0];
+    const blocks = Array.from(from.children) as HTMLElement[];
+    // Keep at least two blocks of the letter on the page it leaves.
+    const n = Math.min(CLOSING_CARRY, blocks.length - 2);
+    if (n <= 0) return false;
+    const carried = blocks.slice(blocks.length - n);
+    // Never carry an appendix that starts its own page.
+    if (carried.some((b) => breaksBefore(b))) return false;
+    for (const b of carried) from.removeChild(b);
+    newPage();
+    const to = stack[0];
+    for (const b of carried) to.appendChild(b);
+    to.appendChild(closing);
+    if (!overflows()) {
+      placed = carried.length + 1;
+      return true;
+    }
+    // Too tall together: undo, and lay the closing out on its own.
+    pages.pop()?.remove();
+    for (const b of carried) from.appendChild(b);
+    stack = [from];
+    placed = from.children.length;
+    return false;
   };
 
   // The "Drafted with DraftHR" line is a page footer: it sits in the bottom

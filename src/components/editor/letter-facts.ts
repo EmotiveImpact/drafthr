@@ -170,10 +170,11 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
   // like its marked-sent export: show that line and not both.
   // The send line is listed when it was recorded; its marked-sent export
   // carries the date given (meta.sentExportAt names it).
+  // Its export's own entry is listed when the send was recorded too (SEND-X35).
   const sentAts = new Set(
     timeline
       .filter((t) => t.kind === "details_updated" && t.meta?.action === "sent")
-      .map((t) => (typeof t.meta?.sentExportAt === "number" ? t.meta.sentExportAt : t.createdAt))
+      .flatMap((t) => (typeof t.meta?.sentExportAt === "number" ? [t.meta.sentExportAt, t.createdAt] : [t.createdAt]))
   );
   // Downloads made together (the Send step's "Download and mark as sent")
   // read as one line: "Downloaded PDF and evidence pack".

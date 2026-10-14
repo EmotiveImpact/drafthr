@@ -413,7 +413,8 @@ export function DownloadChips({ flow }: { flow: SendFlow }) {
           <label
             key={key}
             className={cn(
-              "relative inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--ds-line)] px-[9px] py-[5px] max-md:min-h-10 text-[12.5px] text-[var(--ds-ink)] transition-colors duration-[120ms]",
+              // 28px tall, as in the mock (f7 .inc), so the four chips and the counsel line fit above the button (SEND-X30).
+              "relative inline-flex items-center gap-1.5 rounded-[8px] border border-[var(--ds-line)] px-[9px] py-[5px] max-md:min-h-10 text-[12.5px] leading-4 text-[var(--ds-ink)] transition-colors duration-[120ms]",
               on ? "bg-[var(--ds-surface-2)]" : "bg-[var(--ds-surface)]",
               disabled ? "cursor-default opacity-[.6]" : "cursor-pointer hover:bg-[var(--ds-surface-3)]",
               "has-[input:focus-visible]:shadow-[var(--ds-focus-ring)]"

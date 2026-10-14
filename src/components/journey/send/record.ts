@@ -235,6 +235,31 @@ export function sendEntryFor(draft: Draft, exportedAt: number) {
   );
 }
 
+/**
+ * The send record behind a "marked-sent" timeline entry, found through the
+ * export it was made with (meta.exportId). The entry is listed when the
+ * send was recorded, while its export keeps the date given (SEND-X35);
+ * entries made before that share the export's time, the fallback here.
+ */
+export function sendEntryForTimelineExport(
+  draft: Draft,
+  t: { createdAt: number; meta?: Record<string, unknown> }
+) {
+  const id = t.meta?.exportId;
+  const ex = typeof id === "string" ? (draft.exports ?? []).find((e) => e.id === id) : undefined;
+  return sendEntryFor(draft, ex?.exportedAt ?? t.createdAt);
+}
+
+/**
+ * How a "sent for approval" entry reads. The store records the approver as
+ * that entry's actor, but the person who sent it is the one asking, so the
+ * approver is named as who it went to, never as who acted (SEND-X38).
+ */
+export function sentForApprovalTitle(approver: string | undefined): string {
+  const name = approver?.trim();
+  return name && !/^workspace reviewer$/i.test(name) ? `Sent to ${name} to approve` : "Sent for approval";
+}
+
 export function markedSentEvents(draft: Draft): ExportEvent[] {
   return (draft.exports ?? []).filter((e) => e.format === "marked-sent");
 }
@@ -440,6 +465,31 @@ export function recipientOf(draft: Draft, employee?: Employee): Recipient {
     suggestedEmail: !isValidEmail(stored) && isValidEmail(fromRecord) ? fromRecord : null,
     toEmployer: false,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  The "what to do now" line once sent                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The grey line above the Sent panel. In the send moment (the Send step held
+ * read-only, every step green), it says what was just recorded: "Sent.
+ * Handed over in person on Wed 14 Oct." Once What's next shows, it leads
+ * into the appeal rows ("What's next for this matter:", mock f8-sent) when
+ * the letter has them; a letter with no appeal window (an offer, a
+ * promotion, an employee's own letter) keeps the line about the send, as
+ * Download again and the next letter need no introduction (SEND-X37).
+ * Mirrors WhatsNext's own test for the appeal rows.
+ */
+export function sentWhatNow(draft: Draft, phase: "moment" | "next"): { lead: string; detail: string } {
+  const rec = getSentRecord(draft);
+  const given = dateGivenOf(draft);
+  const appeal = draft.mode !== "employee" && !!(rec?.appealDeadline ?? appealCloseDate(draft, given));
+  if (phase === "next" && appeal) {
+    return { lead: "Sent.", detail: draft.matterId ? "What's next for this matter:" : "What's next:" };
+  }
+  const how = rec ? givenByActivity(rec.givenBy, rec.way, rec.emailedName) : "Marked as sent";
+  return { lead: "Sent.", detail: given ? `${how} on ${fmtShortDay(given)}.` : `${how}.` };
 }
 
 /* ------------------------------------------------------------------ */

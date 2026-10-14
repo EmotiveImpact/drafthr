@@ -4,7 +4,8 @@ import { useDraftStore } from "@/lib/store";
 import { getJourney } from "@/lib/journey/stage";
 import { useJourneyUI } from "@/components/journey/ui-store";
 import { markLetterSent, saveAppealHearing, undoMarkedSent, undoToastText } from "./actions";
-import { getSentRecord, sentBannerText } from "./record";
+import { getSentRecord, sentBannerText, sentWhatNow } from "./record";
+import { buildDraftTimeline } from "@/lib/timeline";
 import { buildAuditRecord } from "./exports";
 import { activityEvents } from "@/components/editor/letter-facts";
 
@@ -100,6 +101,32 @@ describe("mark as sent, then undo", () => {
     expect(rows.map((r) => r.title)).toEqual(["Sent by post on Mon 12 Oct", "Started Warning letter"]);
   });
 
+  it("dates a back-dated send's export entry, and its counsel review, when it was recorded (SEND-X35)", () => {
+    seed();
+    markLetterSent(
+      "send-test-1",
+      {
+        way: "self",
+        givenBy: "post",
+        dateGiven: "2026-10-09",
+        downloaded: [],
+        attestation: { reviewedBy: "Priya Shah", reviewedOn: "2026-10-08" },
+      },
+      now
+    );
+    const sent = draft().exports!.find((e) => e.format === "marked-sent")!;
+    // The export keeps the date given (the seal, the lists, the appeal window)...
+    expect(new Date(sent.exportedAt).getDate()).toBe(9);
+    // ...but nothing in Activity is dated on the 9th, when nothing happened.
+    const items = buildDraftTimeline(draft());
+    expect(items.some((t) => new Date(t.createdAt).getDate() === 9)).toBe(false);
+    const entry = items.find((t) => t.kind === "exported" && t.meta?.exportId === sent.id)!;
+    expect(entry.createdAt).toBe(now.getTime());
+    expect(items.find((t) => t.kind === "counsel_review")?.createdAt).toBe(now.getTime());
+    // The editor's margin card still shows the send once.
+    expect(activityEvents(draft(), null, "Alex Morgan").map((r) => r.title)).toEqual(["Sent by post on Fri 9 Oct"]);
+  });
+
   it("Undo restores the Send step, the earlier appeal date and clears the hearing", () => {
     seed();
     markLetterSent("send-test-1", { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", downloaded: ["pdf"] }, now);
@@ -166,8 +193,8 @@ describe("audit record", () => {
     const text = buildAuditRecord(d, undefined, now.getTime(), {
       pendingSend: { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", actorName: "Alex Morgan" },
     });
-    expect(text).toMatch(/^Drafted {8}Alex Morgan, /m);
-    expect(text).toMatch(/^Sent {11}Handed over in person, given 14 Oct 2026, recorded by Alex Morgan/m);
+    expect(text).toMatch(/^Drafted {10}Alex Morgan, /m);
+    expect(text).toMatch(/^Sent {13}Handed over in person, given 14 Oct 2026, recorded by Alex Morgan/m);
     expect(text).not.toMatch(/Not yet|The letter's author/);
   });
 
@@ -178,14 +205,14 @@ describe("audit record", () => {
     const text = buildAuditRecord(d, undefined, now.getTime(), {
       pendingSend: { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", actorName: "Ruth Adeyemi" },
     });
-    expect(text).toMatch(/^Drafted {8}Alex Morgan, /m);
+    expect(text).toMatch(/^Drafted {10}Alex Morgan, /m);
     expect(text).toMatch(/recorded by Ruth Adeyemi/);
-    expect(text).not.toMatch(/^Drafted {8}Ruth/m);
+    expect(text).not.toMatch(/^Drafted {10}Ruth/m);
   });
 
   it("says the drafter is not recorded when the letter does not name one", () => {
     const d = seed({ timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }] });
-    expect(buildAuditRecord(d, undefined, now.getTime())).toMatch(/^Drafted {8}Not recorded, /m);
+    expect(buildAuditRecord(d, undefined, now.getTime())).toMatch(/^Drafted {10}Not recorded, /m);
   });
 
   it("names the owner collaborator when the created event has no name", () => {
@@ -193,7 +220,7 @@ describe("audit record", () => {
       timeline: [{ id: "c", kind: "created", title: "Created Warning letter", createdAt: 1 }],
       collaborators: [{ id: "o", email: "alex@harbourfoods.co.uk", name: "Alex Morgan", role: "owner", status: "active", invitedAt: 1 }],
     });
-    expect(buildAuditRecord(d, undefined, now.getTime())).toMatch(/^Drafted {8}Alex Morgan, /m);
+    expect(buildAuditRecord(d, undefined, now.getTime())).toMatch(/^Drafted {10}Alex Morgan, /m);
   });
 
   it("lists a back-dated send when it was recorded, with the day it was given (SEND-X2)", () => {
@@ -204,9 +231,44 @@ describe("audit record", () => {
     expect(text).not.toMatch(/^9 Oct 2026, 16:05/m);
   });
 
+  it("never names the approver as who sent it for approval, and keeps one label column (SEND-X38)", () => {
+    const d = seed({
+      reviewStatus: "approved",
+      approvals: [
+        { id: "s1", decision: "submitted", reviewerName: "Ruth Adeyemi", createdAt: 2 },
+        { id: "a1", decision: "approved", reviewerName: "Ruth Adeyemi", createdAt: 3 },
+      ] as Draft["approvals"],
+      timeline: [
+        { id: "t1", kind: "review_submitted", title: "Submitted for review to Ruth Adeyemi", createdAt: 2, actorName: "Ruth Adeyemi" },
+      ],
+    });
+    const text = buildAuditRecord(d, undefined, now.getTime());
+    expect(text).toMatch(/ {2}Sent to Ruth Adeyemi to approve$/m);
+    expect(text).not.toMatch(/Submitted for review to Ruth Adeyemi \(Ruth Adeyemi\)/);
+    // Every WHO DID WHAT value starts in the same column.
+    const who = text.split("WHO DID WHAT")[1].split("\n\n")[0].split("\n").slice(2);
+    const starts = who.map((l) => l.search(/(?<=^.{15} {2})\S/));
+    expect(new Set(starts)).toEqual(new Set([17]));
+  });
+
   it("reads the send from the letter once it is sent", () => {
     seed();
     markLetterSent("send-test-1", { way: "self", givenBy: "post", dateGiven: "2026-10-14", downloaded: ["pdf"] }, now);
-    expect(buildAuditRecord(draft(), undefined, now.getTime())).toMatch(/^Sent {11}Sent by post, given 14 Oct 2026/m);
+    expect(buildAuditRecord(draft(), undefined, now.getTime())).toMatch(/^Sent {13}Sent by post, given 14 Oct 2026/m);
+  });
+});
+
+describe("the line above the Sent panel (SEND-X37)", () => {
+  it("says what was recorded in the send moment, then leads into the appeal rows", () => {
+    seed({ matterId: "m1" });
+    markLetterSent("send-test-1", { way: "self", givenBy: "hand-delivery", dateGiven: "2026-10-14", downloaded: [] }, now);
+    expect(sentWhatNow(draft(), "moment")).toEqual({ lead: "Sent.", detail: "Handed over in person on Wed 14 Oct." });
+    expect(sentWhatNow(draft(), "next")).toEqual({ lead: "Sent.", detail: "What's next for this matter:" });
+  });
+
+  it("keeps the line about the send for a letter with no appeal window, with no colon leading nowhere", () => {
+    seed({ letterType: "promotion", sections: [section("opening", "<p>Dear Chris,</p>")], answers: {} });
+    markLetterSent("send-test-1", { way: "self", givenBy: "post", dateGiven: "2026-10-14", downloaded: ["pdf"] }, now);
+    expect(sentWhatNow(draft(), "next")).toEqual({ lead: "Sent.", detail: "Sent by post on Wed 14 Oct." });
   });
 });

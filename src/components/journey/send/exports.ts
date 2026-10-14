@@ -13,6 +13,8 @@ import {
   givenByActivity,
   letterAuthorOf,
   sendEntryFor,
+  sendEntryForTimelineExport,
+  sentForApprovalTitle,
   type GivenBy,
   type LetterFormat,
   type SendWay,
@@ -88,6 +90,9 @@ export type AuditOptions = {
   pendingSend?: PendingSend;
 };
 
+/** Width of the WHO DID WHAT labels: the longest ("Sent to approve") and two spaces. */
+const WHO_COLUMN = 17;
+
 /** The audit record: who drafted, checked, reviewed, approved and sent the letter, and when. */
 export function buildAuditRecord(
   draft: Draft,
@@ -109,37 +114,40 @@ export function buildAuditRecord(
   const timeline = [...(draft.timeline ?? [])].sort((a, b) => a.createdAt - b.createdAt);
   const created = timeline.find((t) => t.kind === "created");
   lines.push("WHO DID WHAT", "------------");
+  // One column for every label, the longest ("Sent to approve") included (SEND-X38).
+  const row = (label: string, text: string) => lines.push(`${label.padEnd(WHO_COLUMN)}${text}`);
   // The letter's own author, never whoever downloads or sends it (SEND-29).
   const drafter = letterAuthorOf(draft) ?? "Not recorded";
-  lines.push(`Drafted        ${drafter}, ${when(created?.createdAt ?? draft.createdAt)}`);
+  row("Drafted", `${drafter}, ${when(created?.createdAt ?? draft.createdAt)}`);
 
   const checks = runHealthChecks(draft);
   const score = computeHealthScore(checks);
   const passing = checks.filter((c) => c.severity === "pass").length;
-  lines.push(`Checked        DraftHR, ${passing} of ${checks.length} checks passing, health ${score.score} (at ${when(now)})`);
+  row("Checked", `DraftHR, ${passing} of ${checks.length} checks passing, health ${score.score} (at ${when(now)})`);
 
   const review = getLatestReview(draft.id);
   if (review && review.status !== "recalled") {
     const rounds = review.rounds.length;
     const finished = review.finishedAt ? `, finished ${when(review.finishedAt)}` : review.status === "out" ? ", still out" : "";
-    lines.push(
-      `Reviewed       ${review.reviewer.name} (${REVIEW_KIND_LABELS[review.kind]}), ${rounds} round${rounds === 1 ? "" : "s"}${finished}`
+    row(
+      "Reviewed",
+      `${review.reviewer.name} (${REVIEW_KIND_LABELS[review.kind]}), ${rounds} round${rounds === 1 ? "" : "s"}${finished}`
     );
   } else {
-    lines.push("Reviewed       Not reviewed (review is optional)");
+    row("Reviewed", "Not reviewed (review is optional)");
   }
 
   // An employee's own letter has no approver: its approval is their sign-off (FOUNDATION-X5).
-  const approved = approvalWord(draft).padEnd(15);
+  const approved = approvalWord(draft);
   for (const a of draft.approvals ?? []) {
     const who = a.reviewerName || "the approver";
-    if (a.decision === "submitted") lines.push(`Sent to approve  ${who}, ${when(a.createdAt)}`);
-    else if (a.decision === "approved") lines.push(`${approved}${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
-    else lines.push(`Changes asked  ${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
+    if (a.decision === "submitted") row("Sent to approve", `${who}, ${when(a.createdAt)}`);
+    else if (a.decision === "approved") row(approved, `${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
+    else row("Changes asked", `${who}, ${when(a.createdAt)}${a.body ? ` ("${a.body}")` : ""}`);
   }
-  if (!(draft.approvals ?? []).some((a) => a.decision === "approved")) lines.push(`${approved}Not yet`);
+  if (!(draft.approvals ?? []).some((a) => a.decision === "approved")) row(approved, "Not yet");
 
-  if (attestation) lines.push(`Counsel        ${attestation.reviewedBy}, reviewed ${fmtDayMonYear(attestation.reviewedOn)}`);
+  if (attestation) row("Counsel", `${attestation.reviewedBy}, reviewed ${fmtDayMonYear(attestation.reviewedOn)}`);
 
   const pending = opts.pendingSend;
   const rec = getSentRecord(draft);
@@ -147,14 +155,15 @@ export function buildAuditRecord(
   if (pending) {
     const how = givenByActivity(pending.givenBy, pending.way, pending.emailedName);
     const by = pending.actorName ? `, recorded by ${pending.actorName}` : "";
-    lines.push(
-      `Sent           ${how}, given ${fmtDayMonYear(pending.dateGiven)}${pending.emailedTo ? ` to ${pending.emailedTo}` : ""}${by} (at ${when(now)})`
+    row(
+      "Sent",
+      `${how}, given ${fmtDayMonYear(pending.dateGiven)}${pending.emailedTo ? ` to ${pending.emailedTo}` : ""}${by} (at ${when(now)})`
     );
   } else if (given) {
     const how = rec ? givenByActivity(rec.givenBy, rec.way, rec.emailedName) : "Marked as sent";
-    lines.push(`Sent           ${how}, given ${fmtDayMonYear(given)}${rec?.emailedTo ? ` to ${rec.emailedTo}` : ""}`);
+    row("Sent", `${how}, given ${fmtDayMonYear(given)}${rec?.emailedTo ? ` to ${rec.emailedTo}` : ""}`);
   } else {
-    lines.push("Sent           Not yet");
+    row("Sent", "Not yet");
   }
   lines.push("");
 
@@ -186,9 +195,18 @@ export function buildAuditRecord(
       // The marked-sent export behind a recorded send is that send's entry
       // (listed at the time it was recorded), not a second line at the date
       // given (SEND-X2).
-      if (t.kind === "exported" && t.meta?.format === "marked-sent" && sendEntryFor(draft, t.createdAt)) continue;
+      if (t.kind === "exported" && t.meta?.format === "marked-sent" && sendEntryForTimelineExport(draft, t)) continue;
+      // The store names the approver as the actor of "sent for approval";
+      // they are who it went to, not who sent it (SEND-X38).
+      if (t.kind === "review_submitted") {
+        lines.push(`${when(t.createdAt)}  ${sentForApprovalTitle(t.actorName)}${t.detail ? `: ${t.detail}` : ""}`);
+        continue;
+      }
+      // Downloads in words ("Downloaded Word"), not the store's "Exported as DOCX".
+      const format = t.kind === "exported" ? String(t.meta?.format ?? "") : "";
+      const title = format in FORMAT_LABEL ? `Downloaded ${FORMAT_LABEL[format as ExportFormat]}` : t.title;
       const who = t.actorName ? ` (${t.actorName})` : "";
-      lines.push(`${when(t.createdAt)}  ${t.title}${who}${t.detail ? `: ${t.detail}` : ""}`);
+      lines.push(`${when(t.createdAt)}  ${title}${who}${t.detail ? `: ${t.detail}` : ""}`);
     }
     lines.push("");
   }
