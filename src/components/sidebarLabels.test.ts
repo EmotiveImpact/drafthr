@@ -72,6 +72,25 @@ describe("recentLabels", () => {
     expect(n.hover).toBe("Warning letter 2 · Jordan Hale (Draft · 1 check to fix, started 13 Oct)");
   });
 
+  it("keeps the number apart from the name, so it shows even when the name is shortened (R1-SIDEBAR-SAME-LEVEL-WARNINGS)", () => {
+    const final = { warningLevel: "final_written" } as Draft["answers"];
+    const older = makeDraft({ id: "a", createdAt: 1, answers: final });
+    const newer = makeDraft({ id: "b", createdAt: 2, answers: final });
+    const [n, o] = recentLabelParts([newer, older]);
+    expect(o).toMatchObject({ text: "Final written warning 1 · J. Hale", title: "Final written warning 1", stem: "Final written warning", number: 1, compact: "Final warning", who: "J. Hale" });
+    expect(n).toMatchObject({ stem: "Final written warning", number: 2, compact: "Final warning" });
+    expect(o.hover).not.toBe(n.hover);
+  });
+
+  it("offers 'Written warning' for a first written warning and nothing shorter for a verbal one", () => {
+    const at = (warningLevel: string, id: string) => makeDraft({ id, answers: { warningLevel } as Draft["answers"] });
+    const [w, f] = recentLabelParts([at("written", "a"), at("final_written", "b")]);
+    expect(w).toMatchObject({ stem: "First written warning", compact: "Written warning", number: undefined });
+    expect(f).toMatchObject({ stem: "Final written warning", compact: "Final warning", number: undefined });
+    const [v] = recentLabelParts([at("verbal", "c"), at("verbal", "d")]);
+    expect(v).toMatchObject({ stem: "Verbal warning", compact: undefined });
+  });
+
   it("keeps the person whole and offers a shorter letter name for long types (FOUNDATION-X14)", () => {
     const [p] = recentLabelParts([
       makeDraft({ letterType: "probation_outcome", employee: { ...makeDraft().employee, legalName: "Sam Patel" } }),

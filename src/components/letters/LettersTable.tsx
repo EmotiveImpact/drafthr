@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { LetterRowData } from "./rows";
 import { tableWhereLabel, updatedColumnLabel } from "./letterView";
-import { letterTableLayout, makeMeasure, type LetterColumn, type TableColumn, type TableLayout } from "./tableLayout";
+import { letterSubLine, letterTableLayout, makeMeasure, type LetterColumn, type TableColumn, type TableLayout } from "./tableLayout";
 import { useTableBox } from "./useTableBox";
 import { Initials, MENU_MOTION, PaperIcon, TickBox } from "./parts";
 
@@ -128,7 +128,7 @@ export function LettersTable({
       <table
         aria-label={ariaLabel}
         data-layout={
-          [layout.healthCompact && "health-compact", layout.ownerCompact && "owner-compact", layout.recipientInLetter && "recipient-in-letter"]
+          [layout.healthCompact && "health-compact", layout.ownerCompact && "owner-compact", layout.recipientInLetter && "recipient-in-letter", layout.matterInLetter && "matter-in-letter"]
             .filter(Boolean)
             .join(" ") || undefined
         }
@@ -270,8 +270,9 @@ function Cell({
     case "select":
       return selection ? <TickBox checked={on} onChange={(v) => selection.toggle(r.id, v)} label={`Select ${r.label}`} /> : null;
     case "letter": {
-      // On a narrow table the recipient has no column and leads the sub line.
-      const sub = layout.recipientInLetter && r.recipient ? `${r.recipient} · ${r.subLine}` : r.subLine;
+      // On a narrow table the recipient and the matter have no column of
+      // their own and lead the sub line, so they are still in the row.
+      const sub = letterSubLine({ subLine: r.subLine, recipient: r.recipient, matter: r.matter?.name }, layout);
       return (
         <div className="flex min-w-0 items-center gap-3">
           <PaperIcon tint={r.tint} />
@@ -284,8 +285,18 @@ function Cell({
               {r.label}
             </Link>
             {/* One line, like the mock: the full text is in the tooltip. */}
-            <div className="mt-px truncate text-[12.5px] text-[var(--ds-muted)]" title={sub}>
-              {sub}
+            <div className="mt-px truncate text-[12.5px] text-[var(--ds-muted)]" title={sub.text}>
+              {sub.matter ? (
+                <>
+                  {sub.lead && `${sub.lead} · `}
+                  <Folder aria-hidden className="mr-1 inline-block size-3 -translate-y-px align-middle text-[var(--ds-subtle)]" />
+                  <span className="sr-only">Matter: </span>
+                  {sub.matter}
+                  {` · ${sub.rest}`}
+                </>
+              ) : (
+                sub.text
+              )}
             </div>
           </div>
         </div>

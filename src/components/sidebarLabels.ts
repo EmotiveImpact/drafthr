@@ -1,7 +1,8 @@
 /**
  * The names the sidebar gives its recent letters: the short form from the
  * mocks ("Warning letter · J. Hale"), told apart when two would read the
- * same (FOUNDATION-X9, X12), with the person always in full (FOUNDATION-X14).
+ * same (FOUNDATION-X9, X12), with the person always in full (FOUNDATION-X14)
+ * and the number that tells two apart never cut ("Final warning 1 · J. Hale").
  */
 import { format } from "date-fns";
 import { briefTitleFor, displayTitleFor } from "@/lib/letters/display";
@@ -24,6 +25,16 @@ const WARNING_LEVEL: Record<string, string> = {
   verbal: "Verbal warning",
   written: "First written warning",
   final_written: "Final written warning",
+};
+
+/**
+ * Shorter names for the warning levels, used only when the full one would be
+ * cut ("Final written wa... 1 · J. Hale" read the same for two final
+ * warnings). The full name stays on hover.
+ */
+const WARNING_LEVEL_COMPACT: Record<string, string> = {
+  written: "Written warning",
+  final_written: "Final warning",
 };
 
 /**
@@ -59,9 +70,13 @@ function orgShort(name: string): string {
 export type RecentLabel = {
   /** The whole label, "Warning letter · J. Hale" (menus, toasts, tests). */
   text: string;
-  /** The letter part, "Warning letter" or "Final written warning". */
+  /** The letter part, "Warning letter 2" or "Final written warning". */
   title: string;
-  /** A shorter letter part for when `title` would be cut ("Probation"). */
+  /** The letter part without its number, "Warning letter"; may end in an ellipsis. */
+  stem: string;
+  /** The number that tells two otherwise alike letters apart; never cut. */
+  number?: number;
+  /** A shorter `stem` for when it would be cut ("Probation", "Final warning"). */
   compact?: string;
   /** The person part, "J. Hale"; always shown in full. */
   who?: string;
@@ -87,8 +102,10 @@ function recentWho(d: Draft): { short?: string; full?: string } {
  * read the same (same kind of letter, same person), a warning's level tells
  * them apart ("First written warning", "Final written warning"); if that is
  * not enough (no level chosen, or the same level) they are numbered in the
- * order they were started ("Warning letter 1", "Warning letter 2"). A name
- * the person gave the letter is kept as it is.
+ * order they were started ("Warning letter 1", "Warning letter 2"). The
+ * number is kept apart from the name (`stem`, `number`) so the sidebar can
+ * shorten the name and still show the number. A name the person gave the
+ * letter is kept as it is.
  *
  * `whereOf` gives each letter's where line ("Draft · 1 check to fix"), for
  * the hover text.
@@ -105,12 +122,16 @@ export function recentLabelParts(list: Draft[], whereOf?: (d: Draft) => string |
 
   // A warning's level, only where it is needed to tell two apart.
   const titles = [...base];
+  const compacts: (string | undefined)[] = list.map((d) => (d.title?.trim() ? undefined : COMPACT_TITLE[d.letterType]));
   for (const group of clashes(base)) {
     for (const i of group) {
       const d = list[i];
       if (d.title?.trim() || d.letterType !== "warning") continue;
       const level = String((d.answers as Record<string, unknown> | undefined)?.warningLevel ?? "");
-      if (WARNING_LEVEL[level]) titles[i] = WARNING_LEVEL[level];
+      if (WARNING_LEVEL[level]) {
+        titles[i] = WARNING_LEVEL[level];
+        compacts[i] = WARNING_LEVEL_COMPACT[level];
+      }
     }
   }
   // Still the same: number them in the order they were started.
@@ -123,9 +144,9 @@ export function recentLabelParts(list: Draft[], whereOf?: (d: Draft) => string |
 
   return list.map((d, i) => {
     const n = number.get(i);
-    const title = n ? `${titles[i]} ${n}` : titles[i];
-    const compactBase = !d.title?.trim() && titles[i] === base[i] ? COMPACT_TITLE[d.letterType] : undefined;
-    const compact = compactBase ? (n ? `${compactBase} ${n}` : compactBase) : undefined;
+    const stem = titles[i];
+    const title = n ? `${stem} ${n}` : stem;
+    const compact = compacts[i];
     const who = whos[i].short;
     const where = whereOf?.(d);
     const started = d.createdAt > 0 ? `started ${format(new Date(d.createdAt), "d MMM")}` : "";
@@ -134,7 +155,9 @@ export function recentLabelParts(list: Draft[], whereOf?: (d: Draft) => string |
     return {
       text: who ? `${title} · ${who}` : title,
       title,
-      compact: compact && compact !== title ? compact : undefined,
+      stem,
+      number: n,
+      compact: compact && compact !== stem ? compact : undefined,
       who,
       hover: detail ? `${named} (${detail})` : named,
     };

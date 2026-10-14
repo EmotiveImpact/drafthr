@@ -13,12 +13,16 @@
  *      ends in an ellipsis with the full text on hover.
  *   2. When those do not fit, the table makes room in this order: the health
  *      score drops "/ 100", the owner column keeps only its menu, then the
- *      Matter column goes, then the recipient moves into the letter's sub
- *      line, then Updated goes. Every row keeps one line per cell, so all rows are
- *      the same height.
- *   3. Room left over goes first to the recipient's job title, then to the
- *      letter column (whose sub line may still end in an ellipsis, as in
- *      the mock).
+ *      Matter column goes and its matter leads the letter's sub line (so it
+ *      is still in the row, R1-LETTERS-MATTER-COLUMN-DROPPED), then the
+ *      recipient moves into the letter's sub line too, then Updated goes.
+ *      Every row keeps one line per cell, so all rows are the same height.
+ *   3. Room left over is shared between the letter's sub line and the
+ *      recipient's job title so that as few of them as possible are cut
+ *      (short lines like "Conduct · 1 check to fix" are shown in full before
+ *      a long one like "Conduct · PDF · reviewed by Alex Morgan"). What is
+ *      still too long ends in an ellipsis, as in the mock, with the full
+ *      text on hover.
  *
  * Pure: the caller measures text (canvas in the browser, an estimate in
  * tests) and the table width.
@@ -62,7 +66,26 @@ export type TableLayout = {
   ownerCompact: boolean;
   /** The recipient has no column of its own and leads the letter's sub line. */
   recipientInLetter: boolean;
+  /** The matter has no column of its own and is in the letter's sub line. */
+  matterInLetter: boolean;
 };
+
+/**
+ * What a row's letter cell shows under its name: the recipient when it has
+ * no column, then the matter when it has no column, then the usual line
+ * ("Jordan Hale · Jordan Hale, attendance · Conduct · 1 check to fix").
+ * `matter` is set when the line holds the matter, so the cell can mark it
+ * with the folder icon the Matter column uses.
+ */
+export function letterSubLine(
+  r: { subLine: string; recipient?: string | null; matter?: string | null },
+  layout: Pick<TableLayout, "recipientInLetter" | "matterInLetter">
+): { text: string; lead: string; matter?: string; rest: string } {
+  const lead = layout.recipientInLetter && r.recipient ? r.recipient : "";
+  const matter = layout.matterInLetter && r.matter ? r.matter : undefined;
+  const text = [lead, matter, r.subLine].filter(Boolean).join(" · ");
+  return { text, lead, matter, rest: r.subLine };
+}
 
 /** Cell padding, left and right (px-2.5). */
 export const CELL_PAD = 20;
@@ -73,6 +96,8 @@ const LETTER_CHROME = CELL_PAD + 38 + 12;
 const RECIPIENT_CHROME = CELL_PAD + 28 + 10;
 /** Folder icon (14) and the 8px gap. */
 const MATTER_CHROME = CELL_PAD + 14 + 8;
+/** The smaller folder icon (12) and its 4px gap, in a letter's sub line. */
+const SUB_MATTER_ICON = 16;
 /** The four-segment stage bar is 118px wide. */
 const STAGE_BAR_W = 118;
 /** Ring, score and "/ 100"; compact drops "/ 100". */
@@ -177,12 +202,40 @@ export function letterTableLayout({
   const widths: Partial<Record<TableColumn, number>> = {};
   for (const c of shown) if (c !== "letter") widths[c] = widthOf(c, plan);
 
-  // Room left over goes first to the recipient's job title, then to the
-  // letter column, which has no set width and takes whatever is left (its
-  // sub line may still end in an ellipsis, as in the mock).
+  const matterIn = plan.drop.has("matter") && has("matter");
+
+  // Room left over is shared between the letter's sub line (the letter
+  // column has no set width and takes whatever the recipient does not) and
+  // the recipient's job title, so the fewest lines are cut (R1-LETTERS-
+  // MATTER-COLUMN-DROPPED: a fixed "job title first" order cut "Conduct ·
+  // 1 check to fix" at 1440 to show one long job title).
   if (width > 0 && widths.recipient != null && want.recipient > need.recipient) {
     const spare = width - shown.reduce((s, c) => s + widthOf(c, plan), 0);
-    if (spare > 0) widths.recipient += Math.min(spare, want.recipient - need.recipient);
+    if (spare > 0) {
+      const layoutNow = { recipientInLetter: fold, matterInLetter: matterIn };
+      const extras = (xs: number[]) => xs.map((x) => Math.ceil(x)).filter((x) => x > 0).sort((a, b) => a - b);
+      const letterExtra = extras(
+        rows.map((r) => {
+          const sub = letterSubLine(r, layoutNow);
+          return LETTER_CHROME + measure(sub.text, "small") + (sub.matter ? SUB_MATTER_ICON : 0) - need.letter;
+        })
+      );
+      const roleCap = want.recipient - need.recipient;
+      const roleExtra = extras(rows.map((r) => (r.recipientRole ? RECIPIENT_CHROME + measure(r.recipientRole, "small") - need.recipient : 0))).map((x) =>
+        Math.min(x, roleCap)
+      );
+      // Two columns, so every split can be tried: the one that shows the most
+      // lines in full wins (on a tie, the one giving the letter more), and
+      // whatever the recipient does not take goes to the letter.
+      const fixed = (xs: number[], at: number) => xs.filter((x) => x <= at).length;
+      let best = { role: 0, lines: fixed(letterExtra, spare) };
+      for (const role of new Set(roleExtra)) {
+        if (role > spare) break;
+        const lines = fixed(roleExtra, role) + fixed(letterExtra, spare - role);
+        if (lines > best.lines) best = { role, lines };
+      }
+      widths.recipient += best.role;
+    }
   }
 
   return {
@@ -191,6 +244,7 @@ export function letterTableLayout({
     healthCompact: plan.healthCompact,
     ownerCompact: plan.ownerCompact,
     recipientInLetter: fold,
+    matterInLetter: matterIn,
   };
 }
 

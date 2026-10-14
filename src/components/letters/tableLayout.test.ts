@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { letterTableLayout, makeMeasure, type LayoutRow, type Measure, type TableColumn } from "./tableLayout";
+import { letterSubLine, letterTableLayout, makeMeasure, type LayoutRow, type Measure, type TableColumn } from "./tableLayout";
 import { tableWhereLabel } from "./letterView";
 
 /** Roughly Inter: a fixed width per character for each text style. */
@@ -64,12 +64,18 @@ describe("letterTableLayout", () => {
     expect(l.columns).toContain("recipient");
     expect(l.columns).toContain("updated");
     expect(l.recipientInLetter).toBe(false);
+    // The matter is still in the row, leading the letter's sub line (R1-LETTERS-MATTER-COLUMN-DROPPED).
+    expect(l.matterInLetter).toBe(true);
+    expect(letterSubLine(ROWS[0], l)).toMatchObject({ matter: "Jordan Hale, attendance", text: "Jordan Hale, attendance · Conduct · 1 check to fix" });
+    expect(letterSubLine(ROWS[1], l)).toMatchObject({ matter: undefined, text: "Conduct · Dana's changes to decide" });
   });
 
   it("moves the recipient into the letter's sub line at 1024 instead of cutting names to a letter or two", () => {
     const l = letterTableLayout({ width: 660, columns: ALL, rows: ROWS, measure });
     expect(l.columns).not.toContain("recipient");
     expect(l.recipientInLetter).toBe(true);
+    expect(l.matterInLetter).toBe(true);
+    expect(letterSubLine(ROWS[2], l).text).toBe("Tom Ellis · Tom Ellis, return to work · Absence · expert review");
     expect(l.columns).toContain("where");
     expect(l.columns).toContain("health");
     // What is left for the letter column still fits its longest name.
@@ -90,10 +96,34 @@ describe("letterTableLayout", () => {
     expect(l.widths.where).toBe(Math.ceil(measure("Draft · 1 check to fix", "where")) + 20);
     expect(l.widths.matter).toBeGreaterThanOrEqual(Math.ceil(measure("Tom Ellis, return to work", "matter")) + 42);
     expect(l.recipientInLetter).toBe(false);
+    expect(l.matterInLetter).toBe(false);
   });
 
-  it("gives spare room to the recipient's job title first", () => {
-    const l = letterTableLayout({ width: 1200, columns: ALL, rows: ROWS, measure });
+  it("keeps the matter in its column, not the sub line, while the table is wide enough", () => {
+    const l = letterTableLayout({ width: 1076, columns: ALL, rows: ROWS, measure });
+    expect(l.matterInLetter).toBe(false);
+    expect(letterSubLine(ROWS[0], l)).toMatchObject({ matter: undefined, text: "Conduct · 1 check to fix" });
+  });
+
+  it("shares spare room so the fewest sub lines and job titles are cut (R1-LETTERS-MATTER-COLUMN-DROPPED)", () => {
+    // The widths every column needs, with nothing spare.
+    const full = letterTableLayout({ width: 0, columns: ALL, rows: ROWS, measure });
+    const base = letterTableLayout({ width: 4000, columns: ALL, rows: ROWS, measure });
+    const needs = sum(full.widths) - (full.widths.recipient ?? 0) + Math.ceil(measure("Jordan Hale", "body")) + 58;
+    const letterNeed = Math.ceil(measure("Probation outcome", "name")) + 70;
+    const short = Math.ceil(measure("Conduct · 1 check to fix", "small")) + 70 - letterNeed;
+    const shorter = Math.ceil(measure("Absence · expert review", "small")) + 70 - letterNeed;
+    // Room for the two short sub lines, but not for the longest job title as well.
+    const width = needs + letterNeed + Math.max(short, shorter) + 4;
+    const l = letterTableLayout({ width, columns: ALL, rows: ROWS, measure });
+    const letterW = width - sum(l.widths);
+    expect(letterW - 70).toBeGreaterThanOrEqual(measure("Conduct · 1 check to fix", "small"));
+    expect(letterW - 70).toBeGreaterThanOrEqual(measure("Absence · expert review", "small"));
+    expect(base.widths.recipient).toBeGreaterThan(l.widths.recipient ?? 0);
+  });
+
+  it("gives every job title its room when there is plenty", () => {
+    const l = letterTableLayout({ width: 1400, columns: ALL, rows: ROWS, measure });
     expect(l.widths.recipient).toBe(Math.ceil(measure("Customer service advisor", "small")) + 58);
   });
 
@@ -108,6 +138,20 @@ describe("letterTableLayout", () => {
     expect(l.columns).toEqual(ALL);
     expect(l.healthCompact).toBe(false);
     expect(l.ownerCompact).toBe(false);
+  });
+});
+
+describe("letterSubLine", () => {
+  it("puts the recipient, then the matter, before the usual line", () => {
+    const both = { recipientInLetter: true, matterInLetter: true };
+    expect(letterSubLine({ ...ROWS[0] }, both)).toEqual({
+      text: "Jordan Hale · Jordan Hale, attendance · Conduct · 1 check to fix",
+      lead: "Jordan Hale",
+      matter: "Jordan Hale, attendance",
+      rest: "Conduct · 1 check to fix",
+    });
+    expect(letterSubLine({ ...ROWS[1] }, both).text).toBe("Sam Patel · Conduct · Dana's changes to decide");
+    expect(letterSubLine({ ...ROWS[0] }, { recipientInLetter: false, matterInLetter: false }).text).toBe("Conduct · 1 check to fix");
   });
 });
 

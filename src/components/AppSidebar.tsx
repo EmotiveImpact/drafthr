@@ -139,6 +139,15 @@ const SUB_BUTTON =
   "hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] " +
   "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:font-normal data-[active=true]:text-[var(--ds-ink)]";
 
+/* A recent letter's row menu, shown only while its own row is hovered or
+ * focused, or its menu is open (always on a phone, where nothing hovers),
+ * and the room kept for it at the same moments, so it never sits over the
+ * row's stage dot. */
+const RECENT_MENU_SHOW =
+  "md:opacity-0 group-hover/recent:opacity-100 group-focus-within/recent:opacity-100 aria-expanded:opacity-100";
+const RECENT_MENU_ROOM =
+  "max-md:pr-8! group-hover/recent:pr-8! group-focus-within/recent:pr-8! group-has-[[aria-expanded=true]]/recent:pr-8!";
+
 /* The chevron that opens and closes a row's nested list. */
 const CHEVRON_ACTION =
   "top-2.5! right-1.5 size-5 rounded-[6px] text-[var(--ds-faint)] hover:bg-[var(--ds-surface-3)] hover:text-[var(--ds-ink)] [&>svg]:size-[15px]";
@@ -880,13 +889,17 @@ function NavLetters({
                 const href = `/editor/${d.id}`;
                 const on = path === href || path.startsWith(`${href}/`);
                 return (
-                  <SidebarMenuItem key={d.id}>
+                  // Its own hover group: these rows sit inside the Letters
+                  // item, whose group/menu-item hover would show every row's
+                  // menu at once, over the other rows' dots (R1-SIDEBAR-HOVER-DOT).
+                  <SidebarMenuItem key={d.id} className="group/recent">
                     <SidebarMenuButton
                       asChild
                       isActive={on}
-                      // The row menu shows on hover only, so the room for it is
-                      // only taken then (FOUNDATION-X14).
-                      className={cn(SUB_BUTTON, "justify-between hover:pr-8 focus-within:pr-8")}
+                      // The row menu shows only on this row's hover or focus
+                      // (always on a phone), so the room for it is only taken
+                      // then (FOUNDATION-X14).
+                      className={cn(SUB_BUTTON, "justify-between", RECENT_MENU_ROOM)}
                     >
                       <Link to={href} title={parts.hover} aria-current={on ? "page" : undefined}>
                         <RecentLabelText key={parts.title} parts={parts} />
@@ -895,7 +908,7 @@ function NavLetters({
                     </SidebarMenuButton>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <SidebarMenuAction showOnHover aria-label={`Actions for ${label}`} className="top-[7px]! right-1 rounded-[6px]">
+                        <SidebarMenuAction aria-label={`Actions for ${label}`} className={cn("top-[7px]! right-1 rounded-[6px]", RECENT_MENU_SHOW)}>
                           <MoreHorizontal />
                         </SidebarMenuAction>
                       </DropdownMenuTrigger>
@@ -1049,9 +1062,11 @@ function mattersToShow(all: Matter[], activeId: string | null, count: number): M
 /**
  * A recent letter's name: the letter part ends in an ellipsis if it must,
  * but the person never does ("Probation outc... · S. Patel", never
- * "Probation outcome · ..."). When the letter part would be cut and the
- * type has a shorter name, that is used instead ("Probation · S. Patel");
- * the full name is on hover (FOUNDATION-X14).
+ * "Probation outcome · ..."), and nor does the number that tells two alike
+ * letters apart ("Final warning 1 · J. Hale", never "Final written wa... ·
+ * J. Hale" twice). When the letter part would be cut and has a shorter name,
+ * that is used instead ("Probation · S. Patel", "Final warning 2 · J. Hale");
+ * the full name is on hover (FOUNDATION-X14, R1-SIDEBAR-SAME-LEVEL-WARNINGS).
  */
 function RecentLabelText({ parts }: { parts: RecentLabelParts }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -1077,9 +1092,13 @@ function RecentLabelText({ parts }: { parts: RecentLabelParts }) {
   return (
     <span className="flex min-w-0 flex-1">
       <span ref={ref} className="min-w-0 truncate">
-        {compact && parts.compact ? parts.compact : parts.title}
+        {compact && parts.compact ? parts.compact : parts.stem}
       </span>
-      {parts.who && <span className="shrink-0 whitespace-pre">{` · ${parts.who}`}</span>}
+      {(parts.number != null || parts.who) && (
+        <span className="shrink-0 whitespace-pre">
+          {[parts.number != null ? ` ${parts.number}` : "", parts.who ? ` · ${parts.who}` : ""].join("")}
+        </span>
+      )}
     </span>
   );
 }
