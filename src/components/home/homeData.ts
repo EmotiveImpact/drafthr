@@ -185,7 +185,9 @@ export function needsYouItems({
       out.push({
         id: `review:${d.id}`,
         kind: "review",
-        pill: { label: "Review", tone: "amber" },
+        // Waiting for your approval: the Approve stage, as Letters calls it
+        // ("Approve · needs you"), not Review (HOME-X36).
+        pill: { label: STAGE_PILL.approve!, tone: "amber" },
         title,
         meta: fails > 0 ? issues : `Waiting for your approval, asked ${ageWords(now - asked)} ago`,
         href: `/editor/${d.id}`,

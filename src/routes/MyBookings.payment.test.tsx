@@ -93,6 +93,19 @@ describe("MyBookings payment", () => {
     expect(screen.queryByText(/accepted 8 days ago/)).not.toBeInTheDocument();
   });
 
+  it("calls the reviewer an expert, never a specialist (MARKET-X18)", async () => {
+    seed({
+      status: "accepted",
+      paymentStatus: "paid",
+      consultantName: undefined,
+      responseNote: "Happy to take this one.",
+    });
+    renderPage();
+    expect(await screen.findByText("Expert's note")).toBeInTheDocument();
+    expect(screen.getAllByText(/Expert JS/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/specialist (note|JS)/i)).not.toBeInTheDocument();
+  });
+
   it("shows its own copy, not the server's, when checkout can't start", async () => {
     vi.mocked(startBookingCheckout).mockResolvedValueOnce({
       ok: false,

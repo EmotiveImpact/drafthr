@@ -8,7 +8,7 @@ import type { Booking } from "@/lib/bookings";
 import { agoWords, shortDate } from "./market";
 
 /** Accepted but not yet paid (or a previous attempt failed): the requester
- *  needs to pay before the specialist can start. A booking delivered before
+ *  needs to pay before the expert can start. A booking delivered before
  *  payment was required is payable too, and can't be completed until it is. */
 export function awaitingPayment(b: Booking): boolean {
   if (b.status !== "accepted" && b.status !== "delivered") return false;
@@ -68,7 +68,7 @@ export function lateRefundNote(b: Booking, reader: "requester" | "consultant"): 
 /** Bank payments clearing. */
 export function processingNote(b: Booking): string | null {
   return b.status === "accepted" && b.paymentStatus === "processing"
-    ? "Payment processing. Bank payments such as Direct Debit can take a few working days to clear; the specialist starts once it does."
+    ? "Payment processing. Bank payments such as Direct Debit can take a few working days to clear; the expert starts once it does."
     : null;
 }
 
@@ -85,7 +85,7 @@ export function disputeNote(b: Booking): string | null {
 export function paymentsOffNote(b: Booking): string {
   return b.status === "delivered"
     ? "Awaiting payment. Online payment isn't available yet, so this booking can't be completed."
-    : "Awaiting payment. Online payment isn't available yet, so the specialist can't start on this booking.";
+    : "Awaiting payment. Online payment isn't available yet, so the expert can't start on this booking.";
 }
 
 /** "£180.00, as agreed when you booked. Secure checkout via Stripe." */

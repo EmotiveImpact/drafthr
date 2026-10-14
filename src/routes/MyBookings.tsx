@@ -186,7 +186,7 @@ export function MyBookings() {
       key={open.id}
       booking={open}
       perspective="requester"
-      otherName={open.consultantName ?? `Specialist ${open.consultantInitials}`}
+      otherName={open.consultantName ?? `Expert ${open.consultantInitials}`}
       otherRole={open.consultantRole}
       otherPhotoUrl={open.consultantPhotoUrl}
       otherSeed={open.consultantProfileId || open.consultantName}
@@ -434,7 +434,7 @@ function BookingRow({
   };
 
   const status = statusOf(b);
-  const name = b.consultantName ?? `Specialist ${b.consultantInitials}`;
+  const name = b.consultantName ?? `Expert ${b.consultantInitials}`;
   const first = firstNameOf(b.consultantName) || "The expert";
   const needsPay = awaitingPayment(b);
   const payable = paymentsOn && needsPay;
@@ -569,7 +569,7 @@ function BookingRow({
                   {declinedLine(b)} No payment was taken.
                 </NoteLine>
               )}
-              {status !== "declined" && b.responseNote && <RowNote label="Specialist note">{b.responseNote}</RowNote>}
+              {status !== "declined" && b.responseNote && <RowNote label="Expert's note">{b.responseNote}</RowNote>}
               {b.deliveryNote && (
                 <RowNote tone="green" label="Delivered">
                   {b.deliveryNote}

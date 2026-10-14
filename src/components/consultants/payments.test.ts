@@ -11,6 +11,7 @@ import {
   lateRefundNote,
   payLine,
   priorityDifference,
+  paymentsOffNote,
   processingNote,
 } from "./payments";
 
@@ -53,6 +54,17 @@ describe("payments", () => {
     expect(disputeNote(bk({ status: "accepted", paymentStatus: "dispute_lost" }))).toBe(
       "This payment was reversed after a dispute.",
     );
+  });
+
+  it("calls the reviewer an expert, never a specialist (MARKET-X18)", () => {
+    const notes = [
+      processingNote(bk({ status: "accepted", paymentStatus: "processing" })),
+      paymentsOffNote(bk({ status: "accepted", paymentStatus: "unpaid" })),
+      paymentsOffNote(bk({ status: "delivered", paymentStatus: "unpaid" })),
+    ];
+    for (const n of notes) expect(n).not.toMatch(/specialist/i);
+    expect(notes[0]).toMatch(/the expert starts once it does\.$/);
+    expect(notes[1]).toMatch(/so the expert can't start on this booking\.$/);
   });
 
   describe("priority", () => {

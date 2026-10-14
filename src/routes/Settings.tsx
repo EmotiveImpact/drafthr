@@ -89,7 +89,10 @@ export function Settings() {
         lede={`Manage your profile, your team and how ${workspace ?? "your team"} pays for DraftHR.`}
       />
 
-      <div className="grid min-w-0 grid-cols-1 gap-5 pt-1.5 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10">
+      {/* The section list is 252px (the mock's 240 plus room for the
+          longest label in its active weight, "Integrations and directory
+          sync", so it never runs to the edge of its pill: CREATE-X31). */}
+      <div className="grid min-w-0 grid-cols-1 gap-5 pt-1.5 lg:grid-cols-[252px_minmax(0,1fr)] lg:gap-10">
         {/* Desktop section list */}
         <nav aria-label="Settings sections" className="hidden lg:block">
           {GROUPS.map((g, gi) => (

@@ -369,14 +369,16 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
     id: "risk_flags",
     title: "Risk flags",
     description:
-      "Tell us about any flags that need legal-review attention. Honest answers protect the organisation.",
+      "Tell us about anything that makes this letter more sensitive, so DraftHR can draft it with care. Honest answers protect your organisation.",
     questions: [
       {
         id: "protectedStatus",
         type: "boolean",
         label: "Is the employee currently in a legally protected situation?",
         help:
-          "Pregnancy, parental leave, long-term sickness, whistleblower, trade union representative, current grievance. Any of these triggers a counsel-review gate before export.",
+          // Plain advice, not a promise of a step the app adds: nothing blocks
+          // the export on this answer (CREATE-X32).
+          "For example pregnancy, parental leave, long-term sickness, whistleblowing, being a trade union representative or a current grievance. The law gives these employees extra protection, so think about asking an expert to check the letter before it goes out.",
       },
       {
         id: "grievanceLast90Days",
