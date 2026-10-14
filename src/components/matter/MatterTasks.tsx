@@ -99,7 +99,7 @@ function TaskRow({ task, onToggle, onDelete, completed }: { task: Task; onToggle
   const days = task.dueISO ? daysUntilDateOnly(task.dueISO) : undefined;
   const soon = days !== undefined && days <= 3;
   return (
-    <li className="group/task flex min-h-[47px] items-center gap-3 border-t border-[var(--ds-line-2)] py-2 first:border-t-0">
+    <li className="flex min-h-[47px] items-center gap-3 border-t border-[var(--ds-line-2)] py-2 first:border-t-0">
       <TickBox
         checked={!!completed}
         onChange={onToggle}
@@ -121,7 +121,7 @@ function TaskRow({ task, onToggle, onDelete, completed }: { task: Task; onToggle
         onClick={onDelete}
         title="Delete task"
         aria-label={`Delete task ${task.label}`}
-        className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-faint)] opacity-60 outline-none transition-[opacity,color,background-color] duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-red-fg)] focus-visible:opacity-100 focus-visible:shadow-[var(--ds-focus-ring)] group-hover/task:opacity-100"
+        className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-subtle)] outline-none transition-[color,background-color] duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-red-fg)] focus-visible:shadow-[var(--ds-focus-ring)]"
       >
         <Trash2 className="size-3.5" />
       </button>

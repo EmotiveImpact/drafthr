@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Draft, Matter } from "@/lib/letters/types";
-import { deadlinesIcs, matterDeadlines, matterRef, nextDeadline, tribunalItem } from "./model";
+import { deadlinePillText, deadlinesIcs, matterDeadlines, matterRef, nextDeadline, shortDeadlineLabel, tribunalItem } from "./model";
+import { addDaysToDateOnly, todayDateOnly } from "@/lib/date-only";
 
 const matter = (over: Partial<Matter> = {}): Matter =>
   ({
@@ -78,5 +79,26 @@ describe("matterDeadlines", () => {
     const ics = deadlinesIcs(items.map((item) => ({ matter: m, item })));
     expect(ics).toContain("BEGIN:VCALENDAR");
     expect(ics.match(/BEGIN:VEVENT/g)?.length).toBe(3);
+  });
+});
+
+describe("header deadline pill", () => {
+  it("keeps a short title and names the kind for a long one", () => {
+    expect(shortDeadlineLabel({ kind: "task", title: "Outcome letter" })).toBe("Outcome letter");
+    expect(shortDeadlineLabel({ kind: "task", title: "Send the outcome of the hearing to Jordan" })).toBe("Task");
+    expect(shortDeadlineLabel({ kind: "event", eventKind: "hearing", title: "Disciplinary hearing with Jordan and his rep" })).toBe("Hearing");
+    expect(shortDeadlineLabel({ kind: "tribunal", title: "Tribunal time limit for an unfair dismissal claim" })).toBe("Tribunal limit");
+  });
+
+  it("never cuts the title mid-phrase", () => {
+    const iso = addDaysToDateOnly(todayDateOnly(), 3);
+    const text = deadlinePillText({ kind: "task", title: "Send the outcome of the hearing to Jordan" }, iso);
+    expect(text).toBe("Task due in 3 days");
+    expect(text).not.toContain("…");
+  });
+
+  it("says today and overdue plainly", () => {
+    expect(deadlinePillText({ kind: "task", title: "Outcome letter" }, todayDateOnly())).toBe("Outcome letter due today");
+    expect(deadlinePillText({ kind: "task", title: "Outcome letter" }, addDaysToDateOnly(todayDateOnly(), -2))).toBe("Outcome letter 2 days overdue");
   });
 });

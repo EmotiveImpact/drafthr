@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pill, type PillTone } from "@/components/ds";
 import { CardLink, SectionCard } from "./cards";
-import { SELECT_CLASS } from "./NewMatterDialog";
+import { KitSelect } from "./KitSelect";
 import { DatePicker } from "@/components/wizard/DatePicker";
 
 /** Quarter-hour times in 24-hour UK style, "00:00" to "23:45". */
@@ -19,6 +19,8 @@ const EVENT_KIND_LABEL: Record<EventKind, string> = {
   deadline: "Deadline",
   review: "Review",
 };
+
+const EVENT_KINDS: EventKind[] = ["meeting", "hearing", "deadline", "review"];
 
 const EVENT_KIND_TONE: Record<EventKind, PillTone> = {
   meeting: "blue",
@@ -96,7 +98,7 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
       ) : (
         <ul className="m-0 list-none p-0">
           {upcoming.map((ev) => (
-            <li key={ev.id} className="group/ev flex min-h-[47px] items-center gap-3 border-t border-[var(--ds-line-2)] py-2.5 first:border-t-0">
+            <li key={ev.id} className="flex min-h-[47px] items-center gap-3 border-t border-[var(--ds-line-2)] py-2.5 first:border-t-0">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="truncate text-[13.5px] font-medium text-[var(--ds-ink)]">{ev.label}</span>
@@ -112,7 +114,7 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
                 onClick={() => deleteEvent(ev.id)}
                 title="Delete event"
                 aria-label={`Delete event ${ev.label}`}
-                className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-faint)] opacity-60 outline-none transition-[opacity,color,background-color] duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-red-fg)] focus-visible:opacity-100 focus-visible:shadow-[var(--ds-focus-ring)] group-hover/ev:opacity-100"
+                className="grid size-7 shrink-0 place-items-center rounded-[7px] text-[var(--ds-subtle)] outline-none transition-[color,background-color] duration-[120ms] hover:bg-[var(--ds-surface-2)] hover:text-[var(--ds-red-fg)] focus-visible:shadow-[var(--ds-focus-ring)]"
               >
                 <Trash2 className="size-3.5" />
               </button>
@@ -135,23 +137,24 @@ export function MatterCalendar({ matterId, events }: { matterId: string; events:
             }}
           />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.3fr)_minmax(0,0.8fr)]">
-            <select value={kind} onChange={(e) => setKind(e.target.value as EventKind)} aria-label="Kind" className={SELECT_CLASS + " h-9 text-[14px]"}>
-              <option value="meeting">Meeting</option>
-              <option value="hearing">Hearing</option>
-              <option value="deadline">Deadline</option>
-              <option value="review">Review</option>
-            </select>
+            <KitSelect
+              compact
+              ariaLabel="Kind"
+              value={kind}
+              onChange={(v) => setKind(v as EventKind)}
+              options={EVENT_KINDS.map((k) => ({ value: k, label: EVENT_KIND_LABEL[k] }))}
+            />
             <div className="min-w-0 max-sm:order-last max-sm:col-span-2">
               <DatePicker value={day} onChange={(v) => setDay(v ?? "")} required ariaLabel="Date" placeholder="Date" className="h-9" />
             </div>
-            <select value={time} onChange={(e) => setTime(e.target.value)} aria-label="Time" className={SELECT_CLASS + " h-9 text-[14px]"}>
-              <option value="">No time</option>
-              {TIMES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <KitSelect
+              compact
+              ariaLabel="Time"
+              value={time}
+              onChange={setTime}
+              emptyLabel="No time"
+              options={TIMES.map((t) => ({ value: t, label: t }))}
+            />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input

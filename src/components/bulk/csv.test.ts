@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMissingMergeValues, parseCsv, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
+import { findMissingMergeValues, parseCsv, rowSummary, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
 import { placeholderKeysFor } from "@/lib/bulk/mailmerge";
 
 describe("sampleHeadersFor", () => {
@@ -127,5 +127,23 @@ describe("parseCsv", () => {
     expect(r.warnings).toHaveLength(1);
     expect(r.warnings[0].rowIndex).toBe(2);
     expect(r.warnings[0].message).toMatch(/Row 2 missing 'employee_name'/);
+  });
+});
+
+describe("rowSummary", () => {
+  const headers = ["employee_name", "department", "effective_date", "employee_job_title"];
+
+  it("puts the job title first and leaves the name out", () => {
+    const row = { employee_name: "Jordan Hale", department: "Operations", effective_date: "2026-11-01", employee_job_title: "Shift lead" };
+    expect(rowSummary(row, headers)).toBe("Shift lead · Operations · 2026-11-01");
+  });
+
+  it("shows the values a row has and names what it is missing", () => {
+    const row = { employee_name: "Priya Shah", department: "Finance", effective_date: "2026-11-01", employee_job_title: "" };
+    expect(rowSummary(row, headers, ["employee_job_title"])).toBe("Finance · 2026-11-01 · no job title");
+  });
+
+  it("is empty when the row only has a name", () => {
+    expect(rowSummary({ employee_name: "Sam" }, ["employee_name"])).toBe("");
   });
 });

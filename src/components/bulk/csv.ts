@@ -341,3 +341,36 @@ export function rowToAnswers(
 
   return answers;
 }
+
+/** "employee_job_title" → "job title", for plain-words copy. */
+export function humaniseField(key: string): string {
+  return foldKey(key).replace(/^employee_/, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * The preview's sub line for one CSV row: the job title first, then the row's
+ * other filled values in column order (never the name, which is the title),
+ * then what is missing ("no job title"). Empty when the row only has a name.
+ */
+export function rowSummary(
+  row: Record<string, string | number | undefined>,
+  headers: string[],
+  missingFields: string[] = [],
+  limit = 3,
+): string {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  const ordered = [...headers].sort(
+    (a, b) => Number(foldKey(b) === "employee_job_title") - Number(foldKey(a) === "employee_job_title"),
+  );
+  for (const h of ordered) {
+    const key = foldKey(h);
+    if (key === "employee_name" || seen.has(key)) continue;
+    seen.add(key);
+    const v = String(row[h] ?? "").trim();
+    if (v) values.push(v);
+  }
+  const parts = values.slice(0, limit);
+  for (const f of missingFields) parts.push(`no ${humaniseField(f)}`);
+  return parts.join(" · ");
+}

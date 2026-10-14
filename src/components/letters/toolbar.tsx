@@ -3,7 +3,7 @@
  * menu of real values, the sort menu, pagers, the floating bulk bar and the
  * quiet "no match" box.
  */
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode, type UIEvent } from "react";
 import { ArrowDownUp, ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -103,6 +103,7 @@ export function FilterMenu({
 }) {
   const [open, setOpen] = useState(false);
   const chosen = options.find((o) => o.value === value);
+  const cue = useScrollCue();
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -112,7 +113,9 @@ export function FilterMenu({
           <SolidFilterButton label={label} value={chosen?.label ?? allLabel ?? "All"} set={!!chosen} icon={Icon} />
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent collisionPadding={16} align="start" className={cn("w-60", MENU_MOTION)}>
+      {/* The whole menu shows every option when there is room; when the window is
+          too short it scrolls as one and a fade with a chevron says there is more. */}
+      <DropdownMenuContent ref={cue.ref} onScroll={cue.onScroll} collisionPadding={16} align="start" className={cn("w-60", MENU_MOTION)}>
         <DropdownMenuLabel className="text-[12px] font-medium text-[var(--ds-subtle)]">{label}</DropdownMenuLabel>
         {allLabel && (
           <DropdownMenuItem onSelect={() => onChange(null)}>
@@ -121,15 +124,13 @@ export function FilterMenu({
           </DropdownMenuItem>
         )}
         {options.length === 0 && <div className="px-2.5 py-2 text-[13px] text-[var(--ds-subtle)]">{emptyText}</div>}
-        <div className="max-h-72 overflow-y-auto">
-          {options.map((o) => (
-            <DropdownMenuItem key={o.value} onSelect={() => onChange(o.value === value ? null : o.value)}>
-              <span className="min-w-0 flex-1 truncate">{o.label}</span>
-              {o.count != null && <span className="ds-mono text-[12px] text-[var(--ds-subtle)]">{o.count}</span>}
-              {o.value === value && <Check className="size-4 text-[var(--ds-ink)]" />}
-            </DropdownMenuItem>
-          ))}
-        </div>
+        {options.map((o) => (
+          <DropdownMenuItem key={o.value} onSelect={() => onChange(o.value === value ? null : o.value)}>
+            <span className="min-w-0 flex-1 truncate">{o.label}</span>
+            {o.count != null && <span className="ds-mono text-[12px] text-[var(--ds-subtle)]">{o.count}</span>}
+            {o.value === value && <Check className="size-4 text-[var(--ds-ink)]" />}
+          </DropdownMenuItem>
+        ))}
         {chosen && !allLabel && (
           <>
             <DropdownMenuSeparator />
@@ -139,8 +140,42 @@ export function FilterMenu({
             </DropdownMenuItem>
           </>
         )}
+        {cue.more && <ScrollCue />}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/**
+ * Tracks whether a scrolling menu has more below what shows. `ref` measures
+ * when the menu opens (and on resize); `onScroll` keeps it current.
+ */
+function useScrollCue() {
+  const [more, setMore] = useState(false);
+  const measure = (el: HTMLElement) => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  const ref = (el: HTMLDivElement | null) => {
+    if (!el) return;
+    const frame = requestAnimationFrame(() => measure(el));
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => measure(el));
+    ro?.observe(el);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro?.disconnect();
+    };
+  };
+  return { more, ref, onScroll: (e: UIEvent<HTMLDivElement>) => measure(e.currentTarget) };
+}
+
+/** A fade and a chevron pinned to the bottom of a menu that scrolls. */
+function ScrollCue() {
+  return (
+    <div
+      aria-hidden
+      data-scroll-cue
+      className="pointer-events-none sticky -bottom-1.5 -mx-1.5 -mb-1.5 -mt-10 grid h-10 place-items-end justify-center bg-gradient-to-t from-[var(--ds-surface)] from-40% to-transparent pb-1"
+    >
+      <ChevronDown className="size-4 text-[var(--ds-subtle)]" />
+    </div>
   );
 }
 

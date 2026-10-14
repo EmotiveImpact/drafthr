@@ -4,7 +4,6 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { Archive, ArrowLeft, FolderCheck, FolderMinus, MoreHorizontal, Pencil, Plus, RotateCcw, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
-import { daysUntilDateOnly } from "@/lib/date-only";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +20,7 @@ import { MatterTasks } from "@/components/matter/MatterTasks";
 import { MatterCalendar } from "@/components/matter/MatterCalendar";
 import { useMatterRows, type MatterRow } from "@/components/matter/rows";
 import { DeleteMatterDialog, MatterMark, PeopleStack } from "@/components/matter/parts";
-import { deadlinesIcs, relativeDays } from "@/components/matter/model";
+import { deadlinePillText, deadlinesIcs, relativeDays, shortDay } from "@/components/matter/model";
 import {
   AddLetterDialog,
   AskBox,
@@ -102,7 +101,6 @@ function MatterPage({ row }: { row: MatterRow }) {
   const context = subject?.jobTitle || m.parties?.primaryContext;
   const next = row.next;
   const nextRel = next?.iso ? relativeDays(next.iso) : undefined;
-  const nextDays = next?.iso ? daysUntilDateOnly(next.iso) : undefined;
   const nextTone: PillTone = !nextRel ? "blue" : nextRel.tone === "late" || next?.kind === "tribunal" ? "red" : nextRel.tone === "soon" ? "amber" : "blue";
   const closed = m.status !== "active";
 
@@ -136,8 +134,8 @@ function MatterPage({ row }: { row: MatterRow }) {
         {row.typeLabel && <Pill tone="grey">{row.typeLabel}</Pill>}
         <MatterRiskBadge band={row.risk} />
         {!closed && next?.iso && nextRel && (
-          <Pill tone={nextTone} title={next.title}>
-            {next.title.length > 30 ? `${next.title.slice(0, 28).trimEnd()}…` : next.title} {nextDays !== undefined && nextDays < 0 ? nextRel.text : nextDays === 0 ? "due today" : `due ${nextRel.text}`}
+          <Pill tone={nextTone} title={`${next.title}, ${shortDay(next.iso)}`}>
+            {deadlinePillText(next, next.iso)}
           </Pill>
         )}
         {m.counselReviewed && <Pill tone="green">Counsel reviewed</Pill>}
@@ -396,7 +394,15 @@ function MatterPage({ row }: { row: MatterRow }) {
         }}
       />
       <Dialog open={peopleOpen} onOpenChange={setPeopleOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[520px] overflow-y-auto">
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] max-w-[520px] overflow-y-auto"
+          // Start on the dialog itself, not the first participant's remove
+          // button: opening it should never put focus on a destructive control.
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement | null)?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Edit participants</DialogTitle>
             <DialogDescription>The people this matter is about, and anyone else involved.</DialogDescription>

@@ -31,6 +31,7 @@ import type { LetterTypeId } from "@/lib/letters/types";
 import {
   findMissingMergeValues,
   parseCsv,
+  rowSummary,
   rowToAnswers,
   type MissingMergeValues,
   sampleCsvFor,
@@ -89,7 +90,6 @@ export default function BulkOperations() {
   const createDraft = useDraftStore((s) => s.createDraft);
   const updateSection = useDraftStore((s) => s.updateSection);
   const setSectionStatus = useDraftStore((s) => s.setSectionStatus);
-  const setDraftTitle = useDraftStore((s) => s.setDraftTitle);
 
   const [step, setStep] = useState<Step>(1);
   const [operation, setOperation] = useState<Operation>("generate");
@@ -269,18 +269,18 @@ export default function BulkOperations() {
         }
       }
 
-      // Personalised title — preserves the per-row identity in lists.
+      // No title override: like every other letter, the list shows the bare
+      // type and the person comes from the draft's employee (employee_name),
+      // so the sidebar reads "Pay rise · P. Shah" and Letters has the
+      // recipient column. The results list names the row the same way.
       const meta = getLetterMeta(letterType as LetterTypeId);
       const recipientName = String(row.employee_name ?? "").trim();
-      if (recipientName) {
-        setDraftTitle(draftId, `${meta.shortTitle} – ${recipientName}`);
-      }
 
       summaries.push({
         draftId,
         title: recipientName
-          ? `${meta.shortTitle} – ${recipientName}`
-          : `${meta.shortTitle} – row ${i + 1}`,
+          ? `${meta.shortTitle} · ${recipientName}`
+          : `${meta.shortTitle} · row ${i + 1}`,
         unresolved: Array.from(unresolvedForRow),
       });
       // Yield to React so the progress UI can paint mid-loop.
@@ -864,6 +864,7 @@ function StepPreview({
       <ul className="m-0 mt-5 list-none p-0">
         {visibleRows.map((row, i) => {
           const rowMissing = missing.find((m) => m.rowNumber === (parsed.rowNumbers?.[i] ?? i + 2));
+          const summary = rowSummary(row, parsed.headers, rowMissing?.fields);
           return (
             <li
               key={i}
@@ -875,13 +876,8 @@ function StepPreview({
               <Avatar seed={row.employee_name} name={row.employee_name} size="xl" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] font-semibold text-[var(--ds-ink)]">{row.employee_name}</span>
-                <span className="block truncate text-[12.5px] text-[var(--ds-muted)]">
-                  {[
-                    row.employee_job_title,
-                    row.probation_outcome ?? row.probationOutcome,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "No extra fields"}
+                <span className="block truncate text-[12.5px] text-[var(--ds-muted)]" title={summary || undefined}>
+                  {summary || "Only a name in this row"}
                 </span>
               </span>
               {rowMissing ? (

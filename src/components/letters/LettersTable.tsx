@@ -240,8 +240,8 @@ function Cell({
             >
               {r.label}
             </Link>
-            {/* Wraps to a second line rather than hiding who reviewed it. */}
-            <div className="mt-px line-clamp-2 break-words text-[12.5px] text-[var(--ds-muted)]" title={r.subLine}>
+            {/* One line, like the mock: the full text is in the tooltip. Only the where line wraps. */}
+            <div className="mt-px truncate text-[12.5px] text-[var(--ds-muted)]" title={r.subLine}>
               {r.subLine}
             </div>
           </div>
@@ -252,7 +252,7 @@ function Cell({
         <div className="flex min-w-0 items-center gap-2.5">
           <Initials name={r.recipient.replace(/^to /, "")} size={28} ring={r.journey.needsYou} />
           <div className="min-w-0">
-            <div className="line-clamp-2 break-words text-[14px] leading-[1.35] text-[var(--ds-ink)]">{r.recipient}</div>
+            <div className="truncate text-[14px] leading-[1.35] text-[var(--ds-ink)]" title={r.recipient}>{r.recipient}</div>
             {r.recipientRole && <div className="truncate text-[12.5px] text-[var(--ds-muted)]" title={r.recipientRole}>{r.recipientRole}</div>}
           </div>
         </div>

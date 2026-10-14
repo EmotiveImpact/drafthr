@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tag } from "@/components/ds";
 import { Initials } from "@/components/letters/parts";
-import { SELECT_CLASS } from "./NewMatterDialog";
+import { KitSelect } from "./KitSelect";
 
 /**
  * The participants editor (Edit participants): each person with their role
@@ -86,7 +86,7 @@ export function MatterParticipants({
         <ul className="m-0 list-none rounded-[12px] border border-[var(--ds-line)] p-0">
           {primary && (
             <li className="flex min-h-12 items-center gap-3 px-3 py-2">
-              <Initials name={primary.name} seed={primary.employeeId ?? primary.name} size={28} />
+              <Initials name={primary.name} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] text-[var(--ds-ink)]">{primary.name}</span>
                 <span className="block text-[12px] text-[var(--ds-muted)]">
@@ -100,7 +100,7 @@ export function MatterParticipants({
           )}
           {participants.map((p, i) => (
             <li key={`${p.employeeId ?? "x"}-${p.name}-${i}`} className="flex min-h-12 items-center gap-3 border-t border-[var(--ds-line-2)] px-3 py-2 first:border-t-0">
-              <Initials name={p.name} seed={p.employeeId ?? p.name} size={28} />
+              <Initials name={p.name} size={28} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px] text-[var(--ds-ink)]">{p.name}</span>
                 <span className="block text-[12px] text-[var(--ds-subtle)]">{p.employeeId ? "Employee" : "External party"}</span>
@@ -123,21 +123,21 @@ export function MatterParticipants({
         <div className="grid gap-2 rounded-[12px] bg-[var(--ds-surface-2)] p-3">
           <span className="text-[13px] font-medium text-[var(--ds-ink)]">Add a participant</span>
           <div className="grid gap-2 sm:grid-cols-2">
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} aria-label="Person" className={SELECT_CLASS + " h-9 text-[14px]"}>
-              <option value="">External party…</option>
-              {availableEmployees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.legalName}
-                </option>
-              ))}
-            </select>
-            <select value={role} onChange={(e) => setRole(e.target.value as MatterParticipantRole)} aria-label="Role" className={SELECT_CLASS + " h-9 text-[14px]"}>
-              {ROLE_ORDER.map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            </select>
+            <KitSelect
+              compact
+              ariaLabel="Person"
+              value={employeeId}
+              onChange={setEmployeeId}
+              emptyLabel="External party…"
+              options={availableEmployees.map((e) => ({ value: e.id, label: e.legalName }))}
+            />
+            <KitSelect
+              compact
+              ariaLabel="Role"
+              value={role}
+              onChange={(v) => setRole(v as MatterParticipantRole)}
+              options={ROLE_ORDER.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+            />
           </div>
           {employeeId === "" && (
             <Input value={externalName} onChange={(e) => setExternalName(e.target.value)} placeholder="Name" aria-label="Name" className="h-9 text-[14px]" />

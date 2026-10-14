@@ -227,7 +227,7 @@ function EmployeePage({ employee: e }: { employee: Employee }) {
         titleExtra={e.preferredName && e.preferredName.trim() !== e.legalName.trim() ? `(${e.preferredName})` : undefined}
         mark={
           <span className="grid size-[52px] shrink-0 place-items-center rounded-[14px] border border-[var(--ds-line)]" aria-hidden>
-            <Initials name={e.legalName} seed={e.id} size={50} className="!rounded-[13px] !text-[19px]" />
+            <Initials name={e.legalName} size={50} className="!rounded-[13px] !text-[19px]" />
           </span>
         }
         lede={lede}
@@ -464,7 +464,9 @@ function LetterLines({ rows }: { rows: LetterRowData[] }) {
   const nav = useNavigate();
   return (
     <ul className="m-0 list-none border-t border-[var(--ds-line-2)] p-0">
-      {rows.map((r) => (
+      {rows.map((r) => {
+        const pill = listStatusPill(r.journey);
+        return (
         <li
           key={r.id}
           onClick={(ev) => {
@@ -478,10 +480,14 @@ function LetterLines({ rows }: { rows: LetterRowData[] }) {
             <Link to={`/editor/${r.id}`} className="block truncate rounded-[4px] text-[14px] font-medium text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]">
               {r.label}
             </Link>
-            <div className="truncate text-[12.5px] text-[var(--ds-muted)]">{whoLine(r)}</div>
+            <div className="truncate text-[12.5px] text-[var(--ds-muted)]" title={whoLine(r)}>{whoLine(r)}</div>
+            {/* On a phone the pill moves under the name so the status still shows. */}
+            <span className="mt-1 flex sm:hidden">
+              <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+            </span>
           </div>
-          <span className="hidden sm:inline-flex">
-            <StatusPill tone={listStatusPill(r.journey).tone}>{listStatusPill(r.journey).label}</StatusPill>
+          <span className="hidden shrink-0 sm:inline-flex">
+            <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
           </span>
           <span className="w-12 shrink-0 text-right text-[13px] text-[var(--ds-subtle)]">{shortDate(r.journey.stage === "sent" && r.sentAt ? r.sentAt : r.updatedAt)}</span>
           <DropdownMenu>
@@ -502,7 +508,8 @@ function LetterLines({ rows }: { rows: LetterRowData[] }) {
             </DropdownMenuContent>
           </DropdownMenu>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
@@ -510,11 +517,8 @@ function LetterLines({ rows }: { rows: LetterRowData[] }) {
 function nextStep(r: MatterRow): string | null {
   if (r.matter.status !== "active") return null;
   const n = r.next;
-  if (n?.iso) {
-    const rel = relativeDays(n.iso);
-    const title = n.title.length > 30 ? `${n.title.slice(0, 28).trimEnd()}…` : n.title;
-    return `${title} ${rel.text}`;
-  }
+  // The whole title (it wraps): cutting it mid-phrase hid what is due.
+  if (n?.iso) return n.title;
   return r.matter.nextAction?.trim() || null;
 }
 
@@ -550,7 +554,11 @@ function MatterCards({ rows }: { rows: MatterRow[] }) {
                 <div className="max-w-[300px] text-left sm:text-right">
                   <div className="text-[12.5px] text-[var(--ds-muted)]">Next step</div>
                   <div className="text-[14px] font-medium text-[var(--ds-ink)]">{step}</div>
-                  {r.next?.iso && <div className="text-[12px] text-[var(--ds-muted)]">{shortDay(r.next.iso)}</div>}
+                  {r.next?.iso && (
+                    <div className="text-[12px] text-[var(--ds-muted)]">
+                      {shortDay(r.next.iso)} · {relativeDays(r.next.iso).text}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

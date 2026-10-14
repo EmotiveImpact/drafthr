@@ -8,9 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MATTER_TINT, MATTER_TYPES, MATTER_TYPE_LABEL } from "./model";
 import { DatePicker } from "@/components/wizard/DatePicker";
-
-export const SELECT_CLASS =
-  "h-10 w-full min-w-0 rounded-[10px] border border-[var(--ds-line)] bg-[var(--ds-surface)] px-3 text-[14.5px] text-[var(--ds-ink)] outline-none transition-[border-color,box-shadow] duration-[120ms] hover:border-[var(--ds-line-hover)] focus-visible:border-[var(--ds-ink)]";
+import { KitSelect } from "./KitSelect";
 
 export type NewMatterInput = {
   name: string;
@@ -111,14 +109,13 @@ export function NewMatterDialog({
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="matter-type">Type (optional)</Label>
-              <select id="matter-type" value={type} onChange={(e) => setType(e.target.value as MatterType | "")} className={SELECT_CLASS}>
-                <option value="">Not set</option>
-                {MATTER_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {MATTER_TYPE_LABEL[t]}
-                  </option>
-                ))}
-              </select>
+              <KitSelect
+                id="matter-type"
+                value={type}
+                onChange={(v) => setType(v as MatterType | "")}
+                emptyLabel="Not set"
+                options={MATTER_TYPES.map((t) => ({ value: t, label: MATTER_TYPE_LABEL[t] }))}
+              />
             </div>
           </div>
 

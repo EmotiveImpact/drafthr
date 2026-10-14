@@ -135,24 +135,28 @@ export function NextStrip({
   return (
     <div className="mb-3.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-[var(--ds-amber-bd)] bg-[var(--ds-amber-soft)] py-2 pl-3.5 pr-2">
       <ArrowRight aria-hidden className="size-4 shrink-0 text-[var(--ds-amber-fg)]" />
-      <p className="m-0 min-w-0 flex-1 text-[14px] text-[var(--ds-ink)] [overflow-wrap:anywhere]">
+      {/* The line takes the full width when the row is narrow (a phone), so
+          it wraps once instead of being squeezed beside the date and button. */}
+      <p className="m-0 min-w-0 flex-1 basis-[240px] text-[14px] text-[var(--ds-ink)] [overflow-wrap:anywhere]">
         <b className="font-medium">Next:</b> {label}
       </p>
-      {dueISO && (
-        <span className={cn("shrink-0 text-[12.5px]", days !== undefined && days < 0 ? "text-[var(--ds-red-fg)]" : "text-[var(--ds-amber-fg)]")}>
-          {days !== undefined && days < 0 ? `Overdue since ${shortDay(dueISO)}` : `Due ${shortDay(dueISO)}`}
-        </span>
-      )}
-      {inProgress ? (
-        <Button variant="outline" size="sm" onClick={() => nav(`/editor/${inProgress.id}`)} title={inProgress.label}>
-          Open draft
-        </Button>
-      ) : (
-        <Button variant="outline" size="sm" onClick={onAddLetter}>
-          <Plus />
-          Add a letter
-        </Button>
-      )}
+      <span className="ml-auto flex shrink-0 items-center gap-3">
+        {dueISO && (
+          <span className={cn("whitespace-nowrap text-[12.5px]", days !== undefined && days < 0 ? "text-[var(--ds-red-fg)]" : "text-[var(--ds-amber-fg)]")}>
+            {days !== undefined && days < 0 ? `Overdue since ${shortDay(dueISO)}` : `Due ${shortDay(dueISO)}`}
+          </span>
+        )}
+        {inProgress ? (
+          <Button variant="outline" size="sm" onClick={() => nav(`/editor/${inProgress.id}`)} title={inProgress.label}>
+            Open draft
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" onClick={onAddLetter}>
+            <Plus />
+            Add a letter
+          </Button>
+        )}
+      </span>
     </div>
   );
 }

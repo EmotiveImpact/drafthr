@@ -38,16 +38,21 @@ function ago(iso?: string): string | null {
  * fallback the comments use.
  *
  * Without a signed-in workspace there is nothing for Directory Sync to
- * connect to, so a failed check there reads as "off", not as an error.
+ * connect to, so the strip reads "off" without asking the server.
  */
 export function DirectorySyncStrip() {
-  const { activeTenant } = useAuth();
+  const { activeTenant, isLoaded } = useAuth();
   const profileRole = useProfileStore((s) => s.profile.workspaceRole);
   const isAdmin = ADMIN_ROLES.has(activeTenant?.role ?? profileRole ?? "");
   const signedIn = !!activeTenant;
-  const [state, setState] = useState<SyncState>({ kind: "loading" });
+  // Without a signed-in workspace there is no session for the server to read,
+  // so the check would only 404: show "off" and skip the request.
+  const noWorkspace = isLoaded && !signedIn;
+  const [fetched, setFetched] = useState<SyncState>({ kind: "loading" });
+  const state: SyncState = noWorkspace ? { kind: "off" } : fetched;
 
   useEffect(() => {
+    if (!isLoaded || !signedIn) return;
     let live = true;
     fetch("/api/workos/directory-info", { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(async (res) => {
@@ -55,15 +60,15 @@ export function DirectorySyncStrip() {
         const data = (await res.json()) as { configured?: boolean; directories?: Directory[] };
         if (!live) return;
         const linked = (data.directories ?? []).find((d) => d.state === "linked" || d.state === "active");
-        if (data.configured && linked) setState({ kind: "linked", provider: linked.name || "your directory", updatedAt: linked.updatedAt });
-        else if (data && typeof data === "object" && "configured" in data) setState({ kind: "off" });
-        else setState({ kind: "unknown" });
+        if (data.configured && linked) setFetched({ kind: "linked", provider: linked.name || "your directory", updatedAt: linked.updatedAt });
+        else if (data && typeof data === "object" && "configured" in data) setFetched({ kind: "off" });
+        else setFetched({ kind: "unknown" });
       })
-      .catch(() => live && setState(signedIn ? { kind: "unknown" } : { kind: "off" }));
+      .catch(() => live && setFetched({ kind: "unknown" }));
     return () => {
       live = false;
     };
-  }, [signedIn]);
+  }, [isLoaded, signedIn]);
 
   if (state.kind === "loading") {
     return (

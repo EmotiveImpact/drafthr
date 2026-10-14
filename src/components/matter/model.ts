@@ -291,6 +291,40 @@ export function relativeDays(iso: string): { text: string; tone: "late" | "soon"
   return { text: `in ${n} days`, tone: n <= 7 ? "soon" : "later" };
 }
 
+/** Longest deadline title the header pill shows as it is. */
+const PILL_TITLE_MAX = 22;
+
+/**
+ * A short name for a deadline in the matter header pill ("Hearing",
+ * "Task", "Tribunal limit"): the title itself when it is short, otherwise what
+ * kind of deadline it is, so the pill never ends mid-phrase. The full title is
+ * in the Next strip and the Deadlines card.
+ */
+export function shortDeadlineLabel(item: Pick<DeadlineItem, "kind" | "title" | "eventKind">): string {
+  const title = item.title.trim();
+  if (title && title.length <= PILL_TITLE_MAX) return title;
+  switch (item.kind) {
+    case "task":
+      return "Task";
+    case "event":
+      return item.eventKind ? EVENT_KIND_LABEL[item.eventKind] : "Event";
+    case "letter":
+      return "Letter";
+    case "tribunal":
+      return "Tribunal limit";
+    case "key":
+      return "Key deadline";
+  }
+}
+
+/** The header pill: "Hearing due in 3 days", "Task due today", "Task 2 days overdue". */
+export function deadlinePillText(item: Pick<DeadlineItem, "kind" | "title" | "eventKind">, iso: string): string {
+  const n = daysUntilDateOnly(iso);
+  const rel = relativeDays(iso);
+  const when = n < 0 ? rel.text : n === 0 ? "due today" : `due ${rel.text}`;
+  return `${shortDeadlineLabel(item)} ${when}`;
+}
+
 export function shortDay(iso: string): string {
   const d = parseDateOnly(iso);
   return d ? format(d, "EEE d MMM") : iso;

@@ -516,7 +516,7 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
                 </td>
                 <td className={td}>
                   <div className="flex min-w-0 items-center gap-3">
-                    <Initials name={e.legalName} seed={e.id} size={32} />
+                    <Initials name={e.legalName} size={32} />
                     <div className="min-w-0">
                       <Link
                         to={`/employees/${e.id}`}
@@ -566,7 +566,7 @@ function EmployeesTable({ rows, selection, sort, onSort, menu }: { rows: Employe
               onClick={(ev) => open(ev, e.id)}
               className="flex min-w-0 cursor-pointer items-start gap-3 border-b border-[var(--ds-line-2)] py-3 transition-colors duration-[120ms] hover:bg-[var(--ds-hover)]"
             >
-              <Initials name={e.legalName} seed={e.id} size={36} />
+              <Initials name={e.legalName} size={36} />
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-2">
                   <Link to={`/employees/${e.id}`} className="min-w-0 truncate rounded-[4px] text-[14.5px] font-medium text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]">
