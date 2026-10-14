@@ -215,6 +215,9 @@ export type ReviewRequest = {
   updatedAt: number;
   recalledAt?: number;
   finishedAt?: number;
+  /** Who finished it (the person who asked, as a rule). The Activity card
+   *  names them, or "You" when it is the person looking. */
+  finishedBy?: { name: string; email?: string; userId?: string };
 };
 
 export type NewReviewRequest = {
@@ -258,8 +261,9 @@ type ReviewStore = {
   sendBack: (id: string, question?: string) => void;
   /** Take it back before the reviewer finishes. */
   recall: (id: string) => void;
-  /** You are done with the review; the letter moves on to approval. */
-  finish: (id: string) => void;
+  /** You are done with the review; the letter moves on to approval. `by`
+   *  is who finished it (kept for the audit record). */
+  finish: (id: string, by?: { name: string; email?: string; userId?: string }) => void;
   /** Patch fields (reviewer details, due date, booking id). */
   updateReview: (id: string, patch: Partial<Omit<ReviewRequest, "id" | "draftId" | "createdAt">>) => void;
   /** Add a message to the thread. Returns its id, or null for an empty one. */
@@ -426,11 +430,17 @@ export const useReviewStore = create<ReviewStore>()(
           ),
         })),
 
-      finish: (id) =>
+      finish: (id, by) =>
         set((s) => ({
           requests: patchRequest(s.requests, id, (r, now) =>
             r.status === "back" || r.status === "out"
-              ? { ...r, status: "finished", finishedAt: now, events: withEvent(r, "finished", now) }
+              ? {
+                  ...r,
+                  status: "finished",
+                  finishedAt: now,
+                  ...(by?.name?.trim() ? { finishedBy: { ...by, name: by.name.trim() } } : {}),
+                  events: withEvent(r, "finished", now),
+                }
               : r
           ),
         })),

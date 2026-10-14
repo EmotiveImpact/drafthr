@@ -186,6 +186,7 @@ function RecallConfirm() {
 /* ------------------------------------------------------------------ */
 
 function FinishConfirm() {
+  const me = useMe();
   const draftId = useReviewUI((s) => s.finishFor);
   const set = useReviewUI((s) => s.set);
   const review = useOpenReview(draftId);
@@ -208,8 +209,10 @@ function FinishConfirm() {
     if (left.length === 0 && ran.current !== review.id) {
       ran.current = review.id;
       set({ finishFor: null });
-      void finishReview(review).then((o) => o === "pick-approver" && requestApproval(review.draftId));
+      void finishReview(review, me).then((o) => o === "pick-approver" && requestApproval(review.draftId));
     }
+    // me is read when it finishes; a change of name alone never finishes it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId, review, left.length, set]);
 
   if (!draftId || !review || review.status !== "back" || left.length === 0) return null;
@@ -244,7 +247,7 @@ function FinishConfirm() {
           <Button
             onClick={() => {
               close();
-              void finishReview(review).then((o) => o === "pick-approver" && requestApproval(review.draftId));
+              void finishReview(review, me).then((o) => o === "pick-approver" && requestApproval(review.draftId));
             }}
           >
             Finish review

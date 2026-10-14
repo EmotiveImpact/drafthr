@@ -12,5 +12,5 @@ export { HealthCard, type HealthFix } from "./HealthCard";
 export { ActivityCard, type ActivityEvent } from "./ActivityCard";
 export { Seal } from "./Seal";
 export { PersonCard, type PersonTimelineItem } from "./PersonCard";
-export { CheckRow, CheckList } from "./CheckRow";
+export { CheckRow, CheckList, AttentionMark } from "./CheckRow";
 export { WhatNow } from "./WhatNow";

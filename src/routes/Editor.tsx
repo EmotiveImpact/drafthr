@@ -57,7 +57,7 @@ import { TemplateSourceBanner } from "@/components/editor/TemplateSourceBanner";
 import { EvidenceHandoff, evaluateEvidenceHandoff, type EvidenceHandoffReason } from "@/components/editor/EvidenceHandoff";
 import { hasPendingSuggestions } from "@/lib/tiptap/suggestion-merge";
 import { DocumentBar, type DocumentBarProps, type SavedState } from "@/components/editor/DocumentBar";
-import { LetterSidePanel } from "@/components/editor/LetterSidePanel";
+import { LetterSidePanel, editsShowsReview } from "@/components/editor/LetterSidePanel";
 import type { EditsFilter } from "@/components/editor/EditsTab";
 import { MobileBottomSheet } from "@/components/editor/MobileBottomSheet";
 import { CitationLayer } from "@/components/editor/Citations";
@@ -227,6 +227,10 @@ export function Editor() {
         mode:
           | { kind: "new"; sectionId: string; quote?: string; applyMark?: (commentId: string) => void }
           | { kind: "existing"; commentId: string };
+        /** Put the cursor in the reply box (opened from a card's Reply). */
+        focusReply?: boolean;
+        /** Where focus goes back to when the thread closes. */
+        returnFocus?: HTMLElement | null;
       }
     | null
   >(null);
@@ -320,6 +324,25 @@ export function Editor() {
     setPanelTab("edits");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backKey]);
+
+  // Leaving Back to you (finished, sent back with a question, recalled):
+  // the Edits tab stops being the Review step, so the panel moves to
+  // Progress, where what comes next is (the approver card, the timeline and
+  // the review summary; or the reviewer's card again) (LETTER-X53).
+  const latestReviewStatus = review?.status;
+  const wasBack = useRef<string | null>(null);
+  useEffect(() => {
+    const key = review && latestReviewStatus === "back" ? `${draftId}:${review.id}` : null;
+    if (key) {
+      wasBack.current = key;
+      return;
+    }
+    const was = wasBack.current;
+    wasBack.current = null;
+    if (!was || !was.startsWith(`${draftId}:`) || viewerIsReviewer) return;
+    if (useJourneyUI.getState().panelTab === "edits") setPanelTab("progress");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, review?.id, latestReviewStatus]);
 
   // ?openEvidence=1 opens the evidence drawer (old /evidence bookmarks).
   useEffect(() => {
@@ -1028,11 +1051,28 @@ export function Editor() {
     });
   };
 
-  const onFocusComment = (commentId: string) => {
+  const onFocusComment = (commentId: string, from?: HTMLElement) => {
+    // Reply on a margin card: the thread opens under that card, beside the
+    // page rather than over the letter, with the reply box focused, and
+    // focus goes back to Reply when it closes (LETTER-X52).
+    const card = from?.closest<HTMLElement>(".lw-margin-card");
+    if (from && card) {
+      setFloatingComment({
+        anchor: { getRect: () => card.getBoundingClientRect(), containerEl: card, align: "end" },
+        mode: { kind: "existing", commentId },
+        focusReply: true,
+        returnFocus: from,
+      });
+      return;
+    }
     // The comment's highlight, else (a reviewer's comment that came with
     // only the words it is about) the paragraph holding those words, else
     // its section (LETTER-X44).
-    let el = document.querySelector<HTMLElement>(`mark[data-comment-id="${CSS.escape(commentId)}"]`);
+    // The highlight on screen: a hidden copy (page measuring) has no box.
+    let el =
+      [...document.querySelectorAll<HTMLElement>(`mark[data-comment-id="${CSS.escape(commentId)}"]`)].find(
+        (m) => m.getClientRects().length > 0
+      ) ?? null;
     if (!el) {
       const c = draft.comments?.find((x) => x.id === commentId);
       const sectionEl = c?.sectionId
@@ -1311,7 +1351,8 @@ export function Editor() {
   // The journey panel (Progress) hosts the review dialogs. When it is not
   // on screen, host them here so the picker still opens.
   const journeyPanelShown =
-    panelTab === "progress" && (isLargeViewport ? pinnedDock === "ai" && !focusMode : true);
+    (panelTab === "progress" || (panelTab === "edits" && !!journey && editsShowsReview(journey, { viewerIsReviewer, viewerIsAsker }))) &&
+    (isLargeViewport ? pinnedDock === "ai" && !focusMode : true);
 
   const pageInner = (
     <>
@@ -1700,7 +1741,14 @@ export function Editor() {
       {letterExport.gate}
 
       {floatingComment && (
-        <FloatingCommentPanel draft={draft} anchor={floatingComment.anchor} mode={floatingComment.mode} onClose={() => setFloatingComment(null)} />
+        <FloatingCommentPanel
+          draft={draft}
+          anchor={floatingComment.anchor}
+          mode={floatingComment.mode}
+          focusReply={floatingComment.focusReply}
+          returnFocus={floatingComment.returnFocus}
+          onClose={() => setFloatingComment(null)}
+        />
       )}
 
       {/* The floating evidence drawer, when evidence is not pinned. */}

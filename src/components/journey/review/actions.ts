@@ -610,7 +610,7 @@ export type FinishOutcome = "ready-to-send" | "with-approver" | "pick-approver" 
  *  to Send when a teammate approved it in the same step). With no usual
  *  approver the caller asks who approves; a failing required check holds it
  *  at "Send for approval" with the reason. */
-export async function finishReview(review: ReviewRequest): Promise<FinishOutcome> {
+export async function finishReview(review: ReviewRequest, by?: Me): Promise<FinishOutcome> {
   const draft = useDraftStore.getState().drafts[review.draftId];
   if (draft) {
     const round = currentRound(review);
@@ -629,7 +629,7 @@ export async function finishReview(review: ReviewRequest): Promise<FinishOutcome
     }
   }
   closeOpenPoints(review);
-  useReviewStore.getState().finish(review.id);
+  useReviewStore.getState().finish(review.id, by ?? review.asker);
   const fresh = useReviewStore.getState().requests[review.id];
   let outcome: FinishOutcome;
   const own = useDraftStore.getState().drafts[review.draftId];

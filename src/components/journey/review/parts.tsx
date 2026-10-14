@@ -330,7 +330,9 @@ export function OutCard({
       )}
       {review.kind === "trusted" && review.trustedLinkUrl && (
         <p className="m-0 mt-3 text-[12.5px] leading-[1.45] text-[var(--ds-muted)]" data-testid="review-copy-link">
-          {review.linkEmailed === false ? "The email didn't send. " : "The link went by email. "}
+          {/* The timeline above already says the link went by email; one
+           * line keeps Letter health in view at 1440x900 (REVIEW-X30). */}
+          {review.linkEmailed === false ? "The email didn't send. " : ""}
           <button
             type="button"
             className="font-medium text-[var(--ds-ink)] underline underline-offset-[3px]"

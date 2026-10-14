@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils";
 /**
  * One line of a stage checklist (mock f1, f2): a status mark, the text, and
  * either a quiet note or a small action button on the right.
- *   ok    green tick       wait  open ring (yours to do)       need  amber "!"
+ *   ok    green tick       wait  open ring (yours to do)       need  amber mark
+ * The mark is hidden from screen readers; the row says its state in words.
  */
 export function CheckRow({
   state,
@@ -39,7 +40,7 @@ export function CheckRow({
           state === "need" && "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
         )}
       >
-        {state === "ok" ? <Check className="size-[11px]" strokeWidth={2.6} /> : state === "need" ? "!" : null}
+        {state === "ok" ? <Check className="size-[11px]" strokeWidth={2.6} /> : state === "need" ? <AttentionMark /> : null}
       </span>
       <span className="min-w-0 flex-1">
         {children}
@@ -69,6 +70,20 @@ export function CheckRow({
         <span className="ml-auto shrink-0 whitespace-nowrap text-[12.5px] text-[var(--ds-subtle)]">{note}</span>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * The "needs a look" mark inside a status circle: a short upright stroke
+ * over a dot, drawn (not a typed "!", which screen readers read aloud).
+ * Hidden from screen readers; the row names its state in words.
+ */
+export function AttentionMark({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden focusable="false" viewBox="0 0 12 12" className={cn("size-[11px]", className)} data-slot="attention-mark">
+      <path d="M6 2.4v4.5" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" fill="none" />
+      <circle cx="6" cy="9.5" r="1.15" fill="currentColor" />
+    </svg>
   );
 }
 

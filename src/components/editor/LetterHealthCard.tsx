@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { AttentionMark } from "@/components/journey/ui";
 import { checkBasis, planFix, sectionForCheck } from "./health-fix";
 import { prefersReducedMotion } from "./suggestion-groups";
 import { useWorkspaceFor } from "./workspace-store";
@@ -447,10 +448,15 @@ export function ChecksDialog({
                                 : "bg-[var(--ds-amber-bg)] text-[var(--ds-amber-fg)]"
                           )}
                         >
-                          {c.severity === "pass" ? <Check className="size-[11px]" strokeWidth={2.6} /> : "!"}
+                          {c.severity === "pass" ? <Check className="size-[11px]" strokeWidth={2.6} /> : <AttentionMark />}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[13.5px] text-[var(--ds-ink)]">{c.label}</div>
+                          <div className="text-[13.5px] text-[var(--ds-ink)]">
+                            {c.label}
+                            <span className="sr-only">
+                              {c.severity === "pass" ? " (passes)" : c.severity === "fail" ? " (fails)" : " (worth a look)"}
+                            </span>
+                          </div>
                           {c.detail && <div className="mt-px text-[12.5px] leading-snug text-[var(--ds-muted)]">{c.detail}</div>}
                           <div className="mt-px text-[11.5px] text-[var(--ds-subtle)]">{DIMENSION_LABELS[c.dimension]}</div>
                         </div>
