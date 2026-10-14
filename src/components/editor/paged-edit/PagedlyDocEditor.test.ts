@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideSectionWrite, hasAppMarks } from "./PagedlyDocEditor";
+import { decideSectionWrite, hasAppMarks, plainStyleLabel } from "./PagedlyDocEditor";
 
 /**
  * Locks the Page-view (pagedly) persist guards — the fix for the cross-section
@@ -89,5 +89,19 @@ describe("decideSectionWrite", () => {
     // edit off that baseline is still a clean write (not flagged 'external').
     const afterFirst = "<p>new</p>";
     expect(decideSectionWrite({ incomingHtml: "<p>newer</p>", currentHtml: afterFirst, baselineHtml: afterFirst })).toBe("write");
+  });
+});
+
+/** LETTER-X54: the text style menu's accessible name has no "Heading — Heading". */
+describe("plainStyleLabel", () => {
+  it("names the menu plainly in a paragraph", () => {
+    expect(plainStyleLabel("Heading — Heading")).toBe("Text style");
+  });
+  it("adds the style in a heading", () => {
+    expect(plainStyleLabel("Heading — Heading 2")).toBe("Text style: Heading 2");
+  });
+  it("leaves a plain label as it is", () => {
+    expect(plainStyleLabel("Text style")).toBe("Text style");
+    expect(plainStyleLabel("Text style: Heading 1")).toBe("Text style: Heading 1");
   });
 });

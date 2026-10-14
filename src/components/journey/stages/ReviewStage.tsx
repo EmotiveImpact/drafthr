@@ -259,7 +259,11 @@ function OutState({ draft, review, me }: { draft: Draft; review: ReviewRequest; 
       {asker ? (
         <>
           <AskerMessages review={review} booking={booking} me={me} draftId={draft.id} />
-          <BellHint expert={review.kind === "expert"} />
+          {/* The "what to do now" line already says you'll hear when it's
+           * back, and Recall is in the bar. Only an expert review keeps the
+           * line, for what it says about the fee. Leaves room for Letter
+           * health under the thread (REVIEW-X30, mock f3). */}
+          {review.kind === "expert" && <BellHint expert />}
         </>
       ) : (
         <p className="m-0 text-[12.5px] leading-[1.45] text-[var(--ds-muted)]">

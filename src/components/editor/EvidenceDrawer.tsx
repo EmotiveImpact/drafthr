@@ -314,8 +314,8 @@ export function EvidenceDrawer({
         <button
           type="button"
           onClick={() => onPinnedChange(true)}
-          aria-label="Pin evidence as a permanent right rail"
-          title="Pin → make this a permanent right rail (replaces AI agent panel)"
+          aria-label="Pin evidence beside the letter"
+          title="Keep evidence open beside the letter, in place of the side panel"
           className="h-7 px-2 inline-flex items-center gap-1 rounded-md text-[11.5px] font-semibold text-[var(--ds-muted)] hover:bg-[var(--ds-line-2)] hover:text-[var(--ds-ink)] transition"
         >
           <PinIcon className="size-3.5" />

@@ -353,6 +353,26 @@ export function PagedlyDocEditor({
   // the letter reflows at its own size (FEAT-X4).
   const [pageZoom, setPageZoom] = useState(1);
   const [phonePageW, setPhonePageW] = useState<number | null>(null);
+
+  // pagedly names its text style menu "Heading — <value>" ("Heading —
+  // Heading" when the cursor is in a paragraph). Screen readers get a plain
+  // name instead, kept in step as the value changes (LETTER-X54).
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const fix = () => {
+      el.querySelectorAll<HTMLElement>(".pagedly-toolbar__blockstyle[aria-label]").forEach((b) => {
+        const now = b.getAttribute("aria-label") ?? "";
+        const plain = plainStyleLabel(now);
+        if (plain !== now) b.setAttribute("aria-label", plain);
+      });
+    };
+    fix();
+    if (typeof MutationObserver === "undefined") return;
+    const mo = new MutationObserver(fix);
+    mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-label"] });
+    return () => mo.disconnect();
+  }, []);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -447,4 +467,17 @@ function findScroller(root: HTMLElement | null): HTMLElement | null {
     }
   }
   return null;
+}
+
+/**
+ * The text style menu's accessible name: "Text style" in a paragraph,
+ * "Text style: Heading 1" in a heading. Turns pagedly's "<menu> — <value>"
+ * (which reads "Heading — Heading" in a paragraph) into that; any other
+ * label is returned as it is.
+ */
+export function plainStyleLabel(label: string): string {
+  const m = /^(.+?)\s+\u2014\s+(.+)$/.exec(label.trim());
+  if (!m) return label;
+  const [, menu, value] = m;
+  return menu.trim() === value.trim() ? "Text style" : `Text style: ${value.trim()}`;
 }

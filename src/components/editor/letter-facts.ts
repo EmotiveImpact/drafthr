@@ -260,7 +260,9 @@ export function activityEvents(draft: Draft, review: ReviewRequest | null, me: s
         id: `${review.id}-finished`,
         at: review.finishedAt,
         title: `Review finished, ${n} round${n === 1 ? "" : "s"}`,
-        meta: `${review.reviewer.name} · ${fmtWhen(review.finishedAt)}`,
+        // Whoever finished it: the person who asked, never the reviewer
+        // (LETTER-X51). "You" when that is the person looking.
+        meta: `${who(review.finishedBy?.name ?? review.asker?.name)} · ${fmtWhen(review.finishedAt)}`,
         done: true,
       });
     }

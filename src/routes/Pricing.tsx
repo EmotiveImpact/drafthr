@@ -46,7 +46,7 @@ const HR_PLANS: {
     annual: "sub_pro_annual",
     plan: "pro",
     highlight: true,
-    features: ["Unlimited letters", "20 AI critique credits per month", "Evidence-pack signing", "Marketplace access"],
+    features: ["Unlimited letters", "20 DraftHR critique credits per month", "Evidence-pack signing", "Marketplace access"],
   },
   {
     name: "Business",

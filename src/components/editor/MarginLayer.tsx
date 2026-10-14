@@ -62,8 +62,10 @@ export function MarginLayer({
   activity: ActivityEvent[] | null;
   onAllVersions: () => void;
   /** Reply on a comment card; left out when the person can no longer reply
-   *  (a teammate whose review was recalled or sent back). */
-  onReplyComment?: (commentId: string) => void;
+   *  (a teammate whose review was recalled or sent back). Gets the Reply
+   *  button, so the thread opens beside its card and focus can go back to
+   *  it when the thread closes. */
+  onReplyComment?: (commentId: string, from: HTMLElement) => void;
   onResolveComment: (commentId: string) => void;
   onJumpToSection: (sectionId: string) => void;
   /** Left edge of the margin column in the wrapper (page width + 20). */
@@ -264,7 +266,11 @@ export function MarginLayer({
                 meta="Comment"
                 actions={
                   <>
-                    {onReplyComment && <QuietAction onClick={() => onReplyComment(c.id)}>Reply</QuietAction>}
+                    {onReplyComment && (
+                      <QuietAction onClick={(e) => onReplyComment(c.id, e.currentTarget)}>
+                        Reply
+                      </QuietAction>
+                    )}
                     {canResolve && (
                       <QuietAction onClick={() => leave(it.key, () => onResolveComment(c.id))}>Resolve</QuietAction>
                     )}
@@ -325,7 +331,13 @@ export function MarginLayer({
   );
 }
 
-function QuietAction({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function QuietAction({
+  onClick,
+  children,
+}: {
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ComponentProps } from "react";
 import { PanelRight } from "lucide-react";
 import type { Draft } from "@/lib/letters/types";
-import type { JourneyStage } from "@/lib/journey/stage";
+import type { JourneyInfo, JourneyStage } from "@/lib/journey/stage";
 import { cn } from "@/lib/utils";
 import { AIPanel } from "./AIPanel";
 import { EditsTab, type EditsFilter } from "./EditsTab";
@@ -9,6 +9,21 @@ import { ProgressTab } from "./ProgressTab";
 import { appealWorkingDays } from "@/components/journey/send/record";
 
 export type SidePanelTab = "edits" | "progress" | "chat";
+
+/**
+ * Back to you (mock f5): the Edits tab is where the reviewer's points are
+ * decided, so it shows the Review step itself (the tracker, "Your turn",
+ * the reviewer's verdict, the points to decide, Send back and Finish
+ * review, then Letter health) rather than a second copy of the margin
+ * cards (REVIEW-70). Only for the person who asked; anyone else, and the
+ * named reviewer, keep the plain list.
+ */
+export function editsShowsReview(
+  journey: Pick<JourneyInfo, "stage" | "review">,
+  viewer: { viewerIsReviewer?: boolean; viewerIsAsker?: boolean }
+): boolean {
+  return journey.stage === "review" && journey.review?.status === "back" && !viewer.viewerIsReviewer && viewer.viewerIsAsker !== false;
+}
 
 const TRIBUNAL =
   "Rewrite this letter to be tribunal-ready: strictly factual, no intensifiers, no admissions, reservation of rights at the close, statutory anchors explicit. Walk through each section that needs changing.";
@@ -113,8 +128,11 @@ export function LetterSidePanel({
   onClose?: () => void;
   closeLabel?: string;
 }) {
+  const reviewInEdits = editsShowsReview(progress.journey, progress);
   const replaceThread =
-    tab === "edits" ? (
+    tab === "progress" || (tab === "edits" && reviewInEdits) ? (
+      <ProgressTab draft={draft} {...progress} />
+    ) : tab === "edits" ? (
       <EditsTab
         draft={draft}
         canResolve={canResolve}
@@ -124,8 +142,6 @@ export function LetterSidePanel({
         onRejectAll={onRejectAll}
         onJumpToSection={onJumpToSection}
       />
-    ) : tab === "progress" ? (
-      <ProgressTab draft={draft} {...progress} />
     ) : undefined;
 
   const stage = progress.journey.stage;
