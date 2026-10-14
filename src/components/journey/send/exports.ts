@@ -4,6 +4,7 @@ import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { runHealthChecks, computeHealthScore } from "@/lib/finalize/healthChecks";
 import { getLatestReview, REVIEW_KIND_LABELS } from "@/lib/journey/reviews";
 import { displayTitleFor } from "@/lib/letters/display";
+import { plainExportEvent } from "@/lib/timeline";
 import { approvalWord } from "@/lib/journey/stage";
 import {
   dateGivenOf,
@@ -111,7 +112,8 @@ export function buildAuditRecord(
   lines.push(`Generated:     ${when(now)}`);
   lines.push("");
 
-  const timeline = [...(draft.timeline ?? [])].sort((a, b) => a.createdAt - b.createdAt);
+  // Downloads in plain words, as on the letter's timeline (SEND-X43).
+  const timeline = (draft.timeline ?? []).map(plainExportEvent).sort((a, b) => a.createdAt - b.createdAt);
   const created = timeline.find((t) => t.kind === "created");
   lines.push("WHO DID WHAT", "------------");
   // One column for every label, the longest ("Sent to approve") included (SEND-X38).
@@ -205,7 +207,10 @@ export function buildAuditRecord(
       // Downloads in words ("Downloaded Word"), not the store's "Exported as DOCX".
       const format = t.kind === "exported" ? String(t.meta?.format ?? "") : "";
       const title = format in FORMAT_LABEL ? `Downloaded ${FORMAT_LABEL[format as ExportFormat]}` : t.title;
-      const who = t.actorName ? ` (${t.actorName})` : "";
+      // Name who did it, unless the line already does ("Approved by Ruth
+      // Adeyemi", not "Approved by Ruth Adeyemi (Ruth Adeyemi)", SEND-X42).
+      const actor = t.actorName?.trim();
+      const who = actor && !title.includes(actor) ? ` (${actor})` : "";
       lines.push(`${when(t.createdAt)}  ${title}${who}${t.detail ? `: ${t.detail}` : ""}`);
     }
     lines.push("");

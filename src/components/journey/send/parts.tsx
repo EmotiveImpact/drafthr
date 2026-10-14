@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode, type Ref } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -552,14 +552,31 @@ export function SendButton({
   );
 }
 
-/** "Open full page" under the Send step (mock as-panel-c `.full`). */
-export function OpenFullPageCard({ draftId, className }: { draftId: string; className?: string }) {
+/**
+ * "Open full page" under the Send step (mock as-panel-c `.full`). `peek`
+ * while only a sliver of it would show in the panel's bottom fade: it stays
+ * out of sight until it can be seen properly, rather than leaving a stray
+ * dashed edge under the button (SEND-X41). It stays focusable throughout.
+ */
+export function OpenFullPageCard({
+  draftId,
+  className,
+  peek = false,
+  ref,
+}: {
+  draftId: string;
+  className?: string;
+  peek?: boolean;
+  ref?: Ref<HTMLAnchorElement>;
+}) {
   return (
     <Link
+      ref={ref}
       to={`/editor/${draftId}/finalize`}
       data-slot="open-full-page"
+      data-peek={peek || undefined}
       className={cn(
-        "mt-3.5 flex items-center gap-2.5 rounded-[11px] border border-dashed border-[var(--ds-line-strong)] px-3 py-2.5 text-[12.5px] text-[var(--ds-muted)] no-underline outline-none transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:shadow-[var(--ds-focus-ring)]",
+        "mt-3.5 flex items-center gap-2.5 rounded-[11px] border border-dashed border-[var(--ds-line-strong)] px-3 py-2.5 text-[12.5px] text-[var(--ds-muted)] no-underline outline-none transition-[color,background-color,opacity] duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-2)] focus-visible:shadow-[var(--ds-focus-ring)] data-[peek]:not-focus-visible:opacity-0 motion-reduce:transition-none",
         className
       )}
     >

@@ -251,6 +251,20 @@ describe("audit record", () => {
     expect(new Set(starts)).toEqual(new Set([17]));
   });
 
+  it("names the actor once on a timeline line that already names them (SEND-X42)", () => {
+    const d = seed({
+      timeline: [
+        { id: "c", kind: "created", title: "Created Warning letter", createdAt: 1, actorName: "Alex Morgan" },
+        { id: "a", kind: "review_approved", title: "Approved by Ruth Adeyemi", createdAt: 3, actorName: "Ruth Adeyemi" },
+      ],
+    });
+    const text = buildAuditRecord(d, undefined, now.getTime());
+    expect(text).toMatch(/ {2}Approved by Ruth Adeyemi$/m);
+    expect(text).not.toMatch(/Ruth Adeyemi \(Ruth Adeyemi\)/);
+    // A line that does not name them still says who did it.
+    expect(text).toMatch(/ {2}Created Warning letter \(Alex Morgan\)$/m);
+  });
+
   it("reads the send from the letter once it is sent", () => {
     seed();
     markLetterSent("send-test-1", { way: "self", givenBy: "post", dateGiven: "2026-10-14", downloaded: ["pdf"] }, now);
