@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { Booking } from "@/lib/bookings";
-import { agreedPrice, awaitingPayment, canRate, checkoutNote, disputeNote, processingNote } from "./payments";
+import {
+  agreedPrice,
+  awaitingPayment,
+  canRate,
+  checkoutNote,
+  disputeNote,
+  isPriority,
+  lateRefundNote,
+  priorityDifference,
+  processingNote,
+} from "./payments";
 
 const bk = (over: Partial<Booking>): Booking =>
   ({ id: "b1", consultantId: "c1", consultantInitials: "SW", status: "requested", bookedAt: 0, ...over }) as Booking;
@@ -41,5 +51,35 @@ describe("payments", () => {
     expect(disputeNote(bk({ status: "accepted", paymentStatus: "dispute_lost" }))).toBe(
       "This payment was reversed after a dispute.",
     );
+  });
+
+  describe("priority", () => {
+    const pr = (over: Partial<Booking> = {}) =>
+      bk({ turnaround: "priority", priceAmount: 25000, standardPriceAmount: 15000, priceCurrency: "gbp", ...over });
+
+    it("knows a priority booking and the difference a late one refunds", () => {
+      expect(isPriority(pr())).toBe(true);
+      expect(isPriority(bk({}))).toBe(false);
+      expect(priorityDifference(pr())).toBe("£100.00");
+      expect(priorityDifference(bk({ priceAmount: 15000, priceCurrency: "gbp" }))).toBeNull();
+    });
+
+    it("says the 24 hours start at payment when checking out", () => {
+      expect(checkoutNote(pr())).toBe(
+        "£250.00 for a priority review, as agreed when you booked. The 24 hours start when you pay. Secure checkout via Stripe.",
+      );
+    });
+
+    it("says what happened to the difference when it came back late", () => {
+      expect(lateRefundNote(pr(), "requester")).toBeNull();
+      const refunded = pr({ lateRefundStatus: "refunded", lateRefundAmount: 10000 });
+      expect(lateRefundNote(refunded, "requester")).toBe("Back after the 24 hours, so £100.00 was refunded to you.");
+      expect(lateRefundNote(refunded, "consultant")).toBe(
+        "Delivered after the 24 hours, so £100.00 was refunded to the client from your payout.",
+      );
+      expect(lateRefundNote(pr({ lateRefundStatus: "owed", lateRefundAmount: 10000 }), "requester")).toBe(
+        "Back after the 24 hours, so you're owed £100.00. It will be refunded to you.",
+      );
+    });
   });
 });

@@ -18,6 +18,9 @@ import {
   tintFor,
 } from "@/components/consultants/ui";
 import { pushBookingRespond } from "@/lib/marketplaceSync";
+import { isPriority, lateRefundNote, priorityDifference } from "@/components/consultants/payments";
+import { dayAndTime } from "@/components/consultants/market";
+import { cn } from "@/lib/utils";
 
 /** Stable empty-array reference. bookingsForConsultant builds a fresh
  *  array every call; returning a new `[]` literal from the selector's
@@ -137,6 +140,9 @@ function BookingRow({ booking }: { booking: Booking }) {
     ? relativeTime(booking.expectedDeliveryAt, true)
     : null;
 
+  const priority = isPriority(booking);
+  const difference = priorityDifference(booking);
+  const lateRefund = lateRefundNote(booking, "consultant");
   const canRespond = booking.status === "requested" && !showDecline;
   const canDeliver = booking.status === "accepted" && booking.paymentStatus === "paid" && !showDeliver;
 
@@ -152,12 +158,23 @@ function BookingRow({ booking }: { booking: Booking }) {
               </h4>
               <p className="m-0 mt-0.5 flex flex-wrap items-center gap-x-2 text-[12.5px] text-[var(--ds-muted)]">
                 <span>Requested {requestedAgo}</span>
-                {dueIn && booking.status === "accepted" && (
+                {priority && (
                   <>
                     <span aria-hidden className="text-[var(--ds-faint)]">·</span>
-                    <span className="inline-flex items-center gap-1">
+                    <span className="font-medium text-[var(--ds-ink)]">Priority</span>
+                  </>
+                )}
+                {dueIn && booking.status === "accepted" && (!priority || booking.paymentStatus === "paid") && (
+                  <>
+                    <span aria-hidden className="text-[var(--ds-faint)]">·</span>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1",
+                        dueIn === "overdue" && "text-[var(--ds-red-fg)]",
+                      )}
+                    >
                       <Clock className="size-3" aria-hidden />
-                      Due in {dueIn}
+                      {dueIn === "overdue" ? "Overdue" : `Due in ${dueIn}`}
                     </span>
                   </>
                 )}
@@ -167,6 +184,8 @@ function BookingRow({ booking }: { booking: Booking }) {
           </header>
 
           {(booking.message ||
+            (priority && (booking.status === "requested" || booking.status === "accepted")) ||
+            lateRefund ||
             booking.responseNote ||
             showDecline ||
             showDeliver ||
@@ -178,6 +197,20 @@ function BookingRow({ booking }: { booking: Booking }) {
                   {booking.message}
                 </RowNote>
               )}
+
+              {priority && booking.status === "requested" && (
+                <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">
+                  Priority, at your priority price: if you accept, it's due back within 24 hours of their payment.
+                  {difference ? ` If it's late, ${difference} is refunded to them from your payout.` : ""}
+                </p>
+              )}
+              {priority && booking.status === "accepted" && booking.paymentStatus === "paid" && booking.expectedDeliveryAt && (
+                <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">
+                  Priority: due by {dayAndTime(booking.expectedDeliveryAt)}.
+                  {difference ? ` If it's later, ${difference} is refunded to the client from your payout.` : ""}
+                </p>
+              )}
+              {lateRefund && <p className="m-0 text-[12.5px] text-[var(--ds-amber-fg)]">{lateRefund}</p>}
 
               {booking.responseNote && (
                 <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">

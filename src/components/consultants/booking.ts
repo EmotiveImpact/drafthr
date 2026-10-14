@@ -20,7 +20,7 @@ import { useReviewStore } from "@/lib/journey/reviews";
 import { letterSnapshot, sharedEvidence, type Me } from "@/components/journey/review/actions";
 import { createReviewLink } from "@/components/journey/review/trusted-api";
 import { getJourney } from "@/lib/journey/stage";
-import { bookingTotals, planHours } from "./market";
+import { PRIORITY_HOURS, bookingTotals, planHours, priorityPriceOf } from "./market";
 
 export const NEEDS = ["Legal check", "Tone and fairness", "Matches our policy"] as const;
 export type Need = (typeof NEEDS)[number];
@@ -60,6 +60,7 @@ export async function bookExpertFromMarketplace({
   needs,
   note,
   asker,
+  turnaround = "standard",
 }: {
   consultant: Consultant;
   draft: Draft | null;
@@ -67,12 +68,19 @@ export async function bookExpertFromMarketplace({
   note: string;
   /** The person booking (the review's asker), as from useMe(). */
   asker?: Me;
+  /** "priority": the expert's priority price, back within 24 hours of
+   *  payment. Falls back to standard when the expert doesn't offer it. */
+  turnaround?: "standard" | "priority";
 }): Promise<BookResult> {
   // A sent letter is final: the booking is appeal help, carried with the
   // letter so the expert can read it, and no review request is made.
   const appeal = isSentLetter(draft);
   const message = bookingMessage(needs, note, appeal ? APPEAL_PURPOSE : undefined);
-  const expectedDeliveryAt = Date.now() + planHours(c.sla) * 3600_000;
+  const priorityPrice = turnaround === "priority" ? priorityPriceOf(c) : null;
+  const priority = priorityPrice != null;
+  const price = priorityPrice ?? c.price;
+  // Priority's 24 hours start at payment; until then this is the earliest.
+  const expectedDeliveryAt = Date.now() + (priority ? PRIORITY_HOURS : planHours(c.sla)) * 3600_000;
   const title = draft ? letterTitle(draft) : undefined;
   const store = useBookingsStore.getState();
   const placeholder = store.recordBooking({
@@ -89,6 +97,7 @@ export async function bookExpertFromMarketplace({
     consultantPhotoUrl: c.photoUrl || undefined,
     consultantCurrency: c.currency,
     consultantPrice: c.price,
+    ...(priority ? { turnaround: "priority" as const } : {}),
   });
 
   let booking: Booking | undefined = placeholder;
@@ -104,6 +113,7 @@ export async function bookExpertFromMarketplace({
         matterTitle: title,
         message,
         expectedDeliveryAt: new Date(expectedDeliveryAt).toISOString(),
+        ...(priority ? { turnaround: "priority" as const } : {}),
       },
       placeholder.id,
       c.initials,
@@ -128,8 +138,8 @@ export async function bookExpertFromMarketplace({
       ask: message,
       dueAt: new Date(expectedDeliveryAt).toISOString(),
       bookingId: booking?.id,
-      pricePence: bookingTotals(c.price).totalPence,
-      turnaround: "standard",
+      pricePence: bookingTotals(price).totalPence,
+      turnaround: priority ? "priority" : "standard",
       ...(asker ? { asker: { name: asker.name, email: asker.email, userId: asker.userId } } : {}),
     });
     // As when booked from the letter's reviewer dialog: the expert's review

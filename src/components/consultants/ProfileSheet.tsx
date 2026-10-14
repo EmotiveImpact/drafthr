@@ -4,20 +4,24 @@ import { SideSheet, SheetClose, SheetCloseButton } from "@/components/consultant
 import { AvailabilityBadge } from "@/components/consultants/ConsultantCard";
 import { AmberStar, BTN_LG, BTN_OUTLINE, BTN_PRIMARY, ExpertAvatar, VerifiedBadge, expertTint } from "@/components/consultants/ui";
 import {
+  PRIORITY_HOURS,
   availabilityPill,
   canMeet,
   firstNameOf,
+  priorityPriceOf,
   shortDay,
   turnaroundShort,
   turnaroundWords,
 } from "@/components/consultants/market";
+import { getFlag } from "@/lib/flags";
 import { cn } from "@/lib/utils";
 
 /**
  * An expert's profile (design `mk-profile`), opened from "Profile" on a card
  * while choosing a reviewer for a letter. Everything shown is the expert's
- * real listing: stats, about, what they check (their specialties), prices,
- * and whether they can have it back by the letter's deadline. Location,
+ * real listing: stats, about, what they check (their specialties), prices
+ * (Standard, plus Priority while it is switched on and they offer it), and
+ * whether they can have it back by the letter's deadline. Location,
  * "letters reviewed", "clients come back" and written review quotes are not
  * in the listing, so they are not shown.
  */
@@ -57,6 +61,7 @@ function Body({ c, dueMs }: { c: Consultant; dueMs: number | null }) {
   const tint = expertTint(seed);
   const verified = Boolean(c.profileId) && !c.pending;
   const first = firstNameOf(c.name);
+  const priorityPrice = getFlag("priorityReviews") ? priorityPriceOf(c) : null;
   const stats: { big: React.ReactNode; small: string }[] = [];
   if (c.reviews > 0)
     stats.push({
@@ -145,6 +150,18 @@ function Body({ c, dueMs }: { c: Consultant; dueMs: number | null }) {
                 {c.price}
               </b>
             </div>
+            {priorityPrice != null && (
+              <div
+                data-testid="profile-price-priority"
+                className="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--ds-line)] px-3 py-[9px] text-[13px] text-[var(--ds-muted)]"
+              >
+                <span>Priority, {PRIORITY_HOURS} hours from payment</span>
+                <b className="ds-mono text-[14px] font-semibold text-[var(--ds-ink)]">
+                  {c.currency ?? "£"}
+                  {priorityPrice}
+                </b>
+              </div>
+            )}
           </div>
         </Section>
       </div>

@@ -49,4 +49,21 @@ describe("booking emails", () => {
     expect(bookingDueWords(new Date("2026-10-15T11:00:00Z"))).toBe("Thursday 15 October, 12:00");
     expect(bookingEmail("accepted", facts).html).toContain("Expected back by Thursday 15 October, 12:00.");
   });
+
+  it("say when a review is priority, and what a late one gets back", () => {
+    const p = { ...facts, priority: true };
+    const req = bookingEmail("request", p);
+    expect(req.subject).toBe("New priority review request: Warning letter · Jordan Hale");
+    expect(req.html).toContain("due back within 24 hours of their payment");
+    expect(bookingEmail("accepted", p).html).toContain("due back within 24 hours of your payment");
+    expect(bookingEmail("accepted", p).html).not.toContain("Expected back by");
+    expect(bookingEmail("delivered", { ...p, lateRefund: { amount: "£100.00", made: true } }).html).toContain(
+      "£100.00, the difference between the priority and standard prices, has been refunded to you.",
+    );
+    expect(bookingEmail("delivered", { ...p, lateRefund: { amount: "£100.00", made: false } }).html).toContain(
+      "you're owed £100.00",
+    );
+    expect(bookingEmail("delivered", p).html).not.toContain("24 hours");
+    for (const s of STAGES) expect(Object.values(bookingEmail(s, { ...p, lateRefund: { amount: "£1", made: true } })).join("")).not.toMatch(/—|!/);
+  });
 });

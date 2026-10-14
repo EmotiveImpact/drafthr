@@ -221,6 +221,9 @@ export function ConsultantAdminReview() {
                           <span className="ds-mono text-[var(--ds-body)]">
                             {p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}
                             {p.price} per review
+                            {p.priorityPrice
+                              ? `, ${p.currency === "GBP" ? "£" : p.currency === "USD" ? "$" : "€"}${p.priorityPrice} priority`
+                              : ""}
                           </span>
                           <span aria-hidden className="text-[var(--ds-faint)]">·</span>
                           <span>SLA {p.sla}</span>

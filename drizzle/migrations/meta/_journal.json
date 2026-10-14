@@ -169,6 +169,13 @@
       "when": 1783310000000,
       "tag": "0023_booking_declined_at",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1783320000000,
+      "tag": "0024_priority_reviews",
+      "breakpoints": true
     }
   ]
 }

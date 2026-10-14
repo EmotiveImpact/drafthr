@@ -19,6 +19,9 @@ export type Expert = {
   reviews: number;
   /** Rate in whole currency units, as listed. */
   price: number;
+  /** Priority rate (back within 24 hours of payment), when offered and
+   *  priority reviews are switched on; null otherwise. */
+  priorityPrice: number | null;
   symbol: "£" | "$" | "€";
   sla: string;
   photoUrl: string | null;
@@ -37,6 +40,7 @@ function toExpert(d: MarketplaceConsultantDTO): Expert {
     rating: Number(d.rating) || 0,
     reviews: Number(d.reviews) || 0,
     price: Number(d.price) || 0,
+    priorityPrice: Number(d.priorityPrice) || null,
     symbol: SYMBOL[d.currency] ?? "£",
     sla: d.sla || "48h",
     photoUrl: d.photoUrl,

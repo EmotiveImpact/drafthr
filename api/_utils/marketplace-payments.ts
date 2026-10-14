@@ -10,6 +10,7 @@
  *     the consultant's Connect transfer.
  *   - A Checkout session only counts when its metadata names a real booking
  *     and its amount and currency equal that booking's snapshot.
+ *   - Paying a priority booking starts its 24 hours (priority-reviews.ts).
  */
 import type Stripe from "stripe";
 import { and, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
@@ -20,6 +21,7 @@ import {
   consultantProfiles,
 } from "../../src/db/schema.js";
 import { serverUuidOrNull } from "../../src/lib/remote-ids.js";
+import { startPriorityClock } from "./priority-reviews.js";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -251,7 +253,11 @@ export async function applyCheckoutSession(
     return "ignored";
   }
 
-  if (status === "paid") await grantDraftAccess(db, booking.id, now);
+  if (status === "paid") {
+    await grantDraftAccess(db, booking.id, now);
+    // A priority booking's 24 hours start now, when the expert can open it.
+    await startPriorityClock(db, booking.id, now);
+  }
   return status;
 }
 

@@ -16,6 +16,7 @@ import {
   consultantProfiles,
   users,
 } from "../../../src/db/schema.js";
+import { priorityFields } from "../../_utils/priority-reviews.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -85,5 +86,6 @@ function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: st
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
     declinedAt: row.declinedAt?.getTime() ?? null,
+    ...priorityFields(row),
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NO_FILTERS, availabilityPill, declinedLine, describeForLetter } from "./market";
+import { NO_FILTERS, availabilityPill, declinedLine, describeForLetter, priorityPriceOf } from "./market";
 import { openReviewNote } from "./letters";
 import type { Consultant } from "./types";
 import type { ReviewRequest } from "@/lib/journey/reviews";
@@ -59,5 +59,14 @@ describe("openReviewNote (MARKET-X2)", () => {
   });
   it("says out for review while the reviewer has it", () => {
     expect(openReviewNote(review("out"), "short")).toBe("Out for review with Dana Whitfield. Booking takes it back from them.");
+  });
+});
+
+describe("priorityPriceOf", () => {
+  it("offers priority only above the standard price", () => {
+    expect(priorityPriceOf({ price: 150, priorityPrice: 250 })).toBe(250);
+    expect(priorityPriceOf({ price: 150, priorityPrice: 150 })).toBeNull();
+    expect(priorityPriceOf({ price: 150, priorityPrice: null })).toBeNull();
+    expect(priorityPriceOf({ price: 150 })).toBeNull();
   });
 });

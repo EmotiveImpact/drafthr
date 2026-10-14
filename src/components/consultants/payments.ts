@@ -17,15 +17,51 @@ export function awaitingPayment(b: Booking): boolean {
 /** The agreed price snapshot, formatted "£180.00", or null when the booking
  *  predates it. This is the amount checkout charges. */
 export function agreedPrice(b: Booking): string | null {
-  if (!b.priceAmount || !b.priceCurrency) return null;
+  return minorMoney(b.priceAmount, b.priceCurrency);
+}
+
+function minorMoney(amount: number | undefined, currency: string | undefined): string | null {
+  if (!amount || !currency) return null;
   try {
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
-      currency: b.priceCurrency.toUpperCase(),
-    }).format(b.priceAmount / 100);
+      currency: currency.toUpperCase(),
+    }).format(amount / 100);
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Priority (back within 24 hours of payment)                         */
+/* ------------------------------------------------------------------ */
+
+export function isPriority(b: Booking): boolean {
+  return b.turnaround === "priority";
+}
+
+/** The difference a late priority review refunds ("£100.00"), or null. */
+export function priorityDifference(b: Booking): string | null {
+  if (!isPriority(b) || b.priceAmount == null || b.standardPriceAmount == null) return null;
+  return minorMoney(b.priceAmount - b.standardPriceAmount, b.priceCurrency);
+}
+
+/**
+ * A priority review that came back late: what happened to the difference,
+ * in words for the person who booked or for the expert. Null when it wasn't
+ * late (or isn't priority).
+ */
+export function lateRefundNote(b: Booking, reader: "requester" | "consultant"): string | null {
+  if (!isPriority(b) || !b.lateRefundStatus) return null;
+  const amount = minorMoney(b.lateRefundAmount, b.priceCurrency) ?? "The difference";
+  if (reader === "consultant") {
+    return b.lateRefundStatus === "refunded"
+      ? `Delivered after the 24 hours, so ${amount} was refunded to the client from your payout.`
+      : `Delivered after the 24 hours, so ${amount} is being refunded to the client from your payout.`;
+  }
+  return b.lateRefundStatus === "refunded"
+    ? `Back after the 24 hours, so ${amount} was refunded to you.`
+    : `Back after the 24 hours, so you're owed ${amount}. It will be refunded to you.`;
 }
 
 /** Bank payments clearing. */
@@ -54,6 +90,9 @@ export function paymentsOffNote(b: Booking): string {
 /** "£180.00, as agreed when you booked. Secure checkout via Stripe." */
 export function checkoutNote(b: Booking): string {
   const p = agreedPrice(b);
+  if (p && isPriority(b)) {
+    return `${p} for a priority review, as agreed when you booked. The 24 hours start when you pay. Secure checkout via Stripe.`;
+  }
   return p ? `${p}, as agreed when you booked. Secure checkout via Stripe.` : "Secure checkout via Stripe.";
 }
 

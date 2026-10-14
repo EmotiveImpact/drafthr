@@ -32,6 +32,7 @@ export function dtoToConsultant(dto: MarketplaceConsultantDTO): Consultant {
     rating: Number(dto.rating) || 0,
     reviews: Number(dto.reviews) || 0,
     price: Number(dto.price) || 0,
+    priorityPrice: Number(dto.priorityPrice) || null,
     currency: SYMBOL[dto.currency] ?? "£",
     sla: dto.sla || "48h",
     avatarFrom: "",
@@ -55,6 +56,7 @@ export function profileToConsultant(p: ConsultantProfile | null, complete: boole
     rating: p.rating,
     reviews: p.reviews,
     price: p.price,
+    priorityPrice: p.priorityPrice ?? null,
     currency: p.currency,
     sla: p.sla,
     avatarFrom: "",
@@ -515,6 +517,23 @@ export const VAT_RATE_CHARGED = 0;
 
 export function money(amount: number, symbol: string = "£"): string {
   return `${symbol}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Priority                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Hours a priority review has, counted from payment. */
+export const PRIORITY_HOURS = 24;
+
+/**
+ * The expert's priority price when they offer one (above their standard
+ * price), else null. Callers also check the priorityReviews switch; the
+ * listing sends no priority prices while the server's switch is off.
+ */
+export function priorityPriceOf(c: { price: number; priorityPrice?: number | null }): number | null {
+  const p = c.priorityPrice;
+  return typeof p === "number" && Number.isFinite(p) && p > c.price ? p : null;
 }
 
 export function bookingTotals(price: number) {

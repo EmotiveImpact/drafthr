@@ -493,6 +493,10 @@ export const consultantProfiles = pgTable(
     /** Filter-chip tags driving /consultants search. JSON string array. */
     specialties: jsonb("specialties").notNull().default(sql`'[]'::jsonb`),
     price: integer("price").notNull().default(150),
+    /** Priority rate (back within 24 hours of payment), whole units like
+     *  price and always above it. Null: the expert doesn't offer priority.
+     *  Only offered while the operator has priority reviews switched on. */
+    priorityPrice: integer("priority_price"),
     currency: text("currency", { enum: ["GBP", "USD", "EUR"] })
       .notNull()
       .default("GBP"),
@@ -584,6 +588,25 @@ export const consultantBookings = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     /** When the consultant declined (null on rows declined before 0023). */
     declinedAt: timestamp("declined_at", { withTimezone: true }),
+    /** 'standard', or 'priority': back within 24 hours of payment, for the
+     *  expert's priority price (priceAmount holds it). Fixed at booking. */
+    turnaround: text("turnaround", { enum: ["standard", "priority"] })
+      .notNull()
+      .default("standard"),
+    /** The expert's standard rate when a priority booking was placed (minor
+     *  units), so a late delivery refunds exactly the difference. */
+    standardPriceAmount: integer("standard_price_amount"),
+    /** When a priority review is due: payment time plus 24 hours. Null
+     *  until paid, and on standard bookings. */
+    priorityDueAt: timestamp("priority_due_at", { withTimezone: true }),
+    /** A priority review delivered after priorityDueAt refunds the
+     *  difference: 'pending' while the refund is made, then 'refunded',
+     *  'owed' (Stripe off or the payment can't be found, so it's done by
+     *  hand) or 'failed'. Null when nothing is owed. */
+    lateRefundStatus: text("late_refund_status", {
+      enum: ["pending", "refunded", "owed", "failed"],
+    }),
+    lateRefundAmount: integer("late_refund_amount"),
     /** Random bearer token generated once the booking is paid. Tied
      *  to {bookingId, draftId}; expires shareTokenExpiresAt. Used by the
      *  consultant to fetch the specific draft they're reviewing without

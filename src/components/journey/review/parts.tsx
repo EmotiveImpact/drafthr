@@ -21,6 +21,7 @@ import { PersonCard, CheckList, CheckRow, type PersonTimelineItem } from "@/comp
 import type { Booking } from "@/lib/bookings";
 import { useBookingsStore } from "@/lib/bookings";
 import { startBookingCheckout, getStripeConnectStatus } from "@/lib/consultantApi";
+import { priorityDifference } from "@/components/consultants/payments";
 import { pushBookingRespond } from "@/lib/marketplaceSync";
 import { useDraftStore } from "@/lib/store";
 import type { Draft } from "@/lib/letters/types";
@@ -122,11 +123,22 @@ function scrollToPoint(p: { sectionId?: string; markIds?: string[]; id: string }
 export function reviewerSubline(review: ReviewRequest): string {
   if (review.kind === "expert") {
     const role = (review.reviewer.role ?? "").trim();
-    if (/DraftHR expert/i.test(role)) return role;
-    return `${role ? `${role} · ` : ""}DraftHR expert`;
+    const priority = review.turnaround === "priority" ? " · Priority" : "";
+    if (/DraftHR expert/i.test(role)) return `${role}${priority}`;
+    return `${role ? `${role} · ` : ""}DraftHR expert${priority}`;
   }
   if (review.kind === "team") return `${review.reviewer.role || "Teammate"} · your team`;
   return `${review.reviewer.email || "Someone you trust"} · secure link`;
+}
+
+/**
+ * When the review is due back. A priority expert review's 24 hours start
+ * when it's paid, so its due time is the booking's (NaN until paid, so it
+ * can't look late before the clock has started).
+ */
+export function reviewDueMs(review: ReviewRequest, booking: Booking | undefined): number {
+  if (review.kind === "expert" && review.turnaround === "priority") return booking?.priorityDueAt ?? NaN;
+  return review.dueAt ? Date.parse(review.dueAt) : NaN;
 }
 
 function eventAt(review: ReviewRequest, kind: string, since = 0): number | undefined {
@@ -143,7 +155,7 @@ export function timelineFor(
   const who = firstName(review.reviewer.name) || "The reviewer";
   const round = currentRound(review);
   const since = round?.sentAt ?? review.createdAt;
-  const due = review.dueAt ? Date.parse(review.dueAt) : NaN;
+  const due = reviewDueMs(review, booking);
   const late = Number.isFinite(due) && now > due;
   const backItem: PersonTimelineItem = {
     id: "back",
@@ -253,9 +265,10 @@ export function OutCard({
       : opened
         ? { tone: "lilac" as const, label: "Reading now" }
         : { tone: "grey" as const, label: "Not opened yet" };
-  const due = review.dueAt ? Date.parse(review.dueAt) : NaN;
+  const due = reviewDueMs(review, booking);
   const late = Number.isFinite(due) && now > due;
   const note = paymentNote(booking);
+  const difference = booking ? priorityDifference(booking) : null;
   const price = bookingPrice(booking, review);
   const [paying, setPaying] = useState(false);
 
@@ -307,7 +320,9 @@ export function OutCard({
       {note && <p className="m-0 mt-3 text-[12.5px] leading-[1.45] text-[var(--ds-amber-fg)]">{note}</p>}
       {late && (
         <p className="m-0 mt-3 text-[12.5px] leading-[1.45] text-[var(--ds-amber-fg)]">
-          {review.kind === "expert"
+          {review.kind === "expert" && review.turnaround === "priority" && difference
+            ? `${who} is late. It was due back ${fmtDayTime(due)}, so ${difference} is refunded to you automatically when it comes back.`
+            : review.kind === "expert"
             ? `${who} is late. It was due back ${fmtDayTime(due)}, so you're refunded if it doesn't come back.`
             : `${who} is late. It was due back ${fmtDayTime(due)}. Send a message, or recall it.`}
         </p>

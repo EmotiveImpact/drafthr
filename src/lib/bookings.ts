@@ -91,6 +91,16 @@ export type Booking = {
   priceCurrency?: string;
   /** Server payment state; only "paid" lets work start. */
   paymentStatus?: BookingPaymentStatus;
+  /** "priority": back within 24 hours of payment, at the expert's priority
+   *  price. Absent means standard. */
+  turnaround?: "standard" | "priority";
+  /** The standard rate when a priority booking was placed (minor units). */
+  standardPriceAmount?: number;
+  /** When a priority review is due: payment plus 24 hours. */
+  priorityDueAt?: number;
+  /** A priority review delivered late refunds the difference. */
+  lateRefundStatus?: "pending" | "refunded" | "owed" | "failed";
+  lateRefundAmount?: number;
 };
 
 type RecordBookingInput = Omit<

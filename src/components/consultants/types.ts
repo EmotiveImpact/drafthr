@@ -17,6 +17,9 @@ export type Consultant = {
   rating: number;
   reviews: number;
   price: number;
+  /** Priority price (back within 24 hours of payment), above price. Null or
+   *  absent when the expert doesn't offer it or priority is switched off. */
+  priorityPrice?: number | null;
   /** Display currency symbol. */
   currency?: "£" | "$" | "€";
   sla: string;

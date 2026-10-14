@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Check,
+  Clock,
   Loader2,
   Lock,
   Send,
@@ -21,7 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { Avatar } from "@/components/ds/Avatar";
 import { Pill } from "@/components/ds/Pill";
 import { ExpertAvatar } from "@/components/consultants/ui";
-import { VAT_RATE_CHARGED, bookingTotals } from "@/components/consultants/market";
+import { PRIORITY_HOURS, VAT_RATE_CHARGED, bookingTotals } from "@/components/consultants/market";
 import { useDraftStore } from "@/lib/store";
 import { getFlag } from "@/lib/flags";
 import { firstName, type ReviewKind } from "@/lib/journey/reviews";
@@ -118,6 +119,19 @@ export function ReviewerPicker({
   const selectedExpert = expertRows.find((e) => e.id === expertId) ?? null;
   const cheapest = lowestPrice(experts.all);
 
+  // Priority: back within 24 hours of payment, at the expert's priority
+  // price, while it's switched on and the chosen expert offers it.
+  const priorityOn = getFlag("priorityReviews");
+  const [turnaround, setTurnaround] = useState<"standard" | "priority">("standard");
+  const priorityPrice =
+    priorityOn && selectedExpert && selectedExpert.priorityPrice != null && selectedExpert.priorityPrice > selectedExpert.price
+      ? selectedExpert.priorityPrice
+      : null;
+  const priority = turnaround === "priority" && priorityPrice != null;
+  const expertPrice = selectedExpert ? (priority ? (priorityPrice as number) : selectedExpert.price) : 0;
+  // Each expert starts on Standard.
+  useEffect(() => setTurnaround("standard"), [expertId]);
+
   // Default selections once the lists arrive.
   useEffect(() => {
     if (teamKey || teammates.people.length === 0) return;
@@ -130,8 +144,11 @@ export function ReviewerPicker({
     if (expertRows[0]) setExpertId(expertRows[0].id);
   }, [expertRows, expertId]);
 
-  // An expert needs at least their turnaround.
-  const minDue = kind === "expert" && selectedExpert ? Date.now() + slaHours(selectedExpert.sla) * 3600000 : Date.now() + 30 * 60000;
+  // An expert needs at least their turnaround (24 hours for priority).
+  const minDue =
+    kind === "expert" && selectedExpert
+      ? Date.now() + (priority ? PRIORITY_HOURS : slaHours(selectedExpert.sla)) * 3600000
+      : Date.now() + 30 * 60000;
   useEffect(() => {
     if (Date.parse(dueAt) < minDue) setDueAt(defaultDueAt(Math.ceil((minDue - Date.now()) / 3600000)));
   }, [minDue, dueAt]);
@@ -165,7 +182,7 @@ export function ReviewerPicker({
           ? `Send to ${firstTyped}`
           : "Send for review"
         : selectedExpert
-          ? `Book ${firstName(selectedExpert.name)} for ${money(bookingTotals(selectedExpert.price).total, selectedExpert.symbol)}`
+          ? `Book ${firstName(selectedExpert.name)} for ${money(bookingTotals(expertPrice).total, selectedExpert.symbol)}`
           : "Book an expert";
 
   const share = { evidence: shareEvidence && evidence.files.length > 0, hearingNotes: shareNotes };
@@ -194,7 +211,7 @@ export function ReviewerPicker({
         }
         toast.success(`Secure link sent to ${firstName(tName)}`);
       } else if (kind === "expert" && selectedExpert) {
-        const res = await bookExpert(draft, selectedExpert, opts, me);
+        const res = await bookExpert(draft, selectedExpert, opts, me, priority ? "priority" : "standard");
         if (!res.ok) {
           setBusy(false);
           return;
@@ -231,6 +248,15 @@ export function ReviewerPicker({
   if (!draft) return null;
 
   const fromMarketplace = preset?.from === "marketplace" || !!preset?.expertId;
+
+  const priorityHint =
+    selectedExpert && priority ? (
+      <Hint icon={<Clock className="size-3.5" strokeWidth={1.6} />}>
+        {priceLine(selectedExpert, expertPrice)} You pay only once {firstName(selectedExpert.name)} accepts. The {PRIORITY_HOURS} hours start
+        when you pay, and if it comes back later the {money((priorityPrice as number) - selectedExpert.price, selectedExpert.symbol)}{" "}
+        difference is refunded to you automatically.
+      </Hint>
+    ) : null;
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
@@ -463,24 +489,21 @@ export function ReviewerPicker({
                   ))}
                 </div>
               )}
+              {selectedExpert && (chosen || priorityPrice != null) && (
+                <TurnaroundChoice
+                  expert={selectedExpert}
+                  priorityPrice={priorityPrice}
+                  value={priority ? "priority" : "standard"}
+                  onChange={setTurnaround}
+                />
+              )}
               {chosen && selectedExpert ? (
-                <>
-                  <div role="radiogroup" aria-label="Turnaround" className="mt-2.5 flex gap-2 max-sm:flex-col">
-                    <span
-                      role="radio"
-                      aria-checked="true"
-                      className="flex flex-1 items-center gap-2 rounded-[10px] border border-[var(--ds-ink)] px-3 py-2 text-[13px] text-[var(--ds-ink)] shadow-[inset_0_0_0_0.5px_var(--ds-ink)]"
-                    >
-                      <span aria-hidden className="size-3.5 shrink-0 rounded-full border-[4.5px] border-[var(--ds-ink)]" />
-                      Standard, back in {turnaroundWords(selectedExpert.sla)}
-                      <b className="ml-auto font-medium">{money(selectedExpert.price, selectedExpert.symbol)}</b>
-                    </span>
-                  </div>
+                (priorityHint ?? (
                   <Hint icon={<ShieldCheck className="size-3.5" strokeWidth={1.6} />}>
-                    {priceLine(selectedExpert)} You pay only once {firstName(selectedExpert.name)} accepts, and you're refunded if it
-                    isn't back by {fmtDayDate(Date.parse(dueAt))}.
+                    {priceLine(selectedExpert, expertPrice)} You pay only once {firstName(selectedExpert.name)} accepts, and you're refunded
+                    if it isn't back by {fmtDayDate(Date.parse(dueAt))}.
                   </Hint>
-                </>
+                ))
               ) : (
                 <>
                   <button
@@ -504,12 +527,14 @@ export function ReviewerPicker({
                       <ArrowRight className="size-3.5" strokeWidth={1.6} />
                     </span>
                   </button>
-                  <Hint icon={<ShieldCheck className="size-3.5" strokeWidth={1.6} />}>
-                    {suggestion?.suggested
-                      ? `DraftHR suggests an expert because this is ${suggestion.inWords}${suggestion.because ? `: ${suggestion.because}` : ""}. `
-                      : ""}
-                    You only pay once they accept, and you're refunded if it isn't back on time.
-                  </Hint>
+                  {priorityHint ?? (
+                    <Hint icon={<ShieldCheck className="size-3.5" strokeWidth={1.6} />}>
+                      {suggestion?.suggested
+                        ? `DraftHR suggests an expert because this is ${suggestion.inWords}${suggestion.because ? `: ${suggestion.because}` : ""}. `
+                        : ""}
+                      You only pay once they accept, and you're refunded if it isn't back on time.
+                    </Hint>
+                  )}
                 </>
               )}
             </div>
@@ -579,11 +604,86 @@ export function ReviewerPicker({
 /** "£180 plus VAT, £216 in total." The same totals the booking sheet shows
  *  and checkout charges (market.ts bookingTotals); while DraftHR adds no
  *  VAT, the line is one clear total ("£180 in total."). */
-function priceLine(e: Expert): string {
-  const t = bookingTotals(e.price);
+function priceLine(e: Expert, price: number = e.price): string {
+  const t = bookingTotals(price);
   return VAT_RATE_CHARGED > 0
     ? `${money(t.fee, e.symbol)} plus VAT, ${money(t.total, e.symbol)} in total.`
     : `${money(t.total, e.symbol)} in total.`;
+}
+
+/**
+ * Standard, and Priority beside it when the expert offers it (REVIEW-33):
+ * a radio group, Standard selected first, arrow keys move the choice.
+ */
+function TurnaroundChoice({
+  expert: e,
+  priorityPrice,
+  value,
+  onChange,
+}: {
+  expert: Expert;
+  priorityPrice: number | null;
+  value: "standard" | "priority";
+  onChange: (v: "standard" | "priority") => void;
+}) {
+  const refs = useRef<Record<string, HTMLSpanElement | null>>({});
+  const options: { id: "standard" | "priority"; label: string; price: number }[] = [
+    { id: "standard", label: `Standard, back in ${turnaroundWords(e.sla)}`, price: e.price },
+    ...(priorityPrice != null
+      ? [{ id: "priority" as const, label: `Priority, back ${PRIORITY_HOURS} hours from payment`, price: priorityPrice }]
+      : []),
+  ];
+  const onKey = (ev: KeyboardEvent<HTMLDivElement>) => {
+    const dir = ev.key === "ArrowRight" || ev.key === "ArrowDown" ? 1 : ev.key === "ArrowLeft" || ev.key === "ArrowUp" ? -1 : 0;
+    if (!dir || options.length < 2) return;
+    ev.preventDefault();
+    const i = options.findIndex((o) => o.id === value);
+    const next = options[(i + dir + options.length) % options.length].id;
+    onChange(next);
+    refs.current[next]?.focus();
+  };
+  return (
+    <div role="radiogroup" aria-label="Turnaround" onKeyDown={onKey} className="mt-2.5 flex gap-2 max-sm:flex-col" data-testid="review-turnaround">
+      {options.map((o) => {
+        const on = o.id === value;
+        return (
+          <span
+            key={o.id}
+            ref={(el) => {
+              refs.current[o.id] = el;
+            }}
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(o.id)}
+            onKeyDown={(ev) => {
+              if (ev.key === " " || ev.key === "Enter") {
+                ev.preventDefault();
+                onChange(o.id);
+              }
+            }}
+            data-testid={`review-turnaround-${o.id}`}
+            className={cn(
+              "flex flex-1 cursor-pointer items-center gap-2 rounded-[10px] border px-3 py-2 text-[13px] text-[var(--ds-ink)] transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
+              on
+                ? "border-[var(--ds-ink)] shadow-[inset_0_0_0_0.5px_var(--ds-ink)]"
+                : "border-[var(--ds-line)] hover:border-[var(--ds-line-strong)] hover:bg-[var(--ds-hover)]"
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "size-3.5 shrink-0 rounded-full",
+                on ? "border-[4.5px] border-[var(--ds-ink)]" : "border-[1.5px] border-[var(--ds-line-strong)]"
+              )}
+            />
+            <span className="min-w-0">{o.label}</span>
+            <b className="ml-auto shrink-0 font-medium">{money(o.price, e.symbol)}</b>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function validEmail(v: string): boolean {

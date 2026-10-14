@@ -252,8 +252,20 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** A DraftHR expert: a booking through the existing bookings flow. */
-export async function bookExpert(draft: Draft, expert: Expert, opts: SendOptions, me: Me): Promise<SendResult> {
+/**
+ * A DraftHR expert: a booking through the existing bookings flow. "priority"
+ * books their priority price (back within 24 hours of payment); it falls back
+ * to standard if the expert doesn't offer it.
+ */
+export async function bookExpert(
+  draft: Draft,
+  expert: Expert,
+  opts: SendOptions,
+  me: Me,
+  turnaround: "standard" | "priority" = "standard"
+): Promise<SendResult> {
+  const priority = turnaround === "priority" && expert.priorityPrice != null && expert.priorityPrice > expert.price;
+  const price = priority ? (expert.priorityPrice as number) : expert.price;
   const dueMs = Date.parse(opts.dueAt);
   const title = displayTitleFor(draft);
   const placeholder = useBookingsStore.getState().recordBooking({
@@ -270,6 +282,7 @@ export async function bookExpert(draft: Draft, expert: Expert, opts: SendOptions
     consultantPhotoUrl: expert.photoUrl ?? undefined,
     consultantCurrency: expert.symbol,
     consultantPrice: expert.price,
+    ...(priority ? { turnaround: "priority" as const } : {}),
   });
   const before = new Set(useBookingsStore.getState().bookings.map((b) => b.id));
   const ok = await pushBookingCreate(
@@ -279,6 +292,7 @@ export async function bookExpert(draft: Draft, expert: Expert, opts: SendOptions
       matterTitle: title,
       message: opts.ask.trim() || undefined,
       expectedDeliveryAt: Number.isFinite(dueMs) ? new Date(dueMs).toISOString() : undefined,
+      ...(priority ? { turnaround: "priority" as const } : {}),
     },
     placeholder.id,
     expert.initials
@@ -309,8 +323,8 @@ export async function bookExpert(draft: Draft, expert: Expert, opts: SendOptions
     share: opts.share,
     asker: { name: me.name, email: me.email, userId: me.userId },
     bookingId: booking?.id,
-    pricePence: Math.round(expert.price * 100),
-    turnaround: "standard",
+    pricePence: Math.round(price * 100),
+    turnaround: priority ? "priority" : "standard",
   });
   if (booking) {
     // The expert's review state (rounds, points, messages) lives with the

@@ -23,7 +23,10 @@ import {
   canRate as canRateBooking,
   checkoutNote,
   disputeNote,
+  isPriority,
+  lateRefundNote,
   paymentsOffNote,
+  priorityDifference,
   processingNote,
 } from "@/components/consultants/payments";
 import { agoWords, dayAndTime, declinedLine, firstNameOf, sentWhen, shortDate } from "@/components/consultants/market";
@@ -436,6 +439,9 @@ function BookingRow({
   const price = status === "declined" ? "Nothing charged" : agreedPrice(b);
   const processing = processingNote(b);
   const dispute = disputeNote(b);
+  const priority = isPriority(b);
+  const lateRefund = lateRefundNote(b, "requester");
+  const difference = priorityDifference(b);
 
   // The one action on the right.
   let action: React.ReactNode = null;
@@ -519,6 +525,14 @@ function BookingRow({
                   {price}
                 </>
               )}
+              {priority && status !== "declined" && (
+                <>
+                  <span aria-hidden className="mx-1.5 text-[var(--ds-faint)]">
+                    ·
+                  </span>
+                  Priority
+                </>
+              )}
             </p>
 
             <div className="mt-2 flex flex-col gap-1.5 empty:hidden">
@@ -532,11 +546,18 @@ function BookingRow({
               {payable && <p className="m-0 pl-[19px] text-[12px] text-[var(--ds-muted)]">{checkoutNote(b)}</p>}
               {!paymentsOn && needsPay && <NoteLine icon={<Info aria-hidden />}>{paymentsOffNote(b)}</NoteLine>}
               {status === "requested" && (
-                <NoteLine icon={<Clock aria-hidden />}>Sent {sentWhen(b.bookedAt)}. You'll pay when the expert accepts.</NoteLine>
+                <NoteLine icon={<Clock aria-hidden />}>
+                  Sent {sentWhen(b.bookedAt)}. You'll pay when the expert accepts.
+                  {priority ? " It's priority, so it's due back 24 hours after you pay." : ""}
+                </NoteLine>
               )}
               {status === "accepted" && b.paymentStatus === "paid" && (
-                <NoteLine icon={<Clock aria-hidden />}>Due back by {dayAndTime(b.expectedDeliveryAt)}.</NoteLine>
+                <NoteLine icon={<Clock aria-hidden />}>
+                  Due back by {dayAndTime(b.expectedDeliveryAt)}.
+                  {priority && difference ? ` If it's later, ${difference} is refunded to you automatically.` : ""}
+                </NoteLine>
               )}
+              {lateRefund && <NoteLine icon={<Info aria-hidden />}>{lateRefund}</NoteLine>}
               {processing && <NoteLine icon={<Clock aria-hidden />}>{processing}</NoteLine>}
               {dispute && <NoteLine icon={<Info aria-hidden />}>{dispute}</NoteLine>}
               {status === "delivered" && !needsPay && b.deliveredAt && (

@@ -31,6 +31,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { pushProfile } from "@/lib/marketplaceSync";
+import { getFlag } from "@/lib/flags";
+import { Switch } from "@/components/ui/switch";
+import { PRIORITY_HOURS } from "@/components/consultants/market";
 import { toast } from "sonner";
 
 /** The same words the marketplace card shows ("Available in 1 to 2 weeks"). */
@@ -82,6 +85,13 @@ export function ConsultantProfile() {
   const [price, setPrice] = useState<string>(String(profile?.price ?? 150));
   const [currency, setCurrency] = useState<"£" | "$" | "€">(profile?.currency ?? "£");
   const [sla, setSla] = useState(profile?.sla ?? "24-48h");
+  // Priority reviews: only while the operator has them switched on. The
+  // expert opts in with their own price, above the standard one.
+  const priorityFeature = getFlag("priorityReviews");
+  const [offerPriority, setOfferPriority] = useState(profile?.priorityPrice != null);
+  const [priorityPrice, setPriorityPrice] = useState<string>(
+    String(profile?.priorityPrice ?? Math.round((profile?.price ?? 150) * 1.5)),
+  );
   const [photoUrl, setPhotoUrl] = useState<string>(profile?.photoUrl ?? "");
   const [availability, setAvailability] = useState<Availability>(profile?.availability ?? "this_week");
   const [customSpecialty, setCustomSpecialty] = useState("");
@@ -140,6 +150,7 @@ export function ConsultantProfile() {
       specialty: specialty.trim(),
       specialties,
       price: Math.max(0, parseInt(price, 10) || 0),
+      ...(priorityFeature ? { priorityPrice: offerPriority ? parseInt(priorityPrice, 10) || null : null } : {}),
       currency,
       sla: sla.trim(),
       photoUrl,
@@ -170,12 +181,18 @@ export function ConsultantProfile() {
     specialties,
     price: parseInt(price, 10) || 0,
   };
+  const priorityValue = parseInt(priorityPrice, 10) || 0;
+  const priorityError =
+    priorityFeature && offerPriority && priorityValue <= candidate.price
+      ? "Set a priority price above your standard price."
+      : null;
   const ready =
     candidate.fullName.length > 0 &&
     candidate.role.length > 0 &&
     candidate.bio.length > 20 &&
     candidate.specialties.length > 0 &&
-    candidate.price > 0;
+    candidate.price > 0 &&
+    !priorityError;
 
   // Live 6B preview of the marketplace card, built from the form as typed.
   const previewCard: Consultant = {
@@ -186,6 +203,7 @@ export function ConsultantProfile() {
     rating: profile?.rating ?? 0,
     reviews: profile?.reviews ?? 0,
     price: candidate.price,
+    priorityPrice: priorityFeature && offerPriority && !priorityError ? priorityValue : null,
     currency,
     sla: sla.trim() || "24-48h",
     avatarFrom: "from-amber-200",
@@ -425,6 +443,47 @@ export function ConsultantProfile() {
                 hint="What HR teams should expect from booking to delivery."
               />
             </Row>
+            {priorityFeature && (
+              <div data-testid="priority-optin" className="rounded-[12px] border border-[var(--ds-line)] p-4">
+                <label className="flex cursor-pointer items-start justify-between gap-4">
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-medium text-[var(--ds-ink)]">Offer priority reviews</span>
+                    <span className="mt-0.5 block text-[12.5px] leading-[1.5] text-[var(--ds-muted)]">
+                      Back within {PRIORITY_HOURS} hours of the client's payment, for a higher price you set. If one comes back
+                      late, the difference between your two prices is refunded to the client from your payout.
+                    </span>
+                  </span>
+                  <Switch checked={offerPriority} onCheckedChange={setOfferPriority} aria-label="Offer priority reviews" />
+                </label>
+                {offerPriority && (
+                  <div className="mt-3 max-w-[260px]">
+                    <label htmlFor="priority-price" className={LABEL}>
+                      Priority price per review
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="ds-mono text-[13.5px] text-[var(--ds-muted)]" aria-hidden>
+                        {currency}
+                      </span>
+                      <input
+                        id="priority-price"
+                        type="number"
+                        min={0}
+                        value={priorityPrice}
+                        onChange={(e) => setPriorityPrice(e.target.value)}
+                        aria-invalid={priorityError ? true : undefined}
+                        aria-describedby={priorityError ? "priority-price-error" : undefined}
+                        className={`${FIELD} ds-mono h-10 min-w-0 flex-1`}
+                      />
+                    </div>
+                    {priorityError && (
+                      <p id="priority-price-error" className="m-0 mt-1 text-[12px] text-[var(--ds-red-fg)]">
+                        {priorityError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </Fieldset>
 
           <Fieldset legend="Availability">
@@ -459,7 +518,9 @@ export function ConsultantProfile() {
             <p className="m-0 text-[12.5px] text-[var(--ds-muted)]">
               {ready
                 ? "Looks good. Save to publish your card."
-                : "Fill in name, title, bio (20+ chars), at least one tag, and a rate."}
+                : priorityError
+                  ? priorityError
+                  : "Fill in name, title, bio (20+ chars), at least one tag, and a rate."}
             </p>
             <div className="flex gap-2">
               <button type="button" onClick={() => nav("/c")} className={`${BTN_OUTLINE} h-9 px-3.5`}>

@@ -26,6 +26,11 @@ export type BookingEmailFacts = {
   responseNote?: string | null;
   deliveryNote?: string | null;
   expectedDeliveryAt?: Date | null;
+  /** A priority booking: due back within 24 hours of payment. */
+  priority?: boolean;
+  /** A priority review delivered late: the difference refunded ("£50.00"),
+   *  and whether the refund has gone through or is still to be made. */
+  lateRefund?: { amount: string; made: boolean } | null;
   /** The app's base URL, e.g. https://app.drafthr.io */
   appUrl: string;
 };
@@ -51,10 +56,11 @@ export function bookingEmail(stage: BookingEmailStage, f: BookingEmailFacts): { 
   switch (stage) {
     case "request":
       return {
-        subject: `New review request: ${f.matterTitle || "DraftHR letter"}`,
+        subject: `New ${f.priority ? "priority " : ""}review request: ${f.matterTitle || "DraftHR letter"}`,
         html: `
     <p>Hi ${escape(f.consultantName)},</p>
-    <p><strong>${escape(f.requesterName)}</strong> has booked a review with you on DraftHR.</p>
+    <p><strong>${escape(f.requesterName)}</strong> has booked a ${f.priority ? "priority " : ""}review with you on DraftHR.</p>
+    ${f.priority ? "<p>It's a priority review at your priority price: if you accept, it's due back within 24 hours of their payment. If it's late, the difference between your priority and standard prices is refunded to them.</p>" : ""}
     ${f.matterTitle ? `<p><strong>Letter:</strong> ${escape(f.matterTitle)}</p>` : ""}
     ${quote(f.message)}
     ${link(f.appUrl, "/c", "Open your inbox")}
@@ -68,7 +74,11 @@ export function bookingEmail(stage: BookingEmailStage, f: BookingEmailFacts): { 
     <p>Hi ${escape(f.requesterName)},</p>
     <p><strong>${escape(f.consultantProfileName)}</strong> has accepted your booking. Pay for the review in DraftHR and they'll start work once the payment clears.</p>
     ${quote(f.responseNote)}
-    <p>Expected back by ${f.expectedDeliveryAt ? escape(bookingDueWords(f.expectedDeliveryAt)) : "the date you agreed"}.</p>
+    ${
+      f.priority
+        ? "<p>It's a priority review, so it's due back within 24 hours of your payment.</p>"
+        : `<p>Expected back by ${f.expectedDeliveryAt ? escape(bookingDueWords(f.expectedDeliveryAt)) : "the date you agreed"}.</p>`
+    }
     ${link(f.appUrl, "/bookings", "Pay for the review")}
   `,
       };
@@ -90,6 +100,15 @@ export function bookingEmail(stage: BookingEmailStage, f: BookingEmailFacts): { 
     <p>Hi ${escape(f.requesterName)},</p>
     <p><strong>${escape(f.consultantProfileName)}</strong> has delivered your review.</p>
     ${f.deliveryNote ? `<p><strong>Summary:</strong></p>${quote(f.deliveryNote)}` : ""}
+    ${
+      f.lateRefund
+        ? `<p>It came back after the 24 hours, so ${
+            f.lateRefund.made
+              ? `${escape(f.lateRefund.amount)}, the difference between the priority and standard prices, has been refunded to you.`
+              : `you're owed ${escape(f.lateRefund.amount)}, the difference between the priority and standard prices. It will be refunded to you.`
+          }</p>`
+        : ""
+    }
     ${link(f.appUrl, "/bookings", "Open My bookings")}
     <p>You can rate the review there.</p>
   `,

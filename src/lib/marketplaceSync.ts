@@ -25,6 +25,8 @@ import {
   type BookingDTO,
 } from "@/lib/consultantApi";
 import { useConsultantStore, type Availability } from "@/lib/consultantProfile";
+import { getFlag } from "@/lib/flags";
+import { useReviewStore } from "@/lib/journey/reviews";
 import {
   useBookingsStore,
   type Booking,
@@ -55,6 +57,7 @@ function dtoToProfile(dto: ConsultantProfileDTO) {
     // → white screen. Mirrors the persisted-store `migrate` guard.
     specialties: dto.specialties ?? [],
     price: dto.price,
+    priorityPrice: dto.priorityPrice ?? null,
     currency: symbolByCode[dto.currency] ?? "£",
     sla: dto.sla,
     rating: dto.rating,
@@ -110,6 +113,9 @@ export async function pushProfile(): Promise<boolean> {
     specialty: p.specialty,
     specialties: p.specialties,
     price: p.price,
+    // Only the form that shows priority sends it; otherwise the server keeps
+    // what it has (and turns it off if the new price has caught up with it).
+    ...(getFlag("priorityReviews") ? { priorityPrice: p.priorityPrice ?? null } : {}),
     currency: codeByCurrency[p.currency],
     sla: p.sla,
     availability: p.availability,
@@ -192,6 +198,11 @@ function dtoToBooking(
     priceAmount: dto.priceAmount ?? prior?.priceAmount,
     priceCurrency: dto.priceCurrency ?? prior?.priceCurrency,
     paymentStatus: dto.paymentStatus ?? prior?.paymentStatus,
+    turnaround: dto.turnaround ?? prior?.turnaround,
+    standardPriceAmount: dto.standardPriceAmount ?? prior?.standardPriceAmount,
+    priorityDueAt: dto.priorityDueAt ?? prior?.priorityDueAt,
+    lateRefundStatus: dto.lateRefundStatus ?? prior?.lateRefundStatus,
+    lateRefundAmount: dto.lateRefundAmount ?? prior?.lateRefundAmount,
   };
 }
 
@@ -203,6 +214,21 @@ function mergeBookings(serverList: Booking[]) {
   const localById = new Map(state.bookings.map((b) => [b.id, b]));
   for (const sb of serverList) localById.set(sb.id, sb);
   useBookingsStore.setState({ bookings: Array.from(localById.values()) });
+  syncPriorityDue(serverList);
+}
+
+/** A priority review's 24 hours start at payment, so once the server has the
+ *  due time, carry it onto the letter's review: "back by" then shows the real
+ *  time instead of the estimate made when booking. */
+function syncPriorityDue(list: Booking[]) {
+  const reviews = useReviewStore.getState();
+  for (const b of list) {
+    if (b.turnaround !== "priority" || !b.priorityDueAt) continue;
+    const dueAt = new Date(b.priorityDueAt).toISOString();
+    for (const r of Object.values(reviews.requests)) {
+      if (r.bookingId === b.id && r.dueAt !== dueAt) reviews.updateReview(r.id, { dueAt });
+    }
+  }
 }
 
 /** Pull the consultant inbox from the server and merge. */
@@ -258,6 +284,7 @@ export async function pushBookingCreate(
     matterTitle?: string;
     message?: string;
     expectedDeliveryAt?: string;
+    turnaround?: "priority";
   },
   localPlaceholderId: string,
   consultantInitials: string,

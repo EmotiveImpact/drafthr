@@ -85,8 +85,24 @@ function facts(p: EmailPayload): BookingEmailFacts {
     responseNote: p.booking.responseNote,
     deliveryNote: p.booking.deliveryNote,
     expectedDeliveryAt: p.booking.expectedDeliveryAt,
+    priority: p.booking.turnaround === "priority",
+    lateRefund: lateRefundOf(p.booking),
     appUrl: appUrl(""),
   };
+}
+
+function lateRefundOf(b: EmailPayload["booking"]): BookingEmailFacts["lateRefund"] {
+  if (!b.lateRefundStatus || !b.lateRefundAmount) return null;
+  let amount: string;
+  try {
+    amount = new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: (b.priceCurrency ?? "gbp").toUpperCase(),
+    }).format(b.lateRefundAmount / 100);
+  } catch {
+    amount = (b.lateRefundAmount / 100).toFixed(2);
+  }
+  return { amount, made: b.lateRefundStatus === "refunded" };
 }
 
 async function send(bookingId: string, stage: BookingEmailStage) {

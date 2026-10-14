@@ -4,9 +4,12 @@
  * GET  — list bookings placed by the signed-in user, newest first.
  *        ?consultant=<profileId> filters to one consultant.
  * POST — create a new booking. Body: { consultantProfileId, draftId?,
- *        matterTitle?, message?, expectedDeliveryAt? }. The consultant's
- *        current rate is snapshotted onto the booking as the agreed price;
- *        a consultant can't book themselves.
+ *        matterTitle?, message?, expectedDeliveryAt?, turnaround? }. The
+ *        consultant's current rate is snapshotted onto the booking as the
+ *        agreed price; a consultant can't book themselves. turnaround
+ *        "priority" (only while priority reviews are switched on, and only
+ *        for an expert who offers it) snapshots their priority price instead,
+ *        plus the standard one so a late delivery can refund the difference.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
@@ -21,6 +24,12 @@ import {
 } from "../../../src/db/schema.js";
 import { sendBookingRequestEmail } from "../../_utils/consultant-emails.js";
 import { priceSnapshot } from "../../_utils/marketplace-payments.js";
+import {
+  PRIORITY_HOURS,
+  offersPriority,
+  priorityFields,
+  priorityReviewsOn,
+} from "../../_utils/priority-reviews.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
@@ -32,6 +41,8 @@ type CreateBookingInput = {
   message?: string;
   /** ISO timestamp; falls back to consultant SLA if unset. */
   expectedDeliveryAt?: string;
+  /** "standard" (the default) or "priority". */
+  turnaround?: string;
 };
 
 export async function GET(req: Request): Promise<Response> {
@@ -143,6 +154,21 @@ export async function POST(req: Request): Promise<Response> {
   const price = priceSnapshot(profile);
   if (!price) return jsonError("This specialist hasn't set a rate yet", 412);
 
+  const turnaround = body.turnaround ?? "standard";
+  if (turnaround !== "standard" && turnaround !== "priority") {
+    return jsonError("turnaround must be standard or priority", 400);
+  }
+  const priority = turnaround === "priority";
+  let agreed = price;
+  if (priority) {
+    if (!priorityReviewsOn()) return jsonError("Priority reviews aren't available yet", 412);
+    const priorityPrice = offersPriority(profile)
+      ? priceSnapshot({ price: profile.priorityPrice, currency: profile.currency })
+      : null;
+    if (!priorityPrice) return jsonError("This specialist doesn't offer priority reviews", 412);
+    agreed = priorityPrice;
+  }
+
   // SECURITY: verify the attached draft belongs to the caller's tenant BEFORE
   // binding it to the booking. The share-review read path (shared.ts) fetches
   // the draft by id alone — deliberately, trusting that creation authorised it.
@@ -162,7 +188,10 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   let expected: Date;
-  if (body.expectedDeliveryAt) {
+  if (priority) {
+    // An estimate until payment, which starts the real 24 hours.
+    expected = new Date(Date.now() + PRIORITY_HOURS * 3600_000);
+  } else if (body.expectedDeliveryAt) {
     expected = new Date(body.expectedDeliveryAt);
     // A malformed caller-supplied value yields an Invalid Date, which Drizzle's
     // pg driver throws on (toISOString) → an unhandled 500. Reject it cleanly.
@@ -185,8 +214,10 @@ export async function POST(req: Request): Promise<Response> {
       matterTitle: body.matterTitle?.slice(0, 280) ?? null,
       message: body.message?.slice(0, 4000) ?? null,
       status: "requested",
-      priceAmount: price.priceAmount,
-      priceCurrency: price.priceCurrency,
+      priceAmount: agreed.priceAmount,
+      priceCurrency: agreed.priceCurrency,
+      turnaround,
+      standardPriceAmount: priority ? price.priceAmount : null,
       expectedDeliveryAt: expected,
       bookedAt: new Date(),
     })
@@ -237,5 +268,6 @@ function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: st
     deliveredAt: row.deliveredAt?.getTime() ?? null,
     completedAt: row.completedAt?.getTime() ?? null,
     declinedAt: row.declinedAt?.getTime() ?? null,
+    ...priorityFields(row),
   };
 }

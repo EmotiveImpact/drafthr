@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
-import { Check, CircleAlert, CreditCard, FilePlus2, Lock, ShieldCheck } from "lucide-react";
+import { Check, CircleAlert, Clock, CreditCard, FilePlus2, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import type { Consultant } from "@/components/consultants/types";
 import { SideSheet, SheetClose, SheetCloseButton } from "@/components/consultants/SideSheet";
@@ -19,7 +19,16 @@ import { LetterPicker } from "@/components/consultants/LetterPicker";
 import { letterMeta, openReviewNote, useLetterFacts } from "@/components/consultants/letters";
 import { APPEAL_NEEDS, NEEDS, bookExpertFromMarketplace, type BookResult } from "@/components/consultants/booking";
 import { useMe } from "@/components/journey/review/actions";
-import { VAT_RATE_CHARGED, bookingTotals, firstNameOf, money, turnaroundWords } from "@/components/consultants/market";
+import {
+  PRIORITY_HOURS,
+  VAT_RATE_CHARGED,
+  bookingTotals,
+  firstNameOf,
+  money,
+  priorityPriceOf,
+  turnaroundWords,
+} from "@/components/consultants/market";
+import { getFlag } from "@/lib/flags";
 import { useDraftStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -34,9 +43,11 @@ import { cn } from "@/lib/utils";
  * help with an appeal instead ("Ask <expert>" from What's next): the expert
  * reads the letter and advises by message, and the letter stays sent.
  *
- * Only the expert's standard rate exists (profiles have one price and one
- * turnaround), so only Standard shows. No VAT is added at checkout, so the
- * total is the fee and the summary shows no VAT row.
+ * Standard always shows. Priority (back within 24 hours of payment, at the
+ * expert's priority price) shows beside it only while priority reviews are
+ * switched on and this expert offers them; a late priority review refunds the
+ * difference automatically. No VAT is added at checkout, so the total is the
+ * fee and the summary shows no VAT row.
  */
 export function BookingSheet({
   consultant,
@@ -62,6 +73,8 @@ export function BookingSheet({
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [turnaround, setTurnaround] = useState<"standard" | "priority">("standard");
+  const turnRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // Keep the last expert so the sheet does not empty while it closes.
   const [shown, setShown] = useState<Consultant | null>(consultant);
   useEffect(() => {
@@ -74,6 +87,7 @@ export function BookingSheet({
       setNeeds([]);
       setNote("");
       setSending(false);
+      setTurnaround("standard");
     }
   }, [open, consultant?.profileId]);
 
@@ -89,7 +103,9 @@ export function BookingSheet({
   const needOptions: readonly string[] = appeal ? APPEAL_NEEDS : NEEDS;
   const employeeFirst = firstNameOf(letter?.employee ?? "") || "they";
   const symbol = c.currency ?? "£";
-  const totals = bookingTotals(c.price);
+  const priorityPrice = getFlag("priorityReviews") ? priorityPriceOf(c) : null;
+  const priority = turnaround === "priority" && priorityPrice != null;
+  const totals = bookingTotals(priority ? (priorityPrice as number) : c.price);
   const seed = c.profileId || c.name;
   const tint = expertTint(seed);
   const verified = Boolean(c.profileId) && !c.pending;
@@ -103,6 +119,7 @@ export function BookingSheet({
       needs: needs.filter((n) => needOptions.includes(n)),
       note,
       asker: me,
+      turnaround: priority ? "priority" : "standard",
     });
     setSending(false);
     if (!res.ok) {
@@ -114,6 +131,18 @@ export function BookingSheet({
   };
 
   const toggle = (n: string) => setNeeds((xs) => (xs.includes(n) ? xs.filter((x) => x !== n) : [...xs, n]));
+
+  // Arrow keys move the turnaround choice, as in any radio group.
+  const turnOptions: ("standard" | "priority")[] = priorityPrice != null ? ["standard", "priority"] : ["standard"];
+  const onTurnKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const dir = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!dir || turnOptions.length < 2) return;
+    e.preventDefault();
+    const current = priority ? "priority" : "standard";
+    const next = turnOptions[(turnOptions.indexOf(current) + dir + turnOptions.length) % turnOptions.length];
+    setTurnaround(next);
+    turnRefs.current[next]?.focus();
+  };
 
   return (
     <>
@@ -262,32 +291,50 @@ export function BookingSheet({
             />
           </Q>
 
-          {/* Turnaround: only the standard rate exists */}
+          {/* Turnaround: Standard, and Priority when the expert offers it */}
           <Q label="Turnaround">
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2" role="radiogroup" aria-label="Turnaround">
-              <div
-                role="radio"
-                aria-checked
-                tabIndex={0}
-                className="flex items-start gap-2.5 rounded-[12px] border border-[var(--ds-ink)] px-[13px] py-[9px] leading-[1.4] shadow-[inset_0_0_0_0.5px_var(--ds-ink)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
-              >
-                <span aria-hidden className="mt-0.5 size-4 shrink-0 rounded-full border-[5px] border-[var(--ds-ink)]" />
-                <div className="min-w-0">
-                  <div className="text-[13.5px] font-medium text-[var(--ds-ink)]">Standard</div>
-                  <div className="mt-0.5 text-[12.5px] text-[var(--ds-muted)]">Back within {turnaroundWords(c.sla)}</div>
-                </div>
-                <span className="ds-mono ml-auto text-[13.5px] font-medium text-[var(--ds-ink)]">
-                  {symbol}
-                  {c.price}
-                </span>
-              </div>
+            <div
+              className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+              role="radiogroup"
+              aria-label="Turnaround"
+              onKeyDown={onTurnKey}
+              data-testid="booking-turnaround"
+            >
+              <TurnCard
+                refCb={(el) => (turnRefs.current.standard = el)}
+                on={!priority}
+                onSelect={() => setTurnaround("standard")}
+                title="Standard"
+                sub={`Back within ${turnaroundWords(c.sla)}`}
+                price={`${symbol}${c.price}`}
+              />
+              {priorityPrice != null && (
+                <TurnCard
+                  refCb={(el) => (turnRefs.current.priority = el)}
+                  on={priority}
+                  onSelect={() => setTurnaround("priority")}
+                  title="Priority"
+                  sub={`Back within ${PRIORITY_HOURS} hours of payment`}
+                  price={`${symbol}${priorityPrice}`}
+                  testId="booking-turnaround-priority"
+                />
+              )}
             </div>
+            {priority && (
+              <p className="m-0 mt-[7px] flex items-start gap-1.5 text-[12px] leading-[1.45] text-[var(--ds-subtle)]">
+                <Clock className="mt-[2px] size-3 shrink-0" aria-hidden />
+                The {PRIORITY_HOURS} hours start when you pay. If it comes back later, the {money((priorityPrice as number) - c.price, symbol)}{" "}
+                difference is refunded to you automatically.
+              </p>
+            )}
           </Q>
 
           {/* Summary */}
           <div className="mt-[17px] rounded-[12px] bg-[var(--ds-surface-2)] px-3.5 py-[11px]">
             <div className="flex justify-between text-[13.5px] leading-5 text-[var(--ds-muted)]">
-              <span>{appeal ? "Expert fee, standard" : "Review fee, standard"}</span>
+              <span>
+                {appeal ? "Expert fee" : "Review fee"}, {priority ? "priority" : "standard"}
+              </span>
               <b className="ds-mono font-medium text-[var(--ds-ink)]">{money(totals.fee, symbol)}</b>
             </div>
             {VAT_RATE_CHARGED > 0 && (
@@ -335,6 +382,61 @@ export function BookingSheet({
       </SideSheet>
       <LetterPicker open={picking} onOpenChange={setPicking} selectedId={draftId} onPick={(l) => onDraftChange(l.id)} />
     </>
+  );
+}
+
+/** One turnaround choice: a radio card with what it means and its price. */
+function TurnCard({
+  refCb,
+  on,
+  onSelect,
+  title,
+  sub,
+  price,
+  testId,
+}: {
+  refCb: (el: HTMLDivElement | null) => void;
+  on: boolean;
+  onSelect: () => void;
+  title: string;
+  sub: string;
+  price: string;
+  testId?: string;
+}) {
+  return (
+    <div
+      ref={refCb}
+      role="radio"
+      aria-checked={on}
+      tabIndex={on ? 0 : -1}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      data-testid={testId}
+      className={cn(
+        "flex cursor-pointer items-start gap-2.5 rounded-[12px] border px-[13px] py-[9px] leading-[1.4] transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
+        on
+          ? "border-[var(--ds-ink)] shadow-[inset_0_0_0_0.5px_var(--ds-ink)]"
+          : "border-[var(--ds-line)] hover:border-[var(--ds-line-strong)] hover:bg-[var(--ds-hover)]",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "mt-0.5 size-4 shrink-0 rounded-full",
+          on ? "border-[5px] border-[var(--ds-ink)]" : "border-[1.5px] border-[var(--ds-line-strong)]",
+        )}
+      />
+      <div className="min-w-0">
+        <div className="text-[13.5px] font-medium text-[var(--ds-ink)]">{title}</div>
+        <div className="mt-0.5 text-[12.5px] text-[var(--ds-muted)]">{sub}</div>
+      </div>
+      <span className="ds-mono ml-auto text-[13.5px] font-medium text-[var(--ds-ink)]">{price}</span>
+    </div>
   );
 }
 

@@ -27,6 +27,7 @@ import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
 import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
 import { isSafeImageDataUrl } from "../../../src/lib/safe-data-url.js";
+import { validatePriorityPrice } from "../../_utils/priority-reviews.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -54,6 +55,8 @@ type ProfileInput = {
   specialty?: string;
   specialties?: string[];
   price?: number;
+  /** Priority rate (back within 24 hours of payment); null turns it off. */
+  priorityPrice?: number | null;
   currency?: "GBP" | "USD" | "EUR";
   sla?: string;
   photoUrl?: string | null;
@@ -63,7 +66,8 @@ type ProfileInput = {
 /**
  * The fields admin vetting covers: identity, credentials (the role line), the
  * claims in the bio and specialty quote, practice areas and jurisdictions (the
- * specialties tags), and the rate. Changing any of them needs a fresh review.
+ * specialties tags), and the rates (standard and priority). Changing any of
+ * them needs a fresh review.
  * Exempt: photoUrl and availability (cosmetic), and sla (a turnaround
  * estimate, not a vetted claim). initials is derived from fullName.
  */
@@ -74,6 +78,7 @@ export const VETTED_FIELDS = [
   "specialty",
   "specialties",
   "price",
+  "priorityPrice",
   "currency",
 ] as const;
 
@@ -222,6 +227,20 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     photoUrl = checked.value;
   }
 
+  const price = clampInt(body.price ?? existing?.price ?? 150, 0, 5000);
+  // Priority: validated against the standard price it sits above. A form
+  // that doesn't send it (priority switched off) keeps the stored one, unless
+  // the new standard price has caught up with it, which turns priority off
+  // rather than offering a "priority" rate that costs no more.
+  let priorityPrice: number | null = existing?.priorityPrice ?? null;
+  if ("priorityPrice" in body) {
+    const checked = validatePriorityPrice(body.priorityPrice, price);
+    if (!checked.ok) return jsonError(checked.error, 400);
+    priorityPrice = checked.value;
+  } else if (priorityPrice !== null && priorityPrice <= price) {
+    priorityPrice = null;
+  }
+
   const values = {
     userId: auth.userRow.id,
     initials,
@@ -230,7 +249,8 @@ async function writeProfile(req: Request, method: "POST" | "PATCH"): Promise<Res
     bio,
     specialty,
     specialties,
-    price: clampInt(body.price ?? existing?.price ?? 150, 0, 5000),
+    price,
+    priorityPrice,
     currency: (["GBP", "USD", "EUR"].includes(body.currency as string)
       ? body.currency
       : existing?.currency ?? "GBP") as "GBP" | "USD" | "EUR",
@@ -342,6 +362,7 @@ function toClient(row: typeof consultantProfiles.$inferSelect) {
     specialty: row.specialty,
     specialties: row.specialties,
     price: row.price,
+    priorityPrice: row.priorityPrice ?? null,
     currency: row.currency,
     sla: row.sla,
     availability: row.availability,
