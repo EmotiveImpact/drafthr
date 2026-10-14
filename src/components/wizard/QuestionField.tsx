@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ds/Avatar";
 import { cn } from "@/lib/utils";
 import { DatePicker, formatDateShort } from "./DatePicker";
-import { Segmented, plainLabel } from "./kit";
+import { Segmented, TALL_SWITCH, plainLabel } from "./kit";
 
 type Props = {
   q: Question;
@@ -51,6 +51,19 @@ export function isShortQuestion(q: Question): boolean {
   if (q.type === "select") return (q.options?.length ?? 0) > SEGMENT_MAX;
   if (q.type === "text") return q.label.length <= 48 && !/address/i.test(q.id);
   return false;
+}
+
+/**
+ * Help longer than this is a sentence, not a hint: it sits under the label,
+ * left-aligned, instead of beside it on the right (the mock's right-hand
+ * hints are one short line, such as "6 days over 4 occasions in the last
+ * 8 weeks").
+ */
+const SHORT_HELP_MAX = 60;
+
+/** Whether a question's help is a short hint that fits beside the label. */
+export function isShortHelp(help: string): boolean {
+  return help.length <= SHORT_HELP_MAX;
 }
 
 /** A free-text question that lists people ("Hearing attendees", "Witnesses"). */
@@ -103,8 +116,8 @@ function iconFor(q: Question): LucideIcon | undefined {
 }
 
 /**
- * One question: the label row (13.5px medium label, required mark, short
- * help on the right in subtle grey, longer help under it) and the control
+ * One question: the label row (13.5px medium label, required mark, a short
+ * hint on the right in subtle grey, longer help under the label) and the control
  * for its type. The new letter page wraps these in hairline sections.
  */
 export function QuestionField({ q, value, onChange, nested = false, people }: Props) {
@@ -112,6 +125,9 @@ export function QuestionField({ q, value, onChange, nested = false, people }: Pr
   const labelId = `${id}-label`;
   const label = plainLabel(q.label);
   const help = q.help ? plainLabel(q.help) : "";
+  // A short hint sits beside the label on wider screens; a longer one
+  // always sits under it, left-aligned.
+  const helpBeside = help !== "" && isShortHelp(help);
   // Grouped controls (segmented, chips, switch, repeater) are labelled by the
   // label text; plain fields use <label for>.
   const grouped =
@@ -124,12 +140,13 @@ export function QuestionField({ q, value, onChange, nested = false, people }: Pr
   const LabelTag = grouped ? "span" : "label";
   return (
     <div className="min-w-0">
-      {/* Label row (mock `.flab`): the label on the left and the help or
-       * context on the right in subtle grey, for every question. Long help
-       * wraps on the right; on phones it sits under the label. */}
+      {/* Label row (mock `.flab`): the label on the left and a short hint on
+       * the right in subtle grey. Longer help, and any help on phones, sits
+       * under the label, left-aligned. */}
       <div
         className={cn(
-          "flex min-w-0 flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6",
+          "flex min-w-0 flex-col gap-1",
+          helpBeside && "sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6",
           nested ? "mb-1.5" : "mb-[9px]"
         )}
       >
@@ -140,7 +157,7 @@ export function QuestionField({ q, value, onChange, nested = false, people }: Pr
             "min-w-0 text-[13.5px] font-medium leading-snug text-[var(--ds-ink)]",
             // With help beside it the label keeps its width (up to 55%) and
             // the help wraps; on its own a long label shrinks and wraps.
-            help ? "shrink-0 sm:max-w-[55%]" : "shrink [overflow-wrap:anywhere]"
+            helpBeside ? "shrink-0 sm:max-w-[55%]" : "shrink [overflow-wrap:anywhere]"
           )}
         >
           {label}
@@ -152,7 +169,12 @@ export function QuestionField({ q, value, onChange, nested = false, people }: Pr
           {q.required && <span className="sr-only"> (required)</span>}
         </LabelTag>
         {help && (
-          <span className="min-w-0 text-[12.5px] leading-snug text-[var(--ds-subtle)] sm:max-w-[60%] sm:text-right">
+          <span
+            className={cn(
+              "min-w-0 text-[12.5px] leading-snug text-[var(--ds-subtle)]",
+              helpBeside ? "sm:max-w-[60%] sm:text-right" : "max-w-[72ch]"
+            )}
+          >
             {help}
           </span>
         )}
@@ -261,17 +283,23 @@ function renderControl(
     }
 
     case "boolean":
+      // The whole row is the tap target: a 36px tall switch (phone
+      // minimum) inside a label that also covers the Yes/No word. The
+      // switch keeps its name from the question label.
       return (
-        <div className="flex items-center gap-3">
+        <label htmlFor={id} className="inline-flex min-h-9 cursor-pointer items-center gap-3 pr-2">
           <Switch
             id={id}
             aria-labelledby={labelId}
             aria-required={q.required}
             checked={Boolean(value)}
             onCheckedChange={(v) => onChange(v)}
+            className={TALL_SWITCH}
           />
-          <span className="text-[13.5px] text-[var(--ds-muted)]">{value ? "Yes" : "No"}</span>
-        </div>
+          <span aria-hidden className="text-[13.5px] text-[var(--ds-muted)]">
+            {value ? "Yes" : "No"}
+          </span>
+        </label>
       );
 
     case "date":

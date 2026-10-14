@@ -34,7 +34,7 @@ import { LawCardView } from "@/components/wizard/LawCardView";
 import { lawCardFor } from "@/components/wizard/lawCard";
 import { answersOutsideJurisdiction, questionForJurisdiction } from "@/components/wizard/jurisdictionOptions";
 import { clearSavedWizard, loadSavedWizard, saveWizard } from "@/components/wizard/savedAnswers";
-import { plainLabel, timeAgoWords } from "@/components/wizard/kit";
+import { TALL_SWITCH, plainLabel, timeAgoWords } from "@/components/wizard/kit";
 import { cn } from "@/lib/utils";
 
 /**
@@ -639,7 +639,7 @@ function WizardFlow({ meta, mode }: { meta: LetterTypeMeta; mode: Mode }) {
                   aria-label="Save these answers to fill future letters"
                   // A 36px tap target (phone minimum) with the kit's 21px
                   // track drawn inside it, so the switch looks the same.
-                  className="relative isolate data-[size=default]:h-9 data-[state=checked]:bg-transparent data-[state=unchecked]:bg-transparent before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-[21px] before:-translate-y-1/2 before:rounded-full before:transition-colors before:duration-[180ms] before:content-[''] data-[state=checked]:before:bg-[var(--ds-ink)] data-[state=unchecked]:before:bg-[var(--ds-line-strong)] focus-visible:shadow-none focus-visible:before:shadow-[var(--ds-focus-ring)]"
+                  className={TALL_SWITCH}
                 />
                 Save these answers to fill future letters
               </label>

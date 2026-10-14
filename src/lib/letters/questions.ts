@@ -386,8 +386,12 @@ export const UNIVERSAL_STEPS: QuestionStep[] = [
       {
         id: "collectiveConsultation",
         type: "boolean",
-        label:
-          "Are 20+ employees being affected by the same change in a 90-day window? (UK: triggers s.188 TULRCA collective consultation; US: may trigger WARN.)",
+        label: "Are 20 or more employees affected by the same change within 90 days?",
+        // One question serves UK and US letters (answers and prompts key on
+        // the id), so the help stays true for both rather than naming one
+        // country's law on the other's letter.
+        help:
+          "If so, the law may require collective consultation or advance notice before any letters go out.",
       },
     ],
   },

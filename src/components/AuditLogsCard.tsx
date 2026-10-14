@@ -1,14 +1,16 @@
 /**
- * Settings, Audit logs (WorkOS) card. Admin only.
+ * Settings, Security: the "Audit log copy" card. Admin only.
  *
- * Shows the dual-chain status:
- *   - a "Streaming to WorkOS" pill when enabled and configured
- *   - "Not configured" otherwise
- *   - the last successful event time
- *   - "Open WorkOS Admin Portal" (POST /api/workos/portal-link with
- *     intent: "audit_logs")
- *   - "Send test event" (POST /api/workos/audit-logs-test), which emits a
- *     synthetic event so the admin can confirm the SIEM pipeline end to end
+ * DraftHR keeps its own tamper-evident audit log and can also send a copy of
+ * every entry to the company's own security monitoring tools (through the
+ * WorkOS Audit Logs mirror). The card says this in plain words:
+ *   - a "Copy on" pill when the mirror is enabled and configured
+ *   - "Not set up" otherwise
+ *   - whether the copy is connected, and when the last copy went
+ *   - "Open setup portal" (POST /api/workos/portal-link with
+ *     intent: "audit_logs"), the same wording as Directory sync
+ *   - "Send a test entry" (POST /api/workos/audit-logs-test), which emits a
+ *     synthetic event so the admin can confirm their tools receive it
  *     without performing a real draft action.
  *
  * Non-admin members never see this card (gated by activeTenant.role).
@@ -79,13 +81,13 @@ export function AuditLogsCard() {
       });
       const json = (await res.json()) as { link?: string; error?: string };
       if (!res.ok || !json.link) {
-        toast.error(json.error ?? "Failed to open WorkOS Admin Portal");
+        toast.error(plainError(res.status, "Couldn't open the setup portal. Try again in a minute."));
         return;
       }
       window.open(json.link, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.warn("[audit-logs] portal-link failed", err);
-      toast.error("Failed to open WorkOS Admin Portal");
+      toast.error("Couldn't reach DraftHR to open the setup portal. Check your connection and try again.");
     } finally {
       setPortalLoading(false);
     }
@@ -101,16 +103,18 @@ export function AuditLogsCard() {
       });
       const json = (await res.json()) as { ok?: boolean; message?: string; error?: string };
       if (!res.ok || !json.ok) {
-        toast.error(json.error ?? "Failed to send test event");
+        toast.error(plainError(res.status, "Couldn't send the test entry. Try again in a minute."));
         return;
       }
-      toast.success("Test event sent", {
-        description: json.message ?? "Check your SIEM for the DraftHR test event.",
+      toast.success("Test entry sent", {
+        // The server message names the vendor and its event codes; the
+        // admin only needs to know where to look.
+        description: "Check your security tools for the DraftHR test entry.",
       });
       void refresh();
     } catch (err) {
       console.warn("[audit-logs] test event failed", err);
-      toast.error("Failed to send test event");
+      toast.error("Couldn't reach DraftHR to send the test entry. Check your connection and try again.");
     } finally {
       setTestLoading(false);
     }
@@ -125,40 +129,36 @@ export function AuditLogsCard() {
       icon={<ScrollText />}
       title={
         <span className="flex flex-wrap items-center gap-2">
-          Audit logs (WorkOS)
+          Audit log copy
           {!loaded ? (
-            <Placeholder className="h-[22px] w-[132px] rounded-full" label="Loading audit log status" />
+            <Placeholder className="h-[22px] w-[72px] rounded-full" label="Loading audit log status" />
           ) : streaming ? (
-            <Pill tone="green">Streaming to WorkOS</Pill>
+            <Pill tone="green">Copy on</Pill>
           ) : status?.configured ? (
-            <Pill tone="amber">Configured, mirror disabled</Pill>
+            <Pill tone="amber">Set up, copy paused</Pill>
           ) : (
-            <Pill tone="grey">Not configured</Pill>
+            <Pill tone="grey">Not set up</Pill>
           )}
         </span>
       }
-      description="Every audit event written to the local tamper-evident chain is also mirrored to WorkOS Audit Logs, so your SOC team can subscribe a SIEM feed. The local chain remains the source of truth."
+      description="DraftHR records every action on your letters in an audit log that cannot be changed. A copy of each entry can also go to your company's own security tools. The log in DraftHR stays the original."
     >
       {!loaded ? (
         <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)]">
-          <DefRow label="WorkOS organisation">
+          <DefRow label="Connection">
             <Placeholder className="h-3 w-[120px] rounded-full" />
           </DefRow>
-          <DefRow label="Last successful mirror">
+          <DefRow label="Last copy sent">
             <Placeholder className="h-3 w-[96px] rounded-full" />
           </DefRow>
         </dl>
       ) : (
         <FadeIn>
           <dl className="m-0 divide-y divide-[var(--ds-line-2)] border-y border-[var(--ds-line-2)]">
-            <DefRow label="WorkOS organisation">
-              {status?.workosOrgId ? (
-                <code className="ds-mono text-[12.5px]">{status.workosOrgId}</code>
-              ) : (
-                "Not paired, contact support"
-              )}
+            <DefRow label="Connection">
+              {status?.workosOrgId ? "Connected" : "Not connected yet, contact support"}
             </DefRow>
-            <DefRow label="Last successful mirror">{formatLastSent(status?.lastSentAt ?? null)}</DefRow>
+            <DefRow label="Last copy sent">{formatLastSent(status?.lastSentAt ?? null)}</DefRow>
           </dl>
         </FadeIn>
       )}
@@ -166,15 +166,26 @@ export function AuditLogsCard() {
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="outline" disabled={loading || !status?.configured || portalLoading} onClick={onOpenPortal}>
           {portalLoading ? <Spinner /> : <ExternalLink className="size-4" />}
-          {portalLoading ? "Opening…" : "Open WorkOS Admin Portal"}
+          {portalLoading ? "Opening…" : "Open setup portal"}
         </Button>
         <Button variant="outline" disabled={loading || !streaming || testLoading} onClick={onSendTest}>
           {testLoading ? <Spinner /> : <Send className="size-4" />}
-          {testLoading ? "Sending…" : "Send test event"}
+          {testLoading ? "Sending…" : "Send a test entry"}
         </Button>
       </div>
     </SettingsCard>
   );
+}
+
+/**
+ * A plain message for a failed audit log call. The server's own error text
+ * names the vendor and its settings, so it is not shown as is.
+ */
+export function plainError(status: number, fallback: string): string {
+  if (status === 403) return "Only workspace owners and admins can change this.";
+  if (status === 409) return "This workspace isn't connected yet. Contact support to turn on the audit log copy.";
+  if (status === 503) return "The audit log copy is switched off for DraftHR right now. Contact support to turn it on.";
+  return fallback;
 }
 
 /** "13 Oct 2026, 01:17" (en-GB), or "Never". */

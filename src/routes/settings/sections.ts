@@ -60,7 +60,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "integrations",
     label: "Integrations and directory sync",
     group: "Workspace",
-    line: "Connect your identity provider so staff accounts stay in step.",
+    line: "Link your company directory so new starters get access and leavers lose it.",
   },
   {
     id: "billing",
@@ -72,7 +72,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "security",
     label: "Security",
     group: "Account",
-    line: "Your password and, for admins, the audit log stream.",
+    line: "Your password and, for admins, the copy of the audit log sent to your own tools.",
   },
   {
     id: "data",

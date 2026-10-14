@@ -1,5 +1,5 @@
 /**
- * Settings, Security card.
+ * Settings, Security section: the Password card.
  *
  * Lets a signed-in user trigger a password-reset email to their own address.
  * /sign-in/forgot-password is signed-out only (signed-in users are redirected
@@ -69,7 +69,7 @@ export function SecurityCard() {
   };
 
   return (
-    <SettingsCard icon={<KeyRound />} title="Security">
+    <SettingsCard icon={<KeyRound />} title="Password">
       <p className="m-0 max-w-[62ch] text-[13.5px] leading-relaxed text-[var(--ds-muted)]">
         We'll email a one-time reset link to <strong className="font-medium text-[var(--ds-ink)]">{user.email}</strong>.
         The link expires in a few minutes for safety. You stay signed in until you finish the reset on the linked

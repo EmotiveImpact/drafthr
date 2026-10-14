@@ -109,7 +109,7 @@ function DirectorySyncCard() {
     <SettingsCard
       icon={<Users />}
       title="Directory sync"
-      description="Keep your staff list in step with your HR system or identity provider (SCIM, Google Workspace). Admins only."
+      description="Keep who can use DraftHR in step with your company directory, such as Okta, Microsoft Entra ID or Google Workspace. New starters get access and leavers lose it. Admins only."
       actions={
         <Button variant="outline" asChild>
           <Link to="/settings/directory-sync">
@@ -141,13 +141,13 @@ export function IntegrationsPane({ line }: { line: string }) {
             title="Directory sync"
             description={
               activeTenant
-                ? "Only workspace admins can connect a directory. Ask an admin if you need your HR system or identity provider linked."
-                : "Sign in to a workspace to connect your HR system or identity provider (SCIM, Google Workspace)."
+                ? "Only workspace admins can connect a directory. Ask an admin if you need your company directory linked."
+                : "Sign in to a workspace to link your company directory, such as Okta, Microsoft Entra ID or Google Workspace."
             }
           />
         )}
         <p className="m-0 text-[13px] text-[var(--ds-muted)]">
-          Audit log streaming to WorkOS is under{" "}
+          Sending a copy of the audit log to your own tools is under{" "}
           <Link to="/settings?tab=security" className="text-[var(--ds-ink)] underline underline-offset-2">
             Security
           </Link>
@@ -172,12 +172,12 @@ export function SecurityPane({ line }: { line: string }) {
          * is signed-out only, so without this signed-in users have no path to
          * rotate their password. */}
         <SecurityCard />
-        {/* WorkOS Audit Logs mirror status (admins only; renders nothing otherwise). */}
+        {/* Audit log copy status (admins only; renders nothing otherwise). */}
         <AuditLogsCard />
         {!activeTenant && (
           <SettingsCard
-            title="Security"
-            description="Password reset and audit log streaming appear here once you're signed in to a workspace."
+            title="Not signed in to a workspace"
+            description="Your password reset and the audit log copy appear here once you're signed in to a workspace."
           />
         )}
       </div>

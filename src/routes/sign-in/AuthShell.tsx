@@ -108,7 +108,7 @@ export function AuthShell({
 }
 
 /**
- * Tiny "Authentication by WorkOS: SSO, MFA and SAML ready" line that
+ * Tiny "Secure sign-in, with single sign-on and two-step verification" line that
  * sits directly below the form card. Used by SignIn / SignUp / the
  * transactional auth pages to reassure users about identity-provider
  * security right next to where they're typing credentials.
@@ -117,7 +117,7 @@ export function AuthSecurityNote() {
   return (
     <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] text-[var(--ds-muted)]">
       <ShieldCheck className="size-3.5" aria-hidden />
-      Authentication by WorkOS: SSO, MFA and SAML ready
+      Secure sign-in, with single sign-on and two-step verification
     </p>
   );
 }

@@ -330,32 +330,45 @@ function SyncedUsersTable({ users }: { users: DirectoryUserRow[] }) {
           No one has been added from your directory yet. People appear here once it starts syncing.
         </p>
       ) : (
-        <FadeIn className="-mx-5 overflow-x-auto sm:-mx-[22px]">
-          <table className="w-full min-w-[620px] border-collapse text-[13.5px]">
-            <thead>
+        // One table at every width. When the card is wide enough (a container
+        // query, so the sidebar's width counts) it is a five-column table;
+        // narrower, and on a phone, each person stacks like the Team members
+        // list: name, email, then the role, status and date on one line, with
+        // no sideways scroll.
+        <FadeIn className="@container -mx-5 sm:-mx-[22px]">
+          <table className="block w-full border-collapse text-[13.5px] @3xl:table">
+            <thead className="sr-only @3xl:not-sr-only @3xl:table-header-group">
               <tr className="text-left text-[12.5px] text-[var(--ds-subtle)]">
                 {["Name", "Email", "Role", "Status", "Last update"].map((h) => (
-                  <th key={h} className="border-b border-[var(--ds-line)] px-5 pb-2.5 font-medium sm:first:pl-[22px]">
+                  <th key={h} className="border-b border-[var(--ds-line)] px-5 pb-2.5 font-medium @3xl:first:pl-[22px]">
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className="block @3xl:table-row-group">
               {users.map((u) => (
-                <tr key={u.userId} className="border-b border-[var(--ds-line-2)] last:border-b-0 hover:bg-[var(--ds-hover)]">
-                  <td className="px-5 py-3 text-[var(--ds-ink)] sm:pl-[22px]">{u.legalName ?? "Not given"}</td>
-                  <td className="px-5 py-3 text-[var(--ds-body)]">{u.email ?? "Not given"}</td>
-                  <td className="px-5 py-3">
+                <tr
+                  key={u.userId}
+                  className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--ds-line-2)] px-5 py-3 last:border-b-0 sm:px-[22px] hover:bg-[var(--ds-hover)] @3xl:table-row @3xl:p-0"
+                >
+                  <td className="min-w-0 basis-full p-0 font-medium text-[var(--ds-ink)] @3xl:whitespace-nowrap @3xl:px-5 @3xl:py-3 @3xl:pl-[22px] @3xl:font-normal">
+                    {u.legalName ?? "Not given"}
+                  </td>
+                  <td className="mb-1 min-w-0 basis-full p-0 text-[12.5px] text-[var(--ds-muted)] [overflow-wrap:anywhere] @3xl:mb-0 @3xl:[overflow-wrap:normal] @3xl:px-5 @3xl:py-3 @3xl:text-[13.5px] @3xl:text-[var(--ds-body)]">
+                    {u.email ?? "Not given"}
+                  </td>
+                  <td className="p-0 @3xl:px-5 @3xl:py-3">
                     <Pill tone="grey" dot={false}>
                       {sentence(u.role)}
                     </Pill>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="p-0 @3xl:px-5 @3xl:py-3">
                     {/* Red is only for errors; a removed directory user is neutral. */}
                     {u.status === "active" ? <Pill tone="green">Active</Pill> : <Pill tone="grey">Deprovisioned</Pill>}
                   </td>
-                  <td className="whitespace-nowrap px-5 py-3 text-[var(--ds-muted)]">
+                  <td className="whitespace-nowrap p-0 text-[12.5px] text-[var(--ds-muted)] @3xl:px-5 @3xl:py-3 @3xl:text-[13.5px]">
+                    <span className="@3xl:hidden">{u.status === "active" ? "Added " : "Removed "}</span>
                     {shortDate(u.deprovisionedAt ?? u.joinedAt)}
                   </td>
                 </tr>

@@ -424,6 +424,14 @@ export function KitCard({
   );
 }
 
+/**
+ * Classes for a kit switch with a 36px tap target (the phone minimum): the
+ * button is 36px tall and the 21px track is drawn inside it, so the switch
+ * looks the same as the plain kit switch.
+ */
+export const TALL_SWITCH =
+  "relative isolate data-[size=default]:h-9 data-[state=checked]:bg-transparent data-[state=unchecked]:bg-transparent before:absolute before:inset-x-0 before:top-1/2 before:-z-10 before:h-[21px] before:-translate-y-1/2 before:rounded-full before:transition-colors before:duration-[180ms] before:content-[''] data-[state=checked]:before:bg-[var(--ds-ink)] data-[state=unchecked]:before:bg-[var(--ds-line-strong)] focus-visible:shadow-none focus-visible:before:shadow-[var(--ds-focus-ring)]";
+
 /** British English replacements for catalogue labels that use "&", and
  * for catalogue copy written with a spaced dash ("Internal appeal: ..."). */
 export function plainLabel(s: string): string {
