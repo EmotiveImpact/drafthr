@@ -35,16 +35,42 @@ export type Selection = {
   toggleAll: (on: boolean) => void;
 };
 
-const WIDTH: Record<LetterColumn | "letter", string> = {
-  select: "40px",
-  letter: "24%",
-  recipient: "15.5%",
-  matter: "13.5%",
-  where: "16.5%",
-  health: "10%",
-  updated: "9%",
-  owner: "96px",
+/**
+ * Column shares of the full table. "Where it is" is wide enough for the
+ * longest where lines ("Review · ready to send for review", "Approve · ready
+ * to send for approval") on one line at 1440, so every row is the same
+ * height (LISTS-X22); the letter column takes whatever is left.
+ */
+const SHARE: Partial<Record<LetterColumn, number>> = {
+  recipient: 14,
+  matter: 12,
+  where: 22.5,
+  health: 10,
+  updated: 9,
 };
+/** The letter column's share of the full table (it is left to fill the rest). */
+const LETTER_SHARE = 21;
+const FIXED: Partial<Record<LetterColumn, string>> = { select: "40px", owner: "82px" };
+
+/**
+ * Widths for the columns a table shows. A table without some columns (the
+ * employee page has no Recipient, the matter page no Matter) spreads their
+ * share over the columns it keeps, so the row still runs to the menu
+ * instead of leaving a gap before it (LISTS-X24).
+ */
+function columnWidths(order: (LetterColumn | "letter")[]): Record<string, string | undefined> {
+  const kept = order.filter((c): c is LetterColumn => c !== "letter" && SHARE[c as LetterColumn] != null);
+  const full = LETTER_SHARE + Object.values(SHARE).reduce((a, b) => a + (b ?? 0), 0);
+  const present = LETTER_SHARE + kept.reduce((a, c) => a + (SHARE[c] ?? 0), 0);
+  const scale = full / present;
+  const out: Record<string, string | undefined> = {};
+  for (const c of order) {
+    if (c === "letter") out[c] = undefined;
+    else if (FIXED[c]) out[c] = FIXED[c];
+    else if (SHARE[c] != null) out[c] = `${+((SHARE[c] ?? 0) * scale).toFixed(2)}%`;
+  }
+  return out;
+}
 
 const HEAD: Record<LetterColumn | "letter", string> = {
   select: "",
@@ -99,6 +125,7 @@ export function LettersTable({
 
   const dateFor = (r: LetterRowData) => updatedColumnLabel(dateColumn === "sent" ? (r.sentAt ?? r.updatedAt) : r.updatedAt, now);
   const order: (LetterColumn | "letter")[] = cols.includes("select") ? ["select", "letter", ...cols.filter((c) => c !== "select")] : ["letter", ...cols];
+  const widths = columnWidths(order);
 
   return (
     <div className={cn("min-w-0", className)}>
@@ -106,7 +133,7 @@ export function LettersTable({
       <table aria-label={ariaLabel} className="hidden w-full table-fixed border-separate border-spacing-0 md:table">
         <colgroup>
           {order.map((c) => (
-            <col key={c} style={{ width: WIDTH[c] }} />
+            <col key={c} style={widths[c] ? { width: widths[c] } : undefined} />
           ))}
         </colgroup>
         <thead>
@@ -175,7 +202,7 @@ export function LettersTable({
               data-tint={tint || undefined}
               onClick={(e) => openRow(e, r.id)}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-[14px] px-3 py-3 transition-colors duration-[120ms]",
+                "flex cursor-pointer items-start gap-2.5 rounded-[14px] px-3 py-3 transition-colors duration-[120ms]",
                 tint ? "bg-[var(--ds-amber-row)] active:bg-[var(--ds-amber-row-hover)]" : on ? "bg-[var(--ds-surface-2)]" : "active:bg-[var(--ds-hover)]"
               )}
             >
@@ -186,20 +213,23 @@ export function LettersTable({
               )}
               <PaperIcon tint={r.tint} />
               <div className="min-w-0 flex-1">
-                <Link to={`/editor/${r.id}`} className="block truncate rounded-[4px] text-[14px] font-medium text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]">
-                  {r.label}
-                </Link>
-                <div className="mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
-                  {[r.recipient, r.subLine].filter(Boolean).join(" · ")}
-                </div>
-                <div className="mt-2 flex items-end justify-between gap-3">
-                  <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} className={cn("min-w-0 flex-1", WHERE_WRAP)} />
+                {/* Name and health on the first line, so the stage bar and
+                    its where line get the whole width below (one line even
+                    for "Review · ready to send for review", LISTS-X22). */}
+                <div className="flex min-w-0 items-center justify-between gap-2.5">
+                  <Link to={`/editor/${r.id}`} className="block min-w-0 truncate rounded-[4px] text-[14px] font-medium text-[var(--ds-ink)] outline-none focus-visible:shadow-[var(--ds-focus-ring)]">
+                    {r.label}
+                  </Link>
                   {r.health != null ? (
                     <HealthRing score={r.health} size={20} stroke={2} showOutOf={false} label={`Health ${r.health} of 100`} className="shrink-0 whitespace-nowrap text-[12.5px]" />
                   ) : (
                     <span className="shrink-0 text-[12px] text-[var(--ds-muted)]">No score</span>
                   )}
                 </div>
+                <div className="mt-0.5 truncate text-[12.5px] text-[var(--ds-muted)]">
+                  {[r.recipient, r.subLine].filter(Boolean).join(" · ")}
+                </div>
+                <StageBar stage={r.journey.stage} tone={r.journey.listTone} label={r.journey.whereLabel} className={cn("mt-2 min-w-0", WHERE_WRAP)} />
               </div>
               <LetterRowMenu row={r} extra={menuExtra?.(r)} />
             </li>

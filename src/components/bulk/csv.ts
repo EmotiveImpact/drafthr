@@ -347,10 +347,27 @@ export function humaniseField(key: string): string {
   return foldKey(key).replace(/^employee_/, "").replace(/_/g, " ").trim();
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * A CSV date as the app writes dates ("2026-11-02" → "2 Nov 2026"). Only a
+ * real ISO calendar date (optionally with a time) is rewritten; anything
+ * else (other formats, free text, impossible dates) is shown as typed.
+ */
+export function displayCsvValue(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(value);
+  if (!m) return value;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return value;
+  return `${d} ${MONTHS[mo - 1]} ${y}`;
+}
+
 /**
  * The preview's sub line for one CSV row: the job title first, then the row's
  * other filled values in column order (never the name, which is the title),
  * then what is missing ("no job title"). Empty when the row only has a name.
+ * Dates read as everywhere else in the app ("2 Nov 2026", LISTS-X23).
  */
 export function rowSummary(
   row: Record<string, string | number | undefined>,
@@ -368,7 +385,7 @@ export function rowSummary(
     if (key === "employee_name" || seen.has(key)) continue;
     seen.add(key);
     const v = String(row[h] ?? "").trim();
-    if (v) values.push(v);
+    if (v) values.push(displayCsvValue(v));
   }
   const parts = values.slice(0, limit);
   for (const f of missingFields) parts.push(`no ${humaniseField(f)}`);

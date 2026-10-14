@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/wizard/DatePicker";
+import { useMenuReturnFocus } from "@/components/letters/dialogs";
 import {
   Select,
   SelectContent,
@@ -86,6 +87,8 @@ export function EmployeeForm({
   }, [open, initial]);
 
   const canSubmit = values.legalName.trim().length > 0;
+  // Opened from a row's "..." menu: focus goes back to that menu's button.
+  const returnFocus = useMenuReturnFocus(open);
 
   function patch<K extends keyof EmployeeFormValues>(key: K, value: EmployeeFormValues[K]) {
     setValues((v) => ({ ...v, [key]: value }));
@@ -93,7 +96,7 @@ export function EmployeeForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-y-auto">
+      <DialogContent className="max-h-[calc(100dvh-32px)] overflow-y-auto" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}

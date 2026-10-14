@@ -16,6 +16,8 @@ import { useMatterRows, type MatterRow } from "@/components/matter/rows";
 import { DeadlineCell, DeleteMatterDialog, MatterMark, PeopleStack } from "@/components/matter/parts";
 import { deadlinesIcs, dueWithin, MATTER_TYPE_LABEL, RISK_LABEL, RISK_OPTIONS, RISK_TONE, ROLE_LABEL } from "@/components/matter/model";
 import type { MatterType } from "@/lib/letters/types";
+import { useWorkspaceLoad } from "@/components/home/loadState";
+import { ListPlaceholder } from "@/components/home/HomeParts";
 
 type TabId = "open" | "closed" | "archived";
 type SortId = "deadline" | "updated" | "name";
@@ -26,8 +28,27 @@ const SORTS: { value: SortId; label: string }[] = [
   { value: "name", label: "Name" },
 ];
 
-const COLS = ["236px", "118px", "170px", "130px", "88px", "210px", "52px", "52px", "20px"];
-const HEADS = ["Matter", "Type", "Employee", "Stage", "Risk", "Next deadline", "Letters", "Owner", ""];
+/**
+ * The table's columns. At the mock's width (a 1076px list, the 1440 layout)
+ * they are the mock's: 236, 118, 170, 130, 88, 210, 52, 52 and the menu.
+ * The list is a size container, so on narrower laptops (1366, 1280, or with
+ * the sidebar open on a smaller screen) Employee, Stage, Risk and Next
+ * deadline step down, the Matter column takes what is left, and below about
+ * 1000px the Type column folds away (the type stays on the matter page and
+ * in the Type filter). Narrower still, the stacked rows take over, so the
+ * page never scrolls sideways (LISTS-X2).
+ */
+const COLUMNS: { head: string; th: string; td?: string }[] = [
+  { head: "Matter", th: "" },
+  { head: "Type", th: "hidden w-[112px] @min-[1000px]:table-cell @min-[1076px]:w-[118px]", td: "hidden @min-[1000px]:table-cell" },
+  { head: "Employee", th: "w-[150px] @min-[1076px]:w-[170px]" },
+  { head: "Stage", th: "w-[124px] @min-[1076px]:w-[130px]" },
+  { head: "Risk", th: "w-[84px] @min-[1076px]:w-[88px]" },
+  { head: "Next deadline", th: "w-[172px] @min-[1076px]:w-[210px]" },
+  { head: "Letters", th: "w-[52px]" },
+  { head: "Owner", th: "w-[52px]" },
+  { head: "", th: "w-[20px]" },
+];
 
 /**
  * /matters: every matter in the current mode as a table (matters mock),
@@ -42,6 +63,10 @@ export function MattersIndex() {
   const createMatter = useDraftStore((s) => s.createMatter);
   const updateMatter = useDraftStore((s) => s.updateMatter);
   const rows = useMatterRows();
+  // First pull still on its way with no matters on this device: placeholders
+  // like the sidebar's, never "No matters yet" (LISTS-X1).
+  const pulling = useWorkspaceLoad((s) => s.pulling);
+  const loading = pulling && rows.length === 0;
   const [createOpen, setCreateOpen] = useState(false);
   const [params, setParams] = useSearchParams();
   const rawTab = params.get("tab");
@@ -194,7 +219,11 @@ export function MattersIndex() {
       />
 
       <section aria-label="Matters" className="min-w-0 px-4 pb-12 pt-5 md:px-12 md:pt-[22px]">
-        {rows.length === 0 ? (
+        {loading ? (
+          <div aria-busy="true">
+            <ListPlaceholder rows={3} label="Loading matters" />
+          </div>
+        ) : rows.length === 0 ? (
           <div className="flex flex-col items-center px-6 py-14 text-center">
             <div className="mb-4 grid size-11 place-items-center rounded-[12px] border border-[var(--ds-line)] bg-[var(--ds-surface)] text-[var(--ds-ink)]">
               <FolderOpen className="size-5" />
@@ -274,18 +303,17 @@ function MattersTable({ rows, quiet }: { rows: MatterRow[]; quiet?: boolean }) {
     nav(`/matters/${id}`);
   };
   return (
-    <div className={cn("min-w-0 animate-in fade-in-0 duration-200", quiet && "[&_[data-quiet]]:opacity-80")}>
-      <table aria-label="Matters" className="hidden w-full table-fixed border-separate border-spacing-0 lg:table [&_td]:leading-[1.3]">
-        <colgroup>
-          {COLS.map((w, i) => (
-            <col key={i} style={{ width: w }} />
-          ))}
-        </colgroup>
+    <div className={cn("@container min-w-0 animate-in fade-in-0 duration-200", quiet && "[&_[data-quiet]]:opacity-80")}>
+      <table aria-label="Matters" className="hidden w-full table-fixed border-separate border-spacing-0 @min-[860px]:table [&_td]:leading-[1.3]">
         <thead>
           <tr>
-            {HEADS.map((h, i) => (
-              <th key={i} scope="col" className="whitespace-nowrap border-b border-[var(--ds-line)] px-2.5 pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)] first:pl-1">
-                {h}
+            {COLUMNS.map((c, i) => (
+              <th
+                key={i}
+                scope="col"
+                className={cn("whitespace-nowrap border-b border-[var(--ds-line)] px-2.5 pb-2.5 text-left text-[12.5px] font-medium text-[var(--ds-subtle)] first:pl-1", c.th)}
+              >
+                {c.head}
               </th>
             ))}
           </tr>
@@ -314,7 +342,7 @@ function MattersTable({ rows, quiet }: { rows: MatterRow[]; quiet?: boolean }) {
                     </div>
                   </div>
                 </td>
-                <td className={td}>
+                <td className={cn(td, COLUMNS[1].td)}>
                   {r.typeLabel ? <span className="block truncate text-[14px] text-[var(--ds-body)]">{r.typeLabel}</span> : <span className="text-[var(--ds-muted)]">-</span>}
                 </td>
                 <td className={td}>
@@ -371,8 +399,8 @@ function MattersTable({ rows, quiet }: { rows: MatterRow[]; quiet?: boolean }) {
         </tbody>
       </table>
 
-      {/* Phones and narrow screens: stacked rows. */}
-      <ul aria-label="Matters" className="m-0 flex list-none flex-col p-0 lg:hidden">
+      {/* Phones and narrow lists: stacked rows. */}
+      <ul aria-label="Matters" className="m-0 flex list-none flex-col p-0 @min-[860px]:hidden">
         {rows.map((r, i) => (
           <li
             key={r.matter.id}

@@ -16,6 +16,8 @@ import { ArrowPager, BulkBar, FilterMenu, NoMatch, SearchField, SortMenu, usePag
 import { downloadText, todayStamp, useOrgName, usePageTitle, WithReason } from "@/components/letters/parts";
 import { ChangeOwnerDialog, SubmitForApprovalDialog } from "@/components/letters/dialogs";
 import { approvalSkipReason, changeOwner, lettersCsv, summariseReasons } from "@/components/letters/bulkActions";
+import { useWorkspaceLoad } from "@/components/home/loadState";
+import { ListPlaceholder } from "@/components/home/HomeParts";
 
 type TabId = "all" | "needs-you" | "in-review" | "approval" | "sent" | "archived";
 type SortId = "updated" | "oldest" | "health" | "name";
@@ -83,6 +85,11 @@ export function Letters() {
   const tab = readTab(params.get("tab"));
 
   const all = useLetterRows();
+  // The first pull from the server is still on its way and this device has
+  // no letters yet: soft placeholders, as in the sidebar and on Home, never
+  // "No letters yet" (LISTS-X1).
+  const pulling = useWorkspaceLoad((s) => s.pulling);
+  const loading = pulling && all.length === 0;
   const [q, setQ] = useState("");
   const [type, setType] = useState<string | null>(null);
   const [person, setPerson] = useState<string | null>(null);
@@ -265,7 +272,13 @@ export function Letters() {
   ];
 
   const needs = counts["needs-you"];
-  const lede = isEmployee ? (
+  const lede = loading ? (
+    isEmployee ? (
+      "Every letter you have drafted, and where it is."
+    ) : (
+      "Every letter, and where it is."
+    )
+  ) : isEmployee ? (
     <>Every letter you have drafted, and where it is.{needs > 0 && <> <b>{needs}</b> {needs === 1 ? "needs" : "need"} you.</>}</>
   ) : needs > 0 ? (
     <>
@@ -332,7 +345,11 @@ export function Letters() {
         tabsLabel="Letters"
       />
 
-      {all.length === 0 ? (
+      {loading ? (
+        <section aria-label="Letters" aria-busy="true" className="min-w-0 px-4 pb-10 pt-5 md:px-12 md:pt-[22px]">
+          <ListPlaceholder rows={4} label="Loading letters" />
+        </section>
+      ) : all.length === 0 ? (
         <div className="px-4 py-6 md:px-12">
           <EmptyState
             icon={FileText}

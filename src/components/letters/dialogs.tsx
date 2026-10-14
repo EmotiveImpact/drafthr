@@ -3,7 +3,7 @@
  * (rename), the bulk "Submit for approval" approver choice and the bulk
  * "Change owner" picker.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,36 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Initials } from "./parts";
 import { useKnownPeople, type KnownPerson } from "./people";
+
+/* ─── Focus back to the menu that opened a dialog ───────────────────── */
+
+/**
+ * A dialog opened from a menu item (the matter's options, a row's "...")
+ * mounts while the item still has focus; the item then unmounts with the
+ * menu, so Radix's return focus landed on <body> and keyboard users lost
+ * their place (LISTS-X25). This remembers the menu's trigger (the menu
+ * names it in aria-labelledby) when the dialog opens and puts focus back on
+ * it when the dialog closes. Dialogs opened any other way keep Radix's own
+ * return focus. Pass the result as the dialog's onCloseAutoFocus.
+ */
+export function useMenuReturnFocus(open: boolean): (e: Event) => void {
+  const trigger = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current && typeof document !== "undefined") {
+    const active = document.activeElement;
+    const menu = active instanceof HTMLElement ? active.closest<HTMLElement>('[role="menu"]') : null;
+    const id = menu?.getAttribute("aria-labelledby");
+    trigger.current = id ? document.getElementById(id) : null;
+  }
+  wasOpen.current = open;
+  return useCallback((e: Event) => {
+    const el = trigger.current;
+    trigger.current = null;
+    if (!el || !el.isConnected || el.getClientRects().length === 0) return;
+    e.preventDefault();
+    el.focus({ preventScroll: true });
+  }, []);
+}
 
 /* ─── Confirm ────────────────────────────────────────────────────────── */
 
@@ -31,9 +61,10 @@ export function ConfirmDialog({
   destructive?: boolean;
   onConfirm: () => void;
 }) {
+  const returnFocus = useMenuReturnFocus(open);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[440px]">
+      <DialogContent className="max-w-[440px]" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{body}</DialogDescription>
@@ -80,6 +111,7 @@ export function PromptDialog({
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
+  const returnFocus = useMenuReturnFocus(open);
   useEffect(() => {
     if (open) setValue(initial);
   }, [open, initial]);
@@ -93,6 +125,7 @@ export function PromptDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="max-w-[440px]"
+        onCloseAutoFocus={returnFocus}
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           requestAnimationFrame(() => {

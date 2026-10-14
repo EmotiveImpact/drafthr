@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Archive, ArrowLeft, FolderCheck, FolderMinus, MoreHorizontal, Pencil, Plus, RotateCcw, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { Archive, ArrowLeft, FolderCheck, FolderMinus, MoreHorizontal, Pencil, Plus, RotateCcw, ShieldCheck, Tag, Trash2, UserPlus } from "lucide-react";
 import { useDraftStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -13,14 +13,15 @@ import { Pill, type PillTone } from "@/components/ds";
 import { ListHeader } from "@/components/letters/ListHeader";
 import { LettersTable } from "@/components/letters/LettersTable";
 import { downloadText, MENU_MOTION, usePageTitle } from "@/components/letters/parts";
-import { PromptDialog } from "@/components/letters/dialogs";
+import { PromptDialog, useMenuReturnFocus } from "@/components/letters/dialogs";
+import { MatterTypeDialog } from "@/components/matter/MatterTypeDialog";
 import { MatterRiskBadge } from "@/components/matter/MatterRiskBadge";
 import { MatterParticipants } from "@/components/matter/MatterParticipants";
 import { MatterTasks } from "@/components/matter/MatterTasks";
 import { MatterCalendar } from "@/components/matter/MatterCalendar";
 import { useMatterRows, type MatterRow } from "@/components/matter/rows";
 import { DeleteMatterDialog, MatterMark, PeopleStack } from "@/components/matter/parts";
-import { deadlinePillText, deadlinesIcs, relativeDays, shortDay } from "@/components/matter/model";
+import { deadlinePillText, deadlinesIcs, MATTER_TYPE_LABEL, relativeDays, shortDay } from "@/components/matter/model";
 import {
   AddLetterDialog,
   AskBox,
@@ -91,7 +92,9 @@ function MatterPage({ row }: { row: MatterRow }) {
   const [addOpen, setAddOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const peopleReturnFocus = useMenuReturnFocus(peopleOpen);
 
   const evidence = useMemo(() => evidenceRows(row.drafts), [row.drafts]);
   const history = useMemo(() => historyEntries(row.drafts), [row.drafts]);
@@ -158,6 +161,10 @@ function MatterPage({ row }: { row: MatterRow }) {
         <DropdownMenuItem onSelect={() => setPeopleOpen(true)}>
           <UserPlus />
           Edit participants
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => setTypeOpen(true)}>
+          <Tag />
+          {m.type ? "Change type" : "Set type"}
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
@@ -396,6 +403,8 @@ function MatterPage({ row }: { row: MatterRow }) {
       <Dialog open={peopleOpen} onOpenChange={setPeopleOpen}>
         <DialogContent
           className="max-h-[calc(100dvh-2rem)] max-w-[520px] overflow-y-auto"
+          // Back to "Matter options" on close (Esc, Done or the x).
+          onCloseAutoFocus={peopleReturnFocus}
           // Start on the dialog itself, not the first participant's remove
           // button: opening it should never put focus on a destructive control.
           onOpenAutoFocus={(e) => {
@@ -415,6 +424,15 @@ function MatterPage({ row }: { row: MatterRow }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <MatterTypeDialog
+        open={typeOpen}
+        onOpenChange={setTypeOpen}
+        value={m.type}
+        onSave={(type) => {
+          updateMatter(m.id, { type });
+          toast(type ? `Type set to ${MATTER_TYPE_LABEL[type]}` : "Type cleared");
+        }}
+      />
       <DeleteMatterDialog matter={m} letterCount={row.letters.length} open={deleteOpen} onOpenChange={setDeleteOpen} onDeleted={() => nav("/matters")} />
     </div>
   );

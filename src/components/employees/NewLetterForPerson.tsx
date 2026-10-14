@@ -6,6 +6,7 @@ import { prefillsFromProfile, useProfileStore } from "@/lib/profile";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useMenuReturnFocus } from "@/components/letters/dialogs";
 import { employeeAnswers } from "./model";
 
 const QUICK: LetterTypeId[] = ["warning", "probation_outcome", "return_to_work", "salary_increase", "promotion", "termination", "contract_amendment", "reference"];
@@ -19,6 +20,8 @@ export function NewLetterForPerson({ employee, open, onOpenChange }: { employee:
   const nav = useNavigate();
   const profile = useProfileStore((s) => s.profile);
   const createDraft = useDraftStore((s) => s.createDraft);
+  // Opened from a row's "..." menu: focus goes back to that menu's button.
+  const returnFocus = useMenuReturnFocus(open);
   const types = QUICK.flatMap((id) => {
     try {
       const m = getLetterMeta(id);
@@ -35,7 +38,7 @@ export function NewLetterForPerson({ employee, open, onOpenChange }: { employee:
   };
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[520px]">
+      <DialogContent className="max-w-[520px]" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>New letter{employee ? ` for ${employee.preferredName || employee.legalName}` : ""}</DialogTitle>
           <DialogDescription>Pick a letter type. It opens with their name, job title and department already filled in.</DialogDescription>

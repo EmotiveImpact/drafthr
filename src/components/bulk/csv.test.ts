@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMissingMergeValues, parseCsv, rowSummary, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
+import { displayCsvValue, findMissingMergeValues, parseCsv, rowSummary, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
 import { placeholderKeysFor } from "@/lib/bulk/mailmerge";
 
 describe("sampleHeadersFor", () => {
@@ -135,15 +135,23 @@ describe("rowSummary", () => {
 
   it("puts the job title first and leaves the name out", () => {
     const row = { employee_name: "Jordan Hale", department: "Operations", effective_date: "2026-11-01", employee_job_title: "Shift lead" };
-    expect(rowSummary(row, headers)).toBe("Shift lead · Operations · 2026-11-01");
+    expect(rowSummary(row, headers)).toBe("Shift lead · Operations · 1 Nov 2026");
   });
 
   it("shows the values a row has and names what it is missing", () => {
     const row = { employee_name: "Priya Shah", department: "Finance", effective_date: "2026-11-01", employee_job_title: "" };
-    expect(rowSummary(row, headers, ["employee_job_title"])).toBe("Finance · 2026-11-01 · no job title");
+    expect(rowSummary(row, headers, ["employee_job_title"])).toBe("Finance · 1 Nov 2026 · no job title");
   });
 
   it("is empty when the row only has a name", () => {
     expect(rowSummary({ employee_name: "Sam" }, ["employee_name"])).toBe("");
+  });
+
+  it("writes ISO dates the way the app does and leaves other values as typed", () => {
+    expect(displayCsvValue("2026-11-02")).toBe("2 Nov 2026");
+    expect(displayCsvValue("2026-03-09T09:30:00Z")).toBe("9 Mar 2026");
+    expect(displayCsvValue("2026-02-30")).toBe("2026-02-30");
+    expect(displayCsvValue("02/11/2026")).toBe("02/11/2026");
+    expect(displayCsvValue("Operations")).toBe("Operations");
   });
 });
