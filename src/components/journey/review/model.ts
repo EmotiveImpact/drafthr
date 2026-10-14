@@ -150,6 +150,9 @@ export type ReviewPoint = ReviewPointSnapshot & {
    *  another change waiting (decide that first); missing: that part is no
    *  longer in the letter. Still to decide, but it can't be accepted. */
   held?: "busy" | "missing";
+  /** suggestion: it went in over wording that changed after the reviewer
+   *  wrote it (an edit you accepted) and rewrites some of it (REVIEW-X29). */
+  rewritesNewer?: boolean;
 };
 
 const TAG_RE = /<(ins|del)\b[^>]*>/gi;
@@ -262,6 +265,7 @@ export function reviewPoints(draft: Draft, review: ReviewRequest, round = curren
       where: snap?.where ?? sectionTitleText(s.title),
       state: "open",
       markIds: pendingMarkIds(s),
+      ...(review.rewritesNewer?.includes(id) ? { rewritesNewer: true } : {}),
     });
   }
   // Suggestions from the snapshot no longer pending: decided, accepted

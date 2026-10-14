@@ -146,6 +146,10 @@ export type HeldSuggestion = {
   at: number;
   /** busy: that part has another change waiting; missing: it is gone. */
   reason: "busy" | "missing";
+  /** The text of that part as the reviewer worked on it (without the change
+   *  that was waiting). Placing the suggestion replays it on the text as it
+   *  is then, so an edit you accepted meanwhile is kept (REVIEW-X29). */
+  baseHtml?: string;
 };
 
 export type ReviewRequest = {
@@ -200,6 +204,11 @@ export type ReviewRequest = {
    *  here and placed once that part is free, and until then are listed as
    *  still to decide, never as accepted (REVIEW-X24). */
   heldSuggestions?: Record<string, HeldSuggestion>;
+  /** Held suggestions that went in over wording which changed after the
+   *  reviewer wrote them (you accepted DraftHR's edit there) and rewrite
+   *  some of it, by point id. Progress says so beside the change, so
+   *  accepting it never quietly undoes the edit you accepted (REVIEW-X29). */
+  rewritesNewer?: string[];
   /** A copy of a request made on another device (the teammate's view). */
   importedAt?: number;
   createdAt: number;

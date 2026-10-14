@@ -630,7 +630,7 @@ function TurnaroundChoice({
   const options: { id: "standard" | "priority"; label: string; price: number }[] = [
     { id: "standard", label: `Standard, back in ${turnaroundWords(e.sla)}`, price: e.price },
     ...(priorityPrice != null
-      ? [{ id: "priority" as const, label: `Priority, back ${PRIORITY_HOURS} hours from payment`, price: priorityPrice }]
+      ? [{ id: "priority" as const, label: `Priority, back in ${PRIORITY_HOURS} hours`, price: priorityPrice }]
       : []),
   ];
   const onKey = (ev: KeyboardEvent<HTMLDivElement>) => {

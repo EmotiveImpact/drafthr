@@ -13,6 +13,8 @@ import { useDraftStore } from "@/lib/store";
 import { useBookingsStore } from "@/lib/bookings";
 import { pullMyBookings } from "@/lib/marketplaceSync";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
+import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
+import type { Section } from "@/lib/letters/types";
 import {
   REVIEW_VERDICT_ASKER_LABELS,
   REVIEW_VERDICT_LABELS,
@@ -25,6 +27,7 @@ import {
 } from "@/lib/journey/reviews";
 import { bookingFor } from "./actions";
 import { collectReviewerWork, parseDelivery } from "./model";
+import { rebaseSuggestion, sameText } from "./rebase";
 import {
   assignedReviews,
   getTrustedLinkStatus,
@@ -47,6 +50,7 @@ export function applyRemotePoints(review: ReviewRequest, points: RemotePoint[]):
   const held: Record<string, HeldSuggestion> = { ...(review.heldSuggestions ?? {}) };
   let heldChanged = false;
   const lateMarks: string[] = [];
+  const rewrites: string[] = [];
   for (const p of points) {
     const key = p.removed ? `${p.id}:removed` : p.id;
     if (applied.has(key)) continue;
@@ -89,15 +93,21 @@ export function applyRemotePoints(review: ReviewRequest, points: RemotePoint[]):
         const reason = section ? "busy" : "missing";
         const was = held[p.id];
         if (!was || was.reason !== reason || was.proposedHtml !== proposedHtml || was.instruction !== instruction) {
-          held[p.id] = { sectionId: p.sectionId ?? "", proposedHtml, instruction, at: p.at, reason };
+          // What they worked on: the text without the change waiting there
+          // (kept from the first hold, the text they saw doesn't change).
+          const baseHtml = was?.baseHtml ?? (section ? textWithoutPending(section) : undefined);
+          held[p.id] = { sectionId: p.sectionId ?? "", proposedHtml, instruction, at: p.at, reason, ...(baseHtml ? { baseHtml } : {}) };
           heldChanged = true;
         }
         continue;
       }
+      // Held until now: replay it on the text as it is (REVIEW-X29).
+      const placed = held[p.id] ? onTodaysText(section, { ...held[p.id], proposedHtml }) : { html: proposedHtml, overlaps: false };
+      if (placed.overlaps) rewrites.push(p.id);
       store.proposeSectionChange(review.draftId, section.id, {
         id: p.id,
         createdAt: p.at,
-        proposedHtml,
+        proposedHtml: placed.html,
         instruction,
         source: "review",
         authorId: who.email || who.name,
@@ -141,6 +151,7 @@ export function applyRemotePoints(review: ReviewRequest, points: RemotePoint[]):
         : {}),
       ...(added.length ? { remoteApplied: [...(review.remoteApplied ?? []), ...added] } : {}),
       ...(heldChanged ? { heldSuggestions: held } : {}),
+      ...(rewrites.length ? { rewritesNewer: [...new Set([...(review.rewritesNewer ?? []), ...rewrites])] } : {}),
     });
   }
   return added;
@@ -159,6 +170,7 @@ export function placeHeldSuggestions(reviewId: string): string[] {
   if (!draft) return [];
   const held = { ...review.heldSuggestions };
   const placed: string[] = [];
+  const rewrites: string[] = [];
   let changed = false;
   for (const [id, h] of Object.entries(held)) {
     // Already decided (left out, or dismissed): nothing to place.
@@ -177,10 +189,14 @@ export function placeHeldSuggestions(reviewId: string): string[] {
       continue;
     }
     if (section.pendingChange?.id !== id) {
+      // Their change, replayed on the text as it is now: an edit you
+      // accepted in this part meanwhile stays (REVIEW-X29).
+      const onText = onTodaysText(section, h);
+      if (onText.overlaps) rewrites.push(id);
       store.proposeSectionChange(review.draftId, section.id, {
         id,
         createdAt: h.at,
-        proposedHtml: h.proposedHtml,
+        proposedHtml: onText.html,
         instruction: h.instruction,
         source: "review",
         authorId: review.reviewer.email || review.reviewer.name,
@@ -208,10 +224,37 @@ export function placeHeldSuggestions(reviewId: string): string[] {
     useReviewStore.getState().updateReview(review.id, {
       ...(rounds ? { rounds } : {}),
       heldSuggestions: held,
+      ...(rewrites.length ? { rewritesNewer: [...new Set([...(review.rewritesNewer ?? []), ...rewrites])] } : {}),
       ...(placed.length ? { remoteApplied: [...(review.remoteApplied ?? []), ...placed.filter((x) => !(review.remoteApplied ?? []).includes(x))] } : {}),
     });
   }
   return placed;
+}
+
+/** A part of the letter without the change waiting in it: what a reviewer
+ *  sees as the letter's own text. */
+function textWithoutPending(section: Section): string {
+  const html = section.pendingChange?.prevHtml ?? section.html ?? "";
+  return html.includes("data-suggestion-id") ? sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(html)) : html;
+}
+
+/**
+ * A held suggestion on the part of the letter as it is now. When the text
+ * changed after the reviewer wrote it (you accepted DraftHR's edit), their
+ * change is replayed on today's text instead of putting back the wording
+ * they saw; `overlaps` says some of their change rewrites the newer words.
+ */
+export function onTodaysText(section: Section, h: Pick<HeldSuggestion, "proposedHtml" | "baseHtml" | "at">): { html: string; overlaps: boolean } {
+  const current = textWithoutPending(section);
+  // Older holds kept no copy of the text: the first version saved after they
+  // wrote it (when the change that was waiting went in) is that text.
+  const base = h.baseHtml ?? (section.versions ?? []).find((v) => v.createdAt >= h.at)?.html;
+  if (!base || sameText(base, current)) return { html: h.proposedHtml, overlaps: false };
+  const theirs = h.proposedHtml.includes("data-suggestion-id")
+    ? sanitizeLetterHtml(mergeAcceptedSuggestionsHtml(h.proposedHtml))
+    : h.proposedHtml;
+  const r = rebaseSuggestion(base, current, theirs);
+  return { html: sanitizeLetterHtml(r.html), overlaps: r.overlaps };
 }
 
 /** Bring the review in line with the server's copy. */

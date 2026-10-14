@@ -666,6 +666,12 @@ function PointRow({
                 : "This part is no longer in the letter, so it can only be left out."}
             </span>
           )}
+          {/* Written before an edit you accepted here (REVIEW-X29). */}
+          {!done && !p.held && p.rewritesNewer && (
+            <span className="mt-1 block text-[12px] leading-[1.4] text-[var(--ds-amber-fg)]" data-testid="review-point-rewrites">
+              Written before you accepted DraftHR's edit here. Accepting it changes some of that edit's words.
+            </span>
+          )}
         </button>
         {done ? (
           <span

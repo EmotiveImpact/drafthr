@@ -208,6 +208,40 @@ describe("a reviewer's suggestion that can't go into the letter yet (REVIEW-X24)
     expect(applyRemotePoints(r, [point as never])).toEqual([]);
   });
 
+  it("goes in on DraftHR's edit you accepted first, never undoing it (REVIEW-X29)", () => {
+    const id = trustedWithDraftHrEdit();
+    // The reviewer worked on the letter as it was: "You were late for persistent lateness."
+    const theirs = { ...point, proposedHtml: "<p>You were late for persistent lateness, in breach of our Attendance Policy.</p>" };
+    applyRemotePoints(useReviewStore.getState().requests[id], [theirs as never]);
+    useReviewStore.getState().markBack(id, { verdict: "ready-with-changes", points: [{ id: "ex_1", kind: "suggestion", sectionId: "s1", title: point.title, where: "Opening" }] });
+    // Accept DraftHR's "You were late on eleven shifts." first.
+    useDraftStore.getState().acceptSectionPending("d1", "s1");
+    expect(placeHeldSuggestions(id)).toEqual(["ex_1"]);
+    const sec = useDraftStore.getState().drafts.d1.sections[0];
+    expect(sec.pendingChange?.id).toBe("ex_1");
+    // Only the reviewer's words are marked; DraftHR's accepted words stay.
+    const div = document.createElement("div");
+    div.innerHTML = sec.html;
+    expect([...div.querySelectorAll("del")].map((d) => d.textContent)).toEqual([]);
+    expect([...div.querySelectorAll("ins")].map((d) => d.textContent?.trim())).toEqual([", in breach of our Attendance Policy"]);
+    useDraftStore.getState().acceptSectionPending("d1", "s1");
+    expect(useDraftStore.getState().drafts.d1.sections[0].html).toBe("<p>You were late on eleven shifts, in breach of our Attendance Policy.</p>");
+    expect(useReviewStore.getState().requests[id].rewritesNewer).toBeUndefined();
+  });
+
+  it("says so in Progress when the reviewer's change rewrites the edit you accepted (REVIEW-X29)", () => {
+    const id = trustedWithDraftHrEdit();
+    const theirs = { ...point, proposedHtml: "<p>You were late for repeated lateness.</p>" };
+    applyRemotePoints(useReviewStore.getState().requests[id], [theirs as never]);
+    useReviewStore.getState().markBack(id, { verdict: "ready-with-changes", points: [{ id: "ex_1", kind: "suggestion", sectionId: "s1", title: point.title, where: "Opening" }] });
+    useDraftStore.getState().acceptSectionPending("d1", "s1");
+    placeHeldSuggestions(id);
+    const r = useReviewStore.getState().requests[id];
+    expect(r.rewritesNewer).toEqual(["ex_1"]);
+    const [p] = reviewPoints(useDraftStore.getState().drafts.d1, r);
+    expect([p.state, p.held, p.rewritesNewer]).toEqual(["open", undefined, true]);
+  });
+
   it("on a part no longer in the letter, can only be left out, and never comes back", () => {
     const id = trustedWithDraftHrEdit();
     const gone = { ...point, sectionId: "s_gone" };
