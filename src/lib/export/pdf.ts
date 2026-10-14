@@ -147,27 +147,42 @@ export function letterBodyHtml(draft: Draft): string {
   const signature = signatureHtml(draft);
   const evidence = draft.evidence ?? [];
   const dateLine = issueDateLineHtml(draft);
-  const sectionsHtml = draft.sections
-    .map((s) => {
-      const html = injectSignatureIntoSignatureSection(s, signature);
-      return s.sectionId === "recipient_block" && dateLine ? html + dateLine : html;
-    })
-    .join("\n");
+  const sectionHtml = draft.sections.map((s) => {
+    const html = injectSignatureIntoSignatureSection(s, signature);
+    return s.sectionId === "recipient_block" && dateLine ? html + dateLine : html;
+  });
   // Re-resolve figure references to their current label (handles re-ordering).
-  const resolved = evidence.length > 0
-    ? resolveFigureRefsInHtml(sectionsHtml, evidence)
-    : sectionsHtml;
+  const resolve = (html: string) =>
+    evidence.length > 0 ? resolveFigureRefsInHtml(html, evidence) : html;
+  const signoffStart = signoffStartIndex(draft.sections);
+  // The sign-off starts at the closing section's last line ("Yours
+  // sincerely,"), and the paragraph just before it goes with it, so a page
+  // never starts cold on the sign-off. Earlier closing paragraphs are the
+  // letter's own text and flow as usual, so the end of the letter stays small.
+  const [closingLead, carried, closingLast] =
+    draft.sections[signoffStart]?.sectionId === "closing"
+      ? splitClosing(sectionHtml[signoffStart])
+      : ["", "", sectionHtml[signoffStart] ?? ""];
+  const bodyHtml = resolve([...sectionHtml.slice(0, signoffStart), closingLead].filter(Boolean).join("\n"));
+  const signoffHtml = resolve([closingLast, ...sectionHtml.slice(signoffStart + 1)].filter(Boolean).join("\n"));
   const attachments = buildAttachmentsListHtml(draft);
   return (
     letterhead +
-    resolved +
-    attachments +
-    // The notice and disclaimer belong to the letter, so they close it,
-    // before the Exhibits appendix starts its own page (SEND-X32). They are
-    // one block, set as the letter's small print, that is never split
-    // across pages (break-inside) and never sits alone on a page away from
-    // the letter (paginateForPdf brings the sign-off with it) (SEND-X36).
-    closingBlockHtml(sanitizeLetterHtml(disclaimerHtmlFor(draft))) +
+    bodyHtml +
+    // The end of the letter: the last line of the letter and the sign-off,
+    // the Attachments list, then the notice and disclaimer (which belong to
+    // the letter, so they close it before the Exhibits appendix starts its
+    // own page, SEND-X32). It is one
+    // keep-together group, so the sign-off is never split across pages and
+    // the small print never sits alone on a page away from the letter: when
+    // the group does not fit under the body it goes over whole, in the
+    // server renderer (break-inside) and in paginateForPdf alike (SEND-X36).
+    endOfLetterHtml(
+      resolve(carried),
+      signoffHtml,
+      attachments,
+      closingBlockHtml(sanitizeLetterHtml(disclaimerHtmlFor(draft))),
+    ) +
     // Exhibits appendix: same builder as the page preview and the DOCX.
     buildExhibitsAppendixHtml(draft) +
     // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands
@@ -179,6 +194,67 @@ export function letterBodyHtml(draft: Draft): string {
 
 /** Class of the closing block (the notice and disclaimer under the letter). */
 const CLOSING_CLASS = "letter-closing";
+/** Class of the sign-off ("Yours sincerely," through the signatory's name and title). */
+export const SIGNOFF_CLASS = "letter-signoff";
+/** Class of the end of the letter (sign-off, Attachments list, closing) kept together. */
+export const LETTER_END_CLASS = "letter-end";
+
+const KEEP_TOGETHER = "break-inside:avoid;page-break-inside:avoid;";
+
+/**
+ * Where the sign-off starts: the "closing" section ("Yours sincerely,") when
+ * it comes straight before the "signature" section, else the signature or
+ * closing section on its own. A letter with neither keeps its last section
+ * with the end of the letter, so the small print still has company (unless
+ * that section is the whole letter, which then flows as usual).
+ */
+function signoffStartIndex(sections: ReadonlyArray<{ sectionId?: string }>): number {
+  let signature = -1;
+  let closing = -1;
+  sections.forEach((s, i) => {
+    if (s.sectionId === "signature") signature = i;
+    if (s.sectionId === "closing") closing = i;
+  });
+  if (signature >= 0) return closing === signature - 1 ? closing : signature;
+  if (closing >= 0) return closing;
+  return sections.length > 1 ? sections.length - 1 : sections.length;
+}
+
+/**
+ * Split the closing section's HTML into its top-level blocks: all but the
+ * last two, the one before the last, and the last ("Yours sincerely,").
+ * Without a DOM, or with a single block, the whole section is the last.
+ */
+function splitClosing(html: string): [string, string, string] {
+  if (typeof document === "undefined") return ["", "", html];
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const blocks = Array.from(tpl.content.childNodes).filter((n) => !isBlank(n));
+  if (blocks.length <= 1) return ["", "", html];
+  const outer = (node: ChildNode) => {
+    const wrap = document.createElement("div");
+    wrap.appendChild(node);
+    return wrap.innerHTML;
+  };
+  const last = outer(blocks[blocks.length - 1]);
+  const carried = outer(blocks[blocks.length - 2]);
+  return [tpl.innerHTML.trim(), carried, last];
+}
+
+/** The end of the letter as one keep-together group, with the sign-off whole inside it. */
+function endOfLetterHtml(carried: string, signoff: string, attachments: string, closing: string): string {
+  const signoffBlock = signoff.trim()
+    ? `<div class="${SIGNOFF_CLASS}" style="${KEEP_TOGETHER}">${signoff}</div>`
+    : "";
+  return (
+    `<div class="${LETTER_END_CLASS}" style="${KEEP_TOGETHER}">` +
+    carried +
+    signoffBlock +
+    attachments +
+    closing +
+    "</div>"
+  );
+}
 
 /**
  * The rule and the notice and disclaimer under it, as one block: small print
@@ -187,7 +263,7 @@ const CLOSING_CLASS = "letter-closing";
  */
 function closingBlockHtml(disclaimer: string): string {
   return (
-    `<div class="${CLOSING_CLASS}" style="break-inside:avoid;page-break-inside:avoid;font-size:9.5pt;line-height:1.45;color:#334155;">` +
+    `<div class="${CLOSING_CLASS}" style="${KEEP_TOGETHER}font-size:9.5pt;line-height:1.45;color:#334155;">` +
     "<hr />" +
     disclaimer +
     "</div>"
@@ -319,14 +395,6 @@ async function renderClientSidePdf(pages: HTMLElement[]): Promise<Blob> {
   return pdf.output("blob");
 }
 
-/** The block is the letter's closing: kept whole and kept with the letter. */
-function keepsWithLetter(el: Element): boolean {
-  return el.classList.contains(CLOSING_CLASS);
-}
-
-/** How many of the letter's last blocks go over with a closing that does not fit (the sign-off). */
-const CLOSING_CARRY = 2;
-
 /** The block starts a new page (the Exhibits and Attachments appendices). */
 function breaksBefore(el: Element): boolean {
   if (el.classList.contains("page-break-before")) return true;
@@ -401,11 +469,12 @@ export function paginateForPdf(source: HTMLElement, ownerDocument: Document): HT
       return;
     }
     target().removeChild(node);
-    // The closing does not fit under the letter: rather than a page holding
-    // only the small print, the sign-off goes over with it, as long as the
-    // page it leaves keeps some of the letter and the two fit together.
-    if (el && keepsWithLetter(el) && stack.length === 1 && carryWithClosing(el)) return;
+    // A block that does not fit goes over whole. The end of the letter (the
+    // sign-off, Attachments list and closing small print) is one such block,
+    // so the sign-off is never split and the small print never sits alone.
+    const children = el ? Array.from(el.childNodes).filter((c) => !isBlank(c)) : [];
     if (placed > 0) {
+      const before = { stack, placed };
       newPage();
       target().appendChild(node);
       if (!overflows()) {
@@ -413,10 +482,17 @@ export function paginateForPdf(source: HTMLElement, ownerDocument: Document): HT
         return;
       }
       target().removeChild(node);
+      // Taller than a whole page and about to be split: drop the empty page
+      // and let it flow on from where it was, so a long ending (the sign-off
+      // then many attachments) does not leave a gap under the letter.
+      if (el && children.length > 1) {
+        pages.pop()?.remove();
+        stack = before.stack;
+        placed = before.placed;
+      }
     }
     // Taller than a whole page: split it into its children when it has
     // several; a single tall item (one big image) stays on its own page.
-    const children = el ? Array.from(el.childNodes).filter((c) => !isBlank(c)) : [];
     if (el && children.length > 1) {
       const shell = el.cloneNode(false) as HTMLElement;
       target().appendChild(shell);
@@ -430,33 +506,6 @@ export function paginateForPdf(source: HTMLElement, ownerDocument: Document): HT
     }
     target().appendChild(node);
     placed += 1;
-  };
-
-  /** Move the page's last blocks and the closing to a new page; false (and nothing moved) when they do not fit there. */
-  const carryWithClosing = (closing: HTMLElement): boolean => {
-    const from = stack[0];
-    const blocks = Array.from(from.children) as HTMLElement[];
-    // Keep at least two blocks of the letter on the page it leaves.
-    const n = Math.min(CLOSING_CARRY, blocks.length - 2);
-    if (n <= 0) return false;
-    const carried = blocks.slice(blocks.length - n);
-    // Never carry an appendix that starts its own page.
-    if (carried.some((b) => breaksBefore(b))) return false;
-    for (const b of carried) from.removeChild(b);
-    newPage();
-    const to = stack[0];
-    for (const b of carried) to.appendChild(b);
-    to.appendChild(closing);
-    if (!overflows()) {
-      placed = carried.length + 1;
-      return true;
-    }
-    // Too tall together: undo, and lay the closing out on its own.
-    pages.pop()?.remove();
-    for (const b of carried) from.appendChild(b);
-    stack = [from];
-    placed = from.children.length;
-    return false;
   };
 
   // The "Drafted with DraftHR" line is a page footer: it sits in the bottom

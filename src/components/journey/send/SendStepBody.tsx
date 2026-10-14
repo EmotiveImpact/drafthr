@@ -58,13 +58,7 @@ export function SendStepBody({ flow, frozen = false }: { flow: SendFlow; frozen?
           Sent
         </div>
       ) : (
-        <>
-          <PinnedSendBar flow={flow} />
-          {/* Follows the step: at 1440x900 every choice, the counsel line and
-           * the button fit above the fold, and this card is the one thing
-           * the panel scrolls to (SEND-X30). */}
-          <OpenFullPageCard draftId={draft.id} className="mb-2" />
-        </>
+        <PinnedSendBar flow={flow} draftId={draft.id} />
       )}
       {!frozen && flow.gate}
     </section>
@@ -80,10 +74,11 @@ export function SendStepBody({ flow, frozen = false }: { flow: SendFlow; frozen?
  * cut in half (SEND-X30). The panel's own bottom fade is off while the bar
  * is pinned (globals.css), so the button is never faded either.
  */
-function PinnedSendBar({ flow }: { flow: SendFlow }) {
+function PinnedSendBar({ flow, draftId }: { flow: SendFlow; draftId: string }) {
   const barRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLSpanElement>(null);
-  const { stuck, nearFoot } = useStuck(barRef, endRef);
+  const cardRef = useRef<HTMLAnchorElement>(null);
+  const { stuck, nearFoot, peek } = useStuck(barRef, endRef, cardRef);
   return (
     <>
       <div
@@ -103,6 +98,10 @@ function PinnedSendBar({ flow }: { flow: SendFlow }) {
       </div>
       {/* Marks where the bar sits in the flow: it is pinned while it shows above this. */}
       <span ref={endRef} aria-hidden className="block h-0" />
+      {/* Follows the step: at 1440x900 every choice, the counsel line and
+       * the button fit above the fold, and this card is the one thing the
+       * panel scrolls to (SEND-X30). */}
+      <OpenFullPageCard ref={cardRef} draftId={draftId} peek={peek} className="mb-2" />
     </>
   );
 }
@@ -116,12 +115,16 @@ const PANEL_FADE_PX = 36;
  * in its place within the panel's bottom fade. Then the fade is shortened
  * to the room under the bar (--send-foot-fade on the scroll area), so it
  * fades what follows the bar ("Open full page") and never the button.
+ * `peek` while all that shows of "Open full page" lies in that bottom fade:
+ * a sliver of its dashed edge under the button, which the card then hides
+ * until the panel is scrolled to it (SEND-X41).
  */
 function useStuck(
   barRef: RefObject<HTMLElement | null>,
-  endRef: RefObject<HTMLElement | null>
-): { stuck: boolean; nearFoot: boolean } {
-  const [state, setState] = useState({ stuck: false, nearFoot: false });
+  endRef: RefObject<HTMLElement | null>,
+  cardRef: RefObject<HTMLElement | null>
+): { stuck: boolean; nearFoot: boolean; peek: boolean } {
+  const [state, setState] = useState({ stuck: false, nearFoot: false, peek: false });
   useEffect(() => {
     const bar = barRef.current;
     const end = endRef.current;
@@ -131,13 +134,19 @@ function useStuck(
     const measure = () => {
       const b = bar.getBoundingClientRect();
       const stuck = end.getBoundingClientRect().top - b.bottom > 1;
-      const room = scroller ? scroller.getBoundingClientRect().bottom - b.bottom : Infinity;
+      const foot = scroller ? scroller.getBoundingClientRect().bottom : Infinity;
+      const room = foot - b.bottom;
       const nearFoot = !stuck && room < PANEL_FADE_PX;
+      const card = cardRef.current;
+      const shown = card ? foot - card.getBoundingClientRect().top : 0;
+      const peek = !stuck && shown > 0 && shown < PANEL_FADE_PX;
       if (scroller) {
         if (nearFoot) scroller.style.setProperty("--send-foot-fade", `${Math.max(0, Math.round(room))}px`);
         else scroller.style.removeProperty("--send-foot-fade");
       }
-      setState((s) => (s.stuck === stuck && s.nearFoot === nearFoot ? s : { stuck, nearFoot }));
+      setState((s) =>
+        s.stuck === stuck && s.nearFoot === nearFoot && s.peek === peek ? s : { stuck, nearFoot, peek }
+      );
     };
     measure();
     const target: HTMLElement | Window = scroller ?? window;
@@ -153,6 +162,6 @@ function useStuck(
       ro?.disconnect();
       scroller?.style.removeProperty("--send-foot-fade");
     };
-  }, [barRef, endRef]);
+  }, [barRef, endRef, cardRef]);
   return state;
 }

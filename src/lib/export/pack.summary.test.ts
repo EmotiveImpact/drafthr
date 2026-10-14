@@ -74,7 +74,7 @@ describe("buildExportPackHtml — letter section", () => {
 describe("pack titles (SEND-X33)", () => {
   it("keep who the letter is for when the letter has its own title", () => {
     const draft = { ...makeDraft(), title: "Final written warning" };
-    expect(buildExportPackHtml(draft)).toContain("<h1>Export pack: Final written warning · Jamie Worker</h1>");
+    expect(buildExportPackHtml(draft)).toContain("<h1>Evidence pack: Final written warning · Jamie Worker</h1>");
     expect(buildEvidenceIndexHtml(draft)).toContain("<title>Exhibit index: Final written warning · Jamie Worker</title>");
   });
 
@@ -83,9 +83,9 @@ describe("pack titles (SEND-X33)", () => {
     const name = displayTitleFor(draft);
     expect(name).not.toBe("warning");
     const summary = buildExportPackHtml(draft);
-    expect(summary).toContain(`<title>Export pack: ${name}</title>`);
-    expect(summary).toContain(`<h1>Export pack: ${name}</h1>`);
-    expect(summary).not.toContain("warning export pack");
+    expect(summary).toContain(`<title>Evidence pack: ${name}</title>`);
+    expect(summary).toContain(`<h1>Evidence pack: ${name}</h1>`);
+    expect(summary).not.toContain("warning evidence pack");
     const index = buildEvidenceIndexHtml(draft);
     expect(index).toContain(`<title>Exhibit index: ${name}</title>`);
     expect(index).toContain("<h1>Exhibit index</h1>");
@@ -123,5 +123,54 @@ describe("pack copy people read (SEND-X37)", () => {
     expect(plainPunctuation("MUST NOT use intensifiers ('serious', 'severe') — let the facts carry the weight.")).toBe(
       "MUST NOT use intensifiers ('serious', 'severe'): let the facts carry the weight."
     );
+  });
+});
+
+/** The words the pack itself shows (not its styles, and not the letter's own text). */
+function packCopy(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/g, "")
+    .replace(/<article[\s\S]*<\/article>/, "")
+    .replace(/<[^>]+>/g, " ");
+}
+
+describe("no developer or template wording in the pack (SEND-X43)", () => {
+  it("leaves the drafting model's markup rules out of the section checks and reads them in sentence case", async () => {
+    const { loadTemplate } = await import("@/lib/letters/templates");
+    await loadTemplate("warning", "UK");
+    const draft = makeDraft();
+    draft.sections = [
+      { ...draft.sections[0], id: "r", sectionId: "recipient_block", title: "Date and recipient", html: "<p>14 October 2026<br>Jamie Worker</p>" },
+      { ...draft.sections[0], id: "c", sectionId: "closing", title: "Closing", html: "<p>Yours sincerely,</p>" },
+    ];
+    const html = buildExportPackHtml(draft);
+    expect(html).toContain("<h2>Section checks</h2>");
+    expect(html).not.toMatch(/single &lt;p&gt;|&lt;br&gt;|separated by/);
+    expect(html).not.toMatch(/\bMUST\b/);
+    expect(html).toContain("Must use UK date format.");
+    expect(packCopy(html)).not.toMatch(/Template quality inspector|guardrail/i);
+  });
+
+  it("drops only the HTML rules", async () => {
+    const { packRequirementText } = await import("@/lib/export/pack");
+    expect(packRequirementText("MUST place date and address inside a single <p> separated by <br>.")).toBeNull();
+    expect(packRequirementText("MUST be in <strong>.")).toBeNull();
+    expect(packRequirementText("MUST NOT invent a title.")).toBe("Must not invent a title.");
+    expect(packRequirementText("MUST use 'Yours sincerely,'.")).toBe("Must use 'Yours sincerely,'.");
+  });
+
+  it("shows the checklist's status in words, not status codes", () => {
+    const html = buildExportPackHtml(makeDraft());
+    expect(html).toMatch(/<span class="pill ok">Done<\/span>/);
+    expect(html).not.toMatch(/<span class="pill \w+">(ok|check|missing)<\/span>/);
+    expect(packCopy(html)).not.toMatch(/AI prompt use|attested|issuance|detected/);
+  });
+
+  it("writes the README in plain words", async () => {
+    const { buildReadme } = await import("@/lib/export/pack");
+    const readme = buildReadme(makeDraft(), undefined, [], { pdf: "letter.pdf", docx: "letter.docx" });
+    expect(readme).not.toMatch(/DRAFTHR install|reproducible|tribunal-grade|Machine-readable|\+/);
+    expect(readme).toContain("letter in two formats");
+    expect(readme).toContain("you do not need to open them");
   });
 });
