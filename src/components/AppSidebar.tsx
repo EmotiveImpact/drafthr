@@ -80,7 +80,8 @@ import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceLoad } from "@/components/home/loadState";
 import { fitSubLists } from "@/components/sidebarFit";
-import { recentLabels } from "@/components/sidebarLabels";
+import { recentLabelParts, type RecentLabel as RecentLabelParts } from "@/components/sidebarLabels";
+import { isLetterWizardPath, isTemplatesPage } from "@/components/sidebarCurrent";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { NotificationsBell } from "@/components/NotificationsBell";
 
@@ -129,9 +130,12 @@ const NAV_BUTTON =
   "[&_svg]:size-[18px] [&>svg]:text-[var(--ds-subtle)] hover:[&>svg]:text-[var(--ds-ink)] data-[active=true]:[&>svg]:text-[var(--ds-ink)] " +
   "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:rounded-[10px] group-data-[collapsible=icon]:p-[11px]!";
 
-/* Nested rows (.sub): 34px, 14px muted. */
+/* Nested rows (.sub): 34px, 14px muted, 10px each side as in the mock. The
+ * menu button's own rule adds 32px on the right of every row inside an item
+ * with an action, and the parent row's chevron counts, so nested names were
+ * cut ("Jordan Hale, attend...") for room nothing used (FOUNDATION-X14). */
 const SUB_BUTTON =
-  "h-[34px] gap-2 rounded-[8px] px-2.5 text-[14px] text-[var(--ds-muted)] transition-colors duration-[120ms] " +
+  "h-[34px] gap-2 rounded-[8px] px-2.5 group-has-data-[sidebar=menu-action]/menu-item:pr-2.5 text-[14px] text-[var(--ds-muted)] transition-colors duration-[120ms] " +
   "hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] " +
   "data-[active=true]:bg-[var(--ds-surface-2)] data-[active=true]:font-normal data-[active=true]:text-[var(--ds-ink)]";
 
@@ -401,8 +405,10 @@ function NewLetterButton({ mode }: { mode: SidebarMode | null }) {
             "group-data-[collapsible=icon]:size-10! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:shadow-none"
           )}
         >
-          <Link to={href}>
-            <Plus />
+          {/* Named on the link itself: in the rail its text is hidden and the
+              tooltip only exists on hover (FOUNDATION-N2). */}
+          <Link to={href} aria-label="New letter">
+            <Plus aria-hidden />
             <span className="group-data-[collapsible=icon]:hidden">New letter</span>
           </Link>
         </SidebarMenuButton>
@@ -622,6 +628,7 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
             allDrafts={matterList.allDrafts}
             loading={mattersLoading}
             expanded={mattersOpen}
+            limit={plan.matterLimit}
             setExpanded={chooseMatters}
           />
           {employer && (
@@ -630,9 +637,12 @@ function NavigatePrimary({ mode }: { mode: SidebarMode | null }) {
               isActive={under(path, "/employees")}
             />
           )}
+          {/* The templates page itself. The step-by-step wizard for one letter
+              type (/hr/new/warning) is part of writing a letter, so Letters is
+              the current row there, as in the new-letter mock (CREATE-X34). */}
           <NavRow
             it={{ href: templatesHref, label: "Templates", Icon: LibraryBig, tooltip: "Templates and letter types" }}
-            isActive={under(path, templatesHref)}
+            isActive={isTemplatesPage(path, prefix)}
           />
           {employer && (
             // One row, as in the experts and bookings mocks: Marketplace and
@@ -684,7 +694,7 @@ function DraftMarker({ d, tone }: { d: Draft; tone: StageTone }) {
   );
 }
 
-type RecentLetter = { d: Draft; tone: StageTone; label: string };
+type RecentLetter = { d: Draft; tone: StageTone; label: string; parts: RecentLabelParts };
 
 /** Nested placeholder rows while the first workspace pull is in flight. */
 const LOADING_ROWS = 2;
@@ -702,15 +712,24 @@ function useRecentLetters(mode: Mode): RecentLetter[] {
       .filter((d) => !d.isTemplateSource && d.mode === mode)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 3);
-    const labels = recentLabels(list);
     // The same needs-you rule as the Letters list (rows.ts): a letter waiting
     // for your own approval is amber here too, not lilac (FOUNDATION-X8).
+    const journeys = new Map(
+      list.map((d) => [
+        d.id,
+        getJourney(d, latestReviewIn(requests, d.id), {
+          viewerIsApprover: viewerCanApprove && viewerIsNamedApprover(d, me, legalName),
+        }),
+      ])
+    );
+    // The hover text says where each letter is and when it was started, so
+    // two similar letters can be told apart (FOUNDATION-X12).
+    const parts = recentLabelParts(list, (d) => journeys.get(d.id)?.whereLabel);
     return list.map((d, i) => ({
       d,
-      label: labels[i],
-      tone: getJourney(d, latestReviewIn(requests, d.id), {
-        viewerIsApprover: viewerCanApprove && viewerIsNamedApprover(d, me, legalName),
-      }).listTone,
+      label: parts[i].text,
+      parts: parts[i],
+      tone: journeys.get(d.id)!.listTone,
     }));
   }, [drafts, requests, mode, me, legalName, viewerCanApprove]);
 }
@@ -813,7 +832,8 @@ function NavLetters({
   const isCollapsed = state === "collapsed" && !isMobile;
 
   const choosingForLetter = useChoosingForLetter(mode);
-  const active = LETTER_PAGES.some((p) => under(path, p)) || path.startsWith("/editor/") || choosingForLetter;
+  const active =
+    LETTER_PAGES.some((p) => under(path, p)) || path.startsWith("/editor/") || choosingForLetter || isLetterWizardPath(path);
 
   return (
     <SidebarMenuItem>
@@ -825,7 +845,9 @@ function NavLetters({
       >
         <Link
           to="/letters"
-          aria-current={path === "/letters" ? "page" : undefined}
+          // The Letters page itself, or (aria-current="true") a page within
+          // Letters: a letter, Bulk letters, or the wizard for a new letter.
+          aria-current={path === "/letters" ? "page" : active ? "true" : undefined}
           onClick={(e) => {
             if (isCollapsed) {
               e.preventDefault();
@@ -854,7 +876,7 @@ function NavLetters({
             ) : recent.length === 0 ? (
               <li className="px-2.5 py-2 text-[13px] text-[var(--ds-subtle)]">No letters yet</li>
             ) : (
-              recent.map(({ d, tone, label }) => {
+              recent.map(({ d, tone, label, parts }) => {
                 const href = `/editor/${d.id}`;
                 const on = path === href || path.startsWith(`${href}/`);
                 return (
@@ -862,10 +884,12 @@ function NavLetters({
                     <SidebarMenuButton
                       asChild
                       isActive={on}
+                      // The row menu shows on hover only, so the room for it is
+                      // only taken then (FOUNDATION-X14).
                       className={cn(SUB_BUTTON, "justify-between hover:pr-8 focus-within:pr-8")}
                     >
-                      <Link to={href} title={displayTitleFor(d)} aria-current={on ? "page" : undefined}>
-                        <span className="min-w-0 flex-1 truncate">{label}</span>
+                      <Link to={href} title={parts.hover} aria-current={on ? "page" : undefined}>
+                        <RecentLabelText key={parts.title} parts={parts} />
                         <DraftMarker d={d} tone={tone} />
                       </Link>
                     </SidebarMenuButton>
@@ -926,17 +950,25 @@ function NavMatters({
   allDrafts,
   loading,
   expanded,
+  limit,
   setExpanded,
 }: {
   matters: Matter[];
   allDrafts: Draft[];
   loading: boolean;
   expanded: boolean;
+  /** Nested rows that fit, "View all" included (sidebarFit.ts); none means all fit. */
+  limit?: number;
   setExpanded: (open: boolean) => void;
 }) {
   const loc = useLocation();
   const path = loc.pathname;
   const activeMatterId = path.startsWith("/matters/") ? path.slice("/matters/".length) : null;
+  // With more matters than fit, show as many as fit (always the open one),
+  // then "View all", so Employees, Templates, Experts and Reports stay in
+  // view (FOUNDATION-X15). The open matter's letters are on its page then.
+  const cut = limit != null && limit - 1 < allMatters.length;
+  const shown = cut ? mattersToShow(allMatters, activeMatterId, limit - 1) : allMatters;
 
   return (
     <SidebarMenuItem data-tour="nav-matters">
@@ -961,10 +993,10 @@ function NavMatters({
           ) : allMatters.length === 0 ? (
             <li className="px-2.5 py-2 text-[13px] text-[var(--ds-subtle)]">No matters yet</li>
           ) : (
-            allMatters.map((m) => {
+            shown.map((m) => {
               const href = `/matters/${m.id}`;
               const isActive = activeMatterId === m.id;
-              const matterDrafts = isActive ? draftsInMatter(allDrafts, m.id) : [];
+              const matterDrafts = isActive && !cut ? draftsInMatter(allDrafts, m.id) : [];
               return (
                 <SidebarMenuItem key={m.id}>
                   <SidebarMenuButton asChild isActive={isActive} className={cn(SUB_BUTTON, "justify-start")}>
@@ -999,9 +1031,56 @@ function NavMatters({
               );
             })
           )}
+          {cut && !loading && <SubRow href="/matters" label={`View all ${allMatters.length}`} isActive={false} />}
         </SubList>
       )}
     </SidebarMenuItem>
+  );
+}
+
+/** The first `count` matters, swapping in the open one if it would be left out. */
+function mattersToShow(all: Matter[], activeId: string | null, count: number): Matter[] {
+  const first = all.slice(0, Math.max(1, count));
+  const active = activeId ? all.find((m) => m.id === activeId) : undefined;
+  if (!active || first.includes(active)) return first;
+  return [...first.slice(0, -1), active];
+}
+
+/**
+ * A recent letter's name: the letter part ends in an ellipsis if it must,
+ * but the person never does ("Probation outc... · S. Patel", never
+ * "Probation outcome · ..."). When the letter part would be cut and the
+ * type has a shorter name, that is used instead ("Probation · S. Patel");
+ * the full name is on hover (FOUNDATION-X14).
+ */
+function RecentLabelText({ parts }: { parts: RecentLabelParts }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    if (!parts.compact) return;
+    const check = () => {
+      const el = ref.current;
+      // Hidden (the rail, a closed phone sheet): nothing to measure yet.
+      if (!el || el.clientWidth === 0) return;
+      if (el.scrollWidth > el.clientWidth + 0.5) setCompact(true);
+    };
+    check();
+    let live = true;
+    // The web font can be narrower than the fallback the first check saw.
+    document.fonts?.ready.then(() => {
+      if (live && !compact) check();
+    });
+    return () => {
+      live = false;
+    };
+  }, [parts.compact, compact]);
+  return (
+    <span className="flex min-w-0 flex-1">
+      <span ref={ref} className="min-w-0 truncate">
+        {compact && parts.compact ? parts.compact : parts.title}
+      </span>
+      {parts.who && <span className="shrink-0 whitespace-pre">{` · ${parts.who}`}</span>}
+    </span>
   );
 }
 

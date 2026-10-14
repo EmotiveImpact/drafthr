@@ -166,7 +166,8 @@ export function parseCsv(raw: string): CsvParseResult {
       // is sent to the offending record rather than the header.
       warnings.push({
         rowIndex: fileRow,
-        message: `Row ${fileRow} missing 'employee_name', so it will be skipped.`,
+        // Plain words, not the column key (LISTS-X28).
+        message: `Row ${fileRow} has no name, so it will be skipped.`,
       });
       continue;
     }
@@ -345,6 +346,15 @@ export function rowToAnswers(
 /** "employee_job_title" → "job title", for plain-words copy. */
 export function humaniseField(key: string): string {
   return foldKey(key).replace(/^employee_/, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * What a row is missing, in the words the preview's row lines use:
+ * ["employee_job_title", "department"] → "no job title, no department".
+ * The column keys never reach the screen (LISTS-X28).
+ */
+export function missingFieldsLabel(fields: string[]): string {
+  return fields.map((f) => `no ${humaniseField(f)}`).join(", ");
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

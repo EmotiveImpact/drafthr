@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayCsvValue, findMissingMergeValues, parseCsv, rowSummary, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
+import { displayCsvValue, findMissingMergeValues, missingFieldsLabel, parseCsv, rowSummary, rowToAnswers, sampleCsvFor, sampleHeadersFor } from "./csv";
 import { placeholderKeysFor } from "@/lib/bulk/mailmerge";
 
 describe("sampleHeadersFor", () => {
@@ -126,7 +126,17 @@ describe("parseCsv", () => {
     expect(r.rows).toEqual([{ employee_name: "Jane", employee_job_title: "Analyst" }]);
     expect(r.warnings).toHaveLength(1);
     expect(r.warnings[0].rowIndex).toBe(2);
-    expect(r.warnings[0].message).toMatch(/Row 2 missing 'employee_name'/);
+    expect(r.warnings[0].message).toBe("Row 2 has no name, so it will be skipped.");
+    // Plain words: the column key never reaches the screen (LISTS-X28).
+    expect(r.warnings[0].message).not.toMatch(/employee_name/);
+  });
+});
+
+describe("missingFieldsLabel", () => {
+  it("names what a row is missing in plain words, not column keys", () => {
+    expect(missingFieldsLabel(["employee_job_title"])).toBe("no job title");
+    expect(missingFieldsLabel(["employee_job_title", "effective_date"])).toBe("no job title, no effective date");
+    expect(missingFieldsLabel(["employee_job_title", "department"])).not.toMatch(/_/);
   });
 });
 
