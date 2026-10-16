@@ -1554,6 +1554,9 @@ export function Editor() {
                   draft={draft}
                   readOnly={!canvasEditable || streaming}
                   actionsRef={pagedEditorActionsRef}
+                  // The Home ribbon formats the page, so pagedly's own toolbar
+                  // only shows where there is no ribbon (phones, focus mode).
+                  toolbar={isPhone || focusMode}
                 />
                 {/* The same numbered citation boxes as the Sections view. */}
                 <CitationLayer draft={draft} containerRef={canvasRef} onViewSource={openEvidence} />

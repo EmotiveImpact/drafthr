@@ -11,7 +11,7 @@ import "pagedly/styles.css";
 import type { Draft } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { toLetterDraft } from "@/lib/letters/toLetterDraft";
-import type { PagedEditorActions } from "./types";
+import type { PageFormatState, PagedEditorActions } from "./types";
 
 /** pagedly lays out an A4 page at 794px; below this container width it is
  *  zoomed down to fit (see the effect in the component). */
@@ -152,6 +152,7 @@ export function PagedlyDocEditor({
   suggesting = false,
   onCommentAdd,
   onCommentClick,
+  toolbar = true,
 }: {
   draft: Draft;
   /** Render non-editable (e.g. while a draft is locked for review). Pagination
@@ -172,6 +173,9 @@ export function PagedlyDocEditor({
   onCommentAdd?: (commentId: string, quotedText: string) => void;
   /** An existing comment highlight was clicked. */
   onCommentClick?: (commentId: string) => void;
+  /** pagedly's own toolbar above the page. The letter editor turns it off and
+   *  formats the page from its Home ribbon instead (through actionsRef). */
+  toolbar?: boolean;
 }) {
   const updateSection = useDraftStore((s) => s.updateSection);
   const editorRef = useRef<EditorHandle | null>(null);
@@ -287,9 +291,37 @@ export function PagedlyDocEditor({
   }, [live.sections]);
   const minutes = Math.max(1, Math.round(words / 200));
 
+  // The format at the caret, for the ribbon. pagedly sets editorRef after its
+  // first render (and again after a review-mode remount), so attach to its
+  // state feed once the handle is there, then pass each state on.
+  const formatListeners = useRef(new Set<(state: PageFormatState) => void>());
+  const lastFormat = useRef<PageFormatState | null>(null);
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    let frame = 0;
+    const push = (state: PageFormatState) => {
+      lastFormat.current = state;
+      formatListeners.current.forEach((l) => l(state));
+    };
+    const attach = () => {
+      const ed = editorRef.current;
+      if (!ed) {
+        frame = requestAnimationFrame(attach);
+        return;
+      }
+      push(ed.getState());
+      unsub = ed.subscribe(push);
+    };
+    attach();
+    return () => {
+      cancelAnimationFrame(frame);
+      unsub?.();
+    };
+  }, [mountVersion]);
+
   // Bridge pagedly's imperative handle to the app's PagedEditorActions contract
-  // so the top menubar's Edit menu (Undo / Redo / Select all / Find) keeps
-  // driving whatever engine is mounted.
+  // so the top menubar's Edit menu (Undo / Redo / Select all / Find) and the
+  // Home ribbon's format tools keep driving whatever engine is mounted.
   useEffect(() => {
     if (!actionsRef) return;
     actionsRef.current = {
@@ -297,6 +329,14 @@ export function PagedlyDocEditor({
       redo: () => editorRef.current?.redo(),
       selectAll: () => editorRef.current?.selectAll(),
       openFind: () => editorRef.current?.openFind(),
+      run: (command, value) => editorRef.current?.runCommand(command, value),
+      subscribe: (listener) => {
+        formatListeners.current.add(listener);
+        if (lastFormat.current) listener(lastFormat.current);
+        return () => {
+          formatListeners.current.delete(listener);
+        };
+      },
     };
     return () => {
       actionsRef.current = null;
@@ -428,7 +468,7 @@ export function PagedlyDocEditor({
         readOnly={readOnly}
         onCommentAdd={enableComments ? onCommentAdd : undefined}
         onCommentClick={reviewMode ? onCommentClick : undefined}
-        toolbar
+        toolbar={toolbar}
         // Stationary: the toolbar sits above the page instead of floating
         // over the letter text as it scrolls.
         toolbarPosition="stationary"
