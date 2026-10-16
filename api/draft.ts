@@ -6,7 +6,7 @@
  */
 
 import { streamText, type ModelMessage } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { anthropicModel } from "./_utils/anthropic-provider.js";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
 import { enforceProductionSession } from "./_utils/production-auth.js";
@@ -35,7 +35,7 @@ function requireAnthropicApiKey(): string {
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
   const apiKey = requireAnthropicApiKey();
-  return createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(modelName);
+  return anthropicModel(apiKey, modelName);
 }
 
 export const config = {
