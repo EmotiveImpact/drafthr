@@ -1,5 +1,5 @@
-// Walk every audit event for a tenant in insertion order and recompute the
-// chain. Returns ok=true if every row's row_hash matches sha256(prev_hash ||
+// Walk every audit event for a tenant in chain order (seq ascending) and
+// recompute the chain. seq must run 1, 2, 3, ... with no gaps or repeats. Returns ok=true if every row's row_hash matches sha256(prev_hash ||
 // ':' || canonical(payload) || ':' || kind || ':' || subject_id || ':' ||
 // created_at_epoch_ms), or the first mismatch.
 //
@@ -17,7 +17,7 @@ export type VerifyAuditChainResult =
       brokenAtId: string;
       expected: string;
       actual: string;
-      reason: "row_hash_mismatch" | "prev_hash_mismatch";
+      reason: "row_hash_mismatch" | "prev_hash_mismatch" | "seq_gap";
     };
 
 export async function verifyAuditChain(tenantId: string): Promise<VerifyAuditChainResult> {
@@ -26,10 +26,37 @@ export async function verifyAuditChain(tenantId: string): Promise<VerifyAuditCha
     .select()
     .from(auditEvents)
     .where(eq(auditEvents.tenantId, tenantId))
-    .orderBy(asc(auditEvents.createdAt), asc(auditEvents.id));
+    .orderBy(asc(auditEvents.seq));
 
+  return verifyAuditRows(rows);
+}
+
+type VerifiableRow = {
+  id: string;
+  seq: number | string;
+  prevHash: string;
+  rowHash: string;
+  payloadJson: unknown;
+  kind: string;
+  subjectId: string;
+  createdAt: Date;
+};
+
+/** Pure chain walk over rows already sorted by seq. Exported for tests. */
+export function verifyAuditRows(rows: VerifiableRow[]): VerifyAuditChainResult {
   let expectedPrev = GENESIS_PREV_HASH;
+  let expectedSeq = 1;
   for (const row of rows) {
+    if (Number(row.seq) !== expectedSeq) {
+      return {
+        ok: false,
+        brokenAtId: row.id,
+        expected: String(expectedSeq),
+        actual: String(row.seq),
+        reason: "seq_gap",
+      };
+    }
+    expectedSeq += 1;
     if (row.prevHash !== expectedPrev) {
       return {
         ok: false,

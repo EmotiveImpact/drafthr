@@ -87,8 +87,16 @@ stays request-based). Code: `api/_utils/stripe.ts`,
 2. `npm run db:migrate` (applies 0012 — payments tables).
 3. In Stripe → Developers → Webhooks, add an endpoint
    `https://<your-domain>/api/marketplace/stripe-webhook` for events
-   `account.updated` and `checkout.session.completed`; copy its signing secret
-   into `STRIPE_WEBHOOK_SECRET`.
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `checkout.session.async_payment_failed`, `charge.refunded`,
+   `charge.dispute.created` and `charge.dispute.closed`; copy its signing
+   secret into `STRIPE_WEBHOOK_SECRET`. Add a second endpoint on the same URL
+   listening to events on connected accounts, for `account.updated`, and copy
+   its secret into `STRIPE_WEBHOOK_SECRET_CONNECT`. Without the async events a
+   Direct Debit payment never leaves "processing"; without the refund and
+   dispute events a refunded booking keeps its draft access and the
+   consultant keeps the transfer. The consultant's share link to the draft is
+   only minted once the booking is paid.
 4. `vercel --prod`, then test in **Stripe test mode**: a consultant connects
    payouts (Profile → Connect Stripe), an HR user pays an accepted booking
    (My bookings → Pay for review).
@@ -106,8 +114,14 @@ mode** (v0.21.1): the `/pricing` storefront, subscriptions (Starter/Pro/Business
 packs, the **AI critique** feature (spends 1 credit, Claude Opus 4.8, refunded on
 failure), and the **per-cycle credit drip**. Idempotent webhooks mirror Stripe →
 `subscriptions` / `entitlement_purchases` / `credit_ledger`. Migrations 0013,
-0016, 0017 are **already applied** to prod, so **no new migration is needed to go
-live**. The hard paywall (server gate `assertCanCreateLetter` + client
+0016, 0017 are **already applied** to prod. **Migrations 0018 to 0021 are new and
+must be applied before this code is deployed** (`node scripts/run-migrations-direct.mjs`):
+the code reads `drafts.revision` / `drafts.deleted_at`,
+`entitlement_purchases.refunded_at` and `audit_events.seq`, so deploying first
+breaks draft sync, the paywall gate and audit writes. Apply them immediately
+before promoting the deploy: once 0021 makes `audit_events.seq` NOT NULL, the
+previous release's audit appends fail (logged and skipped) until the new code
+is live. The hard paywall (server gate `assertCanCreateLetter` + client
 `<PaywallGate>`) is complete but **env-gated OFF** via `DRAFTHR_ENFORCE_PAYWALL`.
 
 Direct-charge billing is separate from the marketplace's Connect flow above; it
@@ -127,8 +141,18 @@ has its **own** webhook endpoint + signing secret. Code:
    Webhooks, endpoint `https://<domain>/api/marketplace/billing-webhook`, events:
    `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated`, `customer.subscription.deleted`,
-   `invoice.paid`, `invoice.payment_failed`. Copy its signing secret into
-   `STRIPE_BILLING_WEBHOOK_SECRET`.
+   `invoice.paid`, `invoice.payment_failed`, `charge.refunded`,
+   `checkout.session.async_payment_succeeded`. Copy its signing secret into
+   `STRIPE_BILLING_WEBHOOK_SECRET`. (An existing test-mode endpoint needs the
+   last two added too: without `charge.refunded` a refunded letter, pack or
+   credit purchase keeps working and keeps its credits; without the async
+   event a one-off paid by Direct Debit is never delivered.)
+   **Set up the Billing Portal in LIVE mode:** Stripe → Settings → Billing →
+   Customer portal: save a configuration that allows cancelling, updating the
+   card and switching between the six HR plan prices only (never Employee
+   Plus, which is billed to the person, not the workspace). "Manage billing"
+   fails until a live default configuration exists. To use a non-default one,
+   set its id in `STRIPE_BILLING_PORTAL_CONFIGURATION`.
 5. **Re-do the marketplace Connect webhook in live mode** too (see the section
    above — `STRIPE_WEBHOOK_SECRET` + `STRIPE_WEBHOOK_SECRET_CONNECT`).
 6. **Flip enforcement:** set `DRAFTHR_ENFORCE_PAYWALL=1` on Vercel prod.

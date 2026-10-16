@@ -164,7 +164,7 @@ export const COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "COBRA continuation notice",
     description:
-      "US terminations from group-health-plan employers trigger COBRA notice within 14 days (29 USC §1166).",
+      "US terminations from group-health-plan employers trigger a COBRA election notice (29 USC §1166): employer to plan administrator within 30 days, administrator to employee within 14 days of that.",
     match: { kind: "regex", value: "COBRA", flags: "i" },
     recommendation:
       "Reference COBRA continuation: 'You will receive a separate notice describing your right to elect COBRA continuation coverage for group health benefits.'",

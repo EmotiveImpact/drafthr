@@ -118,13 +118,19 @@ async function main() {
   if (!result.ok || result.rowCount !== 3) throw new Error(`expected 3 rows, got ${JSON.stringify(result)}`);
   console.log("  ✓ chain ok, 3 rows");
 
-  console.log("\n== 7. Tamper with row 0, confirm break ==");
-  await db.execute(
-    sql`UPDATE audit_events SET payload_json = '{"letterType":"TAMPERED"}'::jsonb WHERE tenant_id = ${tenant.id} AND kind = 'draft.created'`,
-  );
-  const tampered = await verifyAuditChain(tenant.id);
-  if (tampered.ok) throw new Error("tampering not detected — chain hash regression");
-  console.log("  ✓ chain broke at row", tampered.brokenAtId, "reason:", tampered.reason);
+  console.log("\n== 7. Tamper with row 0, confirm the database refuses ==");
+  let tamperRejected = false;
+  try {
+    await db.execute(
+      sql`UPDATE audit_events SET payload_json = '{"letterType":"TAMPERED"}'::jsonb WHERE tenant_id = ${tenant.id} AND kind = 'draft.created'`,
+    );
+  } catch {
+    tamperRejected = true;
+  }
+  if (!tamperRejected) throw new Error("append-only trigger did not reject a direct UPDATE");
+  const afterTamper = await verifyAuditChain(tenant.id);
+  if (!afterTamper.ok) throw new Error(`chain broken after rejected tamper: ${JSON.stringify(afterTamper)}`);
+  console.log("  ✓ tamper rejected by trigger; chain still verifies");
 
   console.log("\n== 8. Cleanup ==");
   await db.execute(sql`DELETE FROM ${tenants} WHERE id = ${tenant.id}`);

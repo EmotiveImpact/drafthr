@@ -7,9 +7,13 @@ import { useProfileStore } from "@/lib/profile";
 import { notifyComment } from "@/lib/collab-notify";
 import {
   type CommentIdentity,
+  type CommentViewer,
+  canDeleteComment,
+  identityForComment,
   listIdentities,
   meIdentity,
 } from "@/lib/comments/identity";
+import { useCommentViewer } from "@/lib/comments/useCommentViewer";
 import { Avatar, EmptyState } from "@/components/ds";
 
 type PendingComment = {
@@ -47,6 +51,7 @@ export function CommentsPanel({
 
   const identities = useMemo(() => listIdentities(draft, profile), [draft, profile]);
   const me = useMemo(() => meIdentity(profile), [profile]);
+  const viewer = useCommentViewer();
 
   const [showResolved, setShowResolved] = useState(false);
   const [composerSection, setComposerSection] = useState<string | null>(null);
@@ -100,6 +105,7 @@ export function CommentsPanel({
         sectionId,
         parentId,
         authorId: me.id,
+        authorUserId: viewer.userId ?? undefined,
         authorName: me.name,
         authorEmail: me.email,
         body: text,
@@ -199,6 +205,7 @@ export function CommentsPanel({
               key={root.id}
               draftId={draft.id}
               identities={identities}
+              viewer={viewer}
               me={me}
               root={root}
               replies={replies}
@@ -216,6 +223,7 @@ export function CommentsPanel({
 function Thread({
   draftId: _draftId,
   identities,
+  viewer,
   me,
   root,
   replies,
@@ -225,6 +233,7 @@ function Thread({
 }: {
   draftId: string;
   identities: CommentIdentity[];
+  viewer: CommentViewer;
   me: CommentIdentity | undefined;
   root: Comment;
   replies: Comment[];
@@ -264,6 +273,7 @@ function Thread({
       <CommentRow
         comment={root}
         identities={identities}
+        viewer={viewer}
         onDelete={() => onDelete(root.id)}
         onResolve={() => onResolve(root.id, !root.resolved)}
       />
@@ -279,6 +289,7 @@ function Thread({
           <CommentRow
             comment={r}
             identities={identities}
+            viewer={viewer}
             onDelete={() => onDelete(r.id)}
           />
         </Box>
@@ -319,15 +330,19 @@ function Thread({
 function CommentRow({
   comment,
   identities,
+  viewer,
   onDelete,
   onResolve,
 }: {
   comment: Comment;
   identities: CommentIdentity[];
+  viewer: CommentViewer;
   onDelete: () => void;
   onResolve?: () => void;
 }) {
-  const ident = identities.find((i) => i.id === comment.authorId);
+  // A teammate's synced comment renders under their name, never as "me".
+  const ident = identityForComment(comment, identities, viewer);
+  const mayDelete = canDeleteComment(comment, viewer);
   return (
     <Flex gap="2" align="start">
       <Avatar
@@ -341,7 +356,7 @@ function CommentRow({
         <Flex align="center" gap="2" justify="between">
           <Box className="min-w-0">
             <Text size="1" weight="medium" as="div" className="truncate">
-              {comment.authorName}
+              {ident.name}
             </Text>
             <Text size="1" color="gray" as="div">
               {formatTime(comment.createdAt)}
@@ -359,9 +374,11 @@ function CommentRow({
                 <Check className="size-3" />
               </IconButton>
             )}
-            <IconButton size="1" variant="ghost" color="gray" onClick={onDelete} aria-label="Delete">
-              <Trash2 className="size-3" />
-            </IconButton>
+            {mayDelete && (
+              <IconButton size="1" variant="ghost" color="gray" onClick={onDelete} aria-label="Delete">
+                <Trash2 className="size-3" />
+              </IconButton>
+            )}
           </Flex>
         </Flex>
         <Text size="1" as="p" mt="1" className="leading-relaxed whitespace-pre-wrap">

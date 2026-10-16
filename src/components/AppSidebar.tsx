@@ -72,6 +72,7 @@ import { deriveNotifications, topSeverity } from "@/lib/notifications";
 import { SidebarMenuBadge } from "@/components/ui/sidebar";
 import { useSearchPaletteToggle } from "@/components/SearchPaletteContext";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import { getLetterMeta } from "@/lib/letters/catalog";
 
 /**
  * App sidebar.
@@ -685,7 +686,8 @@ function NavRecentDrafts({ mode }: { mode: SidebarMode | null }) {
           <SidebarMenu>
             {list.map((d) => {
               const href = `/editor/${d.id}`;
-              const label = d.letterType.replace(/_/g, " ");
+              const label =
+                d.title?.trim() || getLetterMeta(d.letterType)?.shortTitle || d.letterType.replace(/_/g, " ");
               const sub =
                 d.mode === "employer"
                   ? d.employee.legalName || "(no recipient)"

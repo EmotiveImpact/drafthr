@@ -212,7 +212,19 @@ function BookingRow({ booking }: { booking: Booking }) {
         </div>
       )}
 
-      {booking.status === "accepted" && !showDeliver && (
+      {booking.status === "accepted" && booking.paymentStatus !== "paid" && (
+        <p className="mt-3 text-[12px] text-[var(--ds-muted)]">
+          {booking.paymentStatus === "processing"
+            ? "Payment is processing. You can start once it clears and the draft opens."
+            : booking.paymentStatus === "refunded" ||
+                booking.paymentStatus === "disputed" ||
+                booking.paymentStatus === "dispute_lost"
+              ? "The payment for this booking was refunded or disputed, so work is paused and the draft is closed."
+              : "Waiting for HR to pay. The draft opens and you can start once the booking is paid."}
+        </p>
+      )}
+
+      {booking.status === "accepted" && booking.paymentStatus === "paid" && !showDeliver && (
         <div className="mt-3 flex gap-2">
           <button
             type="button"

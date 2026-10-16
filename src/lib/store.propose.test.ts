@@ -84,7 +84,19 @@ describe("proposeSectionChange", () => {
     // nested/double-marked artifact (no <ins> inside <del> or vice-versa).
     expect(afterSecond.html).not.toMatch(/<(ins|del)[^>]*>[^<]*<(ins|del)/i);
   });
-  it("refuses to stage a proposal that is textually identical (no marks → no flattening)", async () => {
+  it("refuses to stage a plain-text proposal that is textually identical (no marks → no flattening)", async () => {
+    const { useDraftStore } = await import("./store");
+    const plain = "<p>Same plain text.</p>";
+    useDraftStore.setState({ drafts: { draft_1: baseDraft(plain) }, matters: {} });
+
+    useDraftStore.getState().proposeSectionChange("draft_1", "section_1", change("<p>Same plain text.</p>"));
+
+    const sec = useDraftStore.getState().drafts.draft_1.sections[0];
+    expect(sec.pendingChange).toBeUndefined();
+    expect(sec.html).toBe(plain);
+  });
+
+  it("routes formatted sections to card mode so the inline rebuild can't flatten them", async () => {
     const { useDraftStore } = await import("./store");
     const rich = "<p>Same <strong>rich</strong> text.</p>";
     useDraftStore.setState({ drafts: { draft_1: baseDraft(rich) }, matters: {} });
@@ -95,8 +107,8 @@ describe("proposeSectionChange", () => {
     useDraftStore.getState().proposeSectionChange("draft_1", "section_1", change("<p>Same rich text.</p>"));
 
     const sec = useDraftStore.getState().drafts.draft_1.sections[0];
-    expect(sec.pendingChange).toBeUndefined();
-    expect(sec.html).toBe(rich); // untouched — <strong> intact
+    expect(sec.pendingChange?.diffViewMode).toBe("card");
+    expect(sec.html).toBe(rich); // untouched: <strong> intact
   });
 
   it("accept folds the inline diff in regardless of mark attribute order", async () => {
@@ -254,3 +266,16 @@ function installMemoryLocalStorage() {
   };
   Object.defineProperty(window, "localStorage", { configurable: true, value: storage });
 }
+
+describe("reject restores the original formatting", () => {
+  it("returns the clean snapshot when nothing was edited around the marks", async () => {
+    const { useDraftStore } = await import("./store");
+    const original = "<p>Pay is 100.</p>";
+    useDraftStore.setState({ drafts: { draft_1: baseDraft(original) }, matters: {} });
+    useDraftStore.getState().proposeSectionChange("draft_1", "section_1", change("<p>Pay is 200.</p>"));
+    useDraftStore.getState().rejectSectionPending("draft_1", "section_1");
+    const sec = useDraftStore.getState().drafts.draft_1.sections[0];
+    expect(sec.html).toBe(original);
+    expect(sec.pendingChange).toBeUndefined();
+  });
+});

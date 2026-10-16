@@ -39,7 +39,14 @@ export async function readJsonRequest<T>(
     if (raw.length > maxChars) {
       return { ok: false, response: jsonError("Request body too large", 413) };
     }
-    return { ok: true, body: JSON.parse(raw) as T };
+    const body: unknown = JSON.parse(raw);
+    // Every endpoint expects a JSON object. `null`, arrays and bare values
+    // used to reach handlers that read `parsed.body.x` and throw a TypeError,
+    // which surfaced as a 500 instead of a 400.
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      return { ok: false, response: jsonError("Request body must be a JSON object", 400) };
+    }
+    return { ok: true, body: body as T };
   } catch {
     return { ok: false, response: jsonError("Invalid JSON", 400) };
   }

@@ -9,6 +9,7 @@ import { requireSessionAndTenant } from "../../../_utils/session-with-tenant.js"
 import { getDb } from "../../../../src/db/index.js";
 import { invites } from "../../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../../src/db/audit.js";
+import { serverUuidOrNull } from "../../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -24,8 +25,11 @@ export async function POST(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<Body>(req);
   if (!parsed.ok) return parsed.response;
-  const inviteId = typeof parsed.body.inviteId === "string" ? parsed.body.inviteId.trim() : "";
-  if (!inviteId) return jsonError("inviteId required", 400);
+  const rawInviteId = typeof parsed.body.inviteId === "string" ? parsed.body.inviteId.trim() : "";
+  if (!rawInviteId) return jsonError("inviteId required", 400);
+  // A non-uuid id would raise Postgres 22P02 and surface as a 500.
+  const inviteId = serverUuidOrNull(rawInviteId);
+  if (!inviteId) return jsonError("Invalid inviteId", 400);
 
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;

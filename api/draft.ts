@@ -9,7 +9,7 @@ import { streamText, type ModelMessage } from "ai";
 import { anthropicModel } from "./_utils/anthropic-provider.js";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
-import { enforceProductionSession } from "./_utils/production-auth.js";
+import { rejectAiGeneration } from "./_utils/ai-access.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-6" as const;
 
@@ -30,6 +30,17 @@ function requireAnthropicApiKey(): string {
     throw new Error("ANTHROPIC_API_KEY is not configured on the server.");
   }
   return apiKey;
+}
+
+/**
+ * Whether a model still accepts sampling parameters. Opus 4.7 and every later
+ * model reject `temperature`/`top_p`/`top_k` with a 400, so sending one made
+ * every generation fail when a user picked Opus. Only the older models listed
+ * here take a temperature; for everything else it is left out.
+ */
+const SAMPLING_MODELS = /^claude-(sonnet-4-6|haiku-4-5|opus-4-6|sonnet-4-5|opus-4-5)\b/;
+function temperatureFor(modelName: string, temperature: number | undefined): number | undefined {
+  return SAMPLING_MODELS.test(modelName) ? temperature : undefined;
 }
 
 function buildModel(requested?: string) {
@@ -63,6 +74,34 @@ type DraftRequest = {
 
 const MAX_EXTRA_HINT_CHARS = 4_000;
 
+// Input-side spend cap, the other half of the output clamp below. The real
+// section prompt (master system prompt, evidence, prior sections) is well
+// under this; without it an authenticated caller could send ~1M tokens per
+// request. Reject rather than truncate: a silently cut letter context would
+// produce confidently wrong output.
+const MAX_INPUT_CHARS = 300_000;
+const MAX_MESSAGES = 60;
+
+/**
+ * Why a client-supplied messages[] is unacceptable, or null when it's fine.
+ * Only the first message may carry the system role (the letter's master
+ * prompt); a system message anywhere else would let user-controlled text
+ * speak with system authority.
+ */
+export function rejectDraftMessages(messages: unknown[]): string | null {
+  if (messages.length > MAX_MESSAGES) return "Too many messages";
+  let total = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i] as { role?: unknown; content?: unknown } | null;
+    if (!m || typeof m !== "object") return "Invalid message";
+    if (m.role !== "user" && m.role !== "assistant" && m.role !== "system") return "Invalid message role";
+    if (m.role === "system" && i !== 0) return "Only the first message may be a system message";
+    total += typeof m.content === "string" ? m.content.length : JSON.stringify(m.content ?? "").length;
+    if (total > MAX_INPUT_CHARS) return "This request is too long to generate in one pass";
+  }
+  return null;
+}
+
 // Server-side ceiling on model output. The client picks maxTokens for the
 // editor's short-vs-long generations, but an authenticated user could
 // otherwise POST {"maxTokens": 64000} and, under the 40/min ai rate limit,
@@ -89,8 +128,6 @@ export async function POST(req: Request): Promise<Response> {
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
-  const sessionError = await enforceProductionSession(req);
-  if (sessionError) return sessionError;
 
   const parsed = await readJsonRequest<DraftRequest>(req);
   if (!parsed.ok) return parsed.response;
@@ -99,12 +136,13 @@ export async function POST(req: Request): Promise<Response> {
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return jsonError("messages[] required", 400);
   }
+  const accessError = await rejectAiGeneration(req, resolveModelName(body.model));
+  if (accessError) return accessError;
+  const messagesError = rejectDraftMessages(body.messages);
+  if (messagesError) return jsonError(messagesError, messagesError.includes("too long") ? 413 : 400);
 
-  // Bulk mail-merge: optionally prepend a system message with the hint.
-  // We *prepend* (rather than mutate an existing message) so the existing
-  // letter system prompt's structure stays intact and the hint can't
-  // contradict the master system prompt — Claude treats it as additional
-  // top-level guidance.
+  // Bulk mail-merge: optionally add a system message with the hint, as a
+  // separate message so the letter system prompt's structure stays intact.
   const hint =
     typeof body.extraSystemHint === "string"
       ? body.extraSystemHint.trim().slice(0, MAX_EXTRA_HINT_CHARS)
@@ -117,9 +155,15 @@ export async function POST(req: Request): Promise<Response> {
     body.messages[0]?.role === "system"
       ? [{ ...body.messages[0], ...cacheControl }, ...body.messages.slice(1)]
       : body.messages;
-  const messages: ModelMessage[] = hint
-    ? [{ role: "system", content: hint, ...cacheControl } as ModelMessage, ...supplied]
-    : supplied;
+  // The hint goes AFTER the master system prompt: that prompt says never to
+  // leave {{placeholders}}, and a hint placed before it was overridden by it.
+  // Keeping the master first also keeps the cached prefix identical.
+  const hintMessage = { role: "system", content: hint } as ModelMessage;
+  const messages: ModelMessage[] = !hint
+    ? supplied
+    : supplied[0]?.role === "system"
+      ? [supplied[0], hintMessage, ...supplied.slice(1)]
+      : [hintMessage, ...supplied];
 
   let cancelled = false;
   // Abort the upstream Anthropic generation when the client disconnects, so an
@@ -148,7 +192,7 @@ export async function POST(req: Request): Promise<Response> {
         const result = streamText({
           model: buildModel(body.model),
           messages,
-          temperature: clampTemperature(body.temperature),
+          temperature: temperatureFor(resolveModelName(body.model), clampTemperature(body.temperature)),
           maxOutputTokens: clampMaxTokens(body.maxTokens),
           abortSignal: controllerAbort.signal,
           onError: (err) => {
@@ -169,6 +213,11 @@ export async function POST(req: Request): Promise<Response> {
           if (!chunk) continue;
           totalTokens += 1;
           writeEvent({ delta: chunk });
+        }
+        // Output that stopped at the token cap is cut off mid-section; say so
+        // rather than letting the client save it as finished.
+        if (!cancelled && !realError && (await result.finishReason) === "length") {
+          realError = "This section hit the length limit and was cut off. Regenerate it, or ask for a shorter version.";
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : "unknown error";

@@ -4,7 +4,17 @@
  * - POST: upsert the draft (insert on first sync, update on subsequent).
  *   We use the SPA's draft.id as the row PK rather than minting our own —
  *   keeps localStorage and Postgres aligned by id without a join table.
- * - DELETE: hard-delete to match the in-store deleteDraft semantics.
+ * - DELETE: soft-delete. The row stays as a scrubbed tombstone (deleted_at)
+ *   so the pull can tell other devices to drop the draft, and an upsert of
+ *   a tombstoned id is refused with 410 instead of re-creating the letter
+ *   (and spending another letter credit). Its collaboration data (comments,
+ *   approvals, timeline) is kept for the restore window only, see
+ *   purgeExpiredTombstoneExtras.
+ *
+ * Writes are revision-checked: every accepted write bumps drafts.revision and
+ * an update must name the revision it was built on. A stale write gets 409
+ * with the current row so the client can keep both versions (see
+ * _draft-sync.ts for the rules).
  *
  * Every mutation appends an audit event under the active tenant. Returns
  * 503 when DRAFTHR_DUAL_WRITE !== 'true' so a misbehaving client can't
@@ -12,16 +22,18 @@
  *
  * Tenant ownership is verified on every update/delete (defence against IDOR).
  */
-import { and, eq, lte, inArray, desc, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, desc, isNull, isNotNull, lt, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { rejectReadOnlyMember, rejectUnauthorisedReviewDecision, rejectEditOfApprovedDraft } from "../../_utils/workspace-role.js";
 import { getDb } from "../../../src/db/index.js";
-import { customTemplates, drafts, matters, sections, entitlementPurchases } from "../../../src/db/schema.js";
+import { customTemplates, draftExtras, drafts, matters, sections, entitlementPurchases } from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
 import { assertCanCreateLetter, type ConsumeTarget } from "../../_utils/entitlements.js";
 import { isValidSectionInput } from "./_section-input.js";
+import { decideDraftWrite, RESTORE_WINDOW_MS } from "./_draft-sync.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -49,14 +61,70 @@ type DraftInput = {
   employee?: Record<string, unknown> | null;
   answers?: Record<string, unknown> | null;
   sections?: SectionInput[];
+  /** The client's own edit time. Only used for the stored updatedAt now. */
   clientRevision?: number | null;
+  /** The server revision this write was built on (from the last GET / POST). */
+  baseRevision?: number | null;
+  /** Undo of a delete from the deleting device (honoured for a short window). */
+  restore?: boolean;
 };
 
+type Db = ReturnType<typeof getDb>;
+type DraftRow = typeof drafts.$inferSelect;
+type SectionRow = typeof sections.$inferSelect;
+
+/** One draft in the shape the client merge expects (mirrors toServerPayload). */
+function serializeDraft(d: DraftRow, sectionRows: SectionRow[]) {
+  return {
+    id: d.id,
+    letterType: d.letterType,
+    mode: d.mode,
+    title: d.title,
+    jurisdiction: d.jurisdiction,
+    matterId: d.matterId,
+    reviewStatus: d.reviewStatus,
+    isTemplateSource: d.isTemplateSource,
+    templateSourceId: d.templateSourceId,
+    context: d.contextJson ?? {},
+    employer: d.employerJson ?? null,
+    employee: d.employeeJson ?? null,
+    answers: d.answersJson ?? null,
+    createdAt: d.createdAt.getTime(),
+    updatedAt: d.updatedAt.getTime(),
+    revision: d.revision ?? 0,
+    sections: sectionRows
+      .slice()
+      .sort((a, b) => a.position - b.position)
+      .map((s) => ({
+        sectionId: s.sectionId,
+        title: s.title,
+        html: s.html,
+        status: s.status,
+        position: s.position,
+      })),
+  };
+}
+
+/** The live (non-deleted) row for one draft, serialized, or null. */
+async function loadCurrentDraft(db: Db, tenantId: string, id: string) {
+  const [row] = await db
+    .select()
+    .from(drafts)
+    .where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)))
+    .limit(1);
+  if (!row || row.deletedAt) return null;
+  const sectionRows = await db
+    .select()
+    .from(sections)
+    .where(and(eq(sections.draftId, id), eq(sections.tenantId, tenantId)));
+  return serializeDraft(row, sectionRows);
+}
+
 /**
- * GET — read back every draft for the caller's active tenant, with sections
- * nested, in the SAME shape toServerPayload writes (so the client merge is
- * symmetric). Tenant-scoped; gated by the same dual-write flag as writes so
- * read+write are consistent. This is the pull half of cross-device sync.
+ * GET — read back every live draft for the caller's active tenant, with
+ * sections nested, plus the tombstones of deleted drafts so other devices can
+ * drop their local copies. Tenant-scoped; gated by the same dual-write flag as
+ * writes so read+write are consistent.
  */
 export async function GET(req: Request): Promise<Response> {
   if (process.env.DRAFTHR_DUAL_WRITE !== "true") {
@@ -80,9 +148,20 @@ export async function GET(req: Request): Promise<Response> {
     const draftRows = await db
       .select()
       .from(drafts)
-      .where(eq(drafts.tenantId, tenantId))
+      .where(and(eq(drafts.tenantId, tenantId), isNull(drafts.deletedAt)))
       .orderBy(desc(drafts.updatedAt))
       .limit(MAX_DRAFTS);
+
+    // Tombstones are tiny (id + time); the most recent ones are enough for any
+    // device that has been offline for a while to converge.
+    const tombstoneRows = await db
+      .select({ id: drafts.id, deletedAt: drafts.deletedAt })
+      .from(drafts)
+      .where(and(eq(drafts.tenantId, tenantId), isNotNull(drafts.deletedAt)))
+      .orderBy(desc(drafts.deletedAt))
+      .limit(MAX_DRAFTS);
+
+    await purgeExpiredTombstoneExtras(db, tenantId);
 
     const ids = draftRows.map((d) => d.id);
     const sectionRows = ids.length
@@ -94,42 +173,20 @@ export async function GET(req: Request): Promise<Response> {
           .where(and(inArray(sections.draftId, ids), eq(sections.tenantId, tenantId)))
       : [];
 
-    const sectionsByDraft = new Map<string, typeof sectionRows>();
+    const sectionsByDraft = new Map<string, SectionRow[]>();
     for (const s of sectionRows) {
       const list = sectionsByDraft.get(s.draftId) ?? [];
       list.push(s);
       sectionsByDraft.set(s.draftId, list);
     }
 
-    const out = draftRows.map((d) => ({
-      id: d.id,
-      letterType: d.letterType,
-      mode: d.mode,
-      title: d.title,
-      jurisdiction: d.jurisdiction,
-      matterId: d.matterId,
-      reviewStatus: d.reviewStatus,
-      isTemplateSource: d.isTemplateSource,
-      templateSourceId: d.templateSourceId,
-      context: d.contextJson ?? {},
-      employer: d.employerJson ?? null,
-      employee: d.employeeJson ?? null,
-      answers: d.answersJson ?? null,
-      createdAt: d.createdAt.getTime(),
-      updatedAt: d.updatedAt.getTime(),
-      sections: (sectionsByDraft.get(d.id) ?? [])
-        .slice()
-        .sort((a, b) => a.position - b.position)
-        .map((s) => ({
-          sectionId: s.sectionId,
-          title: s.title,
-          html: s.html,
-          status: s.status,
-          position: s.position,
-        })),
+    const out = draftRows.map((d) => serializeDraft(d, sectionsByDraft.get(d.id) ?? []));
+    const deleted = tombstoneRows.map((t) => ({
+      id: t.id,
+      deletedAt: t.deletedAt ? t.deletedAt.getTime() : 0,
     }));
 
-    return new Response(JSON.stringify({ drafts: out }), {
+    return new Response(JSON.stringify({ drafts: out, deleted }), {
       status: 200,
       headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
@@ -179,43 +236,106 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
     const titleSummary = summariseTitle(body);
     const matterId = normalizeOptionalId(body.matterId);
     const templateSourceId = normalizeOptionalId(body.templateSourceId);
-    const existingDraft = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, updatedAt: drafts.updatedAt })
+    const [existingDraft] = await db
+      .select({
+        id: drafts.id,
+        tenantId: drafts.tenantId,
+        letterType: drafts.letterType,
+        reviewStatus: drafts.reviewStatus,
+        revision: drafts.revision,
+        deletedAt: drafts.deletedAt,
+        updatedAt: drafts.updatedAt,
+        isTemplateSource: drafts.isTemplateSource,
+      })
       .from(drafts)
       .where(eq(drafts.id, body.id))
       .limit(1);
 
-    if (existingDraft.length && existingDraft[0].tenantId !== tenantId) {
+    // Decide BEFORE any paywall check: a tombstoned id is never a create, so a
+    // stale device re-sending a deleted draft can't spend a letter credit.
+    const decision = decideDraftWrite(
+      existingDraft
+        ? {
+            tenantId: existingDraft.tenantId,
+            revision: existingDraft.revision ?? 0,
+            deletedAt: existingDraft.deletedAt ?? null,
+            updatedAt: existingDraft.updatedAt ?? null,
+            reviewStatus: existingDraft.reviewStatus,
+          }
+        : null,
+      tenantId,
+      {
+        baseRevision: body.baseRevision,
+        restore: body.restore,
+        clientRevision: body.clientRevision,
+        reviewStatus: body.reviewStatus,
+      },
+      Date.now(),
+    );
+    if (decision.kind === "forbidden") {
       // Draft exists in a different tenant — refuse to overwrite (IDOR defence).
       return jsonError("Draft belongs to a different workspace", 403);
     }
-    const isCreate = existingDraft.length === 0;
+    if (decision.kind === "gone") return goneResponse(decision.deletedAt);
+    if (decision.kind === "stale") return staleResponse(db, tenantId, body.id);
+    const isCreate = decision.kind === "create";
+    const restoring = decision.kind === "update" && decision.restore;
+    // The letter tier is checked only when a letter is created, so its type is
+    // fixed from then on: an update switching a routine letter to a tribunal
+    // one would skip the tier gate. No client flow changes an existing type.
+    if (!isCreate && body.letterType !== existingDraft.letterType) {
+      return jsonError("A letter's type can't be changed after it is created", 422);
+    }
+    const decisionError = rejectUnauthorisedReviewDecision(
+      auth,
+      isCreate ? null : existingDraft.reviewStatus,
+      body.reviewStatus,
+    );
+    if (decisionError) return decisionError;
+    // Delete scrubs the stored sections, so a restore has nothing to compare
+    // the incoming text against: an approved letter could be deleted and then
+    // restored with different wording but still marked approved. A restored
+    // approved letter therefore comes back re-opened and needs approving again.
+    if (restoring && existingDraft.reviewStatus === "approved") {
+      body.reviewStatus = "draft";
+    }
+    if (!isCreate && !restoring && existingDraft.reviewStatus === "approved" && Array.isArray(body.sections)) {
+      const stored = await db
+        .select({ sectionId: sections.sectionId, title: sections.title, html: sections.html })
+        .from(sections)
+        .where(and(eq(sections.draftId, body.id), eq(sections.tenantId, tenantId)));
+      const locked = rejectEditOfApprovedDraft("approved", body.reviewStatus, stored, body.sections);
+      if (locked) {
+        return conflictResponse(
+          await loadCurrentDraft(db, tenantId, body.id),
+          "This letter is approved and locked. Re-open it for review before editing.",
+          true,
+        );
+      }
+    }
     let consume: ConsumeTarget | undefined;
-    if (isCreate) {
+    if (isCreate && !body.isTemplateSource) {
       // Hard-paywall gate (env-gated by DRAFTHR_ENFORCE_PAYWALL). Only new
       // letters are gated; edits to existing drafts always go through.
-      const gate = await assertCanCreateLetter(tenantId, auth.userRow.id);
+      // Template sources aren't letters (the allowance doesn't count them),
+      // so saving one never spends a letter purchase or pack slot.
+      // The letter type decides which one-off letter tier can authorise it.
+      const gate = await assertCanCreateLetter(tenantId, auth.userRow.id, body.letterType ?? null);
       if (!gate.ok) return jsonError(gate.reason, gate.code);
       consume = gate.consume;
-    }
-    const clientRevision = parseClientRevision(body.clientRevision);
-    if (!isCreate && (clientRevision === null || clientRevision < existingDraft[0].updatedAt.getTime())) {
-      return staleRevisionResponse();
     }
 
     const referenceError = await validateTenantReferences(db, tenantId, matterId, templateSourceId);
     if (referenceError) return referenceError;
 
-    // updatedAt must be server-authoritative. The client's revision is trusted
-    // only for the stale COMPARISON above; persisting it verbatim let a caller
-    // send a far-future epoch that poisons drafts.updatedAt and permanently
-    // 409s every subsequent legitimate write (bug #13). Clamp to now (+ a small
-    // clock-skew window) so a future value can never lock the draft.
+    // updatedAt is display metadata now (the revision does the conflict
+    // check). Clamp the client's edit time to now (+ a small clock-skew
+    // window) so a far-future value can't poison the stored timestamp.
     const MAX_SKEW_MS = 60_000;
     const nowMs = Date.now();
-    const acceptedRevision = new Date(
-      Math.min(clientRevision ?? nowMs, nowMs + MAX_SKEW_MS),
-    );
+    const clientRevision = parseClientRevision(body.clientRevision);
+    const acceptedUpdatedAt = new Date(Math.min(clientRevision ?? nowMs, nowMs + MAX_SKEW_MS));
+    const nextRevision = isCreate ? 1 : decision.expectedRevision + 1;
 
     const writeResult = await db.transaction(async (tx) => {
       if (isCreate) {
@@ -235,7 +355,8 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
           employerJson: body.employer ?? null,
           employeeJson: body.employee ?? null,
           answersJson: body.answers ?? null,
-          updatedAt: acceptedRevision,
+          updatedAt: acceptedUpdatedAt,
+          revision: nextRevision,
         });
         // Consume the entitlement that authorised this create, atomically with
         // the insert. Each guarded UPDATE flips at most one unit and returns 0
@@ -253,6 +374,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
                     and(
                       eq(entitlementPurchases.id, consume.entitlementId),
                       isNull(entitlementPurchases.consumedAt),
+                      isNull(entitlementPurchases.refundedAt),
                     ),
                   )
                   .returning({ id: entitlementPurchases.id })
@@ -263,12 +385,15 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
                     and(
                       eq(entitlementPurchases.id, consume.entitlementId),
                       sql`${entitlementPurchases.lettersUsed} < ${entitlementPurchases.lettersTotal}`,
+                      isNull(entitlementPurchases.refundedAt),
                     ),
                   )
                   .returning({ id: entitlementPurchases.id });
           if (consumed.length === 0) throw new PaywallRaceError();
         }
       } else {
+        // Compare-and-swap on the revision: a concurrent write that landed
+        // between our read and this update makes it match zero rows.
         const updated = await tx
           .update(drafts)
           .set({
@@ -278,15 +403,26 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
             title: body.title ?? null,
             jurisdiction: body.jurisdiction ?? null,
             reviewStatus: body.reviewStatus ?? "draft",
-            isTemplateSource: Boolean(body.isTemplateSource),
+            // Fixed at create: flipping it would let an ungated template
+            // save become a letter, or take a letter out of the allowance.
+            isTemplateSource: Boolean(existingDraft.isTemplateSource),
             templateSourceId,
             contextJson: body.context,
             employerJson: body.employer ?? null,
             employeeJson: body.employee ?? null,
             answersJson: body.answers ?? null,
-            updatedAt: acceptedRevision,
+            updatedAt: acceptedUpdatedAt,
+            revision: nextRevision,
+            ...(restoring ? { deletedAt: null } : {}),
           })
-          .where(and(eq(drafts.id, body.id), eq(drafts.tenantId, tenantId), lte(drafts.updatedAt, acceptedRevision)))
+          .where(
+            and(
+              eq(drafts.id, body.id),
+              eq(drafts.tenantId, tenantId),
+              eq(drafts.revision, decision.expectedRevision),
+              restoring ? isNotNull(drafts.deletedAt) : isNull(drafts.deletedAt),
+            ),
+          )
           .returning({ id: drafts.id });
         if (updated.length === 0) return { stale: true as const };
       }
@@ -310,7 +446,7 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
       }
       return { stale: false as const };
     });
-    if (writeResult.stale) return staleRevisionResponse();
+    if (writeResult.stale) return staleResponse(db, tenantId, body.id);
 
     await safelyAppendAudit({
       tenantId,
@@ -329,13 +465,17 @@ async function writeDraft(req: Request, method: "POST" | "PATCH"): Promise<Respo
             title: titleSummary,
             reviewStatus: body.reviewStatus ?? "draft",
             sectionCount: Array.isArray(body.sections) ? body.sections.length : 0,
+            ...(restoring ? { restored: true } : {}),
           },
     });
 
-    return new Response(JSON.stringify({ ok: true, id: body.id, created: isCreate }), {
-      status: isCreate ? 201 : 200,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    return new Response(
+      JSON.stringify({ ok: true, id: body.id, created: isCreate, revision: nextRevision }),
+      {
+        status: isCreate ? 201 : 200,
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      },
+    );
   } catch (err) {
     if (err instanceof PaywallRaceError) {
       return jsonError("That letter credit was just used — please refresh and choose a plan or letter.", 402);
@@ -364,7 +504,13 @@ export async function DELETE(req: Request): Promise<Response> {
   try {
     const db = getDb();
     const [existing] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId, letterType: drafts.letterType, title: drafts.title })
+      .select({
+        id: drafts.id,
+        tenantId: drafts.tenantId,
+        letterType: drafts.letterType,
+        title: drafts.title,
+        deletedAt: drafts.deletedAt,
+      })
       .from(drafts)
       .where(eq(drafts.id, id))
       .limit(1);
@@ -372,8 +518,31 @@ export async function DELETE(req: Request): Promise<Response> {
     if (existing.tenantId !== tenantId) {
       return jsonError("Draft belongs to a different workspace", 403);
     }
+    if (existing.deletedAt) {
+      return new Response(JSON.stringify({ ok: true, idempotent: true }), { status: 200 });
+    }
 
-    await db.delete(drafts).where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
+    // Soft delete: keep the row as a tombstone but scrub the letter content,
+    // so the PII the user deleted is gone while other devices can still learn
+    // the draft was deleted. The extras row stays until the restore window
+    // has passed (purgeExpiredTombstoneExtras) so an Undo keeps its authors.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(drafts)
+        .set({
+          deletedAt: new Date(),
+          revision: sql`${drafts.revision} + 1`,
+          title: null,
+          contextJson: {},
+          employerJson: null,
+          employeeJson: null,
+          answersJson: null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(drafts.id, id), eq(drafts.tenantId, tenantId)));
+      await tx.delete(sections).where(and(eq(sections.draftId, id), eq(sections.tenantId, tenantId)));
+    });
+    await purgeExpiredTombstoneExtras(db, tenantId);
 
     await safelyAppendAudit({
       tenantId,
@@ -394,6 +563,35 @@ export async function DELETE(req: Request): Promise<Response> {
   }
 }
 
+/**
+ * Delete the collaboration data (comments, approvals, timeline) of this
+ * tenant's drafts deleted longer ago than the restore window. Until then it
+ * is kept so the Undo restores it as it was: re-sent from the client instead,
+ * every teammate's comment would be stamped as the restoring user's, and a
+ * drafter's copy of reviewers' approvals would be refused. There is no
+ * scheduled job, so this runs from the tenant's own pulls and deletes.
+ * Best effort: a failure here must not fail the request.
+ */
+async function purgeExpiredTombstoneExtras(db: Db, tenantId: string): Promise<void> {
+  const cutoff = new Date(Date.now() - RESTORE_WINDOW_MS);
+  try {
+    await db.delete(draftExtras).where(
+      and(
+        eq(draftExtras.tenantId, tenantId),
+        inArray(
+          draftExtras.draftId,
+          db
+            .select({ id: drafts.id })
+            .from(drafts)
+            .where(and(eq(drafts.tenantId, tenantId), lt(drafts.deletedAt, cutoff))),
+        ),
+      ),
+    );
+  } catch (err) {
+    console.warn("[store/drafts] purging deleted drafts' extras failed", err);
+  }
+}
+
 type GuardResult =
   | { ok: true; auth: NonNullable<Awaited<ReturnType<typeof requireSessionAndTenant>>> & { ok: true } }
   | { ok: false; response: Response };
@@ -410,6 +608,8 @@ async function guardWrite(req: Request): Promise<GuardResult> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return { ok: false, response: auth.response };
   if (!auth.activeTenant) return { ok: false, response: jsonError("No active workspace", 400) };
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return { ok: false, response: readOnly };
   return { ok: true, auth };
 }
 
@@ -427,7 +627,7 @@ async function validateTenantReferences(
   // 422, NOT 409: the dual-write client treats every 409 as "stale revision"
   // and permanently marks the draft's snapshot stale (stops syncing it). A bad
   // reference is a semantic error with the payload, not a revision conflict —
-  // 409 is reserved for staleRevisionResponse().
+  // 409 is reserved for conflictResponse().
   if (matterId) {
     if (!isUuid(matterId)) return jsonError("matterId belongs to a different workspace", 422);
     const [matter] = await db
@@ -461,15 +661,46 @@ function parseClientRevision(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function staleRevisionResponse(): Response {
-  return new Response(JSON.stringify({ ok: false, error: "stale revision" }), {
-    status: 409,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
+/**
+ * 409 for a write built on an old revision (or one that would edit an approved
+ * letter). Carries the current row so the client can keep both versions
+ * instead of silently dropping one.
+ */
+function conflictResponse(
+  current: Awaited<ReturnType<typeof loadCurrentDraft>>,
+  error: string,
+  locked = false,
+): Response {
+  return new Response(
+    JSON.stringify({ ok: false, error, locked, revision: current?.revision ?? null, current }),
+    {
+      status: 409,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
     },
-  });
+  );
+}
+
+/** 409 with the current row, or 410 when a concurrent delete removed it (the
+ *  client drops or keeps its copy on 410; a 409 with no row has nothing to
+ *  merge against). */
+async function staleResponse(db: Db, tenantId: string, id: string): Promise<Response> {
+  const current = await loadCurrentDraft(db, tenantId, id);
+  return current ? conflictResponse(current, "stale revision") : goneResponse(new Date());
+}
+
+/** 410 for an upsert of a draft that was deleted (on this or another device). */
+function goneResponse(deletedAt: Date): Response {
+  return new Response(
+    JSON.stringify({ ok: false, error: "Draft was deleted", deleted: true, deletedAt: deletedAt.getTime() }),
+    {
+      status: 410,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    },
+  );
 }
 
 function isUuid(value: string): boolean {

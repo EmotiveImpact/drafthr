@@ -25,7 +25,7 @@ import { anthropicModel } from "./_utils/anthropic-provider.js";
 import { z } from "zod";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
-import { enforceProductionSession } from "./_utils/production-auth.js";
+import { rejectAiGeneration } from "./_utils/ai-access.js";
 
 /* ============================================================================
  * Inlined from server/llm-model.ts — Anthropic only.
@@ -50,6 +50,17 @@ function requireAnthropicApiKey(): string {
     throw new Error("ANTHROPIC_API_KEY is not configured on the server.");
   }
   return apiKey;
+}
+
+/**
+ * Whether a model still accepts sampling parameters. Opus 4.7 and every later
+ * model reject `temperature`/`top_p`/`top_k` with a 400, so sending one made
+ * every generation fail when a user picked Opus. Only the older models listed
+ * here take a temperature; for everything else it is left out.
+ */
+const SAMPLING_MODELS = /^claude-(sonnet-4-6|haiku-4-5|opus-4-6|sonnet-4-5|opus-4-5)\b/;
+function temperatureFor(modelName: string, temperature: number | undefined): number | undefined {
+  return SAMPLING_MODELS.test(modelName) ? temperature : undefined;
 }
 
 function buildModel(requested?: string) {
@@ -162,14 +173,13 @@ type AgentRequest = {
 // under the shared "ai" rate limit. Reject rather than truncate — a silently
 // truncated letter context would produce confidently-wrong AI output.
 const MAX_SYSTEM_CHARS = 100_000;
+const MAX_MESSAGES_CHARS = 200_000;
 
 export async function POST(req: Request): Promise<Response> {
   const originError = enforceSameOrigin(req);
   if (originError) return originError;
   const rateLimitError = rateLimit(req, { name: "ai", max: 40, windowMs: 60_000 });
   if (rateLimitError) return rateLimitError;
-  const sessionError = await enforceProductionSession(req);
-  if (sessionError) return sessionError;
 
   const parsed = await readJsonRequest<AgentRequest>(req);
   if (!parsed.ok) return parsed.response;
@@ -178,6 +188,8 @@ export async function POST(req: Request): Promise<Response> {
   if (!Array.isArray(body.messages) || body.messages.length === 0) {
     return jsonError("messages[] required", 400);
   }
+  const accessError = await rejectAiGeneration(req, resolveModelName(body.model));
+  if (accessError) return accessError;
 
   // convertToModelMessages throws on malformed UIMessage parts (unmatched tool
   // results, unknown part types). body.messages is untrusted, so guard the
@@ -187,6 +199,15 @@ export async function POST(req: Request): Promise<Response> {
     modelMessages = await convertToModelMessages(body.messages);
   } catch {
     return jsonError("Invalid messages payload", 400);
+  }
+  // The system prompt travels in `system` (capped above); a system-role
+  // message inside the conversation would let user-controlled text speak with
+  // system authority. And cap the conversation itself, like `system`.
+  if (modelMessages.some((m) => m.role === "system")) {
+    return jsonError("Invalid messages payload", 400);
+  }
+  if (JSON.stringify(modelMessages).length > MAX_MESSAGES_CHARS) {
+    return jsonError("This conversation is too long. Start a new chat.", 413);
   }
 
   if (typeof body.system === "string" && body.system.length > MAX_SYSTEM_CHARS) {
@@ -207,7 +228,7 @@ export async function POST(req: Request): Promise<Response> {
     system,
     messages: modelMessages,
     tools: agentTools,
-    temperature: 0.4,
+    temperature: temperatureFor(resolveModelName(body.model), 0.4),
     maxOutputTokens: 1100,
     onError: (err) => {
       // eslint-disable-next-line no-console

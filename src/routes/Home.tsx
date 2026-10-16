@@ -198,7 +198,7 @@ function HrDashboard() {
             </h3>
             <p className="m-0 text-[12.5px] text-[var(--ds-body)] mt-0.5 leading-snug">
               {backfillCount} unique{" "}
-              {backfillCount === 1 ? "person" : "people"} appear across your
+              {backfillCount === 1 ? "person appears" : "people appear"} across your
               drafts. Import them so future letters, matters, and the new
               Employees page link to one record per person.
             </p>

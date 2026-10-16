@@ -5,8 +5,11 @@
  *
  * Guards: same-origin + rate-limit + session; only the booking's REQUESTER (the
  * HR user who placed it) can pay for it (IDOR). Off when Stripe unconfigured.
+ *
+ * The amount charged is the price snapshot stored on the booking when it was
+ * placed, never the consultant's current rate.
  */
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -18,11 +21,10 @@ import {
   stripeConnectAccounts,
 } from "../../../src/db/schema.js";
 import { getStripe, appBaseUrl, platformFeeBps } from "../../_utils/stripe.js";
+import { applyCheckoutSession } from "../../_utils/marketplace-payments.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 
 export const config = { runtime: "nodejs" };
-
-const ISO_CURRENCY: Record<string, string> = { GBP: "gbp", USD: "usd", EUR: "eur" };
 
 export async function POST(req: Request): Promise<Response> {
   const sameOrigin = enforceSameOrigin(req);
@@ -55,6 +57,9 @@ export async function POST(req: Request): Promise<Response> {
         requesterUserId: consultantBookings.requesterUserId,
         consultantProfileId: consultantBookings.consultantProfileId,
         matterTitle: consultantBookings.matterTitle,
+        status: consultantBookings.status,
+        priceAmount: consultantBookings.priceAmount,
+        priceCurrency: consultantBookings.priceCurrency,
       })
       .from(consultantBookings)
       .where(eq(consultantBookings.id, bookingId))
@@ -66,6 +71,12 @@ export async function POST(req: Request): Promise<Response> {
     }
     if (!booking.consultantProfileId) {
       return jsonError("Booking has no specialist attached", 412);
+    }
+    // Only a booking the specialist has accepted (or already delivered) can
+    // be paid. Without this a declined or requested booking could still be
+    // charged and the money routed to the consultant.
+    if (booking.status !== "accepted" && booking.status !== "delivered") {
+      return jsonError("This booking can't be paid in its current state", 409);
     }
 
     // Idempotency / double-charge guard: never start a second checkout for a
@@ -84,6 +95,15 @@ export async function POST(req: Request): Promise<Response> {
     if (existingPayment?.status === "paid") {
       return jsonError("This booking is already paid", 409);
     }
+    // An async method (e.g. Direct Debit) is still settling: a second checkout
+    // would take the money twice once both settle.
+    if (existingPayment?.status === "processing") {
+      return jsonError("A payment for this booking is still processing", 409);
+    }
+    // Refunded or disputed bookings are closed; they can't be paid again.
+    if (existingPayment && !["unpaid", "failed"].includes(existingPayment.status)) {
+      return jsonError("This booking can't be paid in its current state", 409);
+    }
     // Expire any prior unpaid Checkout session before minting a new one. Stripe
     // sessions stay completable for ~24h, so without this a click-Pay → Back →
     // click-Pay-again (or a resumed stale tab) leaves TWO live sessions for the
@@ -92,6 +112,19 @@ export async function POST(req: Request): Promise<Response> {
     // hiding the duplicate from reconciliation. Best-effort: expiring a session
     // that's already completed/expired throws, which we ignore.
     if (existingPayment?.checkoutSessionId) {
+      // If the prior session was actually paid but our webhook missed it (or
+      // failed to record it), reconcile now instead of charging again.
+      try {
+        const prior = await stripe.checkout.sessions.retrieve(existingPayment.checkoutSessionId);
+        if (prior.payment_status === "paid") {
+          // Same verification as the webhook (booking id, amount, currency),
+          // which also opens draft access.
+          const applied = await applyCheckoutSession(db, prior, "completed");
+          if (applied === "paid") return jsonError("This booking is already paid", 409);
+        }
+      } catch (err) {
+        console.warn("[stripe-checkout] could not retrieve prior session", err);
+      }
       try {
         await stripe.checkout.sessions.expire(existingPayment.checkoutSessionId);
       } catch (err) {
@@ -108,16 +141,19 @@ export async function POST(req: Request): Promise<Response> {
       return jsonError("This specialist isn't set up to take payment yet", 412);
     }
 
+    // Name only: the price comes from the booking's snapshot.
     const [profile] = await db
-      .select({ price: consultantProfiles.price, currency: consultantProfiles.currency, fullName: consultantProfiles.fullName })
+      .select({ fullName: consultantProfiles.fullName })
       .from(consultantProfiles)
       .where(eq(consultantProfiles.id, booking.consultantProfileId))
       .limit(1);
     if (!profile) return jsonError("Specialist not found", 404);
 
-    const amount = Math.round((profile.price ?? 0) * 100); // major → minor units
-    if (amount <= 0) return jsonError("This specialist hasn't set a rate", 412);
-    const currency = ISO_CURRENCY[profile.currency ?? "GBP"] ?? "gbp";
+    const amount = booking.priceAmount ?? 0; // minor units
+    const currency = booking.priceCurrency ?? "";
+    if (amount <= 0 || !currency) {
+      return jsonError("This booking has no agreed price", 412);
+    }
     const appFee = Math.round((amount * platformFeeBps()) / 10_000);
     const base = appBaseUrl(req);
 
@@ -139,6 +175,7 @@ export async function POST(req: Request): Promise<Response> {
         },
       ],
       payment_intent_data: {
+        metadata: { bookingId: booking.id },
         transfer_data: { destination: acct.accountId },
         ...(appFee > 0 ? { application_fee_amount: appFee } : {}),
       },
@@ -147,7 +184,7 @@ export async function POST(req: Request): Promise<Response> {
     });
 
     // Record the pending payment (decoupled table).
-    await db
+    const [recorded] = await db
       .insert(bookingPayments)
       .values({
         bookingId: booking.id,
@@ -159,8 +196,28 @@ export async function POST(req: Request): Promise<Response> {
       })
       .onConflictDoUpdate({
         target: bookingPayments.bookingId,
-        set: { checkoutSessionId: session.id, amount, currency, updatedAt: new Date() },
-      });
+        // A fresh session after a failed async payment starts over as unpaid.
+        set: { checkoutSessionId: session.id, status: "unpaid", amount, currency, updatedAt: new Date() },
+        // Compare-and-set against the row read above: if the prior session's
+        // webhook marked it paid or processing meanwhile, or a concurrent
+        // checkout already replaced the session, overwriting would lose that
+        // payment and invite a second charge.
+        setWhere: and(
+          inArray(bookingPayments.status, ["unpaid", "failed"]),
+          existingPayment?.checkoutSessionId
+            ? eq(bookingPayments.checkoutSessionId, existingPayment.checkoutSessionId)
+            : isNull(bookingPayments.checkoutSessionId),
+        ),
+      })
+      .returning({ bookingId: bookingPayments.bookingId });
+    if (!recorded) {
+      try {
+        await stripe.checkout.sessions.expire(session.id);
+      } catch (err) {
+        console.warn("[stripe-checkout] could not expire superseded session", err);
+      }
+      return jsonError("A payment for this booking is already under way. Refresh to see its status.", 409);
+    }
 
     return new Response(JSON.stringify({ url: session.url }), {
       status: 200,

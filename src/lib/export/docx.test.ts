@@ -125,6 +125,25 @@ describe("renderLetterDocxBlob", () => {
     // The visible text survives with the illegal chars excised.
     expect(documentXml).toContain("beforeafter");
   });
+
+  it("keeps the space between adjacent formatted words", async () => {
+    const draft = makeDraft();
+    draft.sections = [
+      {
+        id: "s1",
+        sectionId: "body",
+        title: "Body",
+        required: true,
+        status: "ready",
+        versions: [],
+        html: "<p><strong>Jane</strong> <em>Smith</em></p>",
+      },
+    ];
+    const blob = await renderLetterDocxBlob(draft);
+    const zip = await JSZip.loadAsync(blob);
+    const documentXml = await zip.file("word/document.xml")!.async("string");
+    expect(documentXml).toMatch(/Jane<\/w:t><\/w:r><w:r>(?:<w:rPr>.*?<\/w:rPr>)?<w:t xml:space="preserve"> <\/w:t>/);
+  });
 });
 
 function makeDraft(): Draft {

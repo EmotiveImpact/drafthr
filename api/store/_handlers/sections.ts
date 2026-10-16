@@ -7,10 +7,12 @@
  * Per-section audit events are noisy — we chain a single `section.updated`
  * event with a section_id summary instead of one per section.
  */
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
+import { rejectEditOfApprovedDraft, rejectReadOnlyMember } from "../../_utils/workspace-role.js";
+import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
 import { getDb } from "../../../src/db/index.js";
 import { drafts, sections } from "../../../src/db/schema.js";
 import { appendAuditEvent } from "../../../src/db/audit.js";
@@ -40,7 +42,10 @@ export async function POST(req: Request): Promise<Response> {
 
   const parsed = await readJsonRequest<Body>(req, 8_000_000);
   if (!parsed.ok) return parsed.response;
-  const draftId = typeof parsed.body.draftId === "string" ? parsed.body.draftId.trim() : "";
+  const rawDraftId = typeof parsed.body.draftId === "string" ? parsed.body.draftId.trim() : "";
+  // A non-uuid id would raise Postgres 22P02 and surface as a 500.
+  const draftId = rawDraftId ? serverUuidOrNull(rawDraftId) : "";
+  if (draftId === null) return jsonError("Invalid draftId", 400);
   const sectionList = Array.isArray(parsed.body.sections) ? parsed.body.sections : null;
   if (!draftId) return jsonError("draftId required", 400);
   if (!sectionList) return jsonError("sections array required", 400);
@@ -51,11 +56,19 @@ export async function POST(req: Request): Promise<Response> {
   const auth = await requireSessionAndTenant(req);
   if (!auth.ok) return auth.response;
   if (!auth.activeTenant) return jsonError("No active workspace", 400);
+  const readOnly = rejectReadOnlyMember(auth);
+  if (readOnly) return readOnly;
 
   try {
     const db = getDb();
     const [draft] = await db
-      .select({ id: drafts.id, tenantId: drafts.tenantId })
+      .select({
+        id: drafts.id,
+        tenantId: drafts.tenantId,
+        reviewStatus: drafts.reviewStatus,
+        deletedAt: drafts.deletedAt,
+        revision: drafts.revision,
+      })
       .from(drafts)
       .where(eq(drafts.id, draftId))
       .limit(1);
@@ -63,9 +76,37 @@ export async function POST(req: Request): Promise<Response> {
     if (draft.tenantId !== auth.activeTenant.id) {
       return jsonError("Draft belongs to a different workspace", 403);
     }
+    // Deleted on another device: refuse rather than write into the tombstone.
+    if (draft.deletedAt) return jsonError("Draft was deleted", 410);
 
     const tenantId = auth.activeTenant.id;
-    await db.transaction(async (tx) => {
+    if (draft.reviewStatus === "approved") {
+      const stored = await db
+        .select({ sectionId: sections.sectionId, title: sections.title, html: sections.html })
+        .from(sections)
+        .where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)));
+      const locked = rejectEditOfApprovedDraft("approved", "approved", stored, sectionList);
+      if (locked) return locked;
+    }
+    const outcome = await db.transaction(async (tx) => {
+      // Any accepted write moves the draft's revision on, so a device holding
+      // the previous revision gets a 409 from the drafts upsert instead of
+      // silently overwriting these sections. Compare-and-swap on the revision
+      // read above: an approval or delete landing since then would otherwise
+      // be written past (the approved-letter check ran on the older state).
+      const bumped = await tx
+        .update(drafts)
+        .set({ revision: sql`${drafts.revision} + 1`, updatedAt: new Date() })
+        .where(
+          and(
+            eq(drafts.id, draftId),
+            eq(drafts.tenantId, tenantId),
+            eq(drafts.revision, draft.revision),
+            isNull(drafts.deletedAt),
+          ),
+        )
+        .returning({ id: drafts.id });
+      if (bumped.length === 0) return "stale" as const;
       // Scope the delete by tenant too (belt-and-braces — draftId is already
       // tenant-verified above, but this keeps the mutation itself tenant-bounded).
       await tx.delete(sections).where(and(eq(sections.draftId, draftId), eq(sections.tenantId, tenantId)));
@@ -80,7 +121,9 @@ export async function POST(req: Request): Promise<Response> {
           position: s.position,
         });
       }
+      return "ok" as const;
     });
+    if (outcome === "stale") return jsonError("stale revision", 409);
 
     await safelyAppendAudit({
       tenantId: auth.activeTenant.id,

@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type ComponentType } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import { useProfileStore, type WorkspaceRole } from "@/lib/profile";
 import { migrateEmployerImages } from "@/lib/storage/migrate";
 import { useDraftStore } from "@/lib/store";
 import {
   isDualWriteEnabled,
+  pauseDualWrite,
   persistedDraftTombstones,
   reissuePendingDeletes,
   syncAllPending,
@@ -14,24 +15,68 @@ import {
   mergeRemoteDrafts,
   pullRemoteExtras,
   mergeRemoteExtras,
+  type SyncMetaAccess,
 } from "@/lib/remote-pull";
+import {
+  clearSyncMeta,
+  draftContentKey,
+  draftSyncKey,
+  getSyncMeta,
+  patchSyncMeta,
+  setSyncMeta,
+} from "@/lib/sync-meta";
 import { useAuth } from "@/lib/auth";
+import { StorageQuotaBanner } from "@/components/StorageQuotaBanner";
+import { LocalDataLossDialog } from "@/components/LocalDataLossDialog";
+import {
+  clearTenantScopedLocalData,
+  localNamespace,
+  readLocalOwner,
+  reconcileLocalDataOwner,
+  switchLocalWorkspace,
+} from "@/lib/session/clearLocalData";
+import { confirmLocalDataLoss } from "@/lib/session/localDataGuard";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-import { Home } from "@/routes/Home";
-import { Wizard } from "@/routes/Wizard";
 import { RootRedirect } from "@/routes/RootRedirect";
-import { ModePicker } from "@/routes/ModePicker";
-import { Settings } from "@/routes/Settings";
-import { DirectorySync as SettingsDirectorySync } from "@/routes/settings/DirectorySync";
-import { Privacy } from "@/routes/Privacy";
-import { Terms } from "@/routes/Terms";
-import { BrowseLetters } from "@/routes/BrowseLetters";
 import { PaywallGate } from "@/components/billing/PaywallGate";
-import { ReviewStep } from "@/routes/ReviewStep";
-import { MattersIndex } from "@/routes/MattersIndex";
-import { EmployeesIndex } from "@/routes/EmployeesIndex";
-import { Approvals } from "@/routes/Approvals";
+// Every route is its own chunk (React.lazy) so the first paint only pays for
+// the shell (Layout, auth, router) plus the route actually being shown.
+// Previously ~30 routes were imported eagerly, which dragged the editor
+// stack, the paged view and every letter template into the entry chunk.
+function lazyNamed<M, K extends keyof M & string>(load: () => Promise<M>, name: K): M[K] {
+  return lazy(() =>
+    load().then((m) => ({ default: m[name] as unknown as ComponentType<Record<string, unknown>> })),
+  ) as unknown as M[K];
+}
+const Home = lazyNamed(() => import("@/routes/Home"), "Home");
+const Wizard = lazyNamed(() => import("@/routes/Wizard"), "Wizard");
+// ModePicker stays eager: RootRedirect (the landing route) renders it inline.
+import { ModePicker } from "@/routes/ModePicker";
+const Settings = lazyNamed(() => import("@/routes/Settings"), "Settings");
+const SettingsDirectorySync = lazyNamed(() => import("@/routes/settings/DirectorySync"), "DirectorySync");
+const Privacy = lazyNamed(() => import("@/routes/Privacy"), "Privacy");
+const Terms = lazyNamed(() => import("@/routes/Terms"), "Terms");
+const BrowseLetters = lazyNamed(() => import("@/routes/BrowseLetters"), "BrowseLetters");
+const ReviewStep = lazyNamed(() => import("@/routes/ReviewStep"), "ReviewStep");
+const MattersIndex = lazyNamed(() => import("@/routes/MattersIndex"), "MattersIndex");
+const EmployeesIndex = lazyNamed(() => import("@/routes/EmployeesIndex"), "EmployeesIndex");
+const Approvals = lazyNamed(() => import("@/routes/Approvals"), "Approvals");
+const MatterDrillDown = lazyNamed(() => import("@/components/reports/MatterDrillDown"), "MatterDrillDown");
+const FailingCheckDrillDown = lazyNamed(() => import("@/components/reports/FailingCheckDrillDown"), "FailingCheckDrillDown");
+const SignIn = lazyNamed(() => import("@/routes/SignIn"), "SignIn");
+const SignUp = lazyNamed(() => import("@/routes/SignUp"), "SignUp");
+const ForgotPassword = lazyNamed(() => import("@/routes/ForgotPassword"), "ForgotPassword");
+const ResetPassword = lazyNamed(() => import("@/routes/ResetPassword"), "ResetPassword");
+const VerifyEmail = lazyNamed(() => import("@/routes/VerifyEmail"), "VerifyEmail");
+const AuthCallback = lazyNamed(() => import("@/routes/AuthCallback"), "AuthCallback");
+const SignupWorkspace = lazyNamed(() => import("@/routes/SignupWorkspace"), "SignupWorkspace");
+const JoinInvite = lazyNamed(() => import("@/routes/JoinInvite"), "JoinInvite");
+const ConsultantHome = lazyNamed(() => import("@/routes/ConsultantHome"), "ConsultantHome");
+const ConsultantProfile = lazyNamed(() => import("@/routes/ConsultantProfile"), "ConsultantProfile");
+const MyBookings = lazyNamed(() => import("@/routes/MyBookings"), "MyBookings");
+const ConsultantAdminReview = lazyNamed(() => import("@/routes/ConsultantAdminReview"), "ConsultantAdminReview");
+const SharedDraftReview = lazyNamed(() => import("@/routes/SharedDraftReview"), "SharedDraftReview");
 // Heavy / non-first-paint routes are lazy-loaded — they pulled ~hundreds of KB
 // into the main chunk (Reports charts, BulkOps CSV+merge, Finalize export
 // pipeline, MatterDetail/EmployeeDetail). (Senior sweep I-PERF-1.) See the
@@ -47,21 +92,6 @@ const MatterDetail = lazy(() => import("@/routes/MatterDetail").then((m) => ({ d
 const EmployeeDetail = lazy(() => import("@/routes/EmployeeDetail").then((m) => ({ default: m.EmployeeDetail })));
 const BulkOperations = lazy(() => import("@/routes/BulkOperations"));
 const Reports = lazy(() => import("@/routes/Reports").then((m) => ({ default: m.Reports })));
-import { MatterDrillDown } from "@/components/reports/MatterDrillDown";
-import { FailingCheckDrillDown } from "@/components/reports/FailingCheckDrillDown";
-import { SignIn } from "@/routes/SignIn";
-import { SignUp } from "@/routes/SignUp";
-import { ForgotPassword } from "@/routes/ForgotPassword";
-import { ResetPassword } from "@/routes/ResetPassword";
-import { VerifyEmail } from "@/routes/VerifyEmail";
-import { AuthCallback } from "@/routes/AuthCallback";
-import { SignupWorkspace } from "@/routes/SignupWorkspace";
-import { JoinInvite } from "@/routes/JoinInvite";
-import { ConsultantHome } from "@/routes/ConsultantHome";
-import { ConsultantProfile } from "@/routes/ConsultantProfile";
-import { MyBookings } from "@/routes/MyBookings";
-import { ConsultantAdminReview } from "@/routes/ConsultantAdminReview";
-import { SharedDraftReview } from "@/routes/SharedDraftReview";
 import { Layout } from "@/components/Layout";
 import { NotFound } from "@/routes/NotFound";
 import { Protected } from "@/lib/auth/Protected";
@@ -111,9 +141,55 @@ function EditorFallback() {
   );
 }
 
+// Revision bookkeeping for the cross-device pull (see src/lib/sync-meta.ts).
+const SYNC_META_ACCESS: SyncMetaAccess = {
+  get: getSyncMeta,
+  adopted: (localId, revision, draft) =>
+    setSyncMeta(localId, {
+      rev: revision,
+      key: draftSyncKey(draft),
+      ckey: draftContentKey(draft),
+      ekey: getSyncMeta(localId)?.ekey,
+      at: Date.now(),
+    }),
+  rebased: (localId, revision) => patchSyncMeta(localId, { rev: revision }),
+  clear: clearSyncMeta,
+};
+
+/** Set when the local data was just swapped for another workspace's: the
+ *  in-memory store is stale until the reload, so nothing may sync it. */
+let localDataReloadPending = false;
+
 export function App() {
   const location = useLocation();
   const { activeTenant, isLoaded, user } = useAuth();
+  // Make sure the local data on this device belongs to this user and
+  // workspace before anything syncs it. Data left by another workspace (or a
+  // user who didn't sign out) is stashed under its owner, not shown here and
+  // not deleted; this workspace's own stash comes back after a reload.
+  // Declared first so it runs before the sync effects below in each commit.
+  useEffect(() => {
+    if (!isLoaded || !user || !activeTenant) return;
+    if (reconcileLocalDataOwner(user.id, activeTenant.id)) {
+      localDataReloadPending = true;
+      window.location.reload();
+      return;
+    }
+    const ns = localNamespace(user.id, activeTenant.id);
+    const owner = readLocalOwner();
+    if (owner === null || owner === ns) return;
+    // Another workspace's (or user's) data is still live because there was
+    // no room to stash it. Never push or pull it into this workspace; offer
+    // to delete it from this device (with a backup) instead.
+    localDataReloadPending = true;
+    pauseDualWrite();
+    void confirmLocalDataLoss("switch").then((proceed) => {
+      if (!proceed) return;
+      clearTenantScopedLocalData({ keepProfile: true });
+      switchLocalWorkspace(null, ns);
+      window.location.reload();
+    });
+  }, [isLoaded, user, activeTenant]);
   // One-shot migration for existing base64 letterhead/signature → Blob URL.
   // Pre-migration users have ~700 KB+ of base64 sitting in localStorage; this
   // swaps them out lazily so the dual-write rollout doesn't carry those blobs
@@ -144,47 +220,40 @@ export function App() {
     };
   }, []);
 
-  // Dual-write backfill — when the flag is on AND the user has an active
-  // tenant, POST every locally-known draft that hasn't synced yet. Runs once
-  // per mount; idempotent for re-runs (already-synced drafts no-op).
-  useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
-    let cancelled = false;
-    const drafts = Object.values(useDraftStore.getState().drafts);
-    if (drafts.length === 0) return;
-    void syncAllPending(() => Object.values(useDraftStore.getState().drafts)).then((result) => {
-      if (cancelled) return;
-      if (result.ok > 0) {
-        toast.success(`${result.ok} draft${result.ok === 1 ? "" : "s"} synced to your workspace.`);
-      }
-      if (result.failed > 0) {
-        console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, activeTenant]);
-
   // Cross-device PULL — when the flag is on AND the user has an active tenant,
   // fetch the tenant's drafts from the server and merge them into the local
   // store so a second device / teammate sees the same letters. The merge is
   // non-destructive (preserves newer local edits + all local-only fields).
+  //
+  // Then the dual-write backfill: POST every locally-known draft that changed
+  // since its last successful sync. It runs after the pull so each draft's
+  // server revision is known first; pushed before it (as on the first load
+  // after the revision upgrade, with no sync metadata yet) every draft drew a
+  // 409 and anything changed elsewhere came back as a conflicted copy.
   useEffect(() => {
-    if (!isLoaded || !activeTenant || !isDualWriteEnabled()) return;
+    if (!isLoaded || !activeTenant || !isDualWriteEnabled() || localDataReloadPending) return;
     let cancelled = false;
     void (async () => {
       // Retry deletes that never got a confirmed 2xx (tab closed / offline)
       // BEFORE pulling, so a pending-delete row is gone rather than merged.
       await reissuePendingDeletes();
       if (cancelled) return;
-      await pullRemoteDrafts((remote) => {
+      await pullRemoteDrafts((remote, deleted) => {
         if (cancelled) return;
         // Re-read the live store at apply time so a concurrent edit isn't lost.
-        // Skip adoption of rows whose delete is still unconfirmed (BUG-05).
+        // Skip adoption of rows whose delete is still unconfirmed (BUG-05),
+        // and drop drafts deleted on another device (server tombstones).
         const local = useDraftStore.getState().drafts;
         useDraftStore.setState({
-          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones()),
+          drafts: mergeRemoteDrafts(local, remote, persistedDraftTombstones(), {
+            deleted,
+            syncMeta: SYNC_META_ACCESS,
+            syncKey: draftSyncKey,
+            onKeptLocalOnly: () =>
+              toast.warning("A letter was deleted on another device", {
+                description: "Your unsaved changes to it are kept on this device only.",
+              }),
+          }),
         });
       });
       if (cancelled) return;
@@ -195,6 +264,15 @@ export function App() {
         const local = useDraftStore.getState().drafts;
         useDraftStore.setState({ drafts: mergeRemoteExtras(local, remoteExtras) });
       });
+      if (cancelled || Object.keys(useDraftStore.getState().drafts).length === 0) return;
+      const result = await syncAllPending(() => Object.values(useDraftStore.getState().drafts));
+      if (cancelled) return;
+      if (result.ok > 0) {
+        toast.success(`${result.ok} draft${result.ok === 1 ? "" : "s"} synced to your workspace.`);
+      }
+      if (result.failed > 0) {
+        console.warn(`[dual-write] backfill: ${result.failed} drafts failed to sync`);
+      }
     })();
     return () => {
       cancelled = true;
@@ -231,6 +309,8 @@ export function App() {
     !hasSeenTour();
   return (
     <Layout>
+      <StorageQuotaBanner />
+      <LocalDataLossDialog />
       {showTour && (
         <Suspense fallback={null}>
           <OnboardingTour />

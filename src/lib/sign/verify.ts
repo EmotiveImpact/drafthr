@@ -59,6 +59,7 @@ export type VerifyFail = {
     | "byte_range_tampered"
     | "tsa_missing"
     | "tsa_invalid"
+    | "tsa_imprint_mismatch"
     | "wrong_public_key";
   detail?: string;
 };
@@ -145,6 +146,13 @@ export async function verifyPadesCms(input: VerifyNewInput): Promise<VerifyResul
     });
     if (!tsrResult.ok) {
       return { ok: false, reason: "tsa_invalid", detail: tsrResult.reason };
+    }
+    // The token must cover THIS signature. The timestamp sits in an unsigned
+    // attribute, so without this check any genuine token (from any date, for
+    // any document) could be swapped in to backdate a real signature.
+    const signatureDigestHex = createHash("sha256").update(parsed.signature).digest("hex");
+    if (tsrResult.sha256Hex.toLowerCase() !== signatureDigestHex) {
+      return { ok: false, reason: "tsa_imprint_mismatch" };
     }
     signedAt = tsrResult.signedAtUtc;
     tsa = tsrResult.tsaName;

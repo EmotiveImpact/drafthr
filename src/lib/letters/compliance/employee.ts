@@ -105,10 +105,10 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "PIDA / s.43A attestation",
     description:
-      "Protection requires explicit reasonable belief that the information is substantially true and the disclosure is in the public interest. Magic words.",
+      "Protection requires a reasonable belief that the information tends to show a relevant failure and that the disclosure is in the public interest (s.43B). 'Substantially true' is the stricter test for prescribed persons and wider disclosures only.",
     match: { kind: "regex", value: "(?:reasonable|reasonably)\\s+belie(?:f|ve).*(?:substantially\\s+true|public\\s+interest)|public\\s+interest.*(?:reasonable|reasonably)\\s+belie(?:f|ve)", flags: "is" },
     recommendation:
-      "Add: 'I make this disclosure under s.43A Employment Rights Act 1996. I reasonably believe the information is substantially true and that disclosure is in the public interest.'",
+      "Add: 'I make this disclosure under s.43A Employment Rights Act 1996. I reasonably believe the information tends to show [the relevant failure] and that disclosure is in the public interest.'",
   },
   {
     id: "emp_uk_whistle_category_named",
@@ -117,8 +117,8 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "Statutory category named",
     description:
-      "Name the s.43B category — criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, environmental damage, or deliberate concealment.",
-    match: { kind: "regex", value: "criminal offence|breach of (?:a )?legal obligation|miscarriage of justice|health and safety|environmental damage|deliberate concealment", flags: "i" },
+      "Name the s.43B category: criminal offence, breach of legal obligation, miscarriage of justice, danger to health & safety, sexual harassment, environmental damage, or deliberate concealment.",
+    match: { kind: "regex", value: "criminal offence|breach of (?:a )?legal obligation|miscarriage of justice|health and safety|sexual harassment|environmental damage|deliberate concealment", flags: "i" },
     recommendation: "Identify which s.43B category your disclosure falls into.",
   },
   {
@@ -141,10 +141,10 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     severity: "required",
     label: "UK GDPR Art. 15 cited",
     description:
-      "Cite UK GDPR Art. 15 / Data Protection Act 2018 s.45 so the 1-month statutory window starts ticking unambiguously.",
+      "Cite Article 15 UK GDPR so the 1-month statutory window starts ticking unambiguously.",
     match: { kind: "regex", value: "Article\\s*15|Art\\.\\s*15|UK GDPR|Data Protection Act\\s*2018|DPA\\s*2018", flags: "i" },
     recommendation:
-      "Add: 'I make this request under Article 15 UK GDPR and section 45 Data Protection Act 2018.'",
+      "Add: 'I make this request under Article 15 UK GDPR.'",
   },
   {
     id: "emp_us_sar_basis_california",
@@ -232,9 +232,9 @@ export const EMPLOYEE_COMPLIANCE_RULES: ComplianceRule[] = [
     jurisdiction: "UK",
     severity: "required",
     label: "Limitation period referenced",
-    description: "Reference s.111 ERA 1996 / 3-month tribunal limitation so it's clear you're acting in time.",
-    match: { kind: "regex", value: "section\\s*111|s\\.\\s*111|limitation period|three[- ]month|3[- ]month", flags: "i" },
+    description: "Reference s.111 ERA 1996 / the tribunal limitation period so it's clear you're acting in time.",
+    match: { kind: "regex", value: "section\\s*111|s\\.\\s*111|limitation period|(three|six|3|6)[- ]month", flags: "i" },
     recommendation:
-      "Add: 'I am notifying ACAS of a prospective claim within the s.111 ERA 1996 limitation period (3 months less one day).'",
+      "Add: 'I am notifying ACAS of a prospective claim within the s.111 ERA 1996 limitation period (6 months less one day for acts on or after 1 October 2026, 3 months less one day before that).'",
   },
 ];

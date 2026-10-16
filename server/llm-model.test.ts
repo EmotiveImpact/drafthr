@@ -29,3 +29,17 @@ describe("resolveModelName", () => {
     );
   });
 });
+
+describe("temperatureFor", () => {
+  it("keeps the temperature for models that still accept sampling", async () => {
+    const { temperatureFor } = await import("./llm-model");
+    expect(temperatureFor("claude-sonnet-4-6", 0.3)).toBe(0.3);
+    expect(temperatureFor("claude-haiku-4-5", 0.7)).toBe(0.7);
+  });
+  it("drops it for Opus 4.7 and later, which reject sampling parameters", async () => {
+    const { temperatureFor } = await import("./llm-model");
+    for (const m of ["claude-opus-4-7", "claude-opus-4-8", "claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"]) {
+      expect(temperatureFor(m, 0.4)).toBeUndefined();
+    }
+  });
+});

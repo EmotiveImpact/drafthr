@@ -120,7 +120,15 @@ export const DIMENSION_DESCRIPTIONS: Record<HealthDimension, string> = {
   risk: "Liability exposure and data hygiene",
 };
 
-const PLACEHOLDER_RE = /\[([a-z][a-z0-9_]*)\]/gi;
+// Unfilled gaps the pipeline itself writes: [TBD], [TBD: ...], [employer
+// name], [job title], mail merge's [x not set], and any {{token}} left behind.
+// Case citations like [2023] start with a digit and don't match.
+const PLACEHOLDER_RE = /\[(TBD[^\]]{0,80}|[A-Za-z][A-Za-z0-9_ ]{0,40})\]|\{\{\s*([^}]{1,60}?)\s*\}\}/g;
+// Brackets a finished letter legitimately carries: editorial marks in quoted
+// material, and the "[See Fig 2]" / "[See Attachments]" references the editor
+// inserts (validated by checkEvidenceRefs instead).
+const NOT_PLACEHOLDERS = new Set(["sic", "emphasis added", "emphasis in original", "redacted"]);
+const EVIDENCE_REF_RE = /^see\s/i;
 const PII_PATTERNS: { id: string; re: RegExp; label: string }[] = [
   {
     id: "ni-number",
@@ -170,8 +178,11 @@ function bodyText(draft: Draft): string {
 
 function checkSections(draft: Draft): HealthCheck {
   const total = draft.sections.length;
+  // Count sections by what they contain, not by status: a section cleared
+  // for regeneration (or one that failed to generate) can carry "edited"
+  // with no text, and an empty letter must not score as complete.
   const ready = draft.sections.filter(
-    (s) => s.status === "ready" || s.status === "edited",
+    (s) => (s.status === "ready" || s.status === "edited") && stripHtml(s.html ?? "").trim() !== "",
   ).length;
   if (ready === total) {
     return {
@@ -225,7 +236,9 @@ function checkPlaceholders(draft: Draft): HealthCheck {
   const text = bodyText(draft);
   const found = new Set<string>();
   for (const m of text.matchAll(PLACEHOLDER_RE)) {
-    found.add(m[1]);
+    const name = (m[1] ?? m[2] ?? "").trim();
+    if (m[1] !== undefined && EVIDENCE_REF_RE.test(name)) continue;
+    if (name && !NOT_PLACEHOLDERS.has(name.toLowerCase())) found.add(name);
   }
   if (found.size === 0) {
     return {
@@ -241,7 +254,8 @@ function checkPlaceholders(draft: Draft): HealthCheck {
     id: "placeholders",
     dimension: "compliance",
     label: `${found.size} placeholder${found.size === 1 ? "" : "s"} unresolved`,
-    severity: "warn",
+    // A letter that goes out reading "[employee address]" is not send-ready.
+    severity: "fail",
     detail: `Still in body: ${list}${more}`,
     actionLabel: "Open editor",
     actionRoute: "editor",
@@ -283,6 +297,17 @@ function checkWordCount(draft: Draft): HealthCheck {
       dimension: "quality",
       label: `Word count in range (${words} / ${range.min}–${range.max})`,
       severity: "pass",
+    };
+  }
+  if (words === 0) {
+    return {
+      id: "wordcount",
+      dimension: "quality",
+      label: "The letter has no text yet",
+      severity: "fail",
+      detail: "Generate or write the letter before reviewing or sending it",
+      actionLabel: "Open editor",
+      actionRoute: "editor",
     };
   }
   return {

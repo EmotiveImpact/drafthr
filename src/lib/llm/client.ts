@@ -78,6 +78,13 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     const detail = snippet ? ` — ${snippet}` : "";
     throw new RetryableError(`Server error (${res.status})${detail}`);
   }
+  if (res.status === 402 || res.status === 403) {
+    // Our own refusals (no plan for Opus, paywall, viewer role) carry a JSON
+    // message the user can act on; show it rather than a generic failure.
+    const message = serverErrorMessage(await res.text().catch(() => ""));
+    if (message) throw new Error(message);
+    if (res.status === 402) throw new Error("This needs a paid plan.");
+  }
   if (res.status === 401 || res.status === 403) {
     // Vercel Deployment Protection or other auth gate is blocking the API.
     // Not retryable — the user has to disable protection or sign in.
@@ -146,7 +153,24 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     }
     throw new Error(proxyError);
   }
-  opts.onDone?.();
+  // No [DONE] and no error event: the connection dropped or the function was
+  // stopped mid-stream (e.g. the 60s limit). Treating that as success saved a
+  // section cut off mid-sentence as "ready", so fail it as retryable instead.
+  throw new RetryableError("The connection dropped before the section finished. Try again.");
+}
+
+/**
+ * The message in one of our JSON error envelopes (`{"error": "..."}`), or null
+ * when the text is something else. The agent chat's transport puts a failed
+ * response's body in the error it raises, so the chat panel uses this too.
+ */
+export function serverErrorMessage(text: string): string | null {
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown } | null;
+    return typeof parsed?.error === "string" && parsed.error ? parsed.error : null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchOrThrow(opts: StreamOptions): Promise<Response> {

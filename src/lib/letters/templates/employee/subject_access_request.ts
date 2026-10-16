@@ -5,7 +5,7 @@ export const SUBJECT_ACCESS_REQUEST_UK: LetterTemplate = {
   jurisdiction: "UK",
   evidenceTier: "heavy",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Subject Access Request — EMPLOYEE MODE):
-- Statutory request under Article 15 UK GDPR and s.45 Data Protection Act 2018.
+- Statutory request under Article 15 UK GDPR. (Do not cite s.45 Data Protection Act 2018: it applies to law-enforcement processing, not an employer.)
 - Statutory response window: one month from receipt (Art. 12(3) UK GDPR), extendable by up to two further months for complex / multiple requests, with notification to the data subject within the first month.
 - No fee, except where the request is manifestly unfounded or excessive (Art. 12(5) UK GDPR).
 - The data controller may request reasonable proof of identity under Art. 12(6) UK GDPR but must not use ID verification to delay or obstruct.
@@ -30,12 +30,12 @@ export const SUBJECT_ACCESS_REQUEST_UK: LetterTemplate = {
       title: "Subject line",
       instruction:
         "Single <p>, <strong>. Identifies as a Subject Access Request under Art. 15 UK GDPR.",
-      scaffold: `<p><strong>Subject Access Request under Article 15 UK GDPR / s.45 Data Protection Act 2018</strong></p>`,
+      scaffold: `<p><strong>Subject Access Request under Article 15 UK GDPR</strong></p>`,
       constraints: [
         "MUST identify the request as a SAR.",
         "MUST cite Art. 15 UK GDPR.",
       ],
-      example: `<p><strong>Subject Access Request under Article 15 UK GDPR / s.45 Data Protection Act 2018</strong></p>`,
+      example: `<p><strong>Subject Access Request under Article 15 UK GDPR</strong></p>`,
     },
     {
       sectionId: "salutation",

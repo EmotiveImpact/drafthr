@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { BookingPaymentStatus } from "./consultantApi";
 
 /**
  * Booking lifecycle states. Forward-only — once a booking lands in a
@@ -80,6 +81,11 @@ export type Booking = {
   consultantPhotoUrl?: string;
   consultantCurrency?: "£" | "$" | "€";
   consultantPrice?: number;
+  /** Agreed price snapshot (minor units, lowercase ISO currency). */
+  priceAmount?: number;
+  priceCurrency?: string;
+  /** Server payment state; only "paid" lets work start. */
+  paymentStatus?: BookingPaymentStatus;
 };
 
 type RecordBookingInput = Omit<

@@ -49,6 +49,7 @@ import { CommentMark } from "@/lib/tiptap/comment-mark";
 import { SuggestionMark } from "@/lib/tiptap/suggestion-mark";
 import { EvidenceSuggestion } from "@/lib/tiptap/evidence-suggestion";
 import { FigureRef, AttachmentRef } from "@/lib/tiptap/evidence-refs";
+import { RemoteImageEmbed } from "@/lib/tiptap/remote-image-embed";
 import { RefinePopover } from "./RefinePopover";
 import { CommentPopover } from "./CommentPopover";
 import { EvidencePickerPopover } from "./EvidencePickerPopover";
@@ -164,6 +165,10 @@ export function SectionEditor({
           style: "max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0;",
         },
       }),
+      // Images pasted or dropped from a web page arrive with a remote src,
+      // which the export sanitiser drops. Embed them as data URLs right away
+      // (or leave a visible "[image not embedded]" note when the fetch fails).
+      RemoteImageEmbed,
       // Word-doc-style alignment (left / center / right / justify) on
       // paragraphs + headings. Applied via a data-text-align attribute
       // that the sanitiser already preserves on <p>/<h*>.
@@ -541,20 +546,20 @@ export function SectionEditor({
             variant="ghost"
             className="size-7"
             onClick={(e) => { e.stopPropagation(); onClear(); }}
-            disabled={isStreaming}
+            disabled={isStreaming || !editable}
             aria-label="Clear section"
           >
             <Trash2 className="size-3.5" />
           </Button>
           <RefinePopover
-            disabled={isStreaming}
+            disabled={isStreaming || !editable}
             onRefineRegenerate={(instruction) => onRegenerate(instruction)}
             onPlainRegenerate={() => onRegenerate()}
             trigger={
               <Button
                 size="sm"
                 variant="ghost"
-                disabled={isStreaming}
+                disabled={isStreaming || !editable}
                 className="h-7 px-2 text-xs"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -679,7 +684,9 @@ export function SectionEditor({
        * clicked <ins>/<del> mark. Single-suggestion target (vs the
        * canvas-level "Accept all" banner). Closes on outside click via the
        * useEffect below. */}
-      {pendingSuggestion && (
+      {/* Locked drafts (approved, viewer, reviewer in review) can't accept or
+       * reject suggestions; the bubble only appears where editing is allowed. */}
+      {pendingSuggestion && editable && (
         <SuggestionAcceptBubble
           rect={pendingSuggestion.rect}
           kind={pendingSuggestion.kind}

@@ -6,6 +6,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { Avatar } from "@/components/ds";
 import { meIdentity } from "@/lib/comments/identity";
+import { useCommentViewer } from "@/lib/comments/useCommentViewer";
 
 /**
  * Inline comment composer popover.
@@ -55,6 +56,7 @@ export function CommentPopover({
   const setOpen = onOpenChange ?? setInternalOpen;
 
   const me = useMemo(() => meIdentity(profile), [profile]);
+  const viewer = useCommentViewer();
   const [body, setBody] = useState("");
   const [posted, setPosted] = useState(false);
 
@@ -72,6 +74,7 @@ export function CommentPopover({
     const newId = addComment(draft.id, {
       sectionId,
       authorId: me.id,
+      authorUserId: viewer.userId ?? undefined,
       authorName: me.name,
       authorEmail: me.email,
       body: text,

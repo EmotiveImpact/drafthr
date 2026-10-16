@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, Loader2 } from "lucide-react";
 import { catalogFor, type PriceKey } from "@/lib/billing/catalog";
-import { startBillingCheckout, getBillingStatus, type BillingStatus } from "@/lib/billing/api";
+import { startBillingCheckout, getBillingStatus, openBillingPortal, type BillingStatus } from "@/lib/billing/api";
 
 function gbp(minor: number): string {
   return minor % 100 === 0 ? `£${minor / 100}` : `£${(minor / 100).toFixed(2)}`;
@@ -95,6 +95,22 @@ export function Pricing() {
     };
   }, []);
 
+  const [opening, setOpening] = useState(false);
+  const manage = async () => {
+    if (opening) return;
+    setOpening(true);
+    const r = await openBillingPortal("/pricing");
+    if (r.ok) {
+      window.location.assign(r.url);
+      return; // navigating away
+    }
+    toast.error(r.error);
+    setOpening(false);
+  };
+  // An existing workspace subscriber changes plan in the billing portal; a
+  // second checkout would start a second subscription (the server refuses it).
+  const hasHrPlan = Boolean(status?.active && status.plan && ["starter", "pro", "business"].includes(status.plan));
+
   const buy = async (priceKey: PriceKey) => {
     if (busy) return;
     setBusy(priceKey);
@@ -121,6 +137,19 @@ export function Pricing() {
             <Check className="size-3.5" aria-hidden />
             You're on {status.plan}
             {typeof status.credits === "number" ? ` · ${status.credits} credits` : ""}
+          </p>
+        )}
+        {status?.plan && (
+          <p className="mt-3">
+            <button
+              type="button"
+              onClick={manage}
+              disabled={opening}
+              className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-[var(--ds-line)] px-3 text-[12.5px] font-semibold text-[var(--ds-ink)] transition hover:border-[var(--ds-ink)] disabled:opacity-60"
+            >
+              {opening && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+              {opening ? "Opening…" : "Manage billing"}
+            </button>
           </p>
         )}
         {gated && !status?.active && (
@@ -192,8 +221,8 @@ export function Pricing() {
                 </ul>
                 <button
                   type="button"
-                  onClick={() => buy(key)}
-                  disabled={busy !== null || isCurrent}
+                  onClick={() => (hasHrPlan ? manage() : buy(key))}
+                  disabled={busy !== null || opening || isCurrent}
                   className={
                     "mt-5 inline-flex h-10 items-center justify-center gap-1.5 rounded-[8px] px-4 text-[13px] font-semibold transition disabled:opacity-60 " +
                     (p.highlight
@@ -202,7 +231,7 @@ export function Pricing() {
                   }
                 >
                   {busy === key && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-                  {isCurrent ? "Current plan" : busy === key ? "Starting…" : "Subscribe"}
+                  {isCurrent ? "Current plan" : busy === key ? "Starting…" : hasHrPlan ? "Switch plan" : "Subscribe"}
                 </button>
               </div>
             );
@@ -282,7 +311,7 @@ export function Pricing() {
           })}
         </div>
         <p className="mt-6 text-center text-[11.5px] text-[var(--ds-muted)]">
-          Prices in GBP. Secure checkout by Stripe. Purchased credits never expire; plan credits refresh each cycle.
+          Prices in GBP. Secure checkout by Stripe. Purchased credits never expire; plan credits refresh every month, on annual plans too.
         </p>
       </section>
     </div>

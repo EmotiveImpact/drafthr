@@ -1,8 +1,9 @@
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
-import { resolveFigureRefsInHtml, displayModeOf, figureLabelFor } from "@/lib/evidence";
+import { resolveFigureRefsInHtml, displayModeOf } from "@/lib/evidence";
+import { buildExhibitsAppendixHtml } from "@/lib/export/exhibits";
 import { sanitizeLetterHtml } from "@/lib/sanitize";
-import { isSafeImageDataUrl, isSafeImageRef } from "@/lib/safe-data-url";
+import { isSafeImageRef } from "@/lib/safe-data-url";
 
 export function buildPreviewSourceHtml(
   draft: Draft,
@@ -13,7 +14,7 @@ export function buildPreviewSourceHtml(
   const body = options.letterBodyHtml ?? buildStoredSectionsBodyHtml(draft);
   const resolved = evidence.length > 0 ? resolveFigureRefsInHtml(body, evidence) : body;
   const attachments = buildAttachmentsBlock(draft);
-  const figures = buildFiguresAppendix(draft);
+  const figures = buildExhibitsAppendixHtml(draft);
   const disclaimer = sanitizeLetterHtml(disclaimerHtmlFor(draft));
 
   return `
@@ -73,35 +74,6 @@ function buildAttachmentsBlock(draft: Draft): string {
   return `<section class="attachments-section page-break-before">
     <h2>Attachments</h2>
     <ol class="attachments-list">${items}</ol>
-  </section>`;
-}
-
-function buildFiguresAppendix(draft: Draft): string {
-  const all = draft.evidence ?? [];
-  const figs = all.filter((e) => displayModeOf(e) === "figure");
-  if (figs.length === 0) return "";
-  return `<section class="figures-section page-break-before">
-    <h2>Exhibits</h2>
-    ${figs
-      .map((item) => {
-        const label = figureLabelFor(item, all);
-        const isImage = item.mimeType?.startsWith("image/");
-        const imageUrl = isImage && isSafeImageDataUrl(item.fileDataUrl)
-          ? item.fileDataUrl
-          : undefined;
-        return `<figure class="figure-item">
-          <figcaption><strong>${escHtml(label)}</strong>${
-          item.filename ? ` &mdash; ${escHtml(item.filename)}` : ""
-        }</figcaption>
-          ${
-            imageUrl
-              ? `<img src="${escAttr(imageUrl)}" alt="${escAttr(item.filename || "")}" />`
-              : ""
-          }
-          ${item.content ? `<p class="figure-body">${escHtml(item.content)}</p>` : ""}
-        </figure>`;
-      })
-      .join("\n")}
   </section>`;
 }
 

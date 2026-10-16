@@ -114,7 +114,7 @@ export function SignUp() {
   };
 
   if (stage === "verify") {
-    return <CheckYourEmail email={email.trim()} userId={pendingUserId} />;
+    return <CheckYourEmail email={email.trim()} userId={pendingUserId} password={password} />;
   }
 
   return (
@@ -302,6 +302,7 @@ export function CheckYourEmail({
   email,
   userId,
   pendingAuthenticationToken = null,
+  password,
   heading,
   blurb,
 }: {
@@ -310,6 +311,10 @@ export function CheckYourEmail({
   /** Flow B (sign-in-while-unverified): verify via this token instead of a
    *  userId. Exactly one of userId / pendingAuthenticationToken is set. */
   pendingAuthenticationToken?: string | null;
+  /** Flow A: the password from the sign-up form. The server sets it once the
+   *  code is accepted, because a repeat sign-up for an unverified address
+   *  replaces that account's password with a random one. */
+  password?: string;
   /** Optional copy overrides so the sign-in entry point can reword the screen. */
   heading?: string;
   blurb?: string;
@@ -363,6 +368,7 @@ export function CheckYourEmail({
           code: normalisedCode,
           userId: userId || undefined,
           pendingAuthenticationToken: pendingAuthenticationToken || undefined,
+          password: userId && password ? password : undefined,
         }),
       });
       if (!res.ok) {

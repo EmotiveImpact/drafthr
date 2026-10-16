@@ -37,6 +37,7 @@ import { todayDateOnly } from "@/lib/date-only";
 import { WorkspaceMembersCard } from "@/components/WorkspaceMembersCard";
 import { AuditLogsCard } from "@/components/AuditLogsCard";
 import { SecurityCard } from "@/components/SecurityCard";
+import { BillingCard } from "@/components/billing/BillingCard";
 
 const MAX_PROFILE_IMPORT_BYTES = 256 * 1024;
 
@@ -51,8 +52,6 @@ export function Settings() {
   const setWorkspaceRole = useProfileStore((s) => s.setWorkspaceRole);
   const markSetupComplete = useProfileStore((s) => s.markSetupComplete);
   const resetProfile = useProfileStore((s) => s.reset);
-  const drafts = useDraftStore((s) => s.drafts);
-  const deleteDraft = useDraftStore((s) => s.deleteDraft);
 
   const [savedFlash, setSavedFlash] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -113,7 +112,9 @@ export function Settings() {
         "This will erase your profile and all drafts from this device. Cloud-stored data is unaffected. Continue?"
       )
     ) {
-      Object.keys(drafts).forEach((id) => deleteDraft(id));
+      // Local wipe only: deleteDraft would also delete each letter from the
+      // workspace, which this "this device only" action promises not to do.
+      useDraftStore.setState({ drafts: {} });
       resetProfile();
       nav("/");
     }
@@ -356,7 +357,11 @@ export function Settings() {
                 value={profile.defaults.qwenModel ?? DEFAULT_MODEL}
                 onValueChange={(v) => patchDefaults({ qwenModel: v as QwenModelId })}
               >
-                <Select.Trigger />
+                {/* Show only the model name in the trigger; the long hint
+                 * stays in the list, where it overflowed the card before. */}
+                <Select.Trigger style={{ width: "100%", maxWidth: "100%" }}>
+                  {QWEN_MODEL_OPTIONS.find((m) => m.id === (profile.defaults.qwenModel ?? DEFAULT_MODEL))?.label}
+                </Select.Trigger>
                 <Select.Content>
                   {QWEN_MODEL_OPTIONS.map((m) => (
                     <Select.Item key={m.id} value={m.id}>
@@ -403,13 +408,19 @@ export function Settings() {
          * surface signed-in users have no path to rotate their password. */}
         <SecurityCard />
 
+        {/* Billing — current plan and the Stripe Billing Portal. */}
+        <BillingCard />
+
         {/* Workspace — real members + invites when signed in to a tenant. */}
         <WorkspaceMembersCard />
 
         {/* WorkOS Audit Logs mirror status (admin-only) — null for non-admins. */}
         <AuditLogsCard />
 
-        {/* Solo / sim role picker — kept for local-only dev + screencasts. */}
+        {/* Solo / sim role picker — local dev + screencasts only. In a real build
+         * it let any member make themselves owner in the browser, unlocking
+         * approve buttons and approved drafts for client-side export. */}
+        {import.meta.env.DEV && (
         <Card size="3">
           <Box mb="3">
             <Heading size="3" mb="1">Role (local simulation)</Heading>
@@ -437,6 +448,7 @@ export function Settings() {
             </Field>
           </Grid>
         </Card>
+        )}
 
         {/* Auto-fill */}
         <Card size="3">

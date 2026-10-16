@@ -63,9 +63,13 @@ export type BuildPadesCmsInput = {
   content: Uint8Array;
   /** Signer abstraction — KmsSigner from kms-signer.ts or local-signer.ts. */
   signer: KmsSigner;
-  /** RFC 3161 TimeStampResp or bare TimeStampToken DER bytes. Optional;
-   *  when omitted the result is PAdES-B-B (no timestamp). */
-  tsr?: Uint8Array | null;
+  /** Fetch an RFC 3161 TimeStampResp (or bare TimeStampToken) over the
+   *  given SHA-256 hex of the signature value. Called once the signature
+   *  exists, because a PAdES-B-T SignatureTimeStampToken must cover the
+   *  signature value (RFC 3161 Appendix A); a token over anything else
+   *  lets a real signature be paired with an unrelated, older timestamp.
+   *  Optional; when omitted or it yields nothing the result is PAdES-B-B. */
+  timestamp?: (signatureSha256Hex: string) => Promise<Uint8Array | null | undefined>;
   /** UTC instant recorded in the signing-time signed attribute. Defaults
    *  to now. Test fixtures pass a deterministic value. */
   signingTime?: Date;
@@ -79,6 +83,8 @@ export type BuildPadesCmsResult = {
   /** SHA-256 of the signed content — handy for callers to record alongside
    *  the CMS. */
   contentSha256Hex: string;
+  /** The timestamp response that was embedded, if any. */
+  tsr: Uint8Array | null;
 };
 
 export async function buildPadesCms(
@@ -136,8 +142,11 @@ export async function buildPadesCms(
   // wrapping TimeStampResp). FreeTSA gives us back a TimeStampResp; we
   // unwrap it here.
   let unsignedAttrs: Attribute[] | undefined;
-  if (input.tsr) {
-    const tokenDer = extractTimeStampTokenDer(input.tsr);
+  const tsr = input.timestamp
+    ? await input.timestamp(createHash("sha256").update(signature).digest("hex"))
+    : null;
+  if (tsr) {
+    const tokenDer = extractTimeStampTokenDer(tsr);
     unsignedAttrs = [
       new Attribute({
         attrType: OID_SIGNATURE_TIMESTAMP_TOKEN,
@@ -181,6 +190,7 @@ export async function buildPadesCms(
   return {
     cmsDer: new Uint8Array(AsnConvert.serialize(contentInfo)),
     contentSha256Hex: contentDigest.toString("hex"),
+    tsr: tsr ?? null,
   };
 }
 

@@ -8,7 +8,9 @@
  *     the WorkOS email template to include both placeholders). After we
  *     call verifyEmail, we DO mint an iron-session cookie — they just
  *     proved control of the inbox, no reason to make them re-enter their
- *     password to be admitted.
+ *     password to be admitted. When the code is typed into the sign-up
+ *     page, that page also sends the password from its form and we set it
+ *     once the code checks out.
  *
  *  B) Sign-in-while-unverified flow — the user attempted to sign in with
  *     a valid password but unverified email; authenticateWithPassword
@@ -24,13 +26,14 @@
  */
 
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
-import { rateLimit, clientIp } from "../../_utils/rate-limit.js";
+import { rateLimitDurable, rateLimitKeyDurable, clientIp } from "../../_utils/rate-limit.js";
 import {
   buildSessionCookie,
   getWorkos,
   type SessionPayload,
 } from "../../_utils/workos.js";
 import { getUserSessionEpoch } from "../../_utils/session-epoch.js";
+import { linkDirectoryIdentityOnSignIn } from "../../_utils/directory-link.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -39,11 +42,17 @@ type VerifyEmailBody = {
   userId?: string;
   /** Returned by authenticateWithPassword as email_verification_required.pendingAuthenticationToken. */
   pendingAuthenticationToken?: string;
+  /** Flow A only: the password typed into the sign-up form in this browser.
+   *  Applied after the code proves the inbox, so the account's password is
+   *  always chosen by the person who verified it (see sign-up.ts). */
+  password?: string;
 };
 
 const MAX_CODE = 64;
 const MAX_USER_ID = 128;
 const MAX_TOKEN = 4096;
+const MIN_PASSWORD = 8;
+const MAX_PASSWORD = 256;
 
 /** Spoof-resistant client IP for WorkOS risk signals. The shared resolver
  *  (senior sweep B14) uses the proxy-appended last hop and returns the
@@ -61,7 +70,7 @@ export async function POST(req: Request): Promise<Response> {
   // 10/min/IP — generous enough that a user fat-fingering the code a few
   // times isn't locked out, harsh enough that brute-forcing a 6-digit
   // code from a single IP is impractical.
-  const limited = rateLimit(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
+  const limited = await rateLimitDurable(req, { name: "auth-verify-email", max: 10, windowMs: 60_000 });
   if (limited) return limited;
 
   const parsed = await readJsonRequest<VerifyEmailBody>(req);
@@ -86,6 +95,14 @@ export async function POST(req: Request): Promise<Response> {
   if (pendingToken && pendingToken.length > MAX_TOKEN) {
     return jsonError("Verification context is invalid.", 400);
   }
+
+  // Per-subject cap so a six-digit code cannot be brute-forced by spreading
+  // guesses over many IPs or instances.
+  const perSubject = await rateLimitKeyDurable(
+    userId ? `user:${userId}` : `pending:${pendingToken}`,
+    { name: "auth-verify-email-subject", max: 10, windowMs: 15 * 60_000 },
+  );
+  if (perSubject) return perSubject;
 
   const workos = getWorkos();
 
@@ -113,12 +130,28 @@ export async function POST(req: Request): Promise<Response> {
         lastName: user.lastName ?? null,
         profilePictureUrl: user.profilePictureUrl ?? null,
         sealedSession: sealedSession ?? "",
+        // The code just proved control of the inbox.
+        emailVerified: true,
       });
     }
 
     // Flow A: post-sign-up. verifyEmail confirms the address; we then
     // mint a session manually because no auth-with-credentials happened.
     const { user } = await workos.userManagement.verifyEmail({ code, userId });
+
+    // The code has proved the inbox; the password from this browser's
+    // sign-up form becomes the account's password. A duplicate sign-up
+    // replaces an unverified account's password with a random one, so
+    // without this the owner's own password would stop working. Best
+    // effort: they are verified and signed in either way, and can reset it.
+    const password = typeof parsed.body.password === "string" ? parsed.body.password : "";
+    if (password.length >= MIN_PASSWORD && password.length <= MAX_PASSWORD) {
+      try {
+        await workos.userManagement.updateUser({ userId: user.id, password });
+      } catch (err) {
+        console.error("[auth/verify-email] could not set the password after verification", err);
+      }
+    }
 
     return await respondWithSession({
       id: user.id,
@@ -127,6 +160,7 @@ export async function POST(req: Request): Promise<Response> {
       lastName: user.lastName ?? null,
       profilePictureUrl: user.profilePictureUrl ?? null,
       sealedSession: "",
+      emailVerified: true,
     });
   } catch (err) {
     console.warn("[auth/verify-email] failed", err);
@@ -147,7 +181,15 @@ async function respondWithSession(input: {
   lastName: string | null;
   profilePictureUrl: string | null;
   sealedSession: string;
+  emailVerified: boolean;
 }): Promise<Response> {
+  // Link Directory Sync placeholders before reading the epoch (see callback.ts).
+  await linkDirectoryIdentityOnSignIn({
+    workosUserId: input.id,
+    email: input.email,
+    emailVerified: input.emailVerified,
+  });
+
   const payload: SessionPayload = {
     user: {
       id: input.id,

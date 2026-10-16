@@ -5,21 +5,41 @@
  * Authorisation: only the consultant or the requester can transition,
  * and only on transitions valid for their role:
  *
- *                       consultant      requester
- *   accept              ✓               -
- *   decline             ✓               -
- *   deliver             ✓               -
- *   complete            -               ✓
+ *                       consultant      requester       needs payment
+ *   accept              ✓               -               -
+ *   decline             ✓               -               -
+ *   deliver             ✓               -               ✓
+ *   complete            -               ✓               ✓
+ *   rate                -               ✓               ✓
+ *
+ * Payment: the requester pays once the consultant accepts. Delivering,
+ * completing and rating all require the booking's payment to be recorded as
+ * paid, and draft access (the share link) is only minted on payment, by the
+ * Stripe webhook. A booking someone placed on their own consultant profile can
+ * never be worked or rated.
+ *
+ * Rating: one 1 to 5 rating per completed, paid booking, given either with
+ * "complete" or afterwards with "rate".
  *
  * Request body: { bookingId, action, note?, rating? }
  */
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, exists, isNull } from "drizzle-orm";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
 import { getDb } from "../../../src/db/index.js";
-import { consultantBookings, consultantProfiles } from "../../../src/db/schema.js";
+import {
+  bookingPayments,
+  consultantBookings,
+  consultantProfiles,
+} from "../../../src/db/schema.js";
 import { serverUuidOrNull } from "../../../src/lib/remote-ids.js";
+import {
+  grantDraftAccess,
+  paymentStatusOf,
+  priceSnapshot,
+  recomputeConsultantRating,
+} from "../../_utils/marketplace-payments.js";
 import {
   sendBookingAcceptedEmail,
   sendBookingDeclinedEmail,
@@ -28,7 +48,10 @@ import {
 
 export const config = { runtime: "nodejs" };
 
-type Action = "accept" | "decline" | "deliver" | "complete";
+type Action = "accept" | "decline" | "deliver" | "complete" | "rate";
+
+/** Actions that only a paid booking can take. */
+const PAID_ACTIONS: ReadonlySet<string> = new Set(["deliver", "complete", "rate"]);
 
 type RespondInput = {
   bookingId: string;
@@ -71,6 +94,28 @@ export async function POST(req: Request): Promise<Response> {
   const isConsultant = booking.consultantUserId === auth.userRow.id;
   const isRequester = booking.requesterUserId === auth.userRow.id;
   if (!isConsultant && !isRequester) return jsonError("Not your booking", 403);
+  // A booking placed on one's own profile (creation refuses these; this
+  // catches any that predate that check) can't be worked or rated.
+  if (booking.requesterUserId === booking.consultantUserId)
+    return jsonError("You can't act on a booking of your own profile", 403);
+
+  const paymentStatus = await paymentStatusOf(db, booking.id);
+  if (PAID_ACTIONS.has(body.action) && paymentStatus !== "paid") {
+    return jsonError("This booking hasn't been paid yet", 402);
+  }
+
+  let rating: number | undefined;
+  if (body.rating !== undefined && body.rating !== null) {
+    if (
+      typeof body.rating !== "number" ||
+      !Number.isInteger(body.rating) ||
+      body.rating < 1 ||
+      body.rating > 5
+    ) {
+      return jsonError("rating must be a whole number from 1 to 5", 400);
+    }
+    rating = body.rating;
+  }
 
   const update: Partial<typeof consultantBookings.$inferInsert> = {};
   const now = new Date();
@@ -90,12 +135,21 @@ export async function POST(req: Request): Promise<Response> {
       update.status = "accepted";
       update.acceptedAt = now;
       if (body.note) update.responseNote = body.note.slice(0, 2000);
-      // Mint a matter-scoped share token if a draft is attached. The
-      // consultant uses it on /shared/:token to fetch the specific draft
-      // without joining the HR tenant. Expires 30 days after acceptance.
-      if (booking.draftId) {
-        update.shareToken = generateShareToken();
-        update.shareTokenExpiresAt = new Date(now.getTime() + 30 * 24 * 3600 * 1000);
+      // No share token here: draft access opens only once the requester has
+      // paid (the Stripe webhook mints it). Legacy bookings placed before
+      // price snapshots existed get one now, so checkout never reads the
+      // live rate.
+      if (booking.priceAmount === null) {
+        const [profile] = await db
+          .select({ price: consultantProfiles.price, currency: consultantProfiles.currency })
+          .from(consultantProfiles)
+          .where(eq(consultantProfiles.id, booking.consultantProfileId))
+          .limit(1);
+        const price = profile ? priceSnapshot(profile) : null;
+        if (price) {
+          update.priceAmount = price.priceAmount;
+          update.priceCurrency = price.priceCurrency;
+        }
       }
       break;
     case "decline":
@@ -119,9 +173,15 @@ export async function POST(req: Request): Promise<Response> {
         return jsonError(`Cannot complete from status '${booking.status}'`, 409);
       update.status = "completed";
       update.completedAt = now;
-      if (typeof body.rating === "number" && body.rating >= 0 && body.rating <= 5) {
-        update.rating = Math.round(body.rating);
-      }
+      if (rating !== undefined) update.rating = rating;
+      break;
+    case "rate":
+      if (!isRequester) return jsonError("Only the requester can rate", 403);
+      if (booking.status !== "completed")
+        return jsonError("Only a completed booking can be rated", 409);
+      if (booking.rating !== null) return jsonError("This booking has already been rated", 409);
+      if (rating === undefined) return jsonError("rating required", 400);
+      update.rating = rating;
       break;
     default:
       return jsonError(`Unknown action '${body.action}'`, 400);
@@ -136,6 +196,25 @@ export async function POST(req: Request): Promise<Response> {
         // Compare-and-set: the booking must still be in the status the
         // transition validated against (TOCTOU guard, B12).
         eq(consultantBookings.status, expectedFrom),
+        // One rating per booking, even under concurrent requests.
+        ...(body.action === "rate" ? [isNull(consultantBookings.rating)] : []),
+        // Re-check payment inside the write, so a refund or dispute landing
+        // between the read above and this update can't be raced past.
+        ...(PAID_ACTIONS.has(body.action)
+          ? [
+              exists(
+                db
+                  .select({ one: bookingPayments.bookingId })
+                  .from(bookingPayments)
+                  .where(
+                    and(
+                      eq(bookingPayments.bookingId, consultantBookings.id),
+                      eq(bookingPayments.status, "paid"),
+                    ),
+                  ),
+              ),
+            ]
+          : []),
       ),
     )
     .returning();
@@ -143,32 +222,26 @@ export async function POST(req: Request): Promise<Response> {
     return jsonError("Booking already transitioned — please refresh.", 409);
   }
 
-  // When a booking completes with a rating, recompute the consultant's
-  // aggregate rating + review count from all their rated completions.
-  // Without this, consultant_profiles.rating_x10 stays at the seed 50
-  // (5.0) forever and the marketplace's core trust signal is dead.
-  if (body.action === "complete" && typeof update.rating === "number") {
+  // A booking paid before it was accepted (checkout used to allow it) never
+  // got a share link from the webhook, which only opens access on working
+  // bookings. Open it now that the booking is accepted.
+  let result = next;
+  if (body.action === "accept" && paymentStatus === "paid") {
+    await grantDraftAccess(db, next.id, now);
+    const [refreshed] = await db
+      .select()
+      .from(consultantBookings)
+      .where(eq(consultantBookings.id, next.id))
+      .limit(1);
+    if (refreshed) result = refreshed;
+  }
+
+  // Recompute the consultant's aggregate rating + review count whenever a
+  // rating lands. Without this, consultant_profiles.rating_x10 stays at the
+  // seed 50 (5.0) forever and the marketplace's core trust signal is dead.
+  if (typeof update.rating === "number") {
     try {
-      const rated = await db
-        .select({ rating: consultantBookings.rating })
-        .from(consultantBookings)
-        .where(
-          and(
-            eq(consultantBookings.consultantProfileId, booking.consultantProfileId),
-            eq(consultantBookings.status, "completed"),
-            isNotNull(consultantBookings.rating),
-          ),
-        );
-      const values = rated
-        .map((r) => r.rating)
-        .filter((r): r is number => typeof r === "number");
-      if (values.length > 0) {
-        const avg = values.reduce((s, r) => s + r, 0) / values.length;
-        await db
-          .update(consultantProfiles)
-          .set({ rating: Math.round(avg * 10), reviews: values.length })
-          .where(eq(consultantProfiles.id, booking.consultantProfileId));
-      }
+      await recomputeConsultantRating(db, booking.consultantProfileId);
     } catch (err) {
       // Aggregation failure must not fail the completion response.
       console.error("[bookings] rating aggregation failed", err);
@@ -181,7 +254,7 @@ export async function POST(req: Request): Promise<Response> {
     console.error("[bookings] notify failed", body.action, err);
   });
 
-  return new Response(JSON.stringify({ booking: toClient(next) }), {
+  return new Response(JSON.stringify({ booking: toClient(result, paymentStatus) }), {
     status: 200,
     headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
@@ -196,20 +269,12 @@ async function notifyTransition(action: Action, bookingId: string) {
     case "deliver":
       return sendBookingDeliveredEmail(bookingId);
     case "complete":
+    case "rate":
       return Promise.resolve();
   }
 }
 
-/**
- * Generates a 32-char URL-safe share token. Uses crypto.randomUUID()
- * with the dashes stripped — gives 128 bits of entropy and renders as a
- * clean URL path segment without needing base64url normalisation.
- */
-function generateShareToken(): string {
-  return "sht_" + crypto.randomUUID().replace(/-/g, "");
-}
-
-function toClient(row: typeof consultantBookings.$inferSelect) {
+function toClient(row: typeof consultantBookings.$inferSelect, paymentStatus: string) {
   return {
     id: row.id,
     consultantProfileId: row.consultantProfileId,
@@ -220,6 +285,9 @@ function toClient(row: typeof consultantBookings.$inferSelect) {
     responseNote: row.responseNote,
     deliveryNote: row.deliveryNote,
     rating: row.rating,
+    priceAmount: row.priceAmount,
+    priceCurrency: row.priceCurrency,
+    paymentStatus,
     shareToken: row.shareToken,
     messages: row.messages,
     shareTokenExpiresAt: row.shareTokenExpiresAt?.getTime() ?? null,

@@ -18,21 +18,18 @@
  * helper is safe to call repeatedly (the chain advances each time, which is
  * fine — re-deliveries are an accurate record that "we got this event N
  * times"). Tenant scoping is enforced by resolving every webhook to the
- * tenant whose workos_org_id matches the event's organization_id; cross-tenant
- * writes are rejected at the dispatch point.
+ * tenant whose workos_org_id matches the event's organization_id, and every
+ * match and write after that is confined to that tenant. The provisioning
+ * policy lives in api/_utils/directory-provisioning.ts.
  */
-import { and, eq } from "drizzle-orm";
-import { getDb } from "../../../src/db/index.js";
-import { tenantMembers, tenants, users } from "../../../src/db/schema.js";
-import { appendAuditEvent } from "../../../src/db/audit.js";
 import { getWorkos } from "../../_utils/workos.js";
 import { jsonError } from "../../_utils/request.js";
-import { lockTenantOwnerGuard, lockUserActiveTenant } from "../../_utils/tenant-active-lock.js";
+import { createDrizzleDirectoryStore, type DirectoryStore } from "../../_utils/directory-store.js";
 import {
-  extractDirectoryEmail,
-  extractDirectoryName,
-  mapDirectoryRoleToTenantRole,
-} from "../../_utils/directory-sync.js";
+  deprovisionDirectoryUser,
+  provisionDirectoryUser,
+  type DirectoryUserLike,
+} from "../../_utils/directory-provisioning.js";
 
 export const config = { runtime: "nodejs" };
 
@@ -46,18 +43,6 @@ type DsyncEvent =
   | { event: "dsync.group.user_removed"; data: { directoryId: string; user: DirectoryUserLike; group: DirectoryGroupLike } }
   | { event: "dsync.group.created"; data: DirectoryGroupLike }
   | { event: "dsync.group.updated"; data: DirectoryGroupLike };
-
-type DirectoryUserLike = {
-  id: string;
-  directoryId: string;
-  organizationId: string | null;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-  state: "active" | "inactive";
-  customAttributes?: Record<string, unknown>;
-  role?: { slug: string };
-};
 
 type DirectoryGroupLike = {
   id: string;
@@ -138,18 +123,21 @@ function ackResponse(): Response {
   });
 }
 
-async function processDsyncEvent(event: DsyncEvent): Promise<void> {
+async function processDsyncEvent(
+  event: DsyncEvent,
+  store: DirectoryStore = createDrizzleDirectoryStore(),
+): Promise<void> {
   // Resolve organization → tenant. dsync.group.user_* nest org id inside
   // user/group; dsync.user.* + dsync.group.* have it on the top-level data.
+  // Every write below is scoped to this tenant (see directory-provisioning.ts).
   const orgId = resolveOrganizationId(event);
   if (!orgId) {
     console.warn("[directory-webhook] event without organization_id, skipping", event.event);
     return;
   }
 
-  const db = getDb();
-  const [tenant] = await db.select().from(tenants).where(eq(tenants.workosOrgId, orgId)).limit(1);
-  if (!tenant) {
+  const tenantId = await store.findTenantIdByOrgId(orgId);
+  if (!tenantId) {
     // No mapped tenant — this happens during initial dashboard wiring before
     // an admin pairs the org. We don't error out; we just acknowledge.
     console.warn("[directory-webhook] no tenant for workos_org_id", orgId);
@@ -159,18 +147,18 @@ async function processDsyncEvent(event: DsyncEvent): Promise<void> {
   switch (event.event) {
     case "dsync.user.created":
     case "dsync.user.updated":
-      await provisionUser(tenant.id, event.data);
+      await provisionDirectoryUser(store, tenantId, event.data);
       return;
     case "dsync.user.deleted":
-      await deprovisionUser(tenant.id, event.data, "directory.user.deprovisioned");
+      await deprovisionDirectoryUser(store, tenantId, event.data, "directory.user.deprovisioned");
       return;
     case "dsync.group.user_added":
       // Same upsert path as user.created — group membership simply confirms
       // the user should be active in the tenant.
-      await provisionUser(tenant.id, event.data.user);
+      await provisionDirectoryUser(store, tenantId, event.data.user);
       return;
     case "dsync.group.user_removed":
-      await deprovisionUser(tenant.id, event.data.user, "directory.user.group_removed");
+      await deprovisionDirectoryUser(store, tenantId, event.data.user, "directory.user.group_removed");
       return;
     case "dsync.group.created":
     case "dsync.group.updated":
@@ -195,212 +183,6 @@ function resolveOrganizationId(event: DsyncEvent): string | null {
     return event.data.organizationId ?? null;
   }
   return null;
-}
-
-async function provisionUser(tenantId: string, user: DirectoryUserLike): Promise<void> {
-  const db = getDb();
-  const email = extractDirectoryEmail(user);
-  const legalName = extractDirectoryName(user);
-  const role = mapDirectoryRoleToTenantRole(user.role?.slug);
-  // Per the WorkOS docs, state="inactive" on an update event means the IdP
-  // has deactivated the user without deleting them. Treat that as soft
-  // deprovisioning — most IdPs prefer deactivate over delete.
-  if (user.state === "inactive") {
-    await deprovisionUser(tenantId, user, "directory.user.deactivated");
-    return;
-  }
-
-  // Find by workos id first (rename-stable), then by email as a fallback
-  // when the SCIM provider recreated the user with a new id. Upserting
-  // either way keeps the chain idempotent.
-  let [existing] = await db
-    .select()
-    .from(users)
-    .where(eq(users.workosDirectoryUserId, user.id))
-    .limit(1);
-  if (!existing && email) {
-    const [byEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (byEmail) existing = byEmail;
-  }
-
-  let userId: string;
-  let isNew = false;
-  if (existing) {
-    const [updated] = await db
-      .update(users)
-      .set({
-        email: email ?? existing.email,
-        legalName: legalName ?? existing.legalName,
-        workosDirectoryUserId: user.id,
-        workosDirectoryId: user.directoryId,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, existing.id))
-      .returning();
-    userId = updated.id;
-  } else {
-    // Mint a user. external_id is required + unique on the users table; for
-    // directory-provisioned users that don't have a WorkOS AuthKit identity
-    // yet we synthesize one from the directory id with a clear prefix so
-    // a later AuthKit sign-in can be reconciled. (When the directory user
-    // later signs in via AuthKit, requireSessionAndTenant will find the
-    // row by email and we'll update external_id then — outside this PR.)
-    const [created] = await db
-      .insert(users)
-      .values({
-        tenantId,
-        externalId: `dsync:${user.id}`,
-        email,
-        legalName,
-        workspaceRole: role,
-        userType: "customer",
-        workosDirectoryUserId: user.id,
-        workosDirectoryId: user.directoryId,
-      })
-      .returning();
-    userId = created.id;
-    isNew = true;
-  }
-
-  // Only make this the user's active tenant if they don't already have one.
-  // A user matched by email can already belong (and be active) in another
-  // tenant; inserting this membership with isActiveTenant:true would leave
-  // them with TWO active memberships and silently switch their workspace.
-  // The invariant is "exactly one active membership per user", so a new
-  // directory-provisioned membership joins as inactive when an active one
-  // exists elsewhere, and active only when it's the user's first.
-  // Serialize the "active elsewhere?" read + the membership insert under a
-  // per-user advisory lock so they're atomic against a concurrent provision
-  // into a DIFFERENT tenant (and against switch/accept-invite/create). Without
-  // it, two provisions both observe "no active" and both insert active, leaving
-  // two active rows. (Closes the previously-flagged directory-provision residual.)
-  await db.transaction(async (tx) => {
-    await lockUserActiveTenant(tx, userId);
-    const [activeElsewhere] = await tx
-      .select({ tenantId: tenantMembers.tenantId })
-      .from(tenantMembers)
-      .where(and(eq(tenantMembers.userId, userId), eq(tenantMembers.isActiveTenant, true)))
-      .limit(1);
-    const isActiveTenant = !activeElsewhere;
-
-    // Upsert membership. onConflictDoUpdate keeps re-syncs idempotent; the
-    // conflict `set` deliberately does NOT touch isActiveTenant, so re-syncing
-    // an existing membership never flips the user's active workspace.
-    await tx
-      .insert(tenantMembers)
-      .values({
-        userId,
-        tenantId,
-        role,
-        isActiveTenant,
-        status: "active",
-        deprovisionedAt: null,
-      })
-      .onConflictDoUpdate({
-        target: [tenantMembers.userId, tenantMembers.tenantId],
-        set: {
-          role,
-          status: "active",
-          deprovisionedAt: null,
-        },
-      });
-  });
-
-  await safelyAppendAudit({
-    tenantId,
-    kind: isNew ? "directory.user.provisioned" : "directory.user.role_changed",
-    subjectType: "user",
-    subjectId: userId,
-    actorUserId: null,
-    payload: {
-      workosDirectoryUserId: user.id,
-      workosDirectoryId: user.directoryId,
-      email,
-      role,
-    },
-  });
-}
-
-async function deprovisionUser(
-  tenantId: string,
-  user: DirectoryUserLike,
-  kind: "directory.user.deprovisioned" | "directory.user.deactivated" | "directory.user.group_removed",
-): Promise<void> {
-  const db = getDb();
-  const email = extractDirectoryEmail(user);
-
-  // Soft-delete on membership. We DON'T touch the users row — keep the
-  // identity around for audit references.
-  let [existing] = await db
-    .select()
-    .from(users)
-    .where(eq(users.workosDirectoryUserId, user.id))
-    .limit(1);
-  if (!existing && email) {
-    const [byEmail] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (byEmail) existing = byEmail;
-  }
-  if (!existing) {
-    // Already gone or never provisioned — webhook is still idempotent,
-    // just nothing to do. Skip the audit row too (no subject).
-    return;
-  }
-
-  // Run under the same owner-guard lock as member role/remove: without it a
-  // webhook deprovision racing an admin demote could each see 2 live owners
-  // and together leave the workspace ownerless (the R12 TOCTOU class). The
-  // IdP stays authoritative — a sole-owner deprovision still proceeds — but
-  // it is now serialized (so the admin request sees the true count and 409s)
-  // and an ownerless outcome is flagged loudly instead of happening silently.
-  let leftOwnerless = false;
-  await db.transaction(async (tx) => {
-    await lockTenantOwnerGuard(tx, tenantId);
-    await tx
-      .update(tenantMembers)
-      .set({ status: "deprovisioned", deprovisionedAt: new Date(), isActiveTenant: false })
-      .where(and(eq(tenantMembers.userId, existing.id), eq(tenantMembers.tenantId, tenantId)));
-    const owners = await tx
-      .select({ userId: tenantMembers.userId })
-      .from(tenantMembers)
-      .where(
-        and(
-          eq(tenantMembers.tenantId, tenantId),
-          eq(tenantMembers.role, "owner"),
-          eq(tenantMembers.status, "active"),
-        ),
-      );
-    leftOwnerless = owners.length === 0;
-  });
-  if (leftOwnerless) {
-    console.error(
-      "[directory-webhook] tenant left with NO active owner after deprovision",
-      tenantId,
-      existing.id,
-    );
-  }
-
-  await safelyAppendAudit({
-    tenantId,
-    kind,
-    subjectType: "user",
-    subjectId: existing.id,
-    actorUserId: null,
-    payload: {
-      workosDirectoryUserId: user.id,
-      workosDirectoryId: user.directoryId,
-      email,
-    },
-  });
-}
-
-async function safelyAppendAudit(input: Parameters<typeof appendAuditEvent>[0]): Promise<void> {
-  try {
-    await appendAuditEvent(input);
-  } catch (err) {
-    // Audit failure must not bubble — the directory state mutation has
-    // already committed and we don't want WorkOS to retry it.
-    console.error("[directory-webhook] audit append failed", input.kind, err);
-  }
 }
 
 // Exported for tests.

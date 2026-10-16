@@ -7,7 +7,7 @@ export const WHISTLEBLOWING_UK: LetterTemplate = {
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Protected Disclosure / PIDA — EMPLOYEE MODE — TRIBUNAL CRITICAL):
 - Statutory regime: Public Interest Disclosure Act 1998, inserted into the Employment Rights Act 1996 as ss.43A-43L.
 - A "qualifying disclosure" under s.43B is a disclosure of INFORMATION (not a mere allegation — Cavendish Munro Professional Risks Management Ltd v Geduld [2010] IRLR 38) which the worker reasonably believes:
-  (a) tends to show one of six categories: (i) criminal offence; (ii) breach of legal obligation; (iii) miscarriage of justice; (iv) danger to health & safety of any individual; (v) damage to environment; (vi) deliberate concealment of any of the foregoing; AND
+  (a) tends to show one of the s.43B(1) categories: (a) criminal offence; (b) breach of legal obligation; (c) miscarriage of justice; (d) danger to health & safety of any individual; (da) sexual harassment (inserted by the Employment Rights Act 2025 from 6 April 2026); (e) damage to environment; (f) deliberate concealment of any of the foregoing; AND
   (b) is made in the public interest (Chesterton Global Ltd v Nurmohamed [2017] EWCA Civ 979 — interest of more than the worker; small group can suffice).
 - The disclosure must be made to a "prescribed person" or otherwise satisfy s.43C-43H to be PROTECTED. Disclosure to the employer is the safest first step (s.43C).
 - Once protected, the worker is protected from detriment under s.47B and from automatically unfair dismissal under s.103A — no minimum service period; no compensation cap.

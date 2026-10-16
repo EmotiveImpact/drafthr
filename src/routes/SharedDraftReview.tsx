@@ -7,12 +7,13 @@ import { sanitizeLetterHtml } from "@/lib/sanitize";
 
 /**
  * /c/review/:bookingId — read-only draft view for a consultant who has
- * accepted a booking.
+ * accepted a booking that has been paid for.
  *
  * Resolves the booking's matter-scoped share token via the server
  * endpoint /api/marketplace/shared/<token>. The server enforces:
  *   - the caller's session matches the booking's assigned consultant,
- *   - the token hasn't expired (30-day window from acceptance).
+ *   - the token hasn't expired (30-day window from payment),
+ *   - the booking is still paid (a refund or dispute withdraws access).
  *
  * Falls back to the local draft store ONLY when the booking has no
  * share token yet (e.g. local-only demo bookings that never got an
@@ -72,8 +73,8 @@ export function SharedDraftReview() {
         title="Access not yet granted"
         body={
           <>
-            Draft access opens once you accept the booking. Currently the
-            status is <strong>{booking.status}</strong>.
+            Draft access opens once you accept the booking and HR has paid
+            for it. Currently the status is <strong>{booking.status}</strong>.
           </>
         }
       />
@@ -148,7 +149,7 @@ export function SharedDraftReview() {
             </div>
             <p className="mt-4 inline-flex items-center gap-1.5 text-[11px] text-[var(--ds-muted)]">
               <ShieldCheck className="size-3" aria-hidden />
-              Token-scoped read access · expires 30 days after acceptance
+              Token-scoped read access · expires 30 days after payment
             </p>
           </div>
         ) : (
@@ -156,7 +157,7 @@ export function SharedDraftReview() {
             <p className="text-[13.5px] text-[var(--ds-body)]">
               {error
                 ? error
-                : "Draft access pending. If you've just accepted, refresh the inbox to pick up the share link."}
+                : "Draft access opens once the booking is paid. If HR has just paid, refresh the inbox to pick up the share link."}
             </p>
             <p className="mt-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-[var(--ds-muted)]">
               <ShieldCheck className="size-3.5" aria-hidden />

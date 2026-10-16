@@ -1,9 +1,12 @@
+import { toast } from "sonner";
 import type { Draft } from "@/lib/letters/types";
 import { disclaimerHtmlFor } from "@/lib/letters/disclaimers";
 import { sanitizeLetterHtml, sanitizeLetterHtmlForExport } from "@/lib/sanitize";
 import { mergeAcceptedSuggestionsHtml } from "@/lib/tiptap/suggestion-merge";
 import { resolveFigureRefsInHtml } from "@/lib/evidence";
 import { isSafeImageRef } from "@/lib/safe-data-url";
+import { markUnembeddedImagesHtml } from "@/lib/storage/embedRemoteImages";
+import { buildExhibitsAppendixHtml } from "./exhibits";
 import {
   brandedExportFooterHtml,
   resolveClientEnvFlag,
@@ -56,28 +59,73 @@ type JsPdfDocument = {
  * to bundle the PDF alongside DOCX + evidence. The auto-download flow
  * is in exportLetterToPdf() below.
  */
-export async function renderLetterPdfBlob(draft: Draft): Promise<Blob> {
+export async function renderLetterPdfBlob(
+  draft: Draft,
+  attestation?: PdfAttestation,
+): Promise<Blob> {
   const filename = filenameFor(draft);
   const body = letterBodyHtml(draft);
-
-  // 1) Try server-side render
-  if (shouldTryServerPdf()) {
-    try {
-      const res = await fetch("/api/export/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: body, filename, draftId: draft.id }),
-      });
-      if (res.ok) {
-        return await res.blob();
-      }
-    } catch {
-      // Fall through to client-side
-    }
-  }
-
-  // 2) Client-side fallback
+  const server = await tryServerPdf(body, filename, draft.id, attestation);
+  if (server) return server;
   return await clientSidePdfBlob(body, filename);
+}
+
+export type PdfAttestation = { reviewedBy: string; reviewedOn: string };
+
+/** Server responses that mean "don't paper over this with the basic renderer". */
+const NO_FALLBACK_STATUSES: Record<number, string> = {
+  401: "Your session has expired. Sign in again to export.",
+  429: "Too many exports in a short time. Wait a minute and try again.",
+};
+
+const FALLBACK_REASON_UNAVAILABLE = "The server renderer was unavailable";
+// 413 falls back rather than blocking: the request carries every embedded
+// image, including the Exhibits appendix (every evidence item is a figure by
+// default), so a couple of phone photos exceed the platform's 4.5 MB request
+// limit. The in-browser renderer has no such limit.
+const FALLBACK_REASON_TOO_LARGE =
+  "This letter is too large for the server renderer (usually large images or exhibits)";
+
+/**
+ * Ask the server to render the PDF (real text, audit record, timestamp).
+ * Returns null when the caller should fall back to the in-browser renderer,
+ * and tells the user that happened: the fallback is a picture of the letter
+ * with no selectable text and no audit record, so it must never be silent.
+ * Throws for statuses where falling back would hide a real problem.
+ * Exported for unit testing.
+ */
+export async function tryServerPdf(
+  body: string,
+  filename: string,
+  draftId: string,
+  attestation?: PdfAttestation,
+): Promise<Blob | null> {
+  if (!shouldTryServerPdf()) return null;
+  let reason = FALLBACK_REASON_UNAVAILABLE;
+  try {
+    const res = await fetch("/api/export/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        html: body,
+        filename,
+        draftId,
+        reviewedBy: attestation?.reviewedBy,
+        reviewedOn: attestation?.reviewedOn,
+      }),
+    });
+    if (res.ok) return await res.blob();
+    const blocking = NO_FALLBACK_STATUSES[res.status];
+    if (blocking) throw new Error(blocking);
+    if (res.status === 413) reason = FALLBACK_REASON_TOO_LARGE;
+  } catch (err) {
+    if (err instanceof Error && Object.values(NO_FALLBACK_STATUSES).includes(err.message)) throw err;
+    // Network error: fall back below.
+  }
+  toast.warning("Exported with the basic PDF renderer", {
+    description: `${reason}, so this PDF is an image of the letter without selectable text or an export record.`,
+  });
+  return null;
 }
 
 /**
@@ -106,6 +154,8 @@ export function letterBodyHtml(draft: Draft): string {
     letterhead +
     resolved +
     attachments +
+    // Exhibits appendix: same builder as the page preview and the DOCX.
+    buildExhibitsAppendixHtml(draft) +
     "<hr />" +
     sanitizeLetterHtml(disclaimerHtmlFor(draft)) +
     // Branded export footer — toggle-aware. tenantPlan/userOptOut wiring lands
@@ -149,30 +199,17 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export async function exportLetterToPdf(draft: Draft): Promise<void> {
+export async function exportLetterToPdf(
+  draft: Draft,
+  attestation?: PdfAttestation,
+): Promise<void> {
   const filename = filenameFor(draft);
   const body = letterBodyHtml(draft);
-
-  // 1) Try server-side render
-  if (shouldTryServerPdf()) {
-    try {
-      const res = await fetch("/api/export/pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html: body, filename, draftId: draft.id }),
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        triggerDownload(blob, filename);
-        return;
-      }
-      // 404 / 500 on prod misconfig: fall through.
-    } catch {
-      // Network error: silently fall back.
-    }
+  const server = await tryServerPdf(body, filename, draft.id, attestation);
+  if (server) {
+    triggerDownload(server, filename);
+    return;
   }
-
-  // 2) Client-side fallback
   await clientSidePdf(body, filename);
 }
 
@@ -403,7 +440,9 @@ function injectSignatureIntoSignatureSection(
   // which strips any remaining <ins>/<del> wrappers so reviewer track-changes
   // never leak into the rendered document.
   const merged = mergeAcceptedSuggestionsHtml(section.html, { forExport: true });
-  const html = sanitizeLetterHtmlForExport(merged);
+  // Images that never got embedded (remote src) become a visible note
+  // instead of being dropped silently by the sanitiser.
+  const html = sanitizeLetterHtmlForExport(markUnembeddedImagesHtml(merged));
   if (!signature) return html;
   if (section.sectionId === "signature") {
     // Prepend the signature image at the top of the signature block.
