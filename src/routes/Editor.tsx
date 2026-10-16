@@ -8,6 +8,7 @@ import { useDraftStore } from "@/lib/store";
 import { useProfileStore } from "@/lib/profile";
 import { meIdentity } from "@/lib/comments/identity";
 import { generateAllSections, regenerateSectionAsPending } from "@/lib/llm/draft";
+import { PlanRequiredError } from "@/lib/llm/client";
 import type { Section } from "@/lib/letters/types";
 import { getLetterMeta } from "@/lib/letters/catalog";
 import { canSubmitForReview, canEditDraft } from "@/lib/permissions";
@@ -667,7 +668,11 @@ export function Editor() {
       console.error(err);
       toast.error("Generation failed", {
         description: draftErrorCopy(err),
-        action: { label: "Retry", onClick: () => void runGenerateAll() },
+        // A plan error is fixed on the plans page; trying again would only fail again.
+        action:
+          err instanceof PlanRequiredError
+            ? { label: "See plans", onClick: () => nav("/pricing") }
+            : { label: "Retry", onClick: () => void runGenerateAll() },
       });
     } finally {
       setGloballyStreaming(false);
@@ -697,6 +702,7 @@ export function Editor() {
       console.error(err);
       toast.error("DraftHR could not suggest a change", {
         description: draftErrorCopy(err),
+        ...(err instanceof PlanRequiredError ? { action: { label: "See plans", onClick: () => nav("/pricing") } } : {}),
       });
       return false;
     }

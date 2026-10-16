@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { serverErrorMessage, streamDraft, type Message } from "./client";
+import { PlanRequiredError, serverErrorMessage, streamDraft, type Message } from "./client";
 
 function sseResponse(chunks: string[]): Response {
   const body = new ReadableStream<Uint8Array>({
@@ -75,10 +75,27 @@ describe("streamDraft — refusals", () => {
         headers: { "Content-Type": "application/json" },
       }),
     );
-    await expect(streamDraft({ messages, onToken: () => {} })).rejects.toThrow(
-      "Choose a plan, or switch to the standard model.",
-    );
+    const run = streamDraft({ messages, onToken: () => {} });
+    await expect(run).rejects.toThrow("Choose a plan, or switch to the standard model.");
+    // Typed, so the editor offers See plans instead of a Retry that would fail again.
+    await expect(run).rejects.toBeInstanceOf(PlanRequiredError);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still marks a 402 with no message as needing a plan", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 402 }));
+    const run = streamDraft({ messages, onToken: () => {} });
+    await expect(run).rejects.toBeInstanceOf(PlanRequiredError);
+    await expect(run).rejects.toThrow("This needs a paid plan.");
+  });
+
+  it("does not treat a 403 refusal as a plan problem", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () => new Response(JSON.stringify({ error: "Viewers can read letters but not draft them." }), { status: 403 }),
+    );
+    const run = streamDraft({ messages, onToken: () => {} });
+    await expect(run).rejects.toThrow("Viewers can read letters but not draft them.");
+    await expect(run).rejects.not.toBeInstanceOf(PlanRequiredError);
   });
 });
 

@@ -4,6 +4,7 @@ import {
   AGENT_UNREACHABLE_MESSAGE,
   LETTER_CONTEXT_MAX_CHARS,
   agentErrorMessage,
+  agentErrorNeedsPlan,
   buildAgentSystemPrompt,
   buildLetterContextMessage,
   draftPlainTextForAgent,
@@ -103,6 +104,10 @@ describe("agent error message in the side panel", () => {
     expect(agentErrorMessage(tooLong)).toBe("This conversation is too long. Start a new chat.");
     const plan = await transportError(402, JSON.stringify({ error: "Choose a plan or buy a letter to keep drafting.", needPlan: true }));
     expect(agentErrorMessage(plan)).toBe("Choose a plan or buy a letter to keep drafting.");
+    // A plan gate gets See plans in the panel, not Retry.
+    expect(agentErrorNeedsPlan(plan)).toBe(true);
+    expect(agentErrorNeedsPlan(tooLong)).toBe(false);
+    expect(agentErrorNeedsPlan(new TypeError("Failed to fetch"))).toBe(false);
   });
 
   it("falls back to the connection message for anything else", () => {

@@ -33,6 +33,9 @@ class RetryableError extends Error {
   }
 }
 
+/** A 402 from the server: the fix is a plan or a letter, not another try. */
+export class PlanRequiredError extends Error {}
+
 /**
  * Streams from /api/draft with automatic retry-with-backoff on transient failures
  * (network errors, HTTP 429, HTTP 5xx, or "no tokens" sentinel from the proxy).
@@ -82,8 +85,8 @@ async function streamDraftOnce(opts: StreamOptions): Promise<void> {
     // Our own refusals (no plan for Opus, paywall, viewer role) carry a JSON
     // message the user can act on; show it rather than a generic failure.
     const message = serverErrorMessage(await res.text().catch(() => ""));
+    if (res.status === 402) throw new PlanRequiredError(message ?? "This needs a paid plan.");
     if (message) throw new Error(message);
-    if (res.status === 402) throw new Error("This needs a paid plan.");
   }
   if (res.status === 401 || res.status === 403) {
     // Vercel Deployment Protection or other auth gate is blocking the API.
