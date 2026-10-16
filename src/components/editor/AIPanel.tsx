@@ -20,7 +20,7 @@ import type { AIChatScope, Draft, Section } from "@/lib/letters/types";
 import { useDraftStore } from "@/lib/store";
 import { MODEL_OPTIONS, useProfileStore, type ModelId } from "@/lib/profile";
 import { ConfirmDialog } from "@/components/letters/dialogs";
-import { agentErrorMessage, buildAgentSystemPrompt, buildLetterContextMessage } from "@/lib/llm/agent";
+import { agentErrorMessage, agentErrorNeedsPlan, buildAgentSystemPrompt, buildLetterContextMessage } from "@/lib/llm/agent";
 import { captureRuntimeContext } from "@/lib/llm/runtime-context";
 import { DEFAULT_MODEL } from "@/lib/llm/default-model";
 import { regenerateSectionAsPending } from "@/lib/llm/draft";
@@ -832,9 +832,15 @@ export function AIPanel({
               <div className="flex items-center gap-2 rounded-[var(--ds-r-m)] bg-[var(--ds-red-bg)] px-3 py-2 text-[12.5px] text-[var(--ds-red-fg)]">
                 <AlertCircle className="size-3.5 shrink-0" />
                 <span className="flex-1">{agentErrorMessage(error)}</span>
-                <button onClick={() => regenerate()} className="inline-flex items-center gap-1 font-medium hover:underline">
-                  <RotateCw className="size-3" /> Retry
-                </button>
+                {agentErrorNeedsPlan(error) ? (
+                  <button onClick={() => nav("/pricing")} className="inline-flex items-center gap-1 font-medium hover:underline">
+                    See plans
+                  </button>
+                ) : (
+                  <button onClick={() => regenerate()} className="inline-flex items-center gap-1 font-medium hover:underline">
+                    <RotateCw className="size-3" /> Retry
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -84,6 +84,17 @@ export function agentErrorMessage(err: unknown): string {
   return AGENT_UNREACHABLE_MESSAGE;
 }
 
+/** True when the refusal is a plan gate ({"needPlan": true}), which a retry cannot fix. */
+export function agentErrorNeedsPlan(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : "";
+  try {
+    const parsed = JSON.parse(raw) as { needPlan?: unknown } | null;
+    return parsed?.needPlan === true;
+  } catch {
+    return false;
+  }
+}
+
 function htmlToPlainText(html: string): string {
   if (!html) return "";
   const withBreaks = html

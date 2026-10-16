@@ -5,7 +5,7 @@ export const PROBATION_OUTCOME_UK: LetterTemplate = {
   jurisdiction: "UK",
   evidenceTier: "medium",
   letterSystemAddendum: `LETTER-WIDE NOTES (UK Probation Outcome):
-- An employee with under two years' continuous service generally has no ordinary unfair-dismissal claim under s.108 ERA 1996, but exceptions apply: discrimination (Equality Act 2010), whistleblowing (s.103A ERA 1996), and other automatic-unfair categories (ss.99–105 ERA 1996).
+- Unfair dismissal qualifying service (Great Britain), counted to the effective date of termination, which statutory minimum notice can extend (s.97(2) ERA 1996): where that date is before 1 January 2027, an employee with under two years' continuous service generally has no ordinary unfair dismissal claim (s.108 ERA 1996); where it is on or after 1 January 2027, the qualifying period is six months (Employment Rights Act 2025), so most probationers dismissed at or after six months can claim. Exceptions with no service requirement apply either way: discrimination (Equality Act 2010), whistleblowing (s.103A ERA 1996), and the other automatically unfair reasons (ss.99–105 ERA 1996). Never state in the letter that the employee has no right to claim unfair dismissal.
 - The ACAS Code of Practice on Disciplinary and Grievance Procedures applies to capability dismissals as best practice; non-compliance may attract a 25% uplift on tribunal awards under s.207A TULRCA 1992.
 - Once the employee has more than one month's service, statutory minimum notice under s.86 ERA 1996 applies (1 week minimum); contractual notice may be longer.
 - For pass / extension / fail outcomes, this template branches on outcome — be precise about which is being communicated.
