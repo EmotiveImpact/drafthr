@@ -17,9 +17,24 @@ import type { PageFormatState, PagedEditorActions } from "./types";
  *  zoomed down to fit (see the effect in the component). */
 const A4_PAGE_PX = 794;
 const A4_FIT_WIDTH = A4_PAGE_PX + 32;
-/** Below this container width (phones) the page narrows to the screen. */
+/** Only on a phone (the app's phone breakpoint, as Editor's useIsPhone) with
+ *  less room than this does the page narrow to the screen. Everywhere else
+ *  it keeps its A4 layout. */
+const PHONE_QUERY = "(max-width: 767px)";
 const PHONE_PAGE_MAX = 600;
 const A4_RATIO = 297 / 210;
+
+/**
+ * How the A4 page fits a room `width` pixels wide. Outside a phone the page
+ * keeps its 794px layout and is only zoomed down, so the lines break exactly
+ * where they will on paper. On a phone window it narrows to the screen
+ * instead (`phoneWidth`) and the letter reflows at a readable size.
+ */
+export function pageFit(width: number, phoneWindow: boolean): { zoom: number; phoneWidth: number | null } {
+  if (width <= 0) return { zoom: 1, phoneWidth: null };
+  if (phoneWindow && width < PHONE_PAGE_MAX) return { zoom: 1, phoneWidth: Math.floor(width - 16) };
+  return { zoom: width < A4_FIT_WIDTH ? Math.max(0.4, (width - 16) / A4_PAGE_PX) : 1, phoneWidth: null };
+}
 
 /**
  * Edit-on-page engine, backed by the vendored **pagedly** library. This is the
@@ -388,9 +403,12 @@ export function PagedlyDocEditor({
   // Fit the A4 page (794px) to narrow screens. Without this a phone shows
   // the page's left two thirds and cuts the rest off at the right edge.
   // Wider containers keep zoom 1, so desktop layout is untouched.
+  // A narrower room (a laptop with the side panel open) zooms the whole page
+  // down, so every line still breaks where it will on paper.
   // On a phone that would shrink the words to about 5px, so there the page
   // is narrowed to the screen instead (same proportions, smaller margins) and
-  // the letter reflows at its own size (FEAT-X4).
+  // the letter reflows at its own size (FEAT-X4). That is keyed on the
+  // window being phone sized, never on the room left beside a panel.
   const [pageZoom, setPageZoom] = useState(1);
   const [phonePageW, setPhonePageW] = useState<number | null>(null);
 
@@ -416,16 +434,20 @@ export function PagedlyDocEditor({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
+    const mql = typeof window.matchMedia === "function" ? window.matchMedia(PHONE_QUERY) : null;
     const fit = () => {
-      const w = el.clientWidth;
-      const phone = w > 0 && w < PHONE_PAGE_MAX;
-      setPhonePageW(phone ? Math.floor(w - 16) : null);
-      setPageZoom(!phone && w > 0 && w < A4_FIT_WIDTH ? Math.max(0.4, (w - 16) / A4_PAGE_PX) : 1);
+      const f = pageFit(el.clientWidth, !!mql?.matches);
+      setPhonePageW(f.phoneWidth);
+      setPageZoom(f.zoom);
     };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
-    return () => ro.disconnect();
+    mql?.addEventListener("change", fit);
+    return () => {
+      ro.disconnect();
+      mql?.removeEventListener("change", fit);
+    };
   }, []);
 
   const enableComments = reviewMode && !readOnly;
