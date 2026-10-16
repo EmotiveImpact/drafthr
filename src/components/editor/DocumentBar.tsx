@@ -15,6 +15,7 @@ import {
   CheckCheck,
   CheckCircle2,
   ChevronDown,
+  ClipboardPaste,
   Clock3,
   Columns2,
   Download,
@@ -38,6 +39,7 @@ import {
   PanelRight,
   Paperclip,
   Redo2,
+  RemoveFormatting,
   Search,
   Send,
   Settings2,
@@ -48,6 +50,7 @@ import {
   Stamp,
   StopCircle,
   TextSelect,
+  Underline as UnderlineIcon,
   Undo,
   Undo2,
   Wand2,
@@ -78,7 +81,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { PagedEditorActions } from "./paged-edit/types";
+import type { PageFormatState, PagedEditorActions } from "./paged-edit/types";
+import { PAGE_COMMANDS, TEXT_STYLES, pageFormatActive, pageTextStyle, type FormatKey } from "./paged-edit/pageFormat";
 import type { ReviewDialogKind } from "./ReviewDialog";
 import { EditableTitleBar } from "./EditableTitleBar";
 import { DocumentPopover, TONE_OPTIONS } from "./DocumentPopover";
@@ -222,6 +226,30 @@ export function DocumentBar(p: DocumentBarProps) {
   const ed = editor && !editor.isDestroyed ? editor : null;
   const canFormat = Boolean(ed) && armed && p.viewMode === "edit" && p.canEdit && !p.streaming;
 
+  // In the Page view the same tools format pagedly's pages: follow the format
+  // at its caret for pressed states. pagedly fills pagedActions once it has
+  // mounted, which can be after this effect first runs.
+  const [pageFmt, setPageFmt] = useState<PageFormatState | null>(null);
+  useEffect(() => {
+    setPageFmt(null);
+    if (p.viewMode !== "preview") return;
+    let unsub: (() => void) | undefined;
+    let frame = 0;
+    const attach = () => {
+      const subscribe = p.pagedActions.current?.subscribe;
+      if (!subscribe) {
+        frame = requestAnimationFrame(attach);
+        return;
+      }
+      unsub = subscribe(setPageFmt);
+    };
+    attach();
+    return () => {
+      cancelAnimationFrame(frame);
+      unsub?.();
+    };
+  }, [p.viewMode, p.pagedActions]);
+
   return (
     <TooltipProvider delayDuration={150}>
       <div className="shrink-0 bg-[var(--ds-surface)]">
@@ -267,8 +295,8 @@ export function DocumentBar(p: DocumentBarProps) {
               </PopoverContent>
             </Popover>
           </div>
-          {tab === "home" && <ToolsRow tools={homeTools({ ...p, ed, canFormat })} saved={p.saved} resetKey={`home:${p.viewMode}`} />}
-          {tab === "insert" && <InsertRow {...p} ed={ed} canFormat={canFormat} resetKey="insert" />}
+          {tab === "home" && <ToolsRow tools={homeTools({ ...p, ed, canFormat, pageFmt })} saved={p.saved} resetKey={`home:${p.viewMode}`} />}
+          {tab === "insert" && <InsertRow {...p} ed={ed} canFormat={canFormat} pageFmt={pageFmt} resetKey={`insert:${p.viewMode}`} />}
           {tab === "layout" && <LayoutRow {...p} resetKey="layout" />}
           {tab === "review" && <ToolsRow tools={reviewTools(p)} saved={p.saved} resetKey="review" />}
         </div>
@@ -904,7 +932,12 @@ function ToneItems({ draft }: { draft: Draft }) {
 
 /* ---------------------------- Ribbon rows ------------------------------- */
 
-type FormatProps = DocumentBarProps & { ed: Editor | null; canFormat: boolean };
+type FormatProps = DocumentBarProps & {
+  ed: Editor | null;
+  canFormat: boolean;
+  /** The format at the caret in the Page view (null in Sections, or before pagedly is ready). */
+  pageFmt: PageFormatState | null;
+};
 
 /**
  * One tool in a ribbon row. `inline` is the button in the row; `menu` is
@@ -1021,21 +1054,106 @@ function MItem({
   );
 }
 
-function homeTools(p: FormatProps): Tool[] {
+/**
+ * One set of format actions for whichever view is open: the focused
+ * section's Tiptap editor (Sections) or pagedly's pages (Page). The Home
+ * and Insert rows draw the same buttons from it in both views.
+ */
+type Formatter = {
+  page: boolean;
+  /** The tools can act now. */
+  can: boolean;
+  /** Why they cannot (the tooltip on a greyed tool). */
+  hint: string;
+  /** Pressed states show (Sections: only once a section has focus). */
+  pressed: boolean;
+  is: (key: FormatKey) => boolean;
+  apply: (key: FormatKey) => void;
+  style: string;
+  setStyle: (block: (typeof TEXT_STYLES)[number]["block"]) => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  undo: () => void;
+  redo: () => void;
+  linkActive: boolean;
+  link: () => void;
+};
+
+const TIPTAP_FORMAT: Record<FormatKey, { is: (ed: Editor) => boolean; run: (ed: Editor) => void }> = {
+  bold: { is: (ed) => ed.isActive("bold"), run: (ed) => ed.chain().focus().toggleBold().run() },
+  italic: { is: (ed) => ed.isActive("italic"), run: (ed) => ed.chain().focus().toggleItalic().run() },
+  underline: { is: (ed) => ed.isActive("underline"), run: (ed) => ed.chain().focus().toggleUnderline().run() },
+  bullets: { is: (ed) => ed.isActive("bulletList"), run: (ed) => ed.chain().focus().toggleBulletList().run() },
+  numbered: { is: (ed) => ed.isActive("orderedList"), run: (ed) => ed.chain().focus().toggleOrderedList().run() },
+  left: { is: (ed) => ed.isActive({ textAlign: "left" }), run: (ed) => ed.chain().focus().setTextAlign("left").run() },
+  centre: { is: (ed) => ed.isActive({ textAlign: "center" }), run: (ed) => ed.chain().focus().setTextAlign("center").run() },
+  right: { is: (ed) => ed.isActive({ textAlign: "right" }), run: (ed) => ed.chain().focus().setTextAlign("right").run() },
+  justify: { is: (ed) => ed.isActive({ textAlign: "justify" }), run: (ed) => ed.chain().focus().setTextAlign("justify").run() },
+  // Only the text formats: unsetAllMarks would also strip comment anchors and
+  // pending suggestions, which are marks too.
+  clear: {
+    is: () => false,
+    run: (ed) => ed.chain().focus().unsetBold().unsetItalic().unsetUnderline().unsetStrike().unsetLink().clearNodes().run(),
+  },
+};
+
+function formatter(p: FormatProps): Formatter {
   const { ed, canFormat } = p;
-  const page = p.viewMode === "preview";
   const locked = !p.canEdit;
-  // Pressed states show for the section being edited, not before a click.
-  const focused = Boolean(ed?.isFocused);
-  const style = !ed
-    ? "Paragraph"
-    : ed.isActive("heading", { level: 2 })
-      ? "Heading 2"
-      : ed.isActive("heading", { level: 3 })
-        ? "Heading 3"
-        : "Paragraph";
-  // Why a format tool is greyed out.
-  const hint = locked ? "The letter is locked" : p.streaming ? "DraftHR is still drafting" : "Click into a section to format it";
+  if (p.viewMode === "preview") {
+    const st = p.pageFmt;
+    const run = (command: string, value?: string) => p.pagedActions.current?.run?.(command, value);
+    return {
+      page: true,
+      can: !locked && !p.streaming && Boolean(st),
+      hint: locked ? "The letter is locked" : p.streaming ? "DraftHR is still drafting" : "Click into the letter to format it",
+      pressed: true,
+      is: (key) => pageFormatActive(st, key),
+      apply: (key) => run(...PAGE_COMMANDS[key]),
+      style: pageTextStyle(st?.block),
+      setStyle: (block) => run("formatBlock", block),
+      canUndo: !locked && st?.canUndo !== false,
+      canRedo: !locked && st?.canRedo !== false,
+      undo: () => p.pagedActions.current?.undo(),
+      redo: () => p.pagedActions.current?.redo(),
+      linkActive: Boolean(st?.link),
+      link: () => {
+        const url = prompt("Link address", st?.linkHref || "https://");
+        if (url == null) return;
+        if (url === "") run("unlink");
+        else run("createLink", url);
+      },
+    };
+  }
+  const level = ed ? [1, 2, 3].find((l) => ed.isActive("heading", { level: l })) : undefined;
+  return {
+    page: false,
+    can: canFormat,
+    hint: locked ? "The letter is locked" : p.streaming ? "DraftHR is still drafting" : "Click into a section to format it",
+    pressed: Boolean(ed?.isFocused),
+    is: (key) => (ed ? TIPTAP_FORMAT[key].is(ed) : false),
+    apply: (key) => {
+      if (ed) TIPTAP_FORMAT[key].run(ed);
+    },
+    style: level ? `Heading ${level}` : "Paragraph",
+    setStyle: (block) => {
+      if (!ed) return;
+      if (block === "p") ed.chain().focus().setParagraph().run();
+      else ed.chain().focus().toggleHeading({ level: Number(block.slice(1)) as 1 | 2 | 3 }).run();
+    },
+    canUndo: canFormat && Boolean(ed?.can().undo()),
+    canRedo: canFormat && Boolean(ed?.can().redo()),
+    undo: () => ed?.chain().focus().undo().run(),
+    redo: () => ed?.chain().focus().redo().run(),
+    linkActive: Boolean(ed?.isFocused) && Boolean(ed?.isActive("link")),
+    link: () => promptLink(ed),
+  };
+}
+
+function homeTools(p: FormatProps): Tool[] {
+  const f = formatter(p);
+  const page = f.page;
+  const locked = !p.canEdit;
   const tools: Tool[] = [
     {
       key: "outline",
@@ -1049,12 +1167,7 @@ function homeTools(p: FormatProps): Tool[] {
       key: "undo",
       sep: true,
       inline: (
-        <RBtn
-          label="Undo"
-          hint={!page ? hint : undefined}
-          disabled={page ? locked : !canFormat || !ed?.can().undo()}
-          onClick={() => (page ? p.pagedActions.current?.undo() : ed?.chain().focus().undo().run())}
-        >
+        <RBtn label="Undo" hint={f.hint} disabled={!f.canUndo} onClick={f.undo}>
           <Undo2 className="size-[17px]" />
         </RBtn>
       ),
@@ -1062,12 +1175,7 @@ function homeTools(p: FormatProps): Tool[] {
     {
       key: "redo",
       inline: (
-        <RBtn
-          label="Redo"
-          hint={!page ? hint : undefined}
-          disabled={page ? locked : !canFormat || !ed?.can().redo()}
-          onClick={() => (page ? p.pagedActions.current?.redo() : ed?.chain().focus().redo().run())}
-        >
+        <RBtn label="Redo" hint={f.hint} disabled={!f.canRedo} onClick={f.redo}>
           <Redo2 className="size-[17px]" />
         </RBtn>
       ),
@@ -1094,107 +1202,123 @@ function homeTools(p: FormatProps): Tool[] {
       ),
     },
   ];
-  if (page) {
-    tools.push(
-      {
-        key: "select-all",
-        sep: true,
-        inline: (
-          <RBtn label="Select all" disabled={locked} onClick={() => p.pagedActions.current?.selectAll()} text="Select all">
-            <TextSelect className="size-4" />
-          </RBtn>
-        ),
-      },
-      {
-        key: "page-find",
-        inline: (
-          <RBtn label="Find in letter" onClick={() => p.pagedActions.current?.openFind()} text="Find">
-            <Search className="size-4" />
-          </RBtn>
-        ),
-      },
-      {
-        key: "page-note",
-        sep: true,
-        drop: 9,
-        inline: (
-          <span className="shrink-0 whitespace-nowrap px-1.5 text-[12.5px] text-[var(--ds-muted)]">
-            Page view. Switch to Sections to format a section.
-          </span>
-        ),
-        menu: (
-          <p className="m-0 px-2 py-1.5 text-[12px] text-[var(--ds-muted)]">Page view. Switch to Sections to format a section.</p>
-        ),
-      }
-    );
-    return tools;
-  }
-  const fmt = (
-    key: string,
-    label: string,
-    icon: ReactNode,
-    active: boolean | undefined,
-    run: () => void,
-    drop?: number,
-    sep?: boolean
-  ): Tool => ({
-    key,
-    sep,
-    drop,
-    inline: (
-      <RBtn label={label} hint={hint} active={focused && active} disabled={!canFormat} onClick={run}>
-        {icon}
-      </RBtn>
-    ),
-    menu: <MItem icon={icon} label={label} hint={hint} disabled={!canFormat} active={focused && active} onClick={run} />,
-  });
+  const fmt = (key: FormatKey, label: string, icon: ReactNode, drop?: number, sep?: boolean): Tool => {
+    const active = f.pressed && f.is(key);
+    return {
+      key,
+      sep,
+      drop,
+      inline: (
+        <RBtn label={label} hint={f.hint} active={key === "clear" ? undefined : active} disabled={!f.can} onClick={() => f.apply(key)}>
+          {icon}
+        </RBtn>
+      ),
+      menu: <MItem icon={icon} label={label} hint={f.hint} disabled={!f.can} active={active} onClick={() => f.apply(key)} />,
+    };
+  };
   tools.push(
     {
       key: "style",
       sep: true,
       inline: (
         <DropdownMenu>
-          <DropdownMenuTrigger asChild disabled={!canFormat}>
+          <DropdownMenuTrigger asChild disabled={!f.can}>
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-2 text-[13.5px] text-[var(--ds-ink)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] disabled:hover:bg-transparent focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
-              aria-label={`Text style: ${style}`}
-              title={!canFormat ? `Text style. ${hint}` : "Text style"}
+              aria-label={`Text style: ${f.style}`}
+              title={!f.can ? `Text style. ${f.hint}` : "Text style"}
             >
-              {style}
+              {f.style}
               <ChevronDown className="size-[14px] text-[var(--ds-subtle)]" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className={cn("w-[180px]", MENU_MOTION)} onCloseAutoFocus={(e) => e.preventDefault()}>
-            <DropdownMenuItem onClick={() => ed?.chain().focus().setParagraph().run()}>Paragraph</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => ed?.chain().focus().toggleHeading({ level: 2 }).run()}>Heading 2</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => ed?.chain().focus().toggleHeading({ level: 3 }).run()}>Heading 3</DropdownMenuItem>
+            {TEXT_STYLES.map((s) => (
+              <DropdownMenuItem key={s.block} onClick={() => f.setStyle(s.block)}>
+                <span className="flex-1">{s.label}</span>
+                {f.pressed && f.style === s.label && <Check className="size-3.5" />}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       ),
     },
     { key: "tone", inline: <DocumentPopover draft={p.draft} variant="tools" disabled={locked} /> },
-    fmt("bold", "Bold", <Bold className="size-4" />, ed?.isActive("bold"), () => ed?.chain().focus().toggleBold().run(), undefined, true),
-    fmt("italic", "Italic", <Italic className="size-4" />, ed?.isActive("italic"), () => ed?.chain().focus().toggleItalic().run()),
-    fmt("bullets", "Bullets", <List className="size-[17px]" />, ed?.isActive("bulletList"), () => ed?.chain().focus().toggleBulletList().run(), 3, true),
-    fmt("numbered", "Numbered list", <ListOrdered className="size-[17px]" />, ed?.isActive("orderedList"), () => ed?.chain().focus().toggleOrderedList().run(), 4),
-    fmt("left", "Align left", <AlignLeft className="size-[17px]" />, ed?.isActive({ textAlign: "left" }), () => ed?.chain().focus().setTextAlign("left").run(), 5, true),
-    fmt("centre", "Align centre", <AlignCenter className="size-[17px]" />, ed?.isActive({ textAlign: "center" }), () => ed?.chain().focus().setTextAlign("center").run(), 6),
-    fmt("right", "Align right", <AlignRight className="size-[17px]" />, ed?.isActive({ textAlign: "right" }), () => ed?.chain().focus().setTextAlign("right").run(), 7),
-    fmt("justify", "Justify", <AlignJustify className="size-[17px]" />, ed?.isActive({ textAlign: "justify" }), () => ed?.chain().focus().setTextAlign("justify").run(), 8),
-    {
-      key: "find",
-      sep: true,
-      drop: 9,
+    fmt("bold", "Bold", <Bold className="size-4" />, undefined, true),
+    fmt("italic", "Italic", <Italic className="size-4" />),
+    fmt("underline", "Underline", <UnderlineIcon className="size-4" />, 2.5),
+    fmt("bullets", "Bullets", <List className="size-[17px]" />, 3, true),
+    fmt("numbered", "Numbered list", <ListOrdered className="size-[17px]" />, 4),
+    fmt("left", "Align left", <AlignLeft className="size-[17px]" />, 5, true),
+    fmt("centre", "Align centre", <AlignCenter className="size-[17px]" />, 6),
+    fmt("right", "Align right", <AlignRight className="size-[17px]" />, 7),
+    fmt("justify", "Justify", <AlignJustify className="size-[17px]" />, 8),
+    fmt("clear", "Clear formatting", <RemoveFormatting className="size-4" />, 8.5, true)
+  );
+  if (page) {
+    // pagedly's paste choices, which the Sections view has no need of.
+    const rich = p.pageFmt?.pasteFormatting === "rich";
+    const togglePaste = () => p.pagedActions.current?.run?.("setPasteFormatting", rich ? "clean" : "rich");
+    const pastePlain = () => p.pagedActions.current?.run?.("pastePlain");
+    tools.push({
+      key: "paste",
+      drop: 10,
       inline: (
-        <RBtn label="Find in letter" disabled={locked} onClick={p.onOpenFind}>
-          <Search className="size-4" />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild disabled={!f.can}>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-[7px] text-[var(--ds-body)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-ink)] active:bg-[var(--ds-surface-3)] disabled:text-[var(--ds-faint)] disabled:hover:bg-transparent data-[state=open]:bg-[var(--ds-surface-2)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+              aria-label="Paste options"
+              title={!f.can ? `Paste options. ${f.hint}` : "Paste options"}
+            >
+              <ClipboardPaste className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className={cn("w-[260px]", MENU_MOTION)} onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuItem onClick={pastePlain}>Paste without formatting</DropdownMenuItem>
+            <DropdownMenuItem onClick={togglePaste}>
+              <span className="flex-1">Keep source formatting on paste</span>
+              {rich && <Check className="size-3.5" />}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+      menu: (
+        <>
+          <MItem icon={<ClipboardPaste />} label="Paste without formatting" hint={f.hint} disabled={!f.can} onClick={pastePlain} />
+          <MItem icon={<ClipboardPaste />} label="Keep source formatting on paste" hint={f.hint} disabled={!f.can} active={rich} onClick={togglePaste} />
+        </>
+      ),
+    });
+  }
+  const openFind = page ? () => p.pagedActions.current?.openFind() : p.onOpenFind;
+  tools.push({
+    key: "find",
+    sep: true,
+    drop: 9,
+    inline: (
+      <RBtn label="Find in letter" disabled={locked && !page} onClick={openFind}>
+        <Search className="size-4" />
+      </RBtn>
+    ),
+    menu: <MItem icon={<Search />} label="Find in letter" disabled={locked && !page} onClick={openFind} />,
+  });
+  if (page) {
+    tools.push({
+      key: "select-all",
+      drop: 11,
+      inline: (
+        <RBtn label="Select all" disabled={locked} onClick={() => p.pagedActions.current?.selectAll()}>
+          <TextSelect className="size-4" />
         </RBtn>
       ),
-      menu: <MItem icon={<Search />} label="Find in letter" disabled={locked} onClick={p.onOpenFind} />,
-    }
-  );
+      menu: <MItem icon={<TextSelect />} label="Select all" disabled={locked} onClick={() => p.pagedActions.current?.selectAll()} />,
+    });
+  }
   return tools;
 }
 
@@ -1257,7 +1381,10 @@ export function agoText(at: number): string {
 function InsertTools(p: FormatProps & { fileRef: RefObject<HTMLInputElement | null>; pickerOpen: boolean; setPickerOpen: (o: boolean) => void }): Tool[] {
   const { ed, canFormat, draft, fileRef, pickerOpen, setPickerOpen } = p;
   const evidenceCount = draft.evidence?.length ?? 0;
-  const linkRun = () => promptLink(ed);
+  // Link works in both views; citations and images are Sections tools.
+  const f = formatter(p);
+  const linkRun = f.link;
+  const sectionsOnly = f.page ? "Switch to Sections to use this" : undefined;
   return [
     {
       key: "citation",
@@ -1286,7 +1413,13 @@ function InsertTools(p: FormatProps & { fileRef: RefObject<HTMLInputElement | nu
           />
         ) : (
           <RBtn
-            label={evidenceCount > 0 ? "Click into a section to insert a citation" : "Add evidence first to insert citations"}
+            label={
+              evidenceCount === 0
+                ? "Add evidence first to insert citations"
+                : f.page
+                  ? "Switch to Sections to insert a citation"
+                  : "Click into a section to insert a citation"
+            }
             disabled
             onClick={() => {}}
             text="Citation"
@@ -1299,27 +1432,31 @@ function InsertTools(p: FormatProps & { fileRef: RefObject<HTMLInputElement | nu
       key: "image",
       drop: 3,
       inline: (
-        <RBtn label="Insert image (or paste or drop one)" disabled={!canFormat} onClick={() => fileRef.current?.click()} text="Image">
+        <RBtn label="Insert image (or paste or drop one)" hint={sectionsOnly} disabled={!canFormat} onClick={() => fileRef.current?.click()} text="Image">
           <ImageIcon className="size-4" />
         </RBtn>
       ),
-      menu: <MItem icon={<ImageIcon />} label="Image" disabled={!canFormat} onClick={() => fileRef.current?.click()} />,
+      menu: <MItem icon={<ImageIcon />} label="Image" hint={sectionsOnly} disabled={!canFormat} onClick={() => fileRef.current?.click()} />,
     },
     {
       key: "link",
       drop: 4,
-      inline: <LinkBtn ed={ed} disabled={!canFormat} text="Link" />,
-      menu: <MItem icon={<LinkIcon />} label="Link" disabled={!canFormat} onClick={linkRun} />,
+      inline: (
+        <RBtn label="Link" text="Link" hint={f.hint} active={f.linkActive} disabled={!f.can} onClick={linkRun}>
+          <LinkIcon className="size-4" />
+        </RBtn>
+      ),
+      menu: <MItem icon={<LinkIcon />} label="Link" hint={f.hint} disabled={!f.can} active={f.linkActive} onClick={linkRun} />,
     },
     {
       key: "comment",
       drop: 2,
       inline: (
-        <RBtn label="Comment on the selected text" disabled={!p.activeSection} onClick={p.onComment} text="Comment">
+        <RBtn label="Comment on the selected text" hint={sectionsOnly} disabled={!p.activeSection} onClick={p.onComment} text="Comment">
           <MessageSquarePlus className="size-4" />
         </RBtn>
       ),
-      menu: <MItem icon={<MessageSquarePlus />} label="Comment" disabled={!p.activeSection} onClick={p.onComment} />,
+      menu: <MItem icon={<MessageSquarePlus />} label="Comment" hint={sectionsOnly} disabled={!p.activeSection} onClick={p.onComment} />,
     },
     {
       key: "evidence",
@@ -1613,20 +1750,6 @@ function promptLink(ed: Editor | null) {
   if (url == null) return;
   if (url === "") ed.chain().focus().unsetLink().run();
   else ed.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-}
-
-function LinkBtn({ ed, disabled, text }: { ed: Editor | null; disabled?: boolean; text?: string }) {
-  return (
-    <RBtn
-      label="Link"
-      text={text}
-      active={Boolean(ed?.isFocused) && ed?.isActive("link")}
-      disabled={disabled}
-      onClick={() => promptLink(ed)}
-    >
-      <LinkIcon className="size-4" />
-    </RBtn>
-  );
 }
 
 /** Ribbon button. mousedown is cancelled so the section editor keeps its
