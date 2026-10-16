@@ -21,7 +21,7 @@ import {
   type ToolSet,
   type UIMessage,
 } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { anthropicModel } from "./_utils/anthropic-provider.js";
 import { z } from "zod";
 import { rateLimit } from "./_utils/rate-limit.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "./_utils/request.js";
@@ -66,7 +66,7 @@ function temperatureFor(modelName: string, temperature: number | undefined): num
 function buildModel(requested?: string) {
   const modelName = resolveModelName(requested);
   const apiKey = requireAnthropicApiKey();
-  return createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(modelName);
+  return anthropicModel(apiKey, modelName);
 }
 
 /* ============================================================================
