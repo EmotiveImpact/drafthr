@@ -11,7 +11,7 @@
  * runs can't overspend a shared balance.
  */
 import { generateText } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { anthropicModel } from "../../_utils/anthropic-provider.js";
 import { enforceSameOrigin, jsonError, readJsonRequest } from "../../_utils/request.js";
 import { rateLimit } from "../../_utils/rate-limit.js";
 import { requireSessionAndTenant } from "../../_utils/session-with-tenant.js";
@@ -110,7 +110,7 @@ export async function POST(req: Request): Promise<Response> {
     .join(" ");
 
   try {
-    const model = createAnthropic({ apiKey, baseURL: "https://api.anthropic.com/v1" })(CRITIQUE_MODEL);
+    const model = anthropicModel(apiKey, CRITIQUE_MODEL);
     const { text: critique } = await generateText({
       model,
       temperature: 0.3,
