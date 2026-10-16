@@ -99,6 +99,19 @@ import "@/components/editor/letter-workspace.css";
  * ------------------------------------------------------------------------ */
 const DOCK_KEY = (draftId: string) => `drafthr.pinnedDock:${draftId}`;
 
+/** The view picked last on the Sections / Page switch, for every letter. Only a
+ *  click on the switch saves it; jumps back to Sections (find, a section link)
+ *  leave it alone. */
+const VIEW_KEY = "drafthr.letter.view";
+
+function preferredView(): "edit" | "preview" {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "preview" ? "preview" : "edit";
+  } catch {
+    return "edit";
+  }
+}
+
 /** The page is 640px wide; the margin column (256px) sits 20px to its right. */
 const PAGE_W = 640;
 const MARGIN_GAP = 20;
@@ -296,7 +309,10 @@ export function Editor() {
     setFloatingComment(null);
     setRefineSectionId(null);
     setReviewFeedbackOpen(false);
-    setViewMode("edit");
+    // Page view shows the letter as it was when opened, so a letter with no
+    // text yet (or a phone) always starts on Sections, where drafting shows.
+    const hasText = draft?.sections.some((s) => s.status === "ready" || s.status === "edited") ?? false;
+    setViewMode(hasText && !isPhone ? preferredView() : "edit");
     setActiveEditor(null);
     setEditsFilter("edits");
     setFindOpen(false);
@@ -1231,7 +1247,14 @@ export function Editor() {
     journey,
     editor: activeEditor,
     viewMode,
-    onViewMode: setViewMode,
+    onViewMode: (m) => {
+      setViewMode(m);
+      try {
+        window.localStorage.setItem(VIEW_KEY, m);
+      } catch {
+        // Private windows: the choice lasts for this letter only.
+      }
+    },
     pagedActions: pagedEditorActionsRef,
     backTo,
     streaming,

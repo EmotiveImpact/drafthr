@@ -249,11 +249,13 @@ export function DocumentBar(p: DocumentBarProps) {
                 )}
               </button>
             ))}
+            {/* Sections or Page (the pagedly A4 view), in view whichever tab is open. */}
+            <ViewSwitch viewMode={p.viewMode} onViewMode={p.onViewMode} />
             <Popover>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  className="ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-1.5 text-[12.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-muted)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
+                  className="ml-2 inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[7px] px-1.5 text-[12.5px] text-[var(--ds-subtle)] transition-colors duration-[120ms] hover:bg-[var(--ds-hover)] hover:text-[var(--ds-muted)] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]"
                   aria-label="DraftHR drafts, you decide. Not legal advice."
                 >
                   <Info aria-hidden className="size-[13px]" />
@@ -272,6 +274,38 @@ export function DocumentBar(p: DocumentBarProps) {
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+/** Sections (edit section by section, with the margin cards) or Page (the
+ *  pagedly A4 pages). The editor remembers the choice for the next letter. */
+function ViewSwitch({ viewMode, onViewMode }: Pick<DocumentBarProps, "viewMode" | "onViewMode">) {
+  return (
+    <div className="ml-auto inline-flex shrink-0 rounded-[8px] bg-[var(--ds-surface-2)] p-0.5" role="tablist" aria-label="View mode">
+      {(
+        [
+          ["edit", "Sections", <FileEdit key="e" className="size-3.5" />],
+          ["preview", "Page", <Eye key="p" className="size-3.5" />],
+        ] as const
+      ).map(([m, label, icon]) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={viewMode === m}
+          onClick={() => onViewMode(m)}
+          className={cn(
+            "inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
+            viewMode === m
+              ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
+              : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
+          )}
+        >
+          {icon}
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1085,11 +1119,11 @@ function homeTools(p: FormatProps): Tool[] {
         drop: 9,
         inline: (
           <span className="shrink-0 whitespace-nowrap px-1.5 text-[12.5px] text-[var(--ds-muted)]">
-            Page view. Switch to Sections in Layout to format a section.
+            Page view. Switch to Sections to format a section.
           </span>
         ),
         menu: (
-          <p className="m-0 px-2 py-1.5 text-[12px] text-[var(--ds-muted)]">Page view. Switch to Sections in Layout to format a section.</p>
+          <p className="m-0 px-2 py-1.5 text-[12px] text-[var(--ds-muted)]">Page view. Switch to Sections to format a section.</p>
         ),
       }
     );
@@ -1337,38 +1371,7 @@ function LayoutRow(p: DocumentBarProps & { resetKey: string }) {
   }, []);
   const tools: Tool[] = [
     {
-      key: "view",
-      inline: (
-        <div className="inline-flex shrink-0 rounded-[8px] bg-[var(--ds-surface-2)] p-0.5" role="tablist" aria-label="View mode">
-          {(
-            [
-              ["edit", "Sections", <FileEdit key="e" className="size-3.5" />],
-              ["preview", "Page", <Eye key="p" className="size-3.5" />],
-            ] as const
-          ).map(([m, label, icon]) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={p.viewMode === m}
-              onClick={() => p.onViewMode(m)}
-              className={cn(
-                "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 text-[12.5px] font-medium transition-colors duration-[120ms] focus-visible:outline-none focus-visible:shadow-[var(--ds-focus-ring)]",
-                p.viewMode === m
-                  ? "bg-[var(--ds-surface)] text-[var(--ds-ink)] shadow-[var(--ds-shadow-s)]"
-                  : "text-[var(--ds-muted)] hover:text-[var(--ds-ink)]"
-              )}
-            >
-              {icon}
-              {label}
-            </button>
-          ))}
-        </div>
-      ),
-    },
-    {
       key: "settings",
-      sep: true,
       drop: 5,
       inline: (
         <RBtn label="Document settings" onClick={p.onEditDetails} text="Document settings">
