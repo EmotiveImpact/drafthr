@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideSectionWrite, hasAppMarks, plainStyleLabel } from "./PagedlyDocEditor";
+import { decideSectionWrite, hasAppMarks, pageFit, plainStyleLabel } from "./PagedlyDocEditor";
 
 /**
  * Locks the Page-view (pagedly) persist guards — the fix for the cross-section
@@ -103,5 +103,25 @@ describe("plainStyleLabel", () => {
   it("leaves a plain label as it is", () => {
     expect(plainStyleLabel("Text style")).toBe("Text style");
     expect(plainStyleLabel("Text style: Heading 1")).toBe("Text style: Heading 1");
+  });
+});
+
+describe("pageFit", () => {
+  it("keeps the A4 layout on a laptop with the side panel open, zoomed to fit", () => {
+    // 1024 wide window, side panel open: about 580px of room for the page.
+    const f = pageFit(580, false);
+    expect(f.phoneWidth).toBeNull();
+    expect(f.zoom).toBeCloseTo(564 / 794, 3);
+  });
+  it("shows the page at full size when it fits", () => {
+    expect(pageFit(996, false)).toEqual({ zoom: 1, phoneWidth: null });
+  });
+  it("narrows the page to the screen only on a phone", () => {
+    expect(pageFit(390, true)).toEqual({ zoom: 1, phoneWidth: 374 });
+    // A phone turned sideways still has room to zoom the A4 page.
+    expect(pageFit(700, true).phoneWidth).toBeNull();
+  });
+  it("never zooms below 40%", () => {
+    expect(pageFit(200, false).zoom).toBe(0.4);
   });
 });
