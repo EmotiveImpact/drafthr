@@ -165,7 +165,7 @@ export const EMPLOYEE_CATALOG: LetterTypeMeta[] = [
     title: "Appeal against a warning, dismissal or redundancy outcome",
     shortTitle: "Appeal letter",
     description:
-      "Internal appeal, non-negotiable before tribunal. Uses the canonical four grounds: procedural unfairness, factual error, severity disproportionate, new evidence.",
+      "Internal appeal against the outcome. It does not stop you going to a tribunal, but in Great Britain not appealing can cut any award by up to 25%. Uses the four grounds: procedural unfairness, factual error, severity disproportionate, new evidence.",
     riskClass: "high",
     jurisdictionScope: "shared",
     flagshipV1: true,

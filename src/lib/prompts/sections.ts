@@ -293,7 +293,7 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- H-1B specialty occupation: bachelor's minimum, prevailing wage (LCA). L-1A/B intra-company transferee: qualifying relationship + 1-of-3y prior employment. O-1: evidence of acclaim. I-140 EB-2/EB-3: PERM labor certification. E-Verify states with mandatory enrolment.",
   },
   probation_outcome: {
-    UK: "- Sub-2-years service: no ordinary unfair dismissal claim (exceptions: discrimination, whistleblowing, automatic unfair under s.103A–105 ERA). ACAS Code best practice for capability. s.10 ERelA 1999 right to be accompanied. s.86 ERA notice once 1 month service reached.",
+    UK: "- Unfair dismissal qualifying service, counted to the effective date of termination including statutory notice (s.97(2) ERA): two years where that date is before 1 January 2027; six months where it is on or after 1 January 2027 (Employment Rights Act 2025). No service needed for discrimination, whistleblowing or automatically unfair reasons (ss.99–105 ERA). Never tell the employee they cannot claim unfair dismissal. ACAS Code best practice for capability. s.10 ERelA 1999 right to be accompanied. s.86 ERA notice once 1 month service reached.",
     US: "- At-will throughout probation. Document reasons for discrimination defence. CA: final wages immediately if employer-initiated (Lab. Code §201, §203 penalty). NY: next regular payday. TX: within six calendar days of discharge (§61.014(a)(1)).",
   },
 
@@ -324,7 +324,7 @@ const LEGAL_FENCES_BY_LETTER: Record<string, Record<"UK" | "US", string>> = {
     US: "- CA: Lab. Code §1198.5 (HR file, 30 days), §226 (payroll, 21 days), CCPA/CPRA. CT, IL, MA, NH, PA have HR file access statutes. Cite the specific statute(s).",
   },
   appeal: {
-    UK: "- Reference ACAS Code Step 4. Use the four canonical grounds: procedural unfairness, factual error, severity disproportionate, new evidence. Request the right to be accompanied (s.10 ERelA 1999). State outcome sought (overturn / reduce / rehear). Reserve all rights including unfair-dismissal claim. Polkey deduction risk if appeal not used.",
+    UK: "- Reference ACAS Code Step 4. Use the four canonical grounds: procedural unfairness, factual error, severity disproportionate, new evidence. Request the right to be accompanied (s.10 ERelA 1999). State outcome sought (overturn / reduce / rehear). Reserve all rights including unfair-dismissal claim. An internal appeal is not a condition of bringing a tribunal claim, but an unreasonable failure to appeal can reduce any award by up to 25% (s.207A TULRCA 1992).",
     US: "- No federal procedural appeal right; document the absence as evidence for any subsequent EEOC charge. Frame around procedural unfairness, factual error, severity, new evidence.",
   },
   whistleblowing: {

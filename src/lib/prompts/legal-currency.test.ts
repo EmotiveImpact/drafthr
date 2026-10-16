@@ -7,11 +7,13 @@ import { getLetterMeta } from "@/lib/letters/catalog";
 import type { Draft, Section } from "@/lib/letters/types";
 
 /**
- * Pins statements of law that changed in 2026 so a later edit can't quietly
- * reintroduce the old rule: the six-month tribunal time limit (including
- * deductions from wages) from 1 October 2026, the sexual harassment
- * whistleblowing category from 6 April 2026, and the 30 + 14 day COBRA
- * notice sequence.
+ * Pins statements of law that changed in 2026 or change on 1 January 2027 so a
+ * later edit can't quietly reintroduce the old rule: the six-month tribunal
+ * time limit (including deductions from wages) from 1 October 2026, the
+ * six-month unfair dismissal qualifying period from 1 January 2027 (one year
+ * in Northern Ireland), the sexual harassment whistleblowing category from
+ * 6 April 2026, the 30 + 14 day COBRA notice sequence, and that an internal
+ * appeal is not a condition of a tribunal claim.
  */
 
 function makeDraft(
@@ -99,6 +101,31 @@ describe("statements of law current at October 2026", () => {
     expect(prompt).toContain("NORTHERN IRELAND");
     expect(prompt).toContain("Article 145 of the Employment Rights (Northern Ireland) Order 1996");
     expect(prompt).toMatch(/Northern Ireland must still be presented within 3 months less one day/);
+  });
+
+  it("gives the six-month unfair dismissal qualifying period from 1 January 2027 in the probation prompts", () => {
+    for (const sectionId of ["body", "terms"]) {
+      const prompt = fullPrompt("probation_outcome", "UK", "employer", sectionId);
+      expect(prompt, sectionId).toContain("1 January 2027");
+      expect(prompt, sectionId).toMatch(/six months \(Employment Rights Act 2025\)/);
+      expect(prompt, sectionId).not.toContain("Sub-2-years service: no ordinary unfair dismissal claim");
+      expect(prompt, sectionId).not.toMatch(/An employee with under two years' continuous service generally has no ordinary unfair-dismissal claim under s\.108 ERA 1996, but/);
+    }
+  });
+
+  it("keeps Northern Ireland unfair dismissal at one year's service", () => {
+    const prompt = fullPrompt("probation_outcome", "UK", "employer", "body", "Northern Ireland");
+    expect(prompt).toContain("Article 140 of the Employment Rights (Northern Ireland) Order 1996");
+    expect(prompt).toContain("one year's continuous service");
+  });
+
+  it("never says an internal appeal must come before a tribunal claim", () => {
+    expect(getLetterMeta("appeal").description).not.toMatch(/non-negotiable/i);
+    expect(getLetterMeta("appeal").description).toContain("does not stop you going to a tribunal");
+    const prompt = fullPrompt("appeal", "UK", "employee", "body");
+    expect(prompt).toContain("s.207A TULRCA 1992");
+    expect(prompt).toContain("not a legal condition of bringing a tribunal claim");
+    expect(prompt).not.toMatch(/Polkey deduction risk if appeal not used/);
   });
 
   it("states the dated tribunal limit in the wizard help and catalogue", () => {
